@@ -1,0 +1,25 @@
+from setuptools import setup, find_packages
+
+setup(
+    name='corgidrp',
+    version='0.1',
+    description='(Roman Space Telescope) CORonaGraph Instrument Data Reduction Pipeline',
+    #long_description="",
+    #long_description_content_type="text/markdown",
+    #url='',
+    author='Roman Coronagraph Instrument CPP',
+    #author_email='',
+    #license='BSD',
+    packages=find_packages(),
+    classifiers=[
+        # Indicate who your project is intended for
+        'Intended Audience :: Science/Research',
+        'Topic :: Scientific/Engineering :: Astronomy',
+
+        'Programming Language :: Python :: 3',
+        ],
+    keywords='Roman Space Telescope Exoplanets Astronomy',
+    # install_requires=get_requires()
+    )
+
+

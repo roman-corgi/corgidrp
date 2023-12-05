@@ -1,0 +1,9 @@
+# aux python files
+*.pyc
+corgidrp.egg-info/*
+
+# aux data
+tests/simdata/*
+
+# editor files
+.vscode/*
