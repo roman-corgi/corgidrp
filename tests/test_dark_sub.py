@@ -37,13 +37,17 @@ def test_dark_sub():
 
     # save dark
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    dark_filename = "sim_dark_calib.fits"
     if not os.path.exists(calibdir):
         os.mkdir(calibdir)
-    dark_frame.save(filedir=calibdir)
+    dark_frame.save(filedir=calibdir, filename=dark_filename)
 
     ###### perform dark subtraction
+    # load in the dark
+    dark_filepath = os.path.join(calibdir, dark_filename)
+    new_dark = data.Dark(dark_filepath)
     # subtract darks from itself
-    darkest_dataset = detector.dark_subtraction(dark_dataset, dark_frame)
+    darkest_dataset = detector.dark_subtraction(dark_dataset, new_dark)
 
     # check the level of the dataset is now approximately 0 
     assert np.mean(darkest_dataset.all_data) == pytest.approx(0, abs=1e-2)
