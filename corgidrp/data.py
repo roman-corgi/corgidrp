@@ -68,6 +68,29 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
+    def update_after_processing_step(self, history_entry, new_all_data=None):
+        """
+        Updates the dataset after going through a processing step
+
+        Args:
+            history_entry (str): a description of what processing was done. Mention reference files used.
+            new_all_data (np.array): (optional) Array of new data. Needs to be the same shape as `all_data`
+        Returns:
+            corgidrp.data.Dataset: updated dataset. Maybe the same as self! (implementation still being finalized)
+        """
+        # update data if necessary
+        if new_all_data is not None:
+            if new_all_data.shape != self.all_data.shape:
+                raise ValueError("The shape of new_all_data is {0}, whereas we are expecting {1}".format(new_all_data.shape, self.all_data.shape))
+            self.all_data[:] = new_all_data # specific operation overwrites the existing data rather than changing pointers
+
+        # update history
+        for img in self.frames:
+            img.ext_hdr['HISTORY'] = history_entry
+
+        return self # not sure if we should be returning new copies of the dataset, so function signature is such
+
+
 class Image():
     """
     Base class for 2-D image data. Data can be created by passing in the data/header explicitly, or
@@ -137,3 +160,56 @@ class Image():
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
+    def _record_parent_filenames(self, input_dataset):
+        """
+        Record what input dataset was used to create this Image.
+        This assumes many Images were used to make this single Image.
+        Record is stored in the ext header. 
+
+        Args:
+            input_dataset (corgidrp.data.Dataset): the input dataset that were combined together to make this image
+        """
+        self.ext_hdr['DRPNFILE'] = len(input_dataset) # corgidrp specific keyword
+        for i, img in enumerate(input_dataset):
+            self.ext_hdr['FILE{0}'.format(i)] = img.filename
+
+
+class Dark(Image):
+    """
+    Dark calibration frame for a given exposure time. 
+
+     Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark file (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        # additional bookkeeping for Dark
+
+        # if this is a new dark, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new dark
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
+            self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
+
+            # log all the data that went into making this dark
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
+
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+            self.filename = "{0}_dark.fits".format(orig_input_filename)
+
+
+        # double check that this is actually a dark file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
+            raise ValueError("File that was loaded was not a Dark file.")
