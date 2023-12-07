@@ -10,7 +10,7 @@ def create_dark_calib_files(filedir, numfiles=10):
     filepattern = "simcal_dark_{0:04d}.fits"
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
-        sim_data = np.random.poisson(lam=150, size=(2200, 2200))
+        sim_data = np.random.poisson(lam=150, size=(1200, 2200))
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.save(filedir=filedir, filename=filepattern.format(i))
 
