@@ -8,6 +8,10 @@ class Dataset():
 
     Args:
         frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
+
+    Attributes:
+        all_data (np.array): an array with all the data combined together. First dimension is always number of images
+        frames (list): list of data objects (probably corgidrp.data.Image)
     """
     def __init__(self, frames_or_filepaths):
         if len(frames_or_filepaths) == 0:
@@ -75,8 +79,6 @@ class Dataset():
         Args:
             history_entry (str): a description of what processing was done. Mention reference files used.
             new_all_data (np.array): (optional) Array of new data. Needs to be the same shape as `all_data`
-        Returns:
-            corgidrp.data.Dataset: updated dataset. Maybe the same as self! (implementation still being finalized)
         """
         # update data if necessary
         if new_all_data is not None:
@@ -88,8 +90,23 @@ class Dataset():
         for img in self.frames:
             img.ext_hdr['HISTORY'] = history_entry
 
-        return self # not sure if we should be returning new copies of the dataset, so function signature is such
 
+    def copy(self, copy_data=True):
+        """
+        Make a copy of this dataset, including all data and headers. 
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:  
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+        Returns:
+            corgidrp.data.Dataset: a copy of this dataset
+        """
+        # there's a smarter way to manage memory, but to keep the API simple, we will avoid it for now
+        new_frames = [frame.copy(copy_data=copy_data) for frame in self.frames]
+        new_dataset = Dataset(new_frames)
+
+        return new_dataset
 
 class Image():
     """
@@ -100,6 +117,14 @@ class Image():
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+
+    Attributes:
+        data (np.array): 2-D data for this Image
+        pri_hdr (astropy.io.fits.Header): primary header
+        ext_hdr (astropy.io.fits.Header): ext_hdr. Generally this header will be edited/added to
+        filename (str): the filename corresponding to this Image
+        filedir (str): the file directory on disk where this image is to be/already saved.
+        filepath (str): full path to the file on disk (if it exists)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
         if isinstance(data_or_filepath, str):
@@ -173,6 +198,29 @@ class Image():
         for i, img in enumerate(input_dataset):
             self.ext_hdr['FILE{0}'.format(i)] = img.filename
 
+    def copy(self, copy_data=True):
+        """
+        Make a copy of this image file. including data and headers. 
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:  
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+        Returns:
+            corgidrp.data.Image: a copy of this Image
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+        else:
+            new_data = self.data # this is just pointer referencing
+
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+
+        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
+        new_img.filename = self.filename
+        new_img.filedir = self.filedir
+
+        return new_img
 
 class Dark(Image):
     """

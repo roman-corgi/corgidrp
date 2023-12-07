@@ -29,13 +29,14 @@ def dark_subtraction(input_dataset, dark_frame):
     Returns:
         corgidrp.data.Dataset: a dark subtracted version of the input dataset
     """
-    darksub_cube = input_dataset.all_data - dark_frame.data
+    # you should make a copy the dataset to start
+    darksub_dataset = input_dataset.copy()
+
+    darksub_cube = darksub_dataset.all_data - dark_frame.data
 
     history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
 
-    # note that current implementation this points to the same dataset, just with updated data
-    # THIS COULD CHANGE DEPENDING ON ARCHITECTURE 
-    # please use this syntax currently to ensure design can be flexible
-    darksub_dataset = input_dataset.update_after_processing_step(history_msg, darksub_cube)
+    # update the output dataset with this new dark subtracted data and update the history
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube)
 
     return darksub_dataset
