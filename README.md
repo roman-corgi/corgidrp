@@ -1,4 +1,4 @@
-# corgidrp: CORonaGraph Instrumnet Data Reduction Pipeline
+# corgidrp: CORonaGraph Instrument Data Reduction Pipeline
 This is the data reduction pipeline for the Nancy Grace Roman Space Telescope Coronagraph Instrument
 
 ## Install

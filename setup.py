@@ -1,5 +1,11 @@
 from setuptools import setup, find_packages
 
+def get_requires():
+    reqs = []
+    for line in open("requirements.txt", "r").readlines():
+        reqs.append(line)
+    return reqs
+
 setup(
     name='corgidrp',
     version='0.1',
@@ -19,7 +25,7 @@ setup(
         'Programming Language :: Python :: 3',
         ],
     keywords='Roman Space Telescope Exoplanets Astronomy',
-    # install_requires=get_requires()
+    install_requires=get_requires()
     )
 
 
