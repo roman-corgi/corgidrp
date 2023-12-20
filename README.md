@@ -12,7 +12,7 @@ Then you can import `corgidrp` like any other python package!
 
 Contact Jason is you have any questions on how to get started. Below is a quick tutorial. 
 
-### The basis of getting setup
+### The basics of getting setup
 #### Find a task to work on
 Check out the [Github issues page](https://github.com/roman-corgi/corgidrp/issues) for tasks that need attention. Alternatively, contact Jason (@semaphoreP).
 
@@ -36,7 +36,8 @@ In `corgidrp`, each pipeline step is a function. All function should follow this
 ```
 def example_step(dataset, calib_data, tuneable_arg=1, another_arg="test"):
     """
-    Function docstrings are required and should follow Google style docstrings. We will not demonstrate it here for brevity.
+    Function docstrings are required and should follow Google style docstrings. 
+    We will not demonstrate it here for brevity.
     """
     # unless you don't alter the input dataset at all, plan to make a copy of the data
     # this is to ensure functions are reproducible
@@ -45,6 +46,7 @@ def example_step(dataset, calib_data, tuneable_arg=1, another_arg="test"):
     ### Your code here that does the real work
     # here is a convience field to grab all the data in a dataset
     all_data = processed_dataset.all_data
+    ### End of your code that does the real work
 
     # update the header of the new dataset with your processing step
     history_msg = "I did an example step"
@@ -73,3 +75,6 @@ We are required to write tests to verify the functionality of the code. Instead 
 All tests are stored in the `tests` folder and each test is a function that starts with `test_`. See `tests/test_dark_sub.py` as an example. Within each test, you will likely need to simulate some mock data, run it through your function you wrote, and verify it ran correctly using assert statements. 
 
 These tests will allow code reviews to test and understand your code. We will also run these tests in an automated test suite (continuous integration) with the pipeline. 
+
+### Create a pull request to merge your changes
+Use the Github pull request feature to request that your changes get merged into the `main` branch. Your changes will be reviewed, and possibly some edits will be requested. You can simply make additional pushes to your branch to update the pull request with those changes. When the branch is satisfactory, you can pull your changes in!
