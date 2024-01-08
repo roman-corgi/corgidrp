@@ -14,7 +14,7 @@ Contact Jason is you have any questions on how to get started. Below is a quick 
 
 ### The basics of getting setup
 #### Find a task to work on
-Check out the [Github issues page](https://github.com/roman-corgi/corgidrp/issues) for tasks that need attention. Alternatively, contact Jason (@semaphoreP).
+Check out the [Github issues page](https://github.com/roman-corgi/corgidrp/issues) for tasks that need attention. Alternatively, contact Jason (@semaphoreP). _Make sure to tag yourself on the issue and mention in the comments if you start working on it._ 
 
 #### Clone the git repository and install
 
