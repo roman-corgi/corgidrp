@@ -5,12 +5,13 @@ import corgidrp.data as data
 
 def create_dark_calib_files(filedir, numfiles=10):
     """
-    Create simulated data to create a master dark
+    Create simulated data to create a master dark. 
+    Assume these have already undergone L1 processing
     """
     filepattern = "simcal_dark_{0:04d}.fits"
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
-        sim_data = np.random.poisson(lam=150, size=(1200, 2200))
+        sim_data = np.random.poisson(lam=150, size=(1024, 1024))
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.save(filedir=filedir, filename=filepattern.format(i))
 
