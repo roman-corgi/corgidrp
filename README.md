@@ -14,7 +14,7 @@ Contact Jason is you have any questions on how to get started. Below is a quick 
 
 ### The basics of getting setup
 #### Find a task to work on
-Check out the [Github issues page](https://github.com/roman-corgi/corgidrp/issues) for tasks that need attention. Alternatively, contact Jason (@semaphoreP).
+Check out the [Github issues page](https://github.com/roman-corgi/corgidrp/issues) for tasks that need attention. Alternatively, contact Jason (@semaphoreP). _Make sure to tag yourself on the issue and mention in the comments if you start working on it._ 
 
 #### Clone the git repository and install
 
@@ -61,12 +61,12 @@ Inside the function can be nearly anything you want, but the function signature 
 
   * The input dataset should always be the first input
   * Additional arguments and keywords exist only if you need them. A pipeline step can only have a single argument (the input dataset) if needed.
-  * All additional function arguments/keywords should only consist of the following types: int, float, str, or a class defined in kpicdrp.Data. 
+  * All additional function arguments/keywords should only consist of the following types: int, float, str, or a class defined in corgidrp.Data. 
     * (Long explaination for the curious: The reason for this is that pipeline steps can be written out as text files. Int/float/str are easily represented succinctly by textfiles. All classes in kpcidrp.Data can be created simply by passing in a filepath. Therefore, all pipeline steps have easily recordably arguments for easy reproducibility.)
   * The first line of the function generally should be creating a copy of the dataset (which will be the output dataset). This way, the output dataset is not the same instance as the input dataset. This will make it easier to ensure reproducibility. 
   * The function should always end with updating the header and (typically) the data of the output dataset. The history of running this pipeline step should be recorded in the header. 
 
-You can check out `kpicdrp.detector.dark_subtraction` function as an example. 
+You can check out `corgidrp.detector.dark_subtraction` function as an example. 
 
 ### Write a unit test to debug your pipeline step
 
