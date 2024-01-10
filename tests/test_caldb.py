@@ -119,5 +119,29 @@ def test_get_calib():
 
 
 
+def test_caldb_scan():
+    """
+    Tests ability to scan a folder to look for calibraiton files
+    """
+    # remove any stranded testcaldb if needed 
+    if os.path.exists(testcaldb_filepath):
+        os.remove(testcaldb_filepath)
+    assert(not os.path.exists(testcaldb_filepath))
+
+    # create custom caldb for testing
+    testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
+    assert(len(testcaldb._db.index) == 0)
+
+    # there should be no calibration files in "./simdata", just unprocessed data
+    testcaldb.scan_dir_for_new_entries(datadir)
+    assert(len(testcaldb._db.index) == 0)
+
+    # there should be at least the master dark in "./tsetcalib"
+    testcaldb.scan_dir_for_new_entries(calibdir)
+    assert(len(testcaldb._db.index) > 0)
+
+    # reset everything
+    os.remove(testcaldb_filepath)
+
 if __name__ == "__main__":
-    test_caldb_insert_and_remove()
+    test_caldb_scan()

@@ -261,3 +261,41 @@ class Dark(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
+        
+
+datatypes = { "Image" : Image,
+              "Dark"  : Dark  }
+
+def autoload(filepath):
+    """
+    Loads the supplied FITS file filepath using the appropriate data class
+
+    Should be used sparingly to avoid accidentally loading in data of the wrong type
+
+    Args:
+        filepath (str): path to FITS file
+
+    Returns:
+        corgidrp.data.* : an instance of one of the data classes specified here
+    """
+
+    with fits.open(filepath) as hdulist:
+        # check the exthdr for datatype
+        if 'DATATYPE' in hdulist[1].header:
+            dtype = hdulist[1].header['DATATYPE']
+        else:
+            # datatype not specified. Check if it's 2D
+            if len(hdulist[1].data.shape) == 2:
+                # a standard image (possibly a science frame)
+                dtype = "Image"
+            else:
+                errmsg = "Could not determine datatype for {0}. Data shape of {1} is not 2-D"
+                raise ValueError(errmsg.format(filepath, dtype))
+
+    # if we got here, we have a datatype
+    data_class = datatypes[dtype]
+
+    # use the class constructor to load in the data
+    frame = data_class(filepath)
+
+    return frame

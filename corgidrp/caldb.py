@@ -178,7 +178,7 @@ class CalDB():
         # update database from disk in case anything changed
         if to_disk:
             self.load()
-            
+
         # downselect to only calibs of this type
         calibdf = self._db[self._db["Type"] == dtype_label] 
 
@@ -191,3 +191,38 @@ class CalDB():
 
         # load the object from disk and return it
         return dtype(calib_filepath)
+    
+    def scan_dir_for_new_entries(self, filedir, look_in_subfolders=True, to_disk=True):
+        """
+        Scan a folder and subfolder for calibration files and add them all to the caldb
+
+        Args:
+            filedir (str): path to folder to scan (includes all subfolders by default)
+            look_in_subfolders (bool): whether to look in subfolders for files. True by default
+            to_disk (bool): True by default, will update DB from disk before adding entry and saving it back to disk
+        """
+        calib_frames = []
+        # walk the directory to find all the calibration files
+        for dirpath, subfolders, filenames in os.walk(filedir):
+            for filename in filenames:
+                # hard coded check only for files that end in .fits
+                if filename[-5:] != ".fits":
+                    continue 
+
+                filepath = os.path.join(dirpath, filename)
+                frame = data.autoload(filepath)
+
+                # check what class it has been loaded as. only save frames that fall into calibration classes
+                if frame.__class__ in labels:
+                    calib_frames.append(frame)
+
+            # the first iteration looks in the basedir
+            # if we don't wnat to look in subdirs now, we should break
+            if not look_in_subfolders:
+                break
+
+        # load all these files into the caldb
+        for calib_frame in calib_frames:
+            self.create_entry(calib_frame, to_disk=to_disk)
+
+        
