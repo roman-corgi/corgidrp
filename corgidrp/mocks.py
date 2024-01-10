@@ -3,17 +3,23 @@ import astropy.io.fits as fits
 import corgidrp.data as data
 
 
-def create_dark_calib_files(filedir, numfiles=10):
+def create_dark_calib_files(filedir=None, numfiles=10):
     """
     Create simulated data to create a master dark. 
-    Assume these have already undergone L1 processing
+    Assume these have already undergone L1 processing and are L2a level products
     """
     filepattern = "simcal_dark_{0:04d}.fits"
+    frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
         sim_data = np.random.poisson(lam=150, size=(1024, 1024))
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
-        frame.save(filedir=filedir, filename=filepattern.format(i))
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    dataset = data.Dataset(frames)
+    return dataset
+    
 
 
 def create_default_headers():
@@ -24,7 +30,7 @@ def create_default_headers():
     exthdr = fits.Header()
 
     # fill in prihdr
-    prihdr['OBSID'] = 1
+    prihdr['OBSID'] = 0
     prihdr['BUILD'] = 0
     prihdr['OBSTYPE'] = 'SCI'
     prihdr['MOCK'] = True
@@ -67,8 +73,8 @@ def create_default_headers():
     exthdr['CFAM_V'] = 1.0
     exthdr['DPAM_H'] = 1.0
     exthdr['DPAM_V'] = 1.0
-    exthdr['DATETIME'] = '2024-02-01T10:00:00.000Z'
-    exthdr['HIERARCH'] = "DATA_LEVEL= 'L1'"
+    exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
+    exthdr['DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
