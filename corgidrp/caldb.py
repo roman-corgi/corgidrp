@@ -66,7 +66,7 @@ class CalDB():
         Args:
             entry(corgidrp.data.Image subclass): calibration frame to add to the database
             is_calib (bool): is a calibration frame. if Not, it won't look up filetype. 
-                             Used to extract properties from science frames for matching
+                             Only used in get_calib() to grab metadata for science frames
         """
         filepath = os.path.abspath(entry.filepath)
         if is_calib:
@@ -158,12 +158,12 @@ class CalDB():
 
     def get_calib(self, frame, dtype, to_disk=True):
         """
-        Outputs the best background or bad pixel map calibration file (same Integration Time and Coadds, >1 # of Files Used, and then searches for the most similar time) to use when a raw file is inputted
+        Outputs the best calibration file of the given type for the input sciene frame. 
 
         Args:
             file (corgidrp.data.Image): an image frame to request a calibratio for
             dtype (corgidrp.data Class): for example: corgidrp.data.Dark (TODO: document the entire list of options)
-            to_disk (bool): True by default, will update DB from disk before adding entry and saving it back to disk
+            to_disk (bool): True by default, will update DB from disk before matching
         
         Returns:
             corgidrp.data.*: an instance of the appropriate calibration type (Exact type depends on calibration type)
