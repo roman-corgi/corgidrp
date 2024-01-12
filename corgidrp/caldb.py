@@ -9,7 +9,7 @@ import corgidrp.data as data
 import astropy.time as time
 
 
-column_names = ["Filepath", "Type", "MJD", "EXPTIME", "Files Used", "OBSID", "NAXIS1", "NAXIS2", "OPMODE", "CMDGAIN", "EXCAMT"]
+column_names = ["Filepath", "Type", "MJD", "EXPTIME", "Files Used", "Date Created", "DRPVERSN", "OBSID", "NAXIS1", "NAXIS2", "OPMODE", "CMDGAIN", "EXCAMT"]
 
 labels = {data.Dark : "Dark"}
 
@@ -82,13 +82,16 @@ class CalDB():
         else:
             files_used = 0
 
+        date_created = time.Time(entry.ext_hdr['DRPCTIME']).mjd
+        drp_version = entry.ext_hdr['DRPVERSN']
+
         obsid = entry.pri_hdr['OBSID']
 
         # this only works for 2D images. may need to adapt for non-2D calibration frames
         naxis1 = entry.data.shape[-1]
         naxis2 = entry.data.shape[-2]
 
-        row = [filepath, datatype, mjd, exptime, files_used, obsid, naxis1, naxis2]
+        row = [filepath, datatype, mjd, exptime, files_used, date_created, drp_version, obsid, naxis1, naxis2]
 
         # rest are ext_hdr keys we can copy
         start_index = len(row)

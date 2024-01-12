@@ -3,7 +3,7 @@ import os
 import pathlib
 import configparser
 
-version = 0.1
+version = "0.1"
 
 # borrowed from the kpicdrp caldb
 # load in default caldbs based on configuration file
