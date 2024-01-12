@@ -1,6 +1,8 @@
 import os
 import numpy as np
+import corgidrp
 import astropy.io.fits as fits
+import astropy.time as time
 
 class Dataset():
     """
@@ -147,6 +149,7 @@ class Image():
 
         else:
             # data has been passed in directly
+            # creation of a new file in DRP eyes
             if pri_hdr is None or ext_hdr is None:
                 raise ValueError("Missing primary and/or extension headers, because you passed in raw data")
             self.pri_hdr = pri_hdr
@@ -154,6 +157,11 @@ class Image():
             self.data = data_or_filepath
             self.filedir = "."
             self.filename = ""
+
+            # record when this file was created and with which version of the pipeline
+            self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
+            self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
+
 
         # can do fancier things here if needed or storing more meta data
 
@@ -194,9 +202,9 @@ class Image():
         Args:
             input_dataset (corgidrp.data.Dataset): the input dataset that were combined together to make this image
         """
-        self.ext_hdr['DRPNFILE'] = len(input_dataset) # corgidrp specific keyword
+        self.ext_hdr.set('DRPNFILE', len(input_dataset), "Number of files used to create this processed frame")
         for i, img in enumerate(input_dataset):
-            self.ext_hdr['FILE{0}'.format(i)] = img.filename
+            self.ext_hdr.set('FILE{0}'.format(i), img.filename, "Filename of file #{0} used to create this frame".format(i))
 
     def copy(self, copy_data=True):
         """
@@ -219,6 +227,10 @@ class Image():
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
         new_img.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img
 
@@ -261,3 +273,41 @@ class Dark(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
+        
+
+datatypes = { "Image" : Image,
+              "Dark"  : Dark  }
+
+def autoload(filepath):
+    """
+    Loads the supplied FITS file filepath using the appropriate data class
+
+    Should be used sparingly to avoid accidentally loading in data of the wrong type
+
+    Args:
+        filepath (str): path to FITS file
+
+    Returns:
+        corgidrp.data.* : an instance of one of the data classes specified here
+    """
+
+    with fits.open(filepath) as hdulist:
+        # check the exthdr for datatype
+        if 'DATATYPE' in hdulist[1].header:
+            dtype = hdulist[1].header['DATATYPE']
+        else:
+            # datatype not specified. Check if it's 2D
+            if len(hdulist[1].data.shape) == 2:
+                # a standard image (possibly a science frame)
+                dtype = "Image"
+            else:
+                errmsg = "Could not determine datatype for {0}. Data shape of {1} is not 2-D"
+                raise ValueError(errmsg.format(filepath, dtype))
+
+    # if we got here, we have a datatype
+    data_class = datatypes[dtype]
+
+    # use the class constructor to load in the data
+    frame = data_class(filepath)
+
+    return frame
