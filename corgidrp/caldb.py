@@ -104,7 +104,6 @@ class CalDB():
 
         return row, row_dict
 
-
     def create_entry(self, entry, to_disk=True):
         """
         Add a new entry to or update an existing one in the database. Note that function by default will load and save db to disk
@@ -156,8 +155,6 @@ class CalDB():
         # save to disk to update changes
         if to_disk:
             self.save()
-
-
 
     def get_calib(self, frame, dtype, to_disk=True):
         """
