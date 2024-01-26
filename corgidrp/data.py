@@ -95,15 +95,15 @@ class Dataset():
         # update data if necessary
         if new_all_data is not None:
             if new_all_data.shape != self.all_data.shape:
-                raise TypeError("The shape of new_all_data is {0}, whereas we are expecting {1}".format(new_all_data.shape, self.all_data.shape))
+                raise ValueError("The shape of new_all_data is {0}, whereas we are expecting {1}".format(new_all_data.shape, self.all_data.shape))
             self.all_data[:] = new_all_data # specific operation overwrites the existing data rather than changing pointers
         if new_all_err is not None:
             if new_all_err.shape != self.all_err.shape:
-                raise TypeError("The shape of new_all_err is {0}, whereas we are expecting {1}".format(new_all_err.shape, self.all_err.shape))
+                raise ValueError("The shape of new_all_err is {0}, whereas we are expecting {1}".format(new_all_err.shape, self.all_err.shape))
             self.all_err[:] = new_all_err # specific operation overwrites the existing data rather than changing pointers
         if new_all_dq is not None:
             if new_all_dq.shape != self.all_dq.shape:
-                raise TypeError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))
+                raise ValueError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))
             self.all_dq[:] = new_all_dq # specific operation overwrites the existing data rather than changing pointers
 
         # update history
@@ -159,21 +159,26 @@ class Image():
                 self.ext_hdr = hdulist[1].header
                 self.data = hdulist[1].data
                 
-                if len(hdulist) > 2:
-                    if hdulist.fileinfo(2) is not None:
-                        self.err = hdulist[2].data
-                elif err is not None:
+                # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions 
+                if err is not None:
                     if np.shape(self.data) != np.shape(err):
-                        raise TypeError("shape mismatch")
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
                     self.err = err
+                # we assume that the ERR extension is index 2 of hdulist
+                elif len(hdulist)>2:
+                    self.err = hdulist[2].data
+                else:
+                    self.err = np.zeros(self.data.shape)
                 
-                if len(hdulist) > 3:    
-                    if hdulist.fileinfo(3) is not None:
-                        self.dq = hdulist[3].data     
-                elif dq is not None:
+                if dq is not None:
                     if np.shape(self.data) != np.shape(dq):
-                        raise TypeError("shape mismatch")
-                    self.dq = dq    
+                        raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
+                    self.dq = dq
+                # we assume that the DQ extension is index 3 of hdulist
+                elif len(hdulist)>3:
+                    self.dq = hdulist[3].data 
+                else:
+                    self.dq = np.zeros(self.data.shape, dtype = np.uint16)    
             
                 
             # parse the filepath to store the filedir and filename
@@ -198,12 +203,16 @@ class Image():
             self.filename = ""
             if err is not None:
                 if np.shape(self.data) != np.shape(err):
-                    raise TypeError("shape mismatch")
+                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
                 self.err = err
+            else:
+                self.err = np.zeros(self.data.shape)
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
-                    raise TypeError("shape mismatch")
+                    raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                 self.dq = dq
+            else:
+                self.dq = np.zeros(self.data.shape)
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
@@ -237,16 +246,14 @@ class Image():
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
-        if hasattr(self, "err"):
-            errhd = fits.Header()
-            errhd["EXTNAME"] = "ERR"
-            errhdu = fits.ImageHDU(data=self.err, header = errhd)
-            hdulist.append(errhdu)
-        if hasattr(self, "dq"):
-            dqhd = fits.Header() 
-            dqhd["EXTNAME"]="DQ"
-            dqhdu = fits.ImageHDU(data=self.dq, header = dqhd)
-            hdulist.append(dqhdu)
+        errhd = fits.Header()
+        errhd["EXTNAME"] = "ERR"
+        errhdu = fits.ImageHDU(data=self.err, header = errhd)
+        hdulist.append(errhdu)
+        dqhd = fits.Header() 
+        dqhd["EXTNAME"] = "DQ"
+        dqhdu = fits.ImageHDU(data=self.dq, header = dqhd)
+        hdulist.append(dqhdu)
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
@@ -276,21 +283,14 @@ class Image():
         """
         if copy_data:
             new_data = np.copy(self.data)
-            if hasattr(self, "err"):
-                new_err = np.copy(self.err)
-            if hasattr(self, "dq"):
-                new_dq = np.copy(self.dq)
+            new_err = np.copy(self.err)
+            new_dq = np.copy(self.dq)
         else:
             new_data = self.data # this is just pointer referencing
-            if hasattr(self, "err"):
-                new_err = self.err
-            if hasattr(self, "dq"):
-                new_dq = self.dq
-        if hasattr(self, "err") and hasattr(self, "dq"):
-            new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq)
-        else:
-            new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-
+            new_err = self.err
+            new_dq = self.dq
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq)
+        
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
         new_img.filedir = self.filedir
@@ -302,11 +302,13 @@ class Image():
         return new_img
 
     def get_masked_data(self):
-        if hasattr(self, "dq"):
-            mask = self.dq>0
-            return ma.masked_array(self.data, mask=mask)
-        else:
-            raise TypeError("no data quality array available")    
+        """
+        uses the dq array to generate a numpy masked array
+        Returns:
+            masked array
+        """
+        mask = self.dq>0
+        return ma.masked_array(self.data, mask=mask)    
 
 
 class Dark(Image):
