@@ -36,18 +36,14 @@ class Dataset():
 
         # create 3-D cube of all the data
         self.all_data = np.array([frame.data for frame in self.frames])
-        if hasattr(self.frames[0], "err"):
-            self.all_err = np.array([frame.err for frame in self.frames])
-        if hasattr(self.frames[0], "dq"):
-            self.all_dq = np.array([frame.dq for frame in self.frames])
+        self.all_err = np.array([frame.err for frame in self.frames])
+        self.all_dq = np.array([frame.dq for frame in self.frames])
         # do a clever thing to point all the individual frames to the data in this cube
         # this way editing a single frame will also edit the entire datacube
         for i, frame in enumerate(self.frames):
             frame.data = self.all_data[i]
-            if hasattr(frame, "err"):
-                frame.err = self.all_err[i]
-            if hasattr(frame, "dq"):
-                frame.dq = self.all_dq[i]
+            frame.err = self.all_err[i]
+            frame.dq = self.all_dq[i]
         
     def __iter__(self):
         return self.frames.__iter__()
@@ -303,9 +299,10 @@ class Image():
 
     def get_masked_data(self):
         """
-        uses the dq array to generate a numpy masked array
+        Uses the dq array to generate a numpy masked array of the data
+
         Returns:
-            masked array
+            numpy.ma.MaskedArray: the data masked
         """
         mask = self.dq>0
         return ma.masked_array(self.data, mask=mask)    
