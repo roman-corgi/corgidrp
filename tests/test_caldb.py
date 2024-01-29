@@ -7,6 +7,11 @@ import corgidrp.mocks as mocks
 datadir = os.path.join(os.path.dirname(__file__), "simdata")
 calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
 
+if not os.path.exists(datadir):
+    os.mkdir(datadir)
+if not os.path.exists(calibdir):
+    os.mkdir(calibdir) 
+
 testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
 
 # make some fake test data to use
