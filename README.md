@@ -1,6 +1,8 @@
 # corgidrp: CORonaGraph Instrument Data Reduction Pipeline
 This is the data reduction pipeline for the Nancy Grace Roman Space Telescope Coronagraph Instrument
 
+![Teseting Badge](https://github.com/roman-corgi/corgidrp/actions/workflows/python-app.yml/badge.svg)
+
 ## Install
 As the code is very much still in development, clone this repository, enter the top-level folder, and run the following command:
 ```
