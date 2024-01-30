@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import numpy.ma as ma
 import corgidrp
 import astropy.io.fits as fits
 import astropy.time as time
@@ -29,17 +30,20 @@ class Dataset():
             # list of frames
             self.frames = frames_or_filepaths
         
-        # turn lists into np.array for indiexing behavior
+        # turn lists into np.array for indexing behavior
         if isinstance(self.frames, list):
             self.frames = np.array(self.frames) # list of objects
 
         # create 3-D cube of all the data
         self.all_data = np.array([frame.data for frame in self.frames])
-
+        self.all_err = np.array([frame.err for frame in self.frames])
+        self.all_dq = np.array([frame.dq for frame in self.frames])
         # do a clever thing to point all the individual frames to the data in this cube
         # this way editing a single frame will also edit the entire datacube
         for i, frame in enumerate(self.frames):
             frame.data = self.all_data[i]
+            frame.err = self.all_err[i]
+            frame.dq = self.all_dq[i]
         
     def __iter__(self):
         return self.frames.__iter__()
@@ -74,19 +78,29 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
-    def update_after_processing_step(self, history_entry, new_all_data=None):
+    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None):
         """
         Updates the dataset after going through a processing step
 
         Args:
             history_entry (str): a description of what processing was done. Mention reference files used.
             new_all_data (np.array): (optional) Array of new data. Needs to be the same shape as `all_data`
+            new_all_err (np.array): (optional) Array of new err. Needs to be the same shape as `all_err`
+            new_all_dq (np.array): (optional) Array of new dq. Needs to be the same shape as `all_dq`
         """
         # update data if necessary
         if new_all_data is not None:
             if new_all_data.shape != self.all_data.shape:
                 raise ValueError("The shape of new_all_data is {0}, whereas we are expecting {1}".format(new_all_data.shape, self.all_data.shape))
             self.all_data[:] = new_all_data # specific operation overwrites the existing data rather than changing pointers
+        if new_all_err is not None:
+            if new_all_err.shape != self.all_err.shape:
+                raise ValueError("The shape of new_all_err is {0}, whereas we are expecting {1}".format(new_all_err.shape, self.all_err.shape))
+            self.all_err[:] = new_all_err # specific operation overwrites the existing data rather than changing pointers
+        if new_all_dq is not None:
+            if new_all_dq.shape != self.all_dq.shape:
+                raise ValueError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))
+            self.all_dq[:] = new_all_dq # specific operation overwrites the existing data rather than changing pointers
 
         # update history
         for img in self.frames:
@@ -119,16 +133,20 @@ class Image():
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        err (np.array): 2-D uncertainty data
+        dq (np.array): 2-D data quality, 0: good, 1: bad
 
     Attributes:
         data (np.array): 2-D data for this Image
+        err (np.array): 2-D uncertainty
+        dq (np.array): 2-D data quality
         pri_hdr (astropy.io.fits.Header): primary header
         ext_hdr (astropy.io.fits.Header): ext_hdr. Generally this header will be edited/added to
         filename (str): the filename corresponding to this Image
         filedir (str): the file directory on disk where this image is to be/already saved.
         filepath (str): full path to the file on disk (if it exists)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
@@ -136,7 +154,29 @@ class Image():
                 # image data is in FITS extension
                 self.ext_hdr = hdulist[1].header
                 self.data = hdulist[1].data
+                
+                # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions 
+                if err is not None:
+                    if np.shape(self.data) != np.shape(err):
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
+                    self.err = err
+                # we assume that the ERR extension is index 2 of hdulist
+                elif len(hdulist)>2:
+                    self.err = hdulist[2].data
+                else:
+                    self.err = np.zeros(self.data.shape)
+                
+                if dq is not None:
+                    if np.shape(self.data) != np.shape(dq):
+                        raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
+                    self.dq = dq
+                # we assume that the DQ extension is index 3 of hdulist
+                elif len(hdulist)>3:
+                    self.dq = hdulist[3].data 
+                else:
+                    self.dq = np.zeros(self.data.shape, dtype = np.uint16)    
             
+                
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
             if len(filepath_args) == 1:
@@ -157,6 +197,18 @@ class Image():
             self.data = data_or_filepath
             self.filedir = "."
             self.filename = ""
+            if err is not None:
+                if np.shape(self.data) != np.shape(err):
+                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
+                self.err = err
+            else:
+                self.err = np.zeros(self.data.shape)
+            if dq is not None:
+                if np.shape(self.data) != np.shape(dq):
+                    raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
+                self.dq = dq
+            else:
+                self.dq = np.zeros(self.data.shape)
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
@@ -190,6 +242,14 @@ class Image():
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
+        errhd = fits.Header()
+        errhd["EXTNAME"] = "ERR"
+        errhdu = fits.ImageHDU(data=self.err, header = errhd)
+        hdulist.append(errhdu)
+        dqhd = fits.Header() 
+        dqhd["EXTNAME"] = "DQ"
+        dqhdu = fits.ImageHDU(data=self.dq, header = dqhd)
+        hdulist.append(dqhdu)
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
@@ -219,11 +279,14 @@ class Image():
         """
         if copy_data:
             new_data = np.copy(self.data)
+            new_err = np.copy(self.err)
+            new_dq = np.copy(self.dq)
         else:
             new_data = self.data # this is just pointer referencing
-
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-
+            new_err = self.err
+            new_dq = self.dq
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq)
+        
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
         new_img.filedir = self.filedir
@@ -233,6 +296,17 @@ class Image():
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img
+
+    def get_masked_data(self):
+        """
+        Uses the dq array to generate a numpy masked array of the data
+
+        Returns:
+            numpy.ma.MaskedArray: the data masked
+        """
+        mask = self.dq>0
+        return ma.masked_array(self.data, mask=mask)    
+
 
 class Dark(Image):
     """
