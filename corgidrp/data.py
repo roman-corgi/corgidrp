@@ -17,6 +17,10 @@ class Dataset():
         frames (list): list of data objects (probably corgidrp.data.Image)
     """
     def __init__(self, frames_or_filepaths):
+        """
+        Args:
+            frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
+        """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
 
@@ -29,7 +33,7 @@ class Dataset():
         else:
             # list of frames
             self.frames = frames_or_filepaths
-        
+
         # turn lists into np.array for indexing behavior
         if isinstance(self.frames, list):
             self.frames = np.array(self.frames) # list of objects
@@ -44,7 +48,7 @@ class Dataset():
             frame.data = self.all_data[i]
             frame.err = self.all_err[i]
             frame.dq = self.all_dq[i]
-        
+
     def __iter__(self):
         return self.frames.__iter__()
 
@@ -55,9 +59,9 @@ class Dataset():
         else:
             # return a subset of the dataset
             return Dataset(self.frames[indices])
-    
+
     def __len__(self):
-        return len(self.frames)        
+        return len(self.frames)
 
     def save(self, filedir, filenames=None):
         """
@@ -109,12 +113,13 @@ class Dataset():
 
     def copy(self, copy_data=True):
         """
-        Make a copy of this dataset, including all data and headers. 
+        Make a copy of this dataset, including all data and headers.
         Data copying can be turned off if you only want to modify the headers
         Headers should always be copied as we should modify them any time we make new edits to the data
 
-        Args:  
+        Args:
             copy_data (bool): (optional) whether the data should be copied. Default is True
+
         Returns:
             corgidrp.data.Dataset: a copy of this dataset
         """
@@ -154,8 +159,8 @@ class Image():
                 # image data is in FITS extension
                 self.ext_hdr = hdulist[1].header
                 self.data = hdulist[1].data
-                
-                # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions 
+
+                # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
                     if np.shape(self.data) != np.shape(err):
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
@@ -165,18 +170,18 @@ class Image():
                     self.err = hdulist[2].data
                 else:
                     self.err = np.zeros(self.data.shape)
-                
+
                 if dq is not None:
                     if np.shape(self.data) != np.shape(dq):
                         raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                     self.dq = dq
                 # we assume that the DQ extension is index 3 of hdulist
                 elif len(hdulist)>3:
-                    self.dq = hdulist[3].data 
+                    self.dq = hdulist[3].data
                 else:
-                    self.dq = np.zeros(self.data.shape, dtype = np.uint16)    
-            
-                
+                    self.dq = np.zeros(self.data.shape, dtype = np.uint16)
+
+
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
             if len(filepath_args) == 1:
@@ -217,12 +222,12 @@ class Image():
 
         # can do fancier things here if needed or storing more meta data
 
-    # create this field dynamically 
+    # create this field dynamically
     @property
     def filepath(self):
         return os.path.join(self.filedir, self.filename)
-    
-    
+
+
     def save(self, filename=None, filedir=None):
         """
         Save file to disk with user specified filepath
@@ -246,7 +251,7 @@ class Image():
         errhd["EXTNAME"] = "ERR"
         errhdu = fits.ImageHDU(data=self.err, header = errhd)
         hdulist.append(errhdu)
-        dqhd = fits.Header() 
+        dqhd = fits.Header()
         dqhd["EXTNAME"] = "DQ"
         dqhdu = fits.ImageHDU(data=self.dq, header = dqhd)
         hdulist.append(dqhdu)
@@ -257,7 +262,7 @@ class Image():
         """
         Record what input dataset was used to create this Image.
         This assumes many Images were used to make this single Image.
-        Record is stored in the ext header. 
+        Record is stored in the ext header.
 
         Args:
             input_dataset (corgidrp.data.Dataset): the input dataset that were combined together to make this image
@@ -268,12 +273,13 @@ class Image():
 
     def copy(self, copy_data=True):
         """
-        Make a copy of this image file. including data and headers. 
+        Make a copy of this image file. including data and headers.
         Data copying can be turned off if you only want to modify the headers
         Headers should always be copied as we should modify them any time we make new edits to the data
 
-        Args:  
+        Args:
             copy_data (bool): (optional) whether the data should be copied. Default is True
+
         Returns:
             corgidrp.data.Image: a copy of this Image
         """
@@ -286,7 +292,7 @@ class Image():
             new_err = self.err
             new_dq = self.dq
         new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq)
-        
+
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
         new_img.filedir = self.filedir
@@ -305,12 +311,12 @@ class Image():
             numpy.ma.MaskedArray: the data masked
         """
         mask = self.dq>0
-        return ma.masked_array(self.data, mask=mask)    
+        return ma.masked_array(self.data, mask=mask)
 
 
 class Dark(Image):
     """
-    Dark calibration frame for a given exposure time. 
+    Dark calibration frame for a given exposure time.
 
      Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
@@ -347,7 +353,7 @@ class Dark(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
-        
+
 
 datatypes = { "Image" : Image,
               "Dark"  : Dark  }
