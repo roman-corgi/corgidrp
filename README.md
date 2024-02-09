@@ -112,9 +112,16 @@ To run all the tests in the test suite, go to the base corgidrp folder in a term
 ### Create a pull request to merge your changes
 Use the Github pull request feature to request that your changes get merged into the `main` branch. Assign Jason/Max to be your reviewers. Your changes will be reviewed, and possibly some edits will be requested. You can simply make additional pushes to your branch to update the pull request with those changes (you don't need to delete the PR and make a new one). When the branch is satisfactory, we will pull your changes in. 
 
-### Overarching Design Guidance (Working Draft)
+### Overarching Design Guidance and FAQ
 
-* Hard-coding variables
+* What python version should I develop in?
+  * Python 3.11
+    
+* How should I treat hard-coded variables
   * If a variable value is extremely unlikely to change AND is only required by one module, it can be hard coded inside that module.
-  * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central metadata file `corgidrp/metadata.yaml`. 
+  * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central conatants file (name TBD). 
   * If it is likely to change, it should be implemented by a config file.
+ 
+* Where should I store computed variables so they can be referenced later in the pipeline?
+  * If possible, in the header of the dataset being processed.
+  * If not possible, then let's chat! 
