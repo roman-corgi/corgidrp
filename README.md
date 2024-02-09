@@ -80,7 +80,7 @@ Inside the function can be nearly anything you want, but the function signature 
   * The input dataset should always be the first input
   * Additional arguments and keywords exist only if you need them. A pipeline step can only have a single argument (the input dataset) if needed.
   * All additional function arguments/keywords should only consist of the following types: int, float, str, or a class defined in corgidrp.Data. 
-    * (Long explaination for the curious: The reason for this is that pipeline steps can be written out as text files. Int/float/str are easily represented succinctly by textfiles. All classes in kpcidrp.Data can be created simply by passing in a filepath. Therefore, all pipeline steps have easily recordably arguments for easy reproducibility.)
+    * (Long explaination for the curious: The reason for this is that pipeline steps can be written out as text files. Int/float/str are easily represented succinctly by textfiles. All classes in kpcidrp.Data can be created simply by passing in a filepath. Therefore, all pipeline steps have easily recordable arguments for easy reproducibility.)
   * The first line of the function generally should be creating a copy of the dataset (which will be the output dataset). This way, the output dataset is not the same instance as the input dataset. This will make it easier to ensure reproducibility. 
   * The function should always end with updating the header and (typically) the data of the output dataset. The history of running this pipeline step should be recorded in the header. 
 
@@ -111,3 +111,17 @@ To run all the tests in the test suite, go to the base corgidrp folder in a term
 
 ### Create a pull request to merge your changes
 Use the Github pull request feature to request that your changes get merged into the `main` branch. Assign Jason/Max to be your reviewers. Your changes will be reviewed, and possibly some edits will be requested. You can simply make additional pushes to your branch to update the pull request with those changes (you don't need to delete the PR and make a new one). When the branch is satisfactory, we will pull your changes in. 
+
+### Overarching Design Guidance and FAQ
+
+* What python version should I develop in?
+  * Python 3.11
+    
+* How should I treat hard-coded variables
+  * If a variable value is extremely unlikely to change AND is only required by one module, it can be hard coded inside that module.
+  * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central conatants file (name TBD). 
+  * If it is likely to change, it should be implemented by a config file.
+ 
+* Where should I store computed variables so they can be referenced later in the pipeline?
+  * If possible, in the header of the dataset being processed.
+  * If not possible, then let's chat! 
