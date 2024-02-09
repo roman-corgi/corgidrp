@@ -3,7 +3,6 @@ import os
 
 import corgidrp.data as data
 import corgidrp.detector as detector
-import corgidrp.metadata as metadata
 import corgidrp.mocks as mocks
 import numpy as np
 import pytest
@@ -15,11 +14,12 @@ def test_prescan_sub():
     """
     ###### create simulated data
     # check that simulated data folder exists, and create if not
-    # datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    datadir = './simdata/'
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
-    
+
+    # dataset = data.Dataset(['example_L1_input.fits'])
+
     obstype = 'ENG'
     mocks.create_prescan_files(filedir=datadir, obstype=obstype)
 
@@ -35,7 +35,9 @@ def test_prescan_sub():
     assert dataset[0].data[0, 0] == 0
 
     ###### create input data
-    input_frame = detector.create_prescan_files(dataset)
+    # input_frame = mocks.create_prescan_files(dataset)
+
+    output_frame = detector.prescan_biassub_v2(dataset)
 
     # check the level of dark current is approximately correct
     # assert np.mean(dark_frame.data) == pytest.approx(150, abs=1e-2)
