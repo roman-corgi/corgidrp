@@ -50,6 +50,8 @@ image_constants= {
         'prescan_reliable' : {
             'rows': 2200,
             'cols': 200,
+            'col_start': 800,
+            'col_end': 1000,
             'r0c0': [0, 800]
             },
         'parallel_overscan' : {
