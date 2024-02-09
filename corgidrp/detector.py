@@ -19,6 +19,8 @@ image_constants= {
         'prescan_reliable' : {
             'rows': 1200,
             'cols': 200,
+            'col_start': 800,
+            'col_end': 1000,
             'r0c0': [0, 800]
             },
         'parallel_overscan' : {
@@ -137,8 +139,8 @@ def prescan_biassub_v2(input_dataset, bias_offset=0.):
         p_r0 = image_constants[obstype]['prescan']['r0c0'][0]
         i_nrow = image_constants[obstype]['image']['rows']
         # select the good cols for getting row-by-row bias
-        st = image_constants[obstype]['prescan']['col_start']
-        end = image_constants[obstype]['prescan']['col_end']
+        st = image_constants[obstype]['prescan_reliable']['col_start']
+        end = image_constants[obstype]['prescan_reliable']['col_end']
         
         # prescan aligned with image rows
         al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
