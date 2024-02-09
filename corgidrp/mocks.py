@@ -27,11 +27,15 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
     Create simulated data. 
     """
     
-    if obstype != "ENG":
-        obstype = "SCI"
+    if obstype == "SCI":
         size = (1200, 2200)
-    else:
+    elif obstype == "ENG":
         size = (2200, 2200)
+    elif obstype == "CAL":
+        size = (2200,2200)
+    else:
+        raise ValueError(f'Obstype {obstype} not in ["SCI","ENG","CAL"]')
+
 
     filepattern = f"sim_prescan_{obstype}"
     filepattern = filepattern+"{0:04d}.fits"
