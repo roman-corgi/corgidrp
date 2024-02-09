@@ -77,6 +77,7 @@ def example_step(dataset, calib_data, tuneable_arg=1, another_arg="test"):
 
 Inside the function can be nearly anything you want, but the function signature and start/end of the function should follow a few rules.
 
+  * Each function should include a docstring that descibes what the function is doing, what the inputs (including units if appropriate) are and what the outputs (also with units). The dosctrings should be [goggle style docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). 
   * The input dataset should always be the first input
   * Additional arguments and keywords exist only if you need them. A pipeline step can only have a single argument (the input dataset) if needed.
   * All additional function arguments/keywords should only consist of the following types: int, float, str, or a class defined in corgidrp.Data. 
@@ -85,13 +86,6 @@ Inside the function can be nearly anything you want, but the function signature 
   * The function should always end with updating the header and (typically) the data of the output dataset. The history of running this pipeline step should be recorded in the header. 
 
 You can check out `corgidrp.detector.dark_subtraction` function as an example of a basic pipeline step.
-
-#### FAQ
-
-  * What about saving files?
-    * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
-  * Can I create new data classes?
-    * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Talk with Jason and Max to discuss how your class should be implemented!
 
 ### Write a unit test to debug your pipeline step
 
@@ -110,12 +104,27 @@ To run an individual test, call the test function you want to test at the bottom
 To run all the tests in the test suite, go to the base corgidrp folder in a terminal and run the `pytest` command. 
 
 ### Create a pull request to merge your changes
-Use the Github pull request feature to request that your changes get merged into the `main` branch. Assign Jason/Max to be your reviewers. Your changes will be reviewed, and possibly some edits will be requested. You can simply make additional pushes to your branch to update the pull request with those changes (you don't need to delete the PR and make a new one). When the branch is satisfactory, we will pull your changes in. 
+Before creating a pull request, review the design Principles below. Use the Github pull request feature to request that your changes get merged into the `main` branch. Assign Jason/Max to be your reviewers. Your changes will be reviewed, and possibly some edits will be requested. You can simply make additional pushes to your branch to update the pull request with those changes (you don't need to delete the PR and make a new one). When the branch is satisfactory, we will pull your changes in. 
 
-### Overarching Design Guidance and FAQ
+
+## Overarching Design Principles
+* Minimize the use of external packages, unless it saves us a lot of time. If you need to use something external, default to well-established and maintained packages, such as `numpy`, `scipy` or `Astropy`. If you think you need to use something else, please check with Jason and Max. 
+* Minimize the use of new classes, with the exception of new classes that extend the existing data framework.
+* The python module files (i.e. the *.py files) should typically hold on the order of 5-10 different functions. You can create new ones if need by, but they should be general enough to encapsulate other future functions as well.
+* All the image data in the Dataset and Image objects should be saved as standard numpy arrays. Other types of arrays (such as masked arrays) can be used as intermediate products within a function.
+* Keep things simple
+* Use __descriptive__ variable names **always**.
+* Comments should be used to describe section of the code where it's not immediately obvious what the code is doing. Using descriptive variable names will minimize the about of comments required.
+
+## FAQ
+
+  * What about saving files?
+    * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
+  * Can I create new data classes?
+    * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
 
 * What python version should I develop in?
-  * Python 3.11
+  * Python 3.12
     
 * How should I treat hard-coded variables
   * If a variable value is extremely unlikely to change AND is only required by one module, it can be hard coded inside that module.
