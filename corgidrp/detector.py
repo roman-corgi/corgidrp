@@ -19,8 +19,6 @@ image_constants= {
         'prescan_reliable' : {
             'rows': 1200,
             'cols': 200,
-            'col_start': 800,
-            'col_end': 1000,
             'r0c0': [0, 800]
             },
         'parallel_overscan' : {
@@ -50,8 +48,6 @@ image_constants= {
         'prescan_reliable' : {
             'rows': 2200,
             'cols': 200,
-            'col_start': 800,
-            'col_end': 1000,
             'r0c0': [0, 800]
             },
         'parallel_overscan' : {
@@ -104,7 +100,7 @@ def slice_section(frame, obstype, key):
         raise Exception('Corners invalid')
     return section
 
-def prescan_biassub_v2(input_dataset, bias_offset=0.):
+def prescan_biassub_v2(input_dataset, bias_offset=0., return_full_frame=False):
     """
     Perform pre-scan bias subtraction of a dataset.
 
@@ -114,9 +110,6 @@ def prescan_biassub_v2(input_dataset, bias_offset=0.):
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-
-
-
     # Make a copy of the input dataset to operate on
     output_dataset = input_dataset.copy()
 
@@ -140,17 +133,15 @@ def prescan_biassub_v2(input_dataset, bias_offset=0.):
         i_r0 = image_constants[obstype]['image']['r0c0'][0]
         p_r0 = image_constants[obstype]['prescan']['r0c0'][0]
         i_nrow = image_constants[obstype]['image']['rows']
-        # select the good cols for getting row-by-row bias
-        st = image_constants[obstype]['prescan_reliable']['col_start']
-        end = image_constants[obstype]['prescan_reliable']['col_end']
         
-        # prescan aligned with image rows
-        al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
-        
-        #medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
-        medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
+        if not return_full_frame:
+            # Get data from prescan (alined with image area)
+            al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
+            medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
+        else:
+            medbyrow = np.median(prescan, axis=1)[:, np.newaxis]
+            image = frame_data
 
-        # # Get data from prescan (alined with image area)
         bias = medbyrow - bias_offset
         image_bias_corrected = image - bias
 
