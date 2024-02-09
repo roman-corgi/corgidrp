@@ -35,6 +35,7 @@ def test_prescan_sub():
         assert dataset[0].data[0, 0] == 0
 
         output_frame = detector.prescan_biassub_v2(dataset)
+        output_frame_full = detector.prescan_biassub_v2(dataset, return_full_frame=True)
 
     ###### create input data
     # input_frame = mocks.create_prescan_files(dataset)
