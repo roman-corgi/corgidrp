@@ -57,6 +57,11 @@ def create_default_headers(obstype="ENG"):
 
     if obstype != "ENG":
         obstype = "SCI"
+        NAXIS1 = 2200
+        NAXIS2 = 1200
+    else:
+        NAXIS1 = 2200
+        NAXIS2 = 2200
 
     # fill in prihdr
     prihdr['OBSID'] = 0
@@ -65,6 +70,9 @@ def create_default_headers(obstype="ENG"):
     prihdr['MOCK'] = True
     
     # fill in exthdr
+    exthdr['NAXIS'] = 2
+    exthdr['NAXIS1'] = NAXIS1
+    exthdr['NAXIS2'] = NAXIS2
     exthdr['PCOUNT'] = 0
     exthdr['GCOUNT'] = 1
     exthdr['BSCALE'] = 1
