@@ -28,6 +28,9 @@ def test_dark_sub():
     # check that data is consistently modified
     dark_dataset.all_data[0,0,0] = 0
     assert dark_dataset[0].data[0,0] == 0
+    
+    dark_dataset[0].data[0,0] = 1
+    assert dark_dataset.all_data[0,0,0] == 1
 
     ###### create dark
     dark_frame = detector.create_dark_calib(dark_dataset)
