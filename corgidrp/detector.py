@@ -100,7 +100,7 @@ def slice_section(frame, obstype, key):
         raise Exception('Corners invalid')
     return section
 
-def prescan_biassub_v2(input_dataset, bias_offset=0., return_full_frame=False):
+def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
     Perform pre-scan bias subtraction of a dataset.
 
@@ -162,147 +162,55 @@ def prescan_biassub_v2(input_dataset, bias_offset=0., return_full_frame=False):
 
     return output_dataset
 
-def prescan_biassub(input_dataset, bias_offset=0.):
+def plot_detector_areas(image_constants, areas=('image', 'prescan',
+        'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
     """
-    Perform pre-scan bias subtraction of a dataset.
+    Create an image of the detector areas for visualization and debugging
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
-        bias_offset (float): an offset value to be subtracted from the bias
+        image_constants (dict): a dictionary of image constants
+        areas (tuple): a tuple of areas to create masks for
+
     Returns:
-        corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
+        np.ndarray: an image of the detector areas
     """
+    detector_areas = make_detector_areas(image_constants, areas=areas)
+    detector_area_image = np.zeros(
+        (image_constants['frame_rows'], image_constants['frame_cols']), dtype=int)
+    for i, area in enumerate(areas):
+        detector_area_image[detector_areas[area]] = i + 1
+    return detector_area_image
 
+def detector_area_mask(image_constants, area='image'):
+    """
+    Create a mask for the detector area
 
-    # Create a dictionary of image constants. Describing the different areas on the detector.
-    
-    def detector_area_mask(image_constants, area='image'):
-        """
-        Create a mask for the detector area
+    Args:
+        area (str): the area of the detector to create a mask for
+    Returns:
+        np.ndarray: a mask for the detector area
+    """
+    mask = np.zeros((image_constants['frame_rows'], image_constants['frame_cols']), dtype=bool)
+    mask[image_constants[area]['r0c0'][0]:image_constants[area]['r0c0'][0] + image_constants[area]['rows'],
+            image_constants[area]['r0c0'][1]:image_constants[area]['r0c0'][1] + image_constants[area]['cols']] = True
+    return mask
 
-        Args:
-            area (str): the area of the detector to create a mask for
-        Returns:
-            np.ndarray: a mask for the detector area
-        """
-        mask = np.zeros((image_constants['frame_rows'], image_constants['frame_cols']), dtype=bool)
-        mask[image_constants[area]['r0c0'][0]:image_constants[area]['r0c0'][0] + image_constants[area]['rows'],
-             image_constants[area]['r0c0'][1]:image_constants[area]['r0c0'][1] + image_constants[area]['cols']] = True
-        return mask
+def make_detector_areas(image_constants, areas=('image', 'prescan', 'prescan_reliable',
+        'parallel_overscan', 'serial_overscan')):
+    """
+    Create a dictionary of masks for the different detector areas
 
+    Args:
+        image_constants (dict): a dictionary of image constants
+        areas (tuple): a tuple of areas to create masks for
 
-    def make_detector_areas(image_constants, areas=('image', 'prescan', 'prescan_reliable',
-            'parallel_overscan', 'serial_overscan')):
-        """
-        Create a dictionary of masks for the different detector areas
-
-        Args:
-            image_constants (dict): a dictionary of image constants
-            areas (tuple): a tuple of areas to create masks for
-
-        Returns:
-            dict: a dictionary of masks for the different detector areas
-        """
-        detector_areas = {}
-        for area in areas:
-            detector_areas[area] = detector_area_mask(image_constants, area=area)
-        return detector_areas
-
-    
-    def make_detector_area_image(image_constants, areas=('image', 'prescan',
-            'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
-        """
-        Create an image of the detector areas for visualization and debugging
-
-        Args:
-            image_constants (dict): a dictionary of image constants
-            areas (tuple): a tuple of areas to create masks for
-
-        Returns:
-            np.ndarray: an image of the detector areas
-        """
-        detector_areas = make_detector_areas(image_constants, areas=areas)
-        detector_area_image = np.zeros(
-            (image_constants['frame_rows'], image_constants['frame_cols']), dtype=int)
-        for i, area in enumerate(areas):
-            detector_area_image[detector_areas[area]] = i + 1
-        return detector_area_image
-
-    detector_areas = make_detector_areas(image_constants_sci)
-    detector_area_image = make_detector_area_image(
-        image_constants_sci,
-        areas=('image', 'prescan', 'prescan_reliable', 'parallel_overscan', 'serial_overscan'))
-
-    plt.imshow(detector_area_image, origin='lower')
-    plt.show()
-
-    
-
-    # output_dataset = input_dataset.copy()
-
-    # Determine what type of file it is (engineering or science), then read Metadata file?
-
-    # cube = output_dataset.all_data
-    # frame = cube[0]
-    frame = fits.getdata('/home/samland/science/python/projects/corgidrp/example_L1_input.fits')
-
-    # prescan_reliable_mask = detector_area_mask(image_constants, area='prescan_reliable')
-    # image = frame[detector_areas['image']]
-    
-
-    prescan_reliable = frame[detector_areas['prescan_reliable']]
-    median_prescan = np.median(prescan_reliable, axis=1)[:, np.newaxis]
-
-    i_r0 = image_constants['image']['r0c0'][0]
-    p_r0 = image_constants['prescan']['r0c0'][0]
-    i_nrow = image_constants['image']['rows']
-
-    median_prescan_for_image_region = np.median(
-        prescan_reliable[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :], axis=1)[:, np.newaxis]
-
-    image_bias_corr = image - (median_prescan_for_image_region - bias_offset)
-    full_image_bias_corr = frame - (median_prescan - bias_offset)
-
-    return image_bias_corr
-
-
-    # Subtract the pre-scan bias
-    for frame in output_dataset:
-        frame.data = frame.data - np.nanmean(frame.data, axis=1)[:, np.newaxis]
-
-    # Get the part of the prescan that lines up with the image, and do a
-    # row-by-row bias subtraction on it
-    # i_r0 = self.meta.geom['image']['r0c0'][0]
-    # p_r0 = self.meta.geom['prescan']['r0c0'][0]
-    # i_nrow = self.meta.geom['image']['rows']
-    # # select the good cols for getting row-by-row bias
-    # st = self.meta.geom['prescan']['col_start']
-    # end = self.meta.geom['prescan']['col_end']
-    # # over all prescan rows
-    # medbyrow_tot = np.median(self.prescan[:,st:end], axis=1)[:, np.newaxis]
-    # # prescan relative to image rows
-    # self.al_prescan = self.prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
-    # medbyrow = np.median(self.al_prescan[:,st:end], axis=1)[:, np.newaxis]
-
-    # # Get data from prescan (image area)
-    # self.bias = medbyrow - self.bias_offset
-    # self.image_bias0 = self.image - self.bias
-
-    # # over total frame
-    # self.frame_bias = medbyrow_tot - self.bias_offset
-    # self.frame_bias0 = self.frame_dn[p_r0:, :] -  self.frame_bias
-
-
-
-    # cube = darksub_dataset.all_data - dark_frame.data
-
-    # history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
-
-    # update the output dataset with this new dark subtracted data and update the history
-    # darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube)
-
-    return output_dataset
-
+    Returns:
+        dict: a dictionary of masks for the different detector areas
+    """
+    detector_areas = {}
+    for area in areas:
+        detector_areas[area] = detector_area_mask(image_constants, area=area)
+    return detector_areas
 
 def dark_subtraction(input_dataset, dark_frame):
     """
