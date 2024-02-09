@@ -125,22 +125,22 @@ def prescan_biassub_v2(input_dataset, bias_offset=0., return_full_frame=False):
         # Get the reliable prescan area
         prescan = slice_section(frame_data, obstype, 'prescan_reliable')
 
-        # Get the image area
-        image = slice_section(frame_data, obstype, 'image')
-
-        # Get the part of the prescan that lines up with the image, and do a
-        # row-by-row bias subtraction on it
-        i_r0 = image_constants[obstype]['image']['r0c0'][0]
-        p_r0 = image_constants[obstype]['prescan']['r0c0'][0]
-        i_nrow = image_constants[obstype]['image']['rows']
-        
         if not return_full_frame:
+            # Get the image area
+            image = slice_section(frame_data, obstype, 'image')
+
+            # Get the part of the prescan that lines up with the image, and do a
+            # row-by-row bias subtraction on it
+            i_r0 = image_constants[obstype]['image']['r0c0'][0]
+            p_r0 = image_constants[obstype]['prescan']['r0c0'][0]
+            i_nrow = image_constants[obstype]['image']['rows']
+     
             # Get data from prescan (alined with image area)
             al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
             medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
         else:
-            medbyrow = np.median(prescan, axis=1)[:, np.newaxis]
             image = frame_data
+            medbyrow = np.median(prescan, axis=1)[:, np.newaxis]  
 
         bias = medbyrow - bias_offset
         image_bias_corrected = image - bias
