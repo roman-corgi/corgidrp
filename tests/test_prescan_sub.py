@@ -20,24 +20,24 @@ def test_prescan_sub():
 
     # dataset = data.Dataset(['example_L1_input.fits'])
 
-    obstype = 'ENG'
-    mocks.create_prescan_files(filedir=datadir, obstype=obstype)
+    for obstype in ['SCI', 'ENG']:
+        # create simulated data
+        dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype)
 
-    ####### test data architecture
-    filenames = glob.glob(os.path.join(datadir, f"sim_prescan_{obstype}*.fits"))
+        filenames = glob.glob(os.path.join(datadir, f"sim_prescan_{obstype}*.fits"))
 
-    dataset = data.Dataset(filenames)
+        dataset = data.Dataset(filenames)
 
-    assert len(dataset) == 2
-    
-    # check that data is consistently modified
-    dataset.all_data[0, 0, 0] = 0
-    assert dataset[0].data[0, 0] == 0
+        assert len(dataset) == 2
+
+        # check that data is consistently modified
+        dataset.all_data[0, 0, 0] = 0
+        assert dataset[0].data[0, 0] == 0
+
+        output_frame = detector.prescan_biassub_v2(dataset)
 
     ###### create input data
     # input_frame = mocks.create_prescan_files(dataset)
-
-    output_frame = detector.prescan_biassub_v2(dataset)
 
     # check the level of dark current is approximately correct
     # assert np.mean(dark_frame.data) == pytest.approx(150, abs=1e-2)
