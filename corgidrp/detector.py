@@ -146,7 +146,9 @@ def prescan_biassub_v2(input_dataset, bias_offset=0.):
         
         # prescan aligned with image rows
         al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
-        medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
+        
+        #medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
+        medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
 
         # # Get data from prescan (alined with image area)
         bias = medbyrow - bias_offset
