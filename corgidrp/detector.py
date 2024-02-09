@@ -113,22 +113,31 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     # Make a copy of the input dataset to operate on
     output_dataset = input_dataset.copy()
 
+    #initialize list of output frames to be concatenated
+    out_frames_data = []
+    out_frames_err = []
+    out_frames_dq = []
+
     # Iterate over frames
-    for i, frame in enumerate(output_dataset.frames):
+    for frame in output_dataset:
 
         frame_data = frame.data
+        frame_err = frame.err
+        frame_dq = frame.dq
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
         obstype = frame.pri_hdr['OBSTYPE']
-        assert(obstype in ['SCI','ENG'], f"Observation type of frame {i} is not 'SCI' or 'ENG'")
+        assert obstype in ['SCI','ENG'], f"Observation type of frame {i} is not 'SCI' or 'ENG'"
 
         # Get the reliable prescan area
         prescan = slice_section(frame_data, obstype, 'prescan_reliable')
 
         if not return_full_frame:
             # Get the image area
-            image = slice_section(frame_data, obstype, 'image')
-
+            image_data = slice_section(frame_data, obstype, 'image')
+            image_err = slice_section(frame_err, obstype, 'image')
+            image_dq = slice_section(frame_dq, obstype, 'image')
+            
             # Get the part of the prescan that lines up with the image, and do a
             # row-by-row bias subtraction on it
             i_r0 = image_constants[obstype]['image']['r0c0'][0]
@@ -139,22 +148,39 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
             medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
         else:
-            image = frame_data
+            image_data = frame_data
+            image_err = frame_err
+            image_dq = frame_dq
+            
             medbyrow = np.median(prescan, axis=1)[:, np.newaxis]  
 
         bias = medbyrow - bias_offset
-        image_bias_corrected = image - bias
+        image_bias_corrected = image_data - bias
 
-        # # over total frame
-        # medbyrow_tot = np.median(prescan[:,st:end], axis=1)[:, np.newaxis]
-        # frame_bias = medbyrow_tot - bias_offset
-        # frame_bias_corrected = frame_data[p_r0:, :] -  frame_bias
+        out_frames_data.append(image_bias_corrected)
+        out_frames_err.append(image_err)
+        out_frames_dq.append(image_dq)
 
-        # Update frame data and header in the dataset
-        output_dataset.frames[i].data = image_bias_corrected
-        output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
-        output_dataset.frames[i].ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
-        
+        # Update header in the dataset
+        frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
+        frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
+
+    
+    # Update all_data and reassign frame pointers (only necessary because the array size has changed)
+    out_frames_data_arr = np.array(out_frames_data)
+    out_frames_err_arr = np.array(out_frames_err)
+    out_frames_dq_arr = np.array(out_frames_dq)
+
+    output_dataset.all_data = out_frames_data_arr
+    output_dataset.all_err = out_frames_err_arr
+    output_dataset.all_dq = out_frames_dq_arr
+
+    for i,frame in enumerate(output_dataset):
+        frame.data = out_frames_data_arr[i]
+        frame.err = out_frames_err_arr[i]
+        frame.dq = out_frames_dq_arr[i]
+
+            
     history_msg = "Frames cropped and bias subtracted"
 
     # update the output dataset with this new dark subtracted data and update the history
