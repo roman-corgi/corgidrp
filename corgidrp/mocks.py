@@ -29,13 +29,17 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
     
     if obstype != "ENG":
         obstype = "SCI"
+        size = (1200, 2200)
+    else:
+        size = (2200, 2200)
 
     filepattern = f"sim_prescan_{obstype}"
     filepattern = filepattern+"{0:04d}.fits"
+
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers(obstype=obstype)
-        sim_data = np.random.poisson(lam=150, size=(1024, 1024))
+        sim_data = np.random.poisson(lam=150, size=size)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
