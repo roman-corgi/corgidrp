@@ -2,6 +2,66 @@ import numpy as np
 
 import corgidrp.data as data
 
+image_constants= {
+    'SCI' : {
+        'frame_rows' : 1200,
+        'frame_cols' : 2200,
+        'image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'prescan' : {
+            'rows': 1200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 1200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 163,
+            'cols': 1056,
+            'r0c0': [1037, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 1200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    'ENG' :{
+        'frame_rows' : 2200,
+        'frame_cols' : 2200,
+        'image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'prescan' : {
+            'rows': 2200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 2200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 1163,
+            'cols': 1056,
+            'r0c0': [1037, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 2200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    }
 
 def create_dark_calib(dark_dataset):
     """
@@ -20,6 +80,90 @@ def create_dark_calib(dark_dataset):
     
     return new_dark
 
+def slice_section(frame, obstype, key):
+    """Slice 2d section out of frame.
+
+    Parameters
+    ----------
+    frame : array_like
+        Full frame consistent with size given in frame_rows, frame_cols.
+    key : str
+        Keyword referencing section to be sliced; must exist in geom.
+
+    """
+    rows = image_constants[obstype][key]['rows']
+    cols = image_constants[obstype][key]['cols']
+    r0c0 = image_constants[obstype][key]['r0c0']
+
+    section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+    if section.size == 0:
+        raise Exception('Corners invalid')
+    return section
+
+def prescan_biassub_v2(input_dataset, bias_offset=0.):
+    """
+    Perform pre-scan bias subtraction of a dataset.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
+        bias_offset (float): an offset value to be subtracted from the bias
+    Returns:
+        corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
+    """
+
+
+
+    # Make a copy of the input dataset to operate on
+    output_dataset = input_dataset.copy()
+
+    # Iterate over frames
+    for i, frame in enumerate(output_dataset.frames):
+
+        frame_data = frame.data
+
+        # Determine what type of file it is (engineering or science), then choose detector area dict
+        obstype = frame.pri_hdr['OBSTYPE']
+        assert(obstype in ['SCI','ENG'], f"Observation type of frame {i} is not 'SCI' or 'ENG'")
+
+        # Get the reliable prescan area
+        prescan = slice_section(frame_data, obstype, 'prescan_reliable')
+
+        # Get the image area
+        image = slice_section(frame_data, obstype, 'image')
+
+        # Get the part of the prescan that lines up with the image, and do a
+        # row-by-row bias subtraction on it
+        i_r0 = image_constants[obstype]['image']['r0c0'][0]
+        p_r0 = image_constants[obstype]['prescan']['r0c0'][0]
+        i_nrow = image_constants[obstype]['image']['rows']
+        # select the good cols for getting row-by-row bias
+        st = image_constants[obstype]['prescan']['col_start']
+        end = image_constants[obstype]['prescan']['col_end']
+        
+        # prescan aligned with image rows
+        al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
+        medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
+
+        # # Get data from prescan (alined with image area)
+        bias = medbyrow - bias_offset
+        image_bias_corrected = image - bias
+
+        # # over total frame
+        # medbyrow_tot = np.median(prescan[:,st:end], axis=1)[:, np.newaxis]
+        # frame_bias = medbyrow_tot - bias_offset
+        # frame_bias_corrected = frame_data[p_r0:, :] -  frame_bias
+
+        # Update frame data and header in the dataset
+        output_dataset.frames[i].data = image_bias_corrected
+        output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
+        output_dataset.frames[i].ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
+        
+    history_msg = "Frames cropped and bias subtracted"
+
+    # update the output dataset with this new dark subtracted data and update the history
+    output_dataset.update_after_processing_step(history_msg)
+
+    return output_dataset
 
 def prescan_biassub(input_dataset, bias_offset=0.):
     """
@@ -34,70 +178,7 @@ def prescan_biassub(input_dataset, bias_offset=0.):
 
 
     # Create a dictionary of image constants. Describing the different areas on the detector.
-    image_constants_eng = {}
-    image_constants_eng['frame_rows'] = 2200
-    image_constants_eng['frame_cols'] = 2200
-    image_constants_eng['image'] = {
-        'rows': 1024,
-        'cols': 1024,
-        'r0c0': [13, 1088]
-    }
-    image_constants_eng['prescan'] = {
-        'rows': 2200,
-        'cols': 1088,
-        # good, reliable cols used for getting row-by-row bias, relative to r0c0
-        # 'col_start': 800,
-        # 'col_end': 1000,
-        'r0c0': [0, 0]
-    }
-    image_constants_eng['prescan_reliable'] = {
-        'rows': 2200,
-        'cols': 200,
-        'r0c0': [0, 800]
-    }
-    image_constants_eng['parallel_overscan'] = {
-        'rows': 1163,
-        'cols': 1056,
-        'r0c0': [1037, 1088]
-    }
-    image_constants_eng['serial_overscan'] = {
-        'rows': 2200,
-        'cols': 56,
-        'r0c0': [0, 2144]
-    }
-
-    image_constants_sci = {}
-    image_constants_sci['frame_rows'] = 1200
-    image_constants_sci['frame_cols'] = 2200
-    image_constants_sci['image'] = {
-        'rows': 1024,
-        'cols': 1024,
-        'r0c0': [13, 1088]
-    }
-    image_constants_sci['prescan'] = {
-        'rows': 1200,
-        'cols': 1088,
-        # good, reliable cols used for getting row-by-row bias, relative to r0c0
-        # 'col_start': 800,
-        # 'col_end': 1000,
-        'r0c0': [0, 0]
-    }
-    image_constants_sci['prescan_reliable'] = {
-        'rows': 1200,
-        'cols': 200,
-        'r0c0': [0, 800]
-    }
-    image_constants_sci['parallel_overscan'] = {
-        'rows': 163,
-        'cols': 1056,
-        'r0c0': [1037, 1088]
-    }
-    image_constants_sci['serial_overscan'] = {
-        'rows': 1200,
-        'cols': 56,
-        'r0c0': [0, 2144]
-    }
-
+    
     def detector_area_mask(image_constants, area='image'):
         """
         Create a mask for the detector area
@@ -157,6 +238,8 @@ def prescan_biassub(input_dataset, bias_offset=0.):
 
     plt.imshow(detector_area_image, origin='lower')
     plt.show()
+
+    
 
     # output_dataset = input_dataset.copy()
 
