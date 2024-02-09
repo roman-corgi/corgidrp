@@ -1,5 +1,6 @@
-import numpy as np
 import astropy.io.fits as fits
+import numpy as np
+
 import corgidrp.data as data
 
 
@@ -19,20 +20,44 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
+
+
+def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
+    """
+    Create simulated data. 
+    """
     
+    if obstype != "ENG":
+        obstype = "SCI"
+
+    filepattern = f"sim_prescan_{obstype}"
+    filepattern = filepattern+"{0:04d}.fits"
+    frames = []
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers(obstype=obstype)
+        sim_data = np.random.poisson(lam=150, size=(1024, 1024))
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    dataset = data.Dataset(frames)
+    return dataset
 
 
-def create_default_headers():
+def create_default_headers(obstype="ENG"):
     """
     Creates an empty primary header and an Image extension header with some possible keywords
     """
     prihdr = fits.Header()
     exthdr = fits.Header()
 
+    if obstype != "ENG":
+        obstype = "SCI"
+
     # fill in prihdr
     prihdr['OBSID'] = 0
     prihdr['BUILD'] = 0
-    prihdr['OBSTYPE'] = 'SCI'
+    prihdr['OBSTYPE'] = obstype
     prihdr['MOCK'] = True
     
     # fill in exthdr
@@ -40,7 +65,7 @@ def create_default_headers():
     exthdr['GCOUNT'] = 1
     exthdr['BSCALE'] = 1
     exthdr['BZERO'] = 32768
-    exthdr['ARRTYPE'] = 'SCI'
+    exthdr['ARRTYPE'] = obstype # seems to be the same as OBSTYPE
     exthdr['SCTSRT'] = '2024-01-01T12:00:00.000Z'
     exthdr['SCTEND'] = '2024-01-01T20:00:00.000Z'
     exthdr['STATUS'] = 0
