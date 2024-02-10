@@ -355,7 +355,7 @@ class Dark(Image):
 
 class NonLinearityCalibration(Image):
     """
-    Class for non-linearity calibration files
+    Class for non-linearity calibration files. Although it's not stricly an image that you might look at, it is a 2D array of data
 
      Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
