@@ -47,9 +47,11 @@ You will create a "feature branch" so you can develop your feature without impac
 
 ### Write your pipeline step
 
-In `corgidrp`, each pipeline step is a function. 
-Think about how your feature can be implemented as a function that takes in some data and outputs processed data. 
-All function should follow this example:
+In `corgidrp`, each pipeline step is a function, that is contained in one of the lX_to_lY.py files (where X and Y are various data levels). 
+Think about how your feature can be implemented as a function that takes in some data and outputs processed data. Please see below for some 
+`corgidrp` design principles. 
+
+All functions should follow this example:
 
 ```
 def example_step(dataset, calib_data, tuneable_arg=1, another_arg="test"):
@@ -79,13 +81,13 @@ Inside the function can be nearly anything you want, but the function signature 
 
   * Each function should include a docstring that descibes what the function is doing, what the inputs (including units if appropriate) are and what the outputs (also with units). The dosctrings should be [goggle style docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). 
   * The input dataset should always be the first input
-  * Additional arguments and keywords exist only if you need them. A pipeline step can only have a single argument (the input dataset) if needed.
+  * Additional arguments and keywords exist only if you need them--many relevant parameters might already by in Dataset headers. A pipeline step can only have a single argument (the input dataset) if needed.
   * All additional function arguments/keywords should only consist of the following types: int, float, str, or a class defined in corgidrp.Data. 
-    * (Long explaination for the curious: The reason for this is that pipeline steps can be written out as text files. Int/float/str are easily represented succinctly by textfiles. All classes in kpcidrp.Data can be created simply by passing in a filepath. Therefore, all pipeline steps have easily recordable arguments for easy reproducibility.)
+    * (Long explaination for the curious: The reason for this is that pipeline steps can be written out as text files. Int/float/str are easily represented succinctly by textfiles. All classes in corgidrp.Data can be created simply by passing in a filepath. Therefore, all pipeline steps have easily recordable arguments for easy reproducibility.)
   * The first line of the function generally should be creating a copy of the dataset (which will be the output dataset). This way, the output dataset is not the same instance as the input dataset. This will make it easier to ensure reproducibility. 
   * The function should always end with updating the header and (typically) the data of the output dataset. The history of running this pipeline step should be recorded in the header. 
 
-You can check out `corgidrp.detector.dark_subtraction` function as an example of a basic pipeline step.
+You can check out `corgidrp.l2a_to_l2b.dark_subtraction` function as an example of a basic pipeline step.
 
 ### Write a unit test to debug your pipeline step
 
@@ -110,15 +112,15 @@ Before creating a pull request, review the design Principles below. Use the Gith
 ## Overarching Design Principles
 * Minimize the use of external packages, unless it saves us a lot of time. If you need to use something external, default to well-established and maintained packages, such as `numpy`, `scipy` or `Astropy`. If you think you need to use something else, please check with Jason and Max. 
 * Minimize the use of new classes, with the exception of new classes that extend the existing data framework.
-* The python module files (i.e. the *.py files) should typically hold on the order of 5-10 different functions. You can create new ones if need by, but they should be general enough to encapsulate other future functions as well.
+* The python module files (i.e. the *.py files) should typically hold on the order of 5-10 different functions. You can create new ones if need be, but the new files should be general enough in topic to encapsulate other future functions as well.
 * All the image data in the Dataset and Image objects should be saved as standard numpy arrays. Other types of arrays (such as masked arrays) can be used as intermediate products within a function.
 * Keep things simple
-* Use __descriptive__ variable names **always**.
-* Comments should be used to describe section of the code where it's not immediately obvious what the code is doing. Using descriptive variable names will minimize the about of comments required.
+* Use _descriptive_ variable names **always**.
+* Comments should be used to describe a section of the code where it's not immediately obvious what the code is doing. Using descriptive variable names will minimize the amount of comments required.
 
 ## FAQ
 
-  * What about saving files?
+  * Does my pipeline function need to save files?
     * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
   * Can I create new data classes?
     * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
@@ -128,9 +130,9 @@ Before creating a pull request, review the design Principles below. Use the Gith
     
 * How should I treat hard-coded variables
   * If a variable value is extremely unlikely to change AND is only required by one module, it can be hard coded inside that module.
-  * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central conatants file (name TBD). 
+  * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central constants file (name TBD). 
   * If it is likely to change, it should be implemented by a config file.
  
 * Where should I store computed variables so they can be referenced later in the pipeline?
-  * If possible, in the header of the dataset being processed.
+  * If possible, in the header of the dataset being processed or in a hew HDU extension
   * If not possible, then let's chat! 
