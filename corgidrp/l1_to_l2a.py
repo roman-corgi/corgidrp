@@ -13,7 +13,7 @@ def prescan_process(input_dataset):
         corgidrp.data.Dataset: a prescan-processed version of the input dataset
     """
 
-    pass
+    return None
 
 
 
@@ -30,7 +30,7 @@ def detect_cosmic_rays(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset of the input dataset where the cosmic rays have been identified. 
     """
 
-    pass
+    return None
 
 def correct_nonlinearity(input_dataset, non_lin_correction):
     """
@@ -44,7 +44,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
         corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
     """
 
-    pass
+    return None
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
@@ -57,4 +57,4 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-    pass
+    return None

@@ -36,7 +36,7 @@ def frame_select(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
     """
-    pass
+    return None
 
 def convert_to_electrons(input_dataset): 
     """
@@ -52,7 +52,7 @@ def convert_to_electrons(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with the data in electrons
     """
 
-    pass 
+    return None 
 
 def cti_correction(input_dataset):
     """
@@ -67,7 +67,7 @@ def cti_correction(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
     """
 
-    pass
+    return None
 
 def flat_division(input_dataset, master_flat):
     """
@@ -82,7 +82,7 @@ def flat_division(input_dataset, master_flat):
         corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
     """
 
-    pass
+    return None
 
 def correct_bad_pixels(input_dataset):
     """
@@ -106,5 +106,5 @@ def correct_bad_pixels(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with bad pixels corrected
     """
 
-    pass
+    return None
 
