@@ -21,7 +21,6 @@ def create_dark_calib(dark_dataset):
 
     return new_dark
 
-
 def dark_subtraction(input_dataset, dark_frame):
     """
     Perform dark current subtraction of a dataset using the corresponding dark frame
@@ -72,9 +71,9 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
 
     history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
 
-    linearized_cube.update_after_processing_step(history_msg, new_all_data=linearized_cube)
+    linearized_dataset.update_after_processing_step(history_msg, new_all_data=linearized_cube)
 
-    return linearized_cube
+    return linearized_dataset
 
 def get_relgains(frame, em_gain, non_lin_correction):
     """
