@@ -357,6 +357,38 @@ class NonLinearityCalibration(Image):
     """
     Class for non-linearity calibration files. Although it's not stricly an image that you might look at, it is a 2D array of data
 
+    The required format for calibration data is as follows:
+     - CSV
+     - Minimum 2x2
+     - First value (top left) must be assigned to nan
+     - Row headers (dn counts) must be monotonically increasing
+     - Column headers (EM gains) must be monotonically increasing
+     - Data columns (relative gain curves) must straddle 1
+
+    For example:
+
+    [
+        [nan,  1,     10,    100,   1000 ],
+        [1,    0.900, 0.950, 0.989, 1.000],
+        [1000, 0.910, 0.960, 0.990, 1.010],
+        [2000, 0.950, 1.000, 1.010, 1.050],
+        [3000, 1.000, 1.001, 1.011, 1.060],
+    ],
+
+    where the row headers [1, 1000, 2000, 3000] are dn counts, the column
+    headers [1, 10, 100, 1000] are EM gains, and the first data column
+    [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
+
+    Some checks that could be done on this data (ported from the IIT code): 
+    # File format checks
+    if nonlin_raw.ndim < 2 or nonlin_raw.shape[0] < 2 or \
+       nonlin_raw.shape[1] < 2:
+        raise NonlinException('Nonlin array must be at least 2x2 (room for x '
+                              'and y axes and one data point)')
+    if not np.isnan(nonlin_raw[0, 0]):
+        raise NonlinException('First value of csv (upper left) must be set to '
+                              '"nan"')
+
      Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
