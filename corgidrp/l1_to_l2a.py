@@ -53,7 +53,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
         bias_offset (float): an offset value to be subtracted from the bias
-        return_full_frame (bool): flag indicating whether to return the full frame or only the bias-subtracted image area
+        return_full_frame (bool, optional): flag indicating whether to return the full frame or only the bias-subtracted image area
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
