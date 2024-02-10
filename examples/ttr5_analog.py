@@ -9,7 +9,8 @@ from corgidrp.data import Dataset, Dark, Flat, generate_filelist
 # from corgidrp.detector import crop_dataset, subtract_bias, detect_cosmic_rays, correct_nonlinearity, convert_to_electrons, divide_by_em_gain, dark_subtraction, cti_correction
 import corgidrp.detector as detector
 import corgidrp.image_utils as image_utils
-from corgidrp.caldb import CalDB, find_best_dark
+from corgidrp import l1_to_l2a, l2a_to_l2b, l2b_to_l3, l3_to_l4
+from corgidrp.caldb import CalDB
 
 input_filepath = "my/bank/passwords/"
 output_filepath = "where/the/planets/will/go/"
@@ -29,17 +30,17 @@ calibration_db = CalDB(caldb_filepath)
 #############################
 
 #Crop the data to only the main region of interest
-l1_dataset_cropped = detector.crop_dataset(l1_dataset) # This function doesn't exist yet
+l1_dataset_cropped = l1_to_l2a.crop_dataset(l1_dataset) # This function doesn't exist yet
 
 #Measure and subtract the bias
-l1_dataset_bias_subtracted = detector.subtract_bias(l1_dataset_cropped) # There is II&T code that we can port over for this
+l1_dataset_bias_subtracted = l1_to_l2a.subtract_bias(l1_dataset_cropped) # There is II&T code that we can port over for this
 
 #Detect cosmic rays and make a mask
-l1_dataset_cosmic_ray_masked = detector.detect_cosmic_rays(l1_dataset_bias_subtracted) # There is II&T code that we can port over for this
+l1_dataset_cosmic_ray_masked = l1_to_l2a.detect_cosmic_rays(l1_dataset_bias_subtracted) # There is II&T code that we can port over for this
 
 #Correct for non-linearity
 #This may need an outside calibration file if nonlinearity is not constant
-l1_dataset_nonlinearity_corrected = detector.correct_nonlinearity(l1_dataset_cosmic_ray_masked) # There is II&T code that we can port over for this
+l1_dataset_nonlinearity_corrected = l1_to_l2a.correct_nonlinearity(l1_dataset_cosmic_ray_masked) # There is II&T code that we can port over for this
 
 #Change the dataset level from L1 to L2a
 l2a_dataset = l1_dataset_nonlinearity_corrected.update_to_l2a() # This function doesn't exist yet
@@ -51,11 +52,11 @@ l2a_dataset.save(output_filepath)
 #############################
 
 #Select the frames that we want to use
-l2_dataset_frame_selected = image_utils.frame_select(l2a_dataset) # This function doesn't exist yet
+l2_dataset_frame_selected = l2a_to_l2b.frame_select(l2a_dataset) # This function doesn't exist yet
 
 #Convert to e-
 # If we expect the detector gain to vary with time, we may need to pass in the caldb here
-l2_dataset_electrons = detector.convert_to_electrons(l2_dataset_frame_selected) # This function doesn't exist yet
+l2_dataset_electrons = l2a_to_l2b.convert_to_electrons(l2_dataset_frame_selected) # This function doesn't exist yet
 
 #Divide by the em gain -- if applicable -- not assuming photon counting in this example
 #This may need an outside calibration file if em_gain < 1000
@@ -63,17 +64,17 @@ l2_dataset_electrons = detector.convert_to_electrons(l2_dataset_frame_selected) 
 
 #Subtract_master_dark
 master_dark = CalDB.get_calib(l2_dataset_electrons.frames[0],Dark)
-l2_dataset_dark_subtracted = detector.dark_subtraction(l2_dataset_electrons, master_dark)
+l2_dataset_dark_subtracted = l2a_to_l2b.dark_subtraction(l2_dataset_electrons, master_dark)
 
 #Apply CTI Correction
-l2_dataset_cti_corrected = detector.cti_correction(l2_dataset_dark_subtracted) # This function doesn't exist yet
+l2_dataset_cti_corrected = l2a_to_l2b.cti_correction(l2_dataset_dark_subtracted) # This function doesn't exist yet
 
 #Divide by master flat
 master_flat = CalDB.get_calib(l2_dataset_cti_corrected.frames[0],Flat)
-l2_dataset_flat_divided = detector.flat_division(l2_dataset_cti_corrected, master_flat) # This function doesn't exist yet
+l2_dataset_flat_divided = l2a_to_l2b.flat_division(l2_dataset_cti_corrected, master_flat) # This function doesn't exist yet
 
 #Compute bad_pixel map and correct for bad pixels
-l2_dataset_bad_pixel_corrected = detector.bad_pixel_correction(l2_dataset_flat_divided) # This function doesn't exist yet
+l2_dataset_bad_pixel_corrected = l2a_to_l2b.bad_pixel_correction(l2_dataset_flat_divided) # This function doesn't exist yet
 
 #Change the dataset level from L2a to L2b
 l2b_dataset = l2_dataset_bad_pixel_corrected.update_to_l2b() # This function doesn't exist yet
