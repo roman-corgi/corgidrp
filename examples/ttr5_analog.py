@@ -6,9 +6,6 @@
 ## and their exact names and home files are only preliminary suggestions. 
 
 from corgidrp.data import Dataset, Dark, Flat, generate_filelist
-# from corgidrp.detector import crop_dataset, subtract_bias, detect_cosmic_rays, correct_nonlinearity, convert_to_electrons, divide_by_em_gain, dark_subtraction, cti_correction
-import corgidrp.detector as detector
-import corgidrp.image_utils as image_utils
 from corgidrp import l1_to_l2a, l2a_to_l2b, l2b_to_l3, l3_to_l4
 from corgidrp.caldb import CalDB
 
@@ -30,13 +27,10 @@ calibration_db = CalDB(caldb_filepath)
 #############################
 
 #Crop the data to only the main region of interest
-l1_dataset_cropped = l1_to_l2a.crop_dataset(l1_dataset) # This function doesn't exist yet
-
-#Measure and subtract the bias
-l1_dataset_bias_subtracted = l1_to_l2a.subtract_bias(l1_dataset_cropped) # There is II&T code that we can port over for this
+l1_dataset_prescan_bias_subtracted = l1_to_l2a.prescan_biassub(l1_dataset,return_full_frame=False) 
 
 #Detect cosmic rays and make a mask
-l1_dataset_cosmic_ray_masked = l1_to_l2a.detect_cosmic_rays(l1_dataset_bias_subtracted) # There is II&T code that we can port over for this
+l1_dataset_cosmic_ray_masked = l1_to_l2a.detect_cosmic_rays(l1_dataset_prescan_bias_subtracted) # There is II&T code that we can port over for this
 
 #Correct for non-linearity
 #This may need an outside calibration file if nonlinearity is not constant
@@ -74,7 +68,7 @@ master_flat = CalDB.get_calib(l2_dataset_cti_corrected.frames[0],Flat)
 l2_dataset_flat_divided = l2a_to_l2b.flat_division(l2_dataset_cti_corrected, master_flat) # This function doesn't exist yet
 
 #Compute bad_pixel map and correct for bad pixels
-l2_dataset_bad_pixel_corrected = l2a_to_l2b.bad_pixel_correction(l2_dataset_flat_divided) # This function doesn't exist yet
+l2_dataset_bad_pixel_corrected = l2a_to_l2b.correct_bad_pixels(l2_dataset_flat_divided) # This function doesn't exist yet
 
 #Change the dataset level from L2a to L2b
 l2b_dataset = l2_dataset_bad_pixel_corrected.update_to_l2b() # This function doesn't exist yet
@@ -87,10 +81,10 @@ l2b_dataset.save(output_filepath)
 #############################
 
 #Create the WCS headers
-l2b_dataset_wcs = image_utils.create_wcs(l2b_dataset) # This function doesn't exist yet. currently in image_utils, but doesn't have to be there
+l2b_dataset_wcs = l2b_to_l3.create_wcs(l2b_dataset) # This function doesn't exist yet. currently in image_utils, but doesn't have to be there
 
 #Divide by exposure time
-l2b_dataset_exptime_divided = image_utils.divide_by_exptime(l2b_dataset_wcs)
+l2b_dataset_exptime_divided = l2b_to_l3.divide_by_exptime(l2b_dataset_wcs)
 
 #Change the dataset level from L2b to L3
 l3_dataset = l2b_dataset_exptime_divided.update_to_l3() # This function doesn't exist yet
@@ -103,13 +97,13 @@ l3_dataset.save(output_filepath)
 ############################
 
 #Apply distortion correction
-l3_dataset_distortion_corrected = image_utils.distortion_correction(l3_dataset) # This function doesn't exist yet
+l3_dataset_distortion_corrected = l3_to_l4.distortion_correction(l3_dataset) # This function doesn't exist yet
 
 #Find the location of the star
-l3_dataset_star_located = image_utils.find_star(l3_dataset_distortion_corrected) # This function doesn't exist yet
+l3_dataset_star_located = l3_to_l4.find_star(l3_dataset_distortion_corrected) # This function doesn't exist yet
 
 #Do PSF subtraction
-l3_psf_subtracted = image_utils.do_psf_subtraction(l3_dataset_star_located) # This function doesn't exist yet
+l3_psf_subtracted = l3_to_l4.do_psf_subtraction(l3_dataset_star_located) # This function doesn't exist yet
 
 l4_dataset = l3_psf_subtracted.update_to_l4() # This function doesn't exist yet
 
