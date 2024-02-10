@@ -1,5 +1,7 @@
 import numpy as np
+from scipy import interpolate
 import corgidrp.data as data
+
 
 def create_dark_calib(dark_dataset):
     """
@@ -43,62 +45,78 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
-def get_relgains(frame, em_gain, nonlin_path):
-    """For a given bias subtracted frame of dn counts, return a same sized
+def correct_nonlinearity(input_dataset, non_lin_correction):
+    """
+    Perform non-linearity correction of a dataset using the corresponding non-linearity correction
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
+        non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity
+
+    Returns:
+        corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
+    """
+    #Copy the dataset to start
+    linearized_dataset = input_dataset.copy()
+
+    #Apply the non-linearity correction to the data
+    linearized_cube = linearized_dataset.all_data
+    #Check to see if EM gain is in the header, if not, raise an error
+    if "EMGAIN" not in linearized_dataset[0].ext_hdr.keys():
+        raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
+
+    em_gain = linearized_dataset[0].ext_hdr["EMGAIN"] #NOTE THIS REQUIRES THAT THE EM GAIN IS MEASURED ALREADY
+
+    for i in range(linearized_cube.shape[0]):
+        linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
+
+    history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
+
+    linearized_cube.update_after_processing_step(history_msg, new_all_data=linearized_cube)
+
+    return linearized_cube
+
+def get_relgains(frame, em_gain, non_lin_correction):
+    """
+    For a given bias subtracted frame of dn counts, return a same sized
     array of relative gain values.
 
-    The required format for the file specified at nonlin_path is as follows:
-     - CSV
-     - Minimum 2x2
-     - First value (top left) must be assigned to nan
-     - Row headers (dn counts) must be monotonically increasing
-     - Column headers (EM gains) must be monotonically increasing
-     - Data columns (relative gain curves) must straddle 1
-
-    For example:
-
-    [
-        [nan,  1,     10,    100,   1000 ],
-        [1,    0.900, 0.950, 0.989, 1.000],
-        [1000, 0.910, 0.960, 0.990, 1.010],
-        [2000, 0.950, 1.000, 1.010, 1.050],
-        [3000, 1.000, 1.001, 1.011, 1.060],
-    ],
-
-    where the row headers [1, 1000, 2000, 3000] are dn counts, the column
-    headers [1, 10, 100, 1000] are EM gains, and the first data column
-    [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
-
-    Parameters
-    ----------
-    frame : array_like
-        Array of dn count values.
-    em_gain : float
-        Detector EM gain.
-    nonlin_path : str
-        Full path of nonlinearity calibration csv.
-
-    Returns
-    -------
-    array_like
-        Array of relative gain values.
-
-    Notes
-    -----
     This algorithm contains two interpolations:
 
-     - A 2d interpolation to find the relative gain curve for a given EM gain
-     - A 1d interpolation to find a relative gain value for each given dn
-     count value.
+    - A 2d interpolation to find the relative gain curve for a given EM gain
+    - A 1d interpolation to find a relative gain value for each given dn
+      count value.
 
     Both of these interpolations are linear, and both use their edge values as
     constant extrapolations for out of bounds values.
 
+    Parameters:
+        frame (array_like): Array of dn count values.
+        em_gain (float): Detector EM gain.
+        non_lin_correction (corgi.drp.NonLinearityCorrection): A NonLinearityCorrection calibration file.
+
+    Returns:
+        array_like: Array of relative gain values.
     """
 
-    # Get file data
-    gain_ax, count_ax, relgains = _parse_file(nonlin_path)
+    # Column headers are gains, row headers are dn counts
+    gain_ax = non_lin_correction.data[0, 1:]
+    count_ax = non_lin_correction.data[1:, 0]
+    # Array is relative gain values at a given dn count and gain
+    relgains = non_lin_correction.data[1:, 1:]
 
+    #MMB Note: This check is maybe better placed in the code that is saving the non-linearity correction file? 
+    # Check for increasing axes
+    if np.any(np.diff(gain_ax) <= 0):
+        raise ValueError('Gain axis (column headers) must be increasing')
+    if np.any(np.diff(count_ax) <= 0):
+        raise ValueError('Counts axis (row headers) must be increasing')
+    # Check that curves (data in columns) contain or straddle 1.0
+    if (np.min(relgains, axis=0) > 1).any() or \
+       (np.max(relgains, axis=0) < 1).any():
+        raise ValueError('Gain curves (array columns) must contain or '
+                              'straddle a relative gain of 1.0')
+    
     # Create interpolation for em gain (x), counts (y), and relative gain (z).
     # Note that this defaults to using the edge values as fill_value for
     # out of bounds values (same as specified below in interp1d)
