@@ -83,7 +83,7 @@ def get_relgains(frame, em_gain, nonlin_path):
     headers [1, 10, 100, 1000] are EM gains, and the first data column
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
-    Arguments:
+    Args:
         frame : array_like
             Array of dn count values.
         em_gain : float
