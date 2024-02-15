@@ -58,38 +58,14 @@ def _parse_file(nonlin_path):
 
 
 def get_relgains(frame, em_gain, nonlin_path):
-    """For a given bias subtracted frame of dn counts, return a same sized
+    """
+    For a given bias subtracted frame of dn counts, return a same sized
     array of relative gain values.
 
-    The required format for the file specified at nonlin_path is as follows:
-     - CSV
-     - Minimum 2x2
-     - First value (top left) must be assigned to nan
-     - Row headers (dn counts) must be monotonically increasing
-     - Column headers (EM gains) must be monotonically increasing
-     - Data columns (relative gain curves) must straddle 1
-
-    For example:
-
-    [
-        [nan,  1,     10,    100,   1000 ],
-        [1,    0.900, 0.950, 0.989, 1.000],
-        [1000, 0.910, 0.960, 0.990, 1.010],
-        [2000, 0.950, 1.000, 1.010, 1.050],
-        [3000, 1.000, 1.001, 1.011, 1.060],
-    ],
-
-    where the row headers [1, 1000, 2000, 3000] are dn counts, the column
-    headers [1, 10, 100, 1000] are EM gains, and the first data column
-    [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
-
     Args:
-        frame : array_like
-            Array of dn count values.
-        em_gain : float
-            Detector EM gain.
-        nonlin_path : str
-            Full path of nonlinearity calibration csv.
+        frame (np.array): Array of dn count values.
+        em_gain (float): Detector EM gain.
+        nonlin_path (str): Full path of nonlinearity calibration csv.
 
     Returns:
         array_like : Array of relative gain values.
