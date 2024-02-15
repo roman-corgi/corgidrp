@@ -2,6 +2,7 @@ import numpy as np
 import astropy.io.fits as fits
 import corgidrp.data as data
 import corgidrp.detector as detector
+import os
 
 
 def create_dark_calib_files(filedir=None, numfiles=10):
@@ -55,7 +56,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
         for x in range(size):
             sim_data[:, x] = np.random.poisson(data_range[x], size)
         
-        non_linearity_correction = data.NonLinearityCalibration('tests/nonlin_sample.fits')        
+        non_linearity_correction = data.NonLinearityCalibration(os.path.dirname(os.path.abspath(__file__))+'/../tests/nonlin_sample.fits')        
 
         #Apply the non-linearity to the data. When we correct we multiple, here when we simulate we divide
         sim_data /= detector.get_relgains(sim_data,em_gain,non_linearity_correction)
@@ -127,7 +128,7 @@ def create_default_headers():
     exthdr['DPAM_H'] = 1.0
     exthdr['DPAM_V'] = 1.0
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
-    exthdr['DATA_LEVEL'] = "L1"
+    exthdr['DATA_LVL'] = "L1"
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
