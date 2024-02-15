@@ -1,3 +1,5 @@
+# Place to put detector-related utility functions
+
 import numpy as np
 from scipy import interpolate
 import corgidrp.data as data
@@ -20,60 +22,6 @@ def create_dark_calib(dark_dataset):
                          ext_hdr=dark_dataset[0].ext_hdr.copy(), input_dataset=dark_dataset)
 
     return new_dark
-
-def dark_subtraction(input_dataset, dark_frame):
-    """
-    Perform dark current subtraction of a dataset using the corresponding dark frame
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
-        dark_frame (corgidrp.data.Dark): a Dark frame to model the dark current
-
-    Returns:
-        corgidrp.data.Dataset: a dark subtracted version of the input dataset
-    """
-    # you should make a copy the dataset to start
-    darksub_dataset = input_dataset.copy()
-
-    darksub_cube = darksub_dataset.all_data - dark_frame.data
-
-    history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
-
-    # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube)
-
-    return darksub_dataset
-
-def correct_nonlinearity(input_dataset, non_lin_correction):
-    """
-    Perform non-linearity correction of a dataset using the corresponding non-linearity correction
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
-        non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity
-
-    Returns:
-        corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
-    """
-    #Copy the dataset to start
-    linearized_dataset = input_dataset.copy()
-
-    #Apply the non-linearity correction to the data
-    linearized_cube = linearized_dataset.all_data
-    #Check to see if EM gain is in the header, if not, raise an error
-    if "EMGAIN" not in linearized_dataset[0].ext_hdr.keys():
-        raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
-
-    em_gain = linearized_dataset[0].ext_hdr["EMGAIN"] #NOTE THIS REQUIRES THAT THE EM GAIN IS MEASURED ALREADY
-
-    for i in range(linearized_cube.shape[0]):
-        linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
-
-    history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
-
-    linearized_dataset.update_after_processing_step(history_msg, new_all_data=linearized_cube)
-
-    return linearized_dataset
 
 def get_relgains(frame, em_gain, non_lin_correction):
     """
