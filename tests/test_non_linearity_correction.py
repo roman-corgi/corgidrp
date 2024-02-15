@@ -3,7 +3,7 @@ import glob
 import numpy as np
 import corgidrp.mocks as mocks
 import corgidrp.data as data
-import corgidrp.detector as detector
+import corgidrp.l1_to_l2a as l1_to_l2a
 
 def test_non_linearity_correction():
     """
@@ -26,7 +26,7 @@ def test_non_linearity_correction():
 
     ######## perform non-linearity correction
     non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),'nonlin_sample.fits'))
-    linear_dataset = detector.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
+    linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
 
     #The data was generated with a ramp in the x-direction going from 10 to 65536
     expected_ramp = np.linspace(10,65536,1024)

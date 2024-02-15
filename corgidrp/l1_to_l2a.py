@@ -1,4 +1,5 @@
 # A file that holds the functions that transmogrify l1 data to l2a data 
+from corgidrp.detector import get_relgains
 
 
 def prescan_process(input_dataset): 
