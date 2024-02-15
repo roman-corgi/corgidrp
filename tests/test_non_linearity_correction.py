@@ -8,6 +8,9 @@ import corgidrp.l1_to_l2a as l1_to_l2a
 from scipy import interpolate
 import pytest
 
+class NonlinException(Exception):
+    """Exception class for nonlin module."""
+
 def _parse_file(nonlin_path):
     """Get data from nonlin file."""
     # Read nonlin csv
