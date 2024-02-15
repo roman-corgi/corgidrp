@@ -37,7 +37,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     Args:
         filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
-
+        em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
     Returns:
         corgidrp.data.Dataset:
             The simulated dataset

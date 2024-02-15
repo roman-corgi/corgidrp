@@ -12,7 +12,18 @@ class NonlinException(Exception):
     """Exception class for nonlin module."""
 
 def _parse_file(nonlin_path):
-    """Get data from nonlin file."""
+    """
+    Get data from nonlin file.
+    
+    
+    Args:
+        nonlin_path (str): (Optional) Full path to the non-linearity calibrationf ile.
+    Returns:
+        tuple:
+            gain_ax (numpy.array): The gain axis
+            count_ax (numpy.array): The count axis
+            relgains (numpy.array): The relative gains
+    """
     # Read nonlin csv
     nonlin_raw = np.genfromtxt(nonlin_path, delimiter=',')
 
@@ -71,31 +82,27 @@ def get_relgains(frame, em_gain, nonlin_path):
     headers [1, 10, 100, 1000] are EM gains, and the first data column
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
-    Parameters
-    ----------
-    frame : array_like
-        Array of dn count values.
-    em_gain : float
-        Detector EM gain.
-    nonlin_path : str
-        Full path of nonlinearity calibration csv.
+    Parameters:
+        frame : array_like
+            Array of dn count values.
+        em_gain : float
+            Detector EM gain.
+        nonlin_path : str
+            Full path of nonlinearity calibration csv.
 
-    Returns
-    -------
-    array_like
-        Array of relative gain values.
+    Returns:
+        array_like : Array of relative gain values.
+            
 
-    Notes
-    -----
-    This algorithm contains two interpolations:
+    Notes:
+        This algorithm contains two interpolations:
 
-     - A 2d interpolation to find the relative gain curve for a given EM gain
-     - A 1d interpolation to find a relative gain value for each given dn
-     count value.
+         - A 2d interpolation to find the relative gain curve for a given EM gain
+         - A 1d interpolation to find a relative gain value for each given dn
+         count value.
 
-    Both of these interpolations are linear, and both use their edge values as
-    constant extrapolations for out of bounds values.
-
+        Both of these interpolations are linear, and both use their edge values as
+        constant extrapolations for out of bounds values.
     """
 
     # Get file data
