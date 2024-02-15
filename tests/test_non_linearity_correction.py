@@ -18,7 +18,7 @@ def _parse_file(nonlin_path):
     
     Args:
         nonlin_path (str): (Optional) Full path to the non-linearity calibrationf ile.
-        
+
     Returns:
         tuple:
             gain_ax (numpy.array): The gain axis
@@ -83,7 +83,7 @@ def get_relgains(frame, em_gain, nonlin_path):
     headers [1, 10, 100, 1000] are EM gains, and the first data column
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
-    Parameters:
+    Arguments:
         frame : array_like
             Array of dn count values.
         em_gain : float
