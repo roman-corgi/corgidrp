@@ -18,6 +18,7 @@ def _parse_file(nonlin_path):
     
     Args:
         nonlin_path (str): (Optional) Full path to the non-linearity calibrationf ile.
+        
     Returns:
         tuple:
             gain_ax (numpy.array): The gain axis
