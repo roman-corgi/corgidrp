@@ -1,7 +1,7 @@
 # corgidrp: CORonaGraph Instrument Data Reduction Pipeline
 This is the data reduction pipeline for the Nancy Grace Roman Space Telescope Coronagraph Instrument
 
-![Teseting Badge](https://github.com/roman-corgi/corgidrp/actions/workflows/python-app.yml/badge.svg)
+![Testing Badge](https://github.com/roman-corgi/corgidrp/actions/workflows/python-app.yml/badge.svg)
 
 ## Install
 As the code is very much still in development, clone this repository, enter the top-level folder, and run the following command:
@@ -15,7 +15,7 @@ That configuration directory will be used to locate things on your computer such
 
 ## How to Contribute
 
-We encourage you to chat with Jason, Max, and Vanessa (e.g., on Slack) to discuss what to do before you get started. Brainstorming
+We encourage you to chat with Jason, Max, and Marie (e.g., on Slack) to discuss what to do before you get started. Brainstorming
 about how to implement something is a very good use of time and makes sure you aren't going down the wrong path. 
 Contact Jason is you have any questions on how to get started on programming details (e.g., git). 
 
@@ -135,4 +135,8 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 * Where should I store computed variables so they can be referenced later in the pipeline?
   * If possible, in the header of the dataset being processed or in a hew HDU extension
-  * If not possible, then let's chat! 
+  * If not possible, then let's chat!
+ 
+* Where do I save FITS files or other data files I need to use for my tests?
+  * Auxiliary data to run tests should be stored in the tests/test_data folder
+  * If they are larger than 1 MB, they should be stored using `git lfs`. Ask Jason about setting up git lfs (as of writing, we have not set up git lfs yet). 
