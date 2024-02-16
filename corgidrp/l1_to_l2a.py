@@ -2,86 +2,7 @@
 
 import numpy as np
 
-image_constants= {
-    'SCI' : {
-        'frame_rows' : 1200,
-        'frame_cols' : 2200,
-        'image' : {
-            'rows': 1024,
-            'cols': 1024,
-            'r0c0': [13, 1088]
-            },
-        'prescan' : {
-            'rows': 1200,
-            'cols': 1088,
-            'r0c0': [0, 0]
-            },
-        'prescan_reliable' : {
-            'rows': 1200,
-            'cols': 200,
-            'r0c0': [0, 800]
-            },
-        'parallel_overscan' : {
-            'rows': 163,
-            'cols': 1056,
-            'r0c0': [1037, 1088]
-            },
-        'serial_overscan' : {
-            'rows': 1200,
-            'cols': 56,
-            'r0c0': [0, 2144]
-            },
-        },
-    'ENG' :{
-        'frame_rows' : 2200,
-        'frame_cols' : 2200,
-        'image' : {
-            'rows': 1024,
-            'cols': 1024,
-            'r0c0': [13, 1088]
-            },
-        'prescan' : {
-            'rows': 2200,
-            'cols': 1088,
-            'r0c0': [0, 0]
-            },
-        'prescan_reliable' : {
-            'rows': 2200,
-            'cols': 200,
-            'r0c0': [0, 800]
-            },
-        'parallel_overscan' : {
-            'rows': 1163,
-            'cols': 1056,
-            'r0c0': [1037, 1088]
-            },
-        'serial_overscan' : {
-            'rows': 2200,
-            'cols': 56,
-            'r0c0': [0, 2144]
-            },
-        },
-    }
-
-def slice_section(frame, obstype, key):
-    """Slice 2d section out of frame.
-
-    Parameters
-    ----------
-    frame : array_like
-        Full frame consistent with size given in frame_rows, frame_cols.
-    key : str
-        Keyword referencing section to be sliced; must exist in geom.
-
-    """
-    rows = image_constants[obstype][key]['rows']
-    cols = image_constants[obstype][key]['cols']
-    r0c0 = image_constants[obstype][key]['r0c0']
-
-    section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
-    if section.size == 0:
-        raise Exception('Corners invalid')
-    return section
+from corgidrp.detector import slice_section, detector_areas
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
@@ -124,9 +45,9 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             
             # Get the part of the prescan that lines up with the image, and do a
             # row-by-row bias subtraction on it
-            i_r0 = image_constants[obstype]['image']['r0c0'][0]
-            p_r0 = image_constants[obstype]['prescan']['r0c0'][0]
-            i_nrow = image_constants[obstype]['image']['rows']
+            i_r0 = detector_areas[obstype]['image']['r0c0'][0]
+            p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
+            i_nrow = detector_areas[obstype]['image']['rows']
      
             # Get data from prescan (alined with image area)
             al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
