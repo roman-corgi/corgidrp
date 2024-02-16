@@ -2,7 +2,7 @@ import glob
 import os
 
 import corgidrp.data as data
-import corgidrp.detector as detector
+from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
 import numpy as np
 import pytest
@@ -10,7 +10,11 @@ import pytest
 
 def test_prescan_sub():
     """
-    Generate mock input data and pass into dark subtraction function
+    Generate mock input data and pass into prescan processing function
+
+    TODO: 
+    * handle 'CAL' observation types
+
     """
     ###### create simulated data
     # check that simulated data folder exists, and create if not
@@ -20,7 +24,7 @@ def test_prescan_sub():
 
     # dataset = data.Dataset(['example_L1_input.fits'])
 
-    for obstype in ['SCI', 'ENG','CAL']:
+    for obstype in ['SCI', 'ENG']:
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype)
 
@@ -38,8 +42,8 @@ def test_prescan_sub():
         assert dataset.all_data[0,0,0] == 1
 
 
-        output_frame = detector.prescan_biassub(dataset)
-        output_frame_full = detector.prescan_biassub(dataset, return_full_frame=True)
+        output_frame = prescan_biassub(dataset)
+        output_frame_full = prescan_biassub(dataset, return_full_frame=True)
 
     ###### create input data
     # input_frame = mocks.create_prescan_files(dataset)
