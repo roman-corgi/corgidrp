@@ -129,7 +129,7 @@ def create_default_headers():
     exthdr['DPAM_H'] = 1.0
     exthdr['DPAM_V'] = 1.0
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
-    exthdr['DATA_LVL'] = "L1"
+    exthdr['DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
