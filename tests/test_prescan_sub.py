@@ -20,7 +20,7 @@ def test_prescan_sub():
 
     # dataset = data.Dataset(['example_L1_input.fits'])
 
-    for obstype in ['SCI', 'ENG']:
+    for obstype in ['SCI', 'ENG','CAL']:
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype)
 
@@ -34,8 +34,12 @@ def test_prescan_sub():
         dataset.all_data[0, 0, 0] = 0
         assert dataset[0].data[0, 0] == 0
 
-        output_frame = detector.prescan_biassub_v2(dataset)
-        output_frame_full = detector.prescan_biassub_v2(dataset, return_full_frame=True)
+        dataset[0].data[0,0] = 1
+        assert dataset.all_data[0,0,0] == 1
+
+
+        output_frame = detector.prescan_biassub(dataset)
+        output_frame_full = detector.prescan_biassub(dataset, return_full_frame=True)
 
     ###### create input data
     # input_frame = mocks.create_prescan_files(dataset)
