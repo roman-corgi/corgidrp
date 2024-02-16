@@ -136,7 +136,7 @@ def test_non_linearity_correction():
     assert len(nonlinear_dataset) == 2
 
     ######## perform non-linearity correction
-    non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),'nonlin_sample.fits'))
+    non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
     linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
 
     #The data was generated with a ramp in the x-direction going from 10 to 65536

@@ -390,6 +390,8 @@ class NonLinearityCalibration(Image):
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
 
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # File format checks - Ported from II&T
         nonlin_raw = self.data
@@ -401,9 +403,6 @@ class NonLinearityCalibration(Image):
             raise ValueError('The first value of the non-linearity calibration array  (upper left) must be set to '
                                 '"nan"')
 
-
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
         
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
