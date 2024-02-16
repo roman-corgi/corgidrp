@@ -57,7 +57,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
         for x in range(size):
             sim_data[:, x] = np.random.poisson(data_range[x], size)
         
-        non_linearity_correction = data.NonLinearityCalibration(os.path.dirname(os.path.abspath(__file__))+'/../tests/nonlin_sample.fits')        
+        non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..',"tests","test_data","nonlin_sample.fits"))
 
         #Apply the non-linearity to the data. When we correct we multiple, here when we simulate we divide
         sim_data /= detector.get_relgains(sim_data,em_gain,non_linearity_correction)
