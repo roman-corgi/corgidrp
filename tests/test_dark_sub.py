@@ -5,6 +5,7 @@ import numpy as np
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
+import corgidrp.l2a_to_l2b as l2a_to_l2b
 
 def test_dark_sub():
     """
@@ -50,7 +51,7 @@ def test_dark_sub():
     dark_filepath = os.path.join(calibdir, dark_filename)
     new_dark = data.Dark(dark_filepath)
     # subtract darks from itself
-    darkest_dataset = detector.dark_subtraction(dark_dataset, new_dark)
+    darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, new_dark)
 
     # check the level of the dataset is now approximately 0 
     assert np.mean(darkest_dataset.all_data) == pytest.approx(0, abs=1e-2)

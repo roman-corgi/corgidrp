@@ -6,8 +6,16 @@ import corgidrp.data as data
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
-    Create simulated data to create a master dark. 
+    Create simulated data to create a master dark.
     Assume these have already undergone L1 processing and are L2a level products
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 10.
+
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset
     """
     filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
@@ -20,6 +28,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
+
 
 
 def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
@@ -55,6 +64,12 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
 def create_default_headers(obstype="ENG"):
     """
     Creates an empty primary header and an Image extension header with some possible keywords
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+
     """
     prihdr = fits.Header()
     exthdr = fits.Header()
@@ -72,7 +87,7 @@ def create_default_headers(obstype="ENG"):
     prihdr['BUILD'] = 0
     prihdr['OBSTYPE'] = obstype
     prihdr['MOCK'] = True
-    
+
     # fill in exthdr
     exthdr['NAXIS'] = 2
     exthdr['NAXIS1'] = NAXIS1
