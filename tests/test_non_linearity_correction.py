@@ -13,6 +13,10 @@ class NonlinException(Exception):
 
 def _parse_file(nonlin_path):
     """
+
+    ** This function has been copied directly from the II&T pipeline 
+    and is only used here to validate the new DRP vs. the old pipeline **
+
     Get data from nonlin file.
     
     
@@ -59,6 +63,10 @@ def _parse_file(nonlin_path):
 
 def get_relgains(frame, em_gain, nonlin_path):
     """
+
+    ** This function has been copied directly from the II&T pipeline 
+    and is only used here to validate the new DRP vs. the old pipeline **
+
     For a given bias subtracted frame of dn counts, return a same sized
     array of relative gain values.
 
@@ -144,7 +152,7 @@ def test_non_linearity_correction():
 
     
     #Let's test that this returns the same thing as the II&T pipeline
-    linear_data_iit = nonlinear_dataset.all_data*get_relgains(nonlinear_dataset.all_data,emgain,os.path.dirname(os.path.abspath(__file__))+"/test_data/nonlin_sample.csv")
+    linear_data_iit = nonlinear_dataset.all_data*get_relgains(nonlinear_dataset.all_data,emgain,os.path.join(os.path.dirname(os.path.abspath(__file__)),"test_data","nonlin_sample.csv"))
 
     #We want the difference between the II&T version and ours to be zero. 
     assert np.all(np.abs(linear_dataset.all_data[0]-linear_data_iit[0]) < 1e-5)
