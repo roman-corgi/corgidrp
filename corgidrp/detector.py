@@ -22,28 +22,107 @@ def create_dark_calib(dark_dataset):
 
     return new_dark
 
+detector_areas= {
+    'SCI' : {
+        'frame_rows' : 1200,
+        'frame_cols' : 2200,
+        'image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'prescan' : {
+            'rows': 1200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 1200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 163,
+            'cols': 1056,
+            'r0c0': [1037, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 1200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    'ENG' :{
+        'frame_rows' : 2200,
+        'frame_cols' : 2200,
+        'image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'prescan' : {
+            'rows': 2200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 2200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 1163,
+            'cols': 1056,
+            'r0c0': [1037, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 2200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    }
 
+def slice_section(frame, obstype, key):
+    """Slice 2d section out of frame.
 
-def plot_detector_areas(image_constants, areas=('image', 'prescan',
+    Parameters
+    ----------
+    frame : array_like
+        Full frame consistent with size given in frame_rows, frame_cols.
+    key : str
+        Keyword referencing section to be sliced; must exist in geom.
+
+    """
+    rows = detector_areas[obstype][key]['rows']
+    cols = detector_areas[obstype][key]['cols']
+    r0c0 = detector_areas[obstype][key]['r0c0']
+
+    section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+    if section.size == 0:
+        raise Exception('Corners invalid')
+    return section
+
+def plot_detector_areas(detector_areas, areas=('image', 'prescan',
         'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
     """
     Create an image of the detector areas for visualization and debugging
 
     Args:
-        image_constants (dict): a dictionary of image constants
+        detector_areas (dict): a dictionary of image constants
         areas (tuple): a tuple of areas to create masks for
 
     Returns:
         np.ndarray: an image of the detector areas
     """
-    detector_areas = make_detector_areas(image_constants, areas=areas)
+    detector_areas = make_detector_areas(detector_areas, areas=areas)
     detector_area_image = np.zeros(
-        (image_constants['frame_rows'], image_constants['frame_cols']), dtype=int)
+        (detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=int)
     for i, area in enumerate(areas):
         detector_area_image[detector_areas[area]] = i + 1
     return detector_area_image
 
-def detector_area_mask(image_constants, area='image'):
+def detector_area_mask(detector_areas, area='image'):
     """
     Create a mask for the detector area
 
@@ -52,18 +131,18 @@ def detector_area_mask(image_constants, area='image'):
     Returns:
         np.ndarray: a mask for the detector area
     """
-    mask = np.zeros((image_constants['frame_rows'], image_constants['frame_cols']), dtype=bool)
-    mask[image_constants[area]['r0c0'][0]:image_constants[area]['r0c0'][0] + image_constants[area]['rows'],
-            image_constants[area]['r0c0'][1]:image_constants[area]['r0c0'][1] + image_constants[area]['cols']] = True
+    mask = np.zeros((detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=bool)
+    mask[detector_areas[area]['r0c0'][0]:detector_areas[area]['r0c0'][0] + detector_areas[area]['rows'],
+            detector_areas[area]['r0c0'][1]:detector_areas[area]['r0c0'][1] + detector_areas[area]['cols']] = True
     return mask
 
-def make_detector_areas(image_constants, areas=('image', 'prescan', 'prescan_reliable',
+def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reliable',
         'parallel_overscan', 'serial_overscan')):
     """
     Create a dictionary of masks for the different detector areas
 
     Args:
-        image_constants (dict): a dictionary of image constants
+        detector_areas (dict): a dictionary of image constants
         areas (tuple): a tuple of areas to create masks for
 
     Returns:
@@ -71,7 +150,7 @@ def make_detector_areas(image_constants, areas=('image', 'prescan', 'prescan_rel
     """
     detector_areas = {}
     for area in areas:
-        detector_areas[area] = detector_area_mask(image_constants, area=area)
+        detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
 
 def dark_subtraction(input_dataset, dark_frame):
