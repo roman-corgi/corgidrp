@@ -138,7 +138,7 @@ class Image():
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        err (np.array): 2-D uncertainty data
+        err (np.array): 2-D/3-D uncertainty data
         dq (np.array): 2-D data quality, 0: good, 1: bad
 
     Attributes:
@@ -162,12 +162,13 @@ class Image():
 
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
-                    if np.shape(self.data) != np.shape(err):
-                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
+                    if np.shape(self.data) != np.shape(err)[-2:]:
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-2:], self.data.shape))
                     self.err = err
                 # we assume that the ERR extension is index 2 of hdulist
                 elif len(hdulist)>2:
                     self.err = hdulist[2].data
+                    self.errhd = hdulist[2].header
                 else:
                     self.err = np.zeros(self.data.shape)
 
@@ -178,6 +179,7 @@ class Image():
                 # we assume that the DQ extension is index 3 of hdulist
                 elif len(hdulist)>3:
                     self.dq = hdulist[3].data
+                    self.dqhd = hdulist[3].header
                 else:
                     self.dq = np.zeros(self.data.shape, dtype = np.uint16)
 
@@ -203,8 +205,8 @@ class Image():
             self.filedir = "."
             self.filename = ""
             if err is not None:
-                if np.shape(self.data) != np.shape(err):
-                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
+                if np.shape(self.data) != np.shape(err)[-2:]:
+                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-2:], self.data.shape))
                 self.err = err
             else:
                 self.err = np.zeros(self.data.shape)
@@ -213,12 +215,18 @@ class Image():
                     raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                 self.dq = dq
             else:
-                self.dq = np.zeros(self.data.shape)
+                self.dq = np.zeros(self.data.shape, dtype = np.uint16)
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
-
+        
+        if not hasattr(self, 'errhd'):
+            self.errhd = fits.Header()
+            self.errhd["EXTNAME"] = "ERR"
+        if not hasattr(self, 'dqhd'):
+            self.dqhd = fits.Header()
+            self.dqhd["EXTNAME"] = "DQ"
 
         # can do fancier things here if needed or storing more meta data
 
@@ -247,13 +255,11 @@ class Image():
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
-        errhd = fits.Header()
-        errhd["EXTNAME"] = "ERR"
-        errhdu = fits.ImageHDU(data=self.err, header = errhd)
+
+        errhdu = fits.ImageHDU(data=self.err, header = self.errhd)
         hdulist.append(errhdu)
-        dqhd = fits.Header()
-        dqhd["EXTNAME"] = "DQ"
-        dqhdu = fits.ImageHDU(data=self.dq, header = dqhd)
+        
+        dqhdu = fits.ImageHDU(data=self.dq, header = self.dqhd)
         hdulist.append(dqhdu)
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
@@ -296,6 +302,8 @@ class Image():
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
         new_img.filedir = self.filedir
+        new_img.errhd = self.errhd
+        new_img.dqhd = self.dqhd
 
         # update DRP version tracking
         self.ext_hdr['DRPVERSN'] =  corgidrp.version
@@ -313,6 +321,36 @@ class Image():
         mask = self.dq>0
         return ma.masked_array(self.data, mask=mask)
 
+    def add_error_term(self, error, err_name):
+        """
+        add a layer of a specific uncertainty on the 3-dim error array extension 
+        
+        Args:
+          error (np.array): 2-d error layer
+          err_name (str): name of the uncertainty layer  
+        """
+        if error.ndim != 2 or error.shape != self.data.shape:
+            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        
+        err = self.err
+        sh = list(err.shape)
+        if err.ndim > 2:
+            sh[0]+=1
+        else:
+            sh.insert(0,2)
+        
+        new_err = np.resize(err, tuple(sh))
+        #append new error as layer on 3D cube
+        new_err[sh[0] - 1,:, :] = error
+
+        comb_err = np.sqrt(new_err[0,:,:]**2 + error**2)
+        #first layer is always the updated combined error
+        new_err[0,:,:] = comb_err
+        self.err = new_err
+        layer = str(new_err.shape[0])
+        self.errhd["Layer_1"] = "combined_error"
+        self.errhd["Layer_" + layer] = err_name    
+        
 
 class Dark(Image):
     """
