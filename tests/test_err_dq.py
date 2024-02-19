@@ -104,8 +104,8 @@ def test_error_dq():
     assert masked_data.mean()==2
     assert masked_data.sum()==image1.data.sum()-2
     
-    #for i in range(4):
-    #    os.remove('test_image{0}.fits'.format(i))
+    for i in range(4):
+        os.remove('test_image{0}.fits'.format(i))
     
 if __name__ == '__main__':
     test_error_dq()
