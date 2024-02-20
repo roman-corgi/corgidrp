@@ -39,32 +39,40 @@ def test_prescan_sub():
 
         dataset = data.Dataset(filenames)
 
-        assert len(dataset) == 2, f"Mock dataset is an unexpected length ({len(dataset)})."
+        if len(dataset) != 2:
+            raise Exception(f"Mock dataset is an unexpected length ({len(dataset)}).")
         
         for return_full_frame in [True, False]:
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
             output_shape = output_dataset[0].data.shape
-            assert output_shape == shapes[obstype][return_full_frame], f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected."
+            if output_shape != shapes[obstype][return_full_frame]:
+                raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
     
             # check that data, err, and dq arrays are consistently modified
             dataset.all_data[0, 0, 0] = 0.
-            assert dataset[0].data[0, 0] == 0., "Modifying dataset.all_data did not modify individual frame data."
+            if dataset[0].data[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
 
             dataset[0].data[0,0] = 1.
-            assert dataset.all_data[0,0,0] == 1., "Modifying individual frame data did not modify dataset.all_data."
+            if dataset.all_data[0,0,0] != 1. :
+                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
 
             dataset.all_err[0, 0, 0] = 0.
-            assert dataset[0].err[0, 0] == 0., "Modifying dataset.all_err did not modify individual frame err."
+            if dataset[0].err[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
 
             dataset[0].err[0,0] = 1.
-            assert dataset.all_err[0,0,0] == 1., "Modifying individual frame err did not modify dataset.all_err."
+            if dataset.all_err[0,0,0] != 1. :
+                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
 
             dataset.all_dq[0, 0, 0] = 0.
-            assert dataset[0].dq[0, 0] == 0., "Modifying dataset.all_dq did not modify individual frame dq."
+            if dataset[0].dq[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
 
             dataset[0].dq[0,0] = 1.
-            assert dataset.all_dq[0,0,0] == 1., "Modifying individual frame dq did not modify dataset.all_dq."
+            if dataset.all_dq[0,0,0] != 1. :
+                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
 
 if __name__ == "__main__":
     test_prescan_sub()
