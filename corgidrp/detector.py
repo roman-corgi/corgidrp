@@ -84,14 +84,12 @@ detector_areas= {
     }
 
 def slice_section(frame, obstype, key):
-    """Slice 2d section out of frame.
+    """
+    Slice 2d section out of frame
 
-    Parameters
-    ----------
-    frame : array_like
-        Full frame consistent with size given in frame_rows, frame_cols.
-    key : str
-        Keyword referencing section to be sliced; must exist in geom.
+    Args:
+        frame (array_like): Full frame consistent with size given in frame_rows, frame_cols
+        key (str): Keyword referencing section to be sliced; must exist in detector_areas
 
     """
     rows = detector_areas[obstype][key]['rows']
