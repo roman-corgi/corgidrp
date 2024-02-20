@@ -4,9 +4,18 @@ import os
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
-import numpy as np
-import pytest
 
+# Expected output image shapes
+shapes = {
+    'SCI' : {
+        True : (1200,2200),
+        False : (1024,1024)
+    },
+    'ENG' : {
+        True: (2200,2200),
+        False : (1024,1024)
+    }
+}
 
 def test_prescan_sub():
     """
@@ -14,15 +23,13 @@ def test_prescan_sub():
 
     TODO: 
     * handle 'CAL' observation types
-
+    * check that output is consistent with what we expect from II&T prescan code
     """
     ###### create simulated data
     # check that simulated data folder exists, and create if not
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
-
-    # dataset = data.Dataset(['example_L1_input.fits'])
 
     for obstype in ['SCI', 'ENG']:
         # create simulated data
@@ -32,44 +39,32 @@ def test_prescan_sub():
 
         dataset = data.Dataset(filenames)
 
-        assert len(dataset) == 2
+        assert len(dataset) == 2, f"Mock dataset is an unexpected length ({len(dataset)})."
+        
+        for return_full_frame in [True, False]:
+            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-        # check that data is consistently modified
-        dataset.all_data[0, 0, 0] = 0
-        assert dataset[0].data[0, 0] == 0
-
-        dataset[0].data[0,0] = 1
-        assert dataset.all_data[0,0,0] == 1
-
-
-        output_frame = prescan_biassub(dataset)
-        output_frame_full = prescan_biassub(dataset, return_full_frame=True)
-
-    ###### create input data
-    # input_frame = mocks.create_prescan_files(dataset)
-
-    # check the level of dark current is approximately correct
-    # assert np.mean(dark_frame.data) == pytest.approx(150, abs=1e-2)
-
-    # save dark
-    # calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
-    # dark_filename = "sim_dark_calib.fits"
-    # if not os.path.exists(calibdir):
-    #     os.mkdir(calibdir)
-    # dark_frame.save(filedir=calibdir, filename=dark_filename)
-
-    ###### perform dark subtraction
-    # load in the dark
-    # dark_filepath = os.path.join(calibdir, dark_filename)
-    # new_dark = data.Dark(dark_filepath)
-    # subtract darks from itself
-    # darkest_dataset = detector.dark_subtraction(dark_dataset, new_dark)
-
-    # check the level of the dataset is now approximately 0 
-    # assert np.mean(darkest_dataset.all_data) == pytest.approx(0, abs=1e-2)
-    # print(np.mean(darkest_dataset.all_data))
-    # print(darkest_dataset[0].ext_hdr)
+            output_shape = output_dataset[0].data.shape
+            assert output_shape == shapes[obstype][return_full_frame], f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected."
     
+            # check that data, err, and dq arrays are consistently modified
+            dataset.all_data[0, 0, 0] = 0.
+            assert dataset[0].data[0, 0] == 0., "Modifying dataset.all_data did not modify individual frame data."
+
+            dataset[0].data[0,0] = 1.
+            assert dataset.all_data[0,0,0] == 1., "Modifying individual frame data did not modify dataset.all_data."
+
+            dataset.all_err[0, 0, 0] = 0.
+            assert dataset[0].err[0, 0] == 0., "Modifying dataset.all_err did not modify individual frame err."
+
+            dataset[0].err[0,0] = 1.
+            assert dataset.all_err[0,0,0] == 1., "Modifying individual frame err did not modify dataset.all_err."
+
+            dataset.all_dq[0, 0, 0] = 0.
+            assert dataset[0].dq[0, 0] == 0., "Modifying dataset.all_dq did not modify individual frame dq."
+
+            dataset[0].dq[0,0] = 1.
+            assert dataset.all_dq[0,0,0] == 1., "Modifying individual frame dq did not modify dataset.all_dq."
 
 if __name__ == "__main__":
     test_prescan_sub()
