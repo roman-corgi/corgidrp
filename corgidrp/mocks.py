@@ -75,7 +75,7 @@ def create_default_headers(obstype="ENG"):
     Creates an empty primary header and an Image extension header with some possible keywords
 
     Args:
-        obstype (str) : Observation type. Defaults to "ENG".
+        obstype (str): Observation type. Defaults to "ENG".
 
     Returns:
         tuple:
