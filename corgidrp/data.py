@@ -386,7 +386,7 @@ class NonLinearityCalibration(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D calibration data. See above for the required format. 
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark file (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this NonLinearityCalibration file (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
 
@@ -406,14 +406,14 @@ class NonLinearityCalibration(Image):
         
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new dark
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new NonLinearityCalibration file
         if ext_hdr is not None:
             if input_dataset is None:
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new Non Linearity Correction. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this calibration file.")
             self.ext_hdr['DATATYPE'] = 'NonLinearityCalibration' # corgidrp specific keyword for saving to disk
 
-            # log all the data that went into making this dark
+            # log all the data that went into making this calibration file
             self._record_parent_filenames(input_dataset)
 
             # add to history
@@ -425,7 +425,7 @@ class NonLinearityCalibration(Image):
             self.filename = "{0}_NonLinearityCalibration.fits".format(orig_input_filename)
 
 
-        # double check that this is actually a dark file that got read in
+        # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
