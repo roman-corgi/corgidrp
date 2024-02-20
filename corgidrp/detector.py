@@ -89,6 +89,7 @@ def slice_section(frame, obstype, key):
 
     Args:
         frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
+        obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         key (str): Keyword referencing section to be sliced; must exist in detector_areas
 
     Returns: 
@@ -129,6 +130,7 @@ def detector_area_mask(detector_areas, area='image'):
     Args:
         detector_areas (dict): a dictionary of image constants
         area (str): the area of the detector to create a mask for
+    
     Returns:
         np.ndarray: a mask for the detector area
     """
@@ -161,6 +163,7 @@ def dark_subtraction(input_dataset, dark_frame):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
         dark_frame (corgidrp.data.Dark): a Dark frame to model the dark current
+    
     Returns:
         corgidrp.data.Dataset: a dark subtracted version of the input dataset
     """

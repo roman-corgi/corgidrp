@@ -25,7 +25,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     out_frames_dq = []
 
     # Iterate over frames
-    for frame in output_dataset:
+    for i, frame in enumerate(output_dataset):
 
         frame_data = frame.data
         frame_err = frame.err
@@ -33,7 +33,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
         obstype = frame.pri_hdr['OBSTYPE']
-        assert obstype in ['SCI','ENG'], f"Observation type of frame {i} is not 'SCI' or 'ENG'"
+        if not obstype in ['SCI','ENG'] :
+                raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG'")
 
         # Get the reliable prescan area
         prescan = slice_section(frame_data, obstype, 'prescan_reliable')
