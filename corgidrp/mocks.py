@@ -33,7 +33,16 @@ def create_dark_calib_files(filedir=None, numfiles=10):
 
 def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
     """
-    Create simulated data. 
+    Create simulated raw data. 
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 2.
+        obstype (str): Observation type. Defaults to "ENG".
+
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset
     """
     
     if obstype == "SCI":
@@ -64,6 +73,9 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
 def create_default_headers(obstype="ENG"):
     """
     Creates an empty primary header and an Image extension header with some possible keywords
+
+    Args:
+        obstype (str) : Observation type. Defaults to "ENG".
 
     Returns:
         tuple:
