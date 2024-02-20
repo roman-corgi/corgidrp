@@ -88,9 +88,11 @@ def slice_section(frame, obstype, key):
     Slice 2d section out of frame
 
     Args:
-        frame (array_like): Full frame consistent with size given in frame_rows, frame_cols
+        frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
         key (str): Keyword referencing section to be sliced; must exist in detector_areas
 
+    Returns: 
+        np.ndarray: a 2D array of the specified detector area
     """
     rows = detector_areas[obstype][key]['rows']
     cols = detector_areas[obstype][key]['cols']
@@ -125,6 +127,7 @@ def detector_area_mask(detector_areas, area='image'):
     Create a mask for the detector area
 
     Args:
+        detector_areas (dict): a dictionary of image constants
         area (str): the area of the detector to create a mask for
     Returns:
         np.ndarray: a mask for the detector area
