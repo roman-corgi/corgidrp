@@ -2,6 +2,8 @@ import astropy.io.fits as fits
 import numpy as np
 
 import corgidrp.data as data
+import corgidrp.detector as detector
+import os
 
 
 def create_dark_calib_files(filedir=None, numfiles=10):
@@ -22,6 +24,45 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
         sim_data = np.random.poisson(lam=150, size=(1024, 1024))
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    dataset = data.Dataset(frames)
+    return dataset
+
+def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
+    """
+    Create simulated data to non-linear data to test non-linearity correction.
+    
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
+        em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
+        
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset
+    """
+    filepattern = "simcal_nonlin_{0:04d}.fits"
+    frames = []
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+        #Add the EMGAIN to the headers
+        exthdr['EMGAIN'] = em_gain
+        # Create a default 
+        size = 1024
+        sim_data = np.zeros([size,size])
+        data_range = np.linspace(10,65536,size)
+        # Generate data for each row, where the mean increase from 10 to 65536
+        for x in range(size):
+            sim_data[:, x] = np.random.poisson(data_range[x], size)
+        
+        non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..',"tests","test_data","nonlin_sample.fits"))
+
+        #Apply the non-linearity to the data. When we correct we multiple, here when we simulate we divide
+        sim_data /= detector.get_relgains(sim_data,em_gain,non_linearity_correction)
+
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
