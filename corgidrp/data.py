@@ -313,7 +313,6 @@ class Image():
         mask = self.dq>0
         return ma.masked_array(self.data, mask=mask)
 
-
 class Dark(Image):
     """
     Dark calibration frame for a given exposure time.
@@ -354,9 +353,87 @@ class Dark(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
+class NonLinearityCalibration(Image):
+    """
+    Class for non-linearity calibration files. Although it's not stricly an image that you might look at, it is a 2D array of data
+
+    The required format for calibration data is as follows:
+     - Minimum 2x2
+     - First value (top left) must be assigned to nan
+     - Row headers (dn counts) must be monotonically increasing
+     - Column headers (EM gains) must be monotonically increasing
+     - Data columns (relative gain curves) must straddle 1
+     - The first row will provide the the Gain axis values (accesssed via gain_ax = non_lin_correction.data[0, 1:])
+     - The first column will provide the "count" axis value (accessed via count_ax = non_lin_correction.data[1:, 0])
+     - The rest of the array will be the calibration data (accessed via relgains = non_lin_correction.data[1:, 1:])
+
+    For example:
+    [
+        [nan,  1,     10,    100,   1000 ], <- gain axis
+        [1,    0.900, 0.950, 0.989, 1.000],
+        [1000, 0.910, 0.960, 0.990, 1.010],
+        [2000, 0.950, 1.000, 1.010, 1.050],
+        [3000, 1.000, 1.001, 1.011, 1.060],
+         ^
+         count axis
+    ],
+
+    where the row headers [1, 1000, 2000, 3000] are dn counts, the column
+    headers [1, 10, 100, 1000] are EM gains, and the first data column
+    [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
+
+     Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D calibration data. See above for the required format. 
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this NonLinearityCalibration file (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # File format checks - Ported from II&T
+        nonlin_raw = self.data
+        if nonlin_raw.ndim < 2 or nonlin_raw.shape[0] < 2 or \
+        nonlin_raw.shape[1] < 2:
+            raise ValueError('The non-linearity calibration array must be at least 2x2 (room for x '
+                                'and y axes and one data point)')
+        if not np.isnan(nonlin_raw[0, 0]):
+            raise ValueError('The first value of the non-linearity calibration array  (upper left) must be set to '
+                                '"nan"')
+
+        
+        # additional bookkeeping for a calibration file
+        # if this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new NonLinearityCalibration file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new Non Linearity Correction. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this calibration file.")
+            self.ext_hdr['DATATYPE'] = 'NonLinearityCalibration' # corgidrp specific keyword for saving to disk
+
+            # log all the data that went into making this calibration file
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Non Linearity Calibration file created"
+
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+            self.filename = "{0}_NonLinearityCalibration.fits".format(orig_input_filename)
+
+
+        # double check that this is actually a NonLinearityCalibration file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
+            raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
+        
 
 datatypes = { "Image" : Image,
-              "Dark"  : Dark  }
+              "Dark"  : Dark,
+              "NonLinearityCalibration" : NonLinearityCalibration }
 
 def autoload(filepath):
     """
