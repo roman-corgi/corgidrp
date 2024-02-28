@@ -72,7 +72,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
 
 
 
-def create_prescan_files(filedir=None, numfiles=2, obstype="ENG"):
+def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     """
     Create simulated raw data. 
 
