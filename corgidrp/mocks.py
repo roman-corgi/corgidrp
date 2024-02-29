@@ -19,6 +19,10 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         corgidrp.data.Dataset:
             The simulated dataset
     """
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+
     filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
@@ -44,6 +48,11 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
         corgidrp.data.Dataset:
             The simulated dataset
     """
+
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+
     filepattern = "simcal_nonlin_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
@@ -79,13 +88,16 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     Args:
         filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset.  Defaults to 2.
-        obstype (str): Observation type. Defaults to "ENG".
+        obstype (str): Observation type. Defaults to "SCI".
 
     Returns:
         corgidrp.data.Dataset:
             The simulated dataset
     """
-    
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+
     if obstype == "SCI":
         size = (1200, 2200)
     elif obstype == "ENG":
@@ -111,12 +123,12 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     return dataset
 
 
-def create_default_headers(obstype="ENG"):
+def create_default_headers(obstype="SCI"):
     """
     Creates an empty primary header and an Image extension header with some possible keywords
 
     Args:
-        obstype (str): Observation type. Defaults to "ENG".
+        obstype (str): Observation type. Defaults to "SCI".
 
     Returns:
         tuple:
@@ -127,8 +139,7 @@ def create_default_headers(obstype="ENG"):
     prihdr = fits.Header()
     exthdr = fits.Header()
 
-    if obstype != "ENG":
-        obstype = "SCI"
+    if obstype != "SCI":
         NAXIS1 = 2200
         NAXIS2 = 1200
     else:
