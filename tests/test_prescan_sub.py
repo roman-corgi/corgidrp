@@ -38,22 +38,18 @@ here = Path(os.path.dirname(os.path.abspath(__file__)))
 meta_path = Path(here,'test_data','metadata.yaml')
 
 class Metadata(object):
-    """Create masks for different regions of the Roman CGI EXCAM detector.
-
-    Parameters
-    ----------
-    meta_path : str
-        Full path of metadta yaml.
-
-    Attributes
-    ----------
-    data : dict
-        Data from metadata file.
-    geom : SimpleNamespace
-        Geometry specific data.
-
+    """ II&T pipeline class to store metadata.
+    
     B Nemati and S Miller - UAH - 03-Aug-2018
 
+    Args:
+        meta_path (str): Full path of metadta yaml.
+
+    Attributes:
+        data (dict):
+            Data from metadata file.
+        geom (SimpleNamespace):
+            Geometry specific data.
     """
 
     def __init__(self, meta_path=meta_path):
@@ -65,7 +61,11 @@ class Metadata(object):
         self.geom = self.data['geom']
 
     def get_data(self):
-        """Read yaml data into dictionary."""
+        """Read yaml data into dictionary.
+        
+        Returns:
+            data (dict): Metadata dictionary.
+        """
         with open(self.meta_path, 'r') as stream:
             data = yaml.safe_load(stream)
         return data
@@ -73,13 +73,14 @@ class Metadata(object):
     def slice_section(self, frame, key):
         """Slice 2d section out of frame.
 
-        Parameters
-        ----------
-        frame : array_like
-            Full frame consistent with size given in frame_rows, frame_cols.
-        key : str
-            Keyword referencing section to be sliced; must exist in geom.
-
+        Args:
+            frame (array_like): 
+                Full frame consistent with size given in frame_rows, frame_cols.
+            key (str): 
+                Keyword referencing section to be sliced; must exist in geom.
+        
+        Returns:
+            section (array_like): Section of frame
         """
         rows, cols, r0c0 = self._unpack_geom(key)
 
@@ -89,7 +90,16 @@ class Metadata(object):
         return section
 
     def _unpack_geom(self, key):
-        """Safely check format of geom sub-dictionary and return values."""
+        """Safely check format of geom sub-dictionary and return values.
+        
+        Args:
+            key (str): Keyword referencing section to be sliced; must exist in geom.
+
+        Returns:
+            rows (int): Number of rows in section.
+            cols (int): Number of columns in section.
+            r0c0 (tuple): Initial row and column of section.
+        """
         coords = self.geom[key]
         rows = coords['rows']
         cols = coords['cols']
@@ -99,7 +109,14 @@ class Metadata(object):
 
     #added in from MetadataWrapper
     def _imaging_area_geom(self):
-        """Return geometry of imaging area in reference to full frame."""
+        """Return geometry of imaging area in reference to full frame.
+        
+        Returns:
+            rows_im (int): Number of rows corresponding to image frame.
+            cols_im (int): Number of columns in section.
+            r0c0_im (tuple): Initial row and column of section.
+        """
+
         _, cols_pre, _ = self._unpack_geom('prescan')
         _, cols_serial_ovr, _ = self._unpack_geom('serial_overscan')
         rows_parallel_ovr, _, _ = self._unpack_geom('parallel_overscan')
@@ -119,10 +136,19 @@ class Metadata(object):
         Use this to transform mask and embed from acting on the full frame to
         acting on only the image frame.
 
+        Args:
+            frame (array_like): 
+                Full frame consistent with size given in frame_rows, frame_cols.
+            
+        Returns:
+            slice (array_like): 
+                Science image area of full frame.
         """
         rows, cols, r0c0 = self._imaging_area_geom()
 
-        return frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+        slice = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+
+        return slice
     
 # EMCCDFrame code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_emccd_frame.py#L9
 
@@ -134,48 +160,44 @@ class EMCCDFrameException(Exception):
 class EMCCDFrame:
     """Get data from EMCCD frame and subtract the bias and bias offset.
 
-    Parameters
-    ----------
-    frame_dn : array_like
-        Raw EMCCD full frame (DN).
-    meta : instance
-        Instance of Metadata class containing detector metadata.
-    fwc_em : float
-        Detector EM gain register full well capacity (DN).
-    fwc_pp : float
-        Detector image area per-pixel full well capacity (DN).
-    em_gain : float
-        Gain from EM gain register, >= 1 (unitless).
-    bias_offset : float
-        Median number of counts in the bias region due to fixed non-bias noise
-        not in common with the image region.  Basically we compute the bias
-        for the image region based on the prescan from each frame, and the
-        bias_offset is how many additional counts the prescan had from extra
-        noise not captured in the master dark fit.  This value is subtracted
-        from each measured bias.  Units of DN.
-
-
-    Attributes
-    ----------
-    image : array_like
-        Image section of frame (DN).
-    prescan : array_like
-        Prescan section of frame (DN).
-    al_prescan : array_like
-        Prescan with row numbers relative to the first image row (DN).
-    frame_bias : array_like
-        Column vector with each entry the median of the prescan row minus the
-        bias offset (DN).
-    bias : array_like
-        Column vector with each entry the median of the prescan row relative
-        to the first image row minus the bias offset (DN).
-    frame_bias0 : array_like
-        Total frame minus the bias (row by row) minus the bias offset (DN).
-    image_bias0 : array_like
-        Image area minus the bias (row by row) minus the bias offset (DN).
-
     S Miller - UAH - 16-April-2019
 
+    Args:
+        frame_dn (array_like): 
+            Raw EMCCD full frame (DN).
+        meta (instance): 
+            Instance of Metadata class containing detector metadata.
+        fwc_em (float): 
+            Detector EM gain register full well capacity (DN).
+        fwc_pp (float): 
+            Detector image area per-pixel full well capacity (DN).
+        em_gain (float): 
+            Gain from EM gain register, >= 1 (unitless).
+        bias_offset (float): 
+            Median number of counts in the bias region due to fixed non-bias noise
+            not in common with the image region.  Basically we compute the bias
+            for the image region based on the prescan from each frame, and the
+            bias_offset is how many additional counts the prescan had from extra
+            noise not captured in the master dark fit.  This value is subtracted
+            from each measured bias.  Units of DN.
+
+    Attributes:
+        image (array_like): 
+            Image section of frame (DN).
+        prescan (array_like): 
+            Prescan section of frame (DN).
+        al_prescan (array_like): 
+            Prescan with row numbers relative to the first image row (DN).
+        frame_bias (array_like): 
+            Column vector with each entry the median of the prescan row minus the
+            bias offset (DN).
+        bias (array_like): 
+            Column vector with each entry the median of the prescan row relative
+            to the first image row minus the bias offset (DN).
+        frame_bias0 (array_like): 
+            Total frame minus the bias (row by row) minus the bias offset (DN).
+        image_bias0 (array_like): 
+            Image area minus the bias (row by row) minus the bias offset (DN).
     """
 
     def __init__(self, frame_dn, meta, fwc_em, fwc_pp, em_gain, bias_offset):
