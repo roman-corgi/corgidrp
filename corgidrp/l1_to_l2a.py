@@ -67,9 +67,12 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         out_frames_err.append(image_err)
         out_frames_dq.append(image_dq)
 
-        # Update header in the dataset
+        # Update header with new frame dimensions
         frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
         frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
+        
+        # Save median bias measured in the header
+        frame.ext_hdr['MED_BIAS'] = np.median(bias)
 
     
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
