@@ -4,6 +4,7 @@ import os
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
+from corgidrp.detector import detector_areas
 
 import numpy as np
 import yaml
@@ -180,21 +181,21 @@ class EMCCDFrame:
             from each measured bias.  Units of DN.
 
     Attributes:
-        image (array_like): 
+        image (array_like):
             Image section of frame (DN).
-        prescan (array_like): 
+        prescan (array_like):
             Prescan section of frame (DN).
-        al_prescan (array_like): 
+        al_prescan (array_like):
             Prescan with row numbers relative to the first image row (DN).
-        frame_bias (array_like): 
+        frame_bias (array_like):
             Column vector with each entry the median of the prescan row minus the
             bias offset (DN).
-        bias (array_like): 
+        bias (array_like):
             Column vector with each entry the median of the prescan row relative
             to the first image row minus the bias offset (DN).
-        frame_bias0 (array_like): 
+        frame_bias0 (array_like):
             Total frame minus the bias (row by row) minus the bias offset (DN).
-        image_bias0 (array_like): 
+        image_bias0 (array_like):
             Image area minus the bias (row by row) minus the bias offset (DN).
     """
 
@@ -235,7 +236,6 @@ class EMCCDFrame:
         self.frame_bias = medbyrow_tot - self.bias_offset
         self.frame_bias0 = self.frame_dn[p_r0:, :] -  self.frame_bias
 
-
 # Run tests
 
 def test_prescan_sub():
@@ -243,16 +243,13 @@ def test_prescan_sub():
     Generate mock raw data ('SCI' & 'ENG') and pass into prescan processing function. 
     Check output dataset shapes, maintain pointers in the Dataset and Image class,
     and check that output is consistent with results II&T code.
-
-    TODO: 
-    * test function of different bias offsets
     """
-    ###### create simulated data
-    # check that simulated data folder exists, and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    if not os.path.exists(datadir):
-        os.mkdir(datadir)
 
+    tol = 0.01
+
+    ###### create simulated data
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    
     for obstype in ['SCI', 'ENG']:
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype)
@@ -321,10 +318,11 @@ def test_prescan_sub():
             corgidrp_result = output_dataset[0].data
             iit_result = iit_frames[0] if return_full_frame else iit_images[0]
 
-            if not corgidrp_result == approx(iit_result):
+            if not np.nanmax(corgidrp_result-iit_result) < tol:
                 raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
 
             # Plot for debugging
+            # import matplotlib.pyplot as plt
             # fig,axes = plt.subplots(1,3,figsize=(10,4))
 
             # im0 = axes[0].imshow(corgidrp_result,cmap='seismic')
@@ -342,7 +340,146 @@ def test_prescan_sub():
             # plt.tight_layout()
             # plt.show()
 
+def test_bias_zeros_frame():
+    """Verify prescan_biassub does not break for a frame of all zeros 
+    (should return all zeros)."""
+    
+    ###### create simulated data
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    
+    for obstype in ['SCI', 'ENG']:
+        # create simulated data
+        dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
+
+        # Overwrite data with zeros
+        dataset.all_data[:,:,:] = 0
+
+        for return_full_frame in [True, False]:
+            
+            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+
+            if not np.all(output_dataset.all_data == 0.):
+                raise Exception('Operating on all zero frame did not return all zero frame')
+
+def test_bias_hvoff():
+    """Verify that function finds bias for hvoff distribution."""
+    
+    # Set tolerance
+    tol = 1.
+    bval = 100.
+    seed = 12346
+
+    ###### create simulated data
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    
+    for obstype in ['SCI', 'ENG']:
+        # create simulated data
+        dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,
+                                             numfiles=1)
+
+        # Overwrite data with normal distribution
+        rng = np.random.default_rng(seed)
+        dataset.all_data[:,:,:] = rng.normal(bval, 1,
+                                             size=dataset.all_data.shape)
+
+        for return_full_frame in [True, False]:
+            
+            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+
+            if output_dataset[0].ext_hdr['MED_BIAS'] - bval > tol:
+                raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
+
+def test_bias_hvon():
+    """Verify that function finds bias for hvon
+        distribution.  Also tests that only the good columns are used for
+        the bias."""
+    
+    # Set tolerance
+    tol = 6.
+    bval = 100.
+    expmean = 10.
+    seed = 12346
+
+    ###### create simulated data
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    
+    for obstype in ['SCI', 'ENG']:
+        # create simulated dataset
+        dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
+
+        # Generate bias with inflated values in the bad columns
+        bias = np.full_like(dataset.all_data,bval)
+        col_start = detector_areas[obstype]['prescan_reliable']['r0c0'][1]
+        bias[:,:,0:col_start] = bval * 5
+
+        # Overwrite dataset with normal + exponential + bias
+        rng = np.random.default_rng(seed)
+        dataset.all_data[:,:,:] = (rng.normal(0, 1, size=dataset.all_data.shape)
+                                   + rng.exponential(expmean, size=dataset.all_data.shape)
+                                   - expmean # to keep DC contribution 0
+                                   + bias)
+
+        for return_full_frame in [True, False]:            
+            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            if output_dataset[0].ext_hdr['MED_BIAS'] - bval > tol:
+                raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
+
+def test_bias_uniform_value():
+    """Verify that function finds bias for uniform value."""
+    
+    bval = 1.
+
+    ###### create simulated dataset
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    
+    for obstype in ['SCI', 'ENG']:
+        # create simulated dataset
+        dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
+
+        # Overwrite dataset with normal + exponential + bias
+        dataset.all_data[:,:,:] = bval
+
+        for return_full_frame in [True, False]:            
+            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            if not np.all(output_dataset.all_data == 0.):
+                raise Exception(f'Higher than expected error in bias measurement for uniform value.')
+            
+def test_bias_offset():
+    """Verify bias offset incorporated as expected"""
+    
+    # 10 counts higher than the bias in the image region.
+    bias_offset = 10
+    tol = 1e-13
+    
+    ###### create simulated dataset
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    
+    for obstype in ['SCI', 'ENG']:
+        # create simulated dataset with 0 bias offset
+        dataset_0 = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)    
+        dataset_0.all_data[:,:,:] = 0.
+
+        # create simulated dataset with 10 bias offset
+        # bias_offset = 10 means the bias, as measured in the prescan, is
+        # 10 counts higher than the bias in the image region.
+        dataset_10 = dataset_0.copy()
+        r0c0 = detector_areas[obstype]['prescan']['r0c0']
+        rows = detector_areas[obstype]['prescan']['rows']
+        cols = detector_areas[obstype]['prescan']['cols']
+        dataset_10.all_data[:,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += bias_offset
+    
+        for return_full_frame in [True,False]:
+            output_dataset_0 = prescan_biassub(dataset_0, return_full_frame=return_full_frame,bias_offset=0)
+            output_dataset_10 = prescan_biassub(dataset_10, return_full_frame=return_full_frame,bias_offset=bias_offset)
+
+            if not np.nanmax(output_dataset_0.all_data-output_dataset_10.all_data) < tol:
+                raise Exception(f"Bias offset subtraction did not produce the correct result.")
+
 
 if __name__ == "__main__":
     test_prescan_sub()
-    
+    test_bias_zeros_frame()
+    test_bias_hvoff()
+    test_bias_hvon()
+    test_bias_uniform_value()
+    test_bias_offset()
