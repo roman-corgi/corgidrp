@@ -5,8 +5,6 @@ import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
 
-from corgidrp.data import Dataset
-from matplotlib import pyplot as plt
 import numpy as np
 import yaml
 from astropy.io import fits
@@ -347,3 +345,4 @@ def test_prescan_sub():
 
 if __name__ == "__main__":
     test_prescan_sub()
+    
