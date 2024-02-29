@@ -1,49 +1,66 @@
 import os
 import numpy as np
+import astropy.io.fits as fits
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
-import pytest
-import glob
 
 
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024]) 
 err1 = np.ones([1024,1024])
 err2 = err1.copy()
+err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1 
 prhd, exthd = create_default_headers()
+errhd = fits.Header()
+errhd["CASE"] = "test"
+dqhd = fits.Header()
+dqhd["CASE"] = "test"
 
 def test_err_dq_creation():
     """
-     test the initialization of error and dq attributes of the Image class
+     test the initialization of error and dq attributes of the Image class including saving and loading
     """
     image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd)
     assert hasattr(image1, "err")
     assert hasattr(image1, "dq")
+    assert image1.data.shape == data.shape
     assert image1.data.shape == image1.err.shape[-2:]
+    assert image1.err.shape == (1, 1024, 1024)
     assert image1.data.shape == image1.dq.shape
-    assert hasattr(image1, "errhd")
-    assert hasattr(image1, "dqhd")
+    #test the initial error and dq headers
+    assert hasattr(image1, "err_hdr")
+    assert hasattr(image1, "dq_hdr")
     assert np.mean(image1.dq) == 0
     image1.save('test_image1.fits')
     
-    image2 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err, dq = dq1)
+    image2 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err, dq = dq1, err_hdr = errhd, dq_hdr = dqhd)
     print("data", image2.data)
     print("error", image2.err)
     print("dq", image2.dq)
+    print("err_hdr", image2.err_hdr)
+    print("dq_hdr", image2.dq_hdr)
+    # test the user defined error and dq headers
+    assert image2.err_hdr["CASE"] == errhd["CASE"]
+    assert image2.dq_hdr["CASE"] == dqhd["CASE"]
     #check the correct saving and loading of fits files
     image2.save('test_image2.fits')
     image3 = Image('test_image2.fits')
     assert np.array_equal(image3.data, image2.data)
     assert np.array_equal(image3.err, image2.err)
     assert np.array_equal(image3.dq, image2.dq)
+    assert image3.err_hdr["CASE"] == errhd["CASE"]
+    assert image3.dq_hdr["CASE"] == dqhd["CASE"]
     
     #check the overwriting of err and dq parameters of the fits extensions arrays 
     image_test = Image('test_image2.fits', err = err, dq = dq)
     assert np.array_equal(image_test.dq, dq)
     assert np.array_equal(image_test.err[0,:,:], err)
+    #test 3d input error array
+    image_test2 = Image('test_image2.fits', err = err3)
+    assert np.array_equal(image_test2.err, err3)
     
 def test_err_dq_copy():
     """
@@ -55,8 +72,8 @@ def test_err_dq_copy():
     assert np.array_equal(image3.err, image2.err)
     assert np.array_equal(image3.dq, image2.dq)
     #check the copying of the headers of the extensions
-    assert image2.errhd[:] == image3.errhd[:]
-    assert image2.dqhd[:] == image3.dqhd[:]
+    assert image2.err_hdr == image3.err_hdr
+    assert image2.dq_hdr == image3.dq_hdr
     
 def test_add_error_term():
     """
@@ -74,9 +91,9 @@ def test_add_error_term():
     assert np.array_equal(image_test.dq, dq)
     assert np.array_equal(image_test.err, image1.err)
     assert image_test.err.shape == (3,1024,1024)
-    assert image_test.errhd["Layer_1"] == "combined_error"
-    assert image_test.errhd["Layer_2"] == "error_noid"
-    assert image_test.errhd["Layer_3"] == "error_nuts"
+    assert image_test.err_hdr["Layer_1"] == "combined_error"
+    assert image_test.err_hdr["Layer_2"] == "error_noid"
+    assert image_test.err_hdr["Layer_3"] == "error_nuts"
  
 def test_err_dq_dataset():
     """
