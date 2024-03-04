@@ -1,4 +1,5 @@
 # A file that holds the functions that transmogrify l1 data to l2a data 
+from corgidrp.detector import get_relgains
 
 
 def prescan_process(input_dataset): 
@@ -43,8 +44,25 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
     Returns:
         corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
     """
+    #Copy the dataset to start
+    linearized_dataset = input_dataset.copy()
 
-    return None
+    #Apply the non-linearity correction to the data
+    linearized_cube = linearized_dataset.all_data
+    #Check to see if EM gain is in the header, if not, raise an error
+    if "EMGAIN" not in linearized_dataset[0].ext_hdr.keys():
+        raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
+
+    em_gain = linearized_dataset[0].ext_hdr["EMGAIN"] #NOTE THIS REQUIRES THAT THE EM GAIN IS MEASURED ALREADY
+
+    for i in range(linearized_cube.shape[0]):
+        linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
+
+    history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
+
+    linearized_dataset.update_after_processing_step(history_msg, new_all_data=linearized_cube)
+
+    return linearized_dataset
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
