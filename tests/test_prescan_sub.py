@@ -318,7 +318,7 @@ def test_prescan_sub():
             corgidrp_result = output_dataset[0].data
             iit_result = iit_frames[0] if return_full_frame else iit_images[0]
 
-            if not np.nanmax(np.abs(corgidrp_result-iit_result)) < tol:
+            if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
                 raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
 
             # Plot for debugging
