@@ -318,7 +318,7 @@ def test_prescan_sub():
             corgidrp_result = output_dataset[0].data
             iit_result = iit_frames[0] if return_full_frame else iit_images[0]
 
-            if not np.nanmax(corgidrp_result-iit_result) < tol:
+            if not np.nanmax(np.abs(corgidrp_result-iit_result)) < tol:
                 raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
 
             # Plot for debugging
@@ -386,7 +386,7 @@ def test_bias_hvoff():
             
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            if output_dataset[0].ext_hdr['MED_BIAS'] - bval > tol:
+            if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
 
 def test_bias_hvon():
@@ -421,7 +421,7 @@ def test_bias_hvon():
 
         for return_full_frame in [True, False]:            
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
-            if output_dataset[0].ext_hdr['MED_BIAS'] - bval > tol:
+            if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
 
 def test_bias_uniform_value():
@@ -472,8 +472,19 @@ def test_bias_offset():
             output_dataset_0 = prescan_biassub(dataset_0, return_full_frame=return_full_frame,bias_offset=0)
             output_dataset_10 = prescan_biassub(dataset_10, return_full_frame=return_full_frame,bias_offset=bias_offset)
 
-            if not np.nanmax(output_dataset_0.all_data-output_dataset_10.all_data) < tol:
-                raise Exception(f"Bias offset subtraction did not produce the correct result.")
+            # Compare science image region only
+            if return_full_frame:
+                r0c0 = detector_areas[obstype]['image']['r0c0']
+                rows = detector_areas[obstype]['image']['rows']
+                cols = detector_areas[obstype]['image']['cols']
+                image_slice_0 = output_dataset_0.all_data[0,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+                image_slice_10 = output_dataset_10.all_data[0,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+            else:
+                image_slice_0 = output_dataset_0.all_data[0]
+                image_slice_10 = output_dataset_10.all_data[0]
+
+            if not np.nanmax(np.abs(image_slice_0 - image_slice_10)) < tol:
+                raise Exception(f"Bias offset subtraction did not produce the correct result. absmax value : {np.nanmax(np.abs(image_slice_0 - image_slice_10))}")
 
 
 if __name__ == "__main__":
