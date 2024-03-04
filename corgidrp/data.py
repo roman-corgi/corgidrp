@@ -138,20 +138,24 @@ class Image():
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        err (np.array): 2-D uncertainty data
+        err (np.array): 2-D/3-D uncertainty data
         dq (np.array): 2-D data quality, 0: good, 1: bad
+        err_hdr (astropy.io.fits.Header): the error extension header
+        dq_hdr (astropy.io.fits.Header): the data quality extension header
 
     Attributes:
         data (np.array): 2-D data for this Image
         err (np.array): 2-D uncertainty
         dq (np.array): 2-D data quality
         pri_hdr (astropy.io.fits.Header): primary header
-        ext_hdr (astropy.io.fits.Header): ext_hdr. Generally this header will be edited/added to
+        ext_hdr (astropy.io.fits.Header): image extension header. Generally this header will be edited/added to
+        err_hdr (astropy.io.fits.Header): the error extension header
+        dq_hdr (astropy.io.fits.Header): the data quality extension header
         filename (str): the filename corresponding to this Image
         filedir (str): the file directory on disk where this image is to be/already saved.
         filepath (str): full path to the file on disk (if it exists)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
@@ -162,14 +166,19 @@ class Image():
 
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
-                    if np.shape(self.data) != np.shape(err):
-                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
-                    self.err = err
+                    if np.shape(self.data) != np.shape(err)[-2:]:
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-2:], self.data.shape))
+                    #we want to have a 3 dim error array
+                    if err.ndim > 2:
+                        self.err = err
+                    else:
+                        self.err = err.reshape((1,)+err.shape)
                 # we assume that the ERR extension is index 2 of hdulist
                 elif len(hdulist)>2:
                     self.err = hdulist[2].data
+                    self.err_hdr = hdulist[2].header
                 else:
-                    self.err = np.zeros(self.data.shape)
+                    self.err = np.zeros((1,)+self.data.shape)
 
                 if dq is not None:
                     if np.shape(self.data) != np.shape(dq):
@@ -178,9 +187,9 @@ class Image():
                 # we assume that the DQ extension is index 3 of hdulist
                 elif len(hdulist)>3:
                     self.dq = hdulist[3].data
+                    self.dq_hdr = hdulist[3].header
                 else:
-                    self.dq = np.zeros(self.data.shape, dtype = np.uint16)
-
+                    self.dq = np.zeros(self.data.shape, dtype = int)
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -203,23 +212,37 @@ class Image():
             self.filedir = "."
             self.filename = ""
             if err is not None:
-                if np.shape(self.data) != np.shape(err):
-                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape, self.data.shape))
-                self.err = err
+                if np.shape(self.data) != np.shape(err)[-2:]:
+                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-2:], self.data.shape))
+                #we want to have a 3 dim error array
+                if err.ndim > 2:
+                    self.err = err
+                else:
+                    self.err = err.reshape((1,)+err.shape)
             else:
-                self.err = np.zeros(self.data.shape)
+                self.err = np.zeros((1,)+self.data.shape)
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
                     raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                 self.dq = dq
             else:
-                self.dq = np.zeros(self.data.shape)
-
+                self.dq = np.zeros(self.data.shape, dtype = int)
+                
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
-
-
+        
+        # we assume that if the err_hdr and dq_hdr is given as parameter they supersede eventual existing err_hdr and dq_hdr
+        if err_hdr is not None:
+            self.err_hdr = err_hdr
+        if dq_hdr is not None:
+            self.dq_hdr = dq_hdr   
+        if not hasattr(self, 'err_hdr'):
+            self.err_hdr = fits.Header()
+        self.err_hdr["EXTNAME"] = "ERR"
+        if not hasattr(self, 'dq_hdr'):
+            self.dq_hdr = fits.Header()
+        self.dq_hdr["EXTNAME"] = "DQ"
         # can do fancier things here if needed or storing more meta data
 
     # create this field dynamically
@@ -247,13 +270,11 @@ class Image():
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
-        errhd = fits.Header()
-        errhd["EXTNAME"] = "ERR"
-        errhdu = fits.ImageHDU(data=self.err, header = errhd)
+
+        errhdu = fits.ImageHDU(data=self.err, header = self.err_hdr)
         hdulist.append(errhdu)
-        dqhd = fits.Header()
-        dqhd["EXTNAME"] = "DQ"
-        dqhdu = fits.ImageHDU(data=self.dq, header = dqhd)
+        
+        dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
@@ -291,7 +312,7 @@ class Image():
             new_data = self.data # this is just pointer referencing
             new_err = self.err
             new_dq = self.dq
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq)
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
 
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
@@ -312,6 +333,30 @@ class Image():
         """
         mask = self.dq>0
         return ma.masked_array(self.data, mask=mask)
+
+    def add_error_term(self, input_error, err_name):
+        """
+        Add a layer of a specific additive uncertainty on the 3-dim error array extension 
+        and update the combined uncertainty in the first layer.
+        Update the error header and assign the error name. 
+        
+        Args:
+          input_error (np.array): 2-d error layer
+          err_name (str): name of the uncertainty layer  
+        """
+        if input_error.ndim != 2 or input_error.shape != self.data.shape:
+            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        
+        #append new error as layer on 3D cube
+        self.err=np.append(self.err, [input_error], axis=0)
+
+        #first layer is always the updated combined error
+        self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
+    
+        layer = str(self.err.shape[0])
+        self.err_hdr["Layer_1"] = "combined_error"
+        self.err_hdr["Layer_" + layer] = err_name    
+        
 
 class Dark(Image):
     """
