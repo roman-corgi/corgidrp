@@ -165,7 +165,7 @@ def slice_section(frame, obstype, key):
 
     section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
     if section.size == 0:
-        raise Exception('Corners invalid')
+        raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
     return section
 
 def plot_detector_areas(detector_areas, areas=('image', 'prescan',
