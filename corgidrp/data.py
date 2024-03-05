@@ -221,6 +221,7 @@ class Image():
                     self.err = err.reshape((1,)+err.shape)
             else:
                 self.err = np.zeros((1,)+self.data.shape)
+                
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
                     raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))

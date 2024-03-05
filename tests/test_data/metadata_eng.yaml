@@ -1,0 +1,61 @@
+#############
+# This file specifies the ENG format frame for
+# SCIENCE/ACQUIRE and TRAP PUMPING sequences.  For the SCI format frame,
+# see metadata.yaml.
+#############
+
+# Any regions not specified are assumed to be shielded or unused pixels.
+#
+# Geometry regions are defined as:
+#   rows: number of region rows
+#   cols: number of region columns
+#   r0c0: coordinates (row, col) of the corner closest to (0, 0) of the array
+#
+# For example, in a 5x5 array, the following geometry would look as follows:
+#   rows: 2
+#   cols: 3
+#   r0c0:
+#     - 2
+#     - 1
+#
+# [
+#     [0, 0, 0, 0, 0],
+#     [0, 0, 0, 0, 0],
+#     [0, 1, 1, 1, 0],
+#     [0, 1, 1, 1, 0],
+#     [0, 0, 0, 0, 0]
+# ]
+#
+# where (0, 0) is defined as the top left of this array.
+
+# ENG frame:
+frame_rows: 2200
+frame_cols: 2200
+geom:
+  image:
+    rows: 1024
+    cols: 1024
+    r0c0:
+      - 13
+      - 1088
+  prescan:
+    rows: 2200
+    cols: 1088
+    # good, reliable cols used for getting row-by-row bias, relative to r0c0
+    col_start: 800
+    col_end: 1000
+    r0c0:
+      - 0
+      - 0
+  parallel_overscan:
+    rows: 1163
+    cols: 1056
+    r0c0:
+      - 1037
+      - 1088
+  serial_overscan:
+    rows: 2200
+    cols: 56
+    r0c0:
+      - 0
+      - 2144
