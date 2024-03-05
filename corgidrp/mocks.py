@@ -116,10 +116,16 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
         prihdr, exthdr = create_default_headers(obstype=obstype)
         sim_data = np.random.poisson(lam=150, size=size)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        assert np.size(sim_data.shape) == 2
+        assert np.size(frame.data.shape) == 2
+        assert np.size(frame.err.shape) == 2
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
         frames.append(frame)
     dataset = data.Dataset(frames)
+    assert np.size(frames[0].data.shape) == 2
+    assert np.size(frames[0].err.shape) == 2
+
     return dataset
 
 
