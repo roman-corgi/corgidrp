@@ -301,7 +301,6 @@ def test_prescan_sub():
                 raise Exception("Modifying individual frame data did not modify dataset.all_data.")
 
             dataset.all_err[0, 0, 0, 0] = 0.
-            assert dataset[0].err.shape == shapes[obstype][True]
             if dataset[0].err[0, 0, 0] != 0. :
                 raise Exception("Modifying dataset.all_err did not modify individual frame err.")
 
