@@ -8,3 +8,8 @@ tests/simdata/*
 # editor files
 .vscode/*
 .*.swp
+test_image0.fits
+test_image1.fits
+test_image2.fits
+tests/testcalib/mockdark.fits
+tests/testcalib/sim_dark_calib.fits
