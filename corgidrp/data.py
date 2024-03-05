@@ -170,6 +170,7 @@ class Image():
                     self.err = hdulist[2].data
                 else:
                     self.err = np.zeros(self.data.shape)
+                    assert np.size(self.err.shape) == 2
 
                 if dq is not None:
                     if np.shape(self.data) != np.shape(dq):
@@ -208,6 +209,8 @@ class Image():
                 self.err = err
             else:
                 self.err = np.zeros(self.data.shape)
+                assert np.size(self.data.shape) == 2
+                assert np.size(self.err.shape) == 2
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
                     raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
