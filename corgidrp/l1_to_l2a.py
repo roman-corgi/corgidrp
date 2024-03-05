@@ -41,8 +41,12 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         if not return_full_frame:
             # Get the image area
             image_data = slice_section(frame_data, obstype, 'image')
-            image_err = slice_section(frame_err, obstype, 'image')
             image_dq = slice_section(frame_dq, obstype, 'image')
+            # error maps are 3-D
+            image_err = []
+            for err_slice in frame_err:
+                image_err.append(slice_section(err_slice, obstype, 'image'))
+            image_err = np.array(image_err)
             
             # Get the part of the prescan that lines up with the image, and do a
             # row-by-row bias subtraction on it
