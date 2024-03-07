@@ -345,6 +345,8 @@ def test_bias_zeros_frame():
     """Verify prescan_biassub does not break for a frame of all zeros 
     (should return all zeros)."""
     
+    tol = 1e-13
+
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     
@@ -359,28 +361,33 @@ def test_bias_zeros_frame():
             
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            if not np.all(output_dataset.all_data == 0.):
-                raise Exception('Operating on all zero frame did not return all zero frame')
+            if np.max(np.abs(output_dataset.all_data)) > tol:
+                raise Exception(f'Operating on all zero frame did not return all zero frame.')
+            
+            if np.max(np.abs(output_dataset.all_err)) > tol:
+                raise Exception(f'Operating on all zero frame did not return all zero error.')           
 
 def test_bias_hvoff():
     """Verify that function finds bias for hvoff distribution."""
     
     # Set tolerance
     tol = 1.
+    err_tol = 0.01
     bval = 100.
+    sig = 1.
     seed = 12346
 
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     
     for obstype in ['SCI', 'ENG']:
-        # create simulated data
+        # create simulated da.
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,
                                              numfiles=1)
 
         # Overwrite data with normal distribution
         rng = np.random.default_rng(seed)
-        dataset.all_data[:,:,:] = rng.normal(bval, 1,
+        dataset.all_data[:,:,:] = rng.normal(bval, sig,
                                              size=dataset.all_data.shape)
 
         for return_full_frame in [True, False]:
@@ -389,6 +396,10 @@ def test_bias_hvoff():
 
             if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
+            
+            std_err = sig / np.sqrt(output_dataset[0].data.shape[1])
+            if np.max(np.abs(output_dataset[0].err[1] - std_err)) > err_tol:
+                raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution.')
 
 def test_bias_hvon():
     """Verify that function finds bias for hvon
@@ -428,8 +439,9 @@ def test_bias_hvon():
 def test_bias_uniform_value():
     """Verify that function finds bias for uniform value."""
     
+    tol = 1e-13
     bval = 1.
-
+    
     ###### create simulated dataset
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     
@@ -442,8 +454,11 @@ def test_bias_uniform_value():
 
         for return_full_frame in [True, False]:            
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
-            if not np.all(output_dataset.all_data == 0.):
+            if np.max(np.abs(output_dataset.all_data)) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for uniform value.')
+            
+            if np.max(np.abs(output_dataset.all_err)) > tol:
+                raise Exception(f'Higher than expected std. error in bias measurement for uniform value.')
             
 def test_bias_offset():
     """Verify bias offset incorporated as expected"""
@@ -486,7 +501,6 @@ def test_bias_offset():
 
             if not np.nanmax(np.abs(image_slice_0 - image_slice_10)) < tol:
                 raise Exception(f"Bias offset subtraction did not produce the correct result. absmax value : {np.nanmax(np.abs(image_slice_0 - image_slice_10))}")
-
 
 if __name__ == "__main__":
     test_prescan_sub()
