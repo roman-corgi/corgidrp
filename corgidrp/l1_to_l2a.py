@@ -42,11 +42,6 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             # Get the image area
             image_data = slice_section(frame_data, obstype, 'image')
             image_dq = slice_section(frame_dq, obstype, 'image')
-            # error maps are 3-D
-            image_err = []
-            for err_slice in frame_err:
-                image_err.append(slice_section(err_slice, obstype, 'image'))
-            image_err = np.array(image_err)
             
             # Get the part of the prescan that lines up with the image, and do a
             # row-by-row bias subtraction on it
@@ -57,12 +52,32 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             # Get data from prescan (alined with image area)
             al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
             medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
+            
+            # Measure error (standard error of the mean for each row), add this to 3D image array
+            sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(image_data.shape[1])
+            
+            # Construct new error array
+            image_err = []
+            for err_slice in frame_err: # track original error arrays
+                image_err.append(slice_section(err_slice, obstype, 'image'))
+            image_err.append(sterrbyrow)
+            image_err = np.array(image_err)
+            
         else:
             image_data = frame_data
-            image_err = frame_err
             image_dq = frame_dq
             
             medbyrow = np.median(prescan, axis=1)[:, np.newaxis]  
+            
+            # Measure error (standard error of the mean for each row), add this to 3D image array
+            sterrbyrow = np.std(prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(image_data.shape[1])
+            
+            # Construct new error array
+            image_err = []
+            for err_slice in frame_err: # track original error arrays
+                image_err.append(err_slice)
+            image_err.append(sterrbyrow)
+            image_err = np.array(image_err)
 
         bias = medbyrow - bias_offset
         image_bias_corrected = image_data - bias
