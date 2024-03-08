@@ -368,7 +368,7 @@ def test_bias_zeros_frame():
                 raise Exception(f'Operating on all zero frame did not return all zero error.')           
 
 def test_bias_hvoff():
-    """Verify that function finds bias for hvoff distribution."""
+    """Verify that function finds bias for hvoff distribution (gaussian noise only)."""
     
     # Set tolerance
     tol = 1.
