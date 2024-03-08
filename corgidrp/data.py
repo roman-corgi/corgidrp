@@ -340,6 +340,9 @@ class Image():
         and update the combined uncertainty in the first layer.
         Update the error header and assign the error name. 
         
+        Only tracks individual errors if the "track_individual_errors" setting is set to True
+        in the configuration file
+        
         Args:
           input_error (np.array): 2-d error layer
           err_name (str): name of the uncertainty layer  
@@ -347,16 +350,17 @@ class Image():
         if input_error.ndim != 2 or input_error.shape != self.data.shape:
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
         
-        #append new error as layer on 3D cube
-        self.err=np.append(self.err, [input_error], axis=0)
-
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
-    
-        layer = str(self.err.shape[0])
         self.err_hdr["Layer_1"] = "combined_error"
-        self.err_hdr["Layer_" + layer] = err_name    
-        
+
+        if corgidrp.track_individual_errors:
+            #append new error as layer on 3D cube
+            self.err=np.append(self.err, [input_error], axis=0)
+
+            layer = str(self.err.shape[0])
+            self.err_hdr["Layer_" + layer] = err_name    
+            
 
 class Dark(Image):
     """
