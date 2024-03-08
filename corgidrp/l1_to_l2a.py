@@ -18,10 +18,13 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     # Make a copy of the input dataset to operate on
     output_dataset = input_dataset.copy()
 
-    #initialize list of output frames to be concatenated
+    # Initialize list of output frames to be concatenated
     out_frames_data = []
     out_frames_err = []
     out_frames_dq = []
+
+    # Place to save new error estimates to be added later via Image.add_error_term()
+    new_err_list = []
 
     # Iterate over frames
     for i, frame in enumerate(output_dataset):
@@ -43,41 +46,36 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             image_data = slice_section(frame_data, obstype, 'image')
             image_dq = slice_section(frame_dq, obstype, 'image')
             
-            # Get the part of the prescan that lines up with the image, and do a
-            # row-by-row bias subtraction on it
+            # Special treatment for 3D error array
+            image_err = []
+            for err_slice in frame_err: 
+                image_err.append(slice_section(err_slice, obstype, 'image'))
+            image_err = np.array(image_err)
+
+            # Get the part of the prescan that lines up with the image
             i_r0 = detector_areas[obstype]['image']['r0c0'][0]
             p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
             i_nrow = detector_areas[obstype]['image']['rows']
-     
-            # Get data from prescan (alined with image area)
             al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
-            medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
-            
-            # Measure error (standard error of the mean for each row), add this to 3D image array
-            sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(image_data.shape[1])
-            
-            # Construct new error array
-            image_err = []
-            for err_slice in frame_err: # track original error arrays
-                image_err.append(slice_section(err_slice, obstype, 'image'))
-            image_err.append(sterrbyrow)
-            image_err = np.array(image_err)
             
         else:
+            # Use full frame
             image_data = frame_data
             image_dq = frame_dq
-            
-            medbyrow = np.median(prescan, axis=1)[:, np.newaxis]  
-            
-            # Measure error (standard error of the mean for each row), add this to 3D image array
-            sterrbyrow = np.std(prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(image_data.shape[1])
-            
-            # Construct new error array
+
+            # Special treatment for 3D error array
             image_err = []
-            for err_slice in frame_err: # track original error arrays
+            for err_slice in frame_err: 
                 image_err.append(err_slice)
-            image_err.append(sterrbyrow)
             image_err = np.array(image_err)
+
+            al_prescan = prescan
+
+        # Measure bias and error (standard error of the mean for each row, add this to 3D image array)
+        medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
+        sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(image_data.shape[1])
+        new_err_list.append(sterrbyrow)   
+            
 
         bias = medbyrow - bias_offset
         image_bias_corrected = image_data - bias
@@ -108,8 +106,10 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.err = out_frames_err_arr[i]
         frame.dq = out_frames_dq_arr[i]
 
-            
-    history_msg = "Frames cropped and bias subtracted"
+        # Add new error component from this step to each frame using the Image class method
+        frame.add_error_term(new_err_list[i],"bias_sub")
+
+    history_msg = "Frames cropped and bias subtracted" if not return_full_frame else "Bias subtracted"
 
     # update the output dataset with this new dark subtracted data and update the history
     output_dataset.update_after_processing_step(history_msg)
