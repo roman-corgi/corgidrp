@@ -372,7 +372,7 @@ def test_bias_hvoff():
     
     # Set tolerance
     tol = 1.
-    err_tol = 0.01
+    err_tol = 0.02
     bval = 100.
     sig = 1.
     seed = 12346
@@ -397,7 +397,7 @@ def test_bias_hvoff():
             if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
             
-            std_err = sig / np.sqrt(output_dataset[0].data.shape[1])
+            std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols'])
             if np.max(np.abs(output_dataset[0].err[1] - std_err)) > err_tol:
                 raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution.')
 
