@@ -38,12 +38,12 @@ def create_dark_calib_files(filedir=None, numfiles=10):
 def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     """
     Create simulated data to non-linear data to test non-linearity correction.
-    
+
     Args:
         filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
         em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
-        
+
     Returns:
         corgidrp.data.Dataset:
             The simulated dataset
@@ -59,14 +59,14 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
         prihdr, exthdr = create_default_headers()
         #Add the EMGAIN to the headers
         exthdr['EMGAIN'] = em_gain
-        # Create a default 
+        # Create a default
         size = 1024
         sim_data = np.zeros([size,size])
         data_range = np.linspace(10,65536,size)
         # Generate data for each row, where the mean increase from 10 to 65536
         for x in range(size):
             sim_data[:, x] = np.random.poisson(data_range[x], size)
-        
+
         non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..',"tests","test_data","nonlin_sample.fits"))
 
         #Apply the non-linearity to the data. When we correct we multiple, here when we simulate we divide
@@ -198,7 +198,7 @@ def create_default_headers(obstype="SCI"):
     exthdr['DPAM_H'] = 1.0
     exthdr['DPAM_V'] = 1.0
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
-    exthdr['DATA_LEVEL'] = "L1"
+    exthdr['HIERARCH DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
