@@ -402,9 +402,11 @@ def test_bias_hvoff():
                 raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution.')
 
 def test_bias_hvon():
-    """Verify that function finds bias for hvon
-        distribution.  Also tests that only the good columns are used for
-        the bias."""
+    """
+    Verify that function finds bias for hvon distribution (gaussian noise + 
+    exponential noise + inflated values for the "unreliable" prescan region).  
+    Also tests that only the good columns are used for the bias.
+    """
     
     # Set tolerance
     tol = 6.
