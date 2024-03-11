@@ -243,7 +243,14 @@ class Image():
         if not hasattr(self, 'dq_hdr'):
             self.dq_hdr = fits.Header()
         self.dq_hdr["EXTNAME"] = "DQ"
-        # can do fancier things here if needed or storing more meta data
+
+        # discard individual errors if we aren't tracking them but multiple error terms are passed in
+        if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
+            num_errs = self.err.shape[0] - 1
+            # delete keywords specifying the error of each individual slice
+            for i in range(num_errs):
+                del self.err_hdr['Layer_{0}'.format(i + 2)]
+            self.err = self.err[:1] # only save the total err, preserve 3-D shape
 
     # create this field dynamically
     @property
