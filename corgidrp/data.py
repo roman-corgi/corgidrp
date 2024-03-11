@@ -339,7 +339,7 @@ class Image():
         Add a layer of a specific additive uncertainty on the 3-dim error array extension 
         and update the combined uncertainty in the first layer.
         Update the error header and assign the error name. 
-        
+
         Only tracks individual errors if the "track_individual_errors" setting is set to True
         in the configuration file
         
@@ -360,7 +360,9 @@ class Image():
 
             layer = str(self.err.shape[0])
             self.err_hdr["Layer_" + layer] = err_name    
-            
+        
+        # record history since 2-D error map doesn't track individual terms
+        self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
 class Dark(Image):
     """
