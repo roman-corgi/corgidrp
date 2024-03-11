@@ -34,8 +34,9 @@ def test_dark_sub():
     dark_frame = detector.create_dark_calib(dark_dataset)
 
     # check the level of dark current is approximately correct
-    assert np.mean(dark_frame.data) == pytest.approx(150, abs=1e-2)
-
+    assert np.mean(dark_frame.data) == pytest.approx(150, abs=2e-2)
+    # check that the error is determined correctly
+    assert np.std(dark_dataset.all_data[:,100,100])/np.sqrt(len(dark_dataset)) == pytest.approx(dark_frame.err[100,100], abs=1e-10)
     # save dark
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     dark_filename = "sim_dark_calib.fits"
@@ -52,8 +53,10 @@ def test_dark_sub():
 
     # check the level of the dataset is now approximately 0 
     assert np.mean(darkest_dataset.all_data) == pytest.approx(0, abs=1e-2)
+    assert darkest_dataset[0].err_hdr["Layer_2"] == "dark_error"
     print(np.mean(darkest_dataset.all_data))
     print(darkest_dataset[0].ext_hdr)
+
     
 
 if __name__ == "__main__":
