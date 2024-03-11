@@ -381,7 +381,7 @@ def test_bias_hvoff():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     
     for obstype in ['SCI', 'ENG']:
-        # create simulated da.
+        # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,
                                              numfiles=1)
 
