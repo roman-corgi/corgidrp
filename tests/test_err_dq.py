@@ -21,6 +21,8 @@ errhd["CASE"] = "test"
 dqhd = fits.Header()
 dqhd["CASE"] = "test"
 
+old_err_tracking = corgidrp.track_individual_errors
+
 def test_err_dq_creation():
     """
     test the initialization of error and dq attributes of the Image class including saving and loading
@@ -181,11 +183,15 @@ def test_read_many_errors_notrack():
 
     
 def teardown_module(module):
-    """teardown any state that was previously setup with a setup_module
-    method.
+    """
+    Runs automatically at the end. ONLY IN PYTEST
+
+    Removes new FITS files and restores track individual error setting.
     """
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))
+
+    corgidrp.track_individual_errors = old_err_tracking
 
 # for debugging. does not run with pytest!!
 if __name__ == '__main__':
