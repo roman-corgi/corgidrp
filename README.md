@@ -121,7 +121,7 @@ Before creating a pull request, review the design Principles below. Use the Gith
 - [ ] Ensure that your pull can be merged automatically by merging main onto the branch you wish to pull from
 - [ ] Ensure that all of your new additions have properly formatted docstrings (this will happen automatically if you run the `flake8` command given above
 - [ ] Ensure that all of the commits going in to your pull have informative messages
-- [ ] Ensure that all unit tests pass locally, an that you have provided new unit tests for all new functionality in your pull
+- [ ] Ensure that all unit tests pass locally, and that you have provided new unit tests for all new functionality in your pull
 - [ ] Create a new pull request, fully describing all changes/additions
 
 
