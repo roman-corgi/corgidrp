@@ -182,7 +182,7 @@ def test_read_many_errors_notrack():
         assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
     
-def teardown_module(module):
+def teardown_module():
     """
     Runs automatically at the end. ONLY IN PYTEST
 
