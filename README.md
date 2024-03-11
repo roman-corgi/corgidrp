@@ -27,9 +27,9 @@ Check out the [Github issues page](https://github.com/roman-corgi/corgidrp/issue
 
 #### Clone the git repository and install
 
-See install instructions above. Contact Jason (@semaphoreP) if you need write access to push changes as you make edits.
+See install instructions above. Contact Jason (@semaphoreP) if you need write access to push changes as you make edits.  If you do not have write access to the repository, you can still contribute by creating a fork of the repository under your own GitHub user.  See here for details: https://docs.github.com/en/get-started/quickstart/fork-a-repo.  You can then use the same commands given below, but just replace `roman-corgi` with your own GitHub username. If you fork the repository, you will need to make sure that your fork is up to date with the main repository (https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/syncing-a-fork).
 
-If you are too lazy to read the instructions above:
+To quickly get up an running with the repository, execute the following commands in a terminal (or command prompt - you will need to have the git executable installed on your system):
 ```
 > git clone https://github.com/roman-corgi/corgidrp.git
 > cd corgidrp
@@ -105,8 +105,24 @@ To run an individual test, call the test function you want to test at the bottom
 
 To run all the tests in the test suite, go to the base corgidrp folder in a terminal and run the `pytest` command. 
 
+### Linting
+
+In addition to unit tests, your code will need to pass a static analysis before being merged.  `corgidrp` currently runs a subset of flake8 tests, which you can replicate on your local system by running:
+
+```
+flake8 . --count --select=E9,F63,F7,F82,DCO020,DCO021,DCO022,DCO023,DCO024,DCO030,DCO031,DCO032,DCO060,DCO061,DCO062,DCO063,DCO064,DCO065 --show-source --statistics
+```
+from the top-level directory of the repository.  In order to run these tests you will need to have `flake8` and `flake8-docstrings-complete` installed (both are pip-installable).  Note that the test subset may be updated in the future.  To see the current set of tests being applied, look in the continuous integration GitHub action, located in the repository in file `.github/workflows/python-app.yml`.
+
 ### Create a pull request to merge your changes
-Before creating a pull request, review the design Principles below. Use the Github pull request feature to request that your changes get merged into the `main` branch. Assign Jason/Max to be your reviewers. Your changes will be reviewed, and possibly some edits will be requested. You can simply make additional pushes to your branch to update the pull request with those changes (you don't need to delete the PR and make a new one). When the branch is satisfactory, we will pull your changes in. 
+Before creating a pull request, review the design Principles below. Use the Github pull request feature to request that your changes get merged into the `main` branch. Assign Jason/Max to be your reviewers. Your changes will be reviewed, and possibly some edits will be requested. You can simply make additional pushes to your branch to update the pull request with those changes (you don't need to delete the PR and make a new one). When the branch is satisfactory, we will pull your changes in. When preparing your pull request, you may find it helpful to follow this checklist:
+
+- [ ] If working with a fork, sync your fork to the upstream repository
+- [ ] Ensure that your pull can be merged automatically by merging main onto the branch you wish to pull from
+- [ ] Ensure that all of your new additions have properly formatted docstrings (this will happen automatically if you run the `flake8` command given above
+- [ ] Ensure that all of the commits going in to your pull have informative messages
+- [ ] Ensure that all unit tests pass locally, an that you have provided new unit tests for all new functionality in your pull
+- [ ] Create a new pull request, fully describing all changes/additions
 
 
 ## Overarching Design Principles
