@@ -89,7 +89,7 @@ class Dataset():
         Args:
             history_entry (str): a description of what processing was done. Mention reference files used.
             new_all_data (np.array): (optional) Array of new data. Needs to be the same shape as `all_data`
-            new_all_err (np.array): (optional) Array of new err. Needs to be the same shape as `all_err`
+            new_all_err (np.array): (optional) Array of new err. Needs to be the same shape as `all_err` except of second dimension
             new_all_dq (np.array): (optional) Array of new dq. Needs to be the same shape as `all_dq`
         """
         # update data if necessary
@@ -98,9 +98,9 @@ class Dataset():
                 raise ValueError("The shape of new_all_data is {0}, whereas we are expecting {1}".format(new_all_data.shape, self.all_data.shape))
             self.all_data[:] = new_all_data # specific operation overwrites the existing data rather than changing pointers
         if new_all_err is not None:
-            if new_all_err.shape != self.all_err.shape:
+            if new_all_err.shape[-2:] != self.all_err.shape[-2:] or new_all_err.shape[0] != self.all_err.shape[0]:
                 raise ValueError("The shape of new_all_err is {0}, whereas we are expecting {1}".format(new_all_err.shape, self.all_err.shape))
-            self.all_err[:] = new_all_err # specific operation overwrites the existing data rather than changing pointers
+            self.all_err = new_all_err
         if new_all_dq is not None:
             if new_all_dq.shape != self.all_dq.shape:
                 raise ValueError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))
@@ -128,6 +128,19 @@ class Dataset():
         new_dataset = Dataset(new_frames)
 
         return new_dataset
+    
+    def add_error_term(self, input_error, err_name):
+        """
+        Calls Image.add_error_term() for each frame.
+        Updates Dataset.all_err.
+        
+        Args:
+          input_error (np.array): 2-d error layer
+          err_name (str): name of the uncertainty layer  
+        """
+        for frame in self.frames:
+            frame.add_error_term(input_error, err_name)
+        self.all_err = np.array([frame.err for frame in self.frames])   
 
 class Image():
     """
