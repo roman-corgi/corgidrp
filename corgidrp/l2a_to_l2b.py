@@ -1,4 +1,5 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
+import numpy as np
 
 def dark_subtraction(input_dataset, dark_frame):
     """
@@ -10,13 +11,20 @@ def dark_subtraction(input_dataset, dark_frame):
         dark_frame (corgidrp.data.Dark): a Dark frame to model the dark current
 
     Returns:
-        corgidrp.data.Dataset: a dark subtracted version of the input dataset
+        corgidrp.data.Dataset: a dark subtracted version of the input dataset including error propagation
     """
     # you should make a copy the dataset to start
     darksub_dataset = input_dataset.copy()
 
     darksub_cube = darksub_dataset.all_data - dark_frame.data
-
+    
+    # propagate the error of the dark frame
+    if hasattr(dark_frame, "err"):
+        darksub_dataset.add_error_term(dark_frame.err, "dark_error")   
+    else:
+        raise Warning("no error attribute in the dark frame")
+    
+    #darksub_dataset.all_err = np.array([frame.err for frame in darksub_dataset.frames])
     history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
