@@ -405,8 +405,6 @@ class Dark(Image):
             orig_input_filename = input_dataset[0].filename.split(".fits")[0]
             self.filename = "{0}_dark.fits".format(orig_input_filename)
 
-            # determine the standard error of the mean: stddev/sqrt(n_frames)
-            self.err = np.nanstd(input_dataset.all_data, axis=0)/np.sqrt(len(input_dataset))
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in

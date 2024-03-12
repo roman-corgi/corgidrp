@@ -8,7 +8,7 @@ import corgidrp.data as data
 def create_dark_calib(dark_dataset):
     """
     Turn this dataset of image frames that were taken to measure
-    the dark current into a dark calibration frame
+    the dark current into a dark calibration frame and determines the corresponding error
 
     Args:
         dark_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
@@ -20,6 +20,9 @@ def create_dark_calib(dark_dataset):
 
     new_dark = data.Dark(combined_frame, pri_hdr=dark_dataset[0].pri_hdr.copy(),
                          ext_hdr=dark_dataset[0].ext_hdr.copy(), input_dataset=dark_dataset)
+    
+    # determine the standard error of the mean: stddev/sqrt(n_frames)
+    new_dark.err = np.nanstd(dark_dataset.all_data, axis=0)/np.sqrt(len(dark_dataset))
 
     return new_dark
 
