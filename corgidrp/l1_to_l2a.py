@@ -6,8 +6,7 @@ import numpy as np
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region. 
-    The error associated with this step is taken from the standard error on the median 
-    for each row. This step also crops the images to just the science area, or 
+    This step also crops the images to just the science area, or 
     optionally returns the full detector frames.
 
 
@@ -76,7 +75,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
             al_prescan = prescan
 
-        # Measure bias and error (standard error of the mean for each row, add this to 3D image array)
+        # Measure bias and error (standard error of the median for each row, add this to 3D image array)
         medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
         sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan.shape[1])
         new_err_list.append(sterrbyrow)   
