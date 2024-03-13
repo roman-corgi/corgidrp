@@ -5,12 +5,17 @@ import numpy as np
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
-    Perform pre-scan bias subtraction of a dataset.
+    Measure and subtract the median bias in each row of the pre-scan detector region. 
+    The error associated with this step is taken from the standard error on the median 
+    for each row. This step also crops the images to just the science area, or 
+    optionally returns the full detector frames.
+
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
-        bias_offset (float): an offset value to be subtracted from the bias
-        return_full_frame (bool): flag indicating whether to return the full frame or only the bias-subtracted image area
+        bias_offset (float): an offset value to be subtracted from the bias. Defaults to 0.
+        return_full_frame (bool): flag indicating whether to return the full frame or 
+            only the bias-subtracted image area. Defaults to False.
     
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
