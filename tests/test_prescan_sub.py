@@ -368,7 +368,13 @@ def test_bias_zeros_frame():
                 raise Exception(f'Operating on all zero frame did not return all zero error.')           
 
 def test_bias_hvoff():
-    """Verify that function finds bias for hvoff distribution (gaussian noise only)."""
+    """
+    Verify that the function finds bias for gaussian distribution, with no 
+    contribution from the effect of gain ("hv" is the voltage applied in 
+    the EM gain register).
+    The error tolerance is set by the standard error on the median of 
+    the Gaussian noise, not the mean.
+    """
     
     # Set tolerance
     tol = 1.
@@ -403,8 +409,11 @@ def test_bias_hvoff():
 
 def test_bias_hvon():
     """
-    Verify that function finds bias for hvon distribution (gaussian noise + 
-    exponential noise + inflated values for the "unreliable" prescan region).  
+    Verify that the function finds bias for a gaussian distribution, plus
+    additional contributions from the effect of gain ("hv" is the voltage 
+    applied in the EM gain register), approximated as an exponential distribution 
+    + inflated values for the "unreliable" prescan region, minus the mean of the 
+    exponential distribution to keep the DC contribution 0.  
     Also tests that only the good columns are used for the bias.
     """
     
