@@ -400,10 +400,12 @@ def test_bias_hvoff():
             
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
+            # Compare median bias measurement to expectation
             if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
             
-            std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols'])
+            # Compare error to expected standard error of the median
+            std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols']) * np.sqrt(np.pi / 2.)
             if np.max(np.abs(output_dataset[0].err[1] - std_err)) > err_tol:
                 raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution.')
 
