@@ -1,6 +1,30 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
 import numpy as np
 
+def add_photon_noise(input_dataset):
+    """
+    propagate the photon noise determined from the image signal to the error map.
+    
+    Args:
+       input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+    Returns:
+        corgidrp.data.Dataset: photon noise propagated to the image error extensions of the input dataset
+    """
+    # you should make a copy the dataset to start
+    phot_noise_dataset = input_dataset.copy() # necessary at all?
+    
+    for i, frame in enumerate(phot_noise_dataset.frames):
+        frame.add_error_term(np.sqrt(frame.data), "photnoise_error")
+    
+    new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
+                
+    history_msg = "photon noise propagated to error map"
+    # update the output dataset
+    phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
+    
+    return phot_noise_dataset
+
+
 def dark_subtraction(input_dataset, dark_frame):
     """
     
