@@ -77,7 +77,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
         # Measure bias and error (standard error of the median for each row, add this to 3D image array)
         medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
-        sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan.shape[1])
+        sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan.shape[1]) * np.sqrt(np.pi / 2.)
         new_err_list.append(sterrbyrow)   
             
 
