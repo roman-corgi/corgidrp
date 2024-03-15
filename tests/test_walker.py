@@ -47,10 +47,6 @@ def test_autoreducing():
 
     # generate recipe
     recipe = walker.autogen_reicpe(filelist, outputdir)
-    # save recipe
-    recipe_path = os.path.join(outputdir, "my_l1_to_l2b.json")
-    with open(recipe_path, "w") as json_file:
-        json.dump(recipe, json_file, indent=4)
 
     # process_recipe
     walker.run_recipe(recipe)

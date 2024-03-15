@@ -1,5 +1,6 @@
 import os
 import json
+import astropy.time as time
 import corgidrp
 import corgidrp.data as data
 import corgidrp.caldb as caldb
@@ -77,12 +78,13 @@ def guess_template(image):
 
     return recipe_filename
 
-def run_recipe(recipe):
+def run_recipe(recipe, save_recipe_file=True):
     """
     Run the specified recipe
 
     Args:
         recipe (dict or str): either the filepath to the recipe or the already loaded in recipe
+        save_recipe_file (bool): saves the recipe as a JSON file in the outputdir (true by default)
     """
     if isinstance(recipe, str):
         # need to load in
@@ -96,7 +98,18 @@ def run_recipe(recipe):
     # read in data
     filelist = recipe["inputs"]
     curr_dataset = data.Dataset(filelist)
-    
+
+    # write the recipe into the image extension header
+    for frame in curr_dataset:
+        frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+
+    # save recipe before running recipe
+    if save_recipe_file:
+        recipe_filename = "{0}_{1}_recipe.json".format(recipe["name"], time.Time.now().isot)
+        recipe_filepath = os.path.join(recipe["outputdir"], recipe_filename)
+        with open(recipe_filepath, "w") as json_file:
+            json.dump(recipe, json_file, indent=4)
+
     # execute each pipeline step
     for step in recipe["steps"]:
         if step["name"].lower() == "save":
