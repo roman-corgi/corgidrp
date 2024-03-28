@@ -62,6 +62,35 @@ def convert_to_electrons(input_dataset):
 
     return None 
 
+def em_gain_division(input_dataset):
+    """
+    
+    Convert the data from electrons to photo-electrons by dividing the commanded em_gain. 
+    update the change in units in the header [e/phot].
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with the data in units photo-electrons
+    """
+    
+    # you should make a copy the dataset to start
+    emgain_dataset = input_dataset.copy()
+
+    emgain = emgain_dataset[0].ext_hdr["CMDGAIN"]
+    emgain_cube = emgain_dataset.all_data/emgain
+    emgain_error = emgain_dataset.all_err/emgain
+    
+    history_msg = "data divided by em_gain {0}".format(str(emgain))
+
+    # update the output dataset with this em_gain divided data and update the history
+    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"e/phot"})
+
+    return emgain_dataset
+    
+    
+
 def cti_correction(input_dataset):
     """
     
