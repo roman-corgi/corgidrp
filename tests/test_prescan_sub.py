@@ -285,40 +285,50 @@ def test_prescan_sub():
         for return_full_frame in [True, False]:
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
+            # Check that output shape is as expected
             output_shape = output_dataset[0].data.shape
             if output_shape != shapes[obstype][return_full_frame]:
                 raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
-    
-            # check that data, err, and dq arrays are consistently modified
-            dataset.all_data[0, 0, 0] = 0.
-            if dataset[0].data[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
-
-            dataset[0].data[0,0] = 1.
-            if dataset.all_data[0,0,0] != 1. :
-                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
-
-            dataset.all_err[0, 0, 0, 0] = 0.
-            if dataset[0].err[0, 0, 0] != 0. :
-                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
-
-            dataset[0].err[0, 0, 0] = 1.
-            if dataset.all_err[0, 0, 0, 0] != 1. :
-                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
-
-            dataset.all_dq[0, 0, 0] = 0.
-            if dataset[0].dq[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
-
-            dataset[0].dq[0,0] = 1.
-            if dataset.all_dq[0,0,0] != 1. :
-                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
             
+            # Check that bias extension has the right size, dtype
+            for i, frame in enumerate(output_dataset):
+                
+                if frame.bias.shape != (frame.data.shape[0],):
+                    raise Exception(f"Bias of frame {i} has shape {frame.bias.shape} when we expected {(frame.data.shape[0],)}.")
+                
+                if frame.bias.dtype != np.float32:
+                    raise Exception(f"Bias of frame {i} does not have datatype np.float32.")
+            
+            # Check that corgiDRP and II&T pipeline produce the same result
             corgidrp_result = output_dataset[0].data
             iit_result = iit_frames[0] if return_full_frame else iit_images[0]
-
             if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
                 raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
+
+            # check that data, err, and dq arrays are consistently modified
+            output_dataset.all_data[0, 0, 0] = 0.
+            if output_dataset[0].data[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
+
+            output_dataset[0].data[0,0] = 1.
+            if output_dataset.all_data[0,0,0] != 1. :
+                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
+
+            output_dataset.all_err[0, 0, 0, 0] = 0.
+            if output_dataset[0].err[0, 0, 0] != 0. :
+                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
+
+            output_dataset[0].err[0, 0, 0] = 1.
+            if output_dataset.all_err[0, 0, 0, 0] != 1. :
+                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
+
+            output_dataset.all_dq[0, 0, 0] = 0.
+            if output_dataset[0].dq[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
+
+            output_dataset[0].dq[0,0] = 1.
+            if output_dataset.all_dq[0,0,0] != 1. :
+                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")           
 
 def test_bias_zeros_frame():
     """Verify prescan_biassub does not break for a frame of all zeros 
@@ -334,7 +344,7 @@ def test_bias_zeros_frame():
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
 
         # Overwrite data with zeros
-        dataset.all_data[:,:,:] = 0
+        dataset.all_data[:,:,:] = 0.
 
         for return_full_frame in [True, False]:
             
@@ -345,6 +355,10 @@ def test_bias_zeros_frame():
             
             if np.max(np.abs(output_dataset.all_err)) > tol:
                 raise Exception(f'Operating on all zero frame did not return all zero error.')           
+            
+            for frame in dataset:
+                if np.max(np.abs(frame.bias)) > tol:
+                    raise Exception(f'Operating on all zero frame did not return all zero bias.')
 
 def test_bias_hvoff():
     """
@@ -379,8 +393,8 @@ def test_bias_hvoff():
             
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            # Compare median bias measurement to expectation
-            if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
+            # Compare bias measurement to expectation
+            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
             
             # Compare error to expected standard error of the median
@@ -425,7 +439,7 @@ def test_bias_hvon():
 
         for return_full_frame in [True, False]:            
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
-            if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
+            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
 
 def test_bias_uniform_value():
