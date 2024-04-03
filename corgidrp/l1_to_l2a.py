@@ -22,6 +22,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     out_frames_data = []
     out_frames_err = []
     out_frames_dq = []
+    out_frames_bias = []
 
     # Iterate over frames
     for i, frame in enumerate(output_dataset):
@@ -70,19 +71,17 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         out_frames_data.append(image_bias_corrected)
         out_frames_err.append(image_err)
         out_frames_dq.append(image_dq)
+        out_frames_bias.append(bias[:,0]) # save 1D version of array
 
         # Update header with new frame dimensions
         frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
         frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
-        
-        # Save median bias measured in the header
-        frame.ext_hdr['MED_BIAS'] = np.median(bias)
-
     
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data)
     out_frames_err_arr = np.array(out_frames_err)
     out_frames_dq_arr = np.array(out_frames_dq)
+    out_frames_bias_arr = np.array(out_frames_bias, dtype=np.float32)
 
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
@@ -92,8 +91,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.data = out_frames_data_arr[i]
         frame.err = out_frames_err_arr[i]
         frame.dq = out_frames_dq_arr[i]
+        frame.bias = out_frames_bias_arr[i]
 
-            
     history_msg = "Frames cropped and bias subtracted"
 
     # update the output dataset with this new dark subtracted data and update the history
