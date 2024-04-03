@@ -151,8 +151,6 @@ class Metadata(object):
     
 # EMCCDFrame code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_emccd_frame.py#L9
 
-# EMCCDFrame code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_emccd_frame.py#L9
-
 class EMCCDFrameException(Exception):
     """Exception class for emccd_frame module."""
 
@@ -321,25 +319,6 @@ def test_prescan_sub():
 
             if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
                 raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
-
-            # Plot for debugging
-            # import matplotlib.pyplot as plt
-            # fig,axes = plt.subplots(1,3,figsize=(10,4))
-
-            # im0 = axes[0].imshow(corgidrp_result,cmap='seismic')
-            # plt.colorbar(im0)
-            # axes[0].set_title('corgidrp result')
-
-            # im1 = axes[1].imshow(iit_result,cmap='seismic')
-            # plt.colorbar(im1)
-            # axes[1].set_title('II&T result')
-
-            # im2 = axes[2].imshow(corgidrp_result-iit_result,cmap='seismic')
-            # plt.colorbar(im2)
-            # axes[2].set_title('Difference')
-
-            # plt.tight_layout()
-            # plt.show()
 
 def test_bias_zeros_frame():
     """Verify prescan_biassub does not break for a frame of all zeros 
