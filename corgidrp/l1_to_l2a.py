@@ -110,8 +110,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.dq = out_frames_dq_arr[i]
         frame.bias = out_frames_bias_arr[i]
         
-        # Add new error component from this step to each frame using the Image class method
-        frame.add_error_term(new_err_list[i],"prescan_bias_sub")
+    # Add new error component from this step to each frame using the Dataset class method
+    output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")
 
     history_msg = "Frames cropped and bias subtracted" if not return_full_frame else "Bias subtracted"
 

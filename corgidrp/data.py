@@ -135,12 +135,24 @@ class Dataset():
         Updates Dataset.all_err.
         
         Args:
-          input_error (np.array): 2-d error layer
+          input_error (np.array): 2-d or 3-d error layer
           err_name (str): name of the uncertainty layer  
         """
-        for frame in self.frames:
-            frame.add_error_term(input_error, err_name)
+        if input_error.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.add_error_term(input_error[i], err_name)
+
+        elif input_error.ndim ==2:
+            for frame in self.frames:
+                frame.add_error_term(input_error, err_name)
+
+        else:
+            raise ValueError("input_error is not either a 2D or 3D array.")
+        
+        # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])   
+        for i, frame in enumerate(self.frames):
+            frame.err = self.all_err[i]
 
 class Image():
     """
