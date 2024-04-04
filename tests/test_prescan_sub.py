@@ -287,41 +287,41 @@ def test_prescan_sub():
         for return_full_frame in [True, False]:
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            output_shape = output_dataset[0].data.shape
-            if output_shape != shapes[obstype][return_full_frame]:
-                raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
-    
-            # check that data, err, and dq arrays are consistently modified
-            dataset.all_data[0, 0, 0] = 0.
-            if dataset[0].data[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
-
-            dataset[0].data[0,0] = 1.
-            if dataset.all_data[0,0,0] != 1. :
-                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
-
-            dataset.all_err[0, 0, 0, 0] = 0.
-            if dataset[0].err[0, 0, 0] != 0. :
-                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
-
-            dataset[0].err[0, 0, 0] = 1.
-            if dataset.all_err[0, 0, 0, 0] != 1. :
-                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
-
-            dataset.all_dq[0, 0, 0] = 0.
-            if dataset[0].dq[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
-
-            dataset[0].dq[0,0] = 1.
-            if dataset.all_dq[0,0,0] != 1. :
-                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
-            
             corgidrp_result = output_dataset[0].data
             iit_result = iit_frames[0] if return_full_frame else iit_images[0]
 
             if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
                 raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
 
+            output_shape = output_dataset[0].data.shape
+            if output_shape != shapes[obstype][return_full_frame]:
+                raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
+    
+            # check that data, err, and dq arrays are consistently modified
+            output_dataset.all_data[0, 0, 0] = 0.
+            if output_dataset[0].data[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
+
+            output_dataset[0].data[0,0] = 1.
+            if output_dataset.all_data[0,0,0] != 1. :
+                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
+
+            output_dataset.all_err[0, 0, 0, 0] = 0.
+            if output_dataset[0].err[0, 0, 0] != 0. :
+                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
+
+            output_dataset[0].err[0, 0, 0] = 1.
+            if output_dataset.all_err[0, 0, 0, 0] != 1. :
+                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
+
+            output_dataset.all_dq[0, 0, 0] = 0.
+            if output_dataset[0].dq[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
+
+            output_dataset[0].dq[0,0] = 1.
+            if output_dataset.all_dq[0,0,0] != 1. :
+                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
+            
             # Plot for debugging
             # import matplotlib.pyplot as plt
             # fig,axes = plt.subplots(1,3,figsize=(10,4))
