@@ -287,41 +287,41 @@ def test_prescan_sub():
         for return_full_frame in [True, False]:
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            output_shape = output_dataset[0].data.shape
-            if output_shape != shapes[obstype][return_full_frame]:
-                raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
-    
-            # check that data, err, and dq arrays are consistently modified
-            dataset.all_data[0, 0, 0] = 0.
-            if dataset[0].data[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
-
-            dataset[0].data[0,0] = 1.
-            if dataset.all_data[0,0,0] != 1. :
-                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
-
-            dataset.all_err[0, 0, 0, 0] = 0.
-            if dataset[0].err[0, 0, 0] != 0. :
-                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
-
-            dataset[0].err[0, 0, 0] = 1.
-            if dataset.all_err[0, 0, 0, 0] != 1. :
-                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
-
-            dataset.all_dq[0, 0, 0] = 0.
-            if dataset[0].dq[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
-
-            dataset[0].dq[0,0] = 1.
-            if dataset.all_dq[0,0,0] != 1. :
-                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
-            
             corgidrp_result = output_dataset[0].data
             iit_result = iit_frames[0] if return_full_frame else iit_images[0]
 
             if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
                 raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
 
+            output_shape = output_dataset[0].data.shape
+            if output_shape != shapes[obstype][return_full_frame]:
+                raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
+    
+            # check that data, err, and dq arrays are consistently modified
+            output_dataset.all_data[0, 0, 0] = 0.
+            if output_dataset[0].data[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
+
+            output_dataset[0].data[0,0] = 1.
+            if output_dataset.all_data[0,0,0] != 1. :
+                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
+
+            output_dataset.all_err[0, 0, 0, 0] = 0.
+            if output_dataset[0].err[0, 0, 0] != 0. :
+                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
+
+            output_dataset[0].err[0, 0, 0] = 1.
+            if output_dataset.all_err[0, 0, 0, 0] != 1. :
+                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
+
+            output_dataset.all_dq[0, 0, 0] = 0.
+            if output_dataset[0].dq[0, 0] != 0. :
+                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
+
+            output_dataset[0].dq[0,0] = 1.
+            if output_dataset.all_dq[0,0,0] != 1. :
+                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
+            
             # Plot for debugging
             # import matplotlib.pyplot as plt
             # fig,axes = plt.subplots(1,3,figsize=(10,4))
@@ -345,6 +345,8 @@ def test_bias_zeros_frame():
     """Verify prescan_biassub does not break for a frame of all zeros 
     (should return all zeros)."""
     
+    tol = 1e-13
+
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     
@@ -359,15 +361,26 @@ def test_bias_zeros_frame():
             
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            if not np.all(output_dataset.all_data == 0.):
-                raise Exception('Operating on all zero frame did not return all zero frame')
+            if np.max(np.abs(output_dataset.all_data)) > tol:
+                raise Exception(f'Operating on all zero frame did not return all zero frame.')
+            
+            if np.max(np.abs(output_dataset.all_err)) > tol:
+                raise Exception(f'Operating on all zero frame did not return all zero error.')           
 
 def test_bias_hvoff():
-    """Verify that function finds bias for hvoff distribution."""
+    """
+    Verify that the function finds bias for gaussian distribution, with no 
+    contribution from the effect of gain ("hv" is the voltage applied in 
+    the EM gain register).
+    The error tolerance is set by the standard error on the median of 
+    the Gaussian noise, not the mean.
+    """
     
     # Set tolerance
     tol = 1.
+    err_tol = 0.02
     bval = 100.
+    sig = 1.
     seed = 12346
 
     ###### create simulated data
@@ -380,20 +393,31 @@ def test_bias_hvoff():
 
         # Overwrite data with normal distribution
         rng = np.random.default_rng(seed)
-        dataset.all_data[:,:,:] = rng.normal(bval, 1,
+        dataset.all_data[:,:,:] = rng.normal(bval, sig,
                                              size=dataset.all_data.shape)
 
         for return_full_frame in [True, False]:
             
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
+            # Compare median bias measurement to expectation
             if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
+            
+            # Compare error to expected standard error of the median
+            std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols']) * np.sqrt(np.pi / 2.)
+            if np.max(np.abs(output_dataset[0].err[1]) - std_err) > err_tol:
+                raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution: \n{np.max(np.abs(output_dataset[0].err[1]))} when we expect {std_err} +- {err_tol} ')
 
 def test_bias_hvon():
-    """Verify that function finds bias for hvon
-        distribution.  Also tests that only the good columns are used for
-        the bias."""
+    """
+    Verify that the function finds bias for a gaussian distribution, plus
+    additional contributions from the effect of gain ("hv" is the voltage 
+    applied in the EM gain register), approximated as an exponential distribution 
+    + inflated values for the "unreliable" prescan region, minus the mean of the 
+    exponential distribution to keep the DC contribution 0.  
+    Also tests that only the good columns are used for the bias.
+    """
     
     # Set tolerance
     tol = 6.
@@ -428,8 +452,9 @@ def test_bias_hvon():
 def test_bias_uniform_value():
     """Verify that function finds bias for uniform value."""
     
+    tol = 1e-13
     bval = 1.
-
+    
     ###### create simulated dataset
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     
@@ -442,8 +467,11 @@ def test_bias_uniform_value():
 
         for return_full_frame in [True, False]:            
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
-            if not np.all(output_dataset.all_data == 0.):
+            if np.max(np.abs(output_dataset.all_data)) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for uniform value.')
+            
+            if np.max(np.abs(output_dataset.all_err)) > tol:
+                raise Exception(f'Higher than expected std. error in bias measurement for uniform value.')
             
 def test_bias_offset():
     """Verify bias offset incorporated as expected"""
@@ -486,7 +514,6 @@ def test_bias_offset():
 
             if not np.nanmax(np.abs(image_slice_0 - image_slice_10)) < tol:
                 raise Exception(f"Bias offset subtraction did not produce the correct result. absmax value : {np.nanmax(np.abs(image_slice_0 - image_slice_10))}")
-
 
 if __name__ == "__main__":
     test_prescan_sub()
