@@ -8,6 +8,7 @@ def add_photon_noise(input_dataset):
 
     Args:
        input_dataset (corgidrp.data.Dataset): a dataset of Images with values in photons (L2a-level)
+    
     Returns:
         corgidrp.data.Dataset: photon noise propagated to the image error extensions of the input dataset
     """
