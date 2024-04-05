@@ -5,12 +5,16 @@ import numpy as np
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
-    Perform pre-scan bias subtraction of a dataset.
+    Measure and subtract the median bias in each row of the pre-scan detector region. 
+    This step also crops the images to just the science area, or 
+    optionally returns the full detector frames.
+
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
-        bias_offset (float): an offset value to be subtracted from the bias
-        return_full_frame (bool): flag indicating whether to return the full frame or only the bias-subtracted image area
+        bias_offset (float): an offset value to be subtracted from the bias. Defaults to 0.
+        return_full_frame (bool): flag indicating whether to return the full frame or 
+            only the bias-subtracted image area. Defaults to False.
     
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
@@ -18,10 +22,13 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     # Make a copy of the input dataset to operate on
     output_dataset = input_dataset.copy()
 
-    #initialize list of output frames to be concatenated
+    # Initialize list of output frames to be concatenated
     out_frames_data = []
     out_frames_err = []
     out_frames_dq = []
+
+    # Place to save new error estimates to be added later via Image.add_error_term()
+    new_err_list = []
 
     # Iterate over frames
     for i, frame in enumerate(output_dataset):
@@ -42,27 +49,37 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             # Get the image area
             image_data = slice_section(frame_data, obstype, 'image')
             image_dq = slice_section(frame_dq, obstype, 'image')
-            # error maps are 3-D
+            
+            # Special treatment for 3D error array
             image_err = []
-            for err_slice in frame_err:
+            for err_slice in frame_err: 
                 image_err.append(slice_section(err_slice, obstype, 'image'))
             image_err = np.array(image_err)
-            
-            # Get the part of the prescan that lines up with the image, and do a
-            # row-by-row bias subtraction on it
+
+            # Get the part of the prescan that lines up with the image
             i_r0 = detector_areas[obstype]['image']['r0c0'][0]
             p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
             i_nrow = detector_areas[obstype]['image']['rows']
-     
-            # Get data from prescan (alined with image area)
             al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
-            medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
-        else:
-            image_data = frame_data
-            image_err = frame_err
-            image_dq = frame_dq
             
-            medbyrow = np.median(prescan, axis=1)[:, np.newaxis]  
+        else:
+            # Use full frame
+            image_data = frame_data
+            image_dq = frame_dq
+
+            # Special treatment for 3D error array
+            image_err = []
+            for err_slice in frame_err: 
+                image_err.append(err_slice)
+            image_err = np.array(image_err)
+
+            al_prescan = prescan
+
+        # Measure bias and error (standard error of the median for each row, add this to 3D image array)
+        medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
+        sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan.shape[1])
+        new_err_list.append(sterrbyrow)   
+            
 
         bias = medbyrow - bias_offset
         image_bias_corrected = image_data - bias
@@ -93,8 +110,10 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.err = out_frames_err_arr[i]
         frame.dq = out_frames_dq_arr[i]
 
-            
-    history_msg = "Frames cropped and bias subtracted"
+    # Add new error component from this step to each frame using the Dataset class method
+    output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")
+
+    history_msg = "Frames cropped and bias subtracted" if not return_full_frame else "Bias subtracted"
 
     # update the output dataset with this new dark subtracted data and update the history
     output_dataset.update_after_processing_step(history_msg)

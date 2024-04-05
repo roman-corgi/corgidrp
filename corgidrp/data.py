@@ -135,12 +135,24 @@ class Dataset():
         Updates Dataset.all_err.
         
         Args:
-          input_error (np.array): 2-d error layer
+          input_error (np.array): 2-d or 3-d error layer
           err_name (str): name of the uncertainty layer  
         """
-        for frame in self.frames:
-            frame.add_error_term(input_error, err_name)
+        if input_error.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.add_error_term(input_error[i], err_name)
+
+        elif input_error.ndim ==2:
+            for frame in self.frames:
+                frame.add_error_term(input_error, err_name)
+
+        else:
+            raise ValueError("input_error is not either a 2D or 3D array.")
+        
+        # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])   
+        for i, frame in enumerate(self.frames):
+            frame.err = self.all_err[i]
 
 class Image():
     """
@@ -234,23 +246,23 @@ class Image():
                     self.err = err.reshape((1,)+err.shape)
             else:
                 self.err = np.zeros((1,)+self.data.shape)
-                
+
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
                     raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                 self.dq = dq
             else:
                 self.dq = np.zeros(self.data.shape, dtype = int)
-                
+
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
-        
+
         # we assume that if the err_hdr and dq_hdr is given as parameter they supersede eventual existing err_hdr and dq_hdr
         if err_hdr is not None:
             self.err_hdr = err_hdr
         if dq_hdr is not None:
-            self.dq_hdr = dq_hdr   
+            self.dq_hdr = dq_hdr
         if not hasattr(self, 'err_hdr'):
             self.err_hdr = fits.Header()
         self.err_hdr["EXTNAME"] = "ERR"
@@ -287,7 +299,7 @@ class Image():
 
         errhdu = fits.ImageHDU(data=self.err, header = self.err_hdr)
         hdulist.append(errhdu)
-        
+
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
         hdulist.writeto(self.filepath, overwrite=True)
@@ -302,9 +314,9 @@ class Image():
         Args:
             input_dataset (corgidrp.data.Dataset): the input dataset that were combined together to make this image
         """
-        self.ext_hdr.set('DRPNFILE', len(input_dataset), "Number of files used to create this processed frame")
+        self.ext_hdr.set('DRPNFILE', len(input_dataset), "# of files used to create this processed frame")
         for i, img in enumerate(input_dataset):
-            self.ext_hdr.set('FILE{0}'.format(i), img.filename, "Filename of file #{0} used to create this frame".format(i))
+            self.ext_hdr.set('FILE{0}'.format(i), img.filename, "File #{0} filename used to create this frame".format(i))
 
     def copy(self, copy_data=True):
         """
@@ -350,27 +362,27 @@ class Image():
 
     def add_error_term(self, input_error, err_name):
         """
-        Add a layer of a specific additive uncertainty on the 3-dim error array extension 
+        Add a layer of a specific additive uncertainty on the 3-dim error array extension
         and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name. 
-        
+        Update the error header and assign the error name.
+
         Args:
           input_error (np.array): 2-d error layer
-          err_name (str): name of the uncertainty layer  
+          err_name (str): name of the uncertainty layer
         """
         if input_error.ndim != 2 or input_error.shape != self.data.shape:
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
-        
+
         #append new error as layer on 3D cube
         self.err=np.append(self.err, [input_error], axis=0)
 
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
-    
+
         layer = str(self.err.shape[0])
         self.err_hdr["Layer_1"] = "combined_error"
-        self.err_hdr["Layer_" + layer] = err_name    
-        
+        self.err_hdr["Layer_" + layer] = err_name
+
 
 class Dark(Image):
     """
@@ -442,7 +454,7 @@ class NonLinearityCalibration(Image):
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
      Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D calibration data. See above for the required format. 
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D calibration data. See above for the required format.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this NonLinearityCalibration file (required only if raw 2D data is passed in)
@@ -462,7 +474,7 @@ class NonLinearityCalibration(Image):
             raise ValueError('The first value of the non-linearity calibration array  (upper left) must be set to '
                                 '"nan"')
 
-        
+
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new NonLinearityCalibration file
@@ -488,7 +500,7 @@ class NonLinearityCalibration(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-        
+
 
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
