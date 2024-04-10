@@ -55,7 +55,7 @@ def get_relgains(frame, em_gain, non_lin_correction):
     # Array is relative gain values at a given dn count and gain
     relgains = non_lin_correction.data[1:, 1:]
 
-    #MMB Note: This check is maybe better placed in the code that is saving the non-linearity correction file? 
+    #MMB Note: This check is maybe better placed in the code that is saving the non-linearity correction file?
     # Check for increasing axes
     if np.any(np.diff(gain_ax) <= 0):
         raise ValueError('Gain axis (column headers) must be increasing')
@@ -66,7 +66,7 @@ def get_relgains(frame, em_gain, non_lin_correction):
        (np.max(relgains, axis=0) < 1).any():
         raise ValueError('Gain curves (array columns) must contain or '
                               'straddle a relative gain of 1.0')
-    
+
     # Create interpolation for em gain (x), counts (y), and relative gain (z).
     # Note that this defaults to using the edge values as fill_value for
     # out of bounds values (same as specified below in interp1d)
@@ -159,7 +159,7 @@ def slice_section(frame, obstype, key):
         obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         key (str): Keyword referencing section to be sliced; must exist in detector_areas
 
-    Returns: 
+    Returns:
         np.ndarray: a 2D array of the specified detector area
     """
     rows = detector_areas[obstype][key]['rows']
@@ -197,7 +197,7 @@ def detector_area_mask(detector_areas, area='image'):
     Args:
         detector_areas (dict): a dictionary of image constants
         area (str): the area of the detector to create a mask for
-    
+
     Returns:
         np.ndarray: a mask for the detector area
     """
@@ -222,26 +222,3 @@ def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reli
     for area in areas:
         detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
-
-def dark_subtraction(input_dataset, dark_frame):
-    """
-    Perform dark current subtraction of a dataset using the corresponding dark frame
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
-        dark_frame (corgidrp.data.Dark): a Dark frame to model the dark current
-    
-    Returns:
-        corgidrp.data.Dataset: a dark subtracted version of the input dataset
-    """
-    # you should make a copy the dataset to start
-    darksub_dataset = input_dataset.copy()
-
-    darksub_cube = darksub_dataset.all_data - dark_frame.data
-
-    history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
-
-    # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube)
-
-    return darksub_dataset
