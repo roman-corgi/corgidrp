@@ -1,11 +1,13 @@
-import os
 import glob
-import pytest
-import numpy as np
+import os
+
 import corgidrp.data as data
-import corgidrp.mocks as mocks
 import corgidrp.detector as detector
 import corgidrp.l2a_to_l2b as l2a_to_l2b
+import corgidrp.mocks as mocks
+import numpy as np
+import pytest
+
 
 def test_dark_sub():
     """

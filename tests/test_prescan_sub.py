@@ -1,16 +1,14 @@
 import glob
 import os
+from pathlib import Path
 
 import corgidrp.data as data
-from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
-from corgidrp.detector import detector_areas
-
 import numpy as np
 import yaml
 from astropy.io import fits
-from pathlib import Path
-
+from corgidrp.detector import detector_areas
+from corgidrp.l1_to_l2a import prescan_biassub
 from pytest import approx
 
 # Expected output image shapes

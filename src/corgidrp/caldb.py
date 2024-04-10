@@ -2,12 +2,13 @@
 Calibration tracking system. Modified from kpicdrp caldb implmentation (Copyright (c) 2024, KPIC Team)
 """
 import os
+
+import astropy.time as time
 import numpy as np
 import pandas as pd
+
 import corgidrp
 import corgidrp.data as data
-import astropy.time as time
-
 
 column_names = [
     "Filepath",

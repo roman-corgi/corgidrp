@@ -1,9 +1,9 @@
 import os
-import numpy as np
-import astropy.io.fits as fits
-from corgidrp.mocks import create_default_headers
-from corgidrp.data import Image, Dataset
 
+import astropy.io.fits as fits
+import numpy as np
+from corgidrp.data import Dataset, Image
+from corgidrp.mocks import create_default_headers
 
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024]) 

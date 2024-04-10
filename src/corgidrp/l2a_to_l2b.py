@@ -1,6 +1,7 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
 import numpy as np
 
+
 def add_photon_noise(input_dataset):
     """
     Propagate the photon noise determined from the image signal to the error map.

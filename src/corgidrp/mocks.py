@@ -1,9 +1,10 @@
+import os
+
 import astropy.io.fits as fits
 import numpy as np
 
 import corgidrp.data as data
 import corgidrp.detector as detector
-import os
 
 
 def create_dark_calib_files(filedir=None, numfiles=10):

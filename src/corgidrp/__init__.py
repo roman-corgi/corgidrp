@@ -1,9 +1,13 @@
 import configparser
 import os
 import pathlib
-import configparser
 
-version = "0.1"
+from . import _version
+
+try:
+    __version__ = _version.version
+except Exception:
+    __version__ = "dev"
 
 # borrowed from the kpicdrp caldb
 # load in default caldbs based on configuration file

@@ -1,12 +1,14 @@
 #A file to test the non-linearity correction, including a comparison with the II&T pipeline
-import os
 import glob
-import numpy as np
-import corgidrp.mocks as mocks
+import os
+
 import corgidrp.data as data
 import corgidrp.l1_to_l2a as l1_to_l2a
-from scipy import interpolate
+import corgidrp.mocks as mocks
+import numpy as np
 import pytest
+from scipy import interpolate
+
 
 class NonlinException(Exception):
     """Exception class for nonlin module."""

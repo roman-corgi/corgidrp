@@ -1,6 +1,7 @@
 # A file that holds the functions that transmogrify l1 data to l2a data 
-from corgidrp.detector import get_relgains, slice_section, detector_areas
 import numpy as np
+
+from corgidrp.detector import detector_areas, get_relgains, slice_section
 
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):

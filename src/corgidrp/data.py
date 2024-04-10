@@ -1,9 +1,12 @@
 import os
-import numpy as np
-import numpy.ma as ma
-import corgidrp
+
 import astropy.io.fits as fits
 import astropy.time as time
+import numpy as np
+import numpy.ma as ma
+
+import corgidrp
+
 
 class Dataset():
     """
@@ -255,7 +258,7 @@ class Image():
                 self.dq = np.zeros(self.data.shape, dtype = int)
 
             # record when this file was created and with which version of the pipeline
-            self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
+            self.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
 
         # we assume that if the err_hdr and dq_hdr is given as parameter they supersede eventual existing err_hdr and dq_hdr
@@ -345,7 +348,7 @@ class Image():
         new_img.filedir = self.filedir
 
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img

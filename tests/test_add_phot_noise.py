@@ -1,10 +1,10 @@
 import os
-import numpy as np
-from corgidrp.mocks import create_default_headers
-from corgidrp.data import Image, Dataset
-from corgidrp.l2a_to_l2b import add_photon_noise
-import pytest
 
+import numpy as np
+import pytest
+from corgidrp.data import Dataset, Image
+from corgidrp.l2a_to_l2b import add_photon_noise
+from corgidrp.mocks import create_default_headers
 
 data = np.ones([1024,1024])*2.
 err = np.ones([1024,1024]) *0.5
