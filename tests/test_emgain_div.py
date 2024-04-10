@@ -1,5 +1,3 @@
-import os
-import glob
 import pytest
 import numpy as np
 from corgidrp.mocks import create_default_headers
