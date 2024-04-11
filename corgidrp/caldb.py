@@ -9,11 +9,26 @@ import corgidrp.data as data
 import astropy.time as time
 
 
-column_names = ["Filepath", "Type", "MJD", "EXPTIME", "Files Used", "Date Created", "DRPVERSN", "OBSID", "NAXIS1", "NAXIS2", "OPMODE", "CMDGAIN", "EXCAMT"]
+column_names = [
+    "Filepath",
+    "Type",
+    "MJD",
+    "EXPTIME",
+    "Files Used",
+    "Date Created",
+    "DRPVERSN",
+    "OBSID",
+    "NAXIS1",
+    "NAXIS2",
+    "OPMODE",
+    "CMDGAIN",
+    "EXCAMT",
+]
 
-labels = {data.Dark : "Dark"}
+labels = {data.Dark: "Dark", data.NonLinearityCalibration: "NonLinearityCalibration", }
 
-class CalDB():
+
+class CalDB:
     """
     Database for tracking calibration files saved to disk. Modified from the kpicdrp version
 
@@ -22,12 +37,18 @@ class CalDB():
 
     Args:
         filepath (str): [optional] filepath to a CSV file with an existing database
-        
+
     Fields:
         columns (list): column names of dataframe
         filepath(str): full filepath to data
     """
+
     def __init__(self, filepath=""):
+        """
+        Args:
+            filepath (str): [optional] filepath to a CSV file with an existing database
+        """
+
         # If filepath is not passed in, use the default (majority of case)
         if len(filepath) == 0:
             self.filepath = corgidrp.caldb_filepath
@@ -39,13 +60,12 @@ class CalDB():
         if not os.path.exists(self.filepath):
             # new database
             self.columns = column_names
-            self._db = pd.DataFrame(columns = self.columns)
+            self._db = pd.DataFrame(columns=self.columns)
             self.save()
         else:
             # already a database exists
             self.load()
             self.columns = list(self._db.columns.values)
-
 
     def load(self):
         """
@@ -55,7 +75,7 @@ class CalDB():
 
     def save(self):
         """
-        Save file without numbered index to disk with user specified filepath as a CSV file 
+        Save file without numbered index to disk with user specified filepath as a CSV file
         """
         self._db.to_csv(self.filepath, index=False)
 
@@ -64,39 +84,58 @@ class CalDB():
         Extract the properties from this data entry to ingest them into the database
 
         Args:
-            entry(corgidrp.data.Image subclass): calibration frame to add to the database
-            is_calib (bool): is a calibration frame. if Not, it won't look up filetype. 
+            entry (corgidrp.data.Image subclass): calibration frame to add to the database
+            is_calib (bool): is a calibration frame. if Not, it won't look up filetype.
                              Only used in get_calib() to grab metadata for science frames
+
+        Returns:
+            tuple:
+                row (list):
+                    List of data entry properties
+                row_dict (dict):
+                    Dictionary of data entry properties keyed by column names
+
         """
         filepath = os.path.abspath(entry.filepath)
         if is_calib:
-            datatype = labels[entry.__class__] # get the database str representation
+            datatype = labels[entry.__class__]  # get the database str representation
         else:
             datatype = "Sci"
-        mjd = time.Time(entry.ext_hdr['SCTSRT']).mjd
-        exptime = entry.ext_hdr['EXPTIME']
-        
+        mjd = time.Time(entry.ext_hdr["SCTSRT"]).mjd
+        exptime = entry.ext_hdr["EXPTIME"]
+
         # check if this exists. will be a keyword written by corgidrp
         if "DRPNFILE" in entry.ext_hdr:
-            files_used = entry.ext_hdr['DRPNFILE']
+            files_used = entry.ext_hdr["DRPNFILE"]
         else:
             files_used = 0
 
-        date_created = time.Time(entry.ext_hdr['DRPCTIME']).mjd
-        drp_version = entry.ext_hdr['DRPVERSN']
+        date_created = time.Time(entry.ext_hdr["DRPCTIME"]).mjd
+        drp_version = entry.ext_hdr["DRPVERSN"]
 
-        obsid = entry.pri_hdr['OBSID']
+        obsid = entry.pri_hdr["OBSID"]
 
         # this only works for 2D images. may need to adapt for non-2D calibration frames
         naxis1 = entry.data.shape[-1]
         naxis2 = entry.data.shape[-2]
 
-        row = [filepath, datatype, mjd, exptime, files_used, date_created, drp_version, obsid, naxis1, naxis2]
+        row = [
+            filepath,
+            datatype,
+            mjd,
+            exptime,
+            files_used,
+            date_created,
+            drp_version,
+            obsid,
+            naxis1,
+            naxis2,
+        ]
 
         # rest are ext_hdr keys we can copy
         start_index = len(row)
         for i in range(start_index, len(self.columns)):
-            row.append(entry.ext_hdr[self.columns[i]]) # add value staright from header
+            row.append(entry.ext_hdr[self.columns[i]])  # add value staright from header
 
         row_dict = {}
         for key, val in zip(self.columns, row):
@@ -109,7 +148,7 @@ class CalDB():
         Add a new entry to or update an existing one in the database. Note that function by default will load and save db to disk
 
         Args:
-            entry(corgidrp.data.Image subclass): calibration frame to add to the database
+            entry (corgidrp.data.Image subclass): calibration frame to add to the database
             to_disk (bool): True by default, will update DB from disk before adding entry and saving it back to disk
         """
         new_row, row_dict = self._get_values_from_entry(entry)
@@ -119,13 +158,15 @@ class CalDB():
             self.load()
 
         # use filepath as key to see if it's already in database
-        if row_dict['Filepath'] in self._db.values: 
-            row_index = self._db[self._db["Filepath"] == row_dict['Filepath']].index.values
-            self._db.loc[row_index,self.columns] = new_row
+        if row_dict["Filepath"] in self._db.values:
+            row_index = self._db[
+                self._db["Filepath"] == row_dict["Filepath"]
+            ].index.values
+            self._db.loc[row_index, self.columns] = new_row
         # otherwise create new entry
         else:
-            new_entry = pd.DataFrame([new_row], columns = self.columns)
-            self._db = pd.concat([self._db, new_entry], ignore_index = True)
+            new_entry = pd.DataFrame([new_row], columns=self.columns)
+            self._db = pd.concat([self._db, new_entry], ignore_index=True)
 
         # save to disk to update changes
         if to_disk:
@@ -136,7 +177,7 @@ class CalDB():
         Remove an entry from the database. Removes the entire row
 
         Args:
-            entry(corgidrp.data.Image subclass): calibration frame to add to the database
+            entry (corgidrp.data.Image subclass): calibration frame to add to the database
             to_disk (bool): True by default, will update DB from disk before adding entry and saving it back to disk
         """
         new_row, row_dict = self._get_values_from_entry(entry)
@@ -145,8 +186,10 @@ class CalDB():
         if to_disk:
             self.load()
 
-        if row_dict['Filepath'] in self._db.values:
-            entry_index = self._db[self._db["Filepath"] == row_dict['Filepath']].index.values
+        if row_dict["Filepath"] in self._db.values:
+            entry_index = self._db[
+                self._db["Filepath"] == row_dict["Filepath"]
+            ].index.values
             self._db = self._db.drop(self._db.index[entry_index])
             self._db = self._db.reset_index(drop=True)
         else:
@@ -158,18 +201,20 @@ class CalDB():
 
     def get_calib(self, frame, dtype, to_disk=True):
         """
-        Outputs the best calibration file of the given type for the input sciene frame. 
+        Outputs the best calibration file of the given type for the input sciene frame.
 
         Args:
-            file (corgidrp.data.Image): an image frame to request a calibratio for
+            frame (corgidrp.data.Image): an image frame to request a calibratio for
             dtype (corgidrp.data Class): for example: corgidrp.data.Dark (TODO: document the entire list of options)
             to_disk (bool): True by default, will update DB from disk before matching
-        
+
         Returns:
             corgidrp.data.*: an instance of the appropriate calibration type (Exact type depends on calibration type)
         """
         if dtype not in labels:
-            raise ValueError("Requested calibration dtype of {0} not a valid option".format(dtype))
+            raise ValueError(
+                "Requested calibration dtype of {0} not a valid option".format(dtype)
+            )
         dtype_label = labels[dtype]
 
         # get values for this science frame
@@ -180,18 +225,24 @@ class CalDB():
             self.load()
 
         # downselect to only calibs of this type
-        calibdf = self._db[self._db["Type"] == dtype_label] 
+        calibdf = self._db[self._db["Type"] == dtype_label]
 
         # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
-        options = calibdf.loc[((calibdf["EXPTIME"] == frame_dict["EXPTIME"]) & (calibdf["NAXIS1"] == frame_dict["NAXIS1"]) & (calibdf["NAXIS2"] == frame_dict["NAXIS2"]))]
-                
+        options = calibdf.loc[
+            (
+                (calibdf["EXPTIME"] == frame_dict["EXPTIME"])
+                & (calibdf["NAXIS1"] == frame_dict["NAXIS1"])
+                & (calibdf["NAXIS2"] == frame_dict["NAXIS2"])
+            )
+        ]
+
         # select the one closest in time
-        result_index = np.abs(options['MJD'] - frame_dict['MJD']).argmin() 
-        calib_filepath = options.iloc[result_index,0]
+        result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+        calib_filepath = options.iloc[result_index, 0]
 
         # load the object from disk and return it
         return dtype(calib_filepath)
-    
+
     def scan_dir_for_new_entries(self, filedir, look_in_subfolders=True, to_disk=True):
         """
         Scan a folder and subfolder for calibration files and add them all to the caldb
@@ -207,7 +258,7 @@ class CalDB():
             for filename in filenames:
                 # hard coded check only for files that end in .fits
                 if filename[-5:] != ".fits":
-                    continue 
+                    continue
 
                 filepath = os.path.join(dirpath, filename)
                 frame = data.autoload(filepath)
@@ -224,5 +275,3 @@ class CalDB():
         # load all these files into the caldb
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
-
-        
