@@ -115,8 +115,27 @@ def flat_division(input_dataset, master_flat):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
     """
+    
+     # you should make a copy the dataset to start
+    flatdiv_dataset = input_dataset.copy()
+    
+    #Divide by the master flat
+    flatdiv_cube = flatdiv_dataset.all_data/master_flat.data
+    
+    # propagate the error of the master flat frame
+    if hasattr(master_flat, "err"):
+        flatdiv_dataset.add_error_term(master_flat.err, "masterflat_error")   
+    else:
+        raise Warning("no error attribute in the master flat")
+    
+    #darksub_dataset.all_err = np.array([frame.err for frame in darksub_dataset.frames])
+    history_msg = "Flat calibration done using master_flat".format(master_flat.filename)
 
-    return None
+    # update the output dataset with this new dark subtracted data and update the history
+    flatdiv_dataset.update_after_processing_step(history_msg, new_all_data=flatdiv_cube)
+
+    return flatdiv_dataset
+
 
 def correct_bad_pixels(input_dataset):
     """
