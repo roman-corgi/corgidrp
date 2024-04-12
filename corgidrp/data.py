@@ -433,37 +433,36 @@ class Masterflat(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark file (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this flat file (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         # run the image class contructor
         #super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-        # additional bookkeeping for Dark
 
-        # if this is a new dark, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new dark
+        # if this is a new master flat, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new masterflat
         if ext_hdr is not None:
             if input_dataset is None:
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
             self.ext_hdr['DATATYPE'] = 'Masterflat' # corgidrp specific keyword for saving to disk
 
-            # log all the data that went into making this dark
+            # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
+            #self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_dark.fits".format(orig_input_filename)
+            self.filename = "{0}_masterflat.fits".format(orig_input_filename)
 
 
-        # double check that this is actually a dark file that got read in
+        # double check that this is actually a masterflat file that got read in
         # since if only a filepath was passed in, any file could have been read in
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
-            raise ValueError("File that was loaded was not a Dark file.")
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Masterflat':
+            raise ValueError("File that was loaded was not a Master flat file.")
 
 class NonLinearityCalibration(Image):
     """
@@ -544,6 +543,7 @@ class NonLinearityCalibration(Image):
 
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
+              "Masterflat" : Masterflat,
               "NonLinearityCalibration" : NonLinearityCalibration }
 
 def autoload(filepath):
