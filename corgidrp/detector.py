@@ -26,6 +26,27 @@ def create_dark_calib(dark_dataset):
 
     return new_dark
 
+def create_master_flat(flat_dataset):
+    """
+    Turn this dataset of image frames that were taken for performing the flat calibration and
+    to make one master flat image
+
+    Args:
+        flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
+
+    Returns:
+        data.masterflat: a master flat for flat calibration
+    """
+    combined_frame = np.nanmean(flat_dataset.all_data, axis=0)
+ 
+    master_flat = data.Masterflat(combined_frame, pri_hdr=flat_dataset[0].pri_hdr.copy(),
+                         ext_hdr=flat_dataset[0].ext_hdr.copy(), input_dataset=flat_dataset)
+    
+    # determine the standard error of the mean: stddev/sqrt(n_frames)
+    master_flat.err = np.nanstd(flat_dataset.all_data, axis=0)
+
+    return master_flat
+
 def get_relgains(frame, em_gain, non_lin_correction):
     """
     For a given bias subtracted frame of dn counts, return a same sized
