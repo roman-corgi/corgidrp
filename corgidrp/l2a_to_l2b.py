@@ -103,12 +103,22 @@ def em_gain_division(input_dataset):
     
     # you should make a copy the dataset to start
     emgain_dataset = input_dataset.copy()
-
-    emgain = emgain_dataset[0].ext_hdr["CMDGAIN"]
-    emgain_cube = emgain_dataset.all_data/emgain
-    emgain_error = emgain_dataset.all_err/emgain
+    emgain_cube = emgain_dataset.all_data
+    emgain_error = emgain_dataset.all_err
     
-    history_msg = "data divided by em_gain {0}".format(str(emgain))
+    unique = True
+    emgain = emgain_dataset[0].ext_hdr["CMDGAIN"]
+    for i in range(len(emgain_dataset)): 
+        if emgain != emgain_dataset[i].ext_hdr["CMDGAIN"]:
+            unique = False
+            emgain = emgain_dataset[i].ext_hdr["CMDGAIN"] 
+        emgain_cube[i] /= emgain
+        emgain_error[i] /= emgain
+    
+    if unique:
+        history_msg = "data divided by em_gain {0}".format(str(emgain))
+    else:
+        history_msg = "data divided by non-unique em_gain"
 
     # update the output dataset with this em_gain divided data and update the history
     emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"photoelectrons"})

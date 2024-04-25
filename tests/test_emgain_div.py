@@ -27,6 +27,16 @@ def test_emgain_div():
   
     print(gain_dataset[0].ext_hdr)
     
+    # check non-unique emgain
+    emgain1 = 100
+    dataset[1].ext_hdr['CMDGAIN'] = emgain1
+    gain_dataset = l2a_to_l2b.em_gain_division(dataset)
+    assert("non-unique" in str(gain_dataset[0].ext_hdr["HISTORY"]))
+    assert np.mean(gain_dataset.all_data[0]) == pytest.approx(np.mean(dataset.all_data[0])/emgain, abs=1e-3)
+    assert np.mean(gain_dataset.all_data[1]) == pytest.approx(np.mean(dataset.all_data[1])/emgain1, abs=1e-3)
+    assert np.mean(gain_dataset.all_err[0]) == pytest.approx(np.mean(dataset.all_err[0])/emgain, abs=1e-3)
+    assert np.mean(gain_dataset.all_err[1]) == pytest.approx(np.mean(dataset.all_err[1])/emgain1, abs=1e-3)
+    
 
 if __name__ == "__main__":
     test_emgain_div()
