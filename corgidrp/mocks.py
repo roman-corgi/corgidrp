@@ -90,5 +90,34 @@ def create_default_headers():
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
     exthdr['DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
+    exthdr['UNITS'] = ""
 
     return prihdr, exthdr
+
+
+def create_not_normalized_files(filedir=None, numfiles=10):
+    """
+    Create simulated data non normalized fo the exposure time.
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 10.
+
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset
+    """
+    filepattern = "simcal_not_normalized_{0:04d}.fits"
+    frames = []
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+        
+        sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024, 1024)), dtype=float)
+        sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024, 1024)), dtype=float)
+        sim_dq = np.asarray(np.ones((1024, 1024)), dtype=int)
+        frame = data.Image(sim_data, err=sim_err, dq = sim_dq, pri_hdr=prihdr, ext_hdr=exthdr)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    dataset = data.Dataset(frames)
+    return dataset
