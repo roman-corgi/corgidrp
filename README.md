@@ -10,8 +10,8 @@ pip install -e .
 ```
 Then you can import `corgidrp` like any other python package!
 
-The installation will create a configuration file in your home directory called `.corgidrp`. 
-That configuration directory will be used to locate things on your computer such as the location of the calibration database. 
+The installation will create a configuration folder in your home directory called `.corgidrp`. 
+That configuration directory will be used to locate things on your computer such as the location of the calibration database and the pipeline configuration file. The configuration files stores setting such as whether to track each individual error term added to the noise. 
 
 ## How to Contribute
 
@@ -147,7 +147,7 @@ Before creating a pull request, review the design Principles below. Use the Gith
 * How should I treat hard-coded variables
   * If a variable value is extremely unlikely to change AND is only required by one module, it can be hard coded inside that module.
   * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central constants file (name TBD). 
-  * If it is likely to change, it should be implemented by a config file.
+  * If it is a setting about pipeline behavior that may change, it should be implemented by a config file (examples are location of the calibration database and whether to save individual error terms in the output FITS files).
  
 * Where should I store computed variables so they can be referenced later in the pipeline?
   * If possible, in the header of the dataset being processed or in a hew HDU extension
