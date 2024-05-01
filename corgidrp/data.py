@@ -304,8 +304,9 @@ class Image():
             for i in range(num_errs):
                 del self.err_hdr['Layer_{0}'.format(i + 2)]
             self.err = self.err[:1] # only save the total err, preserve 3-D shape
+        self.err_hdr['TRK_ERRS'] = corgidrp.track_individual_errors # specify whether we are tracing errors
 
-        # can do fancier things here if needed or storing more meta data
+
 
     # create this field dynamically
     @property
