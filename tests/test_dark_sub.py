@@ -2,15 +2,20 @@ import os
 import glob
 import pytest
 import numpy as np
+import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 
+old_err_tracking = corgidrp.track_individual_errors
+
 def test_dark_sub():
     """
     Generate mock input data and pass into dark subtraction function
     """
+    corgidrp.track_individual_errors = True # this test uses individual error components
+
     ###### create simulated data
     # check that simulated data folder exists, and create if not
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
@@ -65,6 +70,8 @@ def test_dark_sub():
     print("mean of all data:", np.mean(darkest_dataset.all_data))
     print("mean of all errors:", np.mean(darkest_dataset.all_err))
     print(darkest_dataset[0].ext_hdr)
+
+    corgidrp.track_individual_errors = old_err_tracking
     
 
 if __name__ == "__main__":
