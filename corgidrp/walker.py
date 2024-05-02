@@ -22,6 +22,7 @@ def autogen_reicpe(filelist, outputdir, template=None):
     Args:
         filelist (list of str): list of filepaths to files
         outputdir (str): output directory folderpath
+        template (json): enables passing in of custom template, if desired
 
     Returns:
         json: the JSON recipe to process the filelist
@@ -29,11 +30,13 @@ def autogen_reicpe(filelist, outputdir, template=None):
     # load the first frame to check what kind of data and identify recipe
     first_frame = data.autoload(filelist[0])
     
-    recipe_filename = guess_template(first_frame)
+    # if user didn't pass in template
+    if template is not None:
+        recipe_filename = guess_template(first_frame)
 
-    # load the template recipe
-    recipe_filepath = os.path.join(recipe_dir, recipe_filename)
-    template = json.load(open(recipe_filepath, 'r'))
+        # load the template recipe
+        recipe_filepath = os.path.join(recipe_dir, recipe_filename)
+        template = json.load(open(recipe_filepath, 'r'))
 
     # create the personalized recipe
     recipe = template.copy()
