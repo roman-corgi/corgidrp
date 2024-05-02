@@ -91,14 +91,14 @@ def convert_to_electrons(input_dataset):
 def em_gain_division(input_dataset):
     """
     
-    Convert the data from electrons to photo-electrons by dividing the commanded em_gain. 
-    update the change in units in the header [photoelectrons].
+    Convert the data from detected EM electrons to detected electrons by dividing the commanded em_gain. 
+    Update the change in units in the header [detected electrons].
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with the data in units photo-electrons
+        corgidrp.data.Dataset: a version of the input dataset with the data in units "detected electrons"
     """
     
     # you should make a copy the dataset to start
@@ -121,7 +121,7 @@ def em_gain_division(input_dataset):
         history_msg = "data divided by non-unique em_gain"
 
     # update the output dataset with this em_gain divided data and update the history
-    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"photoelectrons"})
+    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
 
     return emgain_dataset
     
