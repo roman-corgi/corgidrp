@@ -23,6 +23,8 @@ def autogen_reicpe(filelist, outputdir, template=None):
         filelist (list of str): list of filepaths to files
         outputdir (str): output directory folderpath
 
+    Returns:
+        json: the JSON recipe to process the filelist
     """
     # load the first frame to check what kind of data and identify recipe
     first_frame = data.autoload(filelist[0])
@@ -65,7 +67,7 @@ def guess_template(image):
     Args:
         image (corgidrp.data.Image): an Image file to process
 
-    Returns
+    Returns:
         str: the best template filename
     """
     if image.ext_hdr['DATA_LEVEL'] == "L1":
