@@ -31,7 +31,7 @@ def autogen_reicpe(filelist, outputdir, template=None):
     first_frame = data.autoload(filelist[0])
     
     # if user didn't pass in template
-    if template is not None:
+    if template is None:
         recipe_filename = guess_template(first_frame)
 
         # load the template recipe
