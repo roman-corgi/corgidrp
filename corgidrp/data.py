@@ -82,7 +82,7 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
-    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None):
+    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None):
         """
         Updates the dataset after going through a processing step
 
@@ -91,6 +91,7 @@ class Dataset():
             new_all_data (np.array): (optional) Array of new data. Needs to be the same shape as `all_data`
             new_all_err (np.array): (optional) Array of new err. Needs to be the same shape as `all_err` except of second dimension
             new_all_dq (np.array): (optional) Array of new dq. Needs to be the same shape as `all_dq`
+            header_entries (dict): (optional) a dictionary {} of ext_hdr and err_hdr entries to add or update
         """
         # update data if necessary
         if new_all_data is not None:
@@ -106,11 +107,15 @@ class Dataset():
                 raise ValueError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))
             self.all_dq[:] = new_all_dq # specific operation overwrites the existing data rather than changing pointers
 
-        # update history
+        # update history and header entries
         for img in self.frames:
             img.ext_hdr['HISTORY'] = history_entry
-
-
+            if header_entries:
+                for key, value in header_entries.items():
+                    img.ext_hdr[key] = value
+                    img.err_hdr[key] = value
+                    
+ 
     def copy(self, copy_data=True):
         """
         Make a copy of this dataset, including all data and headers.
@@ -535,10 +540,58 @@ class NonLinearityCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
 
+class KGain(Image):
+    """
+    Class for KGain calibration file. Until further insights it is just one float value.
 
+     Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
+
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The KGain calibration data should be just one float value')
+
+        self._kgain = self.data[0,0] 
+        # additional bookkeeping for a calibration file
+        # if this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new KGain file
+        if ext_hdr is not None:
+            self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'detected EM electrons/DN'
+            # add to history
+            self.ext_hdr['HISTORY'] = "KGain Calibration file created"
+
+            # give it a default filename
+            self.filename = "KGain.fits"
+
+
+        # double check that this is actually a KGain file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'KGain':
+            raise ValueError("File that was loaded was not a KGain Calibration file.")
+    
+    @property
+    def value(self):
+        return self._kgain
+
+    def copy(self):
+        """
+        just return the reference to get the value field
+        """
+        return self        
+ 
+        
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
-              "NonLinearityCalibration" : NonLinearityCalibration }
+              "NonLinearityCalibration" : NonLinearityCalibration,
+              "KGain" : KGain }
 
 def autoload(filepath):
     """
