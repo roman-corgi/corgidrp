@@ -54,7 +54,7 @@ def dark_subtraction(input_dataset, dark_frame):
     history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube)
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, header_entries = {"BUNIT":"photoelectrons"})
 
     return darksub_dataset
 
