@@ -1,6 +1,7 @@
 import glob
 import os
 
+import corgidrp
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
@@ -12,6 +13,8 @@ from astropy.io import fits
 from pathlib import Path
 
 from pytest import approx
+
+old_err_tracking = corgidrp.track_individual_errors
 
 # Expected output image shapes
 shapes = {
@@ -368,7 +371,8 @@ def test_bias_hvoff():
     The error tolerance is set by the standard error on the median of 
     the Gaussian noise, not the mean.
     """
-    
+    corgidrp.track_individual_errors = True # needs to run with error tracking on
+
     # Set tolerance
     tol = 1.
     err_tol = 0.02
@@ -401,6 +405,8 @@ def test_bias_hvoff():
             std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols']) * np.sqrt(np.pi / 2.)
             if np.max(np.abs(output_dataset[0].err[1]) - std_err) > err_tol:
                 raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution: \n{np.max(np.abs(output_dataset[0].err[1]))} when we expect {std_err} +- {err_tol} ')
+
+    corgidrp.track_individual_errors = old_err_tracking
 
 def test_bias_hvon():
     """
@@ -507,6 +513,7 @@ def test_bias_offset():
 
             if not np.nanmax(np.abs(image_slice_0 - image_slice_10)) < tol:
                 raise Exception(f"Bias offset subtraction did not produce the correct result. absmax value : {np.nanmax(np.abs(image_slice_0 - image_slice_10))}")
+
 
 if __name__ == "__main__":
     test_prescan_sub()
