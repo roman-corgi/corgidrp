@@ -15,7 +15,7 @@ all_steps = {
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
-def autogen_reicpe(filelist, outputdir, template=None):
+def autogen_recipe(filelist, outputdir, template=None):
     """
     Automatically creates a recipe by identifyng and populating a template
 

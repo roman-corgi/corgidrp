@@ -46,11 +46,18 @@ def test_autoreducing():
     mycaldb.create_entry(new_nonlinearity)
 
     # generate recipe
-    recipe = walker.autogen_reicpe(filelist, outputdir)
+    recipe = walker.autogen_recipe(filelist, outputdir)
 
     # process_recipe
     walker.run_recipe(recipe)
 
+    # check that the output dataset is saved to the output dir with the same filename as the input filenames
+    output_files = [os.path.join(outputdir, frame.filename) for frame in l1_dataset]
+    output_dataset = data.Dataset(output_files)
+    assert len(output_dataset) == len(l1_dataset) # check the same number of files
+    # check that the recipe is saved into the header.
+    for frame in output_dataset:
+        assert "RECIPE" in frame.ext_hdr
 
 if __name__ == "__main__":
     test_autoreducing()
