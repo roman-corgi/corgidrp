@@ -1,6 +1,5 @@
-#A file to test the non-linearity correction, including a comparison with the II&T pipeline
+#A file to test the kgain conversion
 import os
-import glob
 import numpy as np
 from corgidrp.mocks import create_default_headers
 import corgidrp.data as data
@@ -24,6 +23,7 @@ def test_kgain():
     
     kgain_open = data.KGain("kgain.fits")
     assert kgain_open.value == gain_value[0,0]
+    os.remove('kgain.fits')
     
     kgain_copy = kgain_open.copy()
         
@@ -34,20 +34,18 @@ def test_kgain():
     image2 = image1.copy()
     dataset= data.Dataset([image1, image2])
     
-    k_gain = data.KGain("kgain.fits")
-    os.remove('kgain.fits')
-    kgain = k_gain.value
+    k_gain = kgain.value
     
-    gain_dataset = l2a_to_l2b.convert_to_electrons(dataset, k_gain)
+    gain_dataset = l2a_to_l2b.convert_to_electrons(dataset, kgain)
     
-    assert np.mean(gain_dataset[0].data) == pytest.approx(kgain * np.mean(dataset[0].data), abs = 1e-4)
-    assert np.mean(gain_dataset[0].err) == pytest.approx(kgain * np.mean(dataset[0].err), abs = 1e-4)
+    assert np.mean(gain_dataset[0].data) == pytest.approx(k_gain * np.mean(dataset[0].data), abs = 1e-4)
+    assert np.mean(gain_dataset[0].err) == pytest.approx(k_gain * np.mean(dataset[0].err), abs = 1e-4)
     
     #test header updates
     assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
-    assert gain_dataset[0].ext_hdr["KGAIN"] == kgain
-    assert gain_dataset[0].err_hdr["KGAIN"] == kgain
+    assert gain_dataset[0].ext_hdr["KGAIN"] == k_gain
+    assert gain_dataset[0].err_hdr["KGAIN"] == k_gain
     assert("converted" in str(gain_dataset[0].ext_hdr["HISTORY"]))
     
 if __name__ == "__main__":
