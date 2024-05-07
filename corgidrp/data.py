@@ -549,7 +549,8 @@ class KGain(Image):
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
      
-    Attributes:
+    Attrs:
+        value: the getter of the kgain value
         _kgain (float): the value of kgain
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
