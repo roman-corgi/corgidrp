@@ -548,6 +548,8 @@ class KGain(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+     Attrs:
+        value (float): the value of kgain
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
 
@@ -584,6 +586,8 @@ class KGain(Image):
     def copy(self):
         """
         just return the reference to get the value field
+        Returns:
+           KGain: returns the copy
         """
         return self        
  
