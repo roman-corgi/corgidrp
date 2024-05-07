@@ -80,7 +80,7 @@ def convert_to_electrons(input_dataset, k_gain):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        k_gain(corgidrp.data.kgain: kgain calibration file
+        k_gain (corgidrp.data.KGain): KGain calibration file
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in electrons
