@@ -26,9 +26,10 @@ def test_kgain():
     os.remove('kgain.fits')
     
     kgain_copy = kgain_open.copy()
-        
     assert kgain_copy.value == gain_value[0,0]
- 
+    kgain_copy = kgain_open.copy(copy_data = False)
+    assert kgain_copy.value == gain_value[0,0]
+    
     # test convert_to_electrons
     image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
     image2 = image1.copy()

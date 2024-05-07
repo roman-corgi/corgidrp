@@ -544,12 +544,13 @@ class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
 
-     Args:
+    Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
-     Attrs:
-        value (float): the value of kgain
+     
+    Attributes:
+        _kgain (float): the value of kgain
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
 
@@ -582,15 +583,35 @@ class KGain(Image):
     @property
     def value(self):
         return self._kgain
-
-    def copy(self):
-        """
-        just return the reference to get the value field
-        Returns:
-           KGain: returns the copy
-        """
-        return self        
  
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this KGain file. including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            corgidrp.data.KGain: a copy of this KGain
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+        else:
+            new_data = self.data # this is just pointer referencing
+        new_kg = KGain(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+        
+        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
+        new_kg.filename = self.filename
+        new_kg.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_kg
+  
         
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
