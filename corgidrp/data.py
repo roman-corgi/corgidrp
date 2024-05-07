@@ -551,10 +551,49 @@ class NonLinearityCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
 
+class BAdPixelMap(Image):
+    """
+    Bad Pixel map
+
+     Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark file (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # if this is a new bad pixel map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new bad pixel map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this bad pixel map.")
+            self.ext_hdr['DATATYPE'] = 'BadPixelMap' # corgidrp specific keyword for saving to disk
+
+            # log all the data that went into making this dark
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Bad Pixel map created"
+
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+            self.filename = "{0}_bad_pixel_map.fits".format(orig_input_filename)
+
+
+        # double check that this is actually a dark file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'BadPixelMap':
+            raise ValueError("File that was loaded was not a BadPixelMap file.")
 
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
-              "NonLinearityCalibration" : NonLinearityCalibration }
+              "NonLinearityCalibration" : NonLinearityCalibration,
+              "BadPixelMap" : BadPixelMap }
 
 def autoload(filepath):
     """
