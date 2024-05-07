@@ -45,7 +45,7 @@ def test_dark_sub():
     assert np.mean(dark_frame.data) == pytest.approx(150, abs=1e-2)
     
     # check that the error is determined correctly
-    assert np.array_equal(np.std(dark_dataset.all_data, axis = 0)/np.sqrt(len(dark_dataset)), dark_frame.err)
+    assert np.array_equal(np.std(dark_dataset.all_data, axis = 0)/np.sqrt(len(dark_dataset)), dark_frame.err[0])
     
     # save dark
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
