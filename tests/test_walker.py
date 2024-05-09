@@ -58,7 +58,10 @@ def test_autoreducing():
     # check that the recipe is saved into the header.
     for frame in output_dataset:
         assert "RECIPE" in frame.ext_hdr
-
+        # test recipe was correctly written into the header
+        # do a string comparison, easiest way to check
+        hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
+        assert json.dumps(hdr_recipe) == json.dumps(recipe)
 if __name__ == "__main__":
     test_autoreducing()
 
