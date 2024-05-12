@@ -222,3 +222,26 @@ def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reli
     for area in areas:
         detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
+
+def get_rowreadtime_sec():
+    """
+    Get the value of readrowtime. The EMCCD is considered sensitive to the
+    effects of radiation damage and, if this becomes a problem, one of the
+    mitigation techniques would be to change the row read time to reduce the
+    impact of charge traps.
+ 
+    There’s no formal plan/timeline for this adjustment,  though it is possible
+    to change in the future should it need to.
+
+    Its default value is 223.5e-6 sec.
+
+    Args:
+        None
+
+    Returns:
+        Current value of rowreadtime in sec.
+
+    """ 
+    rowreadtime_sec = 223.5e-6
+
+    return rowreadtime_sec
