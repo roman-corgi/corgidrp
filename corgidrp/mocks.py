@@ -79,7 +79,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     dataset = data.Dataset(frames)
     return dataset
 
-def create_cr_dataset(filedir=None, numfiles=2,em_gain=2000,fwc = 4000, numCRs=5, plateau_length=10):
+def create_cr_dataset(filedir=None, numfiles=2,em_gain=20,fwc_em= 10000, fwc_pp=500, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
 
@@ -93,7 +93,9 @@ def create_cr_dataset(filedir=None, numfiles=2,em_gain=2000,fwc = 4000, numCRs=5
         corgidrp.data.Dataset:
             The simulated dataset
     """
-    dataset = create_nonlinear_dataset(filedir=filedir, numfiles=numfiles,em_gain=em_gain)
+    
+    fwc = np.min([fwc_em,em_gain*fwc_pp])
+    dataset = create_nonlinear_dataset(filedir=None, numfiles=numfiles,em_gain=em_gain)
 
     im_width = dataset.all_data.shape[-1]
 
@@ -107,21 +109,28 @@ def create_cr_dataset(filedir=None, numfiles=2,em_gain=2000,fwc = 4000, numCRs=5
         # Pick random locations to add a cosmic ray
         for x in range(numCRs):
             np.random.seed(123+x)
-            loc = np.random.uniform(0,im_width-1, size=2)
+            loc = np.round(np.random.uniform(0,im_width-1, size=2)).astype(int)
 
             # Add the CR plateau
-            tail_start = np.min(loc[1]+plateau_length,im_width)
-            dataset.all_data[i,loc[0],loc[1]:tail_start] = fwc
+            tail_start = np.min([loc[1]+plateau_length,im_width])
+            dataset.all_data[i,loc[0],loc[1]:tail_start] += fwc
 
-            if tail_start != im_width-1:
+            if tail_start < im_width-1:
                 tail_len = im_width-tail_start
-                cr_tail = [fwc/j for j in range(tail_len)]
-                dataset.all_data[i,loc[0],tail_start:] = cr_tail
+                cr_tail = [fwc/(j+1) for j in range(tail_len)]
+                dataset.all_data[i,loc[0],tail_start:] += cr_tail
 
+        # Add header kws
+        dataset[i].ext_hdr['FWC_EM'] = fwc_em
+        dataset[i].ext_hdr['FWC_PP'] = fwc_pp
+        
+        # Save frame if desired
+        if filedir is not None:
+            filepattern = "simcal_cosmics_{0:04d}.fits"
+            dataset[i].save(filedir=filedir, filename=filepattern.format(i))
 
     # TODO: Add ability to model needed parameters
     # TODO: Add cosmic ray model
-    # TODO: Add necessary extension header keywords
 
     return dataset
 
