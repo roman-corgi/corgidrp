@@ -26,6 +26,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     out_frames_data = []
     out_frames_err = []
     out_frames_dq = []
+    out_frames_bias = []
 
     # Place to save new error estimates to be added later via Image.add_error_term()
     new_err_list = []
@@ -87,19 +88,17 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         out_frames_data.append(image_bias_corrected)
         out_frames_err.append(image_err)
         out_frames_dq.append(image_dq)
+        out_frames_bias.append(bias[:,0]) # save 1D version of array
 
         # Update header with new frame dimensions
         frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
         frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
-        
-        # Save median bias measured in the header
-        frame.ext_hdr['MED_BIAS'] = np.median(bias)
-
     
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data)
     out_frames_err_arr = np.array(out_frames_err)
     out_frames_dq_arr = np.array(out_frames_dq)
+    out_frames_bias_arr = np.array(out_frames_bias, dtype=np.float32)
 
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
@@ -109,7 +108,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.data = out_frames_data_arr[i]
         frame.err = out_frames_err_arr[i]
         frame.dq = out_frames_dq_arr[i]
-
+        frame.bias = out_frames_bias_arr[i]
+        
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")
 

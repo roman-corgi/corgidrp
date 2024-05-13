@@ -165,22 +165,26 @@ class Image():
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         err (np.array): 2-D/3-D uncertainty data
         dq (np.array): 2-D data quality, 0: good, 1: bad
+        bias (np.array): 1-D bias data
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
+        bias_hdr (astropy.io.fits.Header): the bias extension header
 
     Attributes:
         data (np.array): 2-D data for this Image
         err (np.array): 2-D uncertainty
         dq (np.array): 2-D data quality
+        bias (np.array): 1-D bias data
         pri_hdr (astropy.io.fits.Header): primary header
         ext_hdr (astropy.io.fits.Header): image extension header. Generally this header will be edited/added to
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
+        bias_hdr (astropy.io.fits.Header): the bias extension header
         filename (str): the filename corresponding to this Image
         filedir (str): the file directory on disk where this image is to be/already saved.
         filepath (str): full path to the file on disk (if it exists)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, bias=None, err_hdr = None, dq_hdr = None, bias_hdr=None):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
@@ -215,6 +219,17 @@ class Image():
                     self.dq_hdr = hdulist[3].header
                 else:
                     self.dq = np.zeros(self.data.shape, dtype = int)
+
+                if bias is not None:
+                    if (np.shape(self.data)[0],) != np.shape(bias):
+                        raise ValueError("The shape of bias is {0} while we are expecting shape {1}".format(bias.shape, self.data.shape))
+                    self.bias = bias
+                # we assume that the bias extension is index 4 of hdulist
+                elif len(hdulist)>4:
+                    self.bias = hdulist[4].data
+                    self.bias_hdr = hdulist[4].header
+                else:
+                    self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -254,6 +269,13 @@ class Image():
             else:
                 self.dq = np.zeros(self.data.shape, dtype = int)
 
+            if bias is not None:
+                if (np.shape(self.data)[0],) != np.shape(bias):
+                    raise ValueError("The shape of bias is {0} while we are expecting shape {1}".format(bias.shape, self.data.shape))
+                self.bias = bias.astype(np.float32)
+            else:
+                self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
+
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
@@ -263,13 +285,28 @@ class Image():
             self.err_hdr = err_hdr
         if dq_hdr is not None:
             self.dq_hdr = dq_hdr
+        if bias_hdr is not None:
+            self.bias_hdr = bias_hdr
         if not hasattr(self, 'err_hdr'):
             self.err_hdr = fits.Header()
         self.err_hdr["EXTNAME"] = "ERR"
         if not hasattr(self, 'dq_hdr'):
             self.dq_hdr = fits.Header()
         self.dq_hdr["EXTNAME"] = "DQ"
-        # can do fancier things here if needed or storing more meta data
+        if not hasattr(self, 'bias_hdr'):
+            self.bias_hdr = fits.Header()
+        self.bias_hdr["EXTNAME"] = "BIAS"
+        
+        # discard individual errors if we aren't tracking them but multiple error terms are passed in
+        if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
+            num_errs = self.err.shape[0] - 1
+            # delete keywords specifying the error of each individual slice
+            for i in range(num_errs):
+                del self.err_hdr['Layer_{0}'.format(i + 2)]
+            self.err = self.err[:1] # only save the total err, preserve 3-D shape
+        self.err_hdr['TRK_ERRS'] = corgidrp.track_individual_errors # specify whether we are tracing errors
+
+
 
     # create this field dynamically
     @property
@@ -302,6 +339,10 @@ class Image():
 
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
+
+        biashdu = fits.ImageHDU(data=self.bias, header = self.bias_hdr)
+        hdulist.append(biashdu)
+
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
@@ -334,11 +375,14 @@ class Image():
             new_data = np.copy(self.data)
             new_err = np.copy(self.err)
             new_dq = np.copy(self.dq)
+            new_bias = np.copy(self.bias)
         else:
             new_data = self.data # this is just pointer referencing
             new_err = self.err
             new_dq = self.dq
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
+            new_bias = self.bias
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, bias=new_bias, 
+                        err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy(), bias_hdr = self.bias_hdr.copy())
 
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
@@ -364,25 +408,31 @@ class Image():
         """
         Add a layer of a specific additive uncertainty on the 3-dim error array extension
         and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name.
+        Update the error header and assign the error name. 
 
+        Only tracks individual errors if the "track_individual_errors" setting is set to True
+        in the configuration file
+        
         Args:
           input_error (np.array): 2-d error layer
           err_name (str): name of the uncertainty layer
         """
         if input_error.ndim != 2 or input_error.shape != self.data.shape:
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
-
-        #append new error as layer on 3D cube
-        self.err=np.append(self.err, [input_error], axis=0)
-
+        
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
-
-        layer = str(self.err.shape[0])
         self.err_hdr["Layer_1"] = "combined_error"
-        self.err_hdr["Layer_" + layer] = err_name
 
+        if corgidrp.track_individual_errors:
+            #append new error as layer on 3D cube
+            self.err=np.append(self.err, [input_error], axis=0)
+
+            layer = str(self.err.shape[0])
+            self.err_hdr["Layer_" + layer] = err_name    
+        
+        # record history since 2-D error map doesn't track individual terms
+        self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
 class Dark(Image):
     """
