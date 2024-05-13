@@ -120,14 +120,14 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, fwc_em, fwc_pp, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
+def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected. 
     TODO: Decide if we want this step to optionally compensate for them, or if that's a different step. 
     TODO: Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit 
     and tail rather than flagging the whole row.)
-    TODO: Decide how to assign different DQ values for different DQ reasons.
-
+    TODO: Decode incoming DQ mask to avoid double counting saturation/CR flags in case a similar custom step has been run beforehand.
+    TODO: Enable processing of datasets where each frame has a different saturation threshold (determined by em_gain, fwc_em,fwc_pp)
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
         fwc_em (float): 
@@ -145,37 +145,37 @@ def detect_cosmic_rays(input_dataset, fwc_em, fwc_pp, sat_thresh=0.99, plat_thre
     Returns:
         corgidrp.data.Dataset: a version of the input dataset of the input dataset where the cosmic rays have been identified. 
     """
+    sat_dqval = 32 # DQ value corresponding to full well saturation
+    cr_dqval = 128 # DQ value corresponding to CR hit
+
     # you should make a copy the dataset to start
     crmasked_dataset = input_dataset.copy()
 
     crmasked_cube = crmasked_dataset.all_data
 
-    # Assert that EM gain is the same for every frame in the dataset
-    emgain_arr = np.array([frame.ext_hdr['EMGAIN'] for frame in crmasked_dataset])
-    if len(emgain_arr.unique) > 1:
-        raise ValueError("Not all Frames in the Dataset have the same EMGAIN.")
-    em_gain = emgain_arr[0]
-
+    # Assert that full well capacity is the same for every frame in the dataset
+    fwc_arr = np.array([(frame.ext_hdr['EMGAIN'], frame.ext_hdr['FWC_PP'], frame.ext_hdr['FWC_EM']) for frame in crmasked_dataset])
+    if len(fwc_arr.unique) > 1:
+        raise ValueError("Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and EMGAIN).")
+    
     # pick the FWC that will get saturated first, depending on gain
-    sat_fwc = sat_thresh*min(fwc_em, fwc_pp*em_gain)
+    sat_fwc = sat_thresh*min(crmasked_dataset[0].ext_hdr['EMGAIN'] * crmasked_dataset[0].ext_hdr['FWC_PP'], crmasked_dataset[0].ext_hdr['FWC_EM'])
 
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
-    m1 = (crmasked_cube >= sat_fwc)
+    m1 = (crmasked_cube >= sat_fwc) * sat_dqval
+    
     # run remove_cosmics() with fwc=fwc_em since tails only come from
     # saturation in the gain register --> this is mask 2
     m2 = flag_cosmics(image=crmasked_cube,
-                    fwc=fwc_em,
+                    fwc=crmasked_dataset[0].ext_hdr['FWC_EM'],
                     sat_thresh=sat_thresh,
                     plat_thresh=plat_thresh,
                     cosm_filter=cosm_filter,
-                    )
+                    ) * cr_dqval
 
-    # OR the two masks together
-    mask =  np.logical_or(m1, m2)
-
-    # OR the new mask with the all_dq mask
-    new_all_dq = np.logical_or(crmasked_dataset.all_dq, mask)
+    # add the two masks to the all_dq mask
+    new_all_dq = crmasked_dataset.all_dq + m1 + m2
 
     history_msg = "Cosmic ray mask created."
 
