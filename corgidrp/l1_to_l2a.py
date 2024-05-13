@@ -1,5 +1,5 @@
 # A file that holds the functions that transmogrify l1 data to l2a data 
-from corgidrp.detector import get_relgains, slice_section, detector_areas
+from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics
 import numpy as np
 
 
@@ -120,20 +120,69 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset):
+def detect_cosmic_rays(input_dataset, fwc_em, fwc_pp, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
     """
-    
-    Detects cosmis rays in a given images. Updates the DQ to reflect the pixels that are affected. 
+    Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected. 
     TODO: Decide if we want this step to optionally compensate for them, or if that's a different step. 
+    TODO: Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit 
+    and tail rather than flagging the whole row.)
+    TODO: Decide how to assign different DQ values for different DQ reasons.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
-
+        fwc_em (float): 
+            Detector EM gain register full well capacity (DN).
+        fwc_pp (float): 
+            Detector image area per-pixel full well capacity (DN).
+        fsat_thresh (float): 
+            Multiplication factor for fwc that determines saturated cosmic
+            pixels. Interval 0 to 1, defaults to 0.99.
+        plat_thresh (float): 
+            Multiplication factor for fwc that determines edges of cosmic
+            plateau. Interval 0 to 1, defaults to 0.85
+        cosm_filter (int): 
+            Minimum length in pixels of cosmic plateus to be identified. Defaults to 2
     Returns:
         corgidrp.data.Dataset: a version of the input dataset of the input dataset where the cosmic rays have been identified. 
     """
+    # you should make a copy the dataset to start
+    crmasked_dataset = input_dataset.copy()
 
-    return None
+    crmasked_cube = crmasked_dataset.all_data
+
+    # Assert that EM gain is the same for every frame in the dataset
+    emgain_arr = np.array([frame.ext_hdr['EMGAIN'] for frame in crmasked_dataset])
+    if len(emgain_arr.unique) > 1:
+        raise ValueError("Not all Frames in the Dataset have the same EMGAIN.")
+    em_gain = emgain_arr[0]
+
+    # pick the FWC that will get saturated first, depending on gain
+    sat_fwc = sat_thresh*min(fwc_em, fwc_pp*em_gain)
+
+    # threshold the frame to catch any values above sat_fwc --> this is
+    # mask 1
+    m1 = (crmasked_cube >= sat_fwc)
+    # run remove_cosmics() with fwc=fwc_em since tails only come from
+    # saturation in the gain register --> this is mask 2
+    m2 = flag_cosmics(image=crmasked_cube,
+                    fwc=fwc_em,
+                    sat_thresh=sat_thresh,
+                    plat_thresh=plat_thresh,
+                    cosm_filter=cosm_filter,
+                    )
+
+    # OR the two masks together
+    mask =  np.logical_or(m1, m2)
+
+    # OR the new mask with the all_dq mask
+    new_all_dq = np.logical_or(crmasked_dataset.all_dq, mask)
+
+    history_msg = "Cosmic ray mask created."
+
+    # update the output dataset with this new dark subtracted data and update the history
+    crmasked_dataset.update_after_processing_step(history_msg, new_all_dq=new_all_dq)
+
+    return crmasked_dataset
 
 def correct_nonlinearity(input_dataset, non_lin_correction):
     """
