@@ -79,7 +79,51 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     dataset = data.Dataset(frames)
     return dataset
 
+def create_cr_dataset(filedir=None, numfiles=2,em_gain=2000,fwc = 4000, numCRs=5, plateau_length=10):
+    """
+    Create simulated non-linear data with cosmic rays to test CR detection.
 
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
+        em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
+        num_CRs (int): The number of CR hits to inject. Defaults to 5.
+
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset
+    """
+    dataset = create_nonlinear_dataset(filedir=filedir, numfiles=numfiles,em_gain=em_gain)
+
+    im_width = dataset.all_data.shape[-1]
+
+    # Overwrite dataset with a poisson distribution
+    np.random.seed(123)
+    dataset.all_data[:,:,:] = np.random.poisson(lam=150,size=dataset.all_data.shape).astype(np.float64)
+
+    # Loop over images in dataset
+    for i in range(len(dataset.all_data)):
+
+        # Pick random locations to add a cosmic ray
+        for x in range(numCRs):
+            np.random.seed(123+x)
+            loc = np.random.uniform(0,im_width-1, size=2)
+
+            # Add the CR plateau
+            tail_start = np.min(loc[1]+plateau_length,im_width)
+            dataset.all_data[i,loc[0],loc[1]:tail_start] = fwc
+
+            if tail_start != im_width-1:
+                tail_len = im_width-tail_start
+                cr_tail = [fwc/j for j in range(tail_len)]
+                dataset.all_data[i,loc[0],tail_start:] = cr_tail
+
+
+    # TODO: Add ability to model needed parameters
+    # TODO: Add cosmic ray model
+    # TODO: Add necessary extension header keywords
+
+    return dataset
 
 def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     """
@@ -125,7 +169,6 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     dataset = data.Dataset(frames)
 
     return dataset
-
 
 def create_default_headers(obstype="SCI"):
     """
