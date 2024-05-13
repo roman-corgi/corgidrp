@@ -301,7 +301,17 @@ class Image():
         if not hasattr(self, 'bias_hdr'):
             self.bias_hdr = fits.Header()
         self.bias_hdr["EXTNAME"] = "BIAS"
-        # can do fancier things here if needed or storing more meta data
+        
+        # discard individual errors if we aren't tracking them but multiple error terms are passed in
+        if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
+            num_errs = self.err.shape[0] - 1
+            # delete keywords specifying the error of each individual slice
+            for i in range(num_errs):
+                del self.err_hdr['Layer_{0}'.format(i + 2)]
+            self.err = self.err[:1] # only save the total err, preserve 3-D shape
+        self.err_hdr['TRK_ERRS'] = corgidrp.track_individual_errors # specify whether we are tracing errors
+
+
 
     # create this field dynamically
     @property
@@ -403,25 +413,31 @@ class Image():
         """
         Add a layer of a specific additive uncertainty on the 3-dim error array extension
         and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name.
+        Update the error header and assign the error name. 
 
+        Only tracks individual errors if the "track_individual_errors" setting is set to True
+        in the configuration file
+        
         Args:
           input_error (np.array): 2-d error layer
           err_name (str): name of the uncertainty layer
         """
         if input_error.ndim != 2 or input_error.shape != self.data.shape:
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
-
-        #append new error as layer on 3D cube
-        self.err=np.append(self.err, [input_error], axis=0)
-
+        
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
-
-        layer = str(self.err.shape[0])
         self.err_hdr["Layer_1"] = "combined_error"
-        self.err_hdr["Layer_" + layer] = err_name
 
+        if corgidrp.track_individual_errors:
+            #append new error as layer on 3D cube
+            self.err=np.append(self.err, [input_error], axis=0)
+
+            layer = str(self.err.shape[0])
+            self.err_hdr["Layer_" + layer] = err_name    
+        
+        # record history since 2-D error map doesn't track individual terms
+        self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
 class Dark(Image):
     """
