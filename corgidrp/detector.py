@@ -1,9 +1,9 @@
 # Place to put detector-related utility functions
 
 import numpy as np
-from scipy import interpolate
 import corgidrp.data as data
-
+from scipy import interpolate
+from astropy.time import Time
 
 def create_dark_calib(dark_dataset):
     """
@@ -223,7 +223,7 @@ def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reli
         detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
 
-def get_rowreadtime_sec():
+def get_rowreadtime_sec(datetime=Time('2026-12-01 00:00:00', scale='utc'):
     """
     Get the value of readrowtime. The EMCCD is considered sensitive to the
     effects of radiation damage and, if this becomes a problem, one of the
@@ -236,12 +236,25 @@ def get_rowreadtime_sec():
     Its default value is 223.5e-6 sec.
 
     Args:
-        None
+        datetime (astropy Time object): Observation's starting date. Its default
+        value is sometime during the Roman mission.
 
     Returns:
-        Current value of rowreadtime in sec.
+        rowreadtime (float): Current value of rowreadtime in sec.
 
     """ 
-    rowreadtime_sec = 223.5e-6
+    # Launch datetime (should we store it somewhere else?)
+    datetime_launch = Time('2026-10-01 00:00:00', scale='utc')
+    # Date well in the future to always fall in this case, unless rowreadtime
+    # gets updated. One may add more datetime_# values to keep track of changes.
+    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
+    
+    if datetime < datetime_launch:
+        raise ValueError('The observation datetime cannot be before launch.')
+    elif datetime < datetime_1:
+        rowreadtime_sec = 223.5e-6
+    else:
+        raise ValueError('The observation datetime cannot be later than the' + \
+            ' end of the mission')
 
     return rowreadtime_sec
