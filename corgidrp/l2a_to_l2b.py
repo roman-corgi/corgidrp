@@ -46,7 +46,7 @@ def dark_subtraction(input_dataset, dark_frame):
     
     # propagate the error of the dark frame
     if hasattr(dark_frame, "err"):
-        darksub_dataset.add_error_term(dark_frame.err, "dark_error")   
+        darksub_dataset.add_error_term(dark_frame.err[0], "dark_error")   
     else:
         raise Warning("no error attribute in the dark frame")
     
