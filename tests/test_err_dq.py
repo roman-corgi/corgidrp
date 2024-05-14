@@ -3,8 +3,11 @@ import pytest
 import numpy as np
 import astropy.io.fits as fits
 import corgidrp
+import corgidrp.mocks as mocks
+import corgidrp.detector as detector
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
+import corgidrp.caldb as caldb
 
 
 data = np.ones([1024,1024]) * 2
@@ -181,6 +184,39 @@ def test_read_many_errors_notrack():
     with pytest.raises(KeyError):
         assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
+
+def test_err_array_sizes():
+    '''
+    Check that we're robust to 2D error arrays
+
+    Creates a dark calibration and then forces the error array to be 2D
+
+    Makes sure that we're robust to that. 
+    '''
+
+    ##### Create a master Dark #####
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
+    dark_frame = detector.create_dark_calib(dark_dataset)
+
+    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    dark_filename = "sim_dark_calib.fits"
+    if not os.path.exists(calibdir):
+            os.mkdir(calibdir)
+    dark_frame.save(filedir=calibdir, filename=dark_filename)
+
+    
+    ##### Scan the caldb ##### - This tests for previous bug that darks weren't in the right format. 
+    testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
+    testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
+    testcaldb.scan_dir_for_new_entries(calibdir)
+
+    ##### Force it to be 2D ##### - This tests to maks sure we're robust to 2D error arrays in general 
+    dark_frame.err = np.ones(dark_frame.data.shape) 
+    dark_frame.save(filedir=calibdir, filename=dark_filename)
+    testcaldb.scan_dir_for_new_entries(calibdir)
     
 def teardown_module():
     """
@@ -193,12 +229,15 @@ def teardown_module():
 
     corgidrp.track_individual_errors = old_err_tracking
 
+
 # for debugging. does not run with pytest!!
 if __name__ == '__main__':
+    test_err_array_sizes()
     test_err_dq_creation()
     test_err_dq_copy()
     test_add_error_term()
     test_err_dq_dataset()
     test_get_masked_data()
+    
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))
