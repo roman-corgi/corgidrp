@@ -553,13 +553,16 @@ class NonLinearityCalibration(Image):
 
 class BadPixelMap(Image):
     """
-    Bad Pixel map
+    Class for bad pixel map. The bad pixel map indicates which pixels are hot
+    pixels and thus unreliable. Note: These bad pixels are bad due to inherent
+    nonidealities in the detector (applicable to any frame taken) and are
+    separate from pixels marked per frame as contaminated by cosmic rays.
 
      Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark file (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this bad pixel map (required only if raw 2D data is passed in)
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         # run the image class contructor
@@ -573,7 +576,7 @@ class BadPixelMap(Image):
                 raise ValueError("This appears to be a new bad pixel map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this bad pixel map.")
             self.ext_hdr['DATATYPE'] = 'BadPixelMap' # corgidrp specific keyword for saving to disk
 
-            # log all the data that went into making this dark
+            # log all the data that went into making this bad pixel map
             self._record_parent_filenames(input_dataset)
 
             # add to history
@@ -585,7 +588,7 @@ class BadPixelMap(Image):
             self.filename = "{0}_bad_pixel_map.fits".format(orig_input_filename)
 
 
-        # double check that this is actually a dark file that got read in
+        # double check that this is actually a bad pixel map that got read in
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")

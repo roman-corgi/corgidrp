@@ -25,7 +25,7 @@ column_names = [
     "EXCAMT",
 ]
 
-labels = {data.Dark: "Dark", data.NonLinearityCalibration: "NonLinearityCalibration", }
+labels = {data.Dark: "Dark", data.NonLinearityCalibration: "NonLinearityCalibration", data.BadPixelMap: "BadPixelMap", }
 
 
 class CalDB:
