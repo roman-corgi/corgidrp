@@ -58,6 +58,38 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
+def flat_division(input_dataset, master_flat):
+    """
+    
+    Divide the dataset by the master flat field. 
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        master_flat (corgidrp.data.Flat): a master flat field to divide by
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
+    """
+    
+     # copy of the dataset
+    flatcal_dataset = input_dataset.copy()
+    
+    #Divide by the master flat
+    flatcal_cube = flatcal_dataset.all_data/master_flat.data
+    
+    # propagate the error of the master flat frame # Check this error prop 
+    if hasattr(master_flat, "err"):
+        flatcal_dataset.add_error_term(master_flat.err, "masterflat_error")   
+    else:
+        raise Warning("no error attribute in the master flat")
+    
+    history_msg = "Flat calibration done using master_flat".format(master_flat.filename)
+
+    # update the output dataset with this new flat calibrated data and update the history
+    flatcal_dataset.update_after_processing_step(history_msg, new_all_data=flatcal_cube)
+
+    return flatcal_dataset
+
 def frame_select(input_dataset):
     """
     
@@ -103,37 +135,7 @@ def cti_correction(input_dataset):
 
     return None
 
-def flat_division(input_dataset, master_flat):
-    """
-    
-    Divide the dataset by the master flat field. 
 
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        master_flat (corgidrp.data.Flat): a master flat field to divide by
-
-    Returns:
-        corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
-    """
-    
-     # copy of the dataset
-    flatcal_dataset = input_dataset.copy()
-    
-    #Divide by the master flat
-    flatcal_cube = flatcal_dataset.all_data/master_flat.data
-    
-    # propagate the error of the master flat frame # Check this error prop 
-    if hasattr(master_flat, "err"):
-        flatcal_dataset.add_error_term(master_flat.err, "masterflat_error")   
-    else:
-        raise Warning("no error attribute in the master flat")
-    
-    history_msg = "Flat calibration done using master_flat".format(master_flat.filename)
-
-    # update the output dataset with this new flat calibrated data and update the history
-    flatcal_dataset.update_after_processing_step(history_msg, new_all_data=flatcal_cube)
-
-    return flatcal_dataset
 
 
 def correct_bad_pixels(input_dataset):
