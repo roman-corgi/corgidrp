@@ -43,7 +43,7 @@ def create_master_flat(flat_dataset):
                          ext_hdr=flat_dataset[0].ext_hdr.copy(), input_dataset=flat_dataset)
     
     # determine the standard error of the mean: stddev/sqrt(n_frames)
-    master_flat.err = np.nanstd(flat_dataset.all_data, axis=0)
+    master_flat.err = np.nanstd(flat_dataset.all_data, axis=0)/np.sqrt(len(flat_dataset))
 
     return master_flat
 

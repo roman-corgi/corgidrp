@@ -451,7 +451,7 @@ class Masterflat(Image):
             self._record_parent_filenames(input_dataset)
 
             # add to history
-            #self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
+            self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
