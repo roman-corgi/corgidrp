@@ -133,7 +133,7 @@ def detect_cosmic_rays(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset of the input dataset where the cosmic rays have been identified. 
     """
 
-    return None
+    return input_dataset
 
 def correct_nonlinearity(input_dataset, non_lin_correction):
     """
@@ -165,3 +165,32 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
     linearized_dataset.update_after_processing_step(history_msg, new_all_data=linearized_cube)
 
     return linearized_dataset
+
+def update_to_l2a(input_dataset):
+    """
+    Updates the data level to L2a. Only works on L1 data. 
+
+    Currently only checks that data is at the L1 level
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L1-level)
+
+    Returns:
+        corgidrp.data.Dataset: same dataset now at L2-level
+    """
+    # check that we are running this on L1 data
+    for orig_frame in input_dataset:
+        if orig_frame.ext_hdr['DATA_LEVEL'] != "L1":
+            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'] != "L1")
+            raise ValueError(err_msg)
+
+    # we aren't altering the data
+    updated_dataset = input_dataset.copy(copy_data=False)
+
+    for frame in updated_dataset:
+        frame.ext_hdr['DATA_LEVEL'] = "L2a"
+
+    history_msg = "Updated Data Level to L2a"
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset
