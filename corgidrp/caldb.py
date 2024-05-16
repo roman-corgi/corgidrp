@@ -25,7 +25,7 @@ column_names = [
     "EXCAMT",
 ]
 
-labels = {data.Dark: "Dark", data.NonLinearityCalibration: "NonLinearityCalibration", }
+labels = {data.Dark: "Dark", data.NonLinearityCalibration: "NonLinearityCalibration", data.BadPixelMap: "BadPixelMap", }
 
 
 class CalDB:
@@ -227,14 +227,17 @@ class CalDB:
         # downselect to only calibs of this type
         calibdf = self._db[self._db["Type"] == dtype_label]
 
-        # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
-        options = calibdf.loc[
-            (
-                (calibdf["EXPTIME"] == frame_dict["EXPTIME"])
-                & (calibdf["NAXIS1"] == frame_dict["NAXIS1"])
-                & (calibdf["NAXIS2"] == frame_dict["NAXIS2"])
-            )
-        ]
+        if dtype_label in ["Dark"]:
+            # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
+            options = calibdf.loc[
+                (
+                    (calibdf["EXPTIME"] == frame_dict["EXPTIME"])
+                    & (calibdf["NAXIS1"] == frame_dict["NAXIS1"])
+                    & (calibdf["NAXIS2"] == frame_dict["NAXIS2"])
+                )
+            ]
+        else:
+            options = calibdf
 
         # select the one closest in time
         result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
