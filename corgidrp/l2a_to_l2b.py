@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
 import numpy as np
+import corgidrp.detector as detector
 
 def add_photon_noise(input_dataset):
     """
