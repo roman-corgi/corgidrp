@@ -223,7 +223,7 @@ def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reli
         detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
 
-def get_rowreadtime_sec(datetime=Time('2026-12-01 00:00:00', scale='utc'):
+def get_rowreadtime_sec(datetime=Time('2026-12-01 00:00:00', scale='utc')):
     """
     Get the value of readrowtime. The EMCCD is considered sensitive to the
     effects of radiation damage and, if this becomes a problem, one of the
@@ -237,20 +237,21 @@ def get_rowreadtime_sec(datetime=Time('2026-12-01 00:00:00', scale='utc'):
 
     Args:
         datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime during the Roman mission.
+        value is sometime between the first collection of ground data (Full
+        Functional Tests) and the duration of the Roman Coronagraph mission.
 
     Returns:
         rowreadtime (float): Current value of rowreadtime in sec.
 
     """ 
-    # Launch datetime (should we store it somewhere else?)
-    datetime_launch = Time('2026-10-01 00:00:00', scale='utc')
+    # IIT datetime
+    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
     # Date well in the future to always fall in this case, unless rowreadtime
     # gets updated. One may add more datetime_# values to keep track of changes.
     datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
     
-    if datetime < datetime_launch:
-        raise ValueError('The observation datetime cannot be before launch.')
+    if datetime < datetime_iit:
+        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
     elif datetime < datetime_1:
         rowreadtime_sec = 223.5e-6
     else:
