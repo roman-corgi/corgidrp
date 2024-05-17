@@ -118,27 +118,39 @@ def flat_division(input_dataset, master_flat):
 
     return None
 
-def correct_bad_pixels(input_dataset):
+def desmear(input_dataset):
     """
-    
-    Compute bad pixel map and correct for bad pixels. 
 
-    MMB Notes: 
-        - We'll likely want to be able to accept an external bad pixel map, either 
-        from the CalDB or input by a user. 
-        - We may want to accept just a list of bad pixels from a user too, thus 
-        saving them the trouble of actually making their own map. 
-        - We may want flags to decide which pixels in the DQ we correct. We may 
-        not want to correct everything in the DQ extension
-        - Different bad pixels in the DQ may be corrected differently.
-
+    Desmear data frames.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with bad pixels corrected
+        corgidrp.data.Dataset: a version of the input dataset with desmear applied
+
     """
 
-    return None
+    data = input_dataset.copy()
+    data_cube = data.all_data
+
+    rowreadtime_sec = detector.get_rowreadtime_sec()
+
+    for i in range(data_cube.shape[0]):
+        exptime_sec = float(datacube[i].ext_hdr['EXPTIME'])
+        smear = np.zeros_like(data_cube[i])
+        m = len(smear)
+        for r in range(m):
+            columnsum = 0
+            for s in range(r+1):
+                columnsum = columnsum + rowreadtime_sec/exptime_sec*((1 
+                + rowreadtime_sec/exptime_sec)**((s+1)-(s+1)-1))*data_cube[i,s,:]
+            smear[r,:] = columnsum
+        data_cube[i] -= smear
+   
+    history_msg = "Desmear applied to data"
+    data.update_after_processing_step(history_msg, new_all_data=data_cube)
+
+    return data
+
 
