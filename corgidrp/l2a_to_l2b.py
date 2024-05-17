@@ -118,10 +118,10 @@ def flat_division(input_dataset, master_flat):
 
     return None
 
-def correct_bad_pixels(input_dataset):
+def correct_bad_pixels(input_dataset, bp_mask):
     """
     
-    Compute bad pixel map and correct for bad pixels. 
+    Correct for bad pixels and pixels affected by CR. 
 
     MMB Notes: 
         - We'll likely want to be able to accept an external bad pixel map, either 
@@ -132,13 +132,35 @@ def correct_bad_pixels(input_dataset):
         not want to correct everything in the DQ extension
         - Different bad pixels in the DQ may be corrected differently.
 
-
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        bp_mask (corgidrp.data.BadPixelMap): Bad-pixel mask flagging all bad pixels
+            in that frame. Must be 0 (good) or 1 (bad) at every pixel.
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with bad pixels corrected
+        corgidrp.data.Dataset: a version of the input dataset with bad detector
+        pixels and cosmic rays replaced by 0s
+ 
     """
 
-    return None
+    data = input_dataset.copy()
+    data_cube = data.all_data
+    dq_cube = data.all_dq
 
+    for i in range(data_cube.shape[0]):
+        # load CR mask
+        cr_mask = dq_cube[i]
+        # combine CR and BP masks
+        bp_cr_mask = (cr_mask+bp_mask).astype(int)
+        # mask affected pixels with NaN (if L2a are float type)
+        bp = np.where(bp_cr_mask != 0)
+        data_cube[i, bp[0], bp[1]] = 0
+        dq_cube[i] = bp_cr_mask
+
+    history_msg = "removed pixels affected by cosmic rays and bad pixels"
+    data.update_after_processing_step(history_msg, new_all_data=data_cube,
+        new_all_dq=dq_cube)
+
+    breakpoint() 
+
+    return data
