@@ -127,6 +127,7 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     and tail rather than just flagging the whole row.)
     TODO: Decode incoming DQ mask to avoid double counting saturation/CR flags in case a similar custom step has been run beforehand.
     TODO: Enable processing of datasets where each frame has a different saturation threshold (determined by em_gain, fwc_em,fwc_pp)
+    
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
         sat_thresh (float): 
