@@ -79,7 +79,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     dataset = data.Dataset(frames)
     return dataset
 
-def create_cr_dataset(filedir=None, numfiles=2,em_gain=20,fwc_em= 10000, fwc_pp=500, numCRs=5, plateau_length=10):
+def create_cr_dataset(filedir=None, numfiles=2,em_gain=500,fwc_em= 90000, fwc_pp=10000, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
 
@@ -128,9 +128,6 @@ def create_cr_dataset(filedir=None, numfiles=2,em_gain=20,fwc_em= 10000, fwc_pp=
         if filedir is not None:
             filepattern = "simcal_cosmics_{0:04d}.fits"
             dataset[i].save(filedir=filedir, filename=filepattern.format(i))
-
-    # TODO: Add ability to model needed parameters
-    # TODO: Add cosmic ray model
 
     return dataset
 

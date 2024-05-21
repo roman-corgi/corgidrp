@@ -296,9 +296,9 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     mask = np.zeros(cube.shape, dtype=int)
 
     # Do a cheap prefilter for rows that don't have anything bright
-    max_rows = np.max(cube, axis=-1)
-    ji_streak_rows = (max_rows >= sat_thresh*fwc).nonzero()[:-1]
-
+    max_rows = np.max(cube, axis=-1,keepdims=True)
+    ji_streak_rows = np.transpose(np.array((max_rows >= sat_thresh*fwc).nonzero()[:-1]))
+    
     for j,i in ji_streak_rows:
         row = cube[j,i]
 
