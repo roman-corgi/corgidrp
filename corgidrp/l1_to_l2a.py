@@ -139,7 +139,8 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
             Minimum length in pixels of cosmic plateus to be identified. Defaults to 2
     
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset of the input dataset where the cosmic rays have been identified. 
+        crmasked_dataset (corgidrp.data.Dataset): 
+            A version of the input dataset of the input dataset where the cosmic rays have been identified. 
     """
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
