@@ -223,14 +223,14 @@ def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reli
         detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
 
-def get_rowreadtime_sec(datetime=Time('2026-12-01 00:00:00', scale='utc')):
+def get_rowreadtime_sec(datetime=None):
     """
     Get the value of readrowtime. The EMCCD is considered sensitive to the
     effects of radiation damage and, if this becomes a problem, one of the
     mitigation techniques would be to change the row read time to reduce the
     impact of charge traps.
  
-    There’s no formal plan/timeline for this adjustment,  though it is possible
+    There’s no formal plan/timeline for this adjustment, though it is possible
     to change in the future should it need to.
 
     Its default value is 223.5e-6 sec.
@@ -244,6 +244,11 @@ def get_rowreadtime_sec(datetime=Time('2026-12-01 00:00:00', scale='utc')):
         rowreadtime (float): Current value of rowreadtime in sec.
 
     """ 
+    # Some datetime between the first collection of ground data (Full
+    # Functional Tests) and the duration of the Roman Coronagraph mission.
+    if datetime is None:
+        datetime = Time('2024-03-01 00:00:00', scale='utc')
+
     # IIT datetime
     datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
     # Date well in the future to always fall in this case, unless rowreadtime
