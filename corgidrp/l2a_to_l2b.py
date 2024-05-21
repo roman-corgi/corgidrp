@@ -46,7 +46,7 @@ def dark_subtraction(input_dataset, dark_frame):
     
     # propagate the error of the dark frame
     if hasattr(dark_frame, "err"):
-        darksub_dataset.add_error_term(dark_frame.err, "dark_error")   
+        darksub_dataset.add_error_term(dark_frame.err[0], "dark_error")   
     else:
         raise Warning("no error attribute in the dark frame")
     
@@ -54,7 +54,7 @@ def dark_subtraction(input_dataset, dark_frame):
     history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube)
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, header_entries = {"BUNIT":"photoelectrons"})
 
     return darksub_dataset
 
@@ -87,6 +87,45 @@ def convert_to_electrons(input_dataset):
     """
 
     return None 
+
+def em_gain_division(input_dataset):
+    """
+    
+    Convert the data from detected EM electrons to detected electrons by dividing the commanded em_gain. 
+    Update the change in units in the header [detected electrons].
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with the data in units "detected electrons"
+    """
+    
+    # you should make a copy the dataset to start
+    emgain_dataset = input_dataset.copy()
+    emgain_cube = emgain_dataset.all_data
+    emgain_error = emgain_dataset.all_err
+    
+    unique = True
+    emgain = emgain_dataset[0].ext_hdr["CMDGAIN"]
+    for i in range(len(emgain_dataset)): 
+        if emgain != emgain_dataset[i].ext_hdr["CMDGAIN"]:
+            unique = False
+            emgain = emgain_dataset[i].ext_hdr["CMDGAIN"] 
+        emgain_cube[i] /= emgain
+        emgain_error[i] /= emgain
+    
+    if unique:
+        history_msg = "data divided by em_gain {0}".format(str(emgain))
+    else:
+        history_msg = "data divided by non-unique em_gain"
+
+    # update the output dataset with this em_gain divided data and update the history
+    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
+
+    return emgain_dataset
+    
+    
 
 def cti_correction(input_dataset):
     """

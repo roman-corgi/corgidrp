@@ -23,6 +23,7 @@ def create_dark_calib(dark_dataset):
     
     # determine the standard error of the mean: stddev/sqrt(n_frames)
     new_dark.err = np.nanstd(dark_dataset.all_data, axis=0)/np.sqrt(len(dark_dataset))
+    new_dark.err = new_dark.err.reshape((1,)+new_dark.err.shape) #Get it into the right dimensions
 
     return new_dark
 

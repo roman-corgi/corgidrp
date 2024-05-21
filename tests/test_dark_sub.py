@@ -45,7 +45,7 @@ def test_dark_sub():
     assert np.mean(dark_frame.data) == pytest.approx(150, abs=1e-2)
     
     # check that the error is determined correctly
-    assert np.array_equal(np.std(dark_dataset.all_data, axis = 0)/np.sqrt(len(dark_dataset)), dark_frame.err)
+    assert np.array_equal(np.std(dark_dataset.all_data, axis = 0)/np.sqrt(len(dark_dataset)), dark_frame.err[0])
     
     # save dark
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
@@ -69,8 +69,10 @@ def test_dark_sub():
     assert(np.mean(darkest_dataset.all_err) == pytest.approx(np.mean(dark_frame.err), abs = 1e-2))
     print("mean of all data:", np.mean(darkest_dataset.all_data))
     print("mean of all errors:", np.mean(darkest_dataset.all_err))
+    assert darkest_dataset[0].ext_hdr["BUNIT"] == "photoelectrons"
+    assert darkest_dataset[0].err_hdr["BUNIT"] == "photoelectrons"
     print(darkest_dataset[0].ext_hdr)
-
+    
     corgidrp.track_individual_errors = old_err_tracking
     
 
