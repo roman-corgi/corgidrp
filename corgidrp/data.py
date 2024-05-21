@@ -82,7 +82,7 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
-    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None):
+    def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None):
         """
         Updates the dataset after going through a processing step
 
@@ -91,6 +91,7 @@ class Dataset():
             new_all_data (np.array): (optional) Array of new data. Needs to be the same shape as `all_data`
             new_all_err (np.array): (optional) Array of new err. Needs to be the same shape as `all_err` except of second dimension
             new_all_dq (np.array): (optional) Array of new dq. Needs to be the same shape as `all_dq`
+            header_entries (dict): (optional) a dictionary {} of ext_hdr and err_hdr entries to add or update
         """
         # update data if necessary
         if new_all_data is not None:
@@ -106,11 +107,15 @@ class Dataset():
                 raise ValueError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))
             self.all_dq[:] = new_all_dq # specific operation overwrites the existing data rather than changing pointers
 
-        # update history
+        # update history and header entries
         for img in self.frames:
             img.ext_hdr['HISTORY'] = history_entry
-
-
+            if header_entries:
+                for key, value in header_entries.items():
+                    img.ext_hdr[key] = value
+                    img.err_hdr[key] = value
+                    
+ 
     def copy(self, copy_data=True):
         """
         Make a copy of this dataset, including all data and headers.
@@ -206,9 +211,11 @@ class Image():
                 elif len(hdulist)>2:
                     self.err = hdulist[2].data
                     self.err_hdr = hdulist[2].header
+                    if self.err.ndim == 2:
+                        self.err = self.err.reshape((1,)+self.err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
-
+           
                 if dq is not None:
                     if np.shape(self.data) != np.shape(dq):
                         raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
@@ -551,9 +558,52 @@ class NonLinearityCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
 
+class BadPixelMap(Image):
+    """
+    Class for bad pixel map. The bad pixel map indicates which pixels are hot
+    pixels and thus unreliable. Note: These bad pixels are bad due to inherent
+    nonidealities in the detector (applicable to any frame taken) and are
+    separate from pixels marked per frame as contaminated by cosmic rays.
+
+     Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this bad pixel map (required only if raw 2D data is passed in)
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # if this is a new bad pixel map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new bad pixel map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this bad pixel map.")
+            self.ext_hdr['DATATYPE'] = 'BadPixelMap' # corgidrp specific keyword for saving to disk
+
+            # log all the data that went into making this bad pixel map
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Bad Pixel map created"
+
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+            self.filename = "{0}_bad_pixel_map.fits".format(orig_input_filename)
+
+
+        # double check that this is actually a bad pixel map that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'BadPixelMap':
+            raise ValueError("File that was loaded was not a BadPixelMap file.")
+
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
-              "NonLinearityCalibration" : NonLinearityCalibration }
+              "NonLinearityCalibration" : NonLinearityCalibration,
+              "BadPixelMap" : BadPixelMap }
 
 def autoload(filepath):
     """
