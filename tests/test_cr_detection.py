@@ -21,25 +21,23 @@ def find_plateaus_iit(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     pixels immediately neighboring the cosmic plateau are very often affected
     by the cosmic hit as well.
 
-    Parameters
-    ----------
-    streak_row : array_like, float
-        Row with possible cosmics.
-    fwc : float
-        Full well capacity of detector *in DNs*.  Note that this may require a
-        conversion as FWCs are usually specified in electrons, but the image
-        is in DNs at this point.
-    sat_thresh : float
-        Multiplication factor for fwc that determines saturated cosmic pixels.
-    plat_thresh : float
-        Multiplication factor for fwc that determines edges of cosmic plateu.
-    cosm_filter : int
-        Minimum length in pixels of cosmic plateus to be identified.
+    Args:
+        streak_row (float):
+            Row with possible cosmics.
+        fwc (float): 
+            Full well capacity of detector *in DNs*.  Note that this may require a
+            conversion as FWCs are usually specified in electrons, but the image
+            is in DNs at this point.
+        sat_thresh (float): 
+            Multiplication factor for fwc that determines saturated cosmic pixels.
+        plat_thresh (float): 
+            Multiplication factor for fwc that determines edges of cosmic plateu.
+        cosm_filter (int): 
+            Minimum length in pixels of cosmic plateus to be identified.
 
-    Returns
-    -------
-    i_beg : array_like, int
-        Index of plateau beginnings, or None if there is no plateau.
+    Returns:
+        i_beg (array_like, int): 
+            Index of plateau beginnings, or None if there is no plateau.
 
     """
     # Lowpass filter row to differentiate plateaus from standalone pixels
@@ -72,25 +70,23 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter):
     Use cosm_filter to determine the smallest plateaus (in pixels) that will
     be identified. A reasonable value is 2.
 
-    Parameters
-    ----------
-    image : array_like, float
-        Image area of frame (bias of zero).
-    fwc : float
-        Full well capacity of detector *in DNs*.  Note that this may require a
-        conversion as FWCs are usually specified in electrons, but the image
-        is in DNs at this point.
-    sat_thresh : float
-        Multiplication factor for fwc that determines saturated cosmic pixels.
-    plat_thresh : float
-        Multiplication factor for fwc that determines edges of cosmic plateu.
-    cosm_filter : int
-        Minimum length in pixels of cosmic plateus to be identified.
+    Args:
+        image (array_like, float): 
+            Image area of frame (bias of zero).
+        fwc (float): 
+            Full well capacity of detector *in DNs*.  Note that this may require a
+            conversion as FWCs are usually specified in electrons, but the image
+            is in DNs at this point.
+        sat_thresh (float): 
+            Multiplication factor for fwc that determines saturated cosmic pixels.
+        plat_thresh (float): 
+            Multiplication factor for fwc that determines edges of cosmic plateu.
+        cosm_filter (int): 
+            Minimum length in pixels of cosmic plateus to be identified.
 
-    Returns
-    -------
-    mask : array_like, int
-        Mask for pixels that have been set to zero.
+    Returns:
+        mask (array_like, int): 
+            Mask for pixels that have been set to zero.
 
     Notes
     -----
@@ -192,6 +188,9 @@ def test_crs_zeros_frame():
         raise Exception(f'Operating on all zero frames did not return all zero dq mask.')
 
 def test_correct_headers():
+    """
+    Asserts "FWC_EM", "FWC_PP", and "SAT_FWC" are tracked in the frame headers.
+    """
     # create simulated data
     dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
     output_dataset = detect_cosmic_rays(dataset)
@@ -207,7 +206,9 @@ def test_correct_headers():
             raise Exception("'SAT_FWC' missing from frame header.")
 
 def test_saturation_calc():
-    
+    """
+    Asserts that FWC saturation threshold is calculated correctly.
+    """
     sat_thresh = 0.99
 
     # fwc_em = fwc_pp * em_gain
@@ -245,7 +246,9 @@ def test_saturation_calc():
             raise Exception("Saturation full-well capacity calculation incorrectwhen fwc_em > fwc_pp * em_gain.")
 
 def test_fwc_assertions():
-
+    """
+    Asserts that the check for consistent EM_GAIN, FWC_PP, FWC_EM in the dataset frames is done correctly.
+    """
     # Different FWC_EM
     fwc_ems = [90000,10000]
     fwc_pps = [500,500]

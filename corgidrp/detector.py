@@ -34,6 +34,7 @@ def dark_subtraction(input_dataset, dark_frame):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
         dark_frame (corgidrp.data.Dark): a Dark frame to model the dark current
+    
     Returns:
         corgidrp.data.Dataset: a dark subtracted version of the input dataset
     """

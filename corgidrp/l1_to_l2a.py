@@ -123,18 +123,13 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected. 
-    TODO: Decide if we want this step to optionally compensate for them, or if that's a different step. 
-    TODO: Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit 
-    and tail rather than flagging the whole row.)
+    TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit 
+    and tail rather than just flagging the whole row.)
     TODO: Decode incoming DQ mask to avoid double counting saturation/CR flags in case a similar custom step has been run beforehand.
     TODO: Enable processing of datasets where each frame has a different saturation threshold (determined by em_gain, fwc_em,fwc_pp)
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
-        fwc_em (float): 
-            Detector EM gain register full well capacity (DN).
-        fwc_pp (float): 
-            Detector image area per-pixel full well capacity (DN).
-        fsat_thresh (float): 
+        sat_thresh (float): 
             Multiplication factor for fwc that determines saturated cosmic
             pixels. Interval 0 to 1, defaults to 0.99.
         plat_thresh (float): 
@@ -142,6 +137,7 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
             plateau. Interval 0 to 1, defaults to 0.85
         cosm_filter (int): 
             Minimum length in pixels of cosmic plateus to be identified. Defaults to 2
+    
     Returns:
         corgidrp.data.Dataset: a version of the input dataset of the input dataset where the cosmic rays have been identified. 
     """
@@ -171,6 +167,7 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwc) * sat_dqval
+
     
     # run remove_cosmics() with fwc=fwc_em since tails only come from
     # saturation in the gain register --> this is mask 2
