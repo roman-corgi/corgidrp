@@ -154,12 +154,19 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     crmasked_cube = crmasked_dataset.all_data
 
     # Assert that full well capacity is the same for every frame in the dataset
-    fwc_arr = np.array([(frame.ext_hdr['EMGAIN'], frame.ext_hdr['FWC_PP'], frame.ext_hdr['FWC_EM']) for frame in crmasked_dataset])
-    if len(fwc_arr.unique) > 1:
+    emgain_arr = np.array([frame.ext_hdr['EMGAIN'] for frame in crmasked_dataset])
+    fwcpp_arr = np.array([frame.ext_hdr['FWC_PP'] for frame in crmasked_dataset])
+    fwcem_arr = np.array([frame.ext_hdr['FWC_EM'] for frame in crmasked_dataset])
+    if (len(np.unique(emgain_arr)) > 1) or (len(np.unique(fwcpp_arr)) > 1) or (len(np.unique(fwcem_arr)) > 1):
+        print(f'emgain_arr: {emgain_arr}')
+        print(f'fwcpp_arr: {fwcpp_arr}')
+        print(f'fwcem_arr: {fwcem_arr}')
         raise ValueError("Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and EMGAIN).")
     
     # pick the FWC that will get saturated first, depending on gain
     sat_fwc = sat_thresh*min(crmasked_dataset[0].ext_hdr['EMGAIN'] * crmasked_dataset[0].ext_hdr['FWC_PP'], crmasked_dataset[0].ext_hdr['FWC_EM'])
+    for frame in crmasked_dataset:
+        frame.ext_hdr['SAT_FWC'] = sat_fwc
 
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
@@ -167,7 +174,7 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     
     # run remove_cosmics() with fwc=fwc_em since tails only come from
     # saturation in the gain register --> this is mask 2
-    m2 = flag_cosmics(image=crmasked_cube,
+    m2 = flag_cosmics(cube=crmasked_cube,
                     fwc=crmasked_dataset[0].ext_hdr['FWC_EM'],
                     sat_thresh=sat_thresh,
                     plat_thresh=plat_thresh,

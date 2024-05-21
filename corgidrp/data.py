@@ -551,7 +551,6 @@ class NonLinearityCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
 
-
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration }
