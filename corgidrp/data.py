@@ -437,7 +437,7 @@ class Masterflat(Image):
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         # run the image class contructor
-        #super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # if this is a new master flat, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new masterflat
@@ -454,7 +454,6 @@ class Masterflat(Image):
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
             orig_input_filename = input_dataset[0].filename.split(".fits")[0]
             self.filename = "{0}_masterflat.fits".format(orig_input_filename)
 
