@@ -16,7 +16,7 @@ def test_flat_div():
     # check that simulated data folder exists, and create if not
     datadir = os.path.join(os.path.dirname(__file__), "simflatdata")
     if not os.path.exists(datadir):
-    os.mkdir(datadir)
+        os.mkdir(datadir)
     
     mocks.create_flat_calib_files(filedir=datadir)
     
@@ -40,7 +40,7 @@ def test_flat_div():
     flat_filename = "sim_flat_calib.fits"
     if not os.path.exists(calibdir):
         os.mkdir(calibdir)
-        flat_frame.save(filedir=calibdir, filename=flat_filename)  
+    flat_frame.save(filedir=calibdir, filename=flat_filename)  
     
     ###### perform flat division
     # load in the masterflat
