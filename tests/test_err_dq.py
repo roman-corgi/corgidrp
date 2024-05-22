@@ -1,8 +1,13 @@
 import os
+import pytest
 import numpy as np
 import astropy.io.fits as fits
+import corgidrp
+import corgidrp.mocks as mocks
+import corgidrp.detector as detector
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
+import corgidrp.caldb as caldb
 
 
 data = np.ones([1024,1024]) * 2
@@ -19,10 +24,16 @@ errhd["CASE"] = "test"
 dqhd = fits.Header()
 dqhd["CASE"] = "test"
 
+old_err_tracking = corgidrp.track_individual_errors
+
 def test_err_dq_creation():
     """
-     test the initialization of error and dq attributes of the Image class including saving and loading
+    test the initialization of error and dq attributes of the Image class including saving and loading
+
+    Test assuming track individual error terms is on
     """
+    corgidrp.track_individual_errors = True
+
     image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd)
     assert hasattr(image1, "err")
     assert hasattr(image1, "dq")
@@ -65,7 +76,11 @@ def test_err_dq_creation():
 def test_err_dq_copy():
     """
     test the copying of the err and dq attributes
+
+    Runs assuming tracking individual errors
     """
+    corgidrp.track_individual_errors = True
+
     image2 = Image('test_image2.fits')
     image3 = image2.copy()
     assert np.array_equal(image3.data, image2.data)
@@ -78,7 +93,11 @@ def test_err_dq_copy():
 def test_add_error_term():
     """
     test the add_error_term function
+
+    Runs assuming tracking individual errors
     """
+    corgidrp.track_individual_errors = True
+
     image1 = Image('test_image1.fits')
     image1.add_error_term(err1, "error_noid")
     assert image1.err[0,0,0] == err1[0,0]
@@ -97,8 +116,12 @@ def test_add_error_term():
  
 def test_err_dq_dataset():
     """
-    test the behavior of the err and data arrays in the dataset      
+    test the behavior of the err and data arrays in the dataset     
+
+    Runs assuming tracking individual errors 
     """
+    corgidrp.track_individual_errors = True
+
     dataset = Dataset(["test_image1.fits", "test_image2.fits"])
     assert np.array_equal(dataset[0].data, dataset[1].data)
     assert np.array_equal(dataset[0].err, dataset[1].err)
@@ -123,12 +146,98 @@ def test_get_masked_data():
     assert masked_data.mean()==2
     assert masked_data.sum()==image2.data.sum()-2
     
+
+def test_err_adderr_notrack():
+    """
+    test the initialization of error and adding errors when we are not tracking
+    individual errors. There should always only be a single 2-D map.
+    """
+    corgidrp.track_individual_errors = False
+
+    image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd)
+    assert hasattr(image1, "err")
+    assert image1.data.shape == data.shape
+    assert image1.data.shape == image1.err.shape[-2:]
+    assert image1.err.shape == (1, 1024, 1024)
+    #test the initial error and dq headers
+    assert hasattr(image1, "err_hdr")
+
+    image1.add_error_term(err1, "error_noid")
+    assert image1.err[0,0,0] == err1[0,0]
+    image1.add_error_term(err2, "error_nuts")
+    assert image1.err.shape == (1,1024,1024)
+    assert image1.err[0,0,0] == np.sqrt(err1[0,0]**2 + err2[0,0]**2)
+
+
+def test_read_many_errors_notrack():
+    """
+    Check that we can successfully discard errors when reading in a frame with multiple errors
     
+    """
+    corgidrp.track_individual_errors = False
+
+    image_test = Image('test_image0.fits')
+    assert image_test.err.shape == (1,1024,1024)
+    assert image_test.err_hdr["Layer_1"] == "combined_error"
+    with pytest.raises(KeyError):
+        assert image_test.err_hdr["Layer_2"] == "error_noid"
+    with pytest.raises(KeyError):
+        assert image_test.err_hdr["Layer_3"] == "error_nuts"
+
+
+def test_err_array_sizes():
+    '''
+    Check that we're robust to 2D error arrays
+
+    Creates a dark calibration and then forces the error array to be 2D
+
+    Makes sure that we're robust to that. 
+    '''
+
+    ##### Create a master Dark #####
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    dark_dataset = mocks.create_dark_calib_files(filedir=datadir)
+    dark_frame = detector.create_dark_calib(dark_dataset)
+
+    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    dark_filename = "sim_dark_calib.fits"
+    if not os.path.exists(calibdir):
+            os.mkdir(calibdir)
+    dark_frame.save(filedir=calibdir, filename=dark_filename)
+
+    
+    ##### Scan the caldb ##### - This tests for previous bug that darks weren't in the right format. 
+    testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
+    testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
+    testcaldb.scan_dir_for_new_entries(calibdir)
+
+    ##### Force it to be 2D ##### - This tests to maks sure we're robust to 2D error arrays in general 
+    dark_frame.err = np.ones(dark_frame.data.shape) 
+    dark_frame.save(filedir=calibdir, filename=dark_filename)
+    testcaldb.scan_dir_for_new_entries(calibdir)
+    
+def teardown_module():
+    """
+    Runs automatically at the end. ONLY IN PYTEST
+
+    Removes new FITS files and restores track individual error setting.
+    """
+    for i in range(3):
+        os.remove('test_image{0}.fits'.format(i))
+
+    corgidrp.track_individual_errors = old_err_tracking
+
+
+# for debugging. does not run with pytest!!
 if __name__ == '__main__':
+    test_err_array_sizes()
     test_err_dq_creation()
     test_err_dq_copy()
     test_add_error_term()
     test_err_dq_dataset()
     test_get_masked_data()
+    
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))
