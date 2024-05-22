@@ -1,6 +1,7 @@
 import glob
 import os
 
+import corgidrp
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
@@ -12,6 +13,8 @@ from astropy.io import fits
 from pathlib import Path
 
 from pytest import approx
+
+old_err_tracking = corgidrp.track_individual_errors
 
 # Expected output image shapes
 shapes = {
@@ -151,8 +154,6 @@ class Metadata(object):
     
 # EMCCDFrame code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_emccd_frame.py#L9
 
-# EMCCDFrame code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_emccd_frame.py#L9
-
 class EMCCDFrameException(Exception):
     """Exception class for emccd_frame module."""
 
@@ -287,16 +288,26 @@ def test_prescan_sub():
         for return_full_frame in [True, False]:
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            corgidrp_result = output_dataset[0].data
-            iit_result = iit_frames[0] if return_full_frame else iit_images[0]
-
-            if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
-                raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
-
+            # Check that output shape is as expected
             output_shape = output_dataset[0].data.shape
             if output_shape != shapes[obstype][return_full_frame]:
                 raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
-    
+            
+            # Check that bias extension has the right size, dtype
+            for i, frame in enumerate(output_dataset):
+                
+                if frame.bias.shape != (frame.data.shape[0],):
+                    raise Exception(f"Bias of frame {i} has shape {frame.bias.shape} when we expected {(frame.data.shape[0],)}.")
+                
+                if frame.bias.dtype != np.float32:
+                    raise Exception(f"Bias of frame {i} does not have datatype np.float32.")
+            
+            # Check that corgiDRP and II&T pipeline produce the same result
+            corgidrp_result = output_dataset[0].data
+            iit_result = iit_frames[0] if return_full_frame else iit_images[0]
+            if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
+                raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
+
             # check that data, err, and dq arrays are consistently modified
             output_dataset.all_data[0, 0, 0] = 0.
             if output_dataset[0].data[0, 0] != 0. :
@@ -320,26 +331,7 @@ def test_prescan_sub():
 
             output_dataset[0].dq[0,0] = 1.
             if output_dataset.all_dq[0,0,0] != 1. :
-                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
-            
-            # Plot for debugging
-            # import matplotlib.pyplot as plt
-            # fig,axes = plt.subplots(1,3,figsize=(10,4))
-
-            # im0 = axes[0].imshow(corgidrp_result,cmap='seismic')
-            # plt.colorbar(im0)
-            # axes[0].set_title('corgidrp result')
-
-            # im1 = axes[1].imshow(iit_result,cmap='seismic')
-            # plt.colorbar(im1)
-            # axes[1].set_title('II&T result')
-
-            # im2 = axes[2].imshow(corgidrp_result-iit_result,cmap='seismic')
-            # plt.colorbar(im2)
-            # axes[2].set_title('Difference')
-
-            # plt.tight_layout()
-            # plt.show()
+                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")           
 
 def test_bias_zeros_frame():
     """Verify prescan_biassub does not break for a frame of all zeros 
@@ -355,7 +347,7 @@ def test_bias_zeros_frame():
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
 
         # Overwrite data with zeros
-        dataset.all_data[:,:,:] = 0
+        dataset.all_data[:,:,:] = 0.
 
         for return_full_frame in [True, False]:
             
@@ -366,6 +358,10 @@ def test_bias_zeros_frame():
             
             if np.max(np.abs(output_dataset.all_err)) > tol:
                 raise Exception(f'Operating on all zero frame did not return all zero error.')           
+            
+            for frame in dataset:
+                if np.max(np.abs(frame.bias)) > tol:
+                    raise Exception(f'Operating on all zero frame did not return all zero bias.')
 
 def test_bias_hvoff():
     """
@@ -375,7 +371,8 @@ def test_bias_hvoff():
     The error tolerance is set by the standard error on the median of 
     the Gaussian noise, not the mean.
     """
-    
+    corgidrp.track_individual_errors = True # needs to run with error tracking on
+
     # Set tolerance
     tol = 1.
     err_tol = 0.02
@@ -400,14 +397,16 @@ def test_bias_hvoff():
             
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
 
-            # Compare median bias measurement to expectation
-            if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
+            # Compare bias measurement to expectation
+            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
             
             # Compare error to expected standard error of the median
             std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols']) * np.sqrt(np.pi / 2.)
             if np.max(np.abs(output_dataset[0].err[1]) - std_err) > err_tol:
                 raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution: \n{np.max(np.abs(output_dataset[0].err[1]))} when we expect {std_err} +- {err_tol} ')
+
+    corgidrp.track_individual_errors = old_err_tracking
 
 def test_bias_hvon():
     """
@@ -446,7 +445,7 @@ def test_bias_hvon():
 
         for return_full_frame in [True, False]:            
             output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
-            if np.abs(output_dataset[0].ext_hdr['MED_BIAS'] - bval) > tol:
+            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
 
 def test_bias_uniform_value():
@@ -514,6 +513,7 @@ def test_bias_offset():
 
             if not np.nanmax(np.abs(image_slice_0 - image_slice_10)) < tol:
                 raise Exception(f"Bias offset subtraction did not produce the correct result. absmax value : {np.nanmax(np.abs(image_slice_0 - image_slice_10))}")
+
 
 if __name__ == "__main__":
     test_prescan_sub()
