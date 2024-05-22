@@ -642,7 +642,7 @@ class BadPixelMap(Image):
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
-              "BadPixelMap" : BadPixelMap
+              "BadPixelMap" : BadPixelMap,
               "Masterflat" : Masterflat}
 
 
