@@ -135,10 +135,11 @@ def desmear(input_dataset):
     data = input_dataset.copy()
     data_cube = data.all_data
 
-    rowreadtime_sec = detector.get_rowreadtime_sec()
+    ##rowreadtime_sec = detector.get_rowreadtime_sec()
+    rowreadtime_sec = 223.5e-6
 
     for i in range(data_cube.shape[0]):
-        exptime_sec = float(datacube[i].ext_hdr['EXPTIME'])
+        exptime_sec = float(data[i].ext_hdr['EXPTIME'])
         smear = np.zeros_like(data_cube[i])
         m = len(smear)
         for r in range(m):
