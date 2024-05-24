@@ -243,70 +243,24 @@ def test_saturation_calc():
     cr_dataset = detect_cosmic_rays(dataset,sat_thresh=sat_thresh)
     for frame in cr_dataset:
         if not frame.ext_hdr['SAT_FWC'] == fwc_pp * em_gain * sat_thresh:
-            raise Exception("Saturation full-well capacity calculation incorrectwhen fwc_em > fwc_pp * em_gain.")
+            raise Exception("Saturation full-well capacity calculation incorrect when fwc_em > fwc_pp * em_gain.")
+        
+    # fwc_em > fwc_pp * em_gain for first frame, fwc_em < fwc_pp * em_gain for second frame
+    fwc_em = [90000,50000]
+    fwc_pp = [500,90]
+    em_gain = [100,1000]
+    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10,em_gain=em_gain[0],
+                                      fwc_pp=fwc_pp[0],fwc_em=fwc_em[0])
+    dataset[1].ext_hdr['FWC_EM'] = fwc_em[1]
+    dataset[1].ext_hdr['FWC_PP'] = fwc_pp[1]
+    dataset[1].ext_hdr['CMDGAIN'] = em_gain[1]
+    cr_dataset = detect_cosmic_rays(dataset,sat_thresh=sat_thresh)
+    for frame in cr_dataset:
+        if not frame.ext_hdr['SAT_FWC'] == 49500. :
+            raise Exception("Saturation full-well capacity calculation incorrect when frames have different fwc_em, fwc_pp, em_gain.")
 
-def test_fwc_assertions():
-    """
-    Asserts that the check for consistent CMDGAIN, FWC_PP, FWC_EM in the dataset frames is done correctly.
-    """
-    # Different FWC_EM
-    fwc_ems = [90000,10000]
-    fwc_pps = [500,500]
-    em_gains = [1000,1000]
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
-    for i in range(len(dataset)):
-        dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
-        dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
-    
-    with pytest.raises(ValueError) as excinfo:  
-        cr_dataset = detect_cosmic_rays(dataset)
-    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).":
-        raise Exception("FWC calculation did not catch different values for FWC_EM")
 
-    # Different FWC_PP
-    fwc_ems = [90000,90000]
-    fwc_pps = [500,100]
-    em_gains = [1000,1000]
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
-    for i in range(len(dataset)):
-        dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
-        dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
-    
-    with pytest.raises(ValueError) as excinfo:  
-        cr_dataset = detect_cosmic_rays(dataset)
-    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).":
-        raise Exception("FWC calculation did not catch different values for FWC_PP")
-
-    # Different EM_GAIN
-    fwc_ems = [90000,90000]
-    fwc_pps = [500,500]
-    em_gains = [1000,500]
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
-    for i in range(len(dataset)):
-        dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
-        dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
-    
-    with pytest.raises(ValueError) as excinfo:  
-        cr_dataset = detect_cosmic_rays(dataset)
-    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).":
-        raise Exception("FWC calculation did not catch different values for CMDGAIN")
-    
-    # All same
-    fwc_ems = [90000,90000]
-    fwc_pps = [500,500]
-    em_gains = [1000,1000]
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
-    for i in range(len(dataset)):
-        dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
-        dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
-    
-    cr_dataset = detect_cosmic_rays(dataset)
-    
-
+      
 ## Useful constructs from JPL II&T unit tests:
 
 fwc = 90000
@@ -489,7 +443,6 @@ if __name__ == "__main__":
     test_crs_zeros_frame()
     test_correct_headers()
     test_saturation_calc()
-    test_fwc_assertions()
     test_mask()
     test_i_begs()
     test_left_edge_i_begs()
