@@ -57,8 +57,8 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
-        #Add the EMGAIN to the headers
-        exthdr['EMGAIN'] = em_gain
+        #Add the CMDGAIN to the headers
+        exthdr['CMDGAIN'] = em_gain
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])

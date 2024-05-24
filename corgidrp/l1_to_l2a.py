@@ -152,17 +152,17 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     crmasked_cube = crmasked_dataset.all_data
 
     # Assert that full well capacity is the same for every frame in the dataset
-    emgain_arr = np.array([frame.ext_hdr['EMGAIN'] for frame in crmasked_dataset])
+    emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
     fwcpp_arr = np.array([frame.ext_hdr['FWC_PP'] for frame in crmasked_dataset])
     fwcem_arr = np.array([frame.ext_hdr['FWC_EM'] for frame in crmasked_dataset])
     if (len(np.unique(emgain_arr)) > 1) or (len(np.unique(fwcpp_arr)) > 1) or (len(np.unique(fwcem_arr)) > 1):
         print(f'emgain_arr: {emgain_arr}')
         print(f'fwcpp_arr: {fwcpp_arr}')
         print(f'fwcem_arr: {fwcem_arr}')
-        raise ValueError("Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and EMGAIN).")
+        raise ValueError("Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).")
     
     # pick the FWC that will get saturated first, depending on gain
-    sat_fwc = sat_thresh*min(crmasked_dataset[0].ext_hdr['EMGAIN'] * crmasked_dataset[0].ext_hdr['FWC_PP'], crmasked_dataset[0].ext_hdr['FWC_EM'])
+    sat_fwc = sat_thresh*min(crmasked_dataset[0].ext_hdr['CMDGAIN'] * crmasked_dataset[0].ext_hdr['FWC_PP'], crmasked_dataset[0].ext_hdr['FWC_EM'])
     for frame in crmasked_dataset:
         frame.ext_hdr['SAT_FWC'] = sat_fwc
 
@@ -207,10 +207,10 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
     #Apply the non-linearity correction to the data
     linearized_cube = linearized_dataset.all_data
     #Check to see if EM gain is in the header, if not, raise an error
-    if "EMGAIN" not in linearized_dataset[0].ext_hdr.keys():
+    if "CMDGAIN" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
-    em_gain = linearized_dataset[0].ext_hdr["EMGAIN"] #NOTE THIS REQUIRES THAT THE EM GAIN IS MEASURED ALREADY
+    em_gain = linearized_dataset[0].ext_hdr["CMDGAIN"] #NOTE THIS REQUIRES THAT THE EM GAIN IS MEASURED ALREADY
 
     for i in range(linearized_cube.shape[0]):
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)

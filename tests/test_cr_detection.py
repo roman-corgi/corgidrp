@@ -247,7 +247,7 @@ def test_saturation_calc():
 
 def test_fwc_assertions():
     """
-    Asserts that the check for consistent EM_GAIN, FWC_PP, FWC_EM in the dataset frames is done correctly.
+    Asserts that the check for consistent CMDGAIN, FWC_PP, FWC_EM in the dataset frames is done correctly.
     """
     # Different FWC_EM
     fwc_ems = [90000,10000]
@@ -257,7 +257,7 @@ def test_fwc_assertions():
     for i in range(len(dataset)):
         dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
         dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['EM_GAIN'] = em_gains[i]
+        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
     
     with pytest.raises(ValueError) as excinfo:  
         cr_dataset = detect_cosmic_rays(dataset)
@@ -272,11 +272,11 @@ def test_fwc_assertions():
     for i in range(len(dataset)):
         dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
         dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['EM_GAIN'] = em_gains[i]
+        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
     
     with pytest.raises(ValueError) as excinfo:  
         cr_dataset = detect_cosmic_rays(dataset)
-    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and EMGAIN).":
+    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).":
         raise Exception("FWC calculation did not catch different values for FWC_PP")
 
     # Different EM_GAIN
@@ -287,12 +287,12 @@ def test_fwc_assertions():
     for i in range(len(dataset)):
         dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
         dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['EMGAIN'] = em_gains[i]
+        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
     
     with pytest.raises(ValueError) as excinfo:  
         cr_dataset = detect_cosmic_rays(dataset)
-    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and EMGAIN).":
-        raise Exception("FWC calculation did not catch different values for EMGAIN")
+    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).":
+        raise Exception("FWC calculation did not catch different values for CMDGAIN")
     
     # All same
     fwc_ems = [90000,90000]
@@ -302,7 +302,7 @@ def test_fwc_assertions():
     for i in range(len(dataset)):
         dataset[i].ext_hdr['FWC_EM'] = fwc_ems[i]
         dataset[i].ext_hdr['FWC_PP'] = fwc_pps[i]
-        dataset[i].ext_hdr['EMGAIN'] = em_gains[i]
+        dataset[i].ext_hdr['CMDGAIN'] = em_gains[i]
     
     cr_dataset = detect_cosmic_rays(dataset)
     
