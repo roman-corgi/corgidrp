@@ -261,7 +261,7 @@ def test_fwc_assertions():
     
     with pytest.raises(ValueError) as excinfo:  
         cr_dataset = detect_cosmic_rays(dataset)
-    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and EMGAIN).":
+    if str(excinfo.value) != "Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).":
         raise Exception("FWC calculation did not catch different values for FWC_EM")
 
     # Different FWC_PP
