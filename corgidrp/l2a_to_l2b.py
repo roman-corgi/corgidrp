@@ -20,7 +20,6 @@ def add_photon_noise(input_dataset):
         frame.add_error_term(np.sqrt(frame.data), "photnoise_error")
     
     new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
-                
     history_msg = "photon noise propagated to error map"
     # update the output dataset
     phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
@@ -174,8 +173,7 @@ def desmear(input_dataset):
     data = input_dataset.copy()
     data_cube = data.all_data
 
-    ##rowreadtime_sec = detector.get_rowreadtime_sec()
-    rowreadtime_sec = 223.5e-6
+    rowreadtime_sec = detector.get_rowreadtime_sec()
 
     for i in range(data_cube.shape[0]):
         exptime_sec = float(data[i].ext_hdr['EXPTIME'])
@@ -185,7 +183,7 @@ def desmear(input_dataset):
             columnsum = 0
             for s in range(r+1):
                 columnsum = columnsum + rowreadtime_sec/exptime_sec*((1 
-                + rowreadtime_sec/exptime_sec)**((s+1)-(s+1)-1))*data_cube[i,s,:]
+                + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*data_cube[i,s,:]
             smear[r,:] = columnsum
         data_cube[i] -= smear
    
