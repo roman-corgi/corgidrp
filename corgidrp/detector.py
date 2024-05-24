@@ -1,8 +1,9 @@
 # Place to put detector-related utility functions
 
 import numpy as np
-from scipy import interpolate
 import corgidrp.data as data
+from scipy import interpolate
+from astropy.time import Time
 from scipy.ndimage import median_filter
 
 def create_dark_calib(dark_dataset):
@@ -247,6 +248,48 @@ def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reli
         detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
 
+def get_rowreadtime_sec(datetime=None):
+    """
+    Get the value of readrowtime. The EMCCD is considered sensitive to the
+    effects of radiation damage and, if this becomes a problem, one of the
+    mitigation techniques would be to change the row read time to reduce the
+    impact of charge traps.
+ 
+    There’s no formal plan/timeline for this adjustment, though it is possible
+    to change in the future should it need to.
+
+    Its default value is 223.5e-6 sec.
+
+    Args:
+        datetime (astropy Time object): Observation's starting date. Its default
+        value is sometime between the first collection of ground data (Full
+        Functional Tests) and the duration of the Roman Coronagraph mission.
+
+    Returns:
+        rowreadtime (float): Current value of rowreadtime in sec.
+
+    """ 
+    # Some datetime between the first collection of ground data (Full
+    # Functional Tests) and the duration of the Roman Coronagraph mission.
+    if datetime is None:
+        datetime = Time('2024-03-01 00:00:00', scale='utc')
+
+    # IIT datetime
+    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
+    # Date well in the future to always fall in this case, unless rowreadtime
+    # gets updated. One may add more datetime_# values to keep track of changes.
+    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
+    
+    if datetime < datetime_iit:
+        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
+    elif datetime < datetime_1:
+        rowreadtime_sec = 223.5e-6
+    else:
+        raise ValueError('The observation datetime cannot be later than the' + \
+            ' end of the mission')
+
+    return rowreadtime_sec
+
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     """Identify and remove saturated cosmic ray hits and tails.
 
@@ -353,3 +396,4 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
         return i_beg
     else:
         return None
+    
