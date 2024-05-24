@@ -126,7 +126,6 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit 
     and tail rather than just flagging the whole row.)
     TODO: Decode incoming DQ mask to avoid double counting saturation/CR flags in case a similar custom step has been run beforehand.
-    TODO: Enable processing of datasets where each frame has a different saturation threshold (determined by em_gain, fwc_em,fwc_pp)
     
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
@@ -155,30 +154,33 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
     fwcpp_arr = np.array([frame.ext_hdr['FWC_PP'] for frame in crmasked_dataset])
     fwcem_arr = np.array([frame.ext_hdr['FWC_EM'] for frame in crmasked_dataset])
-    if (len(np.unique(emgain_arr)) > 1) or (len(np.unique(fwcpp_arr)) > 1) or (len(np.unique(fwcem_arr)) > 1):
-        print(f'emgain_arr: {emgain_arr}')
-        print(f'fwcpp_arr: {fwcpp_arr}')
-        print(f'fwcem_arr: {fwcem_arr}')
-        raise ValueError("Not all Frames in the Dataset have the same FWC_EM, FWC_PP, and CMDGAIN).")
     
     # pick the FWC that will get saturated first, depending on gain
-    sat_fwc = sat_thresh*min(crmasked_dataset[0].ext_hdr['CMDGAIN'] * crmasked_dataset[0].ext_hdr['FWC_PP'], crmasked_dataset[0].ext_hdr['FWC_EM'])
-    for frame in crmasked_dataset:
-        frame.ext_hdr['SAT_FWC'] = sat_fwc
+    possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
+    sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
+    
+    for i,frame in enumerate(crmasked_dataset):
+        frame.ext_hdr['SAT_FWC'] = sat_fwcs[i]
+
+    sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
 
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
-    m1 = (crmasked_cube >= sat_fwc) * sat_dqval
+    m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
 
-    
     # run remove_cosmics() with fwc=fwc_em since tails only come from
     # saturation in the gain register --> this is mask 2
-    m2 = flag_cosmics(cube=crmasked_cube,
-                    fwc=crmasked_dataset[0].ext_hdr['FWC_EM'],
-                    sat_thresh=sat_thresh,
-                    plat_thresh=plat_thresh,
-                    cosm_filter=cosm_filter,
-                    ) * cr_dqval
+    # Do a for loop since it's calling a for loop in the sub-routine anyway
+    # and can't handle different 'FWC_EM's for different frames.
+    m2 = np.zeros_like(crmasked_cube)
+
+    for i in range(len(crmasked_cube)): 
+        m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
+                        fwc=crmasked_dataset[i].ext_hdr['FWC_EM'],
+                        sat_thresh=sat_thresh,
+                        plat_thresh=plat_thresh,
+                        cosm_filter=cosm_filter,
+                        ) * cr_dqval
 
     # add the two masks to the all_dq mask
     new_all_dq = crmasked_dataset.all_dq + m1 + m2
