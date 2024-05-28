@@ -33,7 +33,7 @@ def divide_by_exptime(input_dataset):
     all_err_new = np.zeros(data.all_err.shape)
 
     for i in range(len(data.frames)):
-        exposure_time = float(data.frames[i].ext_hdr['EXPTIME']) #ask if it is the same 
+        exposure_time = float(data.frames[i].ext_hdr['EXPTIME'])
 
         data.frames[i].data = data.frames[i].data / exposure_time
         data.frames[i].err = data.frames[i].err / exposure_time
@@ -41,7 +41,6 @@ def divide_by_exptime(input_dataset):
         all_data_new[i] = data.frames[i].data
         all_err_new[i] = data.frames[i].err
 
-        data.frames[i].ext_hdr.set('EXPTIME', 1 )
         data.frames[i].ext_hdr.set('UNITS', 'electrons/s' )
 
 
