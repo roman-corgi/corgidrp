@@ -2,6 +2,7 @@ import os
 import pytest
 import corgidrp
 import numpy as np
+import corgidrp.mocks as mocks
 from corgidrp.mocks import create_default_headers
 from corgidrp.l2a_to_l2b import correct_bad_pixels
 from corgidrp.data import Image, Dataset, BadPixelMap
@@ -40,15 +41,15 @@ def test_bad_pixels():
     assert type(dataset) == corgidrp.data.Dataset
 
     # Generate bad pixel detector mask
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    bp_mask = mocks.create_badpixelmap_files(filedir=datadir,
+        col_bp=[12, 120, 234, 450, 678, 990],
+        row_bp=[546, 89, 123, 243, 447, 675])
     breakpoint()
-    bp_mask = BadPixelMap(np.zeros([1024,1024], dtype = np.uint16), pri_hdr = prhd, ext_hdr = exthd)
-
-    # Add some Bad Detector Pixels
-    col_bp = [12, 120, 234, 450, 678, 990]
-    row_bp = [546, 89, 123, 243, 447, 675]
-    for i_col in col_bp:
-        for i_row in row_bp:
-            bp_mask[i_col, i_row] += 4
+    new_bp_mask = data.BadPixelMap(bp_mask.all_data, pri_hdr=bp_mask[0].pri_hdr.copy(),
+                         ext_hdr=bp_mask[0].ext_hdr.copy(), input_dataset=bp_mask)
 
     assert type(dataset) == corgidrp.data.BadPixelMap
 
