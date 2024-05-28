@@ -27,11 +27,9 @@ def test_autoreducing():
 
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
-    # fake the emgain, fwc_pp, fwc_em
+    # fake the emgain
     for image in l1_dataset:
         image.ext_hdr['EMGAIN'] = 1
-        image.ext_hdr['FWC_PP'] = 1
-        image.ext_hdr['FWC_EM'] = 1
     l1_dataset.save(datadir)
     filelist = [frame.filepath for frame in l1_dataset]
 
