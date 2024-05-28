@@ -600,6 +600,34 @@ class BadPixelMap(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
 
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this BadPixelMap file. including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            corgidrp.data.BadPixelMap: a copy of this BadPixelMap
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+        else:
+            new_data = self.data # this is just pointer referencing
+        new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+        
+        # we got to manually update some parameters. Need to keep track of which ones to update
+        new_bp.filename = self.filename
+        new_bp.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_bp
+
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
