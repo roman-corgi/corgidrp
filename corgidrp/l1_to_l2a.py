@@ -1,5 +1,5 @@
 # A file that holds the functions that transmogrify l1 data to l2a data 
-from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, get_fwc_em, get_fwc_pp, calc_sat_fwc
+from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, get_fwc_em_e, get_fwc_pp_e, calc_sat_fwc, get_kgain
 import numpy as np
 from astropy.time import Time
 
@@ -152,18 +152,22 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     crmasked_cube = crmasked_dataset.all_data
     
 
-    # Assert that full well capacity is the same for every frame in the dataset
+    # Calculate the full well capacity for every frame in the dataset
+    kgain = np.array([get_kgain(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
     emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
-    fwcpp_arr = np.array([get_fwc_pp(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
-    fwcem_arr = np.array([get_fwc_em(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
+    fwcpp_e_arr = np.array([get_fwc_pp_e(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
+    fwcem_e_arr = np.array([get_fwc_em_e(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
     
+    fwcpp_dn_arr = fwcpp_e_arr / kgain
+    fwcem_dn_arr = fwcem_e_arr / kgain
+
     # pick the FWC that will get saturated first, depending on gain
-    sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh)
+    sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,sat_thresh)
     
     for i,frame in enumerate(crmasked_dataset):
-        frame.ext_hdr['FWC_PP'] = fwcpp_arr[i]
-        frame.ext_hdr['FWC_EM'] = fwcem_arr[i]
-        frame.ext_hdr['SAT_FWC'] = sat_fwcs[i]
+        frame.ext_hdr['FWC_PP_E'] = fwcpp_e_arr[i]
+        frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
+        frame.ext_hdr['SAT_DN'] = sat_fwcs[i]
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])
 
@@ -179,7 +183,7 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
 
     for i in range(len(crmasked_cube)): 
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
-                        fwc=fwcem_arr[i],
+                        fwc=fwcem_dn_arr[i],
                         sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,

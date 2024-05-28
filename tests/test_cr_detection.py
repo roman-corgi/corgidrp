@@ -3,7 +3,7 @@ import os
 
 import corgidrp.mocks as mocks
 from corgidrp.l1_to_l2a import detect_cosmic_rays
-from corgidrp.detector import find_plateaus, calc_sat_fwc, get_fwc_em, get_fwc_pp
+from corgidrp.detector import find_plateaus, calc_sat_fwc, get_fwc_em_e, get_fwc_pp_e, get_kgain
 
 import numpy as np
 from astropy.time import Time
@@ -132,20 +132,20 @@ def test_iit_vs_corgidrp():
     and check that output is consistent with results II&T code.
     """
 
-    tol = 0.001
-
-    fwc_em = 90000
-    fwc_pp = 10000
+    kgain = 8.7
+    fwc_em_e = 100000
+    fwc_pp_e = 90000
     em_gain = 500
 
+    fwc_em = fwc_em_e / kgain
+    fwc_pp = fwc_pp_e / kgain
     fwc = np.min([fwc_em, fwc_pp*em_gain])
     sat_thresh = 0.99
     plat_thresh = 0.85
     cosm_filter = 2
-
     
     # create simulated data
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,em_gain=em_gain,fwc_em=fwc_em, fwc_pp=fwc_pp, numCRs=5, plateau_length=10)
+    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,em_gain=em_gain, numCRs=5, plateau_length=10)
 
     iit_masks = []
 
@@ -187,21 +187,21 @@ def test_crs_zeros_frame():
 
 def test_correct_headers():
     """
-    Asserts "FWC_EM", "FWC_PP", and "SAT_FWC" are tracked in the frame headers.
+    Asserts "FWC_EM_E", "FWC_PP_E", and "SAT_DN" are tracked in the frame headers.
     """
     # create simulated data
     dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
     output_dataset = detect_cosmic_rays(dataset)
 
     for frame in output_dataset:
-        if not ("FWC_EM" in frame.ext_hdr):
-            raise Exception("'FWC_EM' missing from frame header.")
+        if not ("FWC_EM_E" in frame.ext_hdr):
+            raise Exception("'FWC_EM_E' missing from frame header.")
         
-        if not ("FWC_PP" in frame.ext_hdr):
-            raise Exception("'FWC_PP' missing from frame header.")
+        if not ("FWC_PP_E" in frame.ext_hdr):
+            raise Exception("'FWC_PP_E' missing from frame header.")
 
-        if not ("SAT_FWC" in frame.ext_hdr):
-            raise Exception("'SAT_FWC' missing from frame header.")
+        if not ("SAT_DN" in frame.ext_hdr):
+            raise Exception("'SAT_DN' missing from frame header.")
 
 def test_saturation_calc():
     """
@@ -249,7 +249,7 @@ def test_saturation_calc():
     if not sat_fwcs == approx(expected):
         raise Exception(f"Saturation full-well capacity calculation incorrect when frames have different fwc_em, fwc_pp, em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
 
-def test_get_fwc_em():
+def test_get_fwc_em_e():
     """
     Asserts that FWC_EM is fetched correctly.
     """    
@@ -257,17 +257,17 @@ def test_get_fwc_em():
     t_end = Time('2039-12-01 00:00:00', scale='utc')
 
     # Test that default value returns II&T value
-    fwc_em = get_fwc_em()
-    expected = 90000.
+    fwc_em = get_fwc_em_e()
+    expected = 100000.
     if not fwc_em == expected :
         raise Exception(f"get_fwc_em() did not return the II&T value of {expected} for no input.")
 
-    fwc_em = get_fwc_em(t_end)
-    expected = 90000.
+    fwc_em = get_fwc_em_e(t_end)
+    expected = 100000.
     if not fwc_em == expected :
         raise Exception(f"get_fwc_em() did not return the expected value of {expected} at end of mission.")
 
-def test_get_fwc_pp():
+def test_get_fwc_pp_e():
     """
     Asserts that FWC_PP is fetched correctly.
     """    
@@ -275,15 +275,33 @@ def test_get_fwc_pp():
     t_end = Time('2039-12-01 00:00:00', scale='utc')
 
     # Test that default value returns II&T value
-    fwc_pp = get_fwc_pp()
-    expected = 10000.
+    fwc_pp = get_fwc_pp_e()
+    expected = 90000.
     if not fwc_pp == expected :
         raise Exception(f"get_fwc_pp() did not return the II&T value of {expected} for no input.")
 
-    fwc_pp = get_fwc_pp(t_end)
-    expected = 10000.
+    fwc_pp = get_fwc_pp_e(t_end)
+    expected = 90000.
     if not fwc_pp == expected :
         raise Exception(f"get_fwc_pp() did not return the expected value of {expected} at end of mission.")
+
+def test_get_kgain():
+    """
+    Asserts that FWC_PP is fetched correctly.
+    """    
+
+    t_end = Time('2039-12-01 00:00:00', scale='utc')
+
+    # Test that default value returns II&T value
+    kgain = get_kgain()
+    expected = 8.7
+    if not kgain == expected :
+        raise Exception(f"get_kgain() did not return the II&T value of {expected} for no input.")
+
+    kgain = get_kgain(t_end)
+    expected = 8.7
+    if not kgain == expected :
+        raise Exception(f"get_kgain() did not return the expected value of {expected} at end of mission.")
 
 ## Useful constructs from JPL II&T unit tests:
 
@@ -309,7 +327,7 @@ tail = np.exp(np.linspace(0, -10, 50)) * 0.1*fwc
 
 # Create bias subtracted image
 
-bs_dataset = mocks.create_cr_dataset(datadir,numfiles=1,fwc_em=fwc,numCRs=0)
+bs_dataset = mocks.create_cr_dataset(datadir,numfiles=1,numCRs=0)
 bs_dataset.all_data[:,:,:] = 1.
 im_width = bs_dataset.all_data.shape[-1]
 i_streak_rows_t = np.array([0, im_width//2-1, im_width//2, im_width-1])
@@ -467,8 +485,9 @@ if __name__ == "__main__":
     test_crs_zeros_frame()
     test_correct_headers()
     test_saturation_calc()
-    test_get_fwc_em()
-    test_get_fwc_pp()
+    test_get_fwc_em_e()
+    test_get_fwc_pp_e()
+    test_get_kgain()
     test_mask()
     test_i_begs()
     test_left_edge_i_begs()
