@@ -12,7 +12,7 @@ def create_wcs(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
     """
 
-    return None
+    return input_dataset.copy()
 
 def divide_by_exptime(input_dataset):
     """
@@ -28,4 +28,4 @@ def divide_by_exptime(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with the data in units of electrons/s
     """
 
-    return None
+    return input_dataset.copy()
