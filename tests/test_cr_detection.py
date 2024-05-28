@@ -3,14 +3,12 @@ import os
 
 import corgidrp.mocks as mocks
 from corgidrp.l1_to_l2a import detect_cosmic_rays
-from corgidrp.detector import find_plateaus, flag_cosmics
+from corgidrp.detector import find_plateaus, calc_sat_fwc, get_fwc_em, get_fwc_pp
 
 import numpy as np
-from astropy.io import fits
-from pathlib import Path
+from astropy.time import Time
 from scipy.ndimage import median_filter
 from pytest import approx
-import pytest
 
 ## Copy-pasted II&T code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_remove_cosmics.py ##
 
@@ -212,55 +210,81 @@ def test_saturation_calc():
     sat_thresh = 0.99
 
     # fwc_em = fwc_pp * em_gain
-    fwc_em = 90000
-    fwc_pp = 90
-    em_gain = 1000
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10,em_gain=em_gain,
-                                      fwc_pp=fwc_pp,fwc_em=fwc_em)
-    cr_dataset = detect_cosmic_rays(dataset,sat_thresh=sat_thresh)
-    for frame in cr_dataset:
-        if not frame.ext_hdr['SAT_FWC'] == fwc_em * sat_thresh:
-            print(frame.ext_hdr['SAT_FWC'])
-            raise Exception("Saturation full-well capacity calculation incorrect when fwc_em = fwc_pp * em_gain.")
+    fwc_em = np.array([90000,90000])
+    fwc_pp = np.array([90,90])
+    em_gain = np.array([1000,1000])
+    sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
     
+    expected = fwc_em * sat_thresh
+    if not sat_fwcs == approx(expected):
+        raise Exception(f"Saturation full-well capacity calculation incorrect when fwc_em = fwc_pp * em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
+
     # fwc_em < fwc_pp * em_gain
-    fwc_em = 50000
-    fwc_pp = 90
-    em_gain = 1000
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10,em_gain=em_gain,
-                                      fwc_pp=fwc_pp,fwc_em=fwc_em)
-    cr_dataset = detect_cosmic_rays(dataset,sat_thresh=sat_thresh)
-    for frame in cr_dataset:
-        if not frame.ext_hdr['SAT_FWC'] == fwc_em * sat_thresh:
-            raise Exception("Saturation full-well capacity calculation incorrect fwc_em < fwc_pp * em_gain.")
+    fwc_em = np.array([50000,50000])
+    fwc_pp = np.array([90,90])
+    em_gain = np.array([1000,1000])
+    sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
+    
+    expected = fwc_em * sat_thresh
+    if not sat_fwcs == approx(expected):
+        raise Exception(f"Saturation full-well capacity calculation incorrect when fwc_em < fwc_pp * em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
 
     # fwc_em > fwc_pp * em_gain
-    fwc_em = 90000
-    fwc_pp = 50
-    em_gain = 1000
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10,em_gain=em_gain,
-                                      fwc_pp=fwc_pp,fwc_em=fwc_em)
-    cr_dataset = detect_cosmic_rays(dataset,sat_thresh=sat_thresh)
-    for frame in cr_dataset:
-        if not frame.ext_hdr['SAT_FWC'] == fwc_pp * em_gain * sat_thresh:
-            raise Exception("Saturation full-well capacity calculation incorrect when fwc_em > fwc_pp * em_gain.")
-        
+    fwc_em = np.array([90000,90000])
+    fwc_pp = np.array([50,50])
+    em_gain = np.array([1000,1000])
+    sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
+    
+    expected = fwc_pp * em_gain * sat_thresh
+    if not sat_fwcs == approx(expected):
+        raise Exception(f"Saturation full-well capacity calculation incorrect when fwc_em > fwc_pp * em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
+    
     # fwc_em > fwc_pp * em_gain for first frame, fwc_em < fwc_pp * em_gain for second frame
-    fwc_em = [90000,50000]
-    fwc_pp = [500,90]
-    em_gain = [100,1000]
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10,em_gain=em_gain[0],
-                                      fwc_pp=fwc_pp[0],fwc_em=fwc_em[0])
-    dataset[1].ext_hdr['FWC_EM'] = fwc_em[1]
-    dataset[1].ext_hdr['FWC_PP'] = fwc_pp[1]
-    dataset[1].ext_hdr['CMDGAIN'] = em_gain[1]
-    cr_dataset = detect_cosmic_rays(dataset,sat_thresh=sat_thresh)
-    for frame in cr_dataset:
-        if not frame.ext_hdr['SAT_FWC'] == 49500. :
-            raise Exception("Saturation full-well capacity calculation incorrect when frames have different fwc_em, fwc_pp, em_gain.")
+    fwc_em = np.array([90000,50000])
+    fwc_pp = np.array([500,90])
+    em_gain = np.array([100,1000])
+    sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
+    
+    expected = np.array([49500.,49500.])
+    if not sat_fwcs == approx(expected):
+        raise Exception(f"Saturation full-well capacity calculation incorrect when frames have different fwc_em, fwc_pp, em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
 
+def test_get_fwc_em():
+    """
+    Asserts that FWC_EM is fetched correctly.
+    """    
 
-      
+    t_end = Time('2039-12-01 00:00:00', scale='utc')
+
+    # Test that default value returns II&T value
+    fwc_em = get_fwc_em()
+    expected = 90000.
+    if not fwc_em == expected :
+        raise Exception(f"get_fwc_em() did not return the II&T value of {expected} for no input.")
+
+    fwc_em = get_fwc_em(t_end)
+    expected = 90000.
+    if not fwc_em == expected :
+        raise Exception(f"get_fwc_em() did not return the expected value of {expected} at end of mission.")
+
+def test_get_fwc_pp():
+    """
+    Asserts that FWC_PP is fetched correctly.
+    """    
+
+    t_end = Time('2039-12-01 00:00:00', scale='utc')
+
+    # Test that default value returns II&T value
+    fwc_pp = get_fwc_pp()
+    expected = 10000.
+    if not fwc_pp == expected :
+        raise Exception(f"get_fwc_pp() did not return the II&T value of {expected} for no input.")
+
+    fwc_pp = get_fwc_pp(t_end)
+    expected = 10000.
+    if not fwc_pp == expected :
+        raise Exception(f"get_fwc_pp() did not return the expected value of {expected} at end of mission.")
+
 ## Useful constructs from JPL II&T unit tests:
 
 fwc = 90000
@@ -443,6 +467,8 @@ if __name__ == "__main__":
     test_crs_zeros_frame()
     test_correct_headers()
     test_saturation_calc()
+    test_get_fwc_em()
+    test_get_fwc_pp()
     test_mask()
     test_i_begs()
     test_left_edge_i_begs()

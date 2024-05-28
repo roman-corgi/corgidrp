@@ -1,9 +1,10 @@
 # A file that holds the functions that transmogrify l1 data to l2a data 
-from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics
+from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, get_fwc_em, get_fwc_pp, calc_sat_fwc
 import numpy as np
-
+from astropy.time import Time
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
+    
     """
     Measure and subtract the median bias in each row of the pre-scan detector region. 
     This step also crops the images to just the science area, or 
@@ -149,15 +150,15 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     crmasked_dataset = input_dataset.copy()
 
     crmasked_cube = crmasked_dataset.all_data
+    
 
     # Assert that full well capacity is the same for every frame in the dataset
     emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
-    fwcpp_arr = np.array([frame.ext_hdr['FWC_PP'] for frame in crmasked_dataset])
-    fwcem_arr = np.array([frame.ext_hdr['FWC_EM'] for frame in crmasked_dataset])
+    fwcpp_arr = np.array([get_fwc_pp(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
+    fwcem_arr = np.array([get_fwc_em(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
     
     # pick the FWC that will get saturated first, depending on gain
-    possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
-    sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
+    sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh)
     
     for i,frame in enumerate(crmasked_dataset):
         frame.ext_hdr['SAT_FWC'] = sat_fwcs[i]
@@ -176,7 +177,7 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
 
     for i in range(len(crmasked_cube)): 
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
-                        fwc=crmasked_dataset[i].ext_hdr['FWC_EM'],
+                        fwc=fwcem_arr[i],
                         sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,
