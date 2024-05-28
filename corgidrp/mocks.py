@@ -87,10 +87,9 @@ def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numC
 
     Args:
         filedir (str): (Optional) Full path to directory to save to.
+        datetime (astropy.time.Time): (Optional) Date and time of the observations to simulate.
         numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
         em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
-        fwc_em (int): The full-well capacity in EM units. Defaults to 90000.
-        fwc_pp (int): The full-well capacity in pre-electron-multiplied units. Defaults to 10000.
         numCRs (int): The number of CR hits to inject. Defaults to 5.
         plateau_length (int): The minimum length of a CR plateau that will be flagged by the filter.
 
