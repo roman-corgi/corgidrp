@@ -1,9 +1,11 @@
 import astropy.io.fits as fits
+from astropy.time import Time
 import numpy as np
 
 import corgidrp.data as data
 import corgidrp.detector as detector
 import os
+
 
 
 def create_dark_calib_files(filedir=None, numfiles=10):
@@ -79,7 +81,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     dataset = data.Dataset(frames)
     return dataset
 
-def create_cr_dataset(filedir=None, numfiles=2,em_gain=500,fwc_em= 90000, fwc_pp=10000, numCRs=5, plateau_length=10):
+def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
 
@@ -96,8 +98,14 @@ def create_cr_dataset(filedir=None, numfiles=2,em_gain=500,fwc_em= 90000, fwc_pp
         corgidrp.data.Dataset:
             The simulated dataset.
     """
+
+    if datetime is None:
+        datetime = Time('2024-01-01T11:00:00.000Z')
     
-    fwc = np.min([fwc_em,em_gain*fwc_pp])
+    kgain = detector.get_kgain(datetime=datetime)
+    fwc_em_dn = detector.get_fwc_em_e(datetime=datetime) / kgain
+    fwc_pp_dn = detector.get_fwc_pp_e(datetime=datetime) / kgain
+    fwc = np.min([fwc_em_dn,em_gain*fwc_pp_dn])
     dataset = create_nonlinear_dataset(filedir=None, numfiles=numfiles,em_gain=em_gain)
 
     im_width = dataset.all_data.shape[-1]
@@ -108,6 +116,9 @@ def create_cr_dataset(filedir=None, numfiles=2,em_gain=500,fwc_em= 90000, fwc_pp
 
     # Loop over images in dataset
     for i in range(len(dataset.all_data)):
+
+        # Save the date
+        dataset[i].ext_hdr['DATETIME'] = str(datetime)
 
         # Pick random locations to add a cosmic ray
         for x in range(numCRs):

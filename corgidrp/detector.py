@@ -267,12 +267,13 @@ def get_rowreadtime_sec(datetime=None):
 
     return rowreadtime_sec
 
-def get_fwc_em(datetime=None):
+def get_fwc_em_e(datetime=None):
     """
     Get the value of FWC_EM, the full-well capacity of the pixels in the EM 
-    gain register. This value will change over the course of the mission.
+    gain register in units of electrions. This value will change over the 
+    course of the mission.
 
-    Its default value is 90000 DN.
+    Its default value is 100000 e-.
 
     Args:
         datetime (astropy Time object): Observation's starting date. Its default
@@ -280,7 +281,7 @@ def get_fwc_em(datetime=None):
         Functional Tests) and the duration of the Roman Coronagraph mission.
 
     Returns:
-        fwc_em (float): Current value of FWC_EM in DN.
+        fwc_em (float): Value of FWC_EM in units of electrons at time of observation.
 
     """ 
 
@@ -297,29 +298,28 @@ def get_fwc_em(datetime=None):
     if datetime < datetime_iit:
         raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
     elif datetime < datetime_end:
-        fwc_em = 90000.
+        fwc_em = 100000.
     else:
         raise ValueError('The observation datetime cannot be later than the' + \
             ' end of the mission')
 
     return fwc_em
 
-def get_fwc_pp(datetime=None):
+def get_fwc_pp_e(datetime=None):
     """
     Get the value of FWC_PP, the full-well capacity of the pixels in the image 
-    area, before EM gain is applied in readout. This value will change over the 
-    course of the mission.
+    area, before EM gain is applied in readout in units of electrions. This 
+    value will change over the course of the mission.
 
-    Its default value is 90000 DN.
-    # TODO: Get a more accurate value
-
+    Its default value is 90000 e-.
+    
     Args:
         datetime (astropy Time object): Observation's starting date. Its default
         value is sometime between the first collection of ground data (Full
         Functional Tests) and the duration of the Roman Coronagraph mission.
 
     Returns:
-        fwc_pp (float): Current value of FWC_PP in DN.
+        fwc_pp (float): Value of FWC_PP in electrons at time of observation.
 
     """ 
     # Some datetime between the first collection of ground data (Full
@@ -336,12 +336,50 @@ def get_fwc_pp(datetime=None):
     if datetime < datetime_iit:
         raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
     elif datetime < datetime_1:
-        fwc_pp = 10000.
+        fwc_pp = 90000.
     else:
         raise ValueError('The observation datetime cannot be later than the' + \
             ' end of the mission')
 
     return fwc_pp
+
+def get_kgain(datetime=None):
+    """
+    Get the K gain, the conversion factor between raw counts from the detector 
+    and electrons coming out of the gain register, in units of e-/dN. This 
+    value may change over the course of the mission.
+
+    Its default value is 8.7 e-/dN.
+    
+    Args:
+        datetime (astropy Time object): Observation's starting date. Its default
+        value is sometime between the first collection of ground data (Full
+        Functional Tests) and the duration of the Roman Coronagraph mission.
+
+    Returns:
+        kgain (float): The K gain in electrons/dN at time of observation.
+
+    """ 
+    # Some datetime between the first collection of ground data (Full
+    # Functional Tests) and the duration of the Roman Coronagraph mission.
+    if datetime is None:
+        datetime = Time('2024-03-01 00:00:00', scale='utc')
+
+    # IIT datetime
+    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
+    # Date well in the future to always fall in this case, unless rowreadtime
+    # gets updated. One may add more datetime_# values to keep track of changes.
+    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
+    
+    if datetime < datetime_iit:
+        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
+    elif datetime < datetime_1:
+        kgain = 8.7
+    else:
+        raise ValueError('The observation datetime cannot be later than the' + \
+            ' end of the mission')
+
+    return kgain
 
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     """Identify and remove saturated cosmic ray hits and tails.
