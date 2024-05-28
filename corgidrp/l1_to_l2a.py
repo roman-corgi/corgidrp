@@ -161,6 +161,8 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh)
     
     for i,frame in enumerate(crmasked_dataset):
+        frame.ext_hdr['FWC_PP'] = fwcpp_arr[i]
+        frame.ext_hdr['FWC_EM'] = fwcem_arr[i]
         frame.ext_hdr['SAT_FWC'] = sat_fwcs[i]
 
     sat_fwcs_array = np.array([np.full_like(crmasked_cube[0],sat_fwcs[i]) for i in range(len(sat_fwcs))])

@@ -123,10 +123,6 @@ def create_cr_dataset(filedir=None, numfiles=2,em_gain=500,fwc_em= 90000, fwc_pp
                 cr_tail = [fwc/(j+1) for j in range(tail_len)]
                 dataset.all_data[i,loc[0],tail_start:] += cr_tail
 
-        # Add header kws
-        dataset[i].ext_hdr['FWC_EM'] = fwc_em
-        dataset[i].ext_hdr['FWC_PP'] = fwc_pp
-        
         # Save frame if desired
         if filedir is not None:
             filepattern = "simcal_cosmics_{0:04d}.fits"
