@@ -28,29 +28,6 @@ def create_dark_calib(dark_dataset):
 
     return new_dark
 
-def dark_subtraction(input_dataset, dark_frame):
-    """
-    Perform dark current subtraction of a dataset using the corresponding dark frame
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
-        dark_frame (corgidrp.data.Dark): a Dark frame to model the dark current
-    
-    Returns:
-        corgidrp.data.Dataset: a dark subtracted version of the input dataset
-    """
-    # you should make a copy the dataset to start
-    darksub_dataset = input_dataset.copy()
-
-    darksub_cube = darksub_dataset.all_data - dark_frame.data
-
-    history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
-
-    # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube)
-
-    return darksub_dataset
-    
 def get_relgains(frame, em_gain, non_lin_correction):
     """
     For a given bias subtracted frame of dn counts, return a same sized
@@ -290,6 +267,82 @@ def get_rowreadtime_sec(datetime=None):
 
     return rowreadtime_sec
 
+def get_fwc_em(datetime=None):
+    """
+    Get the value of FWC_EM, the full-well capacity of the pixels in the EM 
+    gain register. This value will change over the course of the mission.
+
+    Its default value is 90000 DN.
+
+    Args:
+        datetime (astropy Time object): Observation's starting date. Its default
+        value is sometime between the first collection of ground data (Full
+        Functional Tests) and the duration of the Roman Coronagraph mission.
+
+    Returns:
+        fwc_em (float): Current value of FWC_EM in DN.
+
+    """ 
+
+    # IIT datetime
+    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
+    # Date well in the future to always fall in this case, unless rowreadtime
+    # gets updated. One may add more datetime_# values to keep track of changes.
+    datetime_end = Time('2040-01-01 00:00:00', scale='utc')
+
+    # Default to datetime_iit.
+    if datetime is None:
+        datetime = Time('2023-11-01 00:00:00', scale='utc')
+    
+    if datetime < datetime_iit:
+        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
+    elif datetime < datetime_end:
+        fwc_em = 90000.
+    else:
+        raise ValueError('The observation datetime cannot be later than the' + \
+            ' end of the mission')
+
+    return fwc_em
+
+def get_fwc_pp(datetime=None):
+    """
+    Get the value of FWC_PP, the full-well capacity of the pixels in the image 
+    area, before EM gain is applied in readout. This value will change over the 
+    course of the mission.
+
+    Its default value is 90000 DN.
+    # TODO: Get a more accurate value
+
+    Args:
+        datetime (astropy Time object): Observation's starting date. Its default
+        value is sometime between the first collection of ground data (Full
+        Functional Tests) and the duration of the Roman Coronagraph mission.
+
+    Returns:
+        fwc_pp (float): Current value of FWC_PP in DN.
+
+    """ 
+    # Some datetime between the first collection of ground data (Full
+    # Functional Tests) and the duration of the Roman Coronagraph mission.
+    if datetime is None:
+        datetime = Time('2024-03-01 00:00:00', scale='utc')
+
+    # IIT datetime
+    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
+    # Date well in the future to always fall in this case, unless rowreadtime
+    # gets updated. One may add more datetime_# values to keep track of changes.
+    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
+    
+    if datetime < datetime_iit:
+        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
+    elif datetime < datetime_1:
+        fwc_pp = 10000.
+    else:
+        raise ValueError('The observation datetime cannot be later than the' + \
+            ' end of the mission')
+
+    return fwc_pp
+
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     """Identify and remove saturated cosmic ray hits and tails.
 
@@ -397,3 +450,22 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     else:
         return None
     
+def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
+    """Calculates the full well capacity saturation threshold for each frame.
+
+    Args:
+        emgain_arr (np.array): 1D array of the EM gain value for each frame.
+        fwcpp_arr (np.array): 1D array of the full-well capacity in the image 
+            frame (before em gain readout) value for each frame.
+        fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain 
+            register for each frame.
+        sat_thresh (float): Multiplier for the full-well capacity to determine 
+            what qualifies as saturation. A reasonable value is 0.99
+
+    Returns:
+        sat_fwcs (np.array): _description_
+    """
+    possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
+    sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
+    
+    return sat_fwcs
