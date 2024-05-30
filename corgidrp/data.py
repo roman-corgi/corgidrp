@@ -114,8 +114,8 @@ class Dataset():
                 for key, value in header_entries.items():
                     img.ext_hdr[key] = value
                     img.err_hdr[key] = value
-                    
- 
+
+
     def copy(self, copy_data=True):
         """
         Make a copy of this dataset, including all data and headers.
@@ -133,15 +133,15 @@ class Dataset():
         new_dataset = Dataset(new_frames)
 
         return new_dataset
-    
+
     def add_error_term(self, input_error, err_name):
         """
         Calls Image.add_error_term() for each frame.
         Updates Dataset.all_err.
-        
+
         Args:
           input_error (np.array): 2-d or 3-d error layer
-          err_name (str): name of the uncertainty layer  
+          err_name (str): name of the uncertainty layer
         """
         if input_error.ndim == 3:
             for i,frame in enumerate(self.frames):
@@ -153,9 +153,9 @@ class Dataset():
 
         else:
             raise ValueError("input_error is not either a 2D or 3D array.")
-        
+
         # Preserve pointer links between Dataset.all_err and Image.err
-        self.all_err = np.array([frame.err for frame in self.frames])   
+        self.all_err = np.array([frame.err for frame in self.frames])
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
@@ -215,7 +215,7 @@ class Image():
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
-           
+
                 if dq is not None:
                     if np.shape(self.data) != np.shape(dq):
                         raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
@@ -303,7 +303,7 @@ class Image():
         if not hasattr(self, 'bias_hdr'):
             self.bias_hdr = fits.Header()
         self.bias_hdr["EXTNAME"] = "BIAS"
-        
+
         # discard individual errors if we aren't tracking them but multiple error terms are passed in
         if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
             num_errs = self.err.shape[0] - 1
@@ -388,7 +388,7 @@ class Image():
             new_err = self.err
             new_dq = self.dq
             new_bias = self.bias
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, bias=new_bias, 
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, bias=new_bias,
                         err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy(), bias_hdr = self.bias_hdr.copy())
 
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
@@ -415,18 +415,18 @@ class Image():
         """
         Add a layer of a specific additive uncertainty on the 3-dim error array extension
         and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name. 
+        Update the error header and assign the error name.
 
         Only tracks individual errors if the "track_individual_errors" setting is set to True
         in the configuration file
-        
+
         Args:
           input_error (np.array): 2-d error layer
           err_name (str): name of the uncertainty layer
         """
         if input_error.ndim != 2 or input_error.shape != self.data.shape:
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
-        
+
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
         self.err_hdr["Layer_1"] = "combined_error"
@@ -436,14 +436,14 @@ class Image():
             self.err=np.append(self.err, [input_error], axis=0)
 
             layer = str(self.err.shape[0])
-            self.err_hdr["Layer_" + layer] = err_name    
-        
+            self.err_hdr["Layer_" + layer] = err_name
+
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
 class Dark(Image):
     """
-    Dark calibration frame for a given exposure time.
+    Dark calibration frame for a given exposure time and EM gain.
 
      Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
