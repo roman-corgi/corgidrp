@@ -20,7 +20,7 @@ def create_dark_calib(dark_dataset):
 
     new_dark = data.Dark(combined_frame, pri_hdr=dark_dataset[0].pri_hdr.copy(),
                          ext_hdr=dark_dataset[0].ext_hdr.copy(), input_dataset=dark_dataset)
-    
+
     # determine the standard error of the mean: stddev/sqrt(n_frames)
     new_dark.err = np.nanstd(dark_dataset.all_data, axis=0)/np.sqrt(len(dark_dataset))
     new_dark.err = new_dark.err.reshape((1,)+new_dark.err.shape) #Get it into the right dimensions
@@ -230,7 +230,7 @@ def get_rowreadtime_sec(datetime=None):
     effects of radiation damage and, if this becomes a problem, one of the
     mitigation techniques would be to change the row read time to reduce the
     impact of charge traps.
- 
+
     There’s no formal plan/timeline for this adjustment, though it is possible
     to change in the future should it need to.
 
@@ -244,7 +244,7 @@ def get_rowreadtime_sec(datetime=None):
     Returns:
         rowreadtime (float): Current value of rowreadtime in sec.
 
-    """ 
+    """
     # Some datetime between the first collection of ground data (Full
     # Functional Tests) and the duration of the Roman Coronagraph mission.
     if datetime is None:
@@ -255,7 +255,7 @@ def get_rowreadtime_sec(datetime=None):
     # Date well in the future to always fall in this case, unless rowreadtime
     # gets updated. One may add more datetime_# values to keep track of changes.
     datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
-    
+
     if datetime < datetime_iit:
         raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
     elif datetime < datetime_1:
