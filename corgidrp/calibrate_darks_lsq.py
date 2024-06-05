@@ -4,9 +4,9 @@ from pathlib import Path
 import numpy as np
 import warnings
 
-from cal.util.read_metadata import Metadata as MetadataWrapper
+from corgidrp.detector import Metadata as MetadataWrapper
 from cal.util.gsw_process import Process, mean_combine
-import cal.util.check as check
+import corgidrp.util.check as check
 
 TELEM_ROWS = 4 #last 4 rows of frame
 
@@ -28,11 +28,11 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     current).
 
     There are rows of each frame that are used for telemetry and are irrelevant
-    for making a master dark.  The count values on those rows are such that 
-    this function may process the values as saturated, and the function would 
+    for making a master dark.  The count values on those rows are such that
+    this function may process the values as saturated, and the function would
     then fail if enough frames in a stack suffer from this apparent saturation.
-    So this function disregards telemetry rows and does not do any fitting for 
-    master dark for those rows.  
+    So this function disregards telemetry rows and does not do any fitting for
+    master dark for those rows.
 
     Parameters
     ----------
@@ -125,11 +125,11 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
         Read noise estimate from the noise profile of a mean frame (in e-).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
-        lower than read noise variance, thus making reading it off doable.  
-        If read_noise is returned as NaN, the read noise estimate is not 
+        lower than read noise variance, thus making reading it off doable.
+        If read_noise is returned as NaN, the read noise estimate is not
         trustworthy, possibly because not enough frames were used per substack
-        for that or because the next lowest gain setting is much larger than 
-        the gain used in the sub-stack. 
+        for that or because the next lowest gain setting is much larger than
+        the gain used in the sub-stack.
 
     R_map : array-like
         A per-pixel map of the adjusted coefficient of determination
@@ -234,7 +234,7 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
         frames = []
         bpmaps = []
         for fr in stack_arr[i]:
-            # ensure frame is in float so nan can be assigned; output of 
+            # ensure frame is in float so nan can be assigned; output of
             # L1_to_L2a converts to float anyways
             fr = fr.astype(float)
             fr[telem_rows] = np.nan
@@ -248,10 +248,10 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
             f1 *= g_arr[i]
             # setting to 0 prevents failure of mean_combine
             # b0: didn't mask telem_rows b/c they weren't saturated but nan'ed
-            f1[telem_rows] = 0 
+            f1[telem_rows] = 0
             frames.append(f1)
             bpmaps.append(b1)
-        mean_frame, _, mean_num, rn_bool = mean_combine(frames, bpmaps)       
+        mean_frame, _, mean_num, rn_bool = mean_combine(frames, bpmaps)
         if not rn_bool: # if False, due to cosmics
             raise CalDarksLSQException('fewer than half the frames '
             'available for at least one pixel in the averaging due to masking'
@@ -261,11 +261,11 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
         mean_frames.append(mean_frame)
         mean_num_good_fr.append(mean_num)
     mean_stack = np.stack(mean_frames)
-    
+
     # need the correlation coefficient for FPN for read noise estimate later;
     # other noise sources aren't correlated frame to frame
-    # Use correlation b/w mean stacks since read noise is negligible (along 
-    # with dark current and CIC); correlation b/w mean stacks then 
+    # Use correlation b/w mean stacks since read noise is negligible (along
+    # with dark current and CIC); correlation b/w mean stacks then
     # approximately equal to the correlation b/w FPN from stack to stack
     # this is the stack that will be used later for estimating read noise:
     min1 = np.argmin(g_arr*t_arr)
@@ -275,7 +275,7 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     tinds = np.where(t_arr == t_arr[min1])
     nextg = g_arr[g_arr > g_arr[min1]].min()
     ginds = np.where(g_arr == nextg)
-    min2 = np.intersect1d(tinds, ginds)[0] 
+    min2 = np.intersect1d(tinds, ginds)[0]
     msi = proc_dark[i].meta.imaging_slice(mean_stack[min1])
     msi2 = proc_dark[i].meta.imaging_slice(mean_stack[min2])
     avg_corr = np.corrcoef(msi.ravel(), msi2.ravel())[0, 1]
@@ -326,7 +326,7 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     # The closer to 1, the better the fit.
     # Can have negative values. Can never be above 1.
     # If R_map has nan or inf values, then something is probably wrong;
-    # this is good feedback to the user. However, nans in the telemetry rows 
+    # this is good feedback to the user. However, nans in the telemetry rows
     # is expected.
     R_map = 1 - (1 - Rsq)*(M - 1)/(M - 3)
 
@@ -355,11 +355,11 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     Num = mean_num_good_fr[l]
     # take std of just image area; more variance if image and different regions
     # included; below assumes no variance inherent in FPN
-    
+
     mean_stack_image = proc_dark[l].meta.imaging_slice(mean_stack[l])
     read_noise2 = (np.var(mean_stack_image)*Num -
         g_arr[l]**2*
-        np.var(D_image_map*t_arr[l]+C_image_map) - 
+        np.var(D_image_map*t_arr[l]+C_image_map) -
         ((Num-1)*avg_corr+1)*np.var(F_image_map))
     if read_noise2 >= 0:
         read_noise = np.sqrt(read_noise2)
@@ -470,7 +470,7 @@ if __name__ == '__main__':
     t_arr = grid[1].ravel()
     k_arr = eperdn*np.ones_like(g_arr) # all the same
     #added in after emccd_detect makes the frames (see below)
-    # The mean FPN that will be found is eperdn*(FPN//eperdn) 
+    # The mean FPN that will be found is eperdn*(FPN//eperdn)
     # due to how I simulate it and then convert the frame to uint16
     FPN = 21 # e
     # the bigger N is, the better the adjusted R^2 per pixel becomes
@@ -520,13 +520,13 @@ if __name__ == '__main__':
             stack_list[i] = stack_list[i].astype('float64')
             im_area = stack_list[i][:,imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
                imr0c0[1]+imcols]
-            
+
             # For FPN, could add in a pattern taken from actual data...
             # fpn = fits.getdata(r'/Users/kevinludwick/Documents/Guillermo_TVAC_all_darks/FPN_image.fits')
             # im_area[:] += fpn[300:300+im_area.shape[1],300:300+im_area.shape[2]]/k_arr[i]
 
             # ...or simulate a cross-hatch-like pattern...
-            # groups = (np.round(np.linspace(0, im_area.shape[1], 
+            # groups = (np.round(np.linspace(0, im_area.shape[1],
             #                                40))).astype(int)
             # for j in groups:
             #     expo = np.where(groups==j)[0][0]
@@ -534,8 +534,8 @@ if __name__ == '__main__':
             #         (-1)**expo*FPN/(k_arr[i]) # in DN
             #     im_area[:,j:j+1,:] += FPN/k_arr[i] + \
             #         (-1)**expo*FPN/(k_arr[i]) # in DN
-                
-            # ...or add in a constant offset.  
+
+            # ...or add in a constant offset.
             stack_list[i][:,imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
                imr0c0[1]+imcols] += FPN/k_arr[i] # in DN
 
