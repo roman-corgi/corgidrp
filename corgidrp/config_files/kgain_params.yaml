@@ -1,0 +1,26 @@
+# offset ROI constants
+offset_rowroi1: 99
+offset_rowroi2: 1000
+offset_colroi1: 799
+offset_colroi2: 1000
+
+# ROI constants
+rowroi1: 9
+rowroi2: 1000
+colroi1: 1199
+colroi2: 2000
+
+# read noise bins range limits
+rn_bins1: -200
+rn_bins2: 201
+
+# maximum DN value to be included in PTC
+max_DN_val: 13000
+
+# number of bins in the signal variables
+signal_bins_N: 400
+
+# log plot min, max, number values
+logplot1: -1
+logplot2: 4
+logplot3: 200
