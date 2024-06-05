@@ -33,8 +33,6 @@ def test_exptime_normalization():
     norm_dataset = l2b_to_l3.divide_by_exptime(not_normalized_dataset)
 
     # test if the function works
-    all_data_back = np.zeros(not_normalized_dataset.all_data.shape)
-    all_err_back = np.zeros(not_normalized_dataset.all_err.shape)
     for i in range(len(not_normalized_dataset.frames)):
 
         # test that the unit in the header is in electrons/s
@@ -50,14 +48,6 @@ def test_exptime_normalization():
         # check that the output in .frames.data and .frames.err correspond to .all_data and .all_err
         assert norm_dataset.frames[i].data == pytest.approx(norm_dataset.all_data[i,:,:], abs = 1e-6)
         assert norm_dataset.frames[i].err == pytest.approx(norm_dataset.all_err[i,:,:], abs = 1e-6)
-
-        # update the datacube that will replace .all_data and all_err to check that if you multiply the output by the exposure time you can recover the input
-        all_data_back[i,:,:] = exposure_times[i] * norm_dataset.all_data[i,:,:]
-        all_err_back[i,:,:] = exposure_times[i] * norm_dataset.all_err[i,:,:]
-
-    #check that if you multiply the output by the exposure time you can recover the input
-    #assert not_normalized_dataset.all_data == pytest.approx(all_data_back, abs=1e-6)
-    #assert not_normalized_dataset.all_err == pytest.approx(all_err_back, abs=1e-6)
 
 #%%    
 
