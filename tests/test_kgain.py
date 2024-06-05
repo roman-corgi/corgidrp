@@ -14,8 +14,8 @@ import warnings
 import numpy as np
 from astropy.io import fits
 
-from cal.util.loadyaml import loadyaml
-import cal.util.ut_check as ut_check
+#from cal.util.loadyaml import loadyaml
+#import cal.util.ut_check as ut_check
 from .calibrate_kgain import (calibrate_kgain, CalKgainException)
 
 ######################## function definitions ###############################

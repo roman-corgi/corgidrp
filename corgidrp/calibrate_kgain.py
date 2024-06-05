@@ -7,7 +7,7 @@ import warnings
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
-# Import this as-is or add to cal functions?
+# Import same repo structure as-is or inline into the function?
 
 # Used 5 times here and 9 times in NL
 ##import cal.util.check as check
