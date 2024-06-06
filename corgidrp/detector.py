@@ -265,3 +265,80 @@ def get_rowreadtime_sec(datetime=None):
             ' end of the mission')
 
     return rowreadtime_sec
+
+
+kgain_params= {
+    # offset ROI constants
+    'offset_rowroi1': 99,
+    'offset_rowroi2': 1000,
+    'offset_colroi1': 799,
+    'offset_colroi2': 1000,
+    
+    # ROI constants
+    'rowroi1': 9,
+    'rowroi2': 1000,
+    'colroi1': 1199,
+    'colroi2': 2000,
+    
+    # read noise bins range limits
+    'rn_bins1': -200,
+    'rn_bins2': 201,
+    
+    # maximum DN value to be included in PTC
+    'max_DN_val': 13000,
+    
+    # number of bins in the signal variables
+    'signal_bins_N': 400,
+    
+    # log plot min, max, number values
+    'logplot1': -1,
+    'logplot2': 4,
+    'logplot3': 200,
+    }
+
+nonlin_params= {
+    # offset column ROI range
+    'offset_colroi1': 799,
+    'offset_colroi2': 1000,
+    
+    # ROI constants
+    'rowroi1': 305,
+    'rowroi2': 736,
+    'colroi1': 1385,
+    'colroi2': 1846,
+    
+    # background ROIs
+    'rowback11': 20,
+    'rowback12': 301,
+    'rowback21': 740,
+    'rowback22': 1001,
+    'colback11': 1200,
+    'colback12': 2001,
+    'colback21': 1200,
+    'colback22': 2001,
+    
+    # minimum exposure time, s
+    'min_exp': 0,
+    
+    # histogram bin parameters; min_bin is in DN
+    'num_bins': 50,
+    'min_bin': 200,
+    
+    # factor to mutiply bin_edge values when making mask
+    'min_mask_factor': 1.1,
+    
+    # factor to use in lowess smoothing function, larger is smoother
+    'lowess_frac': 0.1,
+    
+    # rms relative error selection limits for linear fit
+    'rms_low_limit': 0.004,
+    'rms_upp_limit': 0.2,
+    
+    # polyfit upper cutoffs
+    'fit_upp_cutoff1': -2,
+    'fit_upp_cutoff2': -3,
+    
+    # polyfit lower cutoffs
+    'fit_low_cutoff1': 2,
+    'fit_low_cutoff2': 1,
+    }
