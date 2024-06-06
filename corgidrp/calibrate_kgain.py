@@ -5,6 +5,7 @@ import warnings
 from scipy.optimize import curve_fit
 
 here = Path(os.path.dirname(os.path.abspath(__file__)))
+default_config_file = Path(here, 'config_files', 'kgain_parms.yaml')
 
 class CalKgainException(Exception):
     """Exception class for calibrate_kgain."""
