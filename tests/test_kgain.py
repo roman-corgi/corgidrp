@@ -17,14 +17,20 @@ def test_kgain():
     
     gain_value = np.array([[9.55]])
     kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd)
-    kgain.save("kgain.fits")
     assert kgain.value == gain_value[0,0]
     assert kgain.data[0,0] == gain_value[0,0]
     
-    kgain_open = data.KGain("kgain.fits")
+    # save KGain
+    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    kgain_filename = "kgain_calib.fits"
+    if not os.path.exists(calibdir):
+        os.mkdir(calibdir)
+    kgain.save(filedir=calibdir, filename=kgain_filename)
+        
+    kgain_filepath = os.path.join(calibdir, kgain_filename)
+    kgain_open = data.KGain(kgain_filepath)
     assert kgain_open.value == gain_value[0,0]
-    os.remove('kgain.fits')
-    
+        
     kgain_copy = kgain_open.copy()
     assert kgain_copy.value == gain_value[0,0]
     kgain_copy = kgain_open.copy(copy_data = False)
