@@ -1,21 +1,10 @@
-# import cal.util.check as checkcimport matplotlib.pyplot as pltalibrate kgain
-
 import os
 from pathlib import Path
 import numpy as np
 import warnings
 from scipy.optimize import curve_fit
-import matplotlib.pyplot as plt
-
-# Import same repo structure as-is or inline into the function?
-
-# Used 5 times here and 9 times in NL
-##import cal.util.check as check
-# Used twice here and twice more in NL
-##from cal.util.loadyaml import loadyaml
 
 here = Path(os.path.dirname(os.path.abspath(__file__)))
-default_config_file = Path(here, 'config_files', 'kgain_parms.yaml')
 
 class CalKgainException(Exception):
     """Exception class for calibrate_kgain."""
@@ -129,6 +118,8 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         the second column is standard deviation (DN) corrected for read noise.
     
     """
+
+    SRH: copy stack_arr and stack_arr2 
     
     # input checks
     # load in config file
@@ -249,7 +240,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         """
         
         frame = np.float64(frame)
-        
+
         row_meds = np.median(frame[:,offset_colroi], axis=1)
         row_meds = row_meds[:, np.newaxis]
         frame -= row_meds
@@ -394,6 +385,11 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     log_plot1 = constants_config['logplot1']
     log_plot2 = constants_config['logplot2']
     log_plot3 = constants_config['logplot3']
+
+    if mkplot is not None:
+        # Avoid issues with importing matplotlib on headless servers without GUI
+        # support without proper configuration
+        import matplotlib.pyplot as plt
     
     # Prescan region
     offset_rowroi = slice(offset_rowroi1,offset_rowroi2)
@@ -710,3 +706,424 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     
     return (kgain, mean_rn_gauss_e, mean_rn_std_e, ptc)
     
+
+
+"""
+Module to hold input-checking functions to minimize repetition
+Note: This module, used by calibrate_kgain.py and calibrate_nonlin.py is included
+here because at this moment it is not clear if the functions in the module are
+of general utility for corgidrp
+"""
+import numbers
+
+class CheckException(Exception):
+    pass
+
+# String check support
+string_types = (str, bytes)
+
+# Int check support
+int_types = (int, np.integer)
+
+def _checkname(vname):
+    """
+    Internal check that we can use vname as a string for printing
+    """
+    if not isinstance(vname, string_types):
+        raise CheckException('vname must be a string when fed to check ' + \
+                             'functions')
+    pass
+
+
+def _checkexc(vexc):
+    """
+    Internal check that we can raise from the vexc object
+    """
+    if not isinstance(vexc, type): # pre-check it is class-like
+        raise CheckException('vexc must be a Exception, or an object ' + \
+                             'descended from one when fed to check functions')
+    if not issubclass(vexc, Exception):
+        raise CheckException('vexc must be a Exception, or an object ' + \
+                             'descended from one when fed to check functions')
+    pass
+
+
+def real_positive_scalar(var, vname, vexc):
+    """
+    Checks whether an object is a real positive scalar.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, numbers.Number):
+        raise vexc(vname + ' must be scalar')
+    if not np.isrealobj(var):
+        raise vexc(vname + ' must be real')
+    if var <= 0:
+        raise vexc(vname + ' must be positive')
+    return var
+
+
+def real_array(var, vname, vexc):
+    """
+    Checks whether an object is a real numpy array, or castable to one.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    var = np.array(var, copy=False)  # cast to array
+    if len(var.shape) == 0:
+        raise vexc(vname + ' must have length > 0')
+    if not np.isrealobj(var):
+        raise vexc(vname + ' must be a real array')
+    # skip 'c' as we don't want complex; rest are non-numeric
+    if not var.dtype.kind in ['b', 'i', 'u', 'f']:
+        raise vexc(vname + ' must be a real numeric type to be real')
+    return var
+
+def oneD_array(var, vname, vexc):
+    """
+    Checks whether an object is a 1D numpy array, or castable to one.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    var = np.array(var, copy=False) # cast to array
+    if len(var.shape) != 1:
+        raise vexc(vname + ' must be a 1D array')
+    if (not np.isrealobj(var)) and (not np.iscomplexobj(var)):
+        raise vexc(vname + ' must be a real or complex 1D array')
+    return var
+
+
+def twoD_array(var, vname, vexc):
+    """
+    Checks whether an object is a 2D numpy array, or castable to one.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    var = np.array(var, copy=False) # cast to array
+    if len(var.shape) != 2:
+        raise vexc(vname + ' must be a 2D array')
+    if (not np.isrealobj(var)) and (not np.iscomplexobj(var)):
+        raise vexc(vname + ' must be a real or complex 2D array')
+    return var
+
+
+def twoD_square_array(var, vname, vexc):
+    """
+    Checks whether an object is a 2D square array_like.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    var = np.array(var, copy=False) # cast to array
+    if len(var.shape) != 2:
+        raise vexc(vname + ' must be a 2D array')
+    else: # is 2-D
+        if not var.shape[0] == var.shape[1]:
+            raise vexc(vname + ' must be a square 2D array')
+    if (not np.isrealobj(var)) and (not np.iscomplexobj(var)):
+        raise vexc(vname + ' must be a real or complex square 2D array')
+    return var
+
+def threeD_array(var, vname, vexc):
+    """
+    Checks whether an object is a 3D numpy array, or castable to one.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    var = np.array(var, copy=False) # cast to array
+    if len(var.shape) != 3:
+        raise vexc(vname + ' must be a 3D array')
+    if (not np.isrealobj(var)) and (not np.iscomplexobj(var)):
+        raise vexc(vname + ' must be a real or complex 3D array')
+    return var
+
+
+
+def real_scalar(var, vname, vexc):
+    """
+    Checks whether an object is a real scalar.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, numbers.Number):
+        raise vexc(vname + ' must be scalar')
+    if not np.isrealobj(var):
+        raise vexc(vname + ' must be real')
+    return var
+
+
+def real_nonnegative_scalar(var, vname, vexc):
+    """
+    Checks whether an object is a real nonnegative scalar.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, numbers.Number):
+        raise vexc(vname + ' must be scalar')
+    if not np.isrealobj(var):
+        raise vexc(vname + ' must be real')
+    if var < 0:
+        raise vexc(vname + ' must be nonnegative')
+    return var
+
+def positive_scalar_integer(var, vname, vexc):
+    """
+    Checks whether an object is a positive scalar integer.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, numbers.Number):
+        raise vexc(vname + ' must be scalar')
+    if not isinstance(var, int_types):
+        raise vexc(vname + ' must be integer')
+    if var <= 0:
+        raise vexc(vname + ' must be positive')
+    return var
+
+
+def nonnegative_scalar_integer(var, vname, vexc):
+    """
+    Checks whether an object is a nonnegative scalar integer.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, numbers.Number):
+        raise vexc(vname + ' must be scalar')
+    if not isinstance(var, int_types):
+        raise vexc(vname + ' must be integer')
+    if var < 0:
+        raise vexc(vname + ' must be nonnegative')
+    return var
+
+
+def scalar_integer(var, vname, vexc):
+    """
+    Checks whether an object is a scalar integer (no sign dependence).
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, numbers.Number):
+        raise vexc(vname + ' must be scalar')
+    if not isinstance(var, int_types):
+        raise vexc(vname + ' must be integer')
+    return var
+
+
+def string(var, vname, vexc):
+    """
+    Checks whether an object is a string.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, string_types):
+        raise vexc(vname + ' must be a string')
+    return var
+
+def boolean(var, vname, vexc):
+    """
+    Checks whether an object is a bool.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, bool):
+        raise vexc(vname + ' must be a bool')
+    return var
+
+
+def dictionary(var, vname, vexc):
+    """
+    Checks whether an object is a dictionary.
+
+    Arguments:
+     var: variable to check
+     vname: string to output in case of error for debugging
+     vexc: Exception to raise in case of error for debugging
+
+    Returns:
+     returns var
+
+    """
+    _checkname(vname)
+    _checkexc(vexc)
+
+    if not isinstance(var, dict):
+        raise vexc(vname + ' must be a dict')
+    return var
+
+
+"""
+Utility functions to load YAML files
+Note: This module, used by calibrate_kgain.py and calibrate_nonlin.py is included
+here because at this moment it is not clear if this function is of general
+utility for corgidrp
+"""
+
+import yaml
+
+def loadyaml(path, custom_exception=Exception):
+    """
+    Load a YAML file located at a given path
+
+    All filenames may be absolute or relative paths.  If relative, they will be
+    relative to the current working directory, not to any particular location
+    in the repository.
+
+    Arguments:
+     path: string containing path to file; can be absolute or relative
+
+    Keyword arguments:
+     custom_exception: Exception class to use when raising errors.  Defaults to
+      Exception if none is specified.
+
+    Returns:
+     contents of YAML file as a Python object.  Note that this object does no
+     parsing or validation of this data; this must be handled by the calling
+     function.
+
+    """
+
+    # Load config from file
+    try:
+        with open(path) as f:
+            raw_data = yaml.safe_load(f)
+            pass
+        pass
+    # not a file
+    except IOError:
+        raise custom_exception('Config file does not exist.')
+    # invalid YAML
+    except yaml.YAMLError: # this is base class for all YAML errors
+        raise custom_exception('File is not valid YAML.')
+    except UnicodeDecodeError:
+        raise custom_exception('File is not valid YAML.')
+
+    return raw_data
