@@ -8,13 +8,13 @@ from corgidrp.detector import Metadata as MetadataWrapper
 from cal.util.gsw_process import Process, mean_combine
 import corgidrp.util.check as check
 
-TELEM_ROWS = 4 #last 4 rows of frame
+TELEM_ROWS = 1 #last 1 row of frame
 
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
 
-def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
-            meta_path, nonlin_path, Nem = 604, telem_rows=None):
+def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
+            meta_path=None, nonlin_path=None):
     """Given an array of frame stacks of the same number of dark frames (in DN
     units), where the stacks are for various EM gain values and exposure times,
     this function subtracts the bias from each frame in each stack, masks for
@@ -36,51 +36,25 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
 
     Parameters
     ----------
-    stack_arr : array-like
+    dataset : array-like, corgidrp.data.DataSet
         The input stack of stacks of dark frames (counts in DN).  stack_arr
         contains a stack of sub-stacks, and in each sub-stack is some number of
         frames for a unique EM gain and frame time combination.
         Each sub-stack should have the same number of frames.
         Each frame should accord with the EDU
-        science frame (specified by metadata.yaml).
+        science frame (specified by corgidrp.util.metadata.yaml).
         Recommended:  >= 1300 frames for each sub-stack if calibrating
         darks for analog frames,
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
 
-    g_arr : array-like
-        The input array of EM gain values corresponding to the sub-stacks in
-        stack_arr in the order found there.  > 1 (since extra noise is
-        present when EM gain > 1).  Need to have at least 2 unique EM gain
-        values.  (More than 2 recommended.)
-
-    t_arr : array-like
-        The input array of exposure times (in s) corresponding to the
-        sub-stacks in stack_arr in the order found there.  > 0.  Need to have
-        at least 2 unique frame time values.  (More than 2 recommended.)
-
-    k_arr : array-like
-        The input array of conversion factors in e-/DN corresponding to the
-        sub-stacks in stack_arr in the order found there. > 0.
-
-    fwc_em_e : int
-        Full well capacity of detector EM gain register (electrons).
-
-    fwc_pp_e : int
-        Full well capacity per pixel of detector image area pixels (electrons).
-
     meta_path : str
-        Full path of metadata.yaml.
+        Full path of .yaml file with detector parameters.  For format and names
+        of keys, see corgidrp.util.metadata.yaml. If None, uses that file.
 
     nonlin_path : str
-        Path to residual nonlinearity relative gain file.
-
-    Nem : int
-        Number of gain register cells.  Defaults to in-flight value, 604.
-
-    telem_rows : slice
-        The specified slice of rows in all frames where the telemetry rows lie.
-        If None, the last 4 rows are used.  Defaults to None.
+        Path to residual nonlinearity relative gain file.  If None, uses
+        corgidrp.util.nonlin_table_240425.fits.
 
     Returns
     -------
@@ -150,6 +124,7 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of D_image_map.  This is just for comparison.
     """
+    stack_arr = dataset.copy().data
     #input checks
     if type(stack_arr) != np.ndarray:
         raise TypeError('stack_arr must be '
@@ -170,6 +145,8 @@ def calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
             if np.shape(stack_arr[i-1]) != np.shape(stack_arr[i]):
                 raise CalDarksLSQException('All sub-stacks must have the '
                             'same number of frames and frame shape.')
+        for fr in stack_arr[i]:
+            fr.ext_hdr['CMDGAIN']
     check.real_array(g_arr, 'g_arr', TypeError)
     check.oneD_array(g_arr, 'g_arr', TypeError)
     if len(np.unique(g_arr)) < 2:

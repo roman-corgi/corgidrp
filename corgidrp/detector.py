@@ -329,11 +329,7 @@ def get_rowreadtime_sec(datetime=None, meta_path=None):
     if datetime < datetime_iit:
         raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
     elif datetime < datetime_1:
-        if meta_path is None:
-            meta = Metadata()
-        else:
-            meta = Metadata(meta_path)
-        rowreadtime_sec = meta.data['rowreadtime_sec']
+        rowreadtime_sec =223.5e-6
     else:
         raise ValueError('The observation datetime cannot be later than the' + \
             ' end of the mission')
