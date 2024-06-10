@@ -128,3 +128,10 @@ ENG:
 
 # time to read out a row in seconds
 rowreadtime_sec: 223.5e-6
+
+# number of EM gain register stages
+Nem: 604
+
+# slice of rows that are used for telemetry
+telem_rows_start: -1
+telem_rows_end: ~
