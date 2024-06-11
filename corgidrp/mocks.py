@@ -114,7 +114,7 @@ def create_not_normalized_files(filedir=None, numfiles=10):
         
         sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024, 1024)), dtype=float)
         sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024, 1024)), dtype=float)
-        sim_dq = np.asarray(np.ones((1024, 1024)), dtype=int)
+        sim_dq = np.asarray(np.zeros((1024, 1024)), dtype=int)
         frame = data.Image(sim_data, err=sim_err, dq = sim_dq, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
