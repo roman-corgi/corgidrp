@@ -457,6 +457,7 @@ class Image():
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
         self.err_hdr["Layer_1"] = "combined_error"
+        layer = str(self.err.shape[0])
         self.err_hdr["Layer_" + layer] = err_name
     
     def rescale_error(self, input_error, err_name):
