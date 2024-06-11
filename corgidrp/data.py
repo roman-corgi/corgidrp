@@ -601,7 +601,7 @@ class NonLinearityCalibration(Image):
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "FlatField" :FlatField,
-              "NonLinearityCalibration" : NonLinearityCalibration }
+              "NonLinearityCalibration" : NonLinearityCalibration}
 
 def autoload(filepath):
     """

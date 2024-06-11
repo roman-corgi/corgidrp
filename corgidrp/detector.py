@@ -29,16 +29,16 @@ def create_dark_calib(dark_dataset):
 def create_flatfield(flat_dataset):
     
     """
-    #Turn this dataset of image frames that were taken for performing the flat calibration and
-    #to make one master flat image
-    # this is currently a placeholder, until the final flat fielding calibration package is completed. 
+    Turn this dataset of image frames that were taken for performing the flat calibration and
+    to make one master flat image
+    this is currently a placeholder, until the final flat fielding calibration package is completed. 
 
-    #Args:
-       # flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
+    Args:
+       flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
 
-    #Returns:
-        #data.masterflat: a master flat for flat calibration
-    #"""  
+    Returns:
+        data.masterflat: a master flat for flat calibration
+    """  
     
     
     combined_frame = np.nanmean(flat_dataset.all_data, axis=0)
