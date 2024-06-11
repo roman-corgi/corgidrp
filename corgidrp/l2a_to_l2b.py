@@ -58,37 +58,38 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
-def flat_division(input_dataset, master_flat):
+def flat_division(input_dataset, flat_field):
     """
     
     Divide the dataset by the master flat field. 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        master_flat (corgidrp.data.Flat): a master flat field to divide by
+        flat_field (corgidrp.data.FlatField): a master flat field to divide by
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
     """
     
      # copy of the dataset
-    flatcal_dataset = input_dataset.copy()
+    flatdiv_dataset = input_dataset.copy()
     
     #Divide by the master flat
-    flatcal_cube = flatcal_dataset.all_data/master_flat.data
+    flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
     
     # propagate the error of the master flat frame # Check this error prop 
-    if hasattr(master_flat, "err"):
-        flatcal_dataset.add_error_term(master_flat.err, "masterflat_error")   
+    if hasattr(flat_field, "err"):
+        flatdiv_dataset.rescale_error(flat_field.err[0], "FlatField error") 
+        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0], "FlatField error")
     else:
-        raise Warning("no error attribute in the master flat")
+        raise Warning("no error attribute in the FlatField")
     
-    history_msg = "Flat calibration done using master_flat".format(master_flat.filename)
+    history_msg = "Flat calibration done using Flat field {0}".format(flat_field.filename)
 
     # update the output dataset with this new flat calibrated data and update the history
-    flatcal_dataset.update_after_processing_step(history_msg, new_all_data=flatcal_cube)
+    flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube)
 
-    return flatcal_dataset
+    return flatdiv_dataset
 
 def frame_select(input_dataset):
     """
@@ -102,23 +103,35 @@ def frame_select(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
     """
-    return None
+    return input_dataset.copy()
 
-def convert_to_electrons(input_dataset): 
+def convert_to_electrons(input_dataset, k_gain): 
     """
     
     Convert the data from ADU to electrons. 
     TODO: Establish the interaction with the CalDB for obtaining gain calibration 
-    TODO: Make sure to update the headers to reflect the change in units
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        k_gain (corgidrp.data.KGain): KGain calibration file
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in electrons
     """
+   # you should make a copy the dataset to start
+    kgain_dataset = input_dataset.copy()
+    kgain_cube = kgain_dataset.all_data
+    kgain_error = kgain_dataset.all_err
+    
+    kgain = k_gain.value #extract from caldb
+    kgain_cube *= kgain
+    kgain_error *= kgain
+    
+    history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
-    return None 
+    # update the output dataset with this converted data and update the history
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain})
+    return kgain_dataset
 
 def em_gain_division(input_dataset):
     """
@@ -156,8 +169,6 @@ def em_gain_division(input_dataset):
     emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
 
     return emgain_dataset
-    
-    
 
 def cti_correction(input_dataset):
     """
@@ -172,9 +183,7 @@ def cti_correction(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
     """
 
-    return None
-
-
+    return input_dataset.copy()
 
 
 def correct_bad_pixels(input_dataset):
@@ -199,5 +208,5 @@ def correct_bad_pixels(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with bad pixels corrected
     """
 
-    return None
+    return input_dataset.copy()
 

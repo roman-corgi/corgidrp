@@ -158,7 +158,34 @@ class Dataset():
         self.all_err = np.array([frame.err for frame in self.frames])   
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
+            
+	
+    def rescale_error(self, input_error, err_name):
+        """
+        Calls Image.rescale_errors() for each frame.
+        Updates Dataset.all_err
+        
+        Args:
+          input_error (np.array): 2-d error layer or 3-d layer
+          err_name (str): name of the uncertainty layer
+        """
+        if input_error.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.rescale_error(input_error[i], err_name)
 
+        elif input_error.ndim ==2:
+            for frame in self.frames:
+                frame.rescale_error(input_error, err_name)
+
+        else:
+            raise ValueError("input_error is not either a 2D or 3D array.")
+        
+        # Preserve pointer links between Dataset.all_err and Image.err
+        self.all_err = np.array([frame.err for frame in self.frames])   
+        for i, frame in enumerate(self.frames):
+            frame.err = self.all_err[i]
+           
+  
 class Image():
     """
     Base class for 2-D image data. Data can be created by passing in the data/header explicitly, or
@@ -430,6 +457,38 @@ class Image():
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
         self.err_hdr["Layer_1"] = "combined_error"
+        self.err_hdr["Layer_" + layer] = err_name
+    
+    def rescale_error(self, input_error, err_name):
+        """
+        Add a layer of a specific additive uncertainty on the 3-dim error array extension
+        and update the combined uncertainty in the first layer.
+        Update the error header and assign the error name. 
+
+        Only tracks individual errors if the "track_individual_errors" setting is set to True
+        in the configuration file
+        
+        Args:
+          input_error (np.array): 2-d error layer
+          err_name (str): name of the uncertainty layer
+        """
+        if input_error.ndim != 2 or input_error.shape != self.data.shape:
+            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        
+        #first layer is always the updated combined error
+        self.err = np.sqrt(self.err**2 * input_error**2)
+        self.err_hdr["Layer_1"] = "combined_error"
+
+        if corgidrp.track_individual_errors:
+            #append new error as layer on 3D cube
+            self.err=np.append(self.err, [input_error], axis=0)
+
+            layer = str(self.err.shape[0])
+            self.err_hdr["Layer_1"] = "combined_error"
+            self.err_hdr["Layer_" + layer] = err_name    
+        
+        # record history since 2-D error map doesn't track individual terms
+        self.err_hdr['HISTORY'] = "rescaled error term: {0}".format(err_name)     
 
         if corgidrp.track_individual_errors:
             #append new error as layer on 3D cube
@@ -482,7 +541,7 @@ class Dark(Image):
             raise ValueError("File that was loaded was not a Dark file.")
 
             
-class Masterflat(Image):
+class FlatField(Image):
     """
     Master flat generated from raster scan of uranus or Neptune.
 
@@ -502,7 +561,7 @@ class Masterflat(Image):
             if input_dataset is None:
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
-            self.ext_hdr['DATATYPE'] = 'Masterflat' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'FlatField' # corgidrp specific keyword for saving to disk
 
             # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)
@@ -512,14 +571,14 @@ class Masterflat(Image):
 
             # give it a default filename using the first input file as the base
             orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_masterflat.fits".format(orig_input_filename)
+            self.filename = "{0}_flatfield.fits".format(orig_input_filename)
 
 
         # double check that this is actually a masterflat file that got read in
         # since if only a filepath was passed in, any file could have been read in
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Masterflat':
-            raise ValueError("File that was loaded was not a Master flat file.")
-
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'FlatField':
+            raise ValueError("File that was loaded was not a FlatField file.")
+            
 class NonLinearityCalibration(Image):
     """
     Class for non-linearity calibration files. Although it's not stricly an image that you might look at, it is a 2D array of data
@@ -596,7 +655,86 @@ class NonLinearityCalibration(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-            
+
+class KGain(Image):
+    """
+    Class for KGain calibration file. Until further insights it is just one float value.
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+     
+    Attrs:
+        value: the getter of the kgain value
+        _kgain (float): the value of kgain
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The KGain calibration data should be just one float value')
+       # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The KGain calibration data should be just one float value')
+
+        self._kgain = self.data[0,0] 
+        # additional bookkeeping for a calibration file
+        # if this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new KGain file
+        if ext_hdr is not None:
+            self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'detected EM electrons/DN'
+            # add to history
+            self.ext_hdr['HISTORY'] = "KGain Calibration file created"
+
+            # give it a default filename
+            self.filename = "KGain.fits"
+
+
+        # double check that this is actually a KGain file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'KGain':
+            raise ValueError("File that was loaded was not a KGain Calibration file.")
+
+    @property
+    def value(self):
+        return self._kgain
+ 
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this KGain file. including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            corgidrp.data.KGain: a copy of this KGain
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+        else:
+            new_data = self.data # this is just pointer referencing
+        new_kg = KGain(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+        
+        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
+        new_kg.filename = self.filename
+        new_kg.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_kg
+
+
 class BadPixelMap(Image):
     """
     Class for bad pixel map. The bad pixel map indicates which pixels are hot
@@ -639,12 +777,40 @@ class BadPixelMap(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
 
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this BadPixelMap file. including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            corgidrp.data.BadPixelMap: a copy of this BadPixelMap
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+        else:
+            new_data = self.data # this is just pointer referencing
+        new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+        
+        # we got to manually update some parameters. Need to keep track of which ones to update
+        new_bp.filename = self.filename
+        new_bp.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_bp
+
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
+              "KGain" : KGain, 
               "BadPixelMap" : BadPixelMap,
-              "Masterflat" : Masterflat}
-
+               "FlatField" :FlatField}
 
 def autoload(filepath):
     """
