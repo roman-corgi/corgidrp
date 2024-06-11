@@ -159,7 +159,6 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
             
-	
     def rescale_error(self, input_error, err_name):
         """
         Calls Image.rescale_errors() for each frame.
@@ -183,9 +182,8 @@ class Dataset():
         # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])   
         for i, frame in enumerate(self.frames):
-            frame.err = self.all_err[i]
-           
-  
+            frame.err = self.all_err[i]               
+
 class Image():
     """
     Base class for 2-D image data. Data can be created by passing in the data/header explicitly, or
@@ -457,8 +455,16 @@ class Image():
         #first layer is always the updated combined error
         self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
         self.err_hdr["Layer_1"] = "combined_error"
-        layer = str(self.err.shape[0])
-        self.err_hdr["Layer_" + layer] = err_name
+
+        if corgidrp.track_individual_errors:
+            #append new error as layer on 3D cube
+            self.err=np.append(self.err, [input_error], axis=0)
+
+            layer = str(self.err.shape[0])
+            self.err_hdr["Layer_" + layer] = err_name    
+        
+        # record history since 2-D error map doesn't track individual terms
+        self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
     
     def rescale_error(self, input_error, err_name):
         """
@@ -500,6 +506,7 @@ class Image():
         
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
+    
 
 class Dark(Image):
     """
@@ -541,7 +548,6 @@ class Dark(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
-            
 class FlatField(Image):
     """
     Master flat generated from raster scan of uranus or Neptune.
@@ -579,7 +585,8 @@ class FlatField(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'FlatField':
             raise ValueError("File that was loaded was not a FlatField file.")
-            
+
+
 class NonLinearityCalibration(Image):
     """
     Class for non-linearity calibration files. Although it's not stricly an image that you might look at, it is a 2D array of data
@@ -656,7 +663,8 @@ class NonLinearityCalibration(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-            
+
+
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -811,8 +819,7 @@ datatypes = { "Image" : Image,
               "NonLinearityCalibration" : NonLinearityCalibration,
               "KGain" : KGain, 
               "BadPixelMap" : BadPixelMap,
-               "FlatField" :FlatField}
-
+              "FlatField" : FlatField}
 
 def autoload(filepath):
     """
