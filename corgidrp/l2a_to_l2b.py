@@ -185,7 +185,6 @@ def cti_correction(input_dataset):
 
     return input_dataset.copy()
 
-
 def correct_bad_pixels(input_dataset):
     """
     

@@ -655,7 +655,7 @@ class NonLinearityCalibration(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-
+            
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -811,6 +811,7 @@ datatypes = { "Image" : Image,
               "KGain" : KGain, 
               "BadPixelMap" : BadPixelMap,
                "FlatField" :FlatField}
+
 
 def autoload(filepath):
     """
