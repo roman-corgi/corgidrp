@@ -27,7 +27,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
-        np.random.seed(456+i); sim_data = np.random.poisson(lam=150, size=(1024, 1024))
+        np.random.seed(456+i); sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
@@ -123,7 +123,7 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
         data_range = np.linspace(10,65536,size)
         # Generate data for each row, where the mean increase from 10 to 65536
         for x in range(size):
-            np.random.seed(123+x); sim_data[:, x] = np.random.poisson(data_range[x], size)
+            np.random.seed(123+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
 
         non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..',"tests","test_data","nonlin_sample.fits"))
 
@@ -172,7 +172,7 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers(obstype=obstype)
-        sim_data = np.random.poisson(lam=150, size=size)
+        sim_data = np.random.poisson(lam=150., size=size).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
         if filedir is not None:
