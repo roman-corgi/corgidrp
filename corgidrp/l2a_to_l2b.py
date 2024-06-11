@@ -58,37 +58,38 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
-def flat_division(input_dataset, master_flat):
+def flat_division(input_dataset, flat_field):
     """
     
     Divide the dataset by the master flat field. 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        master_flat (corgidrp.data.Flat): a master flat field to divide by
+        flat_field (corgidrp.data.FlatField): a master flat field to divide by
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
     """
     
      # copy of the dataset
-    flatcal_dataset = input_dataset.copy()
+    flatdiv_dataset = input_dataset.copy()
     
     #Divide by the master flat
-    flatcal_cube = flatcal_dataset.all_data/master_flat.data
+    flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
     
     # propagate the error of the master flat frame # Check this error prop 
-    if hasattr(master_flat, "err"):
-        flatcal_dataset.add_error_term(master_flat.err, "masterflat_error")   
+    if hasattr(flat_field, "err"):
+        flatdiv_dataset.rescale_error(flat_field.err[0], "FlatField error") 
+        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0], "FlatField error")
     else:
-        raise Warning("no error attribute in the master flat")
+        raise Warning("no error attribute in the FlatField")
     
-    history_msg = "Flat calibration done using master_flat".format(master_flat.filename)
+    history_msg = "Flat calibration done using Flat field {0}".format(flat_field.filename)
 
     # update the output dataset with this new flat calibrated data and update the history
-    flatcal_dataset.update_after_processing_step(history_msg, new_all_data=flatcal_cube)
+    flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube)
 
-    return flatcal_dataset
+    return flatdiv_dataset
 
 def frame_select(input_dataset):
     """

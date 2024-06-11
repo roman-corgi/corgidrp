@@ -26,26 +26,32 @@ def create_dark_calib(dark_dataset):
 
     return new_dark
 
-def create_master_flat(flat_dataset):
+def create_flatfield(flat_dataset):
+    
     """
-    Turn this dataset of image frames that were taken for performing the flat calibration and
-    to make one master flat image
+    #Turn this dataset of image frames that were taken for performing the flat calibration and
+    #to make one master flat image
+    # this is currently a placeholder, until the final flat fielding calibration package is completed. 
 
-    Args:
-        flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
+    #Args:
+       # flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
 
-    Returns:
-        data.masterflat: a master flat for flat calibration
-    """
+    #Returns:
+        #data.masterflat: a master flat for flat calibration
+    #"""  
+    
+    
     combined_frame = np.nanmean(flat_dataset.all_data, axis=0)
  
-    master_flat = data.Masterflat(combined_frame, pri_hdr=flat_dataset[0].pri_hdr.copy(),
+    flat_field = data.FlatField(combined_frame, pri_hdr=flat_dataset[0].pri_hdr.copy(),
                          ext_hdr=flat_dataset[0].ext_hdr.copy(), input_dataset=flat_dataset)
     
-    # determine the standard error of the mean: stddev/sqrt(n_frames)
-    master_flat.err = np.nanstd(flat_dataset.all_data, axis=0)/np.sqrt(len(flat_dataset))
+    #determine the standard error of the mean: stddev/sqrt(n_frames)
+    flat_field.err = np.nanstd(flat_dataset.all_data, axis=0)/np.sqrt(len(flat_dataset))
+    flat_field.err=flat_field.err.reshape((1,)+flat_field.err.shape) # Get it into the right dimension
 
-    return master_flat
+    
+    return flat_field
 
 def get_relgains(frame, em_gain, non_lin_correction):
     """

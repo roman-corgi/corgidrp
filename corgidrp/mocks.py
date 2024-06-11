@@ -35,11 +35,10 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     dataset = data.Dataset(frames)
     return dataset
 
-def create_flat_calib_files(filedir=None, numfiles=10):
+def create_simflat_dataset(filedir=None, numfiles=10):
     """
-    Create simulated data to create a master flat.
-    Assume these have already undergone L1 processing and are L2a level products
-
+    Create simulated data to check the flat division
+    
     Args:
         filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset.  Defaults to 10.
@@ -52,18 +51,47 @@ def create_flat_calib_files(filedir=None, numfiles=10):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    filepattern = "simcal_flat_{0:04d}.fits"
+    filepattern = "sim_flat_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
         # generate images in normal distribution with mean 1 and std 0.01
-        np.random.seed(456+i); sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
+        np.random.seed(456+i); sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
+
+def create_flatfield_dummy(filedir=None, numfiles=2):
+    
+    """
+    #Turn this flat field dataset of image frames that were taken for performing the flat calibration and
+    #to make one master flat image
+
+    #Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 1 to create the dummy flat can be changed to any number
+        
+    #Returns:
+        #corgidrp.data.Dataset: a set of flat field images 
+    #"""
+    ## Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+        
+    filepattern= "flat_field_{0:01d}.fits"
+    frames=[]
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+        np.random.seed(456+i); sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    flatfield = data.Dataset(frames)
+    return flatfield
 
 def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     """

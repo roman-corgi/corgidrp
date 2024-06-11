@@ -153,7 +153,34 @@ class Dataset():
         self.all_err = np.array([frame.err for frame in self.frames])   
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
+            
+	
+    def rescale_error(self, input_error, err_name):
+        """
+        Calls Image.rescale_errors() for each frame.
+        Updates Dataset.all_err
+        
+        Args:
+          input_error (np.array): 2-d error layer or 3-d layer
+          err_name (str): name of the uncertainty layer
+        """
+        if input_error.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.rescale_error(input_error[i], err_name)
 
+        elif input_error.ndim ==2:
+            for frame in self.frames:
+                frame.rescale_error(input_error, err_name)
+
+        else:
+            raise ValueError("input_error is not either a 2D or 3D array.")
+        
+        # Preserve pointer links between Dataset.all_err and Image.err
+        self.all_err = np.array([frame.err for frame in self.frames])   
+        for i, frame in enumerate(self.frames):
+            frame.err = self.all_err[i]
+           
+  
 class Image():
     """
     Base class for 2-D image data. Data can be created by passing in the data/header explicitly, or
@@ -382,6 +409,37 @@ class Image():
         layer = str(self.err.shape[0])
         self.err_hdr["Layer_1"] = "combined_error"
         self.err_hdr["Layer_" + layer] = err_name
+    
+    def rescale_error(self, input_error, err_name):
+        """
+        Add a layer of a specific additive uncertainty on the 3-dim error array extension
+        and update the combined uncertainty in the first layer.
+        Update the error header and assign the error name. 
+
+        Only tracks individual errors if the "track_individual_errors" setting is set to True
+        in the configuration file
+        
+        Args:
+          input_error (np.array): 2-d error layer
+          err_name (str): name of the uncertainty layer
+        """
+        if input_error.ndim != 2 or input_error.shape != self.data.shape:
+            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        
+        #first layer is always the updated combined error
+        self.err = np.sqrt(self.err**2 * input_error**2)
+        self.err_hdr["Layer_1"] = "combined_error"
+
+        if corgidrp.track_individual_errors:
+            #append new error as layer on 3D cube
+            self.err=np.append(self.err, [input_error], axis=0)
+
+            layer = str(self.err.shape[0])
+            self.err_hdr["Layer_" + layer] = err_name    
+        
+        # record history since 2-D error map doesn't track individual terms
+        self.err_hdr['HISTORY'] = "rescaled error term: {0}".format(err_name)     
+
 
 
 class Dark(Image):
@@ -425,7 +483,7 @@ class Dark(Image):
             raise ValueError("File that was loaded was not a Dark file.")
 
             
-class Masterflat(Image):
+class FlatField(Image):
     """
     Master flat generated from raster scan of uranus or Neptune.
 
@@ -445,7 +503,7 @@ class Masterflat(Image):
             if input_dataset is None:
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
-            self.ext_hdr['DATATYPE'] = 'Masterflat' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'FlatField' # corgidrp specific keyword for saving to disk
 
             # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)
@@ -455,14 +513,14 @@ class Masterflat(Image):
 
             # give it a default filename using the first input file as the base
             orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_masterflat.fits".format(orig_input_filename)
+            self.filename = "{0}_flatfield.fits".format(orig_input_filename)
 
 
         # double check that this is actually a masterflat file that got read in
         # since if only a filepath was passed in, any file could have been read in
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Masterflat':
-            raise ValueError("File that was loaded was not a Master flat file.")
-
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'FlatField':
+            raise ValueError("File that was loaded was not a FlatField file.")
+            
 class NonLinearityCalibration(Image):
     """
     Class for non-linearity calibration files. Although it's not stricly an image that you might look at, it is a 2D array of data
@@ -542,7 +600,7 @@ class NonLinearityCalibration(Image):
 
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
-              "Masterflat" : Masterflat,
+              "FlatField" :FlatField,
               "NonLinearityCalibration" : NonLinearityCalibration }
 
 def autoload(filepath):
