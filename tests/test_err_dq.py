@@ -223,14 +223,28 @@ def test_hashing():
     Test hashing works on data, err, and dq at the same time
     Two images with same data should be the same
     """
+    # identical images should get the same hash
     image1 = Image(data, err = err, dq = dq, pri_hdr = prhd, ext_hdr = exthd)
     image2 = Image(np.copy(data), err = np.copy(err), dq = np.copy(dq), pri_hdr = prhd, ext_hdr = exthd)
 
     assert image1.get_hash() == image2.get_hash()
 
+    # modifying the data should result in different hashes
     image2.data += 1
 
     assert image1.get_hash() != image2.get_hash()
+
+    # take image 2 and modify the error. should be different hash from before
+    old_hash = image2.get_hash()
+
+    image2.err += 1
+    assert old_hash != image2.get_hash()
+
+    # take image 2 and modify the dq frame. should be different hash from before
+    old_hash = image2.get_hash()
+
+    image2.dq[0] = 1
+    assert old_hash != image2.get_hash()
 
 def teardown_module():
     """
