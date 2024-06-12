@@ -102,7 +102,9 @@ detector_areas= {
         'prescan' : {
             'rows': 1200,
             'cols': 1088,
-            'r0c0': [0, 0]
+            'r0c0': [0, 0],
+            'col_start': 800,
+            'col_end': 1000,
             },
         'prescan_reliable' : {
             'rows': 1200,
@@ -151,9 +153,25 @@ detector_areas= {
         },
     }
 
+def unpack_geometry(obstype,key):
+    '''
+    Safely check format of geom sub-dictionary and return values.
+
+    Ported from II&T read_metadata.py
+    '''
+
+    rows = detector_areas[obstype][key]['rows']
+    cols = detector_areas[obstype][key]['cols']
+    r0c0 = detector_areas[obstype][key]['r0c0']
+
+    return rows, cols, r0c0
+
+
 def slice_section(frame, obstype, key):
     """
     Slice 2d section out of frame
+
+    Ported from II&T read_metadata.py
 
     Args:
         frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
@@ -163,14 +181,60 @@ def slice_section(frame, obstype, key):
     Returns:
         np.ndarray: a 2D array of the specified detector area
     """
-    rows = detector_areas[obstype][key]['rows']
-    cols = detector_areas[obstype][key]['cols']
-    r0c0 = detector_areas[obstype][key]['r0c0']
+    
+
+    rows, cols, r0c0 = unpack_geometry(obstype, key)
 
     section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
     if section.size == 0:
         raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
     return section
+
+
+def imaging_area_geometry(obstype='SCI'):
+    """
+    
+    Return geometry of imaging area in reference to full frame.
+    
+    Ported from II&T
+
+    Args: 
+        obstype (str): Either 'SCI' or 'ENG'
+
+    Returns: 
+
+    """
+
+    _, cols_pre, _ = unpack_geometry(obstype,'prescan')
+    _, cols_serial_ovr, _ = unpack_geometry(obstype,'serial_overscan')
+    rows_parallel_ovr, _, _ = unpack_geometry(obstype,'parallel_overscan')
+    fluxmap_rows, _, r0c0_image = unpack_geometry(obstype,'image')
+
+    rows_im = detector_areas[obstype]['frame_rows'] - rows_parallel_ovr
+    cols_im = detector_areas[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
+    r0c0_im = r0c0_image.copy()
+    r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
+
+    return rows_im, cols_im, r0c0_im
+
+
+def imaging_slice(frame,obstype='SCI'): 
+    """
+
+    Select only the real counts from full frame and exclude virtual.
+
+    Use this to transform mask and embed from acting on the full frame to
+    acting on only the image frame.
+
+    Ported from II&T read_metadata.py
+
+    """
+
+    # Return geometry of imaging area in reference to full frame.
+
+    rows, cols, r0c0 = self._imaging_area_geom()
+
+    return frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
 
 def plot_detector_areas(detector_areas, areas=('image', 'prescan',
         'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
