@@ -441,6 +441,22 @@ class Image():
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
+    def get_hash(self):
+        """
+        Computes the hash of the data, err, and dq. Does not use the header information.
+
+        Returns:
+            str: the hash of the data, err, and dq
+        """
+        data_bytes = self.data.data.tobytes()
+        err_bytes = self.err.data.tobytes()
+        dq_bytes = self.dq.data.tobytes()
+
+        total_bytes = data_bytes + err_bytes + dq_bytes
+
+        return int(hash(total_bytes))
+
+
 class Dark(Image):
     """
     Dark calibration frame for a given exposure time.
