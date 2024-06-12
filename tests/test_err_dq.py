@@ -218,6 +218,20 @@ def test_err_array_sizes():
     dark_frame.save(filedir=calibdir, filename=dark_filename)
     testcaldb.scan_dir_for_new_entries(calibdir)
     
+def test_hashing():
+    """
+    Test hashing works on data, err, and dq at the same time
+    Two images with same data should be the same
+    """
+    image1 = Image(data, err = err, dq = dq, pri_hdr = prhd, ext_hdr = exthd)
+    image2 = Image(np.copy(data), err = np.copy(err), dq = np.copy(dq), pri_hdr = prhd, ext_hdr = exthd)
+
+    assert image1.get_hash() == image2.get_hash()
+
+    image2.data += 1
+
+    assert image1.get_hash() != image2.get_hash()
+
 def teardown_module():
     """
     Runs automatically at the end. ONLY IN PYTEST
@@ -238,6 +252,7 @@ if __name__ == '__main__':
     test_add_error_term()
     test_err_dq_dataset()
     test_get_masked_data()
+    test_hashing()
     
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))
