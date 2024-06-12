@@ -16,6 +16,7 @@ column_names = [
     "EXPTIME",
     "Files Used",
     "Date Created",
+    "Hash",
     "DRPVERSN",
     "OBSID",
     "NAXIS1",
@@ -114,6 +115,8 @@ class CalDB:
 
         obsid = entry.pri_hdr["OBSID"]
 
+        hash_val = entry.get_hash()
+
         # this only works for 2D images. may need to adapt for non-2D calibration frames
         naxis1 = entry.data.shape[-1]
         naxis2 = entry.data.shape[-2]
@@ -125,6 +128,7 @@ class CalDB:
             exptime,
             files_used,
             date_created,
+            hash_val,
             drp_version,
             obsid,
             naxis1,
