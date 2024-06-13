@@ -16,7 +16,7 @@ prhd, exthd = create_default_headers()
 
 def test_bad_pixels():
 
-    corgidrp.track_individual_errors = True
+    corgidrp.track_individual_errors = False
 
     print("UT for pipeline step correct_bad_pixels")
 

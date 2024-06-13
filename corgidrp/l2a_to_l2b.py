@@ -174,7 +174,7 @@ def correct_bad_pixels(input_dataset, bp_mask):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
         bp_mask (corgidrp.data.BadPixelMap): Bad-pixel mask flagging all bad pixels
-            in that frame. Must be 0 (good) or 1 (bad) at every pixel.
+            in that frame.
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with bad detector
@@ -187,16 +187,16 @@ def correct_bad_pixels(input_dataset, bp_mask):
     dq_cube = data.all_dq
 
     for i in range(data_cube.shape[0]):
-        # load CR mask
-        cr_mask = dq_cube[i]
-        # combine CR and BP masks
-        bp_cr_mask = (cr_mask+bp_mask[0].data).astype(int)
+        # load DQ mask
+        dq_mask = dq_cube[i]
+        # combine DQ and BP masks
+        bp_dq_mask = (dq_mask+bp_mask[0].data).astype(int)
         # mask affected pixels with NaN
-        bp = np.where(bp_cr_mask != 0)
+        bp = np.where(bp_dq_mask != 0)
         data_cube[i, bp[0], bp[1]] = np.nan
-        dq_cube[i] = bp_cr_mask
+        dq_cube[i] = bp_dq_mask
 
-    history_msg = "removed pixels affected by cosmic rays and bad pixels"
+    history_msg = "removed pixels affected by bad pixels"
     data.update_after_processing_step(history_msg, new_all_data=data_cube,
         new_all_dq=dq_cube)
 
