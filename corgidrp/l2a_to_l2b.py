@@ -160,7 +160,10 @@ def flat_division(input_dataset, master_flat):
 def desmear(input_dataset):
     """
 
-    Desmear data frames.
+    EXCAM has no shutter, and so continues to illuminate the detector during
+    readout. This creates a "smearing" effect into the resulting images. The
+    desmear function corrects for this effect. There are a small number of use
+    cases for not desmearing data (e.g. time-varying raster data).
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
