@@ -14,7 +14,7 @@ def test_desmear():
     # Tolerance for comparisons
     tol = 1e-12
 
-    corgidrp.track_individual_errors = True
+    corgidrp.track_individual_errors = False
 
     print("Testing desmear step function")
 
