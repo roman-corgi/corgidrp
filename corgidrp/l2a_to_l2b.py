@@ -184,13 +184,18 @@ def correct_bad_pixels(input_dataset, bp_mask):
 
     data = input_dataset.copy()
     data_cube = data.all_data
-    dq_cube = data.all_dq
+    dq_cube = data.all_dq.astype(np.uint8)
 
     for i in range(data_cube.shape[0]):
         # load DQ mask
         dq_mask = dq_cube[i]
+        # Transform integer DQ values into 0/1 arrays
+        dq_mask_bit = np.unpackbits(dq_mask)
+        bp_mask_bit = np.unpackbits(bp_mask[0].data.astype(np.uint8))
         # combine DQ and BP masks
-        bp_dq_mask = (dq_mask+bp_mask[0].data).astype(int)
+        bp_dq_mask_bit = np.bitwise_or(dq_mask_bit, bp_mask_bit)
+        # Transform back to integer DQ values
+        bp_dq_mask = np.packbits(bp_dq_mask_bit).reshape(dq_mask.shape[0], dq_mask.shape[1])
         # mask affected pixels with NaN
         bp = np.where(bp_dq_mask != 0)
         data_cube[i, bp[0], bp[1]] = np.nan

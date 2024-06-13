@@ -32,7 +32,10 @@ def test_bad_pixels():
     row_cr_test = [546, 789, 123, 43, 547, 675]
     for i_col in col_cr_test:
         for i_row in row_cr_test:
-            dq_cube[0, i_col, i_row] += 128
+            # Cast into bits 
+            dq_bit = np.unpackbits(dq_cube[0, i_col, i_row].astype(np.uint8))
+            dq_bit = np.bitwise_or(dq_bit, 128)
+            dq_cube[0, i_col, i_row] = np.packbits(dq_bit)
 
     history_msg = "Pixels affected by CR added"
     dataset.update_after_processing_step(history_msg, new_all_data=data_cube,
