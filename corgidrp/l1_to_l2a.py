@@ -194,7 +194,9 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thr
     # add the two masks to the all_dq mask
     new_all_dq = crmasked_dataset.all_dq + m1 + m2
 
-    history_msg = "Cosmic ray mask created."
+    history_msg = ("Cosmic ray mask created. "
+                   "Used detector parameters from {0}"
+                   "with hash {1}").format(detector_params.filename, detector_params.get_hash())
 
     # update the output dataset with this new dark subtracted data and update the history
     crmasked_dataset.update_after_processing_step(history_msg, new_all_dq=new_all_dq)
