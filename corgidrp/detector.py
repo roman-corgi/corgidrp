@@ -243,7 +243,7 @@ def get_rowreadtime_sec(datetime=None):
         Functional Tests) and the duration of the Roman Coronagraph mission.
 
     Returns:
-        rowreadtime (float): Current value of rowreadtime in sec.
+        float: Current value of rowreadtime in sec.
 
     """ 
     # Some datetime between the first collection of ground data (Full
@@ -281,7 +281,7 @@ def get_fwc_em_e(datetime=None):
         Functional Tests) and the duration of the Roman Coronagraph mission.
 
     Returns:
-        fwc_em (float): Value of FWC_EM in units of electrons at time of observation.
+        float: Value of FWC_EM in units of electrons at time of observation.
 
     """ 
 
@@ -319,7 +319,7 @@ def get_fwc_pp_e(datetime=None):
         Functional Tests) and the duration of the Roman Coronagraph mission.
 
     Returns:
-        fwc_pp (float): Value of FWC_PP in electrons at time of observation.
+        float: Value of FWC_PP in electrons at time of observation.
 
     """ 
     # Some datetime between the first collection of ground data (Full
@@ -357,7 +357,7 @@ def get_kgain(datetime=None):
         Functional Tests) and the duration of the Roman Coronagraph mission.
 
     Returns:
-        kgain (float): The K gain in electrons/dN at time of observation.
+        float: The K gain in electrons/dN at time of observation.
 
     """ 
     # Some datetime between the first collection of ground data (Full
@@ -411,7 +411,7 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
             Minimum length in pixels of cosmic plateus to be identified.
 
     Returns:
-        mask (array_like, int): 
+        array_like, int: 
             Mask for pixels that have been set to zero.
 
     Notes
@@ -470,7 +470,7 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
             Minimum length in pixels of cosmic plateus to be identified.
 
     Returns:
-        i_beg (array_like, int): 
+        array_like, int: 
             Index of plateau beginnings, or None if there is no plateau.
     """
     # Lowpass filter row to differentiate plateaus from standalone pixels
@@ -501,7 +501,7 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
             what qualifies as saturation. A reasonable value is 0.99
 
     Returns:
-        sat_fwcs (np.array): _description_
+        np.array: _description_
     """
     possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
     sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)

@@ -131,16 +131,17 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
         sat_thresh (float): 
-            Multiplication factor for fwc that determines saturated cosmic
-            pixels. Interval 0 to 1, defaults to 0.99.
+            Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
+            pixels. Interval 0 to 1, defaults to 0.99. Lower numbers are more aggressive in flagging saturation.
         plat_thresh (float): 
-            Multiplication factor for fwc that determines edges of cosmic
-            plateau. Interval 0 to 1, defaults to 0.85
+            Multiplication factor for pixel full-well capacity (fwc) that determines edges of cosmic
+            plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
+            ray hits.
         cosm_filter (int): 
             Minimum length in pixels of cosmic plateus to be identified. Defaults to 2
     
     Returns:
-        crmasked_dataset (corgidrp.data.Dataset): 
+        corgidrp.data.Dataset: 
             A version of the input dataset of the input dataset where the cosmic rays have been identified. 
     """
     sat_dqval = 32 # DQ value corresponding to full well saturation
