@@ -14,6 +14,6 @@ config = configparser.ConfigParser()
 config.read(config_filepath)
 
 ## pipeline settings
-aux_dir = config.get("PATH", "auxdir", fallback=None)
 caldb_filepath = config.get("PATH", "caldb", fallback=None)
+default_cal_dir = config.get("PATH", "default_calibs", fallback=None)
 track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors").lower()]
