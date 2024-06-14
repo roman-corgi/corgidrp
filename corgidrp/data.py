@@ -454,7 +454,7 @@ class Image():
 
         total_bytes = data_bytes + err_bytes + dq_bytes
 
-        return int(hash(total_bytes))
+        return str(hash(total_bytes))
 
 
 class Dark(Image):
