@@ -1,6 +1,7 @@
 import glob
 import os
 
+import corgidrp.data as data
 import corgidrp.mocks as mocks
 from corgidrp.l1_to_l2a import detect_cosmic_rays
 from corgidrp.detector import find_plateaus, calc_sat_fwc, get_fwc_em_e, get_fwc_pp_e, get_kgain
@@ -125,6 +126,8 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter):
 ###### create simulated data
 datadir = os.path.join(os.path.dirname(__file__), "simdata")
 
+detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
+
 def test_iit_vs_corgidrp():
     """
     Generate mock raw data ('SCI' & 'ENG') and pass into prescan processing function. 
@@ -162,7 +165,7 @@ def test_iit_vs_corgidrp():
     iit_masks_arr = np.array(iit_masks)
 
     # corgidrp version
-    crmasked_dataset = detect_cosmic_rays(dataset)
+    crmasked_dataset = detect_cosmic_rays(dataset, detector_params)
     corgi_crmask_bool = np.where(crmasked_dataset.all_dq>0,1,0)
 
     if not corgi_crmask_bool == approx(iit_masks_arr):
@@ -180,7 +183,7 @@ def test_crs_zeros_frame():
     # Overwrite data with zeros
     dataset.all_data[:,:,:] = 0.
 
-    output_dataset = detect_cosmic_rays(dataset)
+    output_dataset = detect_cosmic_rays(dataset, detector_params)
 
     if output_dataset.all_dq != approx(0,abs=tol):
         raise Exception(f'Operating on all zero frames did not return all zero dq mask.')
@@ -191,7 +194,7 @@ def test_correct_headers():
     """
     # create simulated data
     dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
-    output_dataset = detect_cosmic_rays(dataset)
+    output_dataset = detect_cosmic_rays(dataset, detector_params)
 
     for frame in output_dataset:
         if not ("FWC_EM_E" in frame.ext_hdr):
@@ -356,7 +359,7 @@ def test_mask():
     dataset.all_data[0,1, 2:2+len(cosm_bs)] = cosm_bs
     check_mask = np.zeros_like(dataset.all_dq, dtype=int)
     check_mask[0,1, 1:] = 1  # Mask starts 1 before cosmic
-    dataset_masked = detect_cosmic_rays(dataset)
+    dataset_masked = detect_cosmic_rays(dataset, detector_params)
     if not np.where(dataset_masked.all_dq>0,1,0) == approx(check_mask):
         raise Exception("Incorrect pixels were masked.")
     
