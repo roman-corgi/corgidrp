@@ -716,9 +716,9 @@ class AstrometricCalibration(Image):
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
     Attrs:
-        _boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
-        _platescale (float): the platescale value in [mas/pixel]
-        _northangle (float): the north angle value in [deg]
+        boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
+        platescale (float): the platescale value in [mas/pixel]
+        northangle (float): the north angle value in [deg]
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
         # run the image class constructor
@@ -727,10 +727,6 @@ class AstrometricCalibration(Image):
         # File format checks
         if self.data.shape != (4,):
             raise ValueError("The AstrometricCalibration data should be a 1D array of four values")
-        
-        self._boresightRA = self.data[:2]
-        self._platescale = self.data[2]
-        self._northangle = self.data[3]
 
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
@@ -746,6 +742,16 @@ class AstrometricCalibration(Image):
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
             raise ValueError("File that was loaded was not an AstrometricCalibration file.")
+    
+    @property    
+    def boresight(self):
+        return self.data[:2]
+    
+    def platescale(self):
+        return self.data[2]
+    
+    def northangle(self):
+        return self.data[3]
 
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
