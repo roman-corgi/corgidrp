@@ -853,8 +853,3 @@ class ut_check:
 
 if __name__ == '__main__':
     unittest.main()
-
-
-if __name__ == '__main__':
-    unittest.main()
-
