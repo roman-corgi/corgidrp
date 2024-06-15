@@ -267,6 +267,25 @@ def get_rowreadtime_sec(datetime=None):
     return rowreadtime_sec
 
 
+"""
+Set of default parameters used in the calibration of Kgain
+
+    offset_rowroi1: offset ROI constant
+    offset_rowroi2: offset ROI constant
+    offset_colroi1: offset ROI constant
+    offset_colroi2: offset ROI constant
+    rowroi1: ROI constant
+    rowroi2: ROI constant
+    colroi1: ROI constant
+    colroi2: ROI constant
+    rn_bins1: read noise bins range limit 1
+    rn_bins2: read noise bins range limit 2
+    max_DN_val: maximum DN value to be included in PTC
+    signal_bins_N: number of bins in the signal variables
+    log_plot1: log plot min value
+    log_plot2: log plot max value
+    log_plot3: log plot number of elements
+"""
 kgain_params= {
     # offset ROI constants
     'offset_rowroi1': 99,
@@ -296,6 +315,11 @@ kgain_params= {
     'logplot3': 200,
     }
 
+"""
+Set of default parameters used in the calibration of non-linearity
+
+
+"""
 nonlin_params= {
     # offset column ROI range
     'offset_colroi1': 799,

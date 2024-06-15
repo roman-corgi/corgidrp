@@ -5,14 +5,12 @@ import warnings
 from scipy.optimize import curve_fit
 
 here = Path(os.path.dirname(os.path.abspath(__file__)))
-default_config_file = Path(here, 'config_files', 'kgain_parms.yaml')
 
 class CalKgainException(Exception):
     """Exception class for calibrate_kgain."""
 
 def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val, 
-                    binwidth=68, config_file=default_config_file, 
-                    mkplot=None, verbose=None):
+                    binwidth=68, mkplot=None, verbose=None):
     """Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
     exposure time, this function subtracts the prescan bias from each frame. It 
@@ -67,26 +65,6 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         values increase computation time.
         (minimum 10; binwidth between 65 and 75 recommended)
     
-    config_file : `str`
-        YAML configuration file that contains relevant constants.
-        YAML file must contain constants named:
-            offset_rowroi1: offset ROI constant
-            offset_rowroi2: offset ROI constant
-            offset_colroi1: offset ROI constant
-            offset_colroi2: offset ROI constant
-            rowroi1: ROI constant
-            rowroi2: ROI constant
-            colroi1: ROI constant
-            colroi2: ROI constant
-            rn_bins1: read noise bins range limit 1
-            rn_bins2: read noise bins range limit 2
-            max_DN_val: maximum DN value to be included in PTC
-            signal_bins_N: number of bins in the signal variables
-            log_plot1: log plot min value
-            log_plot2: log plot max value
-            log_plot3: log plot number of elements
-        Defaults to default_config_file, which is delivered with the repository
-    
     mkplot : boolean
         Option to display plots. Default is None. If mkplot is anything other 
         than None, then this option is chosen.
@@ -115,7 +93,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     
     ptc : array-like
         array of size N x 2, where N is the number of bins set by the 'signal_bins_N' 
-        parameter in the YAML config_file. The first column is the mean (DN) and 
+        parameter in detector.kgain_params. The first column is the mean (DN) and 
         the second column is standard deviation (DN) corrected for read noise.
     
     """
@@ -368,7 +346,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     
     ######################### start of main code #############################
     
-    # get relevant constants from config_file
+    # get relevant constants
     from corgidrp.detector import kgain_params as constants_config
     offset_rowroi1 = constants_config['offset_rowroi1']
     offset_rowroi2 = constants_config['offset_rowroi2']

@@ -11,8 +11,6 @@ import io
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from cal.util.loadyaml import loadyaml
-
 here = Path(os.path.dirname(os.path.abspath(__file__)))
 default_config_file = Path(here, 'config_files', 'nonlin_parms.yaml')
 
@@ -175,8 +173,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     
     # input checks
     # load in config file
-    master_files = loadyaml(config_file)
-    
+    from corgidrp.detector import kgain_params as master_files
+
     # check pointer yaml file
     if 'offset_colroi1' not in master_files:
         raise ValueError('Missing parameter in directory pointer YAML file.')
@@ -281,7 +279,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         raise TypeError('fit_low_cutoff2 is not a number')
     
     # get relevant constants from config_file
-    constants_config = loadyaml(config_file)
+    from corgidrp.detector import kgain_params as constants_config
     offset_colroi1 = constants_config['offset_colroi1']
     offset_colroi2 = constants_config['offset_colroi2']
     rowroi1 = constants_config['rowroi1']
