@@ -4,7 +4,7 @@ import corgidrp.util.check as check
 def mean_combine(image_list, bpmap_list, err=False):
     """
     Get mean frame and corresponding bad-pixel map from L2b data frames.  The
-    input "image_list" should consist of frames with no bad pixels marked or
+    input image_list should consist of frames with no bad pixels marked or
     removed.  This function takes the bad-pixels maps into account when taking
     the mean.
 
