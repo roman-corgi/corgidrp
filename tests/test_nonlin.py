@@ -179,10 +179,6 @@ max_write = 10000
 class TestCalibrateNonlin(unittest.TestCase):
     """Unit tests for calibrate_nonlin method."""
 
-    # config file
-    config_file = os.path.join(os.path.join(local_path, 'config_files'),
-                               'nonlin_parms.yaml')
-    
     def setUp(self):
 
         self.exp_time_stack_arr = exp_time_stack_arr0
@@ -192,10 +188,6 @@ class TestCalibrateNonlin(unittest.TestCase):
         self.min_write = min_write
         self.max_write = max_write
         self.norm_val = norm_val
-        self.ut_config_file1 = os.path.join(os.path.join(local_path, 
-                                'config_files'),'ut_nonlin_parms1.yaml')
-        self.ut_config_file2 = os.path.join(os.path.join(local_path, 
-                                'config_files'),'ut_nonlin_parms2.yaml')
 
         # filter out expected warnings
         warnings.filterwarnings('ignore', category=UserWarning,
@@ -206,8 +198,7 @@ class TestCalibrateNonlin(unittest.TestCase):
         (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(stack_arr, 
                             self.exp_time_stack_arr, self.time_stack_arr, 
                             self.len_list, stack_arr2, self.actual_gain_arr, 
-                            self.norm_val, self.min_write, self.max_write, 
-                            self.config_file)
+                            self.norm_val, self.min_write, self.max_write)
         
         # Calculate rms of the differences between the assumed nonlinearity and 
         # the nonlinearity determined with calibrate_nonlin
@@ -246,8 +237,7 @@ class TestCalibrateNonlin(unittest.TestCase):
         (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(stack_arr, 
                             self.exp_time_stack_arr, time_stack_arr1, 
                             self.len_list, stack_arr2, self.actual_gain_arr, 
-                            self.norm_val, self.min_write, self.max_write, 
-                            self.config_file)
+                            self.norm_val, self.min_write, self.max_write)
         
         # Calculate rms of the differences between the assumed nonlinearity and 
         # the nonlinearity determined with calibrate_nonlin
@@ -456,8 +446,7 @@ class TestCalibrateNonlin(unittest.TestCase):
                 calibrate_nonlin(stack_arr, self.exp_time_stack_arr, 
                                     self.time_stack_arr, self.len_list, stack_arr2, 
                                     self.actual_gain_arr, self.norm_val, 
-                                    self.min_write, self.max_write,
-                                    self.ut_config_file1)
+                                    self.min_write, self.max_write)
 
     def test_rms_rns(self):
         """rms_low_limit and rms_upp_limit must be real nonnegative scalars."""
@@ -465,8 +454,7 @@ class TestCalibrateNonlin(unittest.TestCase):
                 calibrate_nonlin(stack_arr, self.exp_time_stack_arr, 
                                     self.time_stack_arr, self.len_list, stack_arr2, 
                                     self.actual_gain_arr, self.norm_val, 
-                                    self.min_write, self.max_write,
-                                    self.ut_config_file2)
+                                    self.min_write, self.max_write)
 
 if __name__ == '__main__':
     unittest.main()

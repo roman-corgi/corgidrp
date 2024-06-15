@@ -8,7 +8,7 @@ import warnings
 from scipy.interpolate import interp1d
 import io
 import matplotlib.pyplot as plt
-from statsmodels.nonparametric.smoothers_lowess import lowess
+#from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from corgidrp.calibrate_kgain import check
 
@@ -140,7 +140,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     """
     
     # input checks
-    # load in config file
+    # load in default parameters
     from corgidrp.detector import nonlin_params as master_files
 
     # check pointer yaml file
