@@ -22,19 +22,19 @@ def find_plateaus_iit(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     Args:
         streak_row (float):
             Row with possible cosmics.
-        fwc (float): 
+        fwc (float):
             Full well capacity of detector *in DNs*.  Note that this may require a
             conversion as FWCs are usually specified in electrons, but the image
             is in DNs at this point.
-        sat_thresh (float): 
+        sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
-        plat_thresh (float): 
+        plat_thresh (float):
             Multiplication factor for fwc that determines edges of cosmic plateu.
-        cosm_filter (int): 
+        cosm_filter (int):
             Minimum length in pixels of cosmic plateus to be identified.
 
     Returns:
-        i_beg (array_like, int): 
+        i_beg (array_like, int):
             Index of plateau beginnings, or None if there is no plateau.
 
     """
@@ -69,21 +69,21 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter):
     be identified. A reasonable value is 2.
 
     Args:
-        image (array_like, float): 
+        image (array_like, float):
             Image area of frame (bias of zero).
-        fwc (float): 
+        fwc (float):
             Full well capacity of detector *in DNs*.  Note that this may require a
             conversion as FWCs are usually specified in electrons, but the image
             is in DNs at this point.
-        sat_thresh (float): 
+        sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
-        plat_thresh (float): 
+        plat_thresh (float):
             Multiplication factor for fwc that determines edges of cosmic plateu.
-        cosm_filter (int): 
+        cosm_filter (int):
             Minimum length in pixels of cosmic plateus to be identified.
 
     Returns:
-        mask (array_like, int): 
+        mask (array_like, int):
             Mask for pixels that have been set to zero.
 
     Notes
@@ -127,7 +127,7 @@ datadir = os.path.join(os.path.dirname(__file__), "simdata")
 
 def test_iit_vs_corgidrp():
     """
-    Generate mock raw data ('SCI' & 'ENG') and pass into prescan processing function. 
+    Generate mock raw data ('SCI' & 'ENG') and pass into prescan processing function.
     Check output dataset shapes, maintain pointers in the Dataset and Image class,
     and check that output is consistent with results II&T code.
     """
@@ -143,7 +143,7 @@ def test_iit_vs_corgidrp():
     sat_thresh = 0.99
     plat_thresh = 0.85
     cosm_filter = 2
-    
+
     # create simulated data
     dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,em_gain=em_gain, numCRs=5, plateau_length=10)
 
@@ -152,12 +152,12 @@ def test_iit_vs_corgidrp():
 
     # II&T version
     for frame in dataset:
-        
-        cr_mask = remove_cosmics_iit(frame.data, fwc=fwc, 
-                                 sat_thresh=sat_thresh, 
-                                 plat_thresh=plat_thresh, 
+
+        cr_mask = remove_cosmics_iit(frame.data, fwc=fwc,
+                                 sat_thresh=sat_thresh,
+                                 plat_thresh=plat_thresh,
                                  cosm_filter=cosm_filter)
-        
+
         iit_masks.append(cr_mask)
     iit_masks_arr = np.array(iit_masks)
 
@@ -169,9 +169,9 @@ def test_iit_vs_corgidrp():
         raise Exception(f'Corgidrp and II&T functions do not result in the same CR masks.')
 
 def test_crs_zeros_frame():
-    """Verify detect_cosmics does not break for a frame of all zeros 
+    """Verify detect_cosmics does not break for a frame of all zeros
     (should return all zeros)."""
-    
+
     tol = 1e-13
 
     # create simulated data
@@ -196,7 +196,7 @@ def test_correct_headers():
     for frame in output_dataset:
         if not ("FWC_EM_E" in frame.ext_hdr):
             raise Exception("'FWC_EM_E' missing from frame header.")
-        
+
         if not ("FWC_PP_E" in frame.ext_hdr):
             raise Exception("'FWC_PP_E' missing from frame header.")
 
@@ -214,7 +214,7 @@ def test_saturation_calc():
     fwc_pp = np.array([90,90])
     em_gain = np.array([1000,1000])
     sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
-    
+
     expected = fwc_em * sat_thresh
     if not sat_fwcs == approx(expected):
         raise Exception(f"Saturation full-well capacity calculation incorrect when fwc_em = fwc_pp * em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
@@ -224,7 +224,7 @@ def test_saturation_calc():
     fwc_pp = np.array([90,90])
     em_gain = np.array([1000,1000])
     sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
-    
+
     expected = fwc_em * sat_thresh
     if not sat_fwcs == approx(expected):
         raise Exception(f"Saturation full-well capacity calculation incorrect when fwc_em < fwc_pp * em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
@@ -234,17 +234,17 @@ def test_saturation_calc():
     fwc_pp = np.array([50,50])
     em_gain = np.array([1000,1000])
     sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
-    
+
     expected = fwc_pp * em_gain * sat_thresh
     if not sat_fwcs == approx(expected):
         raise Exception(f"Saturation full-well capacity calculation incorrect when fwc_em > fwc_pp * em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
-    
+
     # fwc_em > fwc_pp * em_gain for first frame, fwc_em < fwc_pp * em_gain for second frame
     fwc_em = np.array([90000,50000])
     fwc_pp = np.array([500,90])
     em_gain = np.array([100,1000])
     sat_fwcs = calc_sat_fwc(em_gain,fwc_pp,fwc_em,sat_thresh)
-    
+
     expected = np.array([49500.,49500.])
     if not sat_fwcs == approx(expected):
         raise Exception(f"Saturation full-well capacity calculation incorrect when frames have different fwc_em, fwc_pp, em_gain. \nReturned {sat_fwcs} when {expected} was expected.")
@@ -252,7 +252,7 @@ def test_saturation_calc():
 def test_get_fwc_em_e():
     """
     Asserts that FWC_EM is fetched correctly.
-    """    
+    """
 
     t_end = Time('2039-12-01 00:00:00', scale='utc')
 
@@ -270,7 +270,7 @@ def test_get_fwc_em_e():
 def test_get_fwc_pp_e():
     """
     Asserts that FWC_PP is fetched correctly.
-    """    
+    """
 
     t_end = Time('2039-12-01 00:00:00', scale='utc')
 
@@ -288,7 +288,7 @@ def test_get_fwc_pp_e():
 def test_get_kgain():
     """
     Asserts that FWC_PP is fetched correctly.
-    """    
+    """
 
     t_end = Time('2039-12-01 00:00:00', scale='utc')
 
@@ -348,7 +348,7 @@ bs_dataset.all_data[0,i_streak_rows_t[3], im_width-len(p_basic):] = p_basic
 bs_dataset_below_thresh.all_data[0,im_width//2, 50:50+len(not_cosm_bs)] = not_cosm_bs
 bs_dataset_single_pix.all_data[0,im_width//2, im_width//2] = fwc
 
-    
+
 def test_mask():
     """Assert correct elements are masked."""
     dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=1,numCRs=0, plateau_length=10)
@@ -359,7 +359,7 @@ def test_mask():
     dataset_masked = detect_cosmic_rays(dataset)
     if not np.where(dataset_masked.all_dq>0,1,0) == approx(check_mask):
         raise Exception("Incorrect pixels were masked.")
-    
+
 def test_i_begs():
     """Verify that function returns correct i_begs result."""
     beg = 50
