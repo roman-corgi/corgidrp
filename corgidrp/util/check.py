@@ -17,6 +17,10 @@ int_types = (int, np.integer)
 def _checkname(vname):
     """
     Internal check that we can use vname as a string for printing
+
+    Args:
+    vname: str
+        variable name
     """
     if not isinstance(vname, string_types):
         raise CheckException('vname must be a string when fed to check ' + \
@@ -27,6 +31,10 @@ def _checkname(vname):
 def _checkexc(vexc):
     """
     Internal check that we can raise from the vexc object
+
+    Args:
+    vexc: str
+        exception name
     """
     if not isinstance(vexc, type): # pre-check it is class-like
         raise CheckException('vexc must be a Exception, or an object ' + \

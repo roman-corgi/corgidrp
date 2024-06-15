@@ -11,14 +11,27 @@ from corgidrp.detector import Metadata
 
 
 def plot_corner(ax, x, y, ha, va, xytext):
-    """Plot marker with coordinates label."""
+    """Plot marker with coordinates label.
+
+    Args:
+    ax: ax return of plt.subplots
+    x: x coord of offset
+    y: y coord of offset
+    ha: horizontal placement of corner label
+    va: vertical placement of corner label
+    xytext: xy coords of text
+    """
     ax.scatter(x, y, s=2, c='r', marker='s')
     ax.annotate(f'({x}, {y})', (x, y), size=7, ha=ha, va=va, xytext=xytext,
                 textcoords='offset pixels')
 
 
 def plot_im_corners(ax):
-    """Plot corners of image region"""
+    """Plot corners of image region
+
+    Args:
+    ax: ax return of plt.subplots
+    """
     rows, cols, image_r0c0 = meta._unpack_geom('image')
     image_r1c1 = (image_r0c0[0]+rows-1, image_r0c0[1]+cols-1)
 
