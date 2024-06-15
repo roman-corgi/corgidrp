@@ -54,7 +54,6 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     master dark for those rows.
 
     Args:
-
     datasets : list, corgidrp.data.Dataset
         This is a list of instances of corgidrp.data.Dataset.  Each instance
         should be for a stack of dark frames (counts in DN), and each stack is
@@ -73,7 +72,6 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         If None, uses that file.
 
     Returns:
-
     F_map : array-like (full frame)
         A per-pixel map of fixed-pattern noise (in e-).  Any negative values
         from the fit are made positive in the end.

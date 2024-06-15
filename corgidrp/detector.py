@@ -72,14 +72,12 @@ class Metadata(object):
         """Slice 2d section out of frame.
 
         Args;
-
         frame : array_like
             Full frame consistent with size given in frame_rows, frame_cols.
         key : str
             Keyword referencing section to be sliced; must exist in geom.
 
         Returns:
-
         section: array_like
             Desired slice of the frame
 
