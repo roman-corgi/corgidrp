@@ -58,14 +58,17 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
-def frame_select(input_dataset):
+def frame_select(input_dataset, bpix_frac=100., overexp=False, tt_thres=None):
     """
     
-    Selects the frames that we want to use for further processing. 
-    TODO: Decide on frame selection criteria
+    Selects the frames that we want to use for further processing.
+    Not currently implemented!! 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        bpix_frac (float): what percent of the image needs to be bad to discard. Default: 100% (not used)
+        overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
+        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used) 
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
