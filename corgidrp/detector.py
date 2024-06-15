@@ -316,9 +316,34 @@ kgain_params= {
     }
 
 """
-Set of default parameters used in the calibration of non-linearity
+Set of default parameters used in the calibration of the non-linear response
+of the detector
 
-
+    offset_colroi1: offset ROI constant
+    offset_colroi2: offset ROI constant
+    rowroi1: ROI constant
+    rowroi2: ROI constant
+    colroi1: ROI constant
+    colroi2: ROI constant
+    rowback11: background ROI constant
+    rowback12: background ROI constant
+    rowback21: background ROI constant
+    rowback22: background ROI constant
+    colback11: background ROI constant
+    colback12: background ROI constant
+    colback21: background ROI constant
+    colback22: background ROI constant
+    min_exp: minimum exposure time, s
+    num_bins: histogram bin parameters
+    min_bin: histogram bin parameters
+    min_mask_factor: factor for making mask
+    lowess_frac: factor to use in lowess smoothing function
+    rms_low_limit: rms relative error selection limit
+    rms_upp_limit: rm relative error selection limit
+    fit_upp_cutoff1: linear fit upper cutoff
+    fit_upp_cutoff2: linear fit upper cutoff
+    fit_low_cutoff1: linear fit upper cutoff
+    fit_low_cutoff2: linear fit upper cutoff
 """
 nonlin_params= {
     # offset column ROI range

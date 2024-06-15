@@ -11,16 +11,13 @@ import io
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-here = Path(os.path.dirname(os.path.abspath(__file__)))
-default_config_file = Path(here, 'config_files', 'nonlin_parms.yaml')
-
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
 
 def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list, 
                      stack_arr2, actual_gain_arr, norm_val = 2500, 
                      min_write = 800.0, max_write = 10000.0,
-                     config_file=default_config_file, mkplot=None, verbose=None):
+                     mkplot=None, verbose=None):
     """Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
     frames ranging over exposure time, each sub-stack having at least 1 illuminated 
     pupil SCI-sized L1 frame for each exposure time, this function processes the 
@@ -111,36 +108,6 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     max_write : float
         Maximum mean value in DN to output in nonlin_arr and csv_lines. 
         (10000.0 recommended)
-    
-    config_file : `str`
-        YAML configuration file that contains relevant constants.
-        YAML file must contain constants named:
-            offset_colroi1: offset ROI constant
-            offset_colroi2: offset ROI constant
-            rowroi1: ROI constant
-            rowroi2: ROI constant
-            colroi1: ROI constant
-            colroi2: ROI constant
-            rowback11: background ROI constant
-            rowback12: background ROI constant
-            rowback21: background ROI constant
-            rowback22: background ROI constant
-            colback11: background ROI constant
-            colback12: background ROI constant
-            colback21: background ROI constant
-            colback22: background ROI constant
-            min_exp: minimum exposure time, s
-            num_bins: histogram bin parameters
-            min_bin: histogram bin parameters
-            min_mask_factor: factor for making mask
-            lowess_frac: factor to use in lowess smoothing function
-            rms_low_limit: rms relative error selection limit
-            rms_upp_limit: rm relative error selection limit
-            fit_upp_cutoff1: linear fit upper cutoff
-            fit_upp_cutoff2: linear fit upper cutoff
-            fit_low_cutoff1: linear fit upper cutoff
-            fit_low_cutoff2: linear fit upper cutoff
-        Defaults to default_config_file, which is delivered with the repository
     
     mkplot : boolean
         Option to display plots. Default is None. If mkplot is anything other 
