@@ -73,7 +73,7 @@ class TestSliceSection(unittest.TestCase):
         """Verify method returns correct slice."""
         rows = 4
         cols = 5
-        ul = (1, 2)
+        ul = [1, 2]
         sub_frame = np.ones((rows, cols))
         sub_frame[0, 0] = 2
         check_frame = np.zeros((9, 10))
@@ -90,7 +90,7 @@ class TestSliceSection(unittest.TestCase):
         """Verify method returns exception as expected."""
         rows = 0
         cols = 5
-        ul = (1, 2)
+        ul = [1, 2]
         # sub_frame = np.ones((rows, cols))
         # sub_frame[0, 0] = 2
         check_frame = np.zeros((9, 10))
@@ -124,14 +124,14 @@ class TestImagingSlice(unittest.TestCase):
         im_rows = 104
         im_cols = 105
         #starts at col right after ps, but at row above 0
-        im_ul = (2, 108)
+        im_ul = [2, 108]
         ccd_rows = rows - po_rows
         ccd_cols = cols - ps_cols - so_cols
 
         m2 = Metadata(meta_path_test)
         check_frame = np.zeros((120, 220))
         sub_frame = np.ones((ccd_rows, ccd_cols))
-        ccd_ul = (im_ul[0] - (ccd_rows - im_rows), im_ul[1])
+        ccd_ul = [im_ul[0] - (ccd_rows - im_rows), im_ul[1]]
         sub_frame[0, 0] = 2
         check_frame[ccd_ul[0]:ccd_ul[0]+ccd_rows,
                     ccd_ul[1]:ccd_ul[1]+ccd_cols] = sub_frame
