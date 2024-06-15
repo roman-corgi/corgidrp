@@ -71,6 +71,4 @@ tests/simdata/*
 
 # data files
 *.fits
-!corgidrp/util/*.fits
 *.FITS
-!corgidrp/util/*.FITS
