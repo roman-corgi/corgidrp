@@ -43,11 +43,24 @@ class Metadata(object):
         self.frame_cols = self.data[obstype]['frame_cols']
         self.geom = self.data[obstype]['geom']
 
+        # Get imaging area geometry
+        self.rows_im, self.cols_im, self.r0c0_im = self._imaging_area_geom()
+        # Make some zeros frames for initial creation of arrays
+        self.imaging_area_zeros = np.zeros((self.rows_im, self.cols_im))
+        self.full_frame_zeros = np.zeros((self.frame_rows, self.frame_cols))
+
     def get_data(self):
         """Read yaml data into dictionary."""
         with open(self.meta_path, 'r') as stream:
             data = yaml.safe_load(stream)
         return data
+
+    def mask(self, key):
+        full_frame_m = self.full_frame_zeros.copy()
+
+        rows, cols, r0c0 = self._unpack_geom(key)
+        full_frame_m[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = 1
+        return full_frame_m.astype(bool)
 
     def slice_section(self, frame, key):
         """Slice 2d section out of frame.
@@ -76,9 +89,9 @@ class Metadata(object):
 
         return rows, cols, r0c0
 
-    #added in from MetadataWrapper
     def _imaging_area_geom(self):
-        """Return geometry of imaging area in reference to full frame."""
+        """Return geometry of imaging area (including shielded pixels)
+        in reference to full frame.  Different from normal image area."""
         _, cols_pre, _ = self._unpack_geom('prescan')
         _, cols_serial_ovr, _ = self._unpack_geom('serial_overscan')
         rows_parallel_ovr, _, _ = self._unpack_geom('parallel_overscan')
@@ -94,6 +107,7 @@ class Metadata(object):
 
     def imaging_slice(self, frame):
         """Select only the real counts from full frame and exclude virtual.
+        Includes shielded pixels.
 
         Use this to transform mask and embed from acting on the full frame to
         acting on only the image frame.
@@ -189,110 +203,8 @@ def get_relgains(frame, em_gain, non_lin_correction):
 
     return counts_flat.reshape(frame.shape)
 
-# detector_areas= {
-#     'SCI' : {
-#         'frame_rows' : 1200,
-#         'frame_cols' : 2200,
-#         'image' : {
-#             'rows': 1024,
-#             'cols': 1024,
-#             'r0c0': [13, 1088]
-#             },
-#         'prescan' : {
-#             'rows': 1200,
-#             'cols': 1088,
-#             'r0c0': [0, 0]
-#             },
-#         'prescan_reliable' : {
-#             'rows': 1200,
-#             'cols': 200,
-#             'r0c0': [0, 800]
-#             },
-#         'parallel_overscan' : {
-#             'rows': 163,
-#             'cols': 1056,
-#             'r0c0': [1037, 1088]
-#             },
-#         'serial_overscan' : {
-#             'rows': 1200,
-#             'cols': 56,
-#             'r0c0': [0, 2144]
-#             },
-#         },
-#     'ENG' :{
-#         'frame_rows' : 2200,
-#         'frame_cols' : 2200,
-#         'image' : {
-#             'rows': 1024,
-#             'cols': 1024,
-#             'r0c0': [13, 1088]
-#             },
-#         'prescan' : {
-#             'rows': 2200,
-#             'cols': 1088,
-#             'r0c0': [0, 0]
-#             },
-#         'prescan_reliable' : {
-#             'rows': 2200,
-#             'cols': 200,
-#             'r0c0': [0, 800]
-#             },
-#         'parallel_overscan' : {
-#             'rows': 1163,
-#             'cols': 1056,
-#             'r0c0': [1037, 1088]
-#             },
-#         'serial_overscan' : {
-#             'rows': 2200,
-#             'cols': 56,
-#             'r0c0': [0, 2144]
-#             },
-#         },
-#     }
-
-# NOTE The 2 functions below don't work with implementation of Metadata class.
-# But they are used by anything either, so no need to fix these.  Masking
-# handled via Metadata class, and plotting a visualization can be done via
-# metadata_visualize.py.
-
-# def plot_detector_areas(detector_areas, areas=('image', 'prescan',
-#         'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
-#     """
-#     Create an image of the detector areas for visualization and debugging
-
-#     Args:
-#         detector_areas (dict): a dictionary of image constants
-#         areas (tuple): a tuple of areas to create masks for
-
-#     Returns:
-#         np.ndarray: an image of the detector areas
-#     """
-#     #detector_areas = make_detector_areas(detector_areas, areas=areas)
-#     detector_area_image = np.zeros(
-#         (detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=int)
-#     for i, area in enumerate(areas):
-#         detector_area_image[detector_areas[area]] = i + 1
-#     return detector_area_image
-
-# def detector_area_mask(detector_areas, area='image'):
-#     """
-#     Create a mask for the detector area
-
-#     Args:
-#         detector_areas (dict): a dictionary of image constants
-#         area (str): the area of the detector to create a mask for
-
-#     Returns:
-#         np.ndarray: a mask for the detector area
-#     """
-#     mask = np.zeros((detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=bool)
-#     mask[detector_areas[area]['r0c0'][0]:detector_areas[area]['r0c0'][0] + detector_areas[area]['rows'],
-#             detector_areas[area]['r0c0'][1]:detector_areas[area]['r0c0'][1] + detector_areas[area]['cols']] = True
-#     return mask
-
-# NOTE:  Change the retrieval of rowreadtime_sec to a read-off of a .yaml or
-# other config file which has the date in the filename?
-def get_rowreadtime_sec(datetime=None, meta_path=None):
+# NOTE:  Change the retrieval of rowreadtime_sec to come from a config file
+def get_rowreadtime_sec(datetime=None):
     """
     Get the value of readrowtime. The EMCCD is considered sensitive to the
     effects of radiation damage and, if this becomes a problem, one of the

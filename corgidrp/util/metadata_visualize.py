@@ -7,7 +7,7 @@ import matplotlib.patches as mpatches
 from astropy.io import fits
 from matplotlib.ticker import MaxNLocator
 
-from emccd_detect.emccd_detect import MetadataWrapper
+from corgidrp.detector import Metadata
 
 
 def plot_corner(ax, x, y, ha, va, xytext):
@@ -19,7 +19,9 @@ def plot_corner(ax, x, y, ha, va, xytext):
 
 def plot_im_corners(ax):
     """Plot corners of image region"""
-    image_r0c0, image_r1c1 = meta._unpack_geom_corners('image')
+    rows, cols, image_r0c0 = meta._unpack_geom('image')
+    image_r1c1 = (image_r0c0[0]+rows-1, image_r0c0[1]+cols-1)
+
     plot_corner(ax, image_r0c0[1], image_r0c0[0], 'left', 'bottom', (5, 5))
     plot_corner(ax, image_r0c0[1], image_r1c1[0], 'left', 'top', (5, -5))
     plot_corner(ax, image_r1c1[1], image_r1c1[0], 'right', 'top', (-5, -5))
@@ -36,9 +38,7 @@ class Formatter(object):
 
 
 if __name__ == '__main__':
-    here = os.path.abspath(os.path.dirname(__file__))
-    meta_path = Path(here, 'emccd_detect', 'util', 'metadata.yaml')
-    meta = MetadataWrapper(meta_path)
+    meta = Metadata()
 
     # Get masks of all regions
     image_m = meta.mask('image')
@@ -66,10 +66,10 @@ if __name__ == '__main__':
     # Plot
     origin = 'lower'  # Use origin = 'lower' to put (0, 0) at the bottom left
 
-    # Plot image file (optional)
+    # Plot image area (optional)
     plot_fits = True
     if plot_fits:
-        fits_im = fits.getdata(Path('data', 'sci_frame.fits'))
+        fits_im = np.ones((1024,1024))
         fig_fits, ax_fits = plt.subplots()
         ax_fits.imshow(np.log(fits_im+10), origin=origin, cmap='Greys')
         ax_fits.set_title('SCI Frame')

@@ -4,6 +4,86 @@ import numpy as np
 import corgidrp.data as data
 import corgidrp.detector as detector
 import os
+from pathlib import Path
+
+
+def create_synthesized_master_dark_calib():
+    '''
+    Create simulated data specifically for test_calibrate_darks_lsq.py.
+
+    Returns:
+        List of corgidrp.data.Dataset instances:
+            The simulated dataset
+    '''
+    one_up = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    meta_path = Path(one_up, 'corgidrp', 'util', 'metadata_test.yaml')
+    meta = detector.Metadata(meta_path)
+
+    dark_current = 8.33e-4 #e-/pix/s
+    cic=0.02  # e-/pix/frame
+    read_noise=100 # e-/pix/frame
+    bias=2000 # e-
+    eperdn = 7 # e-/DN conversion; used in this example for all stacks
+    g_picks = (np.linspace(2, 5000, 7))
+    t_picks = (np.linspace(2, 100, 7))
+    grid = np.meshgrid(g_picks, t_picks)
+    g_arr = grid[0].ravel()
+    t_arr = grid[1].ravel()
+    #added in after emccd_detect makes the frames (see below)
+    # The mean FPN that will be found is eperdn*(FPN//eperdn)
+    # due to how I simulate it and then convert the frame to uint16
+    FPN = 21 # e
+    # the bigger N is, the better the adjusted R^2 per pixel becomes
+    N = 30 #Use N=600 for results with better fits (higher values for adjusted
+    # R^2 per pixel)
+    # image area, including "shielded" rows and cols:
+    imrows, imcols, imr0c0 = meta._imaging_area_geom()
+    prerows, precols, prer0c0 = meta._unpack_geom('prescan')
+
+    datasets = []
+    for i in range(len(g_arr)):
+        frame_list = []
+        for l in range(N): #number of frames to produce
+            # Simulate full dark frame (image area + the rest)
+            frame_dn_dark = np.zeros((meta.frame_rows, meta.frame_cols))
+            im = np.random.poisson(cic*g_arr[i]+
+                                t_arr[i]*g_arr[i]*dark_current,
+                                size=(meta.frame_rows, meta.frame_cols))
+            frame_dn_dark = im
+            # prescan has no dark current
+            pre = np.random.poisson(cic*g_arr[i],
+                                    size=(prerows, precols))
+            frame_dn_dark[prer0c0[0]:prer0c0[0]+prerows,
+                            prer0c0[1]:prer0c0[1]+precols] = pre
+            rn = np.random.normal(0, read_noise,
+                                    size=(meta.frame_rows, meta.frame_cols))
+            with_rn = frame_dn_dark + rn + bias
+
+            frame_dn_dark = with_rn/eperdn
+            # simulate a constant FPN in image area (not in prescan
+            # so that it isn't removed when bias is removed)
+            frame_dn_dark[imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
+            imr0c0[1]+imcols] += FPN/eperdn # in DN
+            # simulate telemetry rows, with the last 5 column entries with high counts
+            frame_dn_dark[-1,-5:] = 100000 #DN
+            # take raw frames and process them to what is needed for input
+            # No simulated pre-processing bad pixels or cosmic rays, so just subtract bias
+            # and multiply by k gain
+            frame_dn_dark -= bias/eperdn
+            frame_dn_dark *= eperdn
+
+            # Now make this into a bunch of corgidrp.Dataset stacks
+            prihdr, exthdr = create_default_headers()
+            frame = data.Image(frame_dn_dark, pri_hdr=prihdr,
+                            ext_hdr=exthdr)
+            frame.ext_hdr['CMDGAIN'] = g_arr[i]
+            frame.ext_hdr['EXPTIME'] = t_arr[i]
+            frame.ext_hdr['KGAIN'] = eperdn
+            frame_list.append(frame)
+        dataset = data.Dataset(frame_list)
+        datasets.append(dataset.copy())
+
+    return datasets
 
 
 def create_dark_calib_files(filedir=None, numfiles=10):

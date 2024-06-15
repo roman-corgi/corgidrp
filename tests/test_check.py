@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from . import check
+from corgidrp.util import check
 
 
 # Invalid values
