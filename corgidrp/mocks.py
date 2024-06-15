@@ -13,8 +13,8 @@ def create_synthesized_master_dark_calib():
     Create simulated data specifically for test_calibrate_darks_lsq.py.
 
     Returns:
-        List of corgidrp.data.Dataset instances:
-            The simulated dataset
+        datasets: List of corgidrp.data.Dataset instances
+    The simulated dataset
     '''
     one_up = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     meta_path = Path(one_up, 'corgidrp', 'util', 'metadata_test.yaml')
@@ -180,7 +180,7 @@ def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numC
 
     if datetime is None:
         datetime = Time('2024-01-01T11:00:00.000Z')
-    
+
     kgain = detector.get_kgain(datetime=datetime)
     fwc_em_dn = detector.get_fwc_em_e(datetime=datetime) / kgain
     fwc_pp_dn = detector.get_fwc_pp_e(datetime=datetime) / kgain
