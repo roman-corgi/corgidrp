@@ -131,6 +131,7 @@ else:
 
 frame_list2 = []
 # make 30 uniform frames with emgain = 1
+## DATA: make_frame
 for j in range(30):
     frame2 = make_frame(fluxMap,bias,kgain_in,rn_in,emgain,7.0,coeffs_1,nonlin_flag)
     frame_list2.append(frame2)
@@ -175,10 +176,6 @@ class TestCalibrateKgain(unittest.TestCase):
     # sort out paths
     local_path = os.path.dirname(os.path.realpath(__file__))
 
-    # example config file
-    config_file = os.path.join(os.path.join(local_path, 'config_files'),
-                               'kgain_parms.yaml')
-    
     def setUp(self):
 
         self.emgain = emgain
@@ -194,7 +191,7 @@ class TestCalibrateKgain(unittest.TestCase):
         """Outputs are as expected, for imported frames."""
         (kgain, read_noise_gauss, read_noise_stdev, ptc) = \
         calibrate_kgain(stack_arr, stack_arr2, self.emgain,
-            self.min_val, self.max_val, self.binwidth, self.config_file)
+            self.min_val, self.max_val, self.binwidth)
         
         from corgidrp.detector import kgain_params as constants_config
         signal_bins_N = constants_config['signal_bins_N']
@@ -215,41 +212,41 @@ class TestCalibrateKgain(unittest.TestCase):
         # stack_arr
         with self.assertRaises(CalKgainException):
             calibrate_kgain(object_arr, stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
         # stack_arr2
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr, object_arr, self.emgain, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
     
     def test_4D(self):
         """stack_arr should be 4-D."""
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr[0], stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
 
     def test_sub_stack_len(self):
         """stack_arr must have at least 10 sub-stacks."""
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr[0:8], stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
 
     def test_sub_sub_stack_len(self):
         """Each sub-stack of stack_arr must have 5 sub-stacks."""
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr[:,0:3,:,:], stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
     
     def test_3D(self):
         """stack_arr2 must be 3-D."""
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr, stack_arr2[0], self.emgain, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
     
     def test_sub_stack2_len(self):
         """stack_arr2 must have at least 30 sub-stacks."""
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr, stack_arr2[0:28], self.emgain, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
 
     def test_psi(self):
         """These three below must be positive scalar integers."""
@@ -258,25 +255,25 @@ class TestCalibrateKgain(unittest.TestCase):
         for perr in check_list:
             with self.assertRaises(TypeError):
                 calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                    perr, self.max_val, self.binwidth, self.config_file)
+                    perr, self.max_val, self.binwidth)
 
         # max_val
         for perr in check_list:
             with self.assertRaises(TypeError):
                 calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                    self.min_val, perr, self.binwidth, self.config_file)
+                    self.min_val, perr, self.binwidth)
 
         # binwidth
         for perr in check_list:
             with self.assertRaises(TypeError):
                 calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                    self.min_val, self.max_val, perr, self.config_file)
+                    self.min_val, self.max_val, perr)
         
     def test_binwidth(self):
         """binwidth must be >= 10."""
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                self.min_val, self.max_val, 9, self.config_file)
+                self.min_val, self.max_val, 9)
     
     def test_rps(self):
         """emgain must be a real positive scalar."""
@@ -285,13 +282,13 @@ class TestCalibrateKgain(unittest.TestCase):
         for rerr in check_list:
             with self.assertRaises(TypeError):
                 calibrate_kgain(stack_arr, stack_arr2, rerr, 
-                    self.min_val, self.max_val, self.binwidth, self.config_file)
+                    self.min_val, self.max_val, self.binwidth)
     
     def test_emgain(self):
         """emgain must be >= 1."""
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr, stack_arr2, 0.5, 
-                self.min_val, self.max_val, self.binwidth, self.config_file)
+                self.min_val, self.max_val, self.binwidth)
 
 """
 Class to hold input-checking functions to minimize repetition
