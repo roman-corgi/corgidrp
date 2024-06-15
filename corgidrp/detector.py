@@ -72,13 +72,13 @@ class Metadata(object):
         """Slice 2d section out of frame.
 
         Args;
-        frame : array_like
+            frame : array_like
             Full frame consistent with size given in frame_rows, frame_cols.
-        key : str
+            key : str
             Keyword referencing section to be sliced; must exist in geom.
 
         Returns:
-        section: array_like
+            section: array_like
             Desired slice of the frame
 
         """
@@ -93,15 +93,15 @@ class Metadata(object):
         """Safely check format of geom sub-dictionary and return values.
 
         Args:
-        key: str
+            key: str
             Desired section
 
         Returns:
-        rows: int
+            rows: int
             Number of rows of frame
-        cols : int
+            cols : int
             Number of columns of frame
-        r0c0: tuple
+            r0c0: tuple
             Tuple of (row position, column position) of corner closest to (0,0)
         """
         coords = self.geom[key]
@@ -116,11 +116,11 @@ class Metadata(object):
         in reference to full frame.  Different from normal image area.
 
         Returns:
-        rows: int
+            rows: int
             Number of rows of imaging area
-        cols : int
+            cols : int
             Number of columns of imaging area
-        r0c0: tuple
+            r0c0: tuple
             Tuple of (row position, column position) of corner closest to (0,0)
         """
         _, cols_pre, _ = self._unpack_geom('prescan')
@@ -144,11 +144,11 @@ class Metadata(object):
         acting on only the image frame.
 
         Args:
-        frame: array_like
+            frame: array_like
             Input frame
 
         Returns:
-        sl: array_like
+            sl: array_like
             Imaging slice
 
         """
