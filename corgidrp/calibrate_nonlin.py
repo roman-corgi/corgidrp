@@ -4,12 +4,13 @@ import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import cal.util.check as check
 import warnings
 from scipy.interpolate import interp1d
 import io
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
+
+from corgidrp.calibrate_kgain import check
 
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
@@ -140,7 +141,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     
     # input checks
     # load in config file
-    from corgidrp.detector import kgain_params as master_files
+    from corgidrp.detector import nonlin_params as master_files
 
     # check pointer yaml file
     if 'offset_colroi1' not in master_files:
@@ -245,8 +246,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     if not isinstance(master_files['fit_low_cutoff2'], (float, int)):
         raise TypeError('fit_low_cutoff2 is not a number')
     
-    # get relevant constants from config_file
-    from corgidrp.detector import kgain_params as constants_config
+    # get relevant constants
+    from corgidrp.detector import nonlin_params as constants_config
     offset_colroi1 = constants_config['offset_colroi1']
     offset_colroi2 = constants_config['offset_colroi2']
     rowroi1 = constants_config['rowroi1']
