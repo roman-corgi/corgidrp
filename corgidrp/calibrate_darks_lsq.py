@@ -54,7 +54,7 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     master dark for those rows.
 
     Args:
-    datasets : list, corgidrp.data.Dataset
+        datasets (list, corgidrp.data.Dataset):
         This is a list of instances of corgidrp.data.Dataset.  Each instance
         should be for a stack of dark frames (counts in DN), and each stack is
         for a unique EM gain and frame time combination.
@@ -66,50 +66,50 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
 
-    meta_path : str
+        meta_path (str):
         Full path of .yaml file from which to draw detector parameters.
         For format and names of keys, see corgidrp.util.metadata.yaml.
         If None, uses that file.
 
     Returns:
-    F_map : array-like (full frame)
+        F_map : array-like (full frame)
         A per-pixel map of fixed-pattern noise (in e-).  Any negative values
         from the fit are made positive in the end.
 
-    C_map : array-like (full frame)
+        C_map : array-like (full frame)
         A per-pixel map of EXCAM clock-induced charge (in e-). Any negative
         values from the fit are made positive in the end.
 
-    D_map : array-like (full frame)
+        D_map : array-like (full frame)
         A per-pixel map of dark current (in e-/s). Any negative values
         from the fit are made positive in the end.
 
-    bias_offset : float
+        bias_offset : float
         The median for the residual FPN+CIC in the region where bias was
         calculated (i.e., prescan). In DN.
 
-    F_image_map : array-like (image area)
+        F_image_map : array-like (image area)
         A per-pixel map of fixed-pattern noise in the image area (in e-).
         Any negative values from the fit are made positive in the end.
 
-    C_image_map : array-like (image area)
+        C_image_map : array-like (image area)
         A per-pixel map of EXCAM clock-induced charge in the image area
         (in e-). Any negative values from the fit are made positive in the end.
 
-    D_image_map : array-like (image area)
+        D_image_map : array-like (image area)
         A per-pixel map of dark current in the image area (in e-/s).
         Any negative values from the fit are made positive in the end.
 
-    Fvar : float
+        Fvar : float
         Variance of fixed-pattern noise map (in e-).
 
-    Cvar : float
+        Cvar : float
         Variance of clock-induced charge map (in e-).
 
-    Dvar : float
+        Dvar : float
         Variance of dark current map (in e-).
 
-    read_noise : float
+        read_noise : float
         Read noise estimate from the noise profile of a mean frame (in e-).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
@@ -119,21 +119,21 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         for that or because the next lowest gain setting is much larger than
         the gain used in the sub-stack.
 
-    R_map : array-like
+        R_map : array-like
         A per-pixel map of the adjusted coefficient of determination
         (adjusted R^2) value for the fit.
 
-    F_image_mean : float
+        F_image_mean : float
         F averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of F_image_map.  This is just for comparison.
 
-    C_image_mean : float
+        C_image_mean : float
         C averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of C_image_map.  This is just for comparison.
 
-    D_image_mean : float
+        D_image_mean : float
         D averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of D_image_map.  This is just for comparison.

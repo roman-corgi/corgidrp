@@ -18,35 +18,30 @@ def mean_combine(image_list, bpmap_list, err=False):
     master dark.
 
     Args:
-        image_list : list or array_like
-    List (or stack) of L2b data frames
+        image_list (list or array_like): List (or stack) of L2b data frames
     (with no bad pixels applied to them).
-        bpmap_list : list or array_like
-    List (or stack) of bad-pixel maps associated with L2b data frames.
-    Each must be 0 (good) or 1 (bad) at every pixel.
-        err : bool
-    If True, calculates the standard error over all the frames.  Intended
-    for the corgidrp.Data.Dataset.all_err arrays. Defaults to False.
+        bpmap_list (list or array_like): List (or stack) of bad-pixel maps
+        associated with L2b data frames. Each must be 0 (good) or 1 (bad)
+        at every pixel.
+        err (bool):  If True, calculates the standard error over all
+        the frames.  Intended for the corgidrp.Data.Dataset.all_err
+        arrays. Defaults to False.
 
     Returns:
-        comb_image : array_like
-    Mean-combined frame from input list data.
+        comb_image (array_like): Mean-combined frame from input list data.
 
-        comb_bpmap : array_like
-    Mean-combined bad-pixel map.
+        comb_bpmap (array_like): Mean-combined bad-pixel map.
 
-        map_im : array-like
-    Array showing how many frames per pixel were unmasked.
-    Used for getting read
-    noise in the calibration of the master dark.
+        map_im (array-like): Array showing how many frames per pixel were
+        unmasked. Used for getting read noise in the calibration of the
+        master dark.
 
-        enough_for_rn : bool
-    Useful only for the calibration of the master dark.
-    False:  Fewer than half the frames available for at least one pixel in
-    the averaging due to masking, so noise maps cannot be effectively
-    determined for all pixels.
-    True:  Half or more of the frames available for all pixels, so noise
-    mpas can be effectively determined for all pixels.
+        enough_for_rn (bool): Useful only for the calibration of the master dark.
+        False:  Fewer than half the frames available for at least one pixel in
+        the averaging due to masking, so noise maps cannot be effectively
+        determined for all pixels.
+        True:  Half or more of the frames available for all pixels, so noise
+        mpas can be effectively determined for all pixels.
 
     """
     # if input is an np array or stack, try to accommodate
