@@ -1,24 +1,43 @@
-#least squares method
 import os
 from pathlib import Path
 import numpy as np
 import warnings
 
-from corgidrp.detector import Metadata as MetadataWrapper
-from cal.util.gsw_process import Process, mean_combine
+from corgidrp.detector import Metadata
 import corgidrp.util.check as check
+from corgidrp.util.mean_combine import mean_combine
 
-TELEM_ROWS = 1 #last 1 row of frame
+
+here = os.path.abspath(os.path.dirname(__file__))
+meta_path_default = Path(here, 'util', 'metadata_test.yaml')
 
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
 
-def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
-            meta_path=None, nonlin_path=None):
-    """Given an array of frame stacks of the same number of dark frames (in DN
-    units), where the stacks are for various EM gain values and exposure times,
-    this function subtracts the bias from each frame in each stack, masks for
-    cosmic rays, corrects for nonlinearity, converts DN to e-, and averages
+def calibrate_darks_lsq(datasets, meta_path=None):
+    """The input datasets represents a collection of frame stacks of the
+    same number of dark frames (in e- units), where the stacks are for various
+    EM gain values and exposure times.  The frames in each stack should be
+    SCI full frames that:
+
+    - have had their bias subtracted (assuming 0 bias offset and full frame;
+    this function calibrates bias offset)
+    - have had masks made for cosmic rays
+    - have been corrected for nonlinearity
+    - have been converted from DN to e-
+    - have had the cosmic ray masks combined with any bad pixel masks which may
+    have come from pre-processing if there are any (because creation of the
+    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
+    functionality requires a master dark, which requires this function first)
+    - have been desmeared if desmearing is appropriate.  Under normal
+    circumstances, darks should not be desmeared.  The only time desmearing
+    would be useful is in the unexpected case that, for example,
+    dark current is so high that it stands far above other noise that is
+    not smeared upon readout, such as clock-induced charge
+    and fixed-pattern noise.
+
+    The steps shown above are a subset of the total number of steps
+    involved in going from L1 to L2b.  This function averages
     each stack (which minimizes read noise since it has a mean of 0) while
     accounting for masks.  It then computes a per-pixel map of fixed-pattern
     noise (due to electromagnetic pick-up before going through the amplifier),
@@ -36,10 +55,10 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
 
     Parameters
     ----------
-    dataset : array-like, corgidrp.data.DataSet
-        The input stack of stacks of dark frames (counts in DN).  stack_arr
-        contains a stack of sub-stacks, and in each sub-stack is some number of
-        frames for a unique EM gain and frame time combination.
+    datasets : list, corgidrp.data.Dataset
+        This is a list of instances of corgidrp.data.Dataset.  Each instance
+        should be for a stack of dark frames (counts in DN), and each stack is
+        for a unique EM gain and frame time combination.
         Each sub-stack should have the same number of frames.
         Each frame should accord with the EDU
         science frame (specified by corgidrp.util.metadata.yaml).
@@ -49,12 +68,9 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
         frames that will be used for photon counting.
 
     meta_path : str
-        Full path of .yaml file with detector parameters.  For format and names
-        of keys, see corgidrp.util.metadata.yaml. If None, uses that file.
-
-    nonlin_path : str
-        Path to residual nonlinearity relative gain file.  If None, uses
-        corgidrp.util.nonlin_table_240425.fits.
+        Full path of .yaml file from which to draw detector parameters.
+        For format and names of keys, see corgidrp.util.metadata.yaml.
+        If None, uses that file.
 
     Returns
     -------
@@ -124,56 +140,109 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of D_image_map.  This is just for comparison.
     """
-    stack_arr = dataset.copy().data
-    #input checks
-    if type(stack_arr) != np.ndarray:
-        raise TypeError('stack_arr must be '
-        'castable to a stack.')
-    if np.ndim(stack_arr) != 4:
-        raise CalDarksLSQException('stack_arr must be 4-D (i.e., a stack of '
-                '3-D sub-stacks')
-    if len(stack_arr) <= 3:
-        raise CalDarksLSQException('Number of sub-stacks in stack_arr must '
+
+    if len(datasets) <= 3:
+        raise CalDarksLSQException('Number of sub-stacks in datasets must '
                 'be more than 3 for proper curve fit.')
-    for i in range(len(stack_arr)):
-        check.threeD_array(stack_arr[i], 'stack_arr['+str(i)+']', TypeError)
-        if len(stack_arr[i]) < 1300:
+    # getting telemetry rows to ignore in fit
+    if meta_path is None:
+        meta_path = meta_path_default
+    meta = Metadata(meta_path)
+    metadata = meta.get_data()
+    telem_rows_start = metadata['telem_rows_start']
+    telem_rows_end = metadata['telem_rows_end']
+    telem_rows = slice(telem_rows_start, telem_rows_end)
+
+    g_arr = np.array([])
+    t_arr = np.array([])
+    k_arr = np.array([])
+    mean_frames = []
+    mean_num_good_fr = []
+    unreliable_pix_map = np.zeros((meta.frame_rows,
+                                   meta.frame_cols)).astype(int)
+    for i in range(len(datasets)):
+        frames = []
+        bpmaps = []
+        errs = []
+        check.threeD_array(datasets[i].all_data,
+                           'datasets['+str(i)+'].all_data', TypeError)
+        if len(datasets[i].all_data) < 1300:
             warnings.warn('A sub-stack was found with less than 1300 frames, '
             'which is the recommended number per sub-stack for an analog '
             'master dark')
         if i > 0:
-            if np.shape(stack_arr[i-1]) != np.shape(stack_arr[i]):
+            if np.shape(datasets[i-1].all_data) != np.shape(datasets[i].all_data):
                 raise CalDarksLSQException('All sub-stacks must have the '
                             'same number of frames and frame shape.')
-        for fr in stack_arr[i]:
-            fr.ext_hdr['CMDGAIN']
-    check.real_array(g_arr, 'g_arr', TypeError)
-    check.oneD_array(g_arr, 'g_arr', TypeError)
+        try: # if EM gain measured directly from frame TODO change hdr name if necessary
+            g_arr = np.append(g_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
+        except: # use commanded gain otherwise TODO change hdr name if necessary
+            g_arr = np.append(g_arr, datasets[i].frames[0].ext_hdr['CMDGAIN'])
+        exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
+        cmdgain = datasets[i].frames[0].ext_hdr['CMDGAIN']
+        kgain = datasets[i].frames[0].ext_hdr['KGAIN']
+        t_arr = np.append(t_arr, exptime)
+        k_arr = np.append(k_arr, kgain)
+        # check that all frames in sub-stack have same exposure time
+        for fr in datasets[i].frames:
+            if fr.ext_hdr['EXPTIME'] != exptime:
+                raise CalDarksLSQException('The exposure time must be the '
+                                           'same for all frames per '
+                                           'sub-stack.')
+            if fr.ext_hdr['CMDGAIN'] != cmdgain:
+                raise CalDarksLSQException('The commanded gain must be the '
+                                           'same for all frames per '
+                                           'sub-stack.')
+            if fr.ext_hdr['KGAIN'] != kgain:
+                raise CalDarksLSQException('The k gain must be the '
+                                           'same for all frames per '
+                                           'sub-stack.')
+            # ensure frame is in float so nan can be assigned, though it should
+            # already be float
+            frame = fr.data.astype(float)
+            # For the fit, all types of bad pixels should be masked:
+            b1 = fr.dq.astype(bool).astype(int)
+            err = fr.err[0]
+            frame[telem_rows] = np.nan
+            i0 = meta.slice_section(frame, 'image')
+            if np.isnan(i0).any():
+                raise ValueError('telem_rows cannot be in image area.')
+            # setting to 0 prevents failure of mean_combine
+            # b0: didn't mask telem_rows b/c they weren't saturated but nan'ed
+            frame[telem_rows] = 0
+            frames.append(frame)
+            bpmaps.append(b1)
+            errs.append(err)
+        mean_frame, _, map_im, _ = mean_combine(frames, bpmaps)
+        mean_err, _, _, _ = mean_combine(errs, bpmaps, err=True)
+        pixel_mask = (map_im < len(datasets[i].frames)/2).astype(int)
+        mean_num = np.mean(map_im)
+        mean_frame[telem_rows] = np.nan
+        mean_frames.append(mean_frame)
+        mean_num_good_fr.append(mean_num)
+        unreliable_pix_map += pixel_mask
+    mean_stack = np.stack(mean_frames)
+    mean_err_stack = np.stack(mean_err)
+    if (unreliable_pix_map >= len(datasets)-3).any():
+        warnings.warn('At least one pixel was masked for more than half of '
+                      'the frames in some sub-stacks, leaving 3 or fewer '
+                      'sub-stacks that did not suffer this masking for these '
+                      'pixels, which means the fit was unreliable for '
+                      'these pixels.  These are the pixels in the output '
+                      'unreliable_pixel_map that are >= len(datasets)-3.')
+
     if len(np.unique(g_arr)) < 2:
-        raise CalDarksLSQException("Must have at least 2 unique elements in "
-        "g_arr.")
-    if len(g_arr) != len(stack_arr):
-        raise CalDarksLSQException('The length of g_arr must be the same as '
-            'the number of sub-stacks in stack_arr')
+        raise CalDarksLSQException("Must have at least 2 unique EM gains "
+                                   'represented by the sub-stacks in '
+                                   'datasets.')
     if len(g_arr[g_arr<=1]) != 0:
-        raise CalDarksLSQException('Each element of g_arr must be greater '
+        raise CalDarksLSQException('Each EM gain must be greater '
             'than 1.')
-    check.real_array(t_arr, 't_arr', TypeError)
-    check.oneD_array(t_arr, 't_arr', TypeError)
     if len(np.unique(t_arr)) < 2:
-        raise CalDarksLSQException("Must have at least 2 unique elements in "
-        "t_arr.")
-    if len(t_arr) != len(stack_arr):
-        raise CalDarksLSQException('The length of t_arr must be the same as '
-            'the number of sub-stacks in stack_arr')
+        raise CalDarksLSQException("Must have at 2 unique exposure times.")
     if len(t_arr[t_arr<=0]) != 0:
-        raise CalDarksLSQException('Each element of t_arr must be greater '
+        raise CalDarksLSQException('Each exposure time must be greater '
             'than 0.')
-    check.real_array(k_arr, 'k_arr', TypeError)
-    check.oneD_array(k_arr, 'k_arr', TypeError)
-    if len(k_arr) != len(stack_arr):
-        raise CalDarksLSQException('The length of k_arr must be the same as '
-            'the number of sub-stacks in stack_arr')
     if len(k_arr[k_arr<=0]) != 0:
         raise CalDarksLSQException('Each element of k_arr must be greater '
             'than 0.')
@@ -182,62 +251,6 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
         if unique_sub_stacks.count(el) > 1:
             raise CalDarksLSQException('The EM gain and frame time '
             'combinations for the sub-stacks must be unique.')
-    check.positive_scalar_integer(fwc_em_e, 'fwc_em_e', TypeError)
-    check.positive_scalar_integer(fwc_pp_e, 'fwc_pp_e', TypeError)
-    check.positive_scalar_integer(Nem, 'Nem', TypeError)
-    # no checks on meta_path and nonlin_path since they will fail soon into
-    # the code if they aren't right
-    if telem_rows is not None:
-        if not isinstance(telem_rows, slice):
-            raise TypeError('telem_rows must be a slice or None.')
-    else:
-        end = stack_arr.shape[2]
-        telem_rows = slice(-TELEM_ROWS, end)
-
-    # no bad pixel maps at this point in the pipeline
-    bad_pix = np.zeros_like(stack_arr[0][0])
-    # bias offset set to 0 so that it has no effect; bias offset is determined
-    # by the calibration of darks (this module)
-    bias_offset = 0
-    proc_dark = {}
-    mean_frames = []
-    mean_num_good_fr = []
-    for i in range(len(stack_arr)):
-        proc_dark[i] = Process(bad_pix=bad_pix, eperdn=k_arr[i],
-                               fwc_em_e=fwc_em_e, fwc_pp_e=fwc_pp_e,
-                               bias_offset=0, em_gain=g_arr[i],
-                               exptime=t_arr[i], nonlin_path=nonlin_path,
-                               meta_path=meta_path)
-        frames = []
-        bpmaps = []
-        for fr in stack_arr[i]:
-            # ensure frame is in float so nan can be assigned; output of
-            # L1_to_L2a converts to float anyways
-            fr = fr.astype(float)
-            fr[telem_rows] = np.nan
-            i0, _, _, _, f0, b0, _ = proc_dark[i].L1_to_L2a(fr)
-            if np.isnan(i0).any():
-                raise ValueError('telem_rows cannot be in image area.')
-            # could just skip L2a_to_L2b(), but I like having a hook for
-            # combining b0 with a proc_dark.bad_pix that isn't all zeros
-            f1, b1, _ = proc_dark[i].L2a_to_L2b(f0, b0)
-            # to undo the division by gain in L2a_to_L2b()
-            f1 *= g_arr[i]
-            # setting to 0 prevents failure of mean_combine
-            # b0: didn't mask telem_rows b/c they weren't saturated but nan'ed
-            f1[telem_rows] = 0
-            frames.append(f1)
-            bpmaps.append(b1)
-        mean_frame, _, mean_num, rn_bool = mean_combine(frames, bpmaps)
-        if not rn_bool: # if False, due to cosmics
-            raise CalDarksLSQException('fewer than half the frames '
-            'available for at least one pixel in the averaging due to masking'
-            ', so cannot effectively determine noise maps for all pixels')
-        # now safe to mark telemetry rows as NaN again
-        mean_frame[telem_rows] = np.nan
-        mean_frames.append(mean_frame)
-        mean_num_good_fr.append(mean_num)
-    mean_stack = np.stack(mean_frames)
 
     # need the correlation coefficient for FPN for read noise estimate later;
     # other noise sources aren't correlated frame to frame
@@ -252,9 +265,13 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     tinds = np.where(t_arr == t_arr[min1])
     nextg = g_arr[g_arr > g_arr[min1]].min()
     ginds = np.where(g_arr == nextg)
-    min2 = np.intersect1d(tinds, ginds)[0]
-    msi = proc_dark[i].meta.imaging_slice(mean_stack[min1])
-    msi2 = proc_dark[i].meta.imaging_slice(mean_stack[min2])
+    intersect = np.intersect1d(tinds, ginds)
+    if intersect.size > 0:
+        min2 = intersect[0]
+    else: # just get next smallest g_arr*t_arr
+        min2 = np.where(np.argsort(g_arr*t_arr) == 1)[0][0]
+    msi = meta.imaging_slice(mean_stack[min1])
+    msi2 = meta.imaging_slice(mean_stack[min2])
     avg_corr = np.corrcoef(msi.ravel(), msi2.ravel())[0, 1]
 
     # number of observations (i.e., # of averaged stacks provided for fit)
@@ -262,6 +279,11 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     F_map = np.zeros_like(mean_stack[0])
     C_map = np.zeros_like(mean_stack[0])
     D_map = np.zeros_like(mean_stack[0])
+
+    # input data error comes from .err arrays; could use this for error bars
+    # in input data for weighted least squares, but we'll just simply get the
+    # std error and add it in quadrature to least squares fit standard dev
+    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0))/len(mean_err_stack)
 
     # matrix to be used for least squares and covariance matrix
     X = np.array([np.ones([len(g_arr)]), g_arr, g_arr*t_arr]).T
@@ -282,11 +304,16 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     sigma2_frame = np.sum(residual_stack**2, axis=0)/(M - 3)
     # average sigma2 for image area and use that for all three vars since
     # that's only place where all 3 (F, C, and D) should be present
-    # doesn't matter which k used for just slicing
-    sigma2_image = proc_dark[0].meta.imaging_slice(sigma2_frame)
+    sigma2_image = meta.imaging_slice(sigma2_frame)
     sigma2 = np.mean(sigma2_image)
-
     cov_matrix = np.linalg.inv(X.T@X)
+
+    # For full frame map of standard deviation:
+    F_std_map = np.sqrt(sigma2_frame*cov_matrix[0,0])
+    C_std_map = np.sqrt(sigma2_frame*cov_matrix[1,1])
+    # Dark current should only be in image area, so error only for that area:
+    D_std_map_im = np.sqrt(sigma2_image*cov_matrix[2,2])
+
     var_matrix = sigma2*cov_matrix
     # variances here would naturally account for masked pixels due to cosmics
     # since mean_combine does this
@@ -304,20 +331,20 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     # Can have negative values. Can never be above 1.
     # If R_map has nan or inf values, then something is probably wrong;
     # this is good feedback to the user. However, nans in the telemetry rows
-    # is expected.
+    # are expected.
     R_map = 1 - (1 - Rsq)*(M - 1)/(M - 3)
 
     # doesn't matter which k used for just slicing
-    D_image_map = proc_dark[0].meta.imaging_slice(D_map)
-    C_image_map = proc_dark[0].meta.imaging_slice(C_map)
-    F_image_map = proc_dark[0].meta.imaging_slice(F_map)
+    D_image_map = meta.imaging_slice(D_map)
+    C_image_map = meta.imaging_slice(C_map)
+    F_image_map = meta.imaging_slice(F_map)
 
     # res: should subtract D_map, too.  D should be zero there (in prescan),
     # but fitting errors may lead to non-zero values there.
     bias_offset = np.zeros([len(mean_stack)])
     for i in range(len(mean_stack)):
         res = mean_stack[i] - g_arr[i]*C_map - F_map - g_arr[i]*t_arr[i]*D_map
-        res_prescan = proc_dark[i].meta.slice_section(res, 'prescan')
+        res_prescan = meta.slice_section(res, 'prescan')
         # prescan may contain NaN'ed telemetry rows, so use nanmedian
         bias_offset[i] = np.nanmedian(res_prescan)/k_arr[i] # in DN
     bias_offset = np.mean(bias_offset)
@@ -333,7 +360,7 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     # take std of just image area; more variance if image and different regions
     # included; below assumes no variance inherent in FPN
 
-    mean_stack_image = proc_dark[l].meta.imaging_slice(mean_stack[l])
+    mean_stack_image = meta.imaging_slice(mean_stack[l])
     read_noise2 = (np.var(mean_stack_image)*Num -
         g_arr[l]**2*
         np.var(D_image_map*t_arr[l]+C_image_map) -
@@ -351,14 +378,17 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
     # actual dark current should only be present in CCD pixels (image area),
     # even if we get erroneous non-zero D values in non-CCD pixels.  Let D_map
     # be zeros everywhere except for the image area
-    D_map = np.zeros((proc_dark[0].meta.frame_rows,
-                                proc_dark[0].meta.frame_cols))
+    D_map = np.zeros((meta.frame_rows, meta.frame_cols))
+    D_std_map = np.zeros((meta.frame_rows, meta.frame_cols))
     # and reset the telemetry rows to NaN
     D_map[telem_rows] = np.nan
 
-    im_rows, im_cols, r0c0 = proc_dark[0].meta._imaging_area_geom()
+    im_rows, im_cols, r0c0 = meta._imaging_area_geom()
     D_map[r0c0[0]:r0c0[0]+im_rows,
                     r0c0[1]:r0c0[1]+im_cols] = D_image_map
+    D_std_map[r0c0[0]:r0c0[0]+im_rows,
+                    r0c0[1]:r0c0[1]+im_cols] = D_std_map_im
+
     # now catch any elements that were negative for C and D:
     D_map[D_map < 0] = 0
     C_map[C_map < 0] = 0
@@ -371,81 +401,26 @@ def calibrate_darks_lsq(dataset, #g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
 
     return (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
             D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
-            C_image_mean, D_image_mean)
+            C_image_mean, D_image_mean, unreliable_pix_map, F_std_map,
+            C_std_map, D_std_map, stacks_err)
 
-def ENF(g, Nem):
-    """Returns the extra-noise function (ENF).
-    Parameters
-    ----------
-    g : float
-        EM gain.  >= 1.
-    Nem : int
-        Number of gain register cells.
-    Returns
-    -------
-    ENF : float
-        extra-noise function
-    """
-    return np.sqrt(2*(g-1)*g**(-(Nem+1)/Nem) + 1/g)
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    from astropy.io import fits
-    from emccd_detect.emccd_detect import EMCCDDetect
-
-    def imagesc(data, title=None, vmin=None, vmax=None, cmap='viridis',
-            aspect='equal', colorbar=True):
-        """Plot a scaled colormap."""
-        fig, ax = plt.subplots()
-        im = ax.imshow(data, vmin=vmin, vmax=vmax, cmap=cmap, aspect=aspect)
-
-        if title:
-            ax.set_title(title)
-        if colorbar:
-            fig.colorbar(im, ax=ax)
-
-        return fig, ax
 
     here = os.path.abspath(os.path.dirname(__file__))
-    #meta_path = Path(here,'..', 'util', 'metadata.yaml')
     meta_path = Path(here,'..', 'util', 'metadata_test.yaml')
-    meta = MetadataWrapper(meta_path)
-    image_rows, image_cols, r0c0 = meta._unpack_geom('image')
+    meta = Metadata(meta_path)
 
-    use_proc_cgi_frame_nonlin = False
-    if use_proc_cgi_frame_nonlin:
-        nonlin_path = Path(here, '..', 'util', 'nonlin_sample.csv')
-    else:
-        nonlin_path = Path(here, '..', 'util', 'testdata',
-                'ut_nonlin_array_ones.txt') # does no corrections
-
-    fluxmap = np.zeros((image_rows,image_cols)) #for raw dark, photons/s
-
-    fwc_em_e = 90000 #e-
-    fwc_pp_e = 50000 #e-
     dark_current = 8.33e-4 #e-/pix/s
     cic=0.02  # e-/pix/frame
     read_noise=100 # e-/pix/frame
     bias=2000 # e-
-    qe=0.9  # quantum efficiency, e-/photon
-    cr_rate=0.  # hits/cm^2/s
-    pixel_pitch=13e-6  # m
     eperdn = 7 # e-/DN conversion; used in this example for all stacks
-    nbits=64 # number of ADU bits
-    numel_gain_register=604 #number of gain register elements
-
-    #g_picks = np.linspace(2, 300, 7)# np.linspace(300, 5000, 5)
-    #g_picks = (np.linspace(2, 5000, 10))
-    #g_picks = np.linspace(2, 5000, 7)
     g_picks = (np.linspace(2, 5000, 7))
-    #g_picks = np.array([2, 300.0, 1475.0, 2650.0, 3825.0, 5000.0])
-    #t_picks = (np.linspace(2, 100, 10))
-    #t_picks = np.linspace(2, 100, 7)
     t_picks = (np.linspace(2, 100, 7))
     grid = np.meshgrid(g_picks, t_picks)
     g_arr = grid[0].ravel()
     t_arr = grid[1].ravel()
-    k_arr = eperdn*np.ones_like(g_arr) # all the same
     #added in after emccd_detect makes the frames (see below)
     # The mean FPN that will be found is eperdn*(FPN//eperdn)
     # due to how I simulate it and then convert the frame to uint16
@@ -455,115 +430,39 @@ if __name__ == '__main__':
     # R^2 per pixel)
     # image area, including "shielded" rows and cols:
     imrows, imcols, imr0c0 = meta._imaging_area_geom()
+    prerows, precols, prer0c0 = meta._unpack_geom('prescan')
 
-    making_data = False
-    if making_data:
-        emccd = []
-        for i in range(len(g_arr)):
-            emccd.append(EMCCDDetect(
-            em_gain=g_arr[i],
-            full_well_image=fwc_pp_e,
-            full_well_serial=fwc_em_e,
-            dark_current=dark_current,
-            cic=cic,
-            read_noise=read_noise,
-            bias=bias,
-            qe=qe,
-            cr_rate=cr_rate,
-            pixel_pitch=pixel_pitch,
-            eperdn=k_arr[i],
-            nbits=nbits,
-            numel_gain_register=numel_gain_register,
-            meta_path=meta_path)
-            )
-
-        stack_list = []
-        for i in range(len(g_arr)):
-            frame_list = []
-            for l in range(N): #number of frames to produce
-                # Simulate full dark frame (image area + the rest)
-                frame_dn_dark = emccd[i].sim_full_frame(fluxmap, t_arr[i])
-                frame_list.append(frame_dn_dark)
-            frame_stack = np.stack(frame_list)
-            #np.save('C:\\Users\Kevin\\Desktop\\testdata'+
-            test_data_path = Path(here, 'testdata_small')
-            save = os.path.join(test_data_path, 'g_'+str(int(g_arr[i]))+'_t_'+
-                str(int(t_arr[i]))+'_N_'+str(N)+'stack.npy')
-            np.save(str(save), frame_stack)
-            stack_list.append(frame_stack)
-
-            # simulate a FPN in image area (not in prescan
-            # so that it isn't removed when bias is removed)
-            stack_list[i] = stack_list[i].astype('float64')
-            im_area = stack_list[i][:,imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
-               imr0c0[1]+imcols]
-
-            # For FPN, could add in a pattern taken from actual data...
-            # fpn = fits.getdata(r'/Users/kevinludwick/Documents/Guillermo_TVAC_all_darks/FPN_image.fits')
-            # im_area[:] += fpn[300:300+im_area.shape[1],300:300+im_area.shape[2]]/k_arr[i]
-
-            # ...or simulate a cross-hatch-like pattern...
-            # groups = (np.round(np.linspace(0, im_area.shape[1],
-            #                                40))).astype(int)
-            # for j in groups:
-            #     expo = np.where(groups==j)[0][0]
-            #     im_area[:,:,j:j+1] += FPN/k_arr[i] + \
-            #         (-1)**expo*FPN/(k_arr[i]) # in DN
-            #     im_area[:,j:j+1,:] += FPN/k_arr[i] + \
-            #         (-1)**expo*FPN/(k_arr[i]) # in DN
-
-            # ...or add in a constant offset.
-            stack_list[i][:,imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
-               imr0c0[1]+imcols] += FPN/k_arr[i] # in DN
-
-        stack_arr = np.stack(stack_list)
-
-    if not making_data:
-        stack_list = []
-        #test_data_path = Path(here, 'testdata')
-        test_data_path = Path(here, 'testdata_small')
-        for i in range(len(g_arr)):
-            load = os.path.join(test_data_path, 'g_'+str(int(g_arr[i]))+'_t_'+
-                str(int(t_arr[i]))+'_N_'+str(N)+'stack.npy')
-            stack_list.append(np.load(load))
-
+    stack_list = []
+    for i in range(len(g_arr)):
+        frame_list = []
+        for l in range(N): #number of frames to produce
+            # Simulate full dark frame (image area + the rest)
+            frame_dn_dark = np.zeros((meta.frame_rows, meta.frame_cols))
+            im = np.random.poisson(cic*g_arr[i]+
+                                t_arr[i]*g_arr[i]*dark_current,
+                                size=(meta.frame_rows, meta.frame_cols))
+            frame_dn_dark = im
+            # prescan has no dark current
+            pre = np.random.poisson(cic*g_arr[i],
+                                    size=(prerows, precols))
+            frame_dn_dark[prer0c0[0]:prer0c0[0]+prerows,
+                            prer0c0[1]:prer0c0[1]+precols] = pre
+            rn = np.random.normal(0, read_noise,
+                                    size=(meta.frame_rows, meta.frame_cols))
+            frame_dn_dark += rn + bias
+            frame_dn_dark /= eperdn
             # simulate a constant FPN in image area (not in prescan
             # so that it isn't removed when bias is removed)
-            stack_list[i] = stack_list[i].astype('float64')
-            stack_list[i][:,imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
-               imr0c0[1]+imcols] += FPN/k_arr[i] # in DN
-
-        stack_arr = np.stack(stack_list)
-
-    # simulate telemetry rows, with the last 5 column entries with high counts
-    stack_arr[:,:,-4:,-5] = 100000 #DN
-    # to make more like actual frames from detector
-    stack_arr = stack_arr.astype('uint16')
-
-    (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map, D_image_map,
-        Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean, C_image_mean,
-        D_image_mean) = \
-        calibrate_darks_lsq(stack_arr, g_arr, t_arr, k_arr, fwc_em_e, fwc_pp_e,
-            meta_path, nonlin_path, Nem = 604)
-
-    print('read noise (in e-): ', read_noise)
-    print('mean image dark current (in e-): ', np.mean(D_image_map))
-    print('mean image CIC (in e-): ', np.mean(C_image_map))
-    print('mean image FPN (in e-): ', np.mean(F_image_map))
-    print('bias offset (in DN): ', bias_offset)
-    #print("Fvar: ", Fvar)
-    print("average adjusted R^2 value: ", np.nanmean(R_map))
-
-    # master dark noise
-    def MDnoise(g, t):
-        return np.sqrt(Fvar/g**2 + t**2*Dvar + Cvar)
-
-    g_vals = np.linspace(2, 5000, 100)
-    t_vals = np.linspace(2, 100, 100)
-
-    imagesc(D_map, 'Dark Current')
-    imagesc(C_map, 'CIC')
-    imagesc(F_map, "FPN")
-    plt.figure()
-    plt.plot(g_vals, MDnoise(g_vals, 10))
-    plt.show()
+            frame_dn_dark[imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
+            imr0c0[1]+imcols] += FPN/eperdn # in DN
+            frame_list.append(frame_dn_dark)
+            # simulate telemetry rows, with the last 5 column entries with high counts
+            frame_dn_dark[-1,-5:] = 100000 #DN
+            # to make more like actual frames from detector
+        frame_stack = np.stack(frame_list)
+        test_data_path = Path(here, 'tests', 'simdata',
+                                'calibrate_darks_lsq')
+        save = os.path.join(test_data_path, 'g_'+str(int(g_arr[i]))+'_t_'+
+            str(int(t_arr[i]))+'_N_'+str(N)+'stack.npy')
+        np.save(str(save), frame_stack)
+        stack_list.append(frame_stack)

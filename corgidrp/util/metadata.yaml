@@ -135,3 +135,37 @@ Nem: 604
 # slice of rows that are used for telemetry
 telem_rows_start: -1
 telem_rows_end: ~
+
+# pixel full well (e-)
+fwc: 90000
+# serial full well (e-) in EM gain register in EXCAM EMCCD
+fwc_em: 100000
+
+# cosmic ray hit rate (hits/m**2/sec)
+X: 5.0e+04
+# pixel area (m**2/pixel)
+a: 1.69e-10
+
+# Maximum allowable EM gain
+gmax: 8000.0
+
+delta_constr: 1.0e-4
+# Overhead time, in seconds, for each collected frame.  Used to compute
+# total wall-clock time for data collection
+overhead: 3
+# Maximum allowed electrons/pixel/frame for photon counting
+pc_ecount_max: 0.1
+# number of read noise standard deviations at which to set the
+# photon-counting threshold
+T_factor: 5
+
+######################
+# These below are ultimately sourced from calibration files
+# dark current (e- / second)
+darke: 1.0e-3
+# clock-induced charge (e- / pixel)
+cic: 1.0e-2
+# read noise (e- / pixel)
+rn: 165.0
+# e- per DN factor (k gain)
+eperdn: 8.7
