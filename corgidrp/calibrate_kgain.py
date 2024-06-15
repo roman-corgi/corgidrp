@@ -4,8 +4,6 @@ import numpy as np
 import warnings
 from scipy.optimize import curve_fit
 
-here = Path(os.path.dirname(os.path.abspath(__file__)))
-
 class CalKgainException(Exception):
     """Exception class for calibrate_kgain."""
 
