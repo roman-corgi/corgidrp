@@ -14,9 +14,7 @@ import warnings
 import numpy as np
 from astropy.io import fits
 
-#from cal.util.loadyaml import loadyaml
-#import cal.util.ut_check as ut_check
-from .calibrate_kgain import (calibrate_kgain, CalKgainException)
+from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, check)
 
 ######################## function definitions ###############################
 
@@ -102,17 +100,17 @@ def count_contiguous_repeats(arr):
 # path to nonlin table made from running calibrate_nonlin.py on TVAC frames
 # table used only to choose parameters to make analytic nonlin functions
 here = os.path.abspath(os.path.dirname(__file__))
-nonlin_table_path = Path(here,'ut_data','nonlin_table_TVAC.txt')
+nonlin_table_path = Path(here,'test_data','nonlin_table_TVAC.txt')
 nonlin_flag = False # True adds nonlinearity to simulated frames
 
 # Load the arrays needed for calibrate_nonlin function from the .npz file
-loaded = np.load(Path(here,'ut_data','nonlin_arrays_ut.npz'))
+loaded = np.load(Path(here,'test_data','nonlin_arrays_ut.npz'))
 # Access the arrays needed for calibrate_nonlin function
 exp_time_stack_arr0 = loaded['array1']
 len_list0 = loaded['array3']
 
 # Load the flux map
-hdul =  fits.open(Path(here,'ut_data','FluxMap1024.fits'))
+hdul =  fits.open(Path(here,'test_data','FluxMap1024.fits'))
 fluxmap_init = hdul[0].data
 hdul.close()
 fluxmap_init[fluxmap_init < 50] = 0 # cleanup flux map a bit
@@ -198,7 +196,7 @@ class TestCalibrateKgain(unittest.TestCase):
         calibrate_kgain(stack_arr, stack_arr2, self.emgain,
             self.min_val, self.max_val, self.binwidth, self.config_file)
         
-        constants_config = loadyaml(self.config_file)
+        from corgidrp.detector import kgain_params as constants_config
         signal_bins_N = constants_config['signal_bins_N']
         # kgain - should be close to the assumed value
         self.assertTrue(np.isclose(round(kgain,1), kgain_in, atol=0.5))
@@ -294,6 +292,568 @@ class TestCalibrateKgain(unittest.TestCase):
         with self.assertRaises(CalKgainException):
             calibrate_kgain(stack_arr, stack_arr2, 0.5, 
                 self.min_val, self.max_val, self.binwidth, self.config_file)
+
+"""
+Class to hold input-checking functions to minimize repetition
+Note: This module, used by test_kgain.py and test_nonlin.py is included
+here because at this moment it is not clear if the functions in the module are
+of general utility for corgidrp
+"""
+
+"""Unit tests for check.py."""
+class ut_check:
+
+    import unittest
+    
+    import numpy as np
+    
+    from corgidrp.calibrate_kgain import check
+    
+    # Invalid values
+    
+    # string
+    strlist = [1j, None, (1.,), [5, 5], -1, 0, 1.0]
+    # real scalar
+    rslist = [1j, None, (1.,), [5, 5], 'txt']
+    # real nonnegative scalar
+    rnslist = [1j, None, (1.,), [5, 5], 'txt', -1]
+    # real positive scalar
+    rpslist = [1j, None, (1.,), [5, 5], 'txt', -1, 0]
+    # real scalar integer
+    rsilist = [1j, None, (1.,), [5, 5], 'txt', 1.0]
+    # nonnegative scalar integer
+    nsilist = [1j, None, (1.,), [5, 5], 'txt', -1, 1.0]
+    # positive scalar integer
+    psilist = [1j, None, (1.,), [5, 5], 'txt', -1, 0, 1.0]
+    # real array
+    rarraylist = [1j*np.ones((5, 4)), (1+1j)*np.ones((5, 5, 5)), 'foo',
+                  np.array([[1, 2], [3, 4], [5, 'a']])]
+    # 1D array
+    oneDlist = [np.ones((5, 4)), np.ones((5, 5, 5)), 'foo']
+    # 2D array
+    twoDlist = [np.ones((5,)), np.ones((5, 5, 5)), [], 'foo']
+    # 2D square array
+    twoDsquarelist = [np.ones((5,)), np.ones((5, 5, 5)), np.ones((5, 4)),
+                      [], 'foo']
+    # 3D array
+    threeDlist = [np.ones((5,)), np.ones((5, 5)), np.ones((2, 2, 2, 2)), [], 'foo']
+    
+    
+    class TestCheckException(Exception):
+        pass
+    
+    
+    class TestCheck(unittest.TestCase):
+        """
+        For each check, test with valid and invalid inputs for all three inputs.
+    
+        Test valid here as well since most other functions rely on these for
+        error checking
+        """
+    
+        # real_positive_scalar
+        def test_real_positive_scalar_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: real positive scalar
+            """
+            try:
+                check.real_positive_scalar(1, 'rps', TestCheckException)
+            except check.CheckException:
+                self.fail('real_positive_scalar failed on valid input')
+            pass
+    
+        def test_real_positive_scalar_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: real positive scalar
+            """
+            for v0 in rpslist:
+                with self.assertRaises(TestCheckException):
+                    check.real_positive_scalar(v0, 'rps', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_real_positive_scalar_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.real_positive_scalar(1, (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_real_positive_scalar_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.real_positive_scalar(1, 'rps', 'TestCheckException')
+                pass
+            pass
+    
+        # real_nonnegative_scalar
+        def test_real_nonnegative_scalar_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: real nonnegative scalar
+            """
+            try:
+                check.real_nonnegative_scalar(0, 'rps', TestCheckException)
+            except check.CheckException:
+                self.fail('real_nonnegative_scalar failed on valid input')
+            pass
+    
+        def test_real_nonnegative_scalar_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: real nonnegative scalar
+            """
+            for v0 in rnslist:
+                with self.assertRaises(TestCheckException):
+                    check.real_nonnegative_scalar(v0, 'rps', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_real_nonnegative_scalar_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.real_nonnegative_scalar(0, (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_real_nonnegative_scalar_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.real_nonnegative_scalar(0, 'rps', 'TestCheckException')
+                pass
+            pass
+    
+        # real_array
+        def test_real_array_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: real array
+            """
+            try:
+                check.real_array(np.ones((5, 5)), 'real', TestCheckException)
+            except check.CheckException:
+                self.fail('real_array failed on valid input')
+            pass
+    
+        def test_real_array_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: real array
+            """
+            for v0 in rarraylist:
+                with self.assertRaises(TestCheckException):
+                    check.real_array(v0, '1D', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_real_array_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.real_array(np.ones((5, 5)), (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_real_array_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.real_array(np.ones((5, )), 'rps', 'TestCheckException')
+                pass
+            pass
+    
+        # oneD_array
+        def test_oneD_array_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: 1D array
+            """
+            try:
+                check.oneD_array(np.ones((5, )), '1D', TestCheckException)
+            except check.CheckException:
+                self.fail('oneD_array failed on valid input')
+            pass
+    
+        def test_oneD_array_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: 1D array
+            """
+            for v0 in oneDlist:
+                with self.assertRaises(TestCheckException):
+                    check.oneD_array(v0, '1D', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_oneD_array_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.oneD_array(np.ones((5, )), (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_oneD_array_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.oneD_array(np.ones((5, )), 'rps', 'TestCheckException')
+                pass
+            pass
+    
+        # twoD_array
+        def test_twoD_array_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: 2D array
+            """
+            try:
+                check.twoD_array(np.ones((5, 5)), '2d', TestCheckException)
+            except check.CheckException:
+                self.fail('twoD_array failed on valid input')
+            pass
+    
+        def test_twoD_array_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: 2D array
+            """
+            for v0 in twoDlist:
+                with self.assertRaises(TestCheckException):
+                    check.twoD_array(v0, '2d', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_twoD_array_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.twoD_array(np.ones((5, 5)), (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_twoD_array_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.twoD_array(np.ones((5, 5)), 'rps', 'TestCheckException')
+                pass
+            pass
+    
+        # twoD_square_array
+        def test_twoD_square_array_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: 2D array
+            """
+            try:
+                check.twoD_array(np.ones((5, 5)), '2d', TestCheckException)
+            except check.CheckException:
+                self.fail('twoD_square_array failed on valid input')
+            pass
+    
+        def test_twoD_square_array_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: 2D array
+            """
+            for v0 in twoDsquarelist:
+                with self.assertRaises(TestCheckException):
+                    check.twoD_square_array(v0, '2d', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_twoD_square_array_bad_var_shape(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: 2D square array
+            """
+            for v0 in [np.ones((5, 4)), np.ones((4, 6))]:
+                with self.assertRaises(TestCheckException):
+                    check.twoD_square_array(v0, '2d', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_twoD_square_array_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.twoD_square_array(np.ones((5, 5)), (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_twoD_square_array_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.twoD_square_array(np.ones((5, 5)), 'rps',
+                                        'TestCheckException')
+                pass
+            pass
+    
+        # threeD_array
+        def test_threeD_array_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: 3D array
+            """
+            try:
+                check.threeD_array(np.ones((5, 5, 2)), '3d', TestCheckException)
+            except check.CheckException:
+                self.fail('threeD_array failed on valid input')
+            pass
+    
+        def test_threeD_array_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: 3D array
+            """
+            for v0 in threeDlist:
+                with self.assertRaises(TestCheckException):
+                    check.threeD_array(v0, '3d', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_threeD_array_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.threeD_array(np.ones((5, 5, 2)), (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_threeD_array_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.threeD_array(np.ones((5, 5, 2)), 'rps', 'TestCheckException')
+                pass
+            pass
+    
+        # real_scalar
+        def test_real_scalar_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: real scalar
+            """
+            try:
+                check.real_scalar(1, 'rs', TestCheckException)
+            except check.CheckException:
+                self.fail('real_scalar failed on valid input')
+            pass
+    
+        def test_real_scalar_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: real scalar
+            """
+            for v0 in rslist:
+                with self.assertRaises(TestCheckException):
+                    check.real_scalar(v0, 'rs', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_real_scalar_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.real_scalar(1, (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_real_scalar_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.real_scalar(1, 'rs', 'TestCheckException')
+                pass
+            pass
+    
+        # positive_scalar_integer
+        def test_positive_scalar_integer_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: positive scalar integer
+            """
+            try:
+                check.positive_scalar_integer(1, 'psi', TestCheckException)
+            except check.CheckException:
+                self.fail('positive_scalar_integer failed on valid input')
+            pass
+    
+        def test_positive_scalar_integer_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: positive scalar integer
+            """
+            for v0 in psilist:
+                with self.assertRaises(TestCheckException):
+                    check.positive_scalar_integer(v0, 'psi', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_positive_scalar_integer_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.positive_scalar_integer(1, (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_positive_scalar_integer_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.positive_scalar_integer(1, 'psi', 'TestCheckException')
+                pass
+            pass
+    
+        # nonnegative_scalar_integer
+        def test_nonnegative_scalar_integer_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: nonnegative scalar integer
+            """
+            for j in [0, 1, 2]:
+                try:
+                    check.nonnegative_scalar_integer(j, 'nsi', TestCheckException)
+                except check.CheckException:
+                    self.fail('nonnegative_scalar_integer failed on valid input')
+                pass
+            pass
+    
+        def test_nonnegative_scalar_integer_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: nonnegative scalar integer
+            """
+            for v0 in nsilist:
+                with self.assertRaises(TestCheckException):
+                    check.nonnegative_scalar_integer(v0, 'nsi', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_nonnegative_scalar_integer_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.nonnegative_scalar_integer(1, (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_nonnegative_scalar_integer_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.nonnegative_scalar_integer(1, 'nsi', 'TestCheckException')
+                pass
+            pass
+    
+        # scalar_integer
+        def test_scalar_integer_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: scalar integer
+            """
+            for j in [-2, -1, 0, 1, 2]:
+                try:
+                    check.scalar_integer(j, 'si', TestCheckException)
+                except check.CheckException:
+                    self.fail('scalar_integer failed on valid input')
+                pass
+            pass
+    
+        def test_scalar_integer_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: scalar integer
+            """
+            for v0 in rsilist:
+                with self.assertRaises(TestCheckException):
+                    check.scalar_integer(v0, 'si', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_scalar_integer_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.scalar_integer(1, (1,), TestCheckException)
+                pass
+            pass
+    
+        def test_scalar_integer_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.scalar_integer(1, 'si', 'TestCheckException')
+                pass
+            pass
+    
+        def test_string_good(self):
+            """
+            Verify checker works correctly for valid input.
+    
+            Type: string
+            """
+            for j in ['a', '1', '.']:
+                try:
+                    check.string(j, 'string', TestCheckException)
+                except check.CheckException:
+                    self.fail('string failed on valid input')
+                pass
+            pass
+    
+        def test_string_bad_var(self):
+            """
+            Fail on invalid variable type.
+    
+            Type: string
+            """
+            for v0 in strlist:
+                with self.assertRaises(TestCheckException):
+                    check.string(v0, 'string', TestCheckException)
+                    pass
+                pass
+            pass
+    
+        def test_string_bad_vname(self):
+            """Fail on invalid input name for user output."""
+            with self.assertRaises(check.CheckException):
+                check.string('a', ('a',), TestCheckException)
+                pass
+            pass
+    
+        def test_string_bad_vexc(self):
+            """Fail on input vexc not an Exception."""
+            with self.assertRaises(check.CheckException):
+                check.scalar_integer('a', 'string', 'TestCheckException')
+                pass
+            pass
+
+
+if __name__ == '__main__':
+    unittest.main()
+
 
 if __name__ == '__main__':
     unittest.main()
