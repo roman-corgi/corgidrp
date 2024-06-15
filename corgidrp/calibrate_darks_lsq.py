@@ -53,8 +53,8 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     So this function disregards telemetry rows and does not do any fitting for
     master dark for those rows.
 
-    Parameters
-    ----------
+    Args:
+
     datasets : list, corgidrp.data.Dataset
         This is a list of instances of corgidrp.data.Dataset.  Each instance
         should be for a stack of dark frames (counts in DN), and each stack is
@@ -72,8 +72,8 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         For format and names of keys, see corgidrp.util.metadata.yaml.
         If None, uses that file.
 
-    Returns
-    -------
+    Returns:
+
     F_map : array-like (full frame)
         A per-pixel map of fixed-pattern noise (in e-).  Any negative values
         from the fit are made positive in the end.

@@ -17,8 +17,8 @@ def mean_combine(image_list, bpmap_list, err=False):
     Also Includes outputs for processing darks used for calibrating the
     master dark.
 
-    Parameters
-    ----------
+    Args:
+
     image_list : list or array_like
         List (or stack) of L2b data frames
         (with no bad pixels applied to them).
@@ -29,8 +29,8 @@ def mean_combine(image_list, bpmap_list, err=False):
         If True, calculates the standard error over all the frames.  Intended
         for the corgidrp.Data.Dataset.all_err arrays. Defaults to False.
 
-    Returns
-    -------
+    Returns:
+
     comb_image : array_like
         Mean-combined frame from input list data.
 

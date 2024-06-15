@@ -52,7 +52,11 @@ class Metadata(object):
         self.full_frame_zeros = np.zeros((self.frame_rows, self.frame_cols))
 
     def get_data(self):
-        """Read yaml data into dictionary."""
+        """Read yaml data into dictionary.
+
+        Returns:
+            data: data from the .yaml file
+        """
         with open(self.meta_path, 'r') as stream:
             data = yaml.safe_load(stream)
         return data
@@ -67,12 +71,17 @@ class Metadata(object):
     def slice_section(self, frame, key):
         """Slice 2d section out of frame.
 
-        Parameters
-        ----------
+        Args;
+
         frame : array_like
             Full frame consistent with size given in frame_rows, frame_cols.
         key : str
             Keyword referencing section to be sliced; must exist in geom.
+
+        Returns:
+
+        section: array_like
+            Desired slice of the frame
 
         """
         rows, cols, r0c0 = self._unpack_geom(key)
@@ -83,7 +92,20 @@ class Metadata(object):
         return section
 
     def _unpack_geom(self, key):
-        """Safely check format of geom sub-dictionary and return values."""
+        """Safely check format of geom sub-dictionary and return values.
+
+        Args:
+        key: str
+            Desired section
+
+        Returns:
+        rows: int
+            Number of rows of frame
+        cols : int
+            Number of columns of frame
+        r0c0: tuple
+            Tuple of (row position, column position) of corner closest to (0,0)
+        """
         coords = self.geom[key]
         rows = coords['rows']
         cols = coords['cols']
@@ -93,7 +115,16 @@ class Metadata(object):
 
     def _imaging_area_geom(self):
         """Return geometry of imaging area (including shielded pixels)
-        in reference to full frame.  Different from normal image area."""
+        in reference to full frame.  Different from normal image area.
+
+        Returns:
+        rows: int
+            Number of rows of imaging area
+        cols : int
+            Number of columns of imaging area
+        r0c0: tuple
+            Tuple of (row position, column position) of corner closest to (0,0)
+        """
         _, cols_pre, _ = self._unpack_geom('prescan')
         _, cols_serial_ovr, _ = self._unpack_geom('serial_overscan')
         rows_parallel_ovr, _, _ = self._unpack_geom('parallel_overscan')
@@ -114,10 +145,18 @@ class Metadata(object):
         Use this to transform mask and embed from acting on the full frame to
         acting on only the image frame.
 
+        Args:
+        frame: array_like
+            Input frame
+
+        Returns:
+        sl: array_like
+            Imaging slice
+
         """
         rows, cols, r0c0 = self._imaging_area_geom()
-
-        return frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+        sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+        return sl
 
 
 def create_dark_calib(dark_dataset):
@@ -222,8 +261,6 @@ def get_rowreadtime_sec(datetime=None):
         datetime (astropy Time object): Observation's starting date. Its default
             value is sometime between the first collection of ground data (Full
             Functional Tests) and the duration of the Roman Coronagraph mission.
-        meta_path (string): Full path of .yaml file used for detector geometry.
-            If None, defaults to corgidrp.util.metadata.yaml.
 
     Returns:
         float: Current value of rowreadtime in sec.
