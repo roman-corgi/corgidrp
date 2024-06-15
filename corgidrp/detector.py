@@ -71,10 +71,10 @@ class Metadata(object):
     def slice_section(self, frame, key):
         """Slice 2d section out of frame.
 
-        Args;
+        Args:
             frame : array_like
             Full frame consistent with size given in frame_rows, frame_cols.
-            key : str
+            key: str
             Keyword referencing section to be sliced; must exist in geom.
 
         Returns:
