@@ -8,7 +8,7 @@ import warnings
 from scipy.interpolate import interp1d
 import io
 import matplotlib.pyplot as plt
-#from statsmodels.nonparametric.smoothers_lowess import lowess
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from corgidrp.calibrate_kgain import check
 

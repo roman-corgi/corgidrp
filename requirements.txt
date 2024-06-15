@@ -3,3 +3,4 @@ astropy
 pandas
 pytest
 scipy
+statsmodels

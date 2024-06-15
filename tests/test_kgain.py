@@ -14,6 +14,8 @@ import warnings
 import numpy as np
 from astropy.io import fits
 
+from corgidrp.data import Image, Dataset
+from corgidrp.mocks import create_default_headers
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, check)
 
 ######################## function definitions ###############################
@@ -79,7 +81,13 @@ def make_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
     else:    
         frame = np.round((bias+temp)/kgain) # DN
         
-    return frame
+    prhd, exthd = create_default_headers()
+    err = np.ones([1200,2200]) * 0.5
+    dq = np.zeros([1200,2200], dtype = np.uint16)
+    image1 = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
+        dq = dq)
+    data_frame = Dataset([image1])
+    return data_frame
 
 def count_contiguous_repeats(arr):
     if isinstance(arr, (np.ndarray, list)) and len(arr) == 0:
