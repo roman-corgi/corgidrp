@@ -1,5 +1,5 @@
 # A file that holds the functions that transmogrify l1 data to l2a data 
-from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, get_fwc_em_e, get_fwc_pp_e, calc_sat_fwc, get_kgain
+from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc
 import numpy as np
 from astropy.time import Time
 

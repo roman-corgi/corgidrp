@@ -4,7 +4,7 @@ import os
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 from corgidrp.l1_to_l2a import detect_cosmic_rays
-from corgidrp.detector import find_plateaus, calc_sat_fwc, get_fwc_em_e, get_fwc_pp_e, get_kgain
+from corgidrp.detector import find_plateaus, calc_sat_fwc
 
 import numpy as np
 from astropy.time import Time
