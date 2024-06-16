@@ -170,7 +170,7 @@ def flat_division(input_dataset, master_flat):
 
     return input_dataset.copy()
 
-def desmear(input_dataset):
+def desmear(input_dataset, detector_params):
     """
 
     EXCAM has no shutter, and so continues to illuminate the detector during
@@ -180,6 +180,7 @@ def desmear(input_dataset):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with desmear applied
@@ -189,7 +190,7 @@ def desmear(input_dataset):
     data = input_dataset.copy()
     data_cube = data.all_data
 
-    rowreadtime_sec = detector.get_rowreadtime_sec()
+    rowreadtime_sec = detector_params.params['rowreadtime']
 
     for i in range(data_cube.shape[0]):
         exptime_sec = float(data[i].ext_hdr['EXPTIME'])
