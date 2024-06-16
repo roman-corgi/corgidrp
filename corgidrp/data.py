@@ -732,6 +732,10 @@ class DetectorParams(Image):
         data_or_filepath (dict or str): either a filepath string or a dictionary of
                                         parameters to modify from default values
         date_valid (astropy.time.Time): date after which these parameters are valid
+
+    Attributes:
+        params (dict): the values for various detector parameters specified here
+        default_values (dict): default values for detector parameters (fallback values)
     """
      # default detector params
     default_values = {
