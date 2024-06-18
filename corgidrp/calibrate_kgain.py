@@ -4,6 +4,9 @@ import numpy as np
 import warnings
 from scipy.optimize import curve_fit
 
+import corgidrp.data as data
+from corgidrp.mocks import create_default_headers
+
 class CalKgainException(Exception):
     """Exception class for calibrate_kgain."""
 
@@ -73,7 +76,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     
     Returns
     -------
-    kgain: float
+    kgain: KGain data type
         kgain estimate from the least-squares fit to the photon transfer curve 
         (in e-/DN). The expected value of kgain for EXCAM with flight readout 
         sequence should be between 8 and 9 e-/DN.
@@ -679,6 +682,10 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     ptc_list = [compiled_binned_averages, 
              compiled_binned_shot_deviations]
     ptc = np.column_stack(ptc_list)
+
+    prhd, exthd = create_default_headers()
+    gain_value = np.array([[kgain]])
+    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd)
     
     return (kgain, mean_rn_gauss_e, mean_rn_std_e, ptc)
     

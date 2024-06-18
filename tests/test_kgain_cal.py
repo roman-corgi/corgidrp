@@ -204,7 +204,7 @@ class TestCalibrateKgain(unittest.TestCase):
         from corgidrp.detector import kgain_params as constants_config
         signal_bins_N = constants_config['signal_bins_N']
         # kgain - should be close to the assumed value
-        self.assertTrue(np.isclose(round(kgain,1), kgain_in, atol=0.5))
+        self.assertTrue(np.isclose(round(kgain.value,1), kgain_in, atol=0.5))
         # read noises. these are not requirements, but nice to check
         self.assertTrue(np.isclose(round(read_noise_gauss,1), rn_in, atol=8))
         self.assertTrue(np.isclose(round(read_noise_stdev,1), rn_in, atol=8))
@@ -285,7 +285,7 @@ class TestCalibrateKgain(unittest.TestCase):
 
 """
 Class to hold input-checking functions to minimize repetition
-Note: This module, used by test_kgain.py and test_nonlin.py is included
+Note: This module, used by test_kgain_cal.py and test_nonlin.py is included
 here because at this moment it is not clear if the functions in the module are
 of general utility for corgidrp
 """
