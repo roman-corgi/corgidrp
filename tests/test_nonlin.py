@@ -271,12 +271,12 @@ class TestCalibrateNonlin(unittest.TestCase):
         with self.assertRaises(CalNonlinException):
             for ii in range(stack_arr.shape[0]):
                 for jj in range(stack_arr.shape[1]):
-                    assert type(stack_arr[ii][jj]) == corgidrp.data.Image
+                    assert type(stack_arr[ii][jj]) == Image
         # stack_arr2
         with self.assertRaises(CalNonlinException):
             for ii in range(stack_arr2.shape[0]):
                 breakpoint()
-                assert type(stack_arr2[ii]) == corgidrp.data.Image
+                assert type(stack_arr2[ii]) == Image
 
     def test_3D_1(self):
         """stack_arr must be 3-D."""
