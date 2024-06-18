@@ -265,25 +265,19 @@ class TestCalibrateNonlin(unittest.TestCase):
         self.assertTrue(np.less(rms3,0.0035))
         self.assertTrue(np.less(rms4,0.0035))
     
-    def test_ndarray(self):
-        """stack_arr and stack_arr2 must be ndarrays."""
-        array1 = np.array([1, 2, 3])  # Shape (3,)
-        array2 = np.array([[4, 5, 6], [7, 8, 9]])  # Shape (2, 3)
-        array3 = np.array([[10], [11]])  # Shape (2, 1)
-        object_arr = np.array([array1, array2, array3], dtype=object)
+    def test_data_image_type(self):
+        """stack_arr and stack_arr2 must be Data Image types."""
         # stack_arr
         with self.assertRaises(CalNonlinException):
-            calibrate_nonlin(object_arr, self.exp_time_stack_arr, 
-                                self.time_stack_arr, self.len_list, stack_arr2, 
-                                self.actual_gain_arr, self.norm_val, self.min_write, 
-                                self.max_write)
+            for ii in range(stack_arr.shape[0]):
+                for jj in range(stack_arr.shape[1]):
+                    assert type(stack_arr[ii][jj]) == corgidrp.data.Image
         # stack_arr2
         with self.assertRaises(CalNonlinException):
-            calibrate_nonlin(stack_arr, self.exp_time_stack_arr, 
-                                self.time_stack_arr, self.len_list, object_arr, 
-                                self.actual_gain_arr, self.norm_val, self.min_write, 
-                                self.max_write)
-    
+            for ii in range(stack_arr2.shape[0]):
+                breakpoint()
+                assert type(stack_arr2[ii]) == corgidrp.data.Image
+
     def test_3D_1(self):
         """stack_arr must be 3-D."""
         with self.assertRaises(CalNonlinException):

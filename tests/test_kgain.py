@@ -87,7 +87,7 @@ def make_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
     image1 = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
     data_frame = Dataset([image1])
-    return data_frame
+    return frame
 
 def count_contiguous_repeats(arr):
     if isinstance(arr, (np.ndarray, list)) and len(arr) == 0:
