@@ -17,7 +17,7 @@ from corgidrp.data import Image, Dataset
 from corgidrp.mocks import create_default_headers
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException)
 from corgidrp.calibrate_kgain import check
-from test_kgain import ut_check
+from test_kgain_cal import ut_check
 
 # function definitions
 def nonlin_coefs(filename,EMgain,order):
