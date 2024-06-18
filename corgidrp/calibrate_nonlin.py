@@ -138,19 +138,21 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         minima and maxima of mean values (in DN) used the fit each for EM gain. 
         The size of means_min_max is N x 2, where N is the length of actual_gain_arr.
     """
-    # Debugging
-    stack_arr2_cp = stack_arr2.copy()
-
     # copy stack_arr and stack_arr2 and cast them as numpy arrays for convenience
+    stack_arr_cp = stack_arr.copy()
     stack_list = []
     for j in range(stack_arr.shape[0]):
         if stack_arr.ndim > 1:
             if stack_arr.shape[1] > 1:
-                print('*** Second dimension greater than 1 ***')
                 frame_list = []
                 for t in range(stack_arr.shape[1]):
-                    frame_sim = stack_arr[j][t].data
-                    frame_list.append(frame_sim)
+                    if stack_arr.shape[2] == 1:
+                        frame_sim = stack_arr[j][t][0].data
+                        frame_list.append(frame_sim)
+                    else:
+                        breakpoint()
+                        frame_sim = stack_arr[j][t].data
+                        frame_list.append(frame_sim)
             else:
                 frame_list = np.stack(stack_arr[j][0].data)
         else:
@@ -166,6 +168,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
             frame2 = stack_arr2[j].data
         frame_list2.append(frame2)
     stack_arr2 = np.stack(frame_list2)
+
     
     # input checks
     # load in default parameters
