@@ -95,9 +95,23 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         the second column is standard deviation (DN) corrected for read noise.
     
     """
+    # copy stack_arr and stack_arr2 and cast them as numpy arrays for convenience 
+    stack_list = []
+    for j in range(stack_arr.shape[0]):
+        frame_list = []
+        for t in range(stack_arr.shape[1]):
+            frame_sim = stack_arr[j][t].data
+            frame_list.append(frame_sim)
+        frame_stack = np.stack(frame_list)
+        stack_list.append(frame_stack)
+    stack_arr = np.stack(stack_list)
 
-    # SRH: copy stack_arr and stack_arr2 
-    
+    frame_list2 = []
+    for j in range(stack_arr2.shape[0]):
+        frame2 = stack_arr2[j].data
+        frame_list2.append(frame2)
+    stack_arr2 = np.stack(frame_list2) 
+
     # input checks
     from corgidrp.detector import kgain_params as master_files
     # check pointer yaml file
