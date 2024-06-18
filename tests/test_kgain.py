@@ -87,7 +87,7 @@ def make_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
     image1 = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
     data_frame = Dataset([image1])
-    return frame
+    return data_frame
 
 def count_contiguous_repeats(arr):
     if isinstance(arr, (np.ndarray, list)) and len(arr) == 0:
@@ -211,21 +211,6 @@ class TestCalibrateKgain(unittest.TestCase):
         # check that the ptc output is the correct size
         self.assertTrue(np.all(np.equal(ptc.shape, (signal_bins_N,2))))
 
-    def test_ndarray(self):
-        """stack_arr and stack_arr2 must be ndarrays."""
-        array1 = np.array([1, 2, 3])  # Shape (3,)
-        array2 = np.array([[4, 5, 6], [7, 8, 9]])  # Shape (2, 3)
-        array3 = np.array([[10], [11]])  # Shape (2, 1)
-        object_arr = np.array([array1, array2, array3], dtype=object)
-        # stack_arr
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(object_arr, stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth)
-        # stack_arr2
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr, object_arr, self.emgain, 
-                self.min_val, self.max_val, self.binwidth)
-    
     def test_4D(self):
         """stack_arr should be 4-D."""
         with self.assertRaises(CalKgainException):
@@ -241,7 +226,7 @@ class TestCalibrateKgain(unittest.TestCase):
     def test_sub_sub_stack_len(self):
         """Each sub-stack of stack_arr must have 5 sub-stacks."""
         with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr[:,0:3,:,:], stack_arr2, self.emgain, 
+            calibrate_kgain(stack_arr[:,0:3,:], stack_arr2, self.emgain, 
                 self.min_val, self.max_val, self.binwidth)
     
     def test_3D(self):
