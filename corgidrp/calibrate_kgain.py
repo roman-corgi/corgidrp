@@ -95,36 +95,8 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         the second column is standard deviation (DN) corrected for read noise.
     
     """
-    # copy stack_arr and stack_arr2 and cast them as numpy arrays for convenience
-    stack_arr_cp = stack_arr.copy()
-    stack_list = []
-    for j in range(stack_arr.shape[0]):
-        if stack_arr.ndim > 1:
-            if stack_arr.shape[1] > 1:
-                frame_list = []
-                for t in range(stack_arr.shape[1]):
-                    if stack_arr.shape[2] == 1:
-                        frame_sim = stack_arr[j][t][0].data
-                        frame_list.append(frame_sim)
-                    else:
-                        breakpoint()
-                        frame_sim = stack_arr[j][t].data
-                        frame_list.append(frame_sim)
-            else:
-                frame_list = np.stack(stack_arr[j][0].data)
-        else:
-            frame_list = np.stack(stack_arr[0].data)
-        stack_list.append(frame_list)
-    stack_arr = np.stack(stack_list)
-
-    frame_list2 = []
-    for j in range(stack_arr2.shape[0]):
-        if stack_arr2.ndim > 1:
-            frame2 = stack_arr2[j][0].data
-        else:
-            frame2 = stack_arr2[j].data
-        frame_list2.append(frame2)
-    stack_arr2 = np.stack(frame_list2)
+    # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
+    stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)
 
     # input checks
     from corgidrp.detector import kgain_params as master_files
@@ -1081,4 +1053,41 @@ class check:
         if not isinstance(var, dict):
             raise vexc(vname + ' must be a dict')
         return var
+
+def copy_and_cast(stack_arr_drp, stack_arr2_drp):
+    """ Copies and casts input stacks of CORGIDRP Data Image objects into numpy
+    arrays to perform computations.
+    """
+    stack_arr = stack_arr_drp.copy()
+    stack_arr2 = stack_arr2_drp.copy()
+    stack_list = []
+    for j in range(stack_arr.shape[0]):
+        if stack_arr.ndim > 1:
+            if stack_arr.shape[1] > 1:
+                frame_list = []
+                for t in range(stack_arr.shape[1]):
+                    if stack_arr.shape[2] == 1:
+                        frame_sim = stack_arr[j][t][0].data
+                        frame_list.append(frame_sim)
+                    else:
+                        breakpoint()
+                        frame_sim = stack_arr[j][t].data
+                        frame_list.append(frame_sim)
+            else:
+                frame_list = np.stack(stack_arr[j][0].data)
+        else:
+            frame_list = np.stack(stack_arr[0].data)
+        stack_list.append(frame_list)
+    stack_arr = np.stack(stack_list)
+
+    frame_list2 = []
+    for j in range(stack_arr2.shape[0]):
+        if stack_arr2.ndim > 1:
+            frame2 = stack_arr2[j][0].data
+        else:
+            frame2 = stack_arr2[j].data
+        frame_list2.append(frame2)
+    stack_arr2 = np.stack(frame_list2)
+
+    return stack_arr, stack_arr2
     
