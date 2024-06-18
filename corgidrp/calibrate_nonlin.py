@@ -10,7 +10,7 @@ import io
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from corgidrp.calibrate_kgain import check
+from corgidrp.calibrate_kgain import check, copy_and_cast
 
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
@@ -138,38 +138,9 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         minima and maxima of mean values (in DN) used the fit each for EM gain. 
         The size of means_min_max is N x 2, where N is the length of actual_gain_arr.
     """
-    # copy stack_arr and stack_arr2 and cast them as numpy arrays for convenience
-    stack_arr_cp = stack_arr.copy()
-    stack_list = []
-    for j in range(stack_arr.shape[0]):
-        if stack_arr.ndim > 1:
-            if stack_arr.shape[1] > 1:
-                frame_list = []
-                for t in range(stack_arr.shape[1]):
-                    if stack_arr.shape[2] == 1:
-                        frame_sim = stack_arr[j][t][0].data
-                        frame_list.append(frame_sim)
-                    else:
-                        breakpoint()
-                        frame_sim = stack_arr[j][t].data
-                        frame_list.append(frame_sim)
-            else:
-                frame_list = np.stack(stack_arr[j][0].data)
-        else:
-            frame_list = np.stack(stack_arr[0].data)
-        stack_list.append(frame_list)
-    stack_arr = np.stack(stack_list)
+    # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
+    stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)    
 
-    frame_list2 = []
-    for j in range(stack_arr2.shape[0]):
-        if stack_arr2.ndim > 1:
-            frame2 = stack_arr2[j][0].data
-        else:
-            frame2 = stack_arr2[j].data
-        frame_list2.append(frame2)
-    stack_arr2 = np.stack(frame_list2)
-
-    
     # input checks
     # load in default parameters
     from corgidrp.detector import nonlin_params as master_files
