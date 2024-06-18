@@ -303,7 +303,6 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     if type(stack_arr2) != np.ndarray:
         raise TypeError('stack_arr2 must be an ndarray.')
     if np.ndim(stack_arr2) != 3:
-        breakpoint()
         raise CalNonlinException('stack_arr2 must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
     if len(stack_arr2) < 30:
