@@ -5,6 +5,10 @@ import corgidrp.data as data
 import corgidrp.detector as detector
 import os
 
+import astropy.table.Table as Table
+from astropy.io import ascii
+from astropy.coordinates import SkyCoord
+from astropy import wcs
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
