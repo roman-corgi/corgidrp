@@ -122,7 +122,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         for nm in nmaps:
             # save noise map
             calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
-            nm_filename = str(nm)+".fits"
+            nm_filename = nm.filename
             if not os.path.exists(calibdir):
                 os.mkdir(calibdir)
             nm.save(filedir=calibdir, filename=nm_filename)
@@ -135,12 +135,12 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             self.assertTrue(np.array_equal(nm_open.data, nm.data, equal_nan=True))
 
             # check headers
-            self.assertTrue(ntypes[ind] in nm.ext_hdr['DATATYPE'])
+            self.assertTrue(ntypes[ind] in nm.filename)
             self.assertTrue(nm.ext_hdr["BUNIT"] == "detected electrons")
             self.assertTrue(nm.err_hdr["BUNIT"] == "detected electrons")
             self.assertTrue("NoiseMap" in str(nm.ext_hdr["HISTORY"]))
 
-            self.assertTrue(ntypes[ind] in nm_open.ext_hdr['DATATYPE'])
+            self.assertTrue(ntypes[ind] in nm_open.filename)
             self.assertTrue(nm_open.ext_hdr["BUNIT"] == "detected electrons")
             self.assertTrue(nm_open.err_hdr["BUNIT"] == "detected electrons")
             self.assertTrue("NoiseMap" in str(nm_open.ext_hdr["HISTORY"]))
