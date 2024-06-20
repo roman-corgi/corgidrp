@@ -5,10 +5,9 @@ import corgidrp.data as data
 import corgidrp.detector as detector
 import os
 
-import astropy.table.Table as Table
-from astropy.io import ascii
+import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
-from astropy import wcs
+import astropy.wcs as wcs
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
@@ -225,7 +224,7 @@ def create_astrom_data(filedir=None, ):
 
     #filepattern = "simcal_astrom_{0:04d}.fits"
 
-    cal_field = ascii.read('corgidrp/tests/test_data/JWST_CALFIELD2020.csv')
+    cal_field = ascii.read('../tests/test_data/JWST_CALFIELD2020.csv')
     cal_SkyCoords = SkyCoord(ra= cal_field['RA'], dec= cal_field['DEC'], 
                              unit='deg', frame='icrs')
     
@@ -321,12 +320,14 @@ def create_astrom_data(filedir=None, ):
         sim_data = sim_data + noise
 
         # load as an image object
+        frames = []
         prihdr, exthdr = create_default_headers()
-        newhdr = astropy.io.fits.Header(new_hdr)
+        newhdr = fits.Header(new_hdr)
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
         filename = "simcal_astrom.fits"
         if filedir is not None:
             frame.save(filedir=filedir, filename=filename)
-        dataset = data.Dataset(frame)
+        frames.append(frame)
+        dataset = data.Dataset(frames)
 
         return dataset
