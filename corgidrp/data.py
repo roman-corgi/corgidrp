@@ -765,7 +765,7 @@ class NoiseMap(Image):
 
     Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
-        noise_type (str): 'FPN', 'CIC', or 'DC'
+        noise_type (str): 'FPN', 'CIC', or 'DC'.  Defaults to 'FPN' so that autoload() can still get away with a single argument for calling the class.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this noise map (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
@@ -774,7 +774,7 @@ class NoiseMap(Image):
         dq (np.array): the DQ array (required only if raw data is passed in)
 
     """
-    def __init__(self, data_or_filepath, noise_type, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
+    def __init__(self, data_or_filepath, noise_type='FPN', pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
        # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
 
