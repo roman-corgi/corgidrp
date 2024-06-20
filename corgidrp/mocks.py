@@ -17,7 +17,7 @@ def create_noise_maps(F, Ferr, Fdq, C, Cerr, Cdq, D, Derr, Ddq):
         Fdq: 2D np.array for FPN DQ array
         C: 2D np.array for clock-induced charge (CIC) data array
         Cerr: 2D np.array for CIC err array
-        Cerr: 2D np.array for CIC DQ array
+        Cdq: 2D np.array for CIC DQ array
         D: 2D np.array for dark current data array
         Derr: 2D np.array for dark current err array
         Ddq: 2D np.array for dark current DQ array
