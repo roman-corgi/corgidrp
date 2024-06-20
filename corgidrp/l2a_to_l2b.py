@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
+import corgidrp.detector as detector
 
 def add_photon_noise(input_dataset):
     """
@@ -63,14 +64,16 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
-def frame_select(input_dataset):
-    """
-
+def frame_select(input_dataset, bpix_frac=100., overexp=False, tt_thres=None):
+    """   
     Selects the frames that we want to use for further processing.
-    TODO: Decide on frame selection criteria
+    Not currently implemented!! 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        bpix_frac (float): what percent of the image needs to be bad to discard. Default: 100% (not used)
+        overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
+        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used) 
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
@@ -172,9 +175,8 @@ def flat_division(input_dataset, master_flat):
 
     return input_dataset.copy()
 
-def correct_bad_pixels(input_dataset):
+def desmear(input_dataset):
     """
-
     Compute bad pixel map and correct for bad pixels.
 
     MMB Notes:
@@ -187,12 +189,38 @@ def correct_bad_pixels(input_dataset):
         - Different bad pixels in the DQ may be corrected differently.
 
 
+    EXCAM has no shutter, and so continues to illuminate the detector during
+    readout. This creates a "smearing" effect into the resulting images. The
+    desmear function corrects for this effect. There are a small number of use
+    cases for not desmearing data (e.g. time-varying raster data).
+
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with bad pixels corrected
+        corgidrp.data.Dataset: a version of the input dataset with desmear applied
+
     """
 
-    return input_dataset.copy()
+    data = input_dataset.copy()
+    data_cube = data.all_data
+
+    rowreadtime_sec = detector.get_rowreadtime_sec()
+
+    for i in range(data_cube.shape[0]):
+        exptime_sec = float(data[i].ext_hdr['EXPTIME'])
+        smear = np.zeros_like(data_cube[i])
+        m = len(smear)
+        for r in range(m):
+            columnsum = 0
+            for s in range(r+1):
+                columnsum = columnsum + rowreadtime_sec/exptime_sec*((1 
+                + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*data_cube[i,s,:]
+            smear[r,:] = columnsum
+        data_cube[i] -= smear
+   
+    history_msg = "Desmear applied to data"
+    data.update_after_processing_step(history_msg, new_all_data=data_cube)
+
+    return data
 
