@@ -1,15 +1,3 @@
-"""
-Unit test suite for the calibrate_darks module.
-
-Data was generated for test in the if __name__ == '__main__' part of
-calibrate_darks_lsq.py.  Smaller frames (for faster running) is in
-simdata/calibrate_darks_lsq.
-There is a set of stacks in the testdata_small folder for N=30 in each
-sub-stack (useful for fast-running tests, but the fits give an average adjusted
-R^2 of about 0.19) and N=600 (useful for getting a higher average adjusted
-R^2 of about 0.75).
-"""
-
 import os
 import unittest
 import warnings
@@ -20,6 +8,7 @@ from corgidrp.calibrate_darks_lsq import (calibrate_darks_lsq,
             CalDarksLSQException)
 from corgidrp.detector import Metadata
 from corgidrp.mocks import create_synthesized_master_dark_calib
+from corgidrp.data import NoiseMap
 
 here = Path(os.path.dirname(os.path.abspath(__file__)))
 one_up = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,12 +17,13 @@ meta_path_sub = Path(one_up, 'corgidrp', 'util', 'metadata_test.yaml')
 meta = Metadata(meta_path)
 meta_sub = Metadata(meta_path_sub)
 
-# specified parameters used in simulated data
+# specified parameters used in simulated data from
+# mocks.create_synthesized_master_dark_calib:
 fwc_em_e = 90000 #e-
 fwc_pp_e = 50000 #e-
-# dark_current = 8.33e-4 #e-/pix/s
-# cic=0.02  # e-/pix/frame
-# read_noise=100 # e-/pix/frame
+dark_current = 8.33e-4 #e-/pix/s
+cic=0.02  # e-/pix/frame
+rn=100 # e-/pix/frame
 bias=2000 # e-
 eperdn = 7 # e-/DN conversion; used in this example for all stacks
 
@@ -53,29 +43,6 @@ N = 30#600 #30; can also replace with 30 to use those sub-stacks in the
 # image area, including "shielded" rows and cols:
 imrows, imcols, imr0c0 = meta_sub._imaging_area_geom()
 
-# # load in test data for sub-frame
-# stack_list_sub = []
-# test_data_path_sub = Path(here, 'simdata', 'calibrate_darks_lsq')
-# for i in range(len(g_arr)):
-#     load = os.path.join(test_data_path_sub, 'g_'+str(int(g_arr[i]))+'_t_'+
-#     str(int(t_arr[i]))+'_N_'+str(N)+'stack.npy')
-#     stack_list_sub.append(np.load(load))
-#     # simulate a constant FPN in image area (not in prescan
-#     # so that it isn't removed when bias is removed)
-#     stack_list_sub[i] = stack_list_sub[i].astype('float64')
-#     stack_list_sub[i][:,imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
-#                imr0c0[1]+imcols] += FPN/k_arr[i] # in DN
-
-# stack_arr_sub_fr = np.stack(stack_list_sub)
-# # simulate telemetry row, with the last 5 column entries with high counts
-# stack_arr_sub_fr[:,:,-1,-5:] = 100000 #DN
-
-# # take raw frames and process them to what is needed for input
-# # No simulated pre-processing bad pixels or cosmic rays, so just subtract bias
-# # and multiply by k gain
-# stack_arr_sub_fr -= bias/eperdn
-# stack_arr_sub_fr *= eperdn
-
 
 class TestCalibrateDarksLSQ(unittest.TestCase):
     """Unit tests for calibrate_darks_lsq method."""
@@ -94,10 +61,12 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
     def test_expected_results_sub(self):
         """Outputs are as expected, for smaller-sized frames."""
 
-        (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
+        (F_map, C_map, D_map, bias_offset, bias_offset_up, bias_offset_low,
+         F_image_map, C_image_map,
             D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
             C_image_mean, D_image_mean, unreliable_pix_map, F_std_map,
-            C_std_map, D_std_map, stacks_err) = \
+            C_std_map, D_std_map, stacks_err, F_noise_map, C_noise_map,
+            D_noise_map) = \
                 calibrate_darks_lsq(self.datasets, self.meta_path_sub)
         # F
         self.assertTrue(np.isclose(np.mean(F_image_map), FPN//eperdn*eperdn,
@@ -109,17 +78,17 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         F_prescan_map = meta_sub.slice_section(F_map, 'prescan')
         self.assertTrue(np.isclose(np.nanmean(F_prescan_map), 0, atol=5))
         # C
-        self.assertTrue(np.isclose(np.nanmean(C_map), 0.02, atol=0.01))
-        self.assertTrue(np.isclose(np.mean(C_image_map), 0.02, atol=0.01))
-        self.assertTrue(np.isclose(C_image_mean, 0.02, atol=0.01))
+        self.assertTrue(np.isclose(np.nanmean(C_map), cic, atol=0.01))
+        self.assertTrue(np.isclose(np.mean(C_image_map), cic, atol=0.01))
+        self.assertTrue(np.isclose(C_image_mean, cic, atol=0.01))
         self.assertTrue(len(C_map[C_map < 0]) == 0)
         self.assertTrue(len(C_image_map[C_image_map < 0]) == 0)
         # D
         self.assertTrue(np.isclose(np.mean(D_image_map),
-                        8.33e-4, atol=2e-4))
+                        dark_current, atol=2e-4))
         self.assertTrue(len(D_map[D_map < 0]) == 0)
         self.assertTrue(len(D_image_map[D_image_map < 0]) == 0)
-        self.assertTrue(np.isclose(D_image_mean, 8.33e-4, atol=2e-4))
+        self.assertTrue(np.isclose(D_image_mean, dark_current, atol=2e-4))
         # D_map: 0 everywhere except image area
         im_rows, im_cols, r0c0 = meta_sub._imaging_area_geom()
         # D_nonimg = D_map[~D_map[r0c0[0]:r0c0[0]+im_rows,
@@ -129,7 +98,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         # now whole map should be 0
         self.assertTrue(np.nanmin(D_map) == 0)
         # read_noise
-        self.assertTrue(np.isclose(read_noise, 100, rtol=0.1))
+        self.assertTrue(np.isclose(read_noise, rn, rtol=0.1))
         # adjusted R^2:  acceptable fit (the higher N is, the better the fit)
         if N == 30:
             # bias_offset (tolerance of 5 for N=30 since I used a small number
@@ -139,6 +108,42 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         if N == 600:
             self.assertTrue(np.isclose(bias_offset, 0, atol=1)) #in DN
             self.assertTrue(np.nanmean(R_map) > 0.7)
+        # dark current only in image area
+        D_std_map_im = D_std_map[r0c0[0]:r0c0[0]+im_rows,
+                                 r0c0[1]:r0c0[1]+im_cols]
+        # assert that the std dev coming from the fit itself is < noise itself
+        self.assertTrue(np.nanmean(D_std_map_im) < np.nanmean(D_image_map))
+        self.assertTrue(np.nanmean(C_std_map) < np.nanmean(C_map))
+        self.assertTrue(np.nanmean(F_std_map) < np.nanmean(F_map))
+
+
+        ntypes = ['FPN', 'CIC', 'DC']
+        nmaps = [F_noise_map, C_noise_map, D_noise_map]
+        for nm in nmaps:
+            # save noise map
+            calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+            nm_filename = str(nm)+".fits"
+            if not os.path.exists(calibdir):
+                os.mkdir(calibdir)
+            nm.save(filedir=calibdir, filename=nm_filename)
+            nm_filepath = os.path.join(calibdir, nm_filename)
+            ind = nmaps.index(nm)
+            nm_f = NoiseMap(nm_filepath, noise_type=ntypes[ind])
+            # tests the copy method, from filepath way of creating class
+            # instance, too
+            nm_open = nm_f.copy()
+            self.assertTrue(np.array_equal(nm_open.data, nm.data, equal_nan=True))
+
+            # check headers
+            self.assertTrue(ntypes[ind] in nm.ext_hdr['DATATYPE'])
+            self.assertTrue(nm.ext_hdr["BUNIT"] == "detected electrons")
+            self.assertTrue(nm.err_hdr["BUNIT"] == "detected electrons")
+            self.assertTrue("NoiseMap" in str(nm.ext_hdr["HISTORY"]))
+
+            self.assertTrue(ntypes[ind] in nm_open.ext_hdr['DATATYPE'])
+            self.assertTrue(nm_open.ext_hdr["BUNIT"] == "detected electrons")
+            self.assertTrue(nm_open.err_hdr["BUNIT"] == "detected electrons")
+            self.assertTrue("NoiseMap" in str(nm_open.ext_hdr["HISTORY"]))
 
     def test_sub_stack_len(self):
         """datasets should have at least 4 sub-stacks."""
@@ -152,14 +157,14 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             for d in ds[j].frames:
                 d.ext_hdr['CMDGAIN'] = 4
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds)
+            calibrate_darks_lsq(ds, meta_path_sub)
 
     def test_g_gtr_1(self):
         '''EM gains must all be bigger than 1.'''
         ds = self.datasets.copy()
         ds[0].frames[0].ext_hdr['CMDGAIN'] = 1
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds)
+            calibrate_darks_lsq(ds, meta_path_sub)
 
     def test_t_arr_unique(self):
         '''Exposure times must have at least 2 unique elements.'''
@@ -168,14 +173,14 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             for d in ds[j].frames:
                 d.ext_hdr['EXPTIME'] = 4
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds)
+            calibrate_darks_lsq(ds, meta_path_sub)
 
     def test_t_gtr_0(self):
         '''Exposure times must all be bigger than 0.'''
         ds = self.datasets.copy()
         ds[0].frames[0].ext_hdr['EXPTIME'] = 0
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds)
+            calibrate_darks_lsq(ds, meta_path_sub)
 
 
     def test_k_gtr_0(self):
@@ -183,7 +188,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         ds = self.datasets.copy()
         ds[0].frames[0].ext_hdr['KGAIN'] = 0
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds)
+            calibrate_darks_lsq(ds, meta_path_sub)
 
     def test_unique_g_t_combos(self):
         '''The EM gain and frame time combos for the sub-stacks must be
@@ -194,7 +199,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
                 d.ext_hdr['EXPTIME'] = 4
                 d.ext_hdr['CMDGAIN'] = 5
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds)
+            calibrate_darks_lsq(ds, meta_path_sub)
 
     def test_mean_num(self):
         '''If too many masked in a stack for a given pixel, exception raised.
@@ -205,7 +210,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         for i in range(48):
             ds[i].all_dq[:,7,8] = 1
         with self.assertWarns(UserWarning):
-            calibrate_darks_lsq(ds)
+            calibrate_darks_lsq(ds, meta_path_sub)
 
 if __name__ == '__main__':
     unittest.main()

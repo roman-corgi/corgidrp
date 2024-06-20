@@ -169,3 +169,6 @@ cic: 1.0e-2
 rn: 165.0
 # e- per DN factor (k gain)
 eperdn: 8.7
+# the residual FPN+CIC in the region where bias was calculated (i.e., prescan).
+# In DN.
+bias_offset: 0

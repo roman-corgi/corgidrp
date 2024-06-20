@@ -7,6 +7,57 @@ import corgidrp.detector as detector
 import os
 from pathlib import Path
 
+def create_noise_maps(F, Ferr, Fdq, C, Cerr, Cdq, D, Derr, Ddq):
+    '''
+    Create simulated noise maps for test_masterdark_from_noisemaps.py.
+
+    Arguments:
+        F: 2D np.array for fixed-pattern noise (FPN) data array
+        Ferr: 2D np.array for FPN err array
+        Fdq: 2D np.array for FPN DQ array
+        C: 2D np.array for clock-induced charge (CIC) data array
+        Cerr: 2D np.array for CIC err array
+        Cerr: 2D np.array for CIC DQ array
+        D: 2D np.array for dark current data array
+        Derr: 2D np.array for dark current err array
+        Ddq: 2D np.array for dark current DQ array
+
+    Returns:
+        Fnoisemap: corgidrp.data.NoiseMap instance for FPN
+        Cnoisemap: corgidrp.data.NoiseMap instance for CIC
+        Dnoisemap: corgidrp.data.NoiseMap instance for dark current
+    '''
+
+    prihdr, exthdr = create_default_headers()
+    # taken from end of calibrate_darks_lsq()
+    exthdr['EXPTIME'] = None
+    if 'EMGAIN_M' in exthdr.keys():
+        exthdr['EMGAIN_M'] = None
+    exthdr['CMDGAIN'] = None
+    exthdr['KGAIN'] = None
+    exthdr['BUNIT'] = 'detected electrons'
+    exthdr['HIERARCH DATA_LEVEL'] = None
+    # simulate raw data filenames
+    exthdr['DRPNFILE'] = 2
+    exthdr['FILE0'] = '0.fits'
+    exthdr['FILE1'] = '1.fits'
+
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electrons'
+
+    exthdr['DATATYPE'] = 'FPN NoiseMap'
+    Fnoisemap = data.NoiseMap(F, 'FPN', pri_hdr=prihdr, ext_hdr=exthdr, err=Ferr,
+                              dq=Fdq, err_hdr=err_hdr)
+    exthdr2 = exthdr.copy()
+    exthdr['DATATYPE'] = 'CIC NoiseMap'
+    Cnoisemap = data.NoiseMap(C, 'CIC', pri_hdr=prihdr, ext_hdr=exthdr2, err=Cerr,
+                              dq=Cdq, err_hdr=err_hdr)
+    exthdr3 = exthdr.copy()
+    exthdr3['DATATYPE'] = 'dark current NoiseMap'
+    Dnoisemap = data.NoiseMap(D, 'DC', pri_hdr=prihdr, ext_hdr=exthdr3, err=Derr,
+                              dq=Ddq, err_hdr=err_hdr)
+
+    return Fnoisemap, Cnoisemap, Dnoisemap
 
 def create_synthesized_master_dark_calib():
     '''
@@ -85,8 +136,6 @@ def create_synthesized_master_dark_calib():
         datasets.append(dataset.copy())
 
     return datasets
-
-
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """

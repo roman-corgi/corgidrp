@@ -2,14 +2,13 @@ import os
 from pathlib import Path
 import numpy as np
 import warnings
+from astropy.io import fits
 
 from corgidrp.detector import Metadata
 import corgidrp.util.check as check
 from corgidrp.util.mean_combine import mean_combine
+from corgidrp.data import NoiseMap
 
-
-here = os.path.abspath(os.path.dirname(__file__))
-meta_path_default = Path(here, 'util', 'metadata_test.yaml')
 
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
@@ -54,7 +53,7 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     master dark for those rows.
 
     Args:
-        datasets (list, corgidrp.data.Dataset):
+    datasets (list, corgidrp.data.Dataset):
         This is a list of instances of corgidrp.data.Dataset.  Each instance
         should be for a stack of dark frames (counts in DN), and each stack is
         for a unique EM gain and frame time combination.
@@ -65,40 +64,46 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         darks for analog frames,
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
-        meta_path (str):
+    meta_path (str):
         Full path of .yaml file from which to draw detector parameters.
         For format and names of keys, see corgidrp.util.metadata.yaml.
         If None, uses that file.
 
     Returns:
-        F_map : array-like (full frame)
+    F_map : array-like (full frame)
         A per-pixel map of fixed-pattern noise (in e-).  Any negative values
         from the fit are made positive in the end.
-        C_map : array-like (full frame)
+    C_map : array-like (full frame)
         A per-pixel map of EXCAM clock-induced charge (in e-). Any negative
         values from the fit are made positive in the end.
-        D_map : array-like (full frame)
+    D_map : array-like (full frame)
         A per-pixel map of dark current (in e-/s). Any negative values
         from the fit are made positive in the end.
-        bias_offset : float
+    bias_offset : float
         The median for the residual FPN+CIC in the region where bias was
         calculated (i.e., prescan). In DN.
-        F_image_map : array-like (image area)
+    bias_offset_up : float
+        The upper bound of bias offset, accounting for error in input datasets
+        and the fit.
+    bias_offset_low : float
+        The lower bound of bias offset, accounting for error in input datasets
+        and the fit.
+    F_image_map : array-like (image area)
         A per-pixel map of fixed-pattern noise in the image area (in e-).
         Any negative values from the fit are made positive in the end.
-        C_image_map : array-like (image area)
+    C_image_map : array-like (image area)
         A per-pixel map of EXCAM clock-induced charge in the image area
         (in e-). Any negative values from the fit are made positive in the end.
-        D_image_map : array-like (image area)
+    D_image_map : array-like (image area)
         A per-pixel map of dark current in the image area (in e-/s).
         Any negative values from the fit are made positive in the end.
-        Fvar : float
+    Fvar : float
         Variance of fixed-pattern noise map (in e-).
-        Cvar : float
+    Cvar : float
         Variance of clock-induced charge map (in e-).
-        Dvar : float
+    Dvar : float
         Variance of dark current map (in e-).
-        read_noise : float
+    read_noise : float
         Read noise estimate from the noise profile of a mean frame (in e-).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
@@ -106,22 +111,63 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         If read_noise is returned as NaN, the read noise estimate is not
         trustworthy, possibly because not enough frames were used per substack
         for that or because the next lowest gain setting is much larger than
-        the gain used in the sub-stack.
-        R_map : array-like
+        the gain used in the sub-stack.  The official calibrated read noise
+        comes from the k gain calibration, and this is just a rough estimate
+        that can be used as a sanity check, for checking agreement with the
+        official calibrated value.
+    R_map : array-like
         A per-pixel map of the adjusted coefficient of determination
         (adjusted R^2) value for the fit.
-        F_image_mean : float
+    F_image_mean : float
         F averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of F_image_map.  This is just for comparison.
-        C_image_mean : float
+    C_image_mean : float
         C averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of C_image_map.  This is just for comparison.
-        D_image_mean : float
+    D_image_mean : float
         D averaged over all pixels,
         before any negative ones are made positive.  Should be roughly the same
         as taking the mean of D_image_map.  This is just for comparison.
+    unreliable_pix_map : array-like (full frame)
+        A pixel value in this array indicates how many sub-stacks are usable
+        for a fit for that pixel.  For each sub-stack for which
+        a pixel is masked for more than half of
+        the frames in the sub-stack, 1 is added to that pixel's value
+        in unreliable_pix_map.  Since the least-squares fit function has 3
+        parameters, at least 4 sub-stacks are needed for a given pixel in order
+        to perform a fit for that pixel.  The pixels in unreliable_pix_map that
+        are >= len(stack_arr)-3 cannot be fit.  NOTE:  This uses a flag value
+        of 1, which falls under the category of
+        "Bad pixel - unspecified reason".  Can be changed if necessary.
+    F_std_map : array-like (full frame)
+        The standard deviation per pixel for the calibrated FPN.
+    C_std_map : array-like (full frame)
+        The standard deviation per pixel for the calibrated CIC.
+    D_std_map : array-like (full frame)
+        The standard deviation per pixel for the calibrated dark current.
+    stacks_err : array-like (full frame)
+        Standard error per pixel coming from the frames in datasets used to
+        calibrate the noise maps.
+    F_noise_map : corgidrp.data.NoiseMap instance
+        Includes the FPN noise map for the data, F_std_map for the err, and
+        unreliable_pix_map for the dq.  The header info is taken from that of
+        one of the frames from the input datasets and can be changed via a call
+        to the NoiseMaps class if necessary.
+    C_noise_map : corgidrp.data.NoiseMap instance
+        Includes the CIC noise map for the data, C_std_map combined with
+        stacks_err (since CIC is not scaled by exposure time or EM gain when
+        making the master dark from the calibrated noise maps) for the err, and
+        unreliable_pix_map for the dq.  The header info is taken from that of
+        one of the frames from the input datasets and can be changed via a call
+        to the NoiseMaps class if necessary.
+    D_noise_map : corgidrp.data.NoiseMap instance
+        Includes the dark current noise map for the data, D_std_map
+        for the err, and unreliable_pix_map for the dq.
+        The header info is taken from that of
+        one of the frames from the input datasets and can be changed via a call
+        to the NoiseMaps class if necessary.
     """
 
     if len(datasets) <= 3:
@@ -129,8 +175,9 @@ def calibrate_darks_lsq(datasets, meta_path=None):
                 'be more than 3 for proper curve fit.')
     # getting telemetry rows to ignore in fit
     if meta_path is None:
-        meta_path = meta_path_default
-    meta = Metadata(meta_path)
+        meta = Metadata()
+    else:
+        meta = Metadata(meta_path)
     metadata = meta.get_data()
     telem_rows_start = metadata['telem_rows_start']
     telem_rows_end = metadata['telem_rows_end']
@@ -294,6 +341,8 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     # For full frame map of standard deviation:
     F_std_map = np.sqrt(sigma2_frame*cov_matrix[0,0])
     C_std_map = np.sqrt(sigma2_frame*cov_matrix[1,1])
+    # D_std_map here used only for bias_offset error estimate
+    D_std_map = np.sqrt(sigma2_frame*cov_matrix[2,2])
     # Dark current should only be in image area, so error only for that area:
     D_std_map_im = np.sqrt(sigma2_image*cov_matrix[2,2])
 
@@ -325,12 +374,28 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     # res: should subtract D_map, too.  D should be zero there (in prescan),
     # but fitting errors may lead to non-zero values there.
     bias_offset = np.zeros([len(mean_stack)])
+    bias_offset_up = np.zeros([len(mean_stack)])
+    bias_offset_low = np.zeros([len(mean_stack)])
     for i in range(len(mean_stack)):
+        # NOTE assume no error in g_arr values (or t_arr or k_arr)
         res = mean_stack[i] - g_arr[i]*C_map - F_map - g_arr[i]*t_arr[i]*D_map
+        # upper and lower bounds
+        res_up = ((mean_stack[i]+np.abs(stacks_err)) -
+                  g_arr[i]*(C_map-C_std_map) - (F_map-F_std_map)
+                  - g_arr[i]*t_arr[i]*(D_map-D_std_map))
+        res_low = ((mean_stack[i]-np.abs(stacks_err)) -
+                   g_arr[i]*(C_map+C_std_map) - (F_map+F_std_map)
+                  - g_arr[i]*t_arr[i]*(D_map+D_std_map))
         res_prescan = meta.slice_section(res, 'prescan')
+        res_up_prescan = meta.slice_section(res_up, 'prescan')
+        res_low_prescan = meta.slice_section(res_low, 'prescan')
         # prescan may contain NaN'ed telemetry rows, so use nanmedian
         bias_offset[i] = np.nanmedian(res_prescan)/k_arr[i] # in DN
+        bias_offset_up[i] = np.nanmedian(res_up_prescan)/k_arr[i] # in DN
+        bias_offset_low[i] = np.nanmedian(res_low_prescan)/k_arr[i] # in DN
     bias_offset = np.mean(bias_offset)
+    bias_offset_up = np.mean(bias_offset_up)
+    bias_offset_low = np.mean(bias_offset_low)
 
     # don't average read noise for all frames since reading off read noise
     # from a frame with gained variance of C and D much higher than read
@@ -382,7 +447,47 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     C_image_map[C_image_map < 0] = 0
     D_image_map[D_image_map < 0] = 0
 
-    return (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
+    # Since CIC will not scaled by gain or exptime when master dark created
+    # using these noise maps, just bundle stacks_err in with C_std_map
+    C_std_map_combo = np.sqrt(C_std_map**2 + stacks_err**2)
+    # assume headers from a dataset frame for headers of calibrated noise map
+    prihdr = datasets[0].frames[0].pri_hdr
+    exthdr = datasets[0].frames[0].ext_hdr
+    exthdr['EXPTIME'] = None
+    if 'EMGAIN_M' in exthdr.keys():
+        exthdr['EMGAIN_M'] = None
+    exthdr['CMDGAIN'] = None
+    exthdr['KGAIN'] = None
+    exthdr['BUNIT'] = 'detected electrons'
+    exthdr['HIERARCH DATA_LEVEL'] = None
+
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electrons'
+
+    # make one big dataset of all the input datasets solely for the purpose of
+    # input_dataset going into NoiseMap and the recording of filenames
+    total_data = np.array([])
+    for ds in datasets:
+        total_data = np.append(total_data, ds.frames)
+
+    exthdr['DATATYPE'] = 'FPN NoiseMap'
+    F_noise_map = NoiseMap(F_map, 'FPN', prihdr, exthdr, total_data,
+                           F_std_map,
+                           unreliable_pix_map, err_hdr=err_hdr)
+    exthdr2 = exthdr.copy()
+    exthdr2['DATATYPE'] = 'CIC NoiseMap'
+    C_noise_map = NoiseMap(C_map, 'CIC', prihdr, exthdr2, total_data,
+                           C_std_map_combo,
+                           unreliable_pix_map, err_hdr=err_hdr)
+    exthdr3 = exthdr.copy()
+    exthdr3['DATATYPE'] = 'DC NoiseMap'
+    D_noise_map = NoiseMap(D_map, 'DC', prihdr, exthdr3, total_data,
+                           D_std_map,
+                           unreliable_pix_map, err_hdr=err_hdr)
+
+    return (F_map, C_map, D_map, bias_offset, bias_offset_up, bias_offset_low,
+            F_image_map, C_image_map,
             D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
             C_image_mean, D_image_mean, unreliable_pix_map, F_std_map,
-            C_std_map, D_std_map, stacks_err)
+            C_std_map, D_std_map, stacks_err, F_noise_map, C_noise_map,
+            D_noise_map)
