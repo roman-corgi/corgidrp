@@ -449,41 +449,79 @@ class Dark(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark file (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this noise map (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
+        err (np.array): the error array (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
+        dq (np.array): the DQ array (required only if raw data is passed in)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
-        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-        # additional bookkeeping for Dark
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
 
         # if this is a new dark, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new dark
         if ext_hdr is not None:
-            if input_dataset is None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
             self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'detected electrons'
 
-            # log all the data that went into making this dark
-            self._record_parent_filenames(input_dataset)
+            # log all the data that went into making this calibration file
+            if 'DRPNFILE' not in ext_hdr.keys():
+                self._record_parent_filenames(input_dataset)
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
+            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
             self.filename = "{0}_dark.fits".format(orig_input_filename)
 
+        if err_hdr is not None:
+            self.err_hdr['BUNIT'] = 'detected electrons'
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this Dark file, including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            new_nm (corgidrp.data.NoiseMap): a copy of this Dark
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+            new_err = np.copy(self.err)
+            new_dq = np.copy(self.dq)
+        else:
+            new_data = self.data # this is just pointer referencing
+            new_err = self.err
+            new_dq = self.dq
+        new_dark = Dark(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
+
+        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
+        new_dark.filename = self.filename
+        new_dark.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_dark
+
 class NonLinearityCalibration(Image):
     """
-    Class for non-linearity calibration files. Although it's not stricly an image that you might look at, it is a 2D array of data
+    Class for non-linearity calibration files. Although it's not strictly an image that you might look at, it is a 2D array of data
 
     The required format for calibration data is as follows:
      - Minimum 2x2
@@ -567,7 +605,7 @@ class KGain(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
-     
+
     Attrs:
         value: the getter of the kgain value
         _kgain (float): the value of kgain
@@ -579,14 +617,8 @@ class KGain(Image):
         # File format checks
         if self.data.shape != (1,1):
             raise ValueError('The KGain calibration data should be just one float value')
-       # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
-        # File format checks
-        if self.data.shape != (1,1):
-            raise ValueError('The KGain calibration data should be just one float value')
-
-        self._kgain = self.data[0,0] 
+        self._kgain = self.data[0,0]
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new KGain file
@@ -608,7 +640,7 @@ class KGain(Image):
     @property
     def value(self):
         return self._kgain
- 
+
     def copy(self, copy_data = True):
         """
         Make a copy of this KGain file. including data and headers.
@@ -626,7 +658,7 @@ class KGain(Image):
         else:
             new_data = self.data # this is just pointer referencing
         new_kg = KGain(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-        
+
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_kg.filename = self.filename
         new_kg.filedir = self.filedir
@@ -697,7 +729,7 @@ class BadPixelMap(Image):
         else:
             new_data = self.data # this is just pointer referencing
         new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-        
+
         # we got to manually update some parameters. Need to keep track of which ones to update
         new_bp.filename = self.filename
         new_bp.filedir = self.filedir
@@ -708,11 +740,97 @@ class BadPixelMap(Image):
 
         return new_bp
 
+class NoiseMap(Image):
+    """
+    Class for NoiseMap calibration file. This is the full SCI frame of fitted
+    values for a given noise type at a given temperature.
+    Noise types include fixed-pattern noise (FPN), clock-induced charge (CIC),
+    and dark current (DC).
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        noise_type (str): 'FPN', 'CIC', or 'DC'
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this noise map (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
+        err (np.array): the error array (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
+        dq (np.array): the DQ array (required only if raw data is passed in)
+
+    """
+    def __init__(self, data_or_filepath, noise_type, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
+
+        # additional bookkeeping for a calibration file
+        # if this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new calibration file
+        if ext_hdr is not None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new noise map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this noise map.")
+
+            self.ext_hdr['DATATYPE'] = noise_type + ' NoiseMap' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'detected electrons'
+
+            # log all the data that went into making this calibration file
+            if 'DRPNFILE' not in ext_hdr.keys():
+                self._record_parent_filenames(input_dataset)
+            # add to history
+            self.ext_hdr['HISTORY'] = noise_type + " NoiseMap calibration file created"
+
+            # give it a default filename
+            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
+            self.filename = "{0}_{1}_NoiseMap.fits".format(orig_input_filename, noise_type)
+
+        if err_hdr is not None:
+            self.err_hdr['BUNIT'] = 'detected electrons'
+
+
+        # double check that this is actually a KGain file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != noise_type + ' NoiseMap':
+            raise ValueError("File that was loaded was not a " + noise_type + " NoiseMap Calibration file.")
+
+
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this NoiseMap file, including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            new_nm (corgidrp.data.NoiseMap): a copy of this NoiseMap
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+            new_err = np.copy(self.err)
+            new_dq = np.copy(self.dq)
+        else:
+            new_data = self.data # this is just pointer referencing
+            new_err = self.err
+            new_dq = self.dq
+        new_nm = NoiseMap(new_data, noise_type=self.ext_hdr['DATATYPE'][:-9], pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
+
+        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
+        new_nm.filename = self.filename
+        new_nm.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_nm
+
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
-              "KGain" : KGain, 
-              "BadPixelMap" : BadPixelMap }
+              "KGain" : KGain,
+              "BadPixelMap" : BadPixelMap,
+              "NoiseMap": NoiseMap, }
 
 def autoload(filepath):
     """
