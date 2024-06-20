@@ -470,18 +470,17 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     for ds in datasets:
         total_data = np.append(total_data, ds.frames)
 
-    exthdr['DATATYPE'] = 'FPN NoiseMap'
-    F_noise_map = NoiseMap(F_map, 'FPN', prihdr, exthdr, total_data,
+    exthdr['DATATYPE'] = 'NoiseMap'
+
+    F_noise_map = NoiseMap(F_map, 'FPN', prihdr.copy(), exthdr.copy(), total_data,
                            F_std_map,
                            unreliable_pix_map, err_hdr=err_hdr)
-    exthdr2 = exthdr.copy()
-    exthdr2['DATATYPE'] = 'CIC NoiseMap'
-    C_noise_map = NoiseMap(C_map, 'CIC', prihdr, exthdr2, total_data,
+
+    C_noise_map = NoiseMap(C_map, 'CIC', prihdr.copy(), exthdr.copy(), total_data,
                            C_std_map_combo,
                            unreliable_pix_map, err_hdr=err_hdr)
-    exthdr3 = exthdr.copy()
-    exthdr3['DATATYPE'] = 'DC NoiseMap'
-    D_noise_map = NoiseMap(D_map, 'DC', prihdr, exthdr3, total_data,
+
+    D_noise_map = NoiseMap(D_map, 'DC', prihdr.copy(), exthdr.copy(), total_data,
                            D_std_map,
                            unreliable_pix_map, err_hdr=err_hdr)
 

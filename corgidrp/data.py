@@ -778,6 +778,8 @@ class NoiseMap(Image):
        # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq, err_hdr=err_hdr)
 
+        self.noise_type = noise_type
+
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new calibration file
@@ -786,7 +788,7 @@ class NoiseMap(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new noise map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this noise map.")
 
-            self.ext_hdr['DATATYPE'] = noise_type + ' NoiseMap' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'NoiseMap' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected electrons'
 
             # log all the data that went into making this calibration file
@@ -805,7 +807,7 @@ class NoiseMap(Image):
 
         # double check that this is actually a KGain file that got read in
         # since if only a filepath was passed in, any file could have been read in
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != noise_type + ' NoiseMap':
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NoiseMap':
             raise ValueError("File that was loaded was not a " + noise_type + " NoiseMap Calibration file.")
 
 
@@ -829,7 +831,7 @@ class NoiseMap(Image):
             new_data = self.data # this is just pointer referencing
             new_err = self.err
             new_dq = self.dq
-        new_nm = NoiseMap(new_data, noise_type=self.ext_hdr['DATATYPE'][:-9], pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
+        new_nm = NoiseMap(new_data, noise_type=self.noise_type, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
 
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_nm.filename = self.filename

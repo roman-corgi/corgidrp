@@ -44,17 +44,15 @@ def create_noise_maps(F, Ferr, Fdq, C, Cerr, Cdq, D, Derr, Ddq):
 
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electrons'
+    exthdr['DATATYPE'] = 'NoiseMap'
 
-    exthdr['DATATYPE'] = 'FPN NoiseMap'
     Fnoisemap = data.NoiseMap(F, 'FPN', pri_hdr=prihdr, ext_hdr=exthdr, err=Ferr,
                               dq=Fdq, err_hdr=err_hdr)
-    exthdr2 = exthdr.copy()
-    exthdr['DATATYPE'] = 'CIC NoiseMap'
-    Cnoisemap = data.NoiseMap(C, 'CIC', pri_hdr=prihdr, ext_hdr=exthdr2, err=Cerr,
+
+    Cnoisemap = data.NoiseMap(C, 'CIC', pri_hdr=prihdr, ext_hdr=exthdr, err=Cerr,
                               dq=Cdq, err_hdr=err_hdr)
-    exthdr3 = exthdr.copy()
-    exthdr3['DATATYPE'] = 'dark current NoiseMap'
-    Dnoisemap = data.NoiseMap(D, 'DC', pri_hdr=prihdr, ext_hdr=exthdr3, err=Derr,
+
+    Dnoisemap = data.NoiseMap(D, 'DC', pri_hdr=prihdr, ext_hdr=exthdr, err=Derr,
                               dq=Ddq, err_hdr=err_hdr)
 
     return Fnoisemap, Cnoisemap, Dnoisemap
