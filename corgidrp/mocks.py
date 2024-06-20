@@ -202,3 +202,127 @@ def create_default_headers(obstype="SCI"):
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
+
+def create_astrom_data(filedir=None, ):
+    """
+    Create simulated data for astrometric calibration.
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset
+    """
+
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+
+    #filepattern = "simcal_astrom_{0:04d}.fits"
+
+    cal_field = ascii.read('corgidrp/tests/test_data/JWST_CALFIELD2020.csv')
+    cal_SkyCoords = SkyCoord(ra= cal_field['RA'], dec= cal_field['DEC'], 
+                             unit='deg', frame='icrs')
+    
+    # hard coded image properties
+    size = (1024, 1024)
+    sim_data = np.zeros(size)
+    ny, nx = size
+    center = [nx //2, ny //2]
+    target = (80.553428801, -69.514096821)
+    platescale = 21.8   #[mas]
+    rotation = 45       #[deg]
+    fwhm = 3
+
+    # create the simulated image header
+    vert_ang = np.radians(rotation)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (platescale * 0.001) / 3600.
+
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+
+    new_hdr['CRPIX1'] = center[0]
+    new_hdr['CRPIX2'] = center[1]
+
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+
+    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
+    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+
+    new_hdr['CRVAL1'] = target[0]
+    new_hdr['CRVAL2'] = target[1]
+
+    w = wcs.WCS(new_hdr)
+
+    # create the image data
+    xpix, ypix = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
+    xpix_inds = np.where((xpix >= 0) & (xpix <= 1024) & (ypix >= 0) & (ypix <= 1024))[0]
+    ypix_inds = np.where((ypix >= 0) & (ypix <= 1024) & (xpix >= 0) & (xpix <= 1024))[0]
+    xpix = xpix[xpix_inds]
+    ypix = ypix[ypix_inds]
+
+    amplitudes = np.power(10, ((cal_field['VMAG'] - 22.5) / (-2.5))) * 10
+
+    # inject gaussian psf stars
+    for xpos, ypos, amplitude in zip(xpix, ypix, amplitudes):
+        stampsize = int(np.ceil(3 * fwhm))
+        sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+        
+        # coordinate system
+        y, x = np.indices([stampsize, stampsize])
+        y -= stampsize // 2
+        x -= stampsize // 2
+        
+        # find nearest pixel
+        x_int = int(round(xpos))
+        y_int = int(round(ypos))
+        x += x_int
+        y += y_int
+        
+        xmin = x[0][0]
+        xmax = x[-1][-1]
+        ymin = y[0][0]
+        ymax = y[-1][-1]
+        
+        psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+
+        # crop the edge of the injection at the edge of the image
+        if xmin <= 0:
+            psf = psf[:, -xmin:]
+            xmin = 0
+        if ymin <= 0:
+            psf = psf[-ymin:, :]
+            ymin = 0
+        if xmax >= nx:
+            psf = psf[:, :-(xmax-nx + 1)]
+            xmax = nx - 1
+        if ymax >= ny:
+            psf = psf[:-(ymax-ny + 1), :]
+            ymax = ny - 1
+
+        # inject the stars into the image
+        sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
+
+        # add Gaussian random noise
+        noise_rng = np.random.default_rng(10)
+        gain = 1
+        ref_flux = 10
+        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
+        sim_data = sim_data + noise
+
+        # load as an image object
+        prihdr, exthdr = create_default_headers()
+        newhdr = astropy.io.fits.Header(new_hdr)
+        frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+        filename = "simcal_astrom.fits"
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filename)
+        dataset = data.Dataset(frame)
+
+        return dataset
