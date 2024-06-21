@@ -143,7 +143,8 @@ frame_list2 = []
 for j in range(30):
     frame2 = make_frame(fluxMap,bias,kgain_in,rn_in,emgain,7.0,coeffs_1,nonlin_flag)
     frame_list2.append(frame2)
-stack_arr2 = np.stack(frame_list2)
+# Remove singleton dimensions
+stack_arr2 = np.squeeze(np.stack(frame_list2))
 
 index = 0
 iG = 0 # doing only the em gain = 1 case
@@ -169,7 +170,8 @@ for j in range(len(exp_repeat_counts)):
         frame_list.append(frame_sim)
     frame_stack = np.stack(frame_list)
     stack_list.append(frame_stack)
-stack_arr = np.stack(stack_list)
+# Remove singleton dimensions 
+stack_arr = np.squeeze(np.stack(stack_list))
 
 # set input parameters for calibrate_kgain function
 min_val = 800
@@ -226,7 +228,7 @@ class TestCalibrateKgain(unittest.TestCase):
     def test_sub_sub_stack_len(self):
         """Each sub-stack of stack_arr must have 5 sub-stacks."""
         with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr[:,0:3,:], stack_arr2, self.emgain, 
+            calibrate_kgain(stack_arr[:,0:3], stack_arr2, self.emgain, 
                 self.min_val, self.max_val, self.binwidth)
     
     def test_3D(self):

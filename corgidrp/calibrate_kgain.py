@@ -5,6 +5,7 @@ import warnings
 from scipy.optimize import curve_fit
 
 import corgidrp.data as data
+from corgidrp.data import Image
 from corgidrp.mocks import create_default_headers
 
 class CalKgainException(Exception):
@@ -1073,13 +1074,8 @@ def copy_and_cast(stack_arr_drp, stack_arr2_drp):
             if stack_arr.shape[1] > 1:
                 frame_list = []
                 for t in range(stack_arr.shape[1]):
-                    if stack_arr.shape[2] == 1:
-                        frame_sim = stack_arr[j][t][0].data
-                        frame_list.append(frame_sim)
-                    else:
-                        breakpoint()
-                        frame_sim = stack_arr[j][t].data
-                        frame_list.append(frame_sim)
+                    frame_sim = stack_arr[j][t].data
+                    frame_list.append(frame_sim)
             else:
                 frame_list = np.stack(stack_arr[j][0].data)
         else:
@@ -1088,12 +1084,15 @@ def copy_and_cast(stack_arr_drp, stack_arr2_drp):
     stack_arr = np.stack(stack_list)
 
     frame_list2 = []
-    for j in range(stack_arr2.shape[0]):
-        if stack_arr2.ndim > 1:
-            frame2 = stack_arr2[j][0].data
-        else:
-            frame2 = stack_arr2[j].data
-        frame_list2.append(frame2)
+    if type(stack_arr2) == Image:
+        frame_list2.append(stack_arr2.data)
+    else:
+        for j in range(stack_arr2.shape[0]):
+            if stack_arr2.ndim > 1:
+                frame2 = stack_arr2[j][0].data
+            else:
+                frame2 = stack_arr2[j].data
+            frame_list2.append(frame2)
     stack_arr2 = np.stack(frame_list2)
 
     return stack_arr, stack_arr2
