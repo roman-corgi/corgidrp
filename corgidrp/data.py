@@ -674,7 +674,7 @@ class BadPixelMap(Image):
         # if this is a new bad pixel map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
         if ext_hdr is not None:
-            if input_dataset is None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new bad pixel map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this bad pixel map.")
             self.ext_hdr['DATATYPE'] = 'BadPixelMap' # corgidrp specific keyword for saving to disk
