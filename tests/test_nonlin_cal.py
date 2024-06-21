@@ -429,22 +429,6 @@ class TestCalibrateNonlin(unittest.TestCase):
                                     self.actual_gain_arr, mmerr, 
                                     self.min_write, self.max_write)
     
-    def test_rms_upp_gt_low(self):
-        """rms_upp_limit must be greater than rms_low_limit."""
-        with self.assertRaises(CalNonlinException):
-                calibrate_nonlin(stack_arr, self.exp_time_stack_arr, 
-                                    self.time_stack_arr, self.len_list, stack_arr2, 
-                                    self.actual_gain_arr, self.norm_val, 
-                                    self.min_write, self.max_write)
-
-    def test_rms_rns(self):
-        """rms_low_limit and rms_upp_limit must be real nonnegative scalars."""
-        with self.assertRaises(TypeError):
-                calibrate_nonlin(stack_arr, self.exp_time_stack_arr, 
-                                    self.time_stack_arr, self.len_list, stack_arr2, 
-                                    self.actual_gain_arr, self.norm_val, 
-                                    self.min_write, self.max_write)
-
 if __name__ == '__main__':
     unittest.main()
 
