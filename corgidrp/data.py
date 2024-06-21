@@ -584,6 +584,7 @@ class KGain(Image):
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this KGain file (required only if raw 2D data is passed in)
+    
     Attrs:
         value: the getter of the kgain value
         _kgain (float): the value of kgain
