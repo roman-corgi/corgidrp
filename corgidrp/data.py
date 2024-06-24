@@ -724,11 +724,110 @@ class BadPixelMap(Image):
 
         return new_bp
 
+class DetectorParams(Image):
+    """
+    Class containing detector parameters that may change over time
+
+    Args:
+        data_or_filepath (dict or str): either a filepath string or a dictionary of
+                                        parameters to modify from default values
+        date_valid (astropy.time.Time): date after which these parameters are valid
+
+    Attributes:
+        params (dict): the values for various detector parameters specified here
+        default_values (dict): default values for detector parameters (fallback values)
+    """
+     # default detector params
+    default_values = {
+        'kgain' : 8.7,
+        'fwc_pp' : 90000.,
+        'fwc_em' : 100000.,
+        'rowreadtime' : 223.5e-6 # seconds
+    }
+
+    def __init__(self, data_or_filepath, date_valid=None):
+
+        # if filepaht passed in, just load in from disk as usual
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+
+            # double check that this is actually a bad pixel map that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'DetectorParams':
+                raise ValueError("File that was loaded was not a DetectorParams file.")
+        else:
+            if not isinstance(data_or_filepath, dict):
+                raise ValueError("Input should either be a dictionary or a filepath string")
+            prihdr = fits.Header()
+            exthdr = fits.Header()
+            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
+            exthdr['DRPVERSN'] =  corgidrp.version
+            exthdr['DRPCTIME'] =  time.Time.now().isot
+
+            # fill caldb required keywords with dummy data
+            prihdr['OBSID'] = 0
+            exthdr["EXPTIME"] = 0
+            exthdr['OPMODE'] = ""
+            exthdr['CMDGAIN'] = 1.0
+            exthdr['EXCAMT'] = 40.0
+
+            # write default values to headers
+            for key in self.default_values:
+                exthdr[key] = self.default_values[key]
+            # overwrite default values
+            for key in data_or_filepath:
+                exthdr[key] = data_or_filepath[key]
+
+            self.pri_hdr = prihdr
+            self.ext_hdr = exthdr
+            self.data = np.zeros([1,1])
+            self.dq = np.zeros([1,1])
+            self.err = np.zeros([1,1])
+            self.bias = np.zeros([1,1])
+
+            self.err_hdr = fits.Header()
+            self.dq_hdr = fits.Header()
+            self.bias_hdr = fits.Header()
+
+        # make a dictionary that's easy to use
+        self.params = {}
+        # load back in all the values from the header
+        for key in self.default_values:
+            self.params[key] = self.ext_hdr[key]
+        
+
+        # if this is a new bad pixel map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
+        if isinstance(data_or_filepath, dict):
+            self.ext_hdr['DATATYPE'] = 'DetectorParams' # corgidrp specific keyword for saving to disk
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Detector Params file created"
+
+            # use the start date for the filename by default
+            self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+    def get_hash(self):
+        """
+        Computes the hash of the detector param values
+
+        Returns:
+            str: the hash of the detector parameters
+        """
+        hashing_str = "" # make a string that we can actually hash
+        for key in self.params:
+            hashing_str += str(self.params[key])
+        
+        return str(hash(hashing_str))
+
+
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
               "KGain" : KGain, 
-              "BadPixelMap" : BadPixelMap }
+              "BadPixelMap" : BadPixelMap,
+              "DetectorParams" : DetectorParams }
 
 def autoload(filepath):
     """
