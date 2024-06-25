@@ -192,6 +192,8 @@ def correct_bad_pixels(input_dataset, bp_mask):
         # mask affected pixels with NaN
         bp = np.where(bp_dq_mask != 0)
         data_cube[i, bp[0], bp[1]] = np.nan
+        # Update DQ to keep track of replaced bad pixel values
+        bp_dq_mask[bp[0], bp[1]]=np.bitwise_or(bp_dq_mask[bp[0], bp[1]], 2)
         dq_cube[i] = bp_dq_mask
 
     history_msg = "removed pixels affected by bad pixels"
