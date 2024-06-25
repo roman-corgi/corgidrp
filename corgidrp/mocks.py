@@ -228,9 +228,11 @@ def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numC
     if datetime is None:
         datetime = Time('2024-01-01T11:00:00.000Z')
 
-    kgain = detector.get_kgain(datetime=datetime)
-    fwc_em_dn = detector.get_fwc_em_e(datetime=datetime) / kgain
-    fwc_pp_dn = detector.get_fwc_pp_e(datetime=datetime) / kgain
+    detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
+
+    kgain = detector_params.params['kgain']
+    fwc_em_dn = detector_params.params['fwc_em'] / kgain
+    fwc_pp_dn = detector_params.params['fwc_pp'] / kgain
     fwc = np.min([fwc_em_dn,em_gain*fwc_pp_dn])
     dataset = create_nonlinear_dataset(filedir=None, numfiles=numfiles,em_gain=em_gain)
 

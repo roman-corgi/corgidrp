@@ -1,5 +1,7 @@
 # A file that holds the functions that transmogrify l1 data to l2a data
 from corgidrp.detector import get_relgains, Metadata, ReadMetadataException, get_fwc_em_e, get_fwc_pp_e, get_kgain, flag_cosmics, calc_sat_fwc
+# A file that holds the functions that transmogrify l1 data to l2a data
+from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc
 import numpy as np
 from astropy.time import Time
 
@@ -139,7 +141,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False,
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
+def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -148,6 +150,7 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
+        detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
         sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
             pixels. Interval 0 to 1, defaults to 0.99. Lower numbers are more aggressive in flagging saturation.
@@ -172,10 +175,10 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
 
 
     # Calculate the full well capacity for every frame in the dataset
-    kgain = np.array([get_kgain(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
+    kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
     emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
-    fwcpp_e_arr = np.array([get_fwc_pp_e(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
-    fwcem_e_arr = np.array([get_fwc_em_e(Time(frame.ext_hdr['DATETIME'], scale='utc')) for frame in crmasked_dataset])
+    fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
+    fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
 
     fwcpp_dn_arr = fwcpp_e_arr / kgain
     fwcem_dn_arr = fwcem_e_arr / kgain
@@ -211,7 +214,9 @@ def detect_cosmic_rays(input_dataset, sat_thresh=0.99, plat_thresh=0.85, cosm_fi
     # add the two masks to the all_dq mask
     new_all_dq = crmasked_dataset.all_dq + m1 + m2
 
-    history_msg = "Cosmic ray mask created."
+    history_msg = ("Cosmic ray mask created. "
+                   "Used detector parameters from {0}"
+                   "with hash {1}").format(detector_params.filename, detector_params.get_hash())
 
     # update the output dataset with this new dark subtracted data and update the history
     crmasked_dataset.update_after_processing_step(history_msg, new_all_dq=new_all_dq)

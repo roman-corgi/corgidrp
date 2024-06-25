@@ -242,162 +242,140 @@ def get_relgains(frame, em_gain, non_lin_correction):
 
     return counts_flat.reshape(frame.shape)
 
-# NOTE:  Change the retrieval of rowreadtime_sec to come from a config file
-def get_rowreadtime_sec(datetime=None):
+detector_areas= {
+    'SCI' : {
+        'frame_rows' : 1200,
+        'frame_cols' : 2200,
+        'image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'prescan' : {
+            'rows': 1200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 1200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 163,
+            'cols': 1056,
+            'r0c0': [1037, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 1200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    'ENG' :{
+        'frame_rows' : 2200,
+        'frame_cols' : 2200,
+        'image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'prescan' : {
+            'rows': 2200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 2200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 1163,
+            'cols': 1056,
+            'r0c0': [1037, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 2200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    }
+
+def slice_section(frame, obstype, key):
     """
-    Get the value of readrowtime. The EMCCD is considered sensitive to the
-    effects of radiation damage and, if this becomes a problem, one of the
-    mitigation techniques would be to change the row read time to reduce the
-    impact of charge traps.
-
-    There's no formal plan/timeline for this adjustment, though it is possible
-    to change in the future should it need to.
-
-    Its default value is 223.5e-6 sec.
+    Slice 2d section out of frame
 
     Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-            value is sometime between the first collection of ground data (Full
-            Functional Tests) and the duration of the Roman Coronagraph mission.
+        frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
+        obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        key (str): Keyword referencing section to be sliced; must exist in detector_areas
 
     Returns:
-        float: Current value of rowreadtime in sec.
-
+        np.ndarray: a 2D array of the specified detector area
     """
-    # Some datetime between the first collection of ground data (Full
-    # Functional Tests) and the duration of the Roman Coronagraph mission.
-    if datetime is None:
-        datetime = Time('2024-03-01 00:00:00', scale='utc')
+    rows = detector_areas[obstype][key]['rows']
+    cols = detector_areas[obstype][key]['cols']
+    r0c0 = detector_areas[obstype][key]['r0c0']
 
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
+    section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+    if section.size == 0:
+        raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
+    return section
 
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_1:
-        rowreadtime_sec =223.5e-6
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return rowreadtime_sec
-
-def get_fwc_em_e(datetime=None):
+def plot_detector_areas(detector_areas, areas=('image', 'prescan',
+        'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
     """
-    Get the value of FWC_EM, the full-well capacity of the pixels in the EM
-    gain register in units of electrions. This value will change over the
-    course of the mission.
-
-    Its default value is 100000 e-.
+    Create an image of the detector areas for visualization and debugging
 
     Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime between the first collection of ground data (Full
-        Functional Tests) and the duration of the Roman Coronagraph mission.
+        detector_areas (dict): a dictionary of image constants
+        areas (tuple): a tuple of areas to create masks for
 
     Returns:
-        float: Value of FWC_EM in units of electrons at time of observation.
-
+        np.ndarray: an image of the detector areas
     """
+    detector_areas = make_detector_areas(detector_areas, areas=areas)
+    detector_area_image = np.zeros(
+        (detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=int)
+    for i, area in enumerate(areas):
+        detector_area_image[detector_areas[area]] = i + 1
+    return detector_area_image
 
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_end = Time('2040-01-01 00:00:00', scale='utc')
-
-    # Default to datetime_iit.
-    if datetime is None:
-        datetime = Time('2023-11-01 00:00:00', scale='utc')
-
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_end:
-        fwc_em = 100000.
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return fwc_em
-
-def get_fwc_pp_e(datetime=None):
+def detector_area_mask(detector_areas, area='image'):
     """
-    Get the value of FWC_PP, the full-well capacity of the pixels in the image
-    area, before EM gain is applied in readout in units of electrions. This
-    value will change over the course of the mission.
-
-    Its default value is 90000 e-.
+    Create a mask for the detector area
 
     Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime between the first collection of ground data (Full
-        Functional Tests) and the duration of the Roman Coronagraph mission.
+        detector_areas (dict): a dictionary of image constants
+        area (str): the area of the detector to create a mask for
 
     Returns:
-        float: Value of FWC_PP in electrons at time of observation.
-
+        np.ndarray: a mask for the detector area
     """
-    # Some datetime between the first collection of ground data (Full
-    # Functional Tests) and the duration of the Roman Coronagraph mission.
-    if datetime is None:
-        datetime = Time('2024-03-01 00:00:00', scale='utc')
+    mask = np.zeros((detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=bool)
+    mask[detector_areas[area]['r0c0'][0]:detector_areas[area]['r0c0'][0] + detector_areas[area]['rows'],
+            detector_areas[area]['r0c0'][1]:detector_areas[area]['r0c0'][1] + detector_areas[area]['cols']] = True
+    return mask
 
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
-
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_1:
-        fwc_pp = 90000.
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return fwc_pp
-
-def get_kgain(datetime=None):
+def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reliable',
+        'parallel_overscan', 'serial_overscan')):
     """
-    Get the K gain, the conversion factor between raw counts from the detector
-    and electrons coming out of the gain register, in units of e-/dN. This
-    value may change over the course of the mission.
-
-    Its default value is 8.7 e-/dN.
+    Create a dictionary of masks for the different detector areas
 
     Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime between the first collection of ground data (Full
-        Functional Tests) and the duration of the Roman Coronagraph mission.
+        detector_areas (dict): a dictionary of image constants
+        areas (tuple): a tuple of areas to create masks for
 
     Returns:
-        float: The K gain in electrons/dN at time of observation.
-
+        dict: a dictionary of masks for the different detector areas
     """
-    # Some datetime between the first collection of ground data (Full
-    # Functional Tests) and the duration of the Roman Coronagraph mission.
-    if datetime is None:
-        datetime = Time('2024-03-01 00:00:00', scale='utc')
+    detector_areas = {}
+    for area in areas:
+        detector_areas[area] = detector_area_mask(detector_areas, area=area)
+    return detector_areas
 
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
-
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_1:
-        kgain = 8.7
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return kgain
 
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     """Identify and remove saturated cosmic ray hits and tails.
