@@ -64,6 +64,20 @@ def test_bad_pixels():
     for jj in nan_data[:,1]:
         assert jj in row_cr_test or jj in row_bp_test
 
+    # Checking that bad pixels are only at the expected locations
+    replaced_pix = np.argwhere(new_dataset.all_dq[0] != 0)
+    for ii in replaced_pix[:,0]:
+        assert ii in col_cr_test or ii in col_bp_test
+    for jj in replaced_pix[:,1]:
+        assert jj in row_cr_test or jj in row_bp_test
+
+    # Checking that DQ first bit is set to 1 only for replaced pixels (Big-Endian)
+    for ii in replaced_pix[:,0]:
+        for jj in replaced_pix[:,1]:
+            # Only bad pixels
+            if new_dataset.all_dq[0][ii][jj] != 0:
+                assert np.unpackbits(new_dataset.all_dq[0][ii][jj].astype('uint8'))[6] == 1
+
     # Checking that bad pixels are at the expected locations
     bp_dq = np.where(new_dataset.all_dq[0] == 4)
     for ii in bp_dq[0]:
