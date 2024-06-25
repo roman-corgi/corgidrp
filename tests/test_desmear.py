@@ -6,7 +6,7 @@ import corgidrp.detector as detector
 from astropy.time import Time
 from corgidrp.l2a_to_l2b import desmear
 from corgidrp.mocks import create_default_headers
-from corgidrp.data import Image, Dataset, BadPixelMap
+from corgidrp.data import Image, Dataset, DetectorParams
 
 old_err_tracking = corgidrp.track_individual_errors
 
@@ -18,7 +18,8 @@ def test_desmear():
 
     print("Testing desmear step function")
 
-    rowreadtime_sec = detector.get_rowreadtime_sec()
+    detector_params = DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
+    rowreadtime_sec = detector_params.params['rowreadtime']
 
     #make a flux map
     size = 1024
@@ -51,7 +52,7 @@ def test_desmear():
     assert type(dataset_smeared) == corgidrp.data.Dataset
 
     # Apply desmear correction
-    dataset_desmear = desmear(dataset_smeared)
+    dataset_desmear = desmear(dataset_smeared, detector_params)
 
     assert type(dataset_desmear) == corgidrp.data.Dataset
 
