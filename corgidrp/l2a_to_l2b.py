@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
 import numpy as np
+import corgidrp.data as data
 
 def add_photon_noise(input_dataset):
     """
@@ -58,22 +59,55 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
-def frame_select(input_dataset, bpix_frac=100., overexp=False, tt_thres=None):
+def frame_select(input_dataset, bpix_frac=1., overexp=False, tt_thres=None):
     """
     
     Selects the frames that we want to use for further processing.
-    Not currently implemented!! 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        bpix_frac (float): what percent of the image needs to be bad to discard. Default: 100% (not used)
+        bpix_frac (float): greater than fraction of the image needs to be bad to discard. Default: 1.0 (not used)
         overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
         tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used) 
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
     """
-    return input_dataset.copy()
+    pruned_dataset = input_dataset.copy()
+    select_flags = np.ones(len(input_dataset))
+
+    for i, frame in enumerate(input_dataset.frames):
+        if bpix_frac < 1:
+            numbadpix = np.size(np.where(frame.dq > 0)[0])
+            frame_badpix_frac = numbadpix / np.size(frame.dq)
+            # if fraction of bad pixel over threshold, mark is as bad
+            if frame_badpix_frac > bpix_frac:
+                select_flags[i] = 0
+        if overexp:
+            if frame.ext_hdr['OVEREXP']:
+                select_flags[i] = 0 
+        if tt_thres is not None:
+            if frame.ext_hdr['RESZ2RMS'] > tt_thres:
+                select_flags[i] = 0
+    
+    good_frames = np.where(select_flags == 1)
+    bad_frames = np.where(select_flags == 0)
+    # check that we didn't remove all of the good frames
+    if np.size(good_frames) == 0:
+        raise ValueError("No good frames were selected. Unable to continue")
+
+    pruned_frames = pruned_dataset.frames[good_frames]
+    pruned_dataset = data.Dataset(pruned_frames)
+
+    # history message of which frames were removed.
+    history_msg = "Removed {0} frames:".format(np.size(bad_frames))
+    for bad_frame in input_dataset.frames[bad_frames]:
+        history_msg += " {0},".format(bad_frame.filename)
+    history_msg = history_msg[:-1] # remove last comma or :
+
+    pruned_dataset.update_after_processing_step(history_msg)
+
+    return pruned_dataset
 
 def convert_to_electrons(input_dataset, k_gain): 
     """
