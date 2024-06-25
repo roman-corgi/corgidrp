@@ -71,7 +71,7 @@ def test_bad_pixels():
     for jj in replaced_pix[:,1]:
         assert jj in row_cr_test or jj in row_bp_test
 
-    # Checking that DQ first bit is set to 1 only for replaced pixels (Big-Endian)
+    # Checking that DQ bit for replaced pixels is set to 1 (Big-Endian)
     for ii in replaced_pix[:,0]:
         for jj in replaced_pix[:,1]:
             # Only bad pixels
