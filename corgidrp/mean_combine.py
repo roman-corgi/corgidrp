@@ -1,5 +1,5 @@
 import numpy as np
-import corgidrp.util.check as check
+import corgidrp.check as check
 
 def mean_combine(image_list, bpmap_list, err=False):
     """

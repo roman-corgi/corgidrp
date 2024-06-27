@@ -2,7 +2,6 @@ import os
 import unittest
 import warnings
 import numpy as np
-from pathlib import Path
 
 from corgidrp.calibrate_darks_lsq import (calibrate_darks_lsq,
             CalDarksLSQException)
@@ -145,7 +144,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             os.mkdir(calibdir)
         bias_offset_map.save(filedir=calibdir, filename=bo_filename)
         bo_filepath = os.path.join(calibdir, bo_filename)
-        bo_f = BiasOffset(nm_filepath)
+        bo_f = BiasOffset(bo_filepath)
         # tests the copy method, from filepath way of creating class
         # instance, too
         bo_open = bo_f.copy()
