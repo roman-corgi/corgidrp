@@ -1,12 +1,204 @@
 import astropy.io.fits as fits
 from astropy.time import Time
 import numpy as np
+import os
 
 import corgidrp.data as data
 import corgidrp.detector as detector
-import os
+from corgidrp.detector import imaging_area_geom, unpack_geom
 
+detector_areas_test= {
+'SCI' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
+        'frame_rows' : 120,
+        'frame_cols' : 220,
+        'image' : {
+            'rows': 104,
+            'cols': 105,
+            'r0c0': [2, 108]
+            },
+        'prescan' : {
+            'rows': 120,
+            'cols': 108,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 120,
+            'cols': 108,
+            'r0c0': [0, 0]
+            },
+        'parallel_overscan' : {
+            'rows': 14,
+            'cols': 107,
+            'r0c0': [106, 108]
+            },
+        'serial_overscan' : {
+            'rows': 120,
+            'cols': 5,
+            'r0c0': [0, 215]
+            },
+        },
+'ENG' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
+        'frame_rows' : 220,
+        'frame_cols' : 220,
+        'image' : {
+            'rows': 102,
+            'cols': 102,
+            'r0c0': [13, 108]
+            },
+        'prescan' : {
+            'rows': 120,
+            'cols': 108,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 220,
+            'cols': 20,
+            'r0c0': [0, 80]
+            },
+        'parallel_overscan' : {
+            'rows': 116,
+            'cols': 105,
+            'r0c0': [104, 108]
+            },
+        'serial_overscan' : {
+            'rows': 220,
+            'cols': 5,
+            'r0c0': [0, 215]
+            },
+        }
+}
 
+def create_noise_maps(F, Ferr, Fdq, C, Cerr, Cdq, D, Derr, Ddq):
+    '''
+    Create simulated noise maps for test_masterdark_from_noisemaps.py.
+
+    Arguments:
+        F: 2D np.array for fixed-pattern noise (FPN) data array
+        Ferr: 2D np.array for FPN err array
+        Fdq: 2D np.array for FPN DQ array
+        C: 2D np.array for clock-induced charge (CIC) data array
+        Cerr: 2D np.array for CIC err array
+        Cdq: 2D np.array for CIC DQ array
+        D: 2D np.array for dark current data array
+        Derr: 2D np.array for dark current err array
+        Ddq: 2D np.array for dark current DQ array
+
+    Returns:
+        Fnoisemap: corgidrp.data.NoiseMap instance for FPN
+        Cnoisemap: corgidrp.data.NoiseMap instance for CIC
+        Dnoisemap: corgidrp.data.NoiseMap instance for dark current
+    '''
+
+    prihdr, exthdr = create_default_headers()
+    # taken from end of calibrate_darks_lsq()
+    exthdr['EXPTIME'] = None
+    if 'EMGAIN_M' in exthdr.keys():
+        exthdr['EMGAIN_M'] = None
+    exthdr['CMDGAIN'] = None
+    exthdr['KGAIN'] = None
+    exthdr['BUNIT'] = 'detected electrons'
+    exthdr['HIERARCH DATA_LEVEL'] = None
+    # simulate raw data filenames
+    exthdr['DRPNFILE'] = 2
+    exthdr['FILE0'] = '0.fits'
+    exthdr['FILE1'] = '1.fits'
+
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electrons'
+    exthdr['DATATYPE'] = 'NoiseMap'
+
+    Fnoisemap = data.NoiseMap(F, 'FPN', pri_hdr=prihdr, ext_hdr=exthdr, err=Ferr,
+                              dq=Fdq, err_hdr=err_hdr)
+
+    Cnoisemap = data.NoiseMap(C, 'CIC', pri_hdr=prihdr, ext_hdr=exthdr, err=Cerr,
+                              dq=Cdq, err_hdr=err_hdr)
+
+    Dnoisemap = data.NoiseMap(D, 'DC', pri_hdr=prihdr, ext_hdr=exthdr, err=Derr,
+                              dq=Ddq, err_hdr=err_hdr)
+
+    return Fnoisemap, Cnoisemap, Dnoisemap
+
+def create_synthesized_master_dark_calib(d_areas):
+    '''
+    Create simulated data specifically for test_calibrate_darks_lsq.py.
+
+    Args:
+        d_areas: dict
+    a dictionary of detector geometry properties.  Keys should be as found
+    in detector_areas in detector.py.
+
+    Returns:
+        datasets: List of corgidrp.data.Dataset instances
+    The simulated dataset
+    '''
+
+    dark_current = 8.33e-4 #e-/pix/s
+    cic=0.02  # e-/pix/frame
+    read_noise=100 # e-/pix/frame
+    bias=2000 # e-
+    eperdn = 7 # e-/DN conversion; used in this example for all stacks
+    g_picks = (np.linspace(2, 5000, 7))
+    t_picks = (np.linspace(2, 100, 7))
+    grid = np.meshgrid(g_picks, t_picks)
+    g_arr = grid[0].ravel()
+    t_arr = grid[1].ravel()
+    #added in after emccd_detect makes the frames (see below)
+    # The mean FPN that will be found is eperdn*(FPN//eperdn)
+    # due to how I simulate it and then convert the frame to uint16
+    FPN = 21 # e
+    # the bigger N is, the better the adjusted R^2 per pixel becomes
+    N = 30 #Use N=600 for results with better fits (higher values for adjusted
+    # R^2 per pixel)
+    # image area, including "shielded" rows and cols:
+    imrows, imcols, imr0c0 = imaging_area_geom(d_areas, 'SCI')
+    prerows, precols, prer0c0 = unpack_geom(d_areas, 'SCI', 'prescan')
+
+    datasets = []
+    for i in range(len(g_arr)):
+        frame_list = []
+        for l in range(N): #number of frames to produce
+            # Simulate full dark frame (image area + the rest)
+            frame_rows = d_areas['SCI']['frame_rows']
+            frame_cols = d_areas['SCI']['frame_cols']
+            frame_dn_dark = np.zeros((frame_rows, frame_cols))
+            im = np.random.poisson(cic*g_arr[i]+
+                                t_arr[i]*g_arr[i]*dark_current,
+                                size=(frame_rows, frame_cols))
+            frame_dn_dark = im
+            # prescan has no dark current
+            pre = np.random.poisson(cic*g_arr[i],
+                                    size=(prerows, precols))
+            frame_dn_dark[prer0c0[0]:prer0c0[0]+prerows,
+                            prer0c0[1]:prer0c0[1]+precols] = pre
+            rn = np.random.normal(0, read_noise,
+                                    size=(frame_rows, frame_cols))
+            with_rn = frame_dn_dark + rn + bias
+
+            frame_dn_dark = with_rn/eperdn
+            # simulate a constant FPN in image area (not in prescan
+            # so that it isn't removed when bias is removed)
+            frame_dn_dark[imr0c0[0]:imr0c0[0]+imrows,imr0c0[1]:
+            imr0c0[1]+imcols] += FPN/eperdn # in DN
+            # simulate telemetry rows, with the last 5 column entries with high counts
+            frame_dn_dark[-1,-5:] = 100000 #DN
+            # take raw frames and process them to what is needed for input
+            # No simulated pre-processing bad pixels or cosmic rays, so just subtract bias
+            # and multiply by k gain
+            frame_dn_dark -= bias/eperdn
+            frame_dn_dark *= eperdn
+
+            # Now make this into a bunch of corgidrp.Dataset stacks
+            prihdr, exthdr = create_default_headers()
+            frame = data.Image(frame_dn_dark, pri_hdr=prihdr,
+                            ext_hdr=exthdr)
+            frame.ext_hdr['CMDGAIN'] = g_arr[i]
+            frame.ext_hdr['EXPTIME'] = t_arr[i]
+            frame.ext_hdr['KGAIN'] = eperdn
+            frame_list.append(frame)
+        dataset = data.Dataset(frame_list)
+        datasets.append(dataset.copy())
+
+    return datasets
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
@@ -102,7 +294,7 @@ def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numC
         datetime = Time('2024-01-01T11:00:00.000Z')
 
     detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
-    
+
     kgain = detector_params.params['kgain']
     fwc_em_dn = detector_params.params['fwc_em'] / kgain
     fwc_pp_dn = detector_params.params['fwc_pp'] / kgain

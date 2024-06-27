@@ -3,7 +3,6 @@
 import numpy as np
 import corgidrp.data as data
 from scipy import interpolate
-from astropy.time import Time
 from scipy.ndimage import median_filter
 
 def create_dark_calib(dark_dataset):
@@ -21,7 +20,7 @@ def create_dark_calib(dark_dataset):
 
     new_dark = data.Dark(combined_frame, pri_hdr=dark_dataset[0].pri_hdr.copy(),
                          ext_hdr=dark_dataset[0].ext_hdr.copy(), input_dataset=dark_dataset)
-    
+
     # determine the standard error of the mean: stddev/sqrt(n_frames)
     new_dark.err = np.nanstd(dark_dataset.all_data, axis=0)/np.sqrt(len(dark_dataset))
     new_dark.err = new_dark.err.reshape((1,)+new_dark.err.shape) #Get it into the right dimensions
@@ -150,81 +149,198 @@ detector_areas= {
             'r0c0': [0, 2144]
             },
         },
+    'ENG_EM' :{
+        'frame_rows' : 2200,
+        'frame_cols' : 2200,
+        'image' : { # combined lower and upper
+            'rows': 2048,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'lower_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'upper_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [1037, 1088]
+            },
+        'prescan' : {
+            'rows': 2200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 2200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 130,
+            'cols': 1056,
+            'r0c0': [2070, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 2200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    'ENG_CONV' :{
+        'frame_rows' : 2200,
+        'frame_cols' : 2200,
+        'image' : { # combined lower and upper
+            'rows': 2048,
+            'cols': 1024,
+            'r0c0': [13, 48]
+            },
+        'lower_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 48]
+            },
+        'upper_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [1037, 48]
+            },
+        # 'prescan' is actually the serial_overscan region, but the code needs to take
+        # the bias from the largest serial non-image region, and the code identifies
+        # this region as the "prescan", so we have the prescan and serial_overscan
+        # names flipped for this reason.
+        'prescan' : {
+            'rows': 2200,
+            'cols': 1128,
+            'r0c0': [0, 1072]
+            },
+        'prescan_reliable' : {
+            # not sure if these are good in the eng_conv case where the geometry is
+            # flipped relative to the other cases, but these cols would where the
+            # good, reliable cols used for getting row-by-row bias
+            # would be
+            'rows': 2200,
+            'cols': 200,
+            'r0c0': [0, 1200]
+            },
+        'parallel_overscan' : {
+            'rows': 130,
+            'cols': 1056,
+            'r0c0': [2070, 16]
+            },
+        'serial_overscan' : {
+            'rows': 2200,
+            'cols': 16,
+            'r0c0': [0, 0]
+            },
+        }
     }
 
-def slice_section(frame, obstype, key):
+
+def slice_section(frame, d_areas, obstype, key):
+
     """
     Slice 2d section out of frame
 
     Args:
         frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
+        d_areas (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
         obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         key (str): Keyword referencing section to be sliced; must exist in detector_areas
 
     Returns:
         np.ndarray: a 2D array of the specified detector area
     """
-    rows = detector_areas[obstype][key]['rows']
-    cols = detector_areas[obstype][key]['cols']
-    r0c0 = detector_areas[obstype][key]['r0c0']
+    rows = d_areas[obstype][key]['rows']
+    cols = d_areas[obstype][key]['cols']
+    r0c0 = d_areas[obstype][key]['r0c0']
 
     section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
     if section.size == 0:
         raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
     return section
 
-def plot_detector_areas(detector_areas, areas=('image', 'prescan',
-        'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
-    """
-    Create an image of the detector areas for visualization and debugging
+def unpack_geom(d_areas, obstype, key):
+        """Safely check format of geom sub-dictionary and return values.
 
-    Args:
-        detector_areas (dict): a dictionary of image constants
-        areas (tuple): a tuple of areas to create masks for
+        Args:
+            d_areas: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
+            obstype: str
+            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+            key: str
+            Desired section
 
-    Returns:
-        np.ndarray: an image of the detector areas
-    """
-    detector_areas = make_detector_areas(detector_areas, areas=areas)
-    detector_area_image = np.zeros(
-        (detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=int)
-    for i, area in enumerate(areas):
-        detector_area_image[detector_areas[area]] = i + 1
-    return detector_area_image
+        Returns:
+            rows: int
+            Number of rows of frame
+            cols : int
+            Number of columns of frame
+            r0c0: tuple
+            Tuple of (row position, column position) of corner closest to (0,0)
+        """
+        coords = d_areas[obstype][key]
+        rows = coords['rows']
+        cols = coords['cols']
+        r0c0 = coords['r0c0']
 
-def detector_area_mask(detector_areas, area='image'):
-    """
-    Create a mask for the detector area
+        return rows, cols, r0c0
 
-    Args:
-        detector_areas (dict): a dictionary of image constants
-        area (str): the area of the detector to create a mask for
+def imaging_area_geom(d_areas, obstype):
+        """Return geometry of imaging area (including shielded pixels)
+        in reference to full frame.  Different from normal image area.
 
-    Returns:
-        np.ndarray: a mask for the detector area
-    """
-    mask = np.zeros((detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=bool)
-    mask[detector_areas[area]['r0c0'][0]:detector_areas[area]['r0c0'][0] + detector_areas[area]['rows'],
-            detector_areas[area]['r0c0'][1]:detector_areas[area]['r0c0'][1] + detector_areas[area]['cols']] = True
-    return mask
+        Args:
+            d_areas: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
+            obstype: str
+            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
 
-def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reliable',
-        'parallel_overscan', 'serial_overscan')):
-    """
-    Create a dictionary of masks for the different detector areas
+        Returns:
+            rows: int
+            Number of rows of imaging area
+            cols : int
+            Number of columns of imaging area
+            r0c0: tuple
+            Tuple of (row position, column position) of corner closest to (0,0)
+        """
+        _, cols_pre, _ = unpack_geom(d_areas, obstype, 'prescan')
+        _, cols_serial_ovr, _ = unpack_geom(d_areas, obstype, 'serial_overscan')
+        rows_parallel_ovr, _, _ = unpack_geom(d_areas, obstype, 'parallel_overscan')
+        #_, _, r0c0_image = self._unpack_geom('image')
+        fluxmap_rows, _, r0c0_image = unpack_geom(d_areas, obstype, 'image')
 
-    Args:
-        detector_areas (dict): a dictionary of image constants
-        areas (tuple): a tuple of areas to create masks for
+        rows_im = d_areas[obstype]['frame_rows'] - rows_parallel_ovr
+        cols_im = d_areas[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
+        r0c0_im = r0c0_image.copy()
+        r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
 
-    Returns:
-        dict: a dictionary of masks for the different detector areas
-    """
-    detector_areas = {}
-    for area in areas:
-        detector_areas[area] = detector_area_mask(detector_areas, area=area)
-    return detector_areas
+        return rows_im, cols_im, r0c0_im
 
+def imaging_slice(d_areas, obstype, frame):
+        """Select only the real counts from full frame and exclude virtual.
+        Includes shielded pixels.
+
+        Use this to transform mask and embed from acting on the full frame to
+        acting on only the image frame.
+
+        Args:
+            d_areas: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
+            obstype: str
+            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+            frame: array_like
+            Input frame
+
+        Returns:
+            sl: array_like
+            Imaging slice
+
+        """
+        rows, cols, r0c0 = imaging_area_geom(d_areas, obstype)
+        sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+        return sl
 
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     """Identify and remove saturated cosmic ray hits and tails.
@@ -242,21 +358,21 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     be identified. A reasonable value is 2.
 
     Args:
-        cube (array_like, float): 
+        cube (array_like, float):
             3D cube of image data (bias of zero).
-        fwc (float): 
+        fwc (float):
             Full well capacity of detector *in DNs*.  Note that this may require a
             conversion as FWCs are usually specified in electrons, but the image
             is in DNs at this point.
-        sat_thresh (float): 
+        sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
-        plat_thresh (float): 
+        plat_thresh (float):
             Multiplication factor for fwc that determines edges of cosmic plateu.
-        cosm_filter (int): 
+        cosm_filter (int):
             Minimum length in pixels of cosmic plateus to be identified.
 
     Returns:
-        array_like, int: 
+        array_like, int:
             Mask for pixels that have been set to zero.
 
     Notes
@@ -279,7 +395,7 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     # Do a cheap prefilter for rows that don't have anything bright
     max_rows = np.max(cube, axis=-1,keepdims=True)
     ji_streak_rows = np.transpose(np.array((max_rows >= sat_thresh*fwc).nonzero()[:-1]))
-    
+
     for j,i in ji_streak_rows:
         row = cube[j,i]
 
@@ -300,22 +416,22 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     pixels immediately neighboring the cosmic plateau are very often affected
     by the cosmic hit as well.
 
-    Args: 
-        streak_row (array_like, float): 
+    Args:
+        streak_row (array_like, float):
             Row with possible cosmics.
-        fwc (float): 
+        fwc (float):
             Full well capacity of detector *in DNs*.  Note that this may require a
             conversion as FWCs are usually specified in electrons, but the image
             is in DNs at this point.
-        sat_thresh (float): 
+        sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
-        plat_thresh (float): 
+        plat_thresh (float):
             Multiplication factor for fwc that determines edges of cosmic plateu.
-        cosm_filter (float): 
+        cosm_filter (float):
             Minimum length in pixels of cosmic plateus to be identified.
 
     Returns:
-        array_like, int: 
+        array_like, int:
             Index of plateau beginnings, or None if there is no plateau.
     """
     # Lowpass filter row to differentiate plateaus from standalone pixels
@@ -332,17 +448,17 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
         return i_beg
     else:
         return None
-    
+
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
     """Calculates the full well capacity saturation threshold for each frame.
 
     Args:
         emgain_arr (np.array): 1D array of the EM gain value for each frame.
-        fwcpp_arr (np.array): 1D array of the full-well capacity in the image 
+        fwcpp_arr (np.array): 1D array of the full-well capacity in the image
             frame (before em gain readout) value for each frame.
-        fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain 
+        fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain
             register for each frame.
-        sat_thresh (float): Multiplier for the full-well capacity to determine 
+        sat_thresh (float): Multiplier for the full-well capacity to determine
             what qualifies as saturation. A reasonable value is 0.99
 
     Returns:
@@ -350,5 +466,5 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
     """
     possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
     sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
-    
+
     return sat_fwcs

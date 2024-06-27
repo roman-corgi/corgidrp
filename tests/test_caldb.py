@@ -10,7 +10,7 @@ calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
 if not os.path.exists(datadir):
     os.mkdir(datadir)
 if not os.path.exists(calibdir):
-    os.mkdir(calibdir) 
+    os.mkdir(calibdir)
 
 testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
 
@@ -47,8 +47,8 @@ def test_caldb_create_default():
 def test_caldb_custom_filepath():
     """
     Test caldb creation when filepath is passed in (should be an edge case)
-    """   
-    # remove any stranded testcaldb if needed 
+    """
+    # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
     assert(not os.path.exists(testcaldb_filepath))
@@ -67,7 +67,7 @@ def test_caldb_insert_and_remove():
     """
     Tests the ability to add and remove an entry successfully
     """
-    # remove any stranded testcaldb if needed 
+    # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
     assert(not os.path.exists(testcaldb_filepath))
@@ -102,7 +102,7 @@ def test_get_calib():
     """
     Tests ability to load a calibration file from disk
     """
-    # remove any stranded testcaldb if needed 
+    # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
     assert(not os.path.exists(testcaldb_filepath))
@@ -126,9 +126,9 @@ def test_get_calib():
 
 def test_caldb_scan():
     """
-    Tests ability to scan a folder to look for calibraiton files
+    Tests ability to scan a folder to look for calibration files
     """
-    # remove any stranded testcaldb if needed 
+    # remove any stranded testcaldb if needed
     if os.path.exists(testcaldb_filepath):
         os.remove(testcaldb_filepath)
     assert(not os.path.exists(testcaldb_filepath))
@@ -141,7 +141,7 @@ def test_caldb_scan():
     testcaldb.scan_dir_for_new_entries(datadir)
     assert(len(testcaldb._db.index) == 0)
 
-    # there should be at least the master dark in "./tsetcalib"
+    # there should be at least the master dark in "./testcalib"
     testcaldb.scan_dir_for_new_entries(calibdir)
     assert(len(testcaldb._db.index) > 0)
 

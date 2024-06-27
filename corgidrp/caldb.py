@@ -8,7 +8,6 @@ import corgidrp
 import corgidrp.data as data
 import astropy.time as time
 
-
 column_names = [
     "Filepath",
     "Type",
@@ -26,10 +25,12 @@ column_names = [
     "EXCAMT",
 ]
 
-labels = {data.Dark: "Dark", 
-          data.NonLinearityCalibration: "NonLinearityCalibration", 
-          data.BadPixelMap: "BadPixelMap", 
-          data.KGain : "KGain", 
+labels = {data.Dark: "Dark",
+          data.NonLinearityCalibration: "NonLinearityCalibration",
+          data.BadPixelMap: "BadPixelMap",
+          data.KGain : "KGain",
+          data.NoiseMap: "NoiseMap",
+          data.BiasOffset: "BiasOffset",
           data.DetectorParams : "DetectorParams"}
 
 class CalDB:
