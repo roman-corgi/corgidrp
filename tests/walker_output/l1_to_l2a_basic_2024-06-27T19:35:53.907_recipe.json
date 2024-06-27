@@ -1,0 +1,38 @@
+{
+    "name": "l1_to_l2a_basic",
+    "template": false,
+    "drpconfig": {
+        "track_individual_errors": false
+    },
+    "inputs": [
+        "/Users/kevinludwick/Documents/GitHub/corgidrp/tests/simdata/sim_prescan_SCI0000.fits",
+        "/Users/kevinludwick/Documents/GitHub/corgidrp/tests/simdata/sim_prescan_SCI0001.fits"
+    ],
+    "outputdir": "/Users/kevinludwick/Documents/GitHub/corgidrp/tests/walker_output",
+    "steps": [
+        {
+            "name": "prescan_biassub",
+            "keywords": {
+                "return_full_frame": false
+            }
+        },
+        {
+            "name": "detect_cosmic_rays",
+            "calibs": {
+                "DetectorParams": "/Users/kevinludwick/.corgidrp/default_calibs/DetectorParams_2023-11-01T00:00:00.000.fits"
+            }
+        },
+        {
+            "name": "correct_nonlinearity",
+            "calibs": {
+                "NonLinearityCalibration": "/Users/kevinludwick/Documents/GitHub/corgidrp/tests/test_data/nonlin_sample.fits"
+            }
+        },
+        {
+            "name": "update_to_l2a"
+        },
+        {
+            "name": "save"
+        }
+    ]
+}

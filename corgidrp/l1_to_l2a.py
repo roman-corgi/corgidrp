@@ -1,12 +1,9 @@
 # A file that holds the functions that transmogrify l1 data to l2a data
-from corgidrp.detector import get_relgains, Metadata, ReadMetadataException, get_fwc_em_e, get_fwc_pp_e, get_kgain, flag_cosmics, calc_sat_fwc
-# A file that holds the functions that transmogrify l1 data to l2a data
 from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc
 import numpy as np
 from astropy.time import Time
 
-def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False,
-                    meta_path=None):
+def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
@@ -18,8 +15,6 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False,
         bias_offset (float): an offset value to be subtracted from the bias. Defaults to 0.
         return_full_frame (bool): flag indicating whether to return the full frame or
             only the bias-subtracted image area. Defaults to False.
-        meta_path (string): Full path of .yaml file used for detector geometry.
-            If None, defaults to corgidrp.util.metadata.yaml.
 
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
@@ -45,43 +40,27 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False,
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
         obstype = frame.pri_hdr['OBSTYPE']
-        if not obstype in ['SCI','ENG'] :
-                raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG'")
+        if not obstype in ['SCI','ENG','ENG_EM','ENG_CONV'] :
+                raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG' or 'ENG_EM' or 'EMG_CONV'")
 
         # Get the reliable prescan area
-        if meta_path is None:
-            meta = Metadata(obstype=obstype)
-        else:
-            meta = Metadata(meta_path=meta_path, obstype=obstype)
-
-        # Make sure frames input are compatible with detector geometry
-        try:
-            meta.slice_section(frame_data, 'image')
-            prescan = meta.slice_section(frame_data, 'prescan')
-        except Exception:
-            raise ReadMetadataException('Frame size inconsistent with metadata')
-
-        # Get the part of the prescan that lines up with the image, and do a
-        # row-by-row bias subtraction on it
-        i_r0 = meta.geom['image']['r0c0'][0]
-        p_r0 = meta.geom['prescan']['r0c0'][0]
-        i_nrow = meta.geom['image']['rows']
-        # select the good cols for getting row-by-row bias
-        st = meta.geom['prescan']['col_start']
-        end = meta.geom['prescan']['col_end']
-        prescan = prescan[:, st:end]
+        prescan = slice_section(frame_data, detector_areas, obstype, 'prescan_reliable')
 
         if not return_full_frame:
-            # image area
-            image_data = meta.slice_section(frame_data, 'image')
-            image_dq = meta.slice_section(frame_dq, 'image')
+            # Get the image area
+            image_data = slice_section(frame_data, detector_areas, obstype, 'image')
+            image_dq = slice_section(frame_dq, detector_areas, obstype, 'image')
 
             # Special treatment for 3D error array
             image_err = []
             for err_slice in frame_err:
-                image_err.append(meta.slice_section(err_slice, 'image'))
+                image_err.append(slice_section(err_slice, detector_areas, obstype, 'image'))
             image_err = np.array(image_err)
 
+            # Get the part of the prescan that lines up with the image
+            i_r0 = detector_areas[obstype]['image']['r0c0'][0]
+            p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
+            i_nrow = detector_areas[obstype]['image']['rows']
             al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
 
         else:

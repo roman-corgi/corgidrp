@@ -770,8 +770,8 @@ class NoiseMap(Image):
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this noise map (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
         err (np.array): the error array (required only if raw data is passed in)
-        err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
         dq (np.array): the DQ array (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
 
     """
     def __init__(self, data_or_filepath, noise_type='FPN', pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, dq = None, err_hdr = None):
@@ -842,6 +842,91 @@ class NoiseMap(Image):
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_nm
+
+class BiasOffset(Image):
+    """
+    Class for BiasOffset calibration file. This is the median for the residual
+    FPN+CIC after the fit that made the noise maps (in calibrate_darks_lsq.py)
+    in the region where bias was calculated (i.e., prescan). In DN.
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this noise map (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
+        err (np.array): the error array (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
+
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None, err = None, err_hdr = None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, err_hdr=err_hdr)
+
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The BiasOffset calibration data should be just one float value')
+
+        # additional bookkeeping for a calibration file
+        # if this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new calibration file
+        if ext_hdr is not None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new noise map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this noise map.")
+
+            self.ext_hdr['DATATYPE'] = 'BiasOffset' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'DN'
+
+            # log all the data that went into making this calibration file
+            if 'DRPNFILE' not in ext_hdr.keys():
+                self._record_parent_filenames(input_dataset)
+            # add to history
+            self.ext_hdr['HISTORY'] = "BiasOffset calibration file created"
+
+            # give it a default filename
+            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
+            self.filename = "{0}BiasOffset.fits".format(orig_input_filename)
+
+        if err_hdr is not None:
+            self.err_hdr['BUNIT'] = 'DN'
+
+
+        # double check that this is actually a KGain file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'BiasOffset':
+            raise ValueError("File that was loaded was not a BiasOffset Calibration file.")
+
+
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this BiasOffset file, including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            new_nm (corgidrp.data.BiasOffset): a copy of this BiasOffset
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+            new_err = np.copy(self.err)
+        else:
+            new_data = self.data # this is just pointer referencing
+            new_err = self.err
+        new_nm = BiasOffset(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, err_hdr = self.err_hdr.copy())
+
+        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
+        new_nm.filename = self.filename
+        new_nm.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_nm
+
 class DetectorParams(Image):
     """
     Class containing detector parameters that may change over time
@@ -860,17 +945,56 @@ class DetectorParams(Image):
         'kgain' : 8.7,
         'fwc_pp' : 90000.,
         'fwc_em' : 100000.,
-        'rowreadtime' : 223.5e-6 # seconds
+        'rowreadtime' : 223.5e-6, # seconds
+        # number of EM gain register stages
+        'Nem': 604,
+        # slice of rows that are used for telemetry
+        'telem_rows_start': -1,
+        'telem_rows_end': None, #goes to the end, in other words
+        # pixel full well (e-)
+        'fwc': 90000,
+        # serial full well (e-) in EM gain register in EXCAM EMCCD
+        'fwc_em': 100000,
+        # cosmic ray hit rate (hits/m**2/sec)
+        'X': 5.0e+04,
+        # pixel area (m**2/pixel)
+        'a': 1.69e-10,
+        # Maximum allowable EM gain
+        'gmax': 8000.0,
+        # tolerance in exposure time calculator
+        'delta_constr': 1.0e-4,
+        # Overhead time, in seconds, for each collected frame.  Used to compute
+        # total wall-clock time for data collection
+        'overhead': 3,
+        # Maximum allowed electrons/pixel/frame for photon counting
+        'pc_ecount_max': 0.1,
+        # number of read noise standard deviations at which to set the
+        # photon-counting threshold
+        'T_factor': 5,
+        ######################
+        # These below are ultimately sourced from calibration files
+        # dark current (e- / second)
+        'darke': 1.0e-3,
+        # clock-induced charge (e- / pixel)
+        'cic': 1.0e-2,
+        # read noise (e- / pixel)
+        'rn': 165.0,
+        # e- per DN factor (k gain)
+        'eperdn': 8.7,
+        # the residual FPN+CIC in the region where bias was calculated (i.e., prescan).
+        # In DN.
+        'bias_offset': 0,
     }
 
     def __init__(self, data_or_filepath, date_valid=None):
-
-        # if filepaht passed in, just load in from disk as usual
+        if date_valid is None:
+            date_valid = time.Time.now()
+        # if filepath passed in, just load in from disk as usual
         if isinstance(data_or_filepath, str):
             # run the image class contructor
             super().__init__(data_or_filepath)
 
-            # double check that this is actually a bad pixel map that got read in
+            # double check that this is actually a the right map type that got read in
             # since if only a filepath was passed in, any file could have been read in
             if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'DetectorParams':
                 raise ValueError("File that was loaded was not a DetectorParams file.")
@@ -892,10 +1016,18 @@ class DetectorParams(Image):
 
             # write default values to headers
             for key in self.default_values:
-                exthdr[key] = self.default_values[key]
+                if len(key) > 8:
+                    # to avoid VerifyWarning from fits
+                    exthdr['HIERARCH ' + key] = self.default_values[key]
+                else:
+                    exthdr[key] = self.default_values[key]
             # overwrite default values
             for key in data_or_filepath:
-                exthdr[key] = data_or_filepath[key]
+                # to avoid VerifyWarning from fits
+                if len(key) > 8:
+                    exthdr['HIERARCH ' + key] = data_or_filepath[key]
+                else:
+                    exthdr[key] = data_or_filepath[key]
 
             self.pri_hdr = prihdr
             self.ext_hdr = exthdr
@@ -912,11 +1044,15 @@ class DetectorParams(Image):
         self.params = {}
         # load back in all the values from the header
         for key in self.default_values:
-            self.params[key] = self.ext_hdr[key]
+            if len(key) > 8:
+                # to avoid VerifyWarning from fits
+                self.params[key] = self.ext_hdr['HIERARCH ' + key]
+            else:
+                self.params[key] = self.ext_hdr[key]
 
 
-        # if this is a new bad pixel map, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
+        # if this is a new DetectorParams file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new DetectorParams file
         if isinstance(data_or_filepath, dict):
             self.ext_hdr['DATATYPE'] = 'DetectorParams' # corgidrp specific keyword for saving to disk
 
@@ -924,6 +1060,7 @@ class DetectorParams(Image):
             self.ext_hdr['HISTORY'] = "Detector Params file created"
 
             # use the start date for the filename by default
+            self.filedir = "."
             self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
 
     def get_hash(self):
@@ -946,6 +1083,7 @@ datatypes = { "Image" : Image,
               "KGain" : KGain,
               "BadPixelMap" : BadPixelMap,
               "NoiseMap": NoiseMap,
+              "BiasOffset": BiasOffset,
               "DetectorParams" : DetectorParams }
 
 def autoload(filepath):

@@ -4,16 +4,16 @@ import numpy as np
 import warnings
 from astropy.io import fits
 
-from corgidrp.detector import Metadata
+from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, detector_areas
 import corgidrp.util.check as check
 from corgidrp.util.mean_combine import mean_combine
-from corgidrp.data import NoiseMap
+from corgidrp.data import NoiseMap, BiasOffset
 
 
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
 
-def calibrate_darks_lsq(datasets, meta_path=None):
+def calibrate_darks_lsq(datasets, detector_params, d_areas=detector_areas):
     """The input datasets represents a collection of frame stacks of the
     same number of dark frames (in e- units), where the stacks are for various
     EM gain values and exposure times.  The frames in each stack should be
@@ -58,16 +58,17 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         should be for a stack of dark frames (counts in DN), and each stack is
         for a unique EM gain and frame time combination.
         Each sub-stack should have the same number of frames.
-        Each frame should accord with the EDU
-        science frame (specified by corgidrp.util.metadata.yaml).
+        Each frame should accord with the SCI frame geometry.
         We recommend  >= 1300 frames for each sub-stack if calibrating
         darks for analog frames,
         thousands for photon counting depending on the maximum number of
         frames that will be used for photon counting.
-    meta_path (str):
-        Full path of .yaml file from which to draw detector parameters.
-        For format and names of keys, see corgidrp.util.metadata.yaml.
-        If None, uses that file.
+    detector_params (corgidrp.data.DetectorParams):
+        a calibration file storing detector calibration values
+    d_areas (dict):
+        a dictionary of detector geometry properties.  Keys should be as found
+        in detector_areas in detector.py.
+        Defaults to detector_areas in detector.py.
 
     Returns:
     F_map : array-like (full frame)
@@ -168,19 +169,20 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         The header info is taken from that of
         one of the frames from the input datasets and can be changed via a call
         to the NoiseMaps class if necessary.
+    bias_offset_map : corgidrp.data.BiasOffset instance
+        Includes the bias offset as a 1x1 array for the data and
+        max(bias_offset_up-bias_offset, bias_offset-bias_offset_low)
+        for the err (as a 1x1 array).  The header info is taken from that of
+        one of the frames from the input datasets and can be changed via a call
+        to the BiasOffset class if necessary.
     """
 
     if len(datasets) <= 3:
         raise CalDarksLSQException('Number of sub-stacks in datasets must '
                 'be more than 3 for proper curve fit.')
     # getting telemetry rows to ignore in fit
-    if meta_path is None:
-        meta = Metadata()
-    else:
-        meta = Metadata(meta_path)
-    metadata = meta.get_data()
-    telem_rows_start = metadata['telem_rows_start']
-    telem_rows_end = metadata['telem_rows_end']
+    telem_rows_start = detector_params.params['telem_rows_start']
+    telem_rows_end = detector_params.params['telem_rows_end']
     telem_rows = slice(telem_rows_start, telem_rows_end)
 
     g_arr = np.array([])
@@ -188,8 +190,8 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     k_arr = np.array([])
     mean_frames = []
     mean_num_good_fr = []
-    unreliable_pix_map = np.zeros((meta.frame_rows,
-                                   meta.frame_cols)).astype(int)
+    unreliable_pix_map = np.zeros((d_areas['SCI']['frame_rows'],
+                                   d_areas['SCI']['frame_cols'])).astype(int)
     for i in range(len(datasets)):
         frames = []
         bpmaps = []
@@ -234,7 +236,7 @@ def calibrate_darks_lsq(datasets, meta_path=None):
             b1 = fr.dq.astype(bool).astype(int)
             err = fr.err[0]
             frame[telem_rows] = np.nan
-            i0 = meta.slice_section(frame, 'image')
+            i0 = slice_section(frame, d_areas, 'SCI', 'image')
             if np.isnan(i0).any():
                 raise ValueError('telem_rows cannot be in image area.')
             # setting to 0 prevents failure of mean_combine
@@ -300,8 +302,8 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         min2 = intersect[0]
     else: # just get next smallest g_arr*t_arr
         min2 = np.where(np.argsort(g_arr*t_arr) == 1)[0][0]
-    msi = meta.imaging_slice(mean_stack[min1])
-    msi2 = meta.imaging_slice(mean_stack[min2])
+    msi = imaging_slice(d_areas, 'SCI', mean_stack[min1])
+    msi2 = imaging_slice(d_areas, 'SCI', mean_stack[min2])
     avg_corr = np.corrcoef(msi.ravel(), msi2.ravel())[0, 1]
 
     # number of observations (i.e., # of averaged stacks provided for fit)
@@ -334,7 +336,7 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     sigma2_frame = np.sum(residual_stack**2, axis=0)/(M - 3)
     # average sigma2 for image area and use that for all three vars since
     # that's only place where all 3 (F, C, and D) should be present
-    sigma2_image = meta.imaging_slice(sigma2_frame)
+    sigma2_image = imaging_slice(d_areas, 'SCI', sigma2_frame)
     sigma2 = np.mean(sigma2_image)
     cov_matrix = np.linalg.inv(X.T@X)
 
@@ -367,9 +369,9 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     R_map = 1 - (1 - Rsq)*(M - 1)/(M - 3)
 
     # doesn't matter which k used for just slicing
-    D_image_map = meta.imaging_slice(D_map)
-    C_image_map = meta.imaging_slice(C_map)
-    F_image_map = meta.imaging_slice(F_map)
+    D_image_map = imaging_slice(d_areas, 'SCI', D_map)
+    C_image_map = imaging_slice(d_areas, 'SCI', C_map)
+    F_image_map = imaging_slice(d_areas, 'SCI', F_map)
 
     # res: should subtract D_map, too.  D should be zero there (in prescan),
     # but fitting errors may lead to non-zero values there.
@@ -386,9 +388,9 @@ def calibrate_darks_lsq(datasets, meta_path=None):
         res_low = ((mean_stack[i]-np.abs(stacks_err)) -
                    g_arr[i]*(C_map+C_std_map) - (F_map+F_std_map)
                   - g_arr[i]*t_arr[i]*(D_map+D_std_map))
-        res_prescan = meta.slice_section(res, 'prescan')
-        res_up_prescan = meta.slice_section(res_up, 'prescan')
-        res_low_prescan = meta.slice_section(res_low, 'prescan')
+        res_prescan = slice_section(res, d_areas, 'SCI', 'prescan')
+        res_up_prescan = slice_section(res_up, d_areas, 'SCI', 'prescan')
+        res_low_prescan = slice_section(res_low, d_areas, 'SCI', 'prescan')
         # prescan may contain NaN'ed telemetry rows, so use nanmedian
         bias_offset[i] = np.nanmedian(res_prescan)/k_arr[i] # in DN
         bias_offset_up[i] = np.nanmedian(res_up_prescan)/k_arr[i] # in DN
@@ -406,9 +408,9 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     # Num below accounts for pixels lost to cosmic rays
     Num = mean_num_good_fr[l]
     # take std of just image area; more variance if image and different regions
-    # included; below assumes no variance inherent in FPN
+    # included
 
-    mean_stack_image = meta.imaging_slice(mean_stack[l])
+    mean_stack_image = imaging_slice(d_areas, 'SCI', mean_stack[l])
     read_noise2 = (np.var(mean_stack_image)*Num -
         g_arr[l]**2*
         np.var(D_image_map*t_arr[l]+C_image_map) -
@@ -426,12 +428,12 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     # actual dark current should only be present in CCD pixels (image area),
     # even if we get erroneous non-zero D values in non-CCD pixels.  Let D_map
     # be zeros everywhere except for the image area
-    D_map = np.zeros((meta.frame_rows, meta.frame_cols))
-    D_std_map = np.zeros((meta.frame_rows, meta.frame_cols))
+    D_map = np.zeros_like(unreliable_pix_map).astype(float)
+    D_std_map = np.zeros_like(unreliable_pix_map).astype(float)
     # and reset the telemetry rows to NaN
     D_map[telem_rows] = np.nan
 
-    im_rows, im_cols, r0c0 = meta._imaging_area_geom()
+    im_rows, im_cols, r0c0 = imaging_area_geom(d_areas, 'SCI')
     D_map[r0c0[0]:r0c0[0]+im_rows,
                     r0c0[1]:r0c0[1]+im_cols] = D_image_map
     D_std_map[r0c0[0]:r0c0[0]+im_rows,
@@ -483,10 +485,22 @@ def calibrate_darks_lsq(datasets, meta_path=None):
     D_noise_map = NoiseMap(D_map, 'DC', prihdr.copy(), exthdr.copy(), total_data,
                            D_std_map,
                            unreliable_pix_map, err_hdr=err_hdr)
+    # prepare BiasOffset instance
+    exthdr2 = exthdr.copy()
+    exthdr2['DATATYPE'] = 'BiasOffset'
+    exthdr2['BUNIT'] = 'DN'
+    err_hdr2 = err_hdr.copy()
+    err_hdr2['BUNIT'] = 'DN'
+    bo_data = np.array([[bias_offset]])
+    bo_err_bar = max(bias_offset_up - bias_offset,
+                     bias_offset - bias_offset_low)
+    bo_err = np.array([[bo_err_bar]])
+    bias_offset_map = BiasOffset(bo_data, prihdr.copy(), exthdr2, total_data,
+                                 bo_err, err_hdr=err_hdr2)
 
     return (F_map, C_map, D_map, bias_offset, bias_offset_up, bias_offset_low,
             F_image_map, C_image_map,
             D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
             C_image_mean, D_image_mean, unreliable_pix_map, F_std_map,
             C_std_map, D_std_map, stacks_err, F_noise_map, C_noise_map,
-            D_noise_map)
+            D_noise_map, bias_offset_map)
