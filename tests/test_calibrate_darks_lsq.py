@@ -6,21 +6,15 @@ from pathlib import Path
 
 from corgidrp.calibrate_darks_lsq import (calibrate_darks_lsq,
             CalDarksLSQException)
-from corgidrp.detector import Metadata
+from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom
 from corgidrp.mocks import create_synthesized_master_dark_calib
-from corgidrp.data import NoiseMap
+from corgidrp.mocks import detector_areas_test as dat
+from corgidrp.data import NoiseMap, DetectorParams, BiasOffset
 
-here = Path(os.path.dirname(os.path.abspath(__file__)))
-one_up = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-meta_path = Path(one_up, 'corgidrp', 'util', 'metadata.yaml')
-meta_path_sub = Path(one_up, 'corgidrp', 'util', 'metadata_test.yaml')
-meta = Metadata(meta_path)
-meta_sub = Metadata(meta_path_sub)
-
-# specified parameters used in simulated data from
+# use default parameters
+detector_params = DetectorParams({})
+# specified parameters simulated in simulated data from
 # mocks.create_synthesized_master_dark_calib:
-fwc_em_e = 90000 #e-
-fwc_pp_e = 50000 #e-
 dark_current = 8.33e-4 #e-/pix/s
 cic=0.02  # e-/pix/frame
 rn=100 # e-/pix/frame
@@ -41,14 +35,13 @@ N = 30#600 #30; can also replace with 30 to use those sub-stacks in the
 # variance, and F, C, and D will have more variance with respect to their
 # expected values.  No need to test both here;  just N=30 case is sufficient.
 # image area, including "shielded" rows and cols:
-imrows, imcols, imr0c0 = meta_sub._imaging_area_geom()
+imrows, imcols, imr0c0 = imaging_area_geom(dat, 'SCI')
 
 
 class TestCalibrateDarksLSQ(unittest.TestCase):
     """Unit tests for calibrate_darks_lsq method."""
     def setUp(self):
-        self.meta_path_sub = meta_path_sub
-        self.datasets = create_synthesized_master_dark_calib()
+        self.datasets = create_synthesized_master_dark_calib(dat)
 
         # filter out expected warnings
         warnings.filterwarnings('ignore', category=UserWarning,
@@ -66,8 +59,8 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
             C_image_mean, D_image_mean, unreliable_pix_map, F_std_map,
             C_std_map, D_std_map, stacks_err, F_noise_map, C_noise_map,
-            D_noise_map) = \
-                calibrate_darks_lsq(self.datasets, self.meta_path_sub)
+            D_noise_map, bias_offset_map) = \
+                calibrate_darks_lsq(self.datasets, detector_params, dat)
         # F
         self.assertTrue(np.isclose(np.mean(F_image_map), FPN//eperdn*eperdn,
                                    atol=FPN/5))
@@ -75,7 +68,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
                                    atol=FPN/5))
         # No FPN was inserted in non-image areas (so that bias subtraction
         #wouldn't simply remove it), so it should be 0 in prescan
-        F_prescan_map = meta_sub.slice_section(F_map, 'prescan')
+        F_prescan_map = slice_section(F_map, dat, 'SCI', 'prescan')
         self.assertTrue(np.isclose(np.nanmean(F_prescan_map), 0, atol=5))
         # C
         self.assertTrue(np.isclose(np.nanmean(C_map), cic, atol=0.01))
@@ -90,7 +83,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         self.assertTrue(len(D_image_map[D_image_map < 0]) == 0)
         self.assertTrue(np.isclose(D_image_mean, dark_current, atol=2e-4))
         # D_map: 0 everywhere except image area
-        im_rows, im_cols, r0c0 = meta_sub._imaging_area_geom()
+        im_rows, im_cols, r0c0 = imaging_area_geom(dat, 'SCI')
         # D_nonimg = D_map[~D_map[r0c0[0]:r0c0[0]+im_rows,
         #             r0c0[1]:r0c0[1]+im_cols]]
         D_map[r0c0[0]:r0c0[0]+im_rows,
@@ -145,10 +138,34 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             self.assertTrue(nm_open.err_hdr["BUNIT"] == "detected electrons")
             self.assertTrue("NoiseMap" in str(nm_open.ext_hdr["HISTORY"]))
 
+        # save bias offset class instance
+        calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+        bo_filename = bias_offset_map.filename
+        if not os.path.exists(calibdir):
+            os.mkdir(calibdir)
+        bias_offset_map.save(filedir=calibdir, filename=bo_filename)
+        bo_filepath = os.path.join(calibdir, bo_filename)
+        bo_f = BiasOffset(nm_filepath)
+        # tests the copy method, from filepath way of creating class
+        # instance, too
+        bo_open = bo_f.copy()
+        self.assertTrue(np.array_equal(bo_open.data, bias_offset_map.data))
+
+        # check headers
+        self.assertTrue('BiasOffset' in bias_offset_map.filename)
+        self.assertTrue(bias_offset_map.ext_hdr["BUNIT"] == "DN")
+        self.assertTrue(bias_offset_map.err_hdr["BUNIT"] == "DN")
+        self.assertTrue("BiasOffset" in str(bias_offset_map.ext_hdr["HISTORY"]))
+
+        self.assertTrue('BiasOffset' in bo_open.filename)
+        self.assertTrue(bo_open.ext_hdr["BUNIT"] == "DN")
+        self.assertTrue(bo_open.err_hdr["BUNIT"] == "DN")
+        self.assertTrue("BiasOffset" in str(bo_open.ext_hdr["HISTORY"]))
+
     def test_sub_stack_len(self):
         """datasets should have at least 4 sub-stacks."""
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(self.datasets[0:2])
+            calibrate_darks_lsq(self.datasets[0:2], detector_params, dat)
 
     def test_g_arr_unique(self):
         '''EM gains must have at least 2 unique elements.'''
@@ -157,14 +174,14 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             for d in ds[j].frames:
                 d.ext_hdr['CMDGAIN'] = 4
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds, meta_path_sub)
+            calibrate_darks_lsq(ds, detector_params, dat)
 
     def test_g_gtr_1(self):
         '''EM gains must all be bigger than 1.'''
         ds = self.datasets.copy()
         ds[0].frames[0].ext_hdr['CMDGAIN'] = 1
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds, meta_path_sub)
+            calibrate_darks_lsq(ds, detector_params, dat)
 
     def test_t_arr_unique(self):
         '''Exposure times must have at least 2 unique elements.'''
@@ -173,14 +190,14 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
             for d in ds[j].frames:
                 d.ext_hdr['EXPTIME'] = 4
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds, meta_path_sub)
+            calibrate_darks_lsq(ds, detector_params, dat)
 
     def test_t_gtr_0(self):
         '''Exposure times must all be bigger than 0.'''
         ds = self.datasets.copy()
         ds[0].frames[0].ext_hdr['EXPTIME'] = 0
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds, meta_path_sub)
+            calibrate_darks_lsq(ds, detector_params, dat)
 
 
     def test_k_gtr_0(self):
@@ -188,7 +205,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         ds = self.datasets.copy()
         ds[0].frames[0].ext_hdr['KGAIN'] = 0
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds, meta_path_sub)
+            calibrate_darks_lsq(ds, detector_params, dat)
 
     def test_unique_g_t_combos(self):
         '''The EM gain and frame time combos for the sub-stacks must be
@@ -199,7 +216,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
                 d.ext_hdr['EXPTIME'] = 4
                 d.ext_hdr['CMDGAIN'] = 5
         with self.assertRaises(CalDarksLSQException):
-            calibrate_darks_lsq(ds, meta_path_sub)
+            calibrate_darks_lsq(ds, detector_params, dat)
 
     def test_mean_num(self):
         '''If too many masked in a stack for a given pixel, exception raised.
@@ -210,7 +227,7 @@ class TestCalibrateDarksLSQ(unittest.TestCase):
         for i in range(48):
             ds[i].all_dq[:,7,8] = 1
         with self.assertWarns(UserWarning):
-            calibrate_darks_lsq(ds, meta_path_sub)
+            calibrate_darks_lsq(ds, detector_params, dat)
 
 if __name__ == '__main__':
     unittest.main()

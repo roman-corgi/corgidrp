@@ -4,12 +4,13 @@ Function to assemble a master dark frame from calibrated subcomponents
 import numpy as np
 
 import corgidrp.util.check as check
-from corgidrp.detector import Metadata
+from corgidrp.detector import slice_section, detector_areas
 from corgidrp.data import Dark
 
-def build_dark(F, D, C, g, t, full_frame=False, meta_path=None):
+def build_dark(F, D, C, g, t, d_areas=detector_areas, full_frame=False):
     """
-    Assemble a master dark frame from individual noise components.
+    Assemble a master dark SCI frame (full or image)
+    from individual noise components.
 
     This is done this way because the actual dark frame varies with gain and
     exposure time, and both of these values may vary over orders of magnitude
@@ -34,13 +35,13 @@ def build_dark(F, D, C, g, t, full_frame=False, meta_path=None):
         Each array element should be >= 0.
      g: Desired EM gain, >= 1.  Unitless.
      t: Desired exposure time in seconds.  >= 0.
+     d_areas: dict.  A dictionary of detector geometry properties.
+        Keys should be as found in detector_areas in detector.py. Defaults to
+        detector_areas in detector.py.
      full_frame: bool.  If True, a full-frame master dark is generated (which
         may be useful for the module that statistically fits a frame to find
         the empirically applied EM gain, for example). If False, an image-area
         master dark is generated.  Defaults to False.
-    meta_path: string.  Full path of .yaml file from which to
-        draw detector parameters.  For format and names of keys,
-        see corgidrp.util.metadata.yaml.  If None, uses that file.
 
     Returns:
      master_dark:  corgidrp.data.Dark instance.
@@ -57,13 +58,8 @@ def build_dark(F, D, C, g, t, full_frame=False, meta_path=None):
     check.real_scalar(g, 'g', TypeError)
     check.real_nonnegative_scalar(t, 't', TypeError)
 
-    if meta_path is None:
-        meta = Metadata()
-    else:
-        meta = Metadata(meta_path)
-
-    rows = meta.frame_rows
-    cols = meta.frame_cols
+    rows = d_areas['SCI']['frame_rows']
+    cols = d_areas['SCI']['frame_cols']
     if Fd.shape != (rows, cols):
         raise TypeError('F must be ' + str(rows) + 'x' + str(cols))
     if Dd.shape != (rows, cols):
@@ -78,15 +74,15 @@ def build_dark(F, D, C, g, t, full_frame=False, meta_path=None):
         raise TypeError('Gain must be a value >= 1.')
 
     if not full_frame:
-        Fd = meta.slice_section(Fd, 'image')
-        Dd = meta.slice_section(Dd, 'image')
-        Cd = meta.slice_section(Cd, 'image')
-        Ferr = meta.slice_section(F.err[0], 'image')
-        Derr = meta.slice_section(D.err[0], 'image')
-        Cerr = meta.slice_section(C.err[0], 'image')
-        Fdq = meta.slice_section(F.dq, 'image')
-        Ddq = meta.slice_section(D.dq, 'image')
-        Cdq = meta.slice_section(C.dq, 'image')
+        Fd = slice_section(Fd, d_areas, 'SCI', 'image')
+        Dd = slice_section(Dd, d_areas, 'SCI','image')
+        Cd = slice_section(Cd, d_areas, 'SCI', 'image')
+        Ferr = slice_section(F.err[0], d_areas, 'SCI', 'image')
+        Derr = slice_section(D.err[0], d_areas, 'SCI', 'image')
+        Cerr = slice_section(C.err[0], d_areas, 'SCI', 'image')
+        Fdq = slice_section(F.dq, d_areas, 'SCI', 'image')
+        Ddq = slice_section(D.dq, d_areas, 'SCI', 'image')
+        Cdq = slice_section(C.dq, d_areas, 'SCI', 'image')
     else:
         Ferr = F.err[0]
         Cerr = C.err[0]

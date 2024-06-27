@@ -6,15 +6,11 @@ from pathlib import Path
 
 from corgidrp.masterdark_from_noisemaps import build_dark
 from corgidrp.mocks import create_noise_maps
-from corgidrp.detector import Metadata
+from corgidrp.detector import unpack_geom, detector_areas
 
-meta = Metadata()
-im_rows, im_cols, _ = meta._unpack_geom('image')
-rows = meta.frame_rows
-cols = meta.frame_cols
-
-corgi_path = Path(os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'corgidrp')))
-meta_path_default = Path(corgi_path, 'util', 'metadata.yaml')
+im_rows, im_cols, _ = unpack_geom(detector_areas, 'SCI', 'image')
+rows = detector_areas['SCI']['frame_rows']
+cols = detector_areas['SCI']['frame_cols']
 
 class TestBuildDark(unittest.TestCase):
     """
@@ -36,7 +32,7 @@ class TestBuildDark(unittest.TestCase):
     def test_success(self):
         """Good inputs complete as expected"""
         build_dark(self.F, self.D, self.C, self.g, self.t)
-        build_dark(self.F, self.D, self.C, self.g, self.t, meta_path=meta_path_default)
+        build_dark(self.F, self.D, self.C, self.g, self.t, detector_areas, full_frame=True)
         pass
 
 
