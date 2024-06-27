@@ -5,7 +5,7 @@ import corgidrp
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
-from corgidrp.detector import Metadata
+from corgidrp.detector import detector_areas
 
 import numpy as np
 import yaml
@@ -14,8 +14,6 @@ from pathlib import Path
 
 from pytest import approx
 
-
-here = Path(os.path.dirname(os.path.abspath(__file__)))
 old_err_tracking = corgidrp.track_individual_errors
 
 # Expected output image shapes
@@ -29,6 +27,130 @@ shapes = {
         False : (1024,1024)
     }
 }
+
+# Copy-pasted II&T code
+
+# Metadata code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/read_metadata.py
+
+class ReadMetadataException(Exception):
+    """Exception class for read_metadata module."""
+
+# Set up to allow the metadata.yaml in the repo be the default
+here = Path(os.path.dirname(os.path.abspath(__file__)))
+meta_path = Path(here,'test_data','metadata.yaml')
+
+class Metadata(object):
+    """ II&T pipeline class to store metadata.
+
+    B Nemati and S Miller - UAH - 03-Aug-2018
+
+    Args:
+        meta_path (str): Full path of metadta yaml.
+
+    Attributes:
+        data (dict):
+            Data from metadata file.
+        geom (SimpleNamespace):
+            Geometry specific data.
+    """
+
+    def __init__(self, meta_path=meta_path):
+        self.meta_path = meta_path
+
+        self.data = self.get_data()
+        self.frame_rows = self.data['frame_rows']
+        self.frame_cols = self.data['frame_cols']
+        self.geom = self.data['geom']
+
+    def get_data(self):
+        """Read yaml data into dictionary.
+
+        Returns:
+            data (dict): Metadata dictionary.
+        """
+        with open(self.meta_path, 'r') as stream:
+            data = yaml.safe_load(stream)
+        return data
+
+    def slice_section(self, frame, key):
+        """Slice 2d section out of frame.
+
+        Args:
+            frame (array_like):
+                Full frame consistent with size given in frame_rows, frame_cols.
+            key (str):
+                Keyword referencing section to be sliced; must exist in geom.
+
+        Returns:
+            section (array_like): Section of frame
+        """
+        rows, cols, r0c0 = self._unpack_geom(key)
+
+        section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+        if section.size == 0:
+            raise ReadMetadataException('Corners invalid')
+        return section
+
+    def _unpack_geom(self, key):
+        """Safely check format of geom sub-dictionary and return values.
+
+        Args:
+            key (str): Keyword referencing section to be sliced; must exist in geom.
+
+        Returns:
+            rows (int): Number of rows in section.
+            cols (int): Number of columns in section.
+            r0c0 (tuple): Initial row and column of section.
+        """
+        coords = self.geom[key]
+        rows = coords['rows']
+        cols = coords['cols']
+        r0c0 = coords['r0c0']
+
+        return rows, cols, r0c0
+
+    #added in from MetadataWrapper
+    def _imaging_area_geom(self):
+        """Return geometry of imaging area in reference to full frame.
+
+        Returns:
+            rows_im (int): Number of rows corresponding to image frame.
+            cols_im (int): Number of columns in section.
+            r0c0_im (tuple): Initial row and column of section.
+        """
+
+        _, cols_pre, _ = self._unpack_geom('prescan')
+        _, cols_serial_ovr, _ = self._unpack_geom('serial_overscan')
+        rows_parallel_ovr, _, _ = self._unpack_geom('parallel_overscan')
+        #_, _, r0c0_image = self._unpack_geom('image')
+        fluxmap_rows, _, r0c0_image = self._unpack_geom('image')
+
+        rows_im = self.frame_rows - rows_parallel_ovr
+        cols_im = self.frame_cols - cols_pre - cols_serial_ovr
+        r0c0_im = r0c0_image.copy()
+        r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
+
+        return rows_im, cols_im, r0c0_im
+
+    def imaging_slice(self, frame):
+        """Select only the real counts from full frame and exclude virtual.
+
+        Use this to transform mask and embed from acting on the full frame to
+        acting on only the image frame.
+
+        Args:
+            frame (array_like):
+                Full frame consistent with size given in frame_rows, frame_cols.
+
+        Returns:
+            slice (array_like):
+                Science image area of full frame.
+        """
+        rows, cols, r0c0 = self._imaging_area_geom()
+
+        slice = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+
+        return slice
 
 # EMCCDFrame code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_emccd_frame.py#L9
 
@@ -147,7 +269,8 @@ def test_prescan_sub():
             l1_data = fits.getdata(fname)
 
             # Read in data
-            meta = Metadata(obstype=obstype)
+            meta_path = Path(here,'test_data','metadata.yaml') if obstype == 'SCI' else Path(here,'test_data','metadata_eng.yaml')
+            meta = Metadata(meta_path = meta_path)
             frameobj = EMCCDFrame(l1_data,
                                     meta,
                                     1., # fwc_em_dn
@@ -279,10 +402,7 @@ def test_bias_hvoff():
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
 
             # Compare error to expected standard error of the median
-            meta = Metadata(obstype=obstype)
-            st = meta.geom['prescan']['col_start']
-            end = meta.geom['prescan']['col_end']
-            std_err = sig / np.sqrt(end-st) * np.sqrt(np.pi / 2.)
+            std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols']) * np.sqrt(np.pi / 2.)
             if np.max(np.abs(output_dataset[0].err[1]) - std_err) > err_tol:
                 raise Exception(f'Higher than expected std. error in bias measurement for hvoff distribution: \n{np.max(np.abs(output_dataset[0].err[1]))} when we expect {std_err} +- {err_tol} ')
 
@@ -313,8 +433,7 @@ def test_bias_hvon():
 
         # Generate bias with inflated values in the bad columns
         bias = np.full_like(dataset.all_data,bval)
-        meta = Metadata(obstype=obstype)
-        col_start = meta.geom['prescan']['col_start']
+        col_start = detector_areas[obstype]['prescan_reliable']['r0c0'][1]
         bias[:,:,0:col_start] = bval * 5
 
         # Overwrite dataset with normal + exponential + bias
@@ -372,10 +491,9 @@ def test_bias_offset():
         # bias_offset = 10 means the bias, as measured in the prescan, is
         # 10 counts higher than the bias in the image region.
         dataset_10 = dataset_0.copy()
-        meta = Metadata(obstype=obstype)
-        r0c0 = meta.geom['prescan']['r0c0']
-        rows = meta.geom['prescan']['rows']
-        cols = meta.geom['prescan']['cols']
+        r0c0 = detector_areas[obstype]['prescan']['r0c0']
+        rows = detector_areas[obstype]['prescan']['rows']
+        cols = detector_areas[obstype]['prescan']['cols']
         dataset_10.all_data[:,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += bias_offset
 
         for return_full_frame in [True,False]:
@@ -384,9 +502,9 @@ def test_bias_offset():
 
             # Compare science image region only
             if return_full_frame:
-                r0c0 = meta.geom['image']['r0c0']
-                rows = meta.geom['image']['rows']
-                cols = meta.geom['image']['cols']
+                r0c0 = detector_areas[obstype]['image']['r0c0']
+                rows = detector_areas[obstype]['image']['rows']
+                cols = detector_areas[obstype]['image']['cols']
                 image_slice_0 = output_dataset_0.all_data[0,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
                 image_slice_10 = output_dataset_10.all_data[0,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
             else:
