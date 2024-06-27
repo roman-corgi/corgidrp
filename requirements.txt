@@ -3,4 +3,3 @@ astropy
 pandas
 pytest
 scipy
-pyyaml
