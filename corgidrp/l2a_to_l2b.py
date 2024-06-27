@@ -160,25 +160,20 @@ def flat_division(input_dataset, master_flat):
 def correct_bad_pixels(input_dataset, bp_mask):
     """
     
-    Correct for bad pixels and pixels affected by CR. 
-
-    MMB Notes: 
-        - We'll likely want to be able to accept an external bad pixel map, either 
-        from the CalDB or input by a user. 
-        - We may want to accept just a list of bad pixels from a user too, thus 
-        saving them the trouble of actually making their own map. 
-        - We may want flags to decide which pixels in the DQ we correct. We may 
-        not want to correct everything in the DQ extension
-        - Different bad pixels in the DQ may be corrected differently.
+    Correct for bad pixels: Bad pixels are identified as part of the data
+        calibration. This function replaces bad pixels by NaN values. It also
+        updates its DQ storing the type of bad pixel at each bad pixel location,
+        and it records the fact that the pixel has been replaced by NaN.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        bp_mask (corgidrp.data.BadPixelMap): Bad-pixel mask flagging all bad pixels
-            in that frame.
+        bp_mask (corgidrp.data.BadPixelMap): Bad-pixel mask built from the bad
+        pixel calibration file.
+
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with bad detector
-        pixels and cosmic rays replaced by 0s
+        pixels and cosmic rays replaced by NaNs
  
     """
 
