@@ -1,12 +1,10 @@
-import os
-from pathlib import Path
 import numpy as np
 import warnings
 from astropy.io import fits
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, detector_areas
-import corgidrp.util.check as check
-from corgidrp.util.mean_combine import mean_combine
+import corgidrp.check as check
+from corgidrp.mean_combine import mean_combine
 from corgidrp.data import NoiseMap, BiasOffset
 
 

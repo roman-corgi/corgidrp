@@ -1,10 +1,7 @@
-import copy
-import os
 import unittest
-from pathlib import Path
 
 import numpy as np
-from corgidrp.util.mean_combine import mean_combine
+from corgidrp.mean_combine import mean_combine
 
 class TestMeanCombine(unittest.TestCase):
     """Unit tests for mean_combine method."""

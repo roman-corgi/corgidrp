@@ -3,7 +3,7 @@ Function to assemble a master dark frame from calibrated subcomponents
 """
 import numpy as np
 
-import corgidrp.util.check as check
+import corgidrp.check as check
 from corgidrp.detector import slice_section, detector_areas
 from corgidrp.data import Dark
 
