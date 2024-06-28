@@ -3,6 +3,7 @@ from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_
 import numpy as np
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
+
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
@@ -39,21 +40,21 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
         obstype = frame.pri_hdr['OBSTYPE']
-        if not obstype in ['SCI','ENG','ENG_EM','ENG_CONV'] :
-                raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG' or 'ENG_EM' or 'EMG_CONV'")
+        if not obstype in ['SCI','ENG'] :
+                raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG'")
 
         # Get the reliable prescan area
-        prescan = slice_section(frame_data, detector_areas, obstype, 'prescan_reliable')
+        prescan = slice_section(frame_data, obstype, 'prescan_reliable')
 
         if not return_full_frame:
             # Get the image area
-            image_data = slice_section(frame_data, detector_areas, obstype, 'image')
-            image_dq = slice_section(frame_dq, detector_areas, obstype, 'image')
+            image_data = slice_section(frame_data, obstype, 'image')
+            image_dq = slice_section(frame_dq, obstype, 'image')
 
             # Special treatment for 3D error array
             image_err = []
             for err_slice in frame_err:
-                image_err.append(slice_section(err_slice, detector_areas, obstype, 'image'))
+                image_err.append(slice_section(err_slice, obstype, 'image'))
             image_err = np.array(image_err)
 
             # Get the part of the prescan that lines up with the image
