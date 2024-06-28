@@ -988,7 +988,7 @@ class DetectorParams(Image):
 
     def __init__(self, data_or_filepath, date_valid=None):
         if date_valid is None:
-            date_valid = time.Time.now()
+            date_valid = time.Time('2024-01-01T11:00:00.000Z')
         # if filepath passed in, just load in from disk as usual
         if isinstance(data_or_filepath, str):
             # run the image class contructor

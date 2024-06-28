@@ -342,7 +342,8 @@ def imaging_slice(d_areas, obstype, frame):
         sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
         return sl
 
-def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
+def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
+                   cosm_tail, mode='image'):
     """Identify and remove saturated cosmic ray hits and tails.
 
     Use sat_thresh (interval 0 to 1) to set the threshold above which cosmics
@@ -370,6 +371,23 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
             Multiplication factor for fwc that determines edges of cosmic plateu.
         cosm_filter (int):
             Minimum length in pixels of cosmic plateus to be identified.
+        cosm_box (int):
+            Number of pixels out from an identified cosmic head (i.e., beginning of
+            the plateau) to mask out.
+            For example, if cosm_box is 3, a 7x7 box is masked,
+            with the cosmic head as the center pixel of the box.
+        cosm_tail (int):
+            Number of pixels in the row downstream of the end of a cosmic plateau
+            to mask.  If cosm_tail is greater than the number of
+            columns left to the end of the row from the cosmic
+            plateau, the cosmic masking ends at the end of the row.
+        mode (string):
+            If 'image', an image-area input is assumed, and if the input
+            tail length is longer than the length to the end of the image-area row,
+            the mask is truncated at the end of the row.
+            If 'full', a full-frame input is assumed, and if the input tail length
+            is longer than the length to the end of the full-frame row, the masking
+            continues onto the next row.  Defaults to 'image'.
 
     Returns:
         array_like, int:
@@ -381,11 +399,11 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     streak rows, which are rows that potentially contain cosmics. It then
     filters each of these rows in order to differentiate cosmic hits (plateaus)
     from any outlier saturated pixels. For each cosmic hit it finds the leading
-    ledge of the plateau and kills the plateau and the rest of the row to take
-    out the tail.
+    ledge of the plateau and kills the plateau (specified by cosm_filter) and
+    the tail (specified by cosm_tail).
 
     |<-------- streak row is the whole row ----------------------->|
-     ......|<-plateau->|<------------------tail------------------->|
+     ......|<-plateau->|<------------------tail---------->|.........
 
     B Nemati and S Miller - UAH - 02-Oct-2018
 
@@ -400,21 +418,41 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
         row = cube[j,i]
 
         # Find if and where saturated plateaus start in streak row
-        i_beg = find_plateaus(row, fwc, sat_thresh, plat_thresh, cosm_filter)
+        i_begs = find_plateaus(row, fwc, sat_thresh, plat_thresh, cosm_filter)
 
-        # If plateaus exist, kill the hit and the rest of the row
-        if i_beg is not None:
-            mask[j,i, i_beg:] = 1
-            pass
+        # If plateaus exist, kill the hit and the tail
+        cutoffs = np.array([])
+        ex_l = np.array([])
+        if i_begs is not None:
+            for i_beg in i_begs:
+                # implement cosm_tail
+                if i_beg+cosm_filter+cosm_tail+1 > mask.shape[2]:
+                    ex_l = np.append(ex_l,
+                            i_beg+cosm_filter+cosm_tail+1-mask.shape[2])
+                    cutoffs = np.append(cutoffs, i+1)
+                streak_end = int(min(i_beg+cosm_filter+cosm_tail+1,
+                                mask.shape[2]))
+                mask[0, i, i_beg:streak_end] = 1
+                # implement cosm_box
+                st_row = max(i-cosm_box, 0)
+                end_row = min(i+cosm_box+1, mask.shape[1])
+                st_col = max(i_beg-cosm_box, 0)
+                end_col = min(i_beg+cosm_box+1, mask.shape[2])
+                mask[0, st_row:end_row, st_col:end_col] = 1
+                pass
+
+        if mode == 'full' and len(ex_l) > 0:
+            mask_rav = mask[0].ravel()
+            for k in range(len(ex_l)):
+                row = cutoffs[k]
+                rav_ind = int(row * mask.shape[2] - 1)
+                mask_rav[rav_ind:rav_ind + int(ex_l[k])] = 1
+
 
     return mask
 
 def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     """Find the beginning index of each cosmic plateau in a row.
-
-    Note that i_beg is set at one pixel before first plateau pixel, as these
-    pixels immediately neighboring the cosmic plateau are very often affected
-    by the cosmic hit as well.
 
     Args:
         streak_row (array_like, float):
@@ -426,9 +464,9 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
         sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
         plat_thresh (float):
-            Multiplication factor for fwc that determines edges of cosmic plateu.
+            Multiplication factor for fwc that determines edges of cosmic plateau.
         cosm_filter (float):
-            Minimum length in pixels of cosmic plateus to be identified.
+            Minimum length in pixels of cosmic plateaus to be identified.
 
     Returns:
         array_like, int:
@@ -441,16 +479,22 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     saturated = (filtered >= sat_thresh*fwc).nonzero()[0]
 
     if len(saturated) > 0:
-        i_beg = saturated[0]
-        while i_beg > 0 and streak_row[i_beg] >= plat_thresh*fwc:
-            i_beg -= 1
+        i_begs = np.array([])
+        for i in range(len(saturated)):
+            i_beg = saturated[i]
+            while i_beg > 0 and streak_row[i_beg] >= plat_thresh*fwc:
+                i_beg -= 1
+            # unless saturated at col 0, shifts forward 1 to plateau start
+            if streak_row[i_beg] < plat_thresh*fwc:
+                i_beg += 1
+            i_begs = np.append(i_begs, i_beg)
 
-        return i_beg
+        return np.unique(i_begs).astype(int)
     else:
         return None
 
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
-    """Calculates the full well capacity saturation threshold for each frame.
+    """Calculates the lowest full well capacity saturation threshold for each frame.
 
     Args:
         emgain_arr (np.array): 1D array of the EM gain value for each frame.
@@ -462,7 +506,7 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
             what qualifies as saturation. A reasonable value is 0.99
 
     Returns:
-        np.array: _description_
+        sat_fwcs (np.array): lowest full well capacity saturation threshold for frames
     """
     possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
     sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
