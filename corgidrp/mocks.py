@@ -8,6 +8,7 @@ import os
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
+from astropy.table import Table
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
@@ -206,25 +207,25 @@ def create_default_headers(obstype="SCI"):
 
     return prihdr, exthdr
 
-def create_astrom_data(filedir=None, ):
+def create_astrom_data(filedir=None, field_path='~/corgidrp/tests/test_data/JWST_CALFIELD2020.csv'):
     """
     Create simulated data for astrometric calibration.
 
     Args:
         filedir (str): (Optional) Full path to directory to save to.
+        field_path (str): (Optional) Full path to directory with test field data (ra, dec, vmag, etc.)
 
     Returns:
         corgidrp.data.Dataset:
             The simulated dataset
+
     """
 
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    #filepattern = "simcal_astrom_{0:04d}.fits"
-
-    cal_field = ascii.read('../tests/test_data/JWST_CALFIELD2020.csv')
+    cal_field = ascii.read(field_path)
     cal_SkyCoords = SkyCoord(ra= cal_field['RA'], dec= cal_field['DEC'], 
                              unit='deg', frame='icrs')
     
@@ -312,22 +313,36 @@ def create_astrom_data(filedir=None, ):
         # inject the stars into the image
         sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
-        # add Gaussian random noise
-        noise_rng = np.random.default_rng(10)
-        gain = 1
-        ref_flux = 10
-        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
-        sim_data = sim_data + noise
+    # add Gaussian random noise
+    noise_rng = np.random.default_rng(10)
+    gain = 1
+    ref_flux = 10
+    noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
+    sim_data = sim_data + noise
 
-        # load as an image object
-        frames = []
-        prihdr, exthdr = create_default_headers()
-        newhdr = fits.Header(new_hdr)
-        frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
-        filename = "simcal_astrom.fits"
-        if filedir is not None:
-            frame.save(filedir=filedir, filename=filename)
-        frames.append(frame)
-        dataset = data.Dataset(frames)
+    # load as an image object
+    frames = []
+    prihdr, exthdr = create_default_headers()
+    newhdr = fits.Header(new_hdr)
+    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+    filename = "simcal_astrom.fits"
+    if filedir is not None:
+        # save source SkyCoord locations and pixel location estimates
+        guess = Table()
+        guess['x'] = [int(x) for x in xpix]
+        guess['y'] = [int(y) for y in ypix]
+        guess['RA'] = cal_SkyCoords[xpix_inds].ra
+        guess['DEC'] = cal_SkyCoords[ypix_inds].dec
+        ascii.write(guess, filedir+'/simcal_guesses.csv', overwrite=True)
 
-        return dataset
+        center = Table()
+        center['RA'] = [target[0]]
+        center['DEC'] = [target[1]]
+        ascii.write(center, filedir+'/target_guess.csv', overwrite=True)
+
+        frame.save(filedir=filedir, filename=filename)
+
+    frames.append(frame)
+    dataset = data.Dataset(frames)
+
+    return dataset
