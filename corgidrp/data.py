@@ -441,6 +441,22 @@ class Image():
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
+    def get_hash(self):
+        """
+        Computes the hash of the data, err, and dq. Does not use the header information.
+
+        Returns:
+            str: the hash of the data, err, and dq
+        """
+        data_bytes = self.data.data.tobytes()
+        err_bytes = self.err.data.tobytes()
+        dq_bytes = self.dq.data.tobytes()
+
+        total_bytes = data_bytes + err_bytes + dq_bytes
+
+        return str(hash(total_bytes))
+
+
 class Dark(Image):
     """
     Dark calibration frame for a given exposure time.
@@ -558,6 +574,86 @@ class NonLinearityCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
 
+
+class KGain(Image):
+    """
+    Class for KGain calibration file. Until further insights it is just one float value.
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+     
+    Attrs:
+        value: the getter of the kgain value
+        _kgain (float): the value of kgain
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The KGain calibration data should be just one float value')
+       # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The KGain calibration data should be just one float value')
+
+        self._kgain = self.data[0,0] 
+        # additional bookkeeping for a calibration file
+        # if this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new KGain file
+        if ext_hdr is not None:
+            self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'detected EM electrons/DN'
+            # add to history
+            self.ext_hdr['HISTORY'] = "KGain Calibration file created"
+
+            # give it a default filename
+            self.filename = "KGain.fits"
+
+
+        # double check that this is actually a KGain file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'KGain':
+            raise ValueError("File that was loaded was not a KGain Calibration file.")
+
+    @property
+    def value(self):
+        return self._kgain
+ 
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this KGain file. including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            corgidrp.data.KGain: a copy of this KGain
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+        else:
+            new_data = self.data # this is just pointer referencing
+        new_kg = KGain(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+        
+        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
+        new_kg.filename = self.filename
+        new_kg.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_kg
+
+
 class BadPixelMap(Image):
     """
     Class for bad pixel map. The bad pixel map indicates which pixels are hot
@@ -578,7 +674,7 @@ class BadPixelMap(Image):
         # if this is a new bad pixel map, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
         if ext_hdr is not None:
-            if input_dataset is None:
+            if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new bad pixel map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this bad pixel map.")
             self.ext_hdr['DATATYPE'] = 'BadPixelMap' # corgidrp specific keyword for saving to disk
@@ -600,10 +696,138 @@ class BadPixelMap(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
 
+    def copy(self, copy_data = True):
+        """
+        Make a copy of this BadPixelMap file. including data and headers.
+        Data copying can be turned off if you only want to modify the headers
+        Headers should always be copied as we should modify them any time we make new edits to the data
+
+        Args:
+            copy_data (bool): (optional) whether the data should be copied. Default is True
+
+        Returns:
+            corgidrp.data.BadPixelMap: a copy of this BadPixelMap
+        """
+        if copy_data:
+            new_data = np.copy(self.data)
+        else:
+            new_data = self.data # this is just pointer referencing
+        new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+        
+        # we got to manually update some parameters. Need to keep track of which ones to update
+        new_bp.filename = self.filename
+        new_bp.filedir = self.filedir
+
+        # update DRP version tracking
+        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+
+        return new_bp
+
+class DetectorParams(Image):
+    """
+    Class containing detector parameters that may change over time
+
+    Args:
+        data_or_filepath (dict or str): either a filepath string or a dictionary of
+                                        parameters to modify from default values
+        date_valid (astropy.time.Time): date after which these parameters are valid
+
+    Attributes:
+        params (dict): the values for various detector parameters specified here
+        default_values (dict): default values for detector parameters (fallback values)
+    """
+     # default detector params
+    default_values = {
+        'kgain' : 8.7,
+        'fwc_pp' : 90000.,
+        'fwc_em' : 100000.,
+        'rowreadtime' : 223.5e-6 # seconds
+    }
+
+    def __init__(self, data_or_filepath, date_valid=None):
+
+        # if filepaht passed in, just load in from disk as usual
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+
+            # double check that this is actually a bad pixel map that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'DetectorParams':
+                raise ValueError("File that was loaded was not a DetectorParams file.")
+        else:
+            if not isinstance(data_or_filepath, dict):
+                raise ValueError("Input should either be a dictionary or a filepath string")
+            prihdr = fits.Header()
+            exthdr = fits.Header()
+            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
+            exthdr['DRPVERSN'] =  corgidrp.version
+            exthdr['DRPCTIME'] =  time.Time.now().isot
+
+            # fill caldb required keywords with dummy data
+            prihdr['OBSID'] = 0
+            exthdr["EXPTIME"] = 0
+            exthdr['OPMODE'] = ""
+            exthdr['CMDGAIN'] = 1.0
+            exthdr['EXCAMT'] = 40.0
+
+            # write default values to headers
+            for key in self.default_values:
+                exthdr[key] = self.default_values[key]
+            # overwrite default values
+            for key in data_or_filepath:
+                exthdr[key] = data_or_filepath[key]
+
+            self.pri_hdr = prihdr
+            self.ext_hdr = exthdr
+            self.data = np.zeros([1,1])
+            self.dq = np.zeros([1,1])
+            self.err = np.zeros([1,1])
+            self.bias = np.zeros([1,1])
+
+            self.err_hdr = fits.Header()
+            self.dq_hdr = fits.Header()
+            self.bias_hdr = fits.Header()
+
+        # make a dictionary that's easy to use
+        self.params = {}
+        # load back in all the values from the header
+        for key in self.default_values:
+            self.params[key] = self.ext_hdr[key]
+        
+
+        # if this is a new bad pixel map, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new bad pixel map
+        if isinstance(data_or_filepath, dict):
+            self.ext_hdr['DATATYPE'] = 'DetectorParams' # corgidrp specific keyword for saving to disk
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Detector Params file created"
+
+            # use the start date for the filename by default
+            self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+    def get_hash(self):
+        """
+        Computes the hash of the detector param values
+
+        Returns:
+            str: the hash of the detector parameters
+        """
+        hashing_str = "" # make a string that we can actually hash
+        for key in self.params:
+            hashing_str += str(self.params[key])
+        
+        return str(hash(hashing_str))
+
+
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
-              "BadPixelMap" : BadPixelMap }
+              "KGain" : KGain, 
+              "BadPixelMap" : BadPixelMap,
+              "DetectorParams" : DetectorParams }
 
 def autoload(filepath):
     """

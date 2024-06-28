@@ -109,4 +109,3 @@ l4_dataset = l3_psf_subtracted.update_to_l4() # This function doesn't exist yet
 
 #Save the dataset
 l4_dataset.save(output_filepath)
-
