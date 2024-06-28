@@ -719,6 +719,7 @@ class AstrometricCalibration(Image):
         boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
         platescale (float): the platescale value in [mas/pixel]
         northangle (float): the north angle value in [deg]
+
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
         # run the image class constructor
@@ -727,31 +728,25 @@ class AstrometricCalibration(Image):
         # File format checks
         if self.data.shape != (4,):
             raise ValueError("The AstrometricCalibration data should be a 1D array of four values")
-
+        else:
+            self.boresight = self.data[:2]
+            self.platescale = self.data[2]
+            self.northangle = self.data[3]
+            
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
         if ext_hdr is not None:
             self.ext_hdr['DATATYPE'] = 'AstrometricCalibration'
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Astrometric Calibration file createed"
+            self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
             
             # give a default filename
             self.filename = "AstrometricCalibration.fits"
 
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
-            raise ValueError("File that was loaded was not an AstrometricCalibration file.")
-    
-    @property    
-    def boresight(self):
-        return self.data[:2]
-    
-    def platescale(self):
-        return self.data[2]
-    
-    def northangle(self):
-        return self.data[3]
+            raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
 
 datatypes = { "Image" : Image,
               "Dark"  : Dark,
