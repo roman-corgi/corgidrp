@@ -196,3 +196,42 @@ def correct_bad_pixels(input_dataset, bp_mask):
         new_all_dq=dq_cube)
 
     return data
+
+def desmear(input_dataset, detector_params):
+    """
+
+    EXCAM has no shutter, and so continues to illuminate the detector during
+    readout. This creates a "smearing" effect into the resulting images. The
+    desmear function corrects for this effect. There are a small number of use
+    cases for not desmearing data (e.g. time-varying raster data).
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with desmear applied
+
+    """
+
+    data = input_dataset.copy()
+    data_cube = data.all_data
+
+    rowreadtime_sec = detector_params.params['rowreadtime']
+
+    for i in range(data_cube.shape[0]):
+        exptime_sec = float(data[i].ext_hdr['EXPTIME'])
+        smear = np.zeros_like(data_cube[i])
+        m = len(smear)
+        for r in range(m):
+            columnsum = 0
+            for s in range(r+1):
+                columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
+                + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*data_cube[i,s,:]
+            smear[r,:] = columnsum
+        data_cube[i] -= smear
+
+    history_msg = "Desmear applied to data"
+    data.update_after_processing_step(history_msg, new_all_data=data_cube)
+
+    return data
