@@ -76,8 +76,7 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_bo
     Use cosm_filter to determine the smallest plateaus (in pixels) that will
     be identified. A reasonable value is 2.
 
-    Parameters
-    ----------
+    Parameters:
     image : array_like, float
         Image area of frame (bias of zero).
     fwc : float
@@ -108,8 +107,7 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_bo
         is longer than the length to the end of the full-frame row, the masking
         continues onto the next row.  Defaults to 'image'.
 
-    Returns
-    -------
+    Returns:
     mask : array_like, int
         Mask for pixels that have been set to zero.
 
