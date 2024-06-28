@@ -316,17 +316,17 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
                     cutoffs = np.append(cutoffs, i+1)
                 streak_end = int(min(i_beg+cosm_filter+cosm_tail+1,
                                 mask.shape[2]))
-                mask[0, i, i_beg:streak_end] = 1
+                mask[j, i, i_beg:streak_end] = 1
                 # implement cosm_box
                 st_row = max(i-cosm_box, 0)
                 end_row = min(i+cosm_box+1, mask.shape[1])
                 st_col = max(i_beg-cosm_box, 0)
                 end_col = min(i_beg+cosm_box+1, mask.shape[2])
-                mask[0, st_row:end_row, st_col:end_col] = 1
+                mask[j, st_row:end_row, st_col:end_col] = 1
                 pass
 
         if mode == 'full' and len(ex_l) > 0:
-            mask_rav = mask[0].ravel()
+            mask_rav = mask[j].ravel()
             for k in range(len(ex_l)):
                 row = cutoffs[k]
                 rav_ind = int(row * mask.shape[2] - 1)
