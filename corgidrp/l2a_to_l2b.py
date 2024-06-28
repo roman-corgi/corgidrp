@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
 import numpy as np
+import corgidrp.detector as detector
 
 def add_photon_noise(input_dataset):
     """
@@ -19,7 +20,6 @@ def add_photon_noise(input_dataset):
         frame.add_error_term(np.sqrt(frame.data), "photnoise_error")
     
     new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
-                
     history_msg = "photon noise propagated to error map"
     # update the output dataset
     phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
@@ -58,35 +58,50 @@ def dark_subtraction(input_dataset, dark_frame):
 
     return darksub_dataset
 
-def frame_select(input_dataset):
+def frame_select(input_dataset, bpix_frac=100., overexp=False, tt_thres=None):
     """
     
-    Selects the frames that we want to use for further processing. 
-    TODO: Decide on frame selection criteria
+    Selects the frames that we want to use for further processing.
+    Not currently implemented!! 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        bpix_frac (float): what percent of the image needs to be bad to discard. Default: 100% (not used)
+        overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
+        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used) 
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
     """
-    return None
+    return input_dataset.copy()
 
-def convert_to_electrons(input_dataset): 
+def convert_to_electrons(input_dataset, k_gain): 
     """
     
     Convert the data from ADU to electrons. 
     TODO: Establish the interaction with the CalDB for obtaining gain calibration 
-    TODO: Make sure to update the headers to reflect the change in units
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        k_gain (corgidrp.data.KGain): KGain calibration file
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in electrons
     """
+   # you should make a copy the dataset to start
+    kgain_dataset = input_dataset.copy()
+    kgain_cube = kgain_dataset.all_data
+    kgain_error = kgain_dataset.all_err
+    
+    kgain = k_gain.value #extract from caldb
+    kgain_cube *= kgain
+    kgain_error *= kgain
+    
+    history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
-    return None 
+    # update the output dataset with this converted data and update the history
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain})
+    return kgain_dataset
 
 def em_gain_division(input_dataset):
     """
@@ -124,8 +139,6 @@ def em_gain_division(input_dataset):
     emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
 
     return emgain_dataset
-    
-    
 
 def cti_correction(input_dataset):
     """
@@ -140,7 +153,7 @@ def cti_correction(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
     """
 
-    return None
+    return input_dataset.copy()
 
 def flat_division(input_dataset, master_flat):
     """
@@ -155,7 +168,7 @@ def flat_division(input_dataset, master_flat):
         corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
     """
 
-    return None
+    return input_dataset.copy()
 
 def correct_bad_pixels(input_dataset, bp_mask):
     """
@@ -199,7 +212,6 @@ def correct_bad_pixels(input_dataset, bp_mask):
 
 def desmear(input_dataset, detector_params):
     """
-
     EXCAM has no shutter, and so continues to illuminate the detector during
     readout. This creates a "smearing" effect into the resulting images. The
     desmear function corrects for this effect. There are a small number of use
@@ -233,5 +245,5 @@ def desmear(input_dataset, detector_params):
 
     history_msg = "Desmear applied to data"
     data.update_after_processing_step(history_msg, new_all_data=data_cube)
-
+    
     return data
