@@ -583,18 +583,13 @@ class KGain(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
-     
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this KGain file (required only if raw 2D data is passed in)
+    
     Attrs:
         value: the getter of the kgain value
         _kgain (float): the value of kgain
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
-       # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-
-        # File format checks
-        if self.data.shape != (1,1):
-            raise ValueError('The KGain calibration data should be just one float value')
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset = None):
        # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
@@ -603,18 +598,29 @@ class KGain(Image):
             raise ValueError('The KGain calibration data should be just one float value')
 
         self._kgain = self.data[0,0] 
+        
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new KGain file
         if ext_hdr is not None:
+            if input_dataset is None:
+                if 'DRPNFILE' not in ext_hdr:
+                    # error check. this is required in this case
+                    raise ValueError("This appears to be a new kgain. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this kgain.")
+                else:
+                    pass
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                self.filename = "{0}_kgain.fits".format(orig_input_filename)
+            
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected EM electrons/DN'
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
-
-            # give it a default filename
-            self.filename = "KGain.fits"
-
 
         # double check that this is actually a KGain file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -641,6 +647,7 @@ class KGain(Image):
             new_data = np.copy(self.data)
         else:
             new_data = self.data # this is just pointer referencing
+    
         new_kg = KGain(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
         
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
