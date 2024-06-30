@@ -335,7 +335,7 @@ def create_astrom_data(field_path, filedir=None):
         guess['y'] = [int(y) for y in ypix]
         guess['RA'] = cal_SkyCoords[xpix_inds].ra
         guess['DEC'] = cal_SkyCoords[ypix_inds].dec
-        ascii.write(guess, filedir+'/simcal_guesses.csv', overwrite=True)
+        ascii.write(guess, filedir+'/guesses.csv', overwrite=True)
 
         center = Table()
         center['RA'] = [target[0]]
