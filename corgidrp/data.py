@@ -483,7 +483,7 @@ class Image():
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
         
         #first layer is always the updated combined error
-        self.err = np.sqrt(self.err**2 * input_error**2)
+        self.err = self.err*input_error
         self.err_hdr["Layer_1"] = "combined_error"
 
         if corgidrp.track_individual_errors:
@@ -491,21 +491,12 @@ class Image():
             self.err=np.append(self.err, [input_error], axis=0)
 
             layer = str(self.err.shape[0])
-            self.err_hdr["Layer_1"] = "combined_error"
+            #self.err_hdr["Layer_1"] = "combined_error"
             self.err_hdr["Layer_" + layer] = err_name    
         
         # record history since 2-D error map doesn't track individual terms
-        self.err_hdr['HISTORY'] = "rescaled error term: {0}".format(err_name)     
+        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(err_name)    
 
-        if corgidrp.track_individual_errors:
-            #append new error as layer on 3D cube
-            self.err=np.append(self.err, [input_error], axis=0)
-
-            layer = str(self.err.shape[0])
-            self.err_hdr["Layer_" + layer] = err_name    
-        
-        # record history since 2-D error map doesn't track individual terms
-        self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
     
 
 class Dark(Image):
