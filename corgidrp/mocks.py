@@ -262,3 +262,38 @@ def create_default_headers(obstype="SCI"):
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
+  
+  
+def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
+    """
+    Create simulated bad pixel map data. Code value is 4.
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        col_bp (array): (Optional) Array of column indices where bad detector
+            pixels are found.
+        row_bp (array): (Optional) Array of row indices where bad detector
+            pixels are found.
+
+    Returns:
+        corgidrp.data.BadPixelMap:
+            The simulated dataset
+    """
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+
+    prihdr, exthdr = create_default_headers()
+    sim_data = np.zeros([1024,1024], dtype = np.uint16)
+    if col_bp is not None and row_bp is not None:
+        for i_col in col_bp:
+            for i_row in row_bp:
+                sim_data[i_col, i_row] += 4
+    frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    if filedir is not None:
+        frame.save(filedir=filedir, filename= "sim_bad_pixel.fits")
+
+    badpixelmap = data.Dataset([frame])
+
+    return badpixelmap
