@@ -14,7 +14,10 @@
             }
         },
         {
-            "name" : "detect_cosmic_rays"
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
         },
         {
             "name" : "correct_nonlinearity",
