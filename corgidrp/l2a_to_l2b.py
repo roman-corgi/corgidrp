@@ -170,9 +170,48 @@ def flat_division(input_dataset, master_flat):
 
     return input_dataset.copy()
 
-def desmear(input_dataset, detector_params):
+def correct_bad_pixels(input_dataset, bp_mask):
+    """
+    
+    Correct for bad pixels: Bad pixels are identified as part of the data
+        calibration. This function replaces bad pixels by NaN values. It also
+        updates its DQ storing the type of bad pixel at each bad pixel location,
+        and it records the fact that the pixel has been replaced by NaN.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        bp_mask (corgidrp.data.BadPixelMap): Bad-pixel mask built from the bad
+        pixel calibration file.
+
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with bad detector
+        pixels and cosmic rays replaced by NaNs
+ 
     """
 
+    data = input_dataset.copy()
+    data_cube = data.all_data
+    dq_cube = data.all_dq.astype(np.uint8)
+
+    for i in range(data_cube.shape[0]):
+        # combine DQ and BP masks
+        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask[0].data.astype(np.uint8))
+        # mask affected pixels with NaN
+        bp = np.where(bp_dq_mask != 0)
+        data_cube[i, bp[0], bp[1]] = np.nan
+        # Update DQ to keep track of replaced bad pixel values
+        bp_dq_mask[bp[0], bp[1]]=np.bitwise_or(bp_dq_mask[bp[0], bp[1]], 2)
+        dq_cube[i] = bp_dq_mask
+
+    history_msg = "removed pixels affected by bad pixels"
+    data.update_after_processing_step(history_msg, new_all_data=data_cube,
+        new_all_dq=dq_cube)
+
+    return data
+
+def desmear(input_dataset, detector_params):
+    """
     EXCAM has no shutter, and so continues to illuminate the detector during
     readout. This creates a "smearing" effect into the resulting images. The
     desmear function corrects for this effect. There are a small number of use
@@ -199,13 +238,12 @@ def desmear(input_dataset, detector_params):
         for r in range(m):
             columnsum = 0
             for s in range(r+1):
-                columnsum = columnsum + rowreadtime_sec/exptime_sec*((1 
+                columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
                 + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*data_cube[i,s,:]
             smear[r,:] = columnsum
         data_cube[i] -= smear
-   
+
     history_msg = "Desmear applied to data"
     data.update_after_processing_step(history_msg, new_all_data=data_cube)
-
+    
     return data
-
