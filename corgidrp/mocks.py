@@ -207,19 +207,21 @@ def create_default_headers(obstype="SCI"):
 
     return prihdr, exthdr
 
-def create_astrom_data(filedir=None, field_path='~/corgidrp/tests/test_data/JWST_CALFIELD2020.csv'):
+def create_astrom_data(field_path, filedir=None):
     """
     Create simulated data for astrometric calibration.
 
     Args:
+        field_path (str): Full path to directory with test field data (ra, dec, vmag, etc.)
         filedir (str): (Optional) Full path to directory to save to.
-        field_path (str): (Optional) Full path to directory with test field data (ra, dec, vmag, etc.)
 
     Returns:
         corgidrp.data.Dataset:
             The simulated dataset
 
     """
+    if type(field_path) != str:
+        raise TypeError('field_path must be a str')
 
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
