@@ -77,10 +77,10 @@ def flat_division(input_dataset, flat_field):
     #Divide by the master flat
     flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
     
-    # propagate the error of the master flat frame # Check this error prop 
+    # propagate the error of the master flat frame  
     if hasattr(flat_field, "err"):
-        flatdiv_dataset.rescale_error(flat_field.err[0], "FlatField error") 
-        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0], "FlatField error")
+        flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField") 
+        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
     else:
         raise Warning("no error attribute in the FlatField")
     
