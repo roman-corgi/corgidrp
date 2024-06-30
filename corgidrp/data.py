@@ -721,7 +721,7 @@ class AstrometricCalibration(Image):
         northangle (float): the north angle value in [deg]
 
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         # run the image class constructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
@@ -736,7 +736,12 @@ class AstrometricCalibration(Image):
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
         if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("This appears to be a new astrometric calibration file. The dataset of input files needs to be passed in to the input_dataset keyword to record its history.")
             self.ext_hdr['DATATYPE'] = 'AstrometricCalibration'
+
+            # record all the data that went into making this calibration file
+            self._record_parent_filenames(input_dataset)
 
             # add to history
             self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
