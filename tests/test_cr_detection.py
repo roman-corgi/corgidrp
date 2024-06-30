@@ -22,21 +22,21 @@ def find_plateaus_iit(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
 
     Args:
         streak_row (float):
-        Row with possible cosmics.
+            Row with possible cosmics.
         fwc (float):
-        Full well capacity of detector *in DNs*.  Note that this may require a
-        conversion as FWCs are usually specified in electrons, but the image
-        is in DNs at this point.
+            Full well capacity of detector *in DNs*.  Note that this may require a
+            conversion as FWCs are usually specified in electrons, but the image
+            is in DNs at this point.
         sat_thresh (float):
-        Multiplication factor for fwc that determines saturated cosmic pixels.
+            Multiplication factor for fwc that determines saturated cosmic pixels.
         plat_thresh (float):
-        Multiplication factor for fwc that determines edges of cosmic plateu.
+            Multiplication factor for fwc that determines edges of cosmic plateu.
         cosm_filter (int):
-        Minimum length in pixels of cosmic plateus to be identified.
+            Minimum length in pixels of cosmic plateus to be identified.
 
     Returns:
-        i_beg (array_like, int):
-        Index of plateau beginnings, or None if there is no plateau.
+        array_like, int:
+            Index of plateau beginnings, or None if there is no plateau.
 
     """
     # Lowpass filter row to differentiate plateaus from standalone pixels
@@ -78,38 +78,38 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_bo
 
     Args:
         image (array_like, float):
-        Image area of frame (bias of zero).
+            Image area of frame (bias of zero).
         fwc (float):
-        Full well capacity of detector *in DNs*.  Note that this may require a
-        conversion as FWCs are usually specified in electrons, but the image
-        is in DNs at this point.
+            Full well capacity of detector *in DNs*.  Note that this may require a
+            conversion as FWCs are usually specified in electrons, but the image
+            is in DNs at this point.
         sat_thresh (float):
-        Multiplication factor for fwc that determines saturated cosmic pixels.
+            Multiplication factor for fwc that determines saturated cosmic pixels.
         plat_thresh (float):
-        Multiplication factor for fwc that determines edges of cosmic plateau.
+            Multiplication factor for fwc that determines edges of cosmic plateau.
         cosm_filter (int):
-        Minimum length in pixels of cosmic plateaus to be identified.
+            Minimum length in pixels of cosmic plateaus to be identified.
         cosm_box (int):
-        Number of pixels out from an identified cosmic head (i.e., beginning of
-        the plateau) to mask out.
-        For example, if cosm_box is 3, a 7x7 box is masked,
-        with the cosmic head as the center pixel of the box.
+            Number of pixels out from an identified cosmic head (i.e., beginning of
+            the plateau) to mask out.
+            For example, if cosm_box is 3, a 7x7 box is masked,
+            with the cosmic head as the center pixel of the box.
         cosm_tail (int):
-        Number of pixels in the row downstream of the end of a cosmic plateau
-        to mask.  If cosm_tail is greater than the number of
-        columns left to the end of the row from the cosmic
-        plateau, the cosmic masking ends at the end of the row.
+            Number of pixels in the row downstream of the end of a cosmic plateau
+            to mask.  If cosm_tail is greater than the number of
+            columns left to the end of the row from the cosmic
+            plateau, the cosmic masking ends at the end of the row.
         mode (string):
-        If 'image', an image-area input is assumed, and if the input
-        tail length is longer than the length to the end of the image-area row,
-        the mask is truncated at the end of the row.
-        If 'full', a full-frame input is assumed, and if the input tail length
-        is longer than the length to the end of the full-frame row, the masking
-        continues onto the next row.  Defaults to 'image'.
+            If 'image', an image-area input is assumed, and if the input
+            tail length is longer than the length to the end of the image-area row,
+            the mask is truncated at the end of the row.
+            If 'full', a full-frame input is assumed, and if the input tail length
+            is longer than the length to the end of the full-frame row, the masking
+            continues onto the next row.  Defaults to 'image'.
 
     Returns:
-        mask (array_like, int):
-        Mask for pixels that have been set to zero.
+        array_like, int:
+            Mask for pixels that have been set to zero.
 
     Notes
     -----
