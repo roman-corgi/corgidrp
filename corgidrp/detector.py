@@ -390,7 +390,7 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
             what qualifies as saturation. A reasonable value is 0.99
 
     Returns:
-        sat_fwcs (np.array): lowest full well capacity saturation threshold for frames
+        np.array: lowest full well capacity saturation threshold for frames
     """
     possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
     sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
