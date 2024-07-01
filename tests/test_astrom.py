@@ -10,11 +10,11 @@ def test_astrom():
     """
     # create a simulated image with source guesses and true positions
     # check that the simulated image folder exists and create if not
-    datadir = os.path.join(os.path.dirname(__file__), "simastrom")
+    datadir = os.path.join(os.path.dirname(__file__), "test_data", "simastrom")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
 
-    field_path = os.path.join(os.path.dirname(__file__), "test_data/JWST_CALFIELD2020.csv")
+    field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
 
     corgidrp.mocks.create_astrom_data(field_path=field_path, filedir=datadir)
 
