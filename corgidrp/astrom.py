@@ -198,10 +198,9 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
             (float): RA coordinate of the target source
             (float): Dec coordinate of the target source
 
-    Returns: 
-        cal_properties (tuple):
-            platescale (float): Platescale [mas/pixel]
-            north_angle (float): Angle between image north and true north [deg]
+    Returns:
+        platescale (float): Platescale [mas/pixel]
+        north_angle (float): Angle between image north and true north [deg]
         
     """
 
@@ -210,7 +209,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
         raise TypeError('Image must be 2D numpy.ndarray')
 
     if type(source_info) != astropy.table.Table:
-        raise TypeError('source_guesses must be an astropy table with columns \'x\',\'y\'')
+        raise TypeError('source_info must be an astropy table with columns \'x\',\'y\',\'RA\',\'DEC\'')
     else:
         guesses = source_info
         skycoords = SkyCoord(ra = guesses['RA'], dec= guesses['DEC'], unit='deg', frame='icrs')
@@ -220,26 +219,33 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
     else:
         center_coord = SkyCoord(ra = center_coord[0], dec= center_coord[1], unit='deg', frame='icrs')
 
+    # use only center quadrant
+    imageshape = np.shape(image)
+    quady, quadx = imageshape[0] // 4, imageshape[1] // 4
+    center_source_inds = np.where((guesses['x'] >= quadx) & (guesses['x'] <= imageshape[1] - quadx) & (guesses['y'] >= quady) & (guesses['y'] <= imageshape[0] - quady))
+    quad_guesses = guesses[center_source_inds]
+    quad_skycoords = skycoords[center_source_inds]
+
     # Platescale calculation
     # create 1_000 random combinations of stars
-    all_combinations = list(compute_combinations(guesses['x']))
+    all_combinations = list(compute_combinations(quad_guesses))
     rand_inds = np.random.randint(low=0, high=len(all_combinations), size=1000)
     combo_list = np.array(all_combinations)[rand_inds]
 
     # gather the skycoord separations for all combinations
     seps = np.empty(len(combo_list))
-    for c, i in zip(combo_list, range(len(combo_list))):
-        star1 = skycoords[c[0]]
-        star2 = skycoords[c[1]]
+    for i,c in enumerate(combo_list):
+        star1 = quad_skycoords[c[0]]
+        star2 = quad_skycoords[c[1]]
 
         sep = star1.separation(star2).mas
         seps[i] = sep
 
     # find the separations in pixel space on the image between all combinations
     pixseps = np.empty(len(combo_list))
-    for c, i in zip(combo_list, range(len(combo_list))):
-        star1 = guesses[c[0]]
-        star2 = guesses[c[1]]
+    for i,c in enumerate(combo_list):
+        star1 = quad_guesses[c[0]]
+        star2 = quad_guesses[c[1]]
 
         xguess = star2['x'] - star1['x']
         yguess = star2['y'] - star1['y']
@@ -255,9 +261,9 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
 
     # North angle calculation
     # find the true centerings of the sources in the image from the guesses and save into a table
-    xs = np.empty(len(guesses))
-    ys = np.empty(len(guesses))
-    for gx,gy,i in zip(guesses['x'], guesses['y'], range(len(guesses))):
+    xs = np.empty(len(quad_guesses))
+    ys = np.empty(len(quad_guesses))
+    for i, (gx, gy) in enumerate(zip(quad_guesses['x'], quad_guesses['y'])):
         pf, fw, x, y = fakes.gaussfit2d(frame= image, xguess= gx, yguess=gy)
         xs[i] = x
         ys[i] = y
@@ -266,23 +272,23 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
     sources['x'] = xs
     sources['y'] = ys
 
-    # find the on sky position angles between the center star and all others
-    pa_sky = np.empty(len(skycoords))
-    for star, i in zip(skycoords, range(len(skycoords))):
+    # find the sky position angles between the center star and all others
+    pa_sky = np.empty(len(quad_skycoords))
+    for i, star in enumerate(quad_skycoords):
         pa = center_coord.position_angle(star).deg
         pa_sky[i] = pa
 
-    # find the pixel space position angles
+    # find the pixel position angles
     pa_pixel = np.empty(len(sources))
-    image_center = 511.
-    for x, y, i in zip(sources['x'], sources['y'], range(len(sources))):
+    image_center = 512.
+    for i, (x, y) in enumerate(zip(sources['x'], sources['y'])):
         pa = angle_between((image_center, image_center), (x,y))
         pa_pixel[i] = pa
 
     # find the difference between the measured and true positon angles
     offset = np.empty(len(sources))
-    same_ind = np.where((skycoords.ra.value == center_coord.ra.value) & (skycoords.dec.value == center_coord.dec.value))[0][0]
-    for sky, pix, i in zip(pa_sky, pa_pixel, range(len(offset))):
+    same_ind = np.where((quad_skycoords.ra.value == center_coord.ra.value) & (quad_skycoords.dec.value == center_coord.dec.value))[0][0]
+    for i, (sky, pix) in enumerate(zip(pa_sky, pa_pixel)):
         if i != same_ind:
             if sky > pix:
                 north_offset = sky - pix
@@ -290,18 +296,19 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
                 north_offset = sky - pix + 360 
             offset[i] = north_offset
 
-    # get rid of the comparison w self
+    # get rid of the comparison with self
     offset = np.delete(offset, same_ind)
     north_angle = np.mean(offset)
     
     return platescale, north_angle
 
-def compute_boresight(image, target_coordinate, cal_properties):
+def compute_boresight(image, source_info, target_coordinate, cal_properties):
     """ 
     Used to find the offset between the target and the center of the image.
 
     Args:
         image (numpy.ndarray): 2D array of image data
+        source_info (astropy.table.Table): Estimated pixel positions of sources and true sky positions, must have column names 'x', 'y', 'RA', 'DEC'
         target_coordinate (tuple): 
             (float): RA coordinate of the target source
             (float): DEC coordinate of the target source
@@ -310,36 +317,73 @@ def compute_boresight(image, target_coordinate, cal_properties):
             (float): North angle
 
     Returns:
-        tuple:
-            image_center_RA (float): RA coordinate of the center pixel
-            image_center_DEC (float): Dec coordinate of the center pixel
+        image_center_RA (float): RA coordinate of the center pixel
+        image_center_DEC (float): Dec coordinate of the center pixel
     
     """
     if type(image) != np.ndarray:
         raise TypeError('Image must be 2D numpy.ndarray')
     
+    if type(source_info) != astropy.table.Table:
+        raise TypeError('source_info must be an astropy table with columns \'x\',\'y\',\'RA\',\'DEC\'')
+    else:
+        guesses = source_info
+        skycoords = SkyCoord(ra = guesses['RA'], dec= guesses['DEC'], unit='deg', frame='icrs')
+
     if type(target_coordinate) != tuple:
         raise TypeError('target_coordinate must be tuple (RA,DEC)')
 
     if type(cal_properties) != tuple:
         raise TypeError('cal_properties must be tuple (platescale, north_angle)')
 
-    image_shape = np.shape(image)
-    image_center_x = (image_shape[0]-1) // 2
-    image_center_y = (image_shape[1]-1) // 2    
-    
-    # estimate the location of the target star with pyklip, assuming the target source is meant to fall on the center pixel
-    target_guess = (image_center_x, image_center_y)
-    peakflx, fwhm, source_center_x, source_center_y = fakes.gaussfit2d(frame= image, xguess= target_guess[0], yguess= target_guess[1])
-    
-    offset_x = source_center_x - image_center_x
-    offset_y = source_center_y - image_center_y
+    # use only center quadrant
+    imageshape = np.shape(image)
+    quady, quadx = imageshape[0] // 4, imageshape[1] // 4
+    center_source_inds = np.where((guesses['x'] >= quadx) & (guesses['x'] <= imageshape[1] - quadx) & (guesses['y'] >= quady) & (guesses['y'] <= imageshape[0] - quady))
+    quad_guesses = guesses[center_source_inds]
 
-    # convert pixel offset back to SkyCoord separation
-    center_pix_RA = ((target_coordinate[0] * astropy.units.deg) - ((offset_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg)).value
-    center_pix_DEC = ((target_coordinate[1] * astropy.units.deg) - ((offset_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg)).value
+    # create the predicted image header from found platescale and north angle
+    vert_ang = np.radians(cal_properties[1])
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (cal_properties[0] * 0.001) / 3600.
 
-    return center_pix_RA, center_pix_DEC
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+    new_hdr['CRPIX1'] = np.shape(image)[1] // 2
+    new_hdr['CRPIX2'] = np.shape(image)[0] // 2
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+    new_hdr['CDELT1'] = (cal_properties[0] * 0.001) / 3600
+    new_hdr['CDELT2'] = (cal_properties[0] * 0.001) / 3600
+    new_hdr['CRVAL1'] = target_coordinate[0]
+    new_hdr['CRVAL2'] = target_coordinate[1]
+    w = astropy.wcs.WCS(new_hdr)
+
+    x_sky_to_pix, y_sky_to_pix = astropy.wcs.utils.skycoord_to_pixel(skycoords, wcs=w)
+    x_predict, y_predict = x_sky_to_pix[center_source_inds], y_sky_to_pix[center_source_inds]
+
+    # find offset between measured centers and predicted positions    
+    image_centerings = np.zeros((len(quad_guesses), 2))
+    boresights = np.zeros((len(quad_guesses), 2))
+    searchrad = 5
+    for i, (xg, yg) in enumerate(zip(quad_guesses['x]'], quad_guesses['y'])):
+        p, f, xi_center, yi_center = fakes.gaussfit2d(frame= image, xguess= xg, yguess= yg, searchrad=searchrad)
+        x_off = xi_center - x_predict[i]
+        y_off = yi_center - y_predict[i]
+        boresights[i,:] = [x_off, y_off]
+        image_centerings[i,:] = [xi_center, yi_center]
+
+    # average all offsets in x,y directions
+    boresight_x, boresight_y = np.mean(boresights[:,0]), np.mean(boresights[:,1])
+
+    # convert back to RA, DEC
+    image_center_RA = target_coordinate[0] - ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
+    image_center_DEC = target_coordinate[1] - ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
+
+    return image_center_RA, image_center_DEC
 
 def astrometric_calibration(input_dataset, guesses, target_coordinate):
     """
@@ -367,19 +411,22 @@ def astrometric_calibration(input_dataset, guesses, target_coordinate):
         target = ascii.read(target_coordinate)
         if 'RA' and 'DEC' not in target.colnames:
             raise ValueError('target_coordinate must have column names [\'RA\',\'DEC\']')
+        else:
+            target_coordinate = (target['RA'][0], target['DEC'][0])
 
+    # load in the data
     dataset = input_dataset.copy()
     image = dataset[0].data
-    
-    target_coordinate = (target['RA'][0], target['DEC'][0])
-    cal_properties = compute_platescale_and_northangle(image=image, source_info=guesses, center_coord=target_coordinate)
 
-    ra, dec = compute_boresight(image=image, target_coordinate=target_coordinate, cal_properties=cal_properties)
+    # compute the calibration properties
+    cal_properties = compute_platescale_and_northangle(image=image, source_info=guesses, center_coord=target_coordinate)
+    ra, dec = compute_boresight(image=image, source_info=guesses, target_coordinate=target_coordinate, cal_properties=cal_properties)
 
     # return a single AstrometricCalibration data file
     astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1]])
     astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[0].pri_hdr, ext_hdr=dataset[0].ext_hdr)
 
+    # update the history
     history_msg = "Boresight calibration completed"
     astrom_cal_dataset = corgidrp.data.Dataset([astrom_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
