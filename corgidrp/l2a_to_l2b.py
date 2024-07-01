@@ -57,8 +57,42 @@ def dark_subtraction(input_dataset, dark_frame):
     darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, header_entries = {"BUNIT":"photoelectrons"})
 
     return darksub_dataset
+  
+def flat_division(input_dataset, flat_field):
+    """
+    
+    Divide the dataset by the master flat field. 
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        flat_field (corgidrp.data.FlatField): a master flat field to divide by
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
+    """
+    
+     # copy of the dataset
+    flatdiv_dataset = input_dataset.copy()
+    
+    #Divide by the master flat
+    flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
+    
+    # propagate the error of the master flat frame  
+    if hasattr(flat_field, "err"):
+        flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField") 
+        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
+    else:
+        raise Warning("no error attribute in the FlatField")
+    
+    history_msg = "Flat calibration done using Flat field {0}".format(flat_field.filename)
+
+    # update the output dataset with this new flat calibrated data and update the history
+    flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube)
+
+    return flatdiv_dataset
 
 def frame_select(input_dataset, bpix_frac=100., overexp=False, tt_thres=None):
+  
     """
     
     Selects the frames that we want to use for further processing.
@@ -155,22 +189,9 @@ def cti_correction(input_dataset):
 
     return input_dataset.copy()
 
-def flat_division(input_dataset, master_flat):
-    """
-    
-    Divide the dataset by the master flat field. 
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        master_flat (corgidrp.data.Flat): a master flat field to divide by
-
-    Returns:
-        corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
-    """
-
-    return input_dataset.copy()
 
 def correct_bad_pixels(input_dataset, bp_mask):
+
     """
     
     Correct for bad pixels: Bad pixels are identified as part of the data
