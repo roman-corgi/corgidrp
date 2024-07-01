@@ -369,7 +369,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     image_centerings = np.zeros((len(quad_guesses), 2))
     boresights = np.zeros((len(quad_guesses), 2))
     searchrad = 5
-    for i, (xg, yg) in enumerate(zip(quad_guesses['x]'], quad_guesses['y'])):
+    for i, (xg, yg) in enumerate(zip(quad_guesses['x'], quad_guesses['y'])):
         p, f, xi_center, yi_center = fakes.gaussfit2d(frame= image, xguess= xg, yguess= yg, searchrad=searchrad)
         x_off = xi_center - x_predict[i]
         y_off = yi_center - y_predict[i]
@@ -424,7 +424,7 @@ def astrometric_calibration(input_dataset, guesses, target_coordinate):
 
     # return a single AstrometricCalibration data file
     astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1]])
-    astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[0].pri_hdr, ext_hdr=dataset[0].ext_hdr)
+    astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[0].pri_hdr, ext_hdr=dataset[0].ext_hdr, input_dataset=dataset)
 
     # update the history
     history_msg = "Boresight calibration completed"
