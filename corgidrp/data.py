@@ -485,15 +485,7 @@ class Image():
         #first layer is always the updated combined error
         self.err = self.err*input_error
         self.err_hdr["Layer_1"] = "combined_error"
-
-        if corgidrp.track_individual_errors:
-            #append new error as layer on 3D cube
-            self.err=np.append(self.err, [input_error], axis=0)
-
-            layer = str(self.err.shape[0])
-            #self.err_hdr["Layer_1"] = "combined_error"
-            self.err_hdr["Layer_" + layer] = err_name    
-        
+  
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(err_name)    
 

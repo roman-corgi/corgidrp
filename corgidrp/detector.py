@@ -38,7 +38,7 @@ def create_flatfield(flat_dataset):
        flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
 
     Returns:
-        data.masterflat: a master flat for flat calibration
+        data.FlatField: a master flat for flat calibration
     """  
     
     
