@@ -194,7 +194,7 @@ class Image():
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         err (np.array): 2-D/3-D uncertainty data
-        dq (np.array): 2-D data quality, 0: good, 1: bad
+        dq (np.array): 2-D data quality, 0: good. Other values track different causes for bad pixels and other pixel-level effects in accordance with the DRP implementation document.
         bias (np.array): 1-D bias data
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
