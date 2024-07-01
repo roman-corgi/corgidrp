@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
 import numpy as np
+import corgidrp.detector as detector
 
 def add_photon_noise(input_dataset):
     """
@@ -19,7 +20,6 @@ def add_photon_noise(input_dataset):
         frame.add_error_term(np.sqrt(frame.data), "photnoise_error")
     
     new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
-                
     history_msg = "photon noise propagated to error map"
     # update the output dataset
     phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
@@ -57,7 +57,7 @@ def dark_subtraction(input_dataset, dark_frame):
     darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, header_entries = {"BUNIT":"photoelectrons"})
 
     return darksub_dataset
-
+  
 def flat_division(input_dataset, flat_field):
     """
     
@@ -91,14 +91,18 @@ def flat_division(input_dataset, flat_field):
 
     return flatdiv_dataset
 
-def frame_select(input_dataset):
+def frame_select(input_dataset, bpix_frac=100., overexp=False, tt_thres=None):
+  
     """
     
-    Selects the frames that we want to use for further processing. 
-    TODO: Decide on frame selection criteria
+    Selects the frames that we want to use for further processing.
+    Not currently implemented!! 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        bpix_frac (float): what percent of the image needs to be bad to discard. Default: 100% (not used)
+        overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
+        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used) 
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
@@ -185,27 +189,82 @@ def cti_correction(input_dataset):
 
     return input_dataset.copy()
 
-def correct_bad_pixels(input_dataset):
+
+def correct_bad_pixels(input_dataset, bp_mask):
+
     """
     
-    Compute bad pixel map and correct for bad pixels. 
-
-    MMB Notes: 
-        - We'll likely want to be able to accept an external bad pixel map, either 
-        from the CalDB or input by a user. 
-        - We may want to accept just a list of bad pixels from a user too, thus 
-        saving them the trouble of actually making their own map. 
-        - We may want flags to decide which pixels in the DQ we correct. We may 
-        not want to correct everything in the DQ extension
-        - Different bad pixels in the DQ may be corrected differently.
-
+    Correct for bad pixels: Bad pixels are identified as part of the data
+        calibration. This function replaces bad pixels by NaN values. It also
+        updates its DQ storing the type of bad pixel at each bad pixel location,
+        and it records the fact that the pixel has been replaced by NaN.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        bp_mask (corgidrp.data.BadPixelMap): Bad-pixel mask built from the bad
+        pixel calibration file.
+
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with bad pixels corrected
+        corgidrp.data.Dataset: a version of the input dataset with bad detector
+        pixels and cosmic rays replaced by NaNs
+ 
     """
 
-    return input_dataset.copy()
+    data = input_dataset.copy()
+    data_cube = data.all_data
+    dq_cube = data.all_dq.astype(np.uint8)
 
+    for i in range(data_cube.shape[0]):
+        # combine DQ and BP masks
+        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask[0].data.astype(np.uint8))
+        # mask affected pixels with NaN
+        bp = np.where(bp_dq_mask != 0)
+        data_cube[i, bp[0], bp[1]] = np.nan
+        # Update DQ to keep track of replaced bad pixel values
+        bp_dq_mask[bp[0], bp[1]]=np.bitwise_or(bp_dq_mask[bp[0], bp[1]], 2)
+        dq_cube[i] = bp_dq_mask
+
+    history_msg = "removed pixels affected by bad pixels"
+    data.update_after_processing_step(history_msg, new_all_data=data_cube,
+        new_all_dq=dq_cube)
+
+    return data
+
+def desmear(input_dataset, detector_params):
+    """
+    EXCAM has no shutter, and so continues to illuminate the detector during
+    readout. This creates a "smearing" effect into the resulting images. The
+    desmear function corrects for this effect. There are a small number of use
+    cases for not desmearing data (e.g. time-varying raster data).
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with desmear applied
+
+    """
+
+    data = input_dataset.copy()
+    data_cube = data.all_data
+
+    rowreadtime_sec = detector_params.params['rowreadtime']
+
+    for i in range(data_cube.shape[0]):
+        exptime_sec = float(data[i].ext_hdr['EXPTIME'])
+        smear = np.zeros_like(data_cube[i])
+        m = len(smear)
+        for r in range(m):
+            columnsum = 0
+            for s in range(r+1):
+                columnsum = columnsum + rowreadtime_sec/exptime_sec*((1
+                + rowreadtime_sec/exptime_sec)**((s+1)-(r+1)-1))*data_cube[i,s,:]
+            smear[r,:] = columnsum
+        data_cube[i] -= smear
+
+    history_msg = "Desmear applied to data"
+    data.update_after_processing_step(history_msg, new_all_data=data_cube)
+    
+    return data
