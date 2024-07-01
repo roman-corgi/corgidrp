@@ -21,12 +21,39 @@ def create_dark_calib(dark_dataset):
 
     new_dark = data.Dark(combined_frame, pri_hdr=dark_dataset[0].pri_hdr.copy(),
                          ext_hdr=dark_dataset[0].ext_hdr.copy(), input_dataset=dark_dataset)
-    
+
     # determine the standard error of the mean: stddev/sqrt(n_frames)
     new_dark.err = np.nanstd(dark_dataset.all_data, axis=0)/np.sqrt(len(dark_dataset))
     new_dark.err = new_dark.err.reshape((1,)+new_dark.err.shape) #Get it into the right dimensions
 
     return new_dark
+
+def create_flatfield(flat_dataset):
+    
+    """
+    Turn this dataset of image frames that were taken for performing the flat calibration and
+    to make one master flat image
+    this is currently a placeholder, until the final flat fielding calibration package is completed. 
+
+    Args:
+       flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
+
+    Returns:
+        flat_field (corgidrp.data.FlatField): a master flat for flat calibration
+    """  
+    
+    
+    combined_frame = np.nanmean(flat_dataset.all_data, axis=0)
+ 
+    flat_field = data.FlatField(combined_frame, pri_hdr=flat_dataset[0].pri_hdr.copy(),
+                         ext_hdr=flat_dataset[0].ext_hdr.copy(), input_dataset=flat_dataset)
+    
+    #determine the standard error of the mean: stddev/sqrt(n_frames)
+    flat_field.err = np.nanstd(flat_dataset.all_data, axis=0)/np.sqrt(len(flat_dataset))
+    flat_field.err=flat_field.err.reshape((1,)+flat_field.err.shape) # Get it into the right dimension
+
+    
+    return flat_field
 
 def get_relgains(frame, em_gain, non_lin_correction):
     """
@@ -225,163 +252,9 @@ def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reli
         detector_areas[area] = detector_area_mask(detector_areas, area=area)
     return detector_areas
 
-def get_rowreadtime_sec(datetime=None):
-    """
-    Get the value of readrowtime. The EMCCD is considered sensitive to the
-    effects of radiation damage and, if this becomes a problem, one of the
-    mitigation techniques would be to change the row read time to reduce the
-    impact of charge traps.
- 
-    There’s no formal plan/timeline for this adjustment, though it is possible
-    to change in the future should it need to.
 
-    Its default value is 223.5e-6 sec.
-
-    Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime between the first collection of ground data (Full
-        Functional Tests) and the duration of the Roman Coronagraph mission.
-
-    Returns:
-        float: Current value of rowreadtime in sec.
-
-    """ 
-    # Some datetime between the first collection of ground data (Full
-    # Functional Tests) and the duration of the Roman Coronagraph mission.
-    if datetime is None:
-        datetime = Time('2024-03-01 00:00:00', scale='utc')
-
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
-    
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_1:
-        rowreadtime_sec = 223.5e-6
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return rowreadtime_sec
-
-def get_fwc_em_e(datetime=None):
-    """
-    Get the value of FWC_EM, the full-well capacity of the pixels in the EM 
-    gain register in units of electrions. This value will change over the 
-    course of the mission.
-
-    Its default value is 100000 e-.
-
-    Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime between the first collection of ground data (Full
-        Functional Tests) and the duration of the Roman Coronagraph mission.
-
-    Returns:
-        float: Value of FWC_EM in units of electrons at time of observation.
-
-    """ 
-
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_end = Time('2040-01-01 00:00:00', scale='utc')
-
-    # Default to datetime_iit.
-    if datetime is None:
-        datetime = Time('2023-11-01 00:00:00', scale='utc')
-    
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_end:
-        fwc_em = 100000.
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return fwc_em
-
-def get_fwc_pp_e(datetime=None):
-    """
-    Get the value of FWC_PP, the full-well capacity of the pixels in the image 
-    area, before EM gain is applied in readout in units of electrions. This 
-    value will change over the course of the mission.
-
-    Its default value is 90000 e-.
-    
-    Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime between the first collection of ground data (Full
-        Functional Tests) and the duration of the Roman Coronagraph mission.
-
-    Returns:
-        float: Value of FWC_PP in electrons at time of observation.
-
-    """ 
-    # Some datetime between the first collection of ground data (Full
-    # Functional Tests) and the duration of the Roman Coronagraph mission.
-    if datetime is None:
-        datetime = Time('2024-03-01 00:00:00', scale='utc')
-
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
-    
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_1:
-        fwc_pp = 90000.
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return fwc_pp
-
-def get_kgain(datetime=None):
-    """
-    Get the K gain, the conversion factor between raw counts from the detector 
-    and electrons coming out of the gain register, in units of e-/dN. This 
-    value may change over the course of the mission.
-
-    Its default value is 8.7 e-/dN.
-    
-    Args:
-        datetime (astropy Time object): Observation's starting date. Its default
-        value is sometime between the first collection of ground data (Full
-        Functional Tests) and the duration of the Roman Coronagraph mission.
-
-    Returns:
-        float: The K gain in electrons/dN at time of observation.
-
-    """ 
-    # Some datetime between the first collection of ground data (Full
-    # Functional Tests) and the duration of the Roman Coronagraph mission.
-    if datetime is None:
-        datetime = Time('2024-03-01 00:00:00', scale='utc')
-
-    # IIT datetime
-    datetime_iit = Time('2023-11-01 00:00:00', scale='utc')
-    # Date well in the future to always fall in this case, unless rowreadtime
-    # gets updated. One may add more datetime_# values to keep track of changes.
-    datetime_1 = Time('2040-01-01 00:00:00', scale='utc')
-    
-    if datetime < datetime_iit:
-        raise ValueError('The observation datetime cannot be earlier than first collected data on ground.')
-    elif datetime < datetime_1:
-        kgain = 8.7
-    else:
-        raise ValueError('The observation datetime cannot be later than the' + \
-            ' end of the mission')
-
-    return kgain
-
-def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
+def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
+                   cosm_tail, mode='image'):
     """Identify and remove saturated cosmic ray hits and tails.
 
     Use sat_thresh (interval 0 to 1) to set the threshold above which cosmics
@@ -397,21 +270,38 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     be identified. A reasonable value is 2.
 
     Args:
-        cube (array_like, float): 
+        cube (array_like, float):
             3D cube of image data (bias of zero).
-        fwc (float): 
+        fwc (float):
             Full well capacity of detector *in DNs*.  Note that this may require a
             conversion as FWCs are usually specified in electrons, but the image
             is in DNs at this point.
-        sat_thresh (float): 
+        sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
-        plat_thresh (float): 
+        plat_thresh (float):
             Multiplication factor for fwc that determines edges of cosmic plateu.
-        cosm_filter (int): 
+        cosm_filter (int):
             Minimum length in pixels of cosmic plateus to be identified.
+        cosm_box (int):
+            Number of pixels out from an identified cosmic head (i.e., beginning of
+            the plateau) to mask out.
+            For example, if cosm_box is 3, a 7x7 box is masked,
+            with the cosmic head as the center pixel of the box.
+        cosm_tail (int):
+            Number of pixels in the row downstream of the end of a cosmic plateau
+            to mask.  If cosm_tail is greater than the number of
+            columns left to the end of the row from the cosmic
+            plateau, the cosmic masking ends at the end of the row.
+        mode (string):
+            If 'image', an image-area input is assumed, and if the input
+            tail length is longer than the length to the end of the image-area row,
+            the mask is truncated at the end of the row.
+            If 'full', a full-frame input is assumed, and if the input tail length
+            is longer than the length to the end of the full-frame row, the masking
+            continues onto the next row.  Defaults to 'image'.
 
     Returns:
-        array_like, int: 
+        array_like, int:
             Mask for pixels that have been set to zero.
 
     Notes
@@ -420,11 +310,11 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     streak rows, which are rows that potentially contain cosmics. It then
     filters each of these rows in order to differentiate cosmic hits (plateaus)
     from any outlier saturated pixels. For each cosmic hit it finds the leading
-    ledge of the plateau and kills the plateau and the rest of the row to take
-    out the tail.
+    ledge of the plateau and kills the plateau (specified by cosm_filter) and
+    the tail (specified by cosm_tail).
 
     |<-------- streak row is the whole row ----------------------->|
-     ......|<-plateau->|<------------------tail------------------->|
+     ......|<-plateau->|<------------------tail---------->|.........
 
     B Nemati and S Miller - UAH - 02-Oct-2018
 
@@ -434,43 +324,63 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter):
     # Do a cheap prefilter for rows that don't have anything bright
     max_rows = np.max(cube, axis=-1,keepdims=True)
     ji_streak_rows = np.transpose(np.array((max_rows >= sat_thresh*fwc).nonzero()[:-1]))
-    
+
     for j,i in ji_streak_rows:
         row = cube[j,i]
 
         # Find if and where saturated plateaus start in streak row
-        i_beg = find_plateaus(row, fwc, sat_thresh, plat_thresh, cosm_filter)
+        i_begs = find_plateaus(row, fwc, sat_thresh, plat_thresh, cosm_filter)
 
-        # If plateaus exist, kill the hit and the rest of the row
-        if i_beg is not None:
-            mask[j,i, i_beg:] = 1
-            pass
+        # If plateaus exist, kill the hit and the tail
+        cutoffs = np.array([])
+        ex_l = np.array([])
+        if i_begs is not None:
+            for i_beg in i_begs:
+                # implement cosm_tail
+                if i_beg+cosm_filter+cosm_tail+1 > mask.shape[2]:
+                    ex_l = np.append(ex_l,
+                            i_beg+cosm_filter+cosm_tail+1-mask.shape[2])
+                    cutoffs = np.append(cutoffs, i+1)
+                streak_end = int(min(i_beg+cosm_filter+cosm_tail+1,
+                                mask.shape[2]))
+                mask[j, i, i_beg:streak_end] = 1
+                # implement cosm_box
+                st_row = max(i-cosm_box, 0)
+                end_row = min(i+cosm_box+1, mask.shape[1])
+                st_col = max(i_beg-cosm_box, 0)
+                end_col = min(i_beg+cosm_box+1, mask.shape[2])
+                mask[j, st_row:end_row, st_col:end_col] = 1
+                pass
+
+        if mode == 'full' and len(ex_l) > 0:
+            mask_rav = mask[j].ravel()
+            for k in range(len(ex_l)):
+                row = cutoffs[k]
+                rav_ind = int(row * mask.shape[2] - 1)
+                mask_rav[rav_ind:rav_ind + int(ex_l[k])] = 1
+
 
     return mask
 
 def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     """Find the beginning index of each cosmic plateau in a row.
 
-    Note that i_beg is set at one pixel before first plateau pixel, as these
-    pixels immediately neighboring the cosmic plateau are very often affected
-    by the cosmic hit as well.
-
-    Args: 
-        streak_row (array_like, float): 
+    Args:
+        streak_row (array_like, float):
             Row with possible cosmics.
-        fwc (float): 
+        fwc (float):
             Full well capacity of detector *in DNs*.  Note that this may require a
             conversion as FWCs are usually specified in electrons, but the image
             is in DNs at this point.
-        sat_thresh (float): 
+        sat_thresh (float):
             Multiplication factor for fwc that determines saturated cosmic pixels.
-        plat_thresh (float): 
-            Multiplication factor for fwc that determines edges of cosmic plateu.
-        cosm_filter (float): 
-            Minimum length in pixels of cosmic plateus to be identified.
+        plat_thresh (float):
+            Multiplication factor for fwc that determines edges of cosmic plateau.
+        cosm_filter (float):
+            Minimum length in pixels of cosmic plateaus to be identified.
 
     Returns:
-        array_like, int: 
+        array_like, int:
             Index of plateau beginnings, or None if there is no plateau.
     """
     # Lowpass filter row to differentiate plateaus from standalone pixels
@@ -480,30 +390,36 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
     saturated = (filtered >= sat_thresh*fwc).nonzero()[0]
 
     if len(saturated) > 0:
-        i_beg = saturated[0]
-        while i_beg > 0 and streak_row[i_beg] >= plat_thresh*fwc:
-            i_beg -= 1
+        i_begs = np.array([])
+        for i in range(len(saturated)):
+            i_beg = saturated[i]
+            while i_beg > 0 and streak_row[i_beg] >= plat_thresh*fwc:
+                i_beg -= 1
+            # unless saturated at col 0, shifts forward 1 to plateau start
+            if streak_row[i_beg] < plat_thresh*fwc:
+                i_beg += 1
+            i_begs = np.append(i_begs, i_beg)
 
-        return i_beg
+        return np.unique(i_begs).astype(int)
     else:
         return None
-    
+
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
-    """Calculates the full well capacity saturation threshold for each frame.
+    """Calculates the lowest full well capacity saturation threshold for each frame.
 
     Args:
         emgain_arr (np.array): 1D array of the EM gain value for each frame.
-        fwcpp_arr (np.array): 1D array of the full-well capacity in the image 
+        fwcpp_arr (np.array): 1D array of the full-well capacity in the image
             frame (before em gain readout) value for each frame.
-        fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain 
+        fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain
             register for each frame.
-        sat_thresh (float): Multiplier for the full-well capacity to determine 
+        sat_thresh (float): Multiplier for the full-well capacity to determine
             what qualifies as saturation. A reasonable value is 0.99
 
     Returns:
-        np.array: _description_
+        np.array: lowest full well capacity saturation threshold for frames
     """
     possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
     sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
-    
+
     return sat_fwcs
