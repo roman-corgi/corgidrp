@@ -63,7 +63,7 @@ def test_flat_div():
     # check the level of the dataset is now approximately 100
     assert np.mean(flatdivided_dataset.all_data) == pytest.approx(150, abs=1e-2)
     # check the propagated errors
-    #assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
+    assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
     print("mean of all simulated data",np.mean(simflat_dataset.all_data))
     print("mean of all simulated data error",np.mean(simflat_dataset.all_err) )
     print("mean of all flat divided data:", np.mean(flatdivided_dataset.all_data))
@@ -75,7 +75,7 @@ def test_flat_div():
     err_estimated=np.sqrt(((np.mean(flatfield.data))**2)*(np.mean(simflat_dataset.all_err))**2+((np.mean(simflat_dataset.all_data))**2)*(np.mean(flatfield.err))**2)
     print("mean of all flat divided data errors:",err_flatdiv)
     print("Error estimated:",err_estimated)
-    assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-0))
+    assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-2))
     
     print(flatdivided_dataset[0].ext_hdr)
     corgidrp.track_individual_errors = old_err_tracking
