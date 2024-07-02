@@ -2,6 +2,7 @@ import os
 import numpy as np
 import corgidrp
 from corgidrp import data, mocks, astrom
+import astropy
 import astropy.io.ascii as ascii
 
 def test_astrom():
@@ -42,10 +43,18 @@ def test_astrom():
 
     # check that derived center coordinate falls within the field limits/ skycoords used
     guesses = ascii.read(guess_path)
-    assert astrom_cal.boresight[0] >= np.min(guesses['RA'])
-    assert astrom_cal.boresight[0] <= np.max(guesses['RA'])
-    assert astrom_cal.boresight[1] >= np.min(guesses['DEC'])
-    assert astrom_cal.boresight[1] <= np.max(guesses['DEC'])
+    ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
+    assert ra >= np.min(guesses['RA'])
+    assert ra <= np.max(guesses['RA'])
+    assert dec >= np.min(guesses['DEC'])
+    assert dec <= np.max(guesses['DEC'])
+
+    # the image was generated to have no offset, so check that boresight center is close to target
+    target = ascii.read(target_path)
+    expected_ra, expected_dec = target['RA'][0], target['DEC'][0]
+    error_window = (30 * astropy.units.mas).to(astropy.units.deg).value
+    assert np.abs(expected_ra - ra) < error_window
+    assert np.abs(expected_dec - dec) < error_window
 
 if __name__ == "__main__":
     test_astrom()
