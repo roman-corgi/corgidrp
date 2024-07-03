@@ -123,7 +123,7 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
             # if fraction of bad pixel over threshold, mark is as bad
             if frame_badpix_frac > bpix_frac:
                 reject_flags[i] += 1
-                reject_reasons[i].append("bad pix frac {0:.2f} > {1:.2f}"
+                reject_reasons[i].append("bad pix frac {0:.5f} > {1:.5f}"
                                          .format(frame_badpix_frac, bpix_frac))
         if overexp:
             if frame.ext_hdr['OVEREXP']:
