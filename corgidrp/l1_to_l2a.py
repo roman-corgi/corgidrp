@@ -1,22 +1,21 @@
-# A file that holds the functions that transmogrify l1 data to l2a data 
+# A file that holds the functions that transmogrify l1 data to l2a data
 from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc
 import numpy as np
-from astropy.time import Time
 
 def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
-    
+
     """
-    Measure and subtract the median bias in each row of the pre-scan detector region. 
-    This step also crops the images to just the science area, or 
+    Measure and subtract the median bias in each row of the pre-scan detector region.
+    This step also crops the images to just the science area, or
     optionally returns the full detector frames.
 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
         bias_offset (float): an offset value to be subtracted from the bias. Defaults to 0.
-        return_full_frame (bool): flag indicating whether to return the full frame or 
+        return_full_frame (bool): flag indicating whether to return the full frame or
             only the bias-subtracted image area. Defaults to False.
-    
+
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
@@ -51,10 +50,10 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             # Get the image area
             image_data = slice_section(frame_data, obstype, 'image')
             image_dq = slice_section(frame_dq, obstype, 'image')
-            
+
             # Special treatment for 3D error array
             image_err = []
-            for err_slice in frame_err: 
+            for err_slice in frame_err:
                 image_err.append(slice_section(err_slice, obstype, 'image'))
             image_err = np.array(image_err)
 
@@ -62,8 +61,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
             i_r0 = detector_areas[obstype]['image']['r0c0'][0]
             p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
             i_nrow = detector_areas[obstype]['image']['rows']
-            al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]    
-            
+            al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
+
         else:
             # Use full frame
             image_data = frame_data
@@ -71,7 +70,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
             # Special treatment for 3D error array
             image_err = []
-            for err_slice in frame_err: 
+            for err_slice in frame_err:
                 image_err.append(err_slice)
             image_err = np.array(image_err)
 
@@ -80,8 +79,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         # Measure bias and error (standard error of the median for each row, add this to 3D image array)
         medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
         sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan.shape[1])
-        new_err_list.append(sterrbyrow)   
-            
+        new_err_list.append(sterrbyrow)
+
 
         bias = medbyrow - bias_offset
         image_bias_corrected = image_data - bias
@@ -94,7 +93,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         # Update header with new frame dimensions
         frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
         frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
-    
+
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data)
     out_frames_err_arr = np.array(out_frames_err)
@@ -110,7 +109,7 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.err = out_frames_err_arr[i]
         frame.dq = out_frames_dq_arr[i]
         frame.bias = out_frames_bias_arr[i]
-        
+
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")
 
@@ -121,29 +120,48 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
+def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
+                       plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
+                       mode='image'):
     """
-    Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected. 
-    TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit 
+    Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
+    TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
     and tail rather than just flagging the whole row.)
     TODO: Decode incoming DQ mask to avoid double counting saturation/CR flags in case a similar custom step has been run beforehand.
-    
+
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
         detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
-        sat_thresh (float): 
+        sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
-            pixels. Interval 0 to 1, defaults to 0.99. Lower numbers are more aggressive in flagging saturation.
-        plat_thresh (float): 
+            pixels. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging saturation.
+        plat_thresh (float):
             Multiplication factor for pixel full-well capacity (fwc) that determines edges of cosmic
-            plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
+            plateau. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging cosmic
             ray hits.
-        cosm_filter (int): 
-            Minimum length in pixels of cosmic plateus to be identified. Defaults to 2
-    
+        cosm_filter (int):
+            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.
+        cosm_box (int):
+            Number of pixels out from an identified cosmic head (i.e., beginning of
+            the plateau) to mask out.
+            For example, if cosm_box is 3, a 7x7 box is masked,
+            with the cosmic head as the center pixel of the box. Defaults to 3.
+        cosm_tail (int):
+            Number of pixels in the row downstream of the end of a cosmic plateau
+            to mask.  If cosm_tail is greater than the number of
+            columns left to the end of the row from the cosmic
+            plateau, the cosmic masking ends at the end of the row. Defaults to 10.
+        mode (string):
+            If 'image', an image-area input is assumed, and if the input
+            tail length is longer than the length to the end of the image-area row,
+            the mask is truncated at the end of the row.
+            If 'full', a full-frame input is assumed, and if the input tail length
+            is longer than the length to the end of the full-frame row, the masking
+            continues onto the next row.  Defaults to 'image'.
+
     Returns:
-        corgidrp.data.Dataset: 
-            A version of the input dataset of the input dataset where the cosmic rays have been identified. 
+        corgidrp.data.Dataset:
+            A version of the input dataset of the input dataset where the cosmic rays have been identified.
     """
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
@@ -152,20 +170,20 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thr
     crmasked_dataset = input_dataset.copy()
 
     crmasked_cube = crmasked_dataset.all_data
-    
+
 
     # Calculate the full well capacity for every frame in the dataset
     kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
     emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
     fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
     fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
-    
+
     fwcpp_dn_arr = fwcpp_e_arr / kgain
     fwcem_dn_arr = fwcem_e_arr / kgain
 
     # pick the FWC that will get saturated first, depending on gain
     sat_fwcs = calc_sat_fwc(emgain_arr,fwcpp_dn_arr,fwcem_dn_arr,sat_thresh)
-    
+
     for i,frame in enumerate(crmasked_dataset):
         frame.ext_hdr['FWC_PP_E'] = fwcpp_e_arr[i]
         frame.ext_hdr['FWC_EM_E'] = fwcem_e_arr[i]
@@ -183,12 +201,15 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thr
     # and can't handle different 'FWC_EM's for different frames.
     m2 = np.zeros_like(crmasked_cube)
 
-    for i in range(len(crmasked_cube)): 
+    for i in range(len(crmasked_cube)):
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
                         fwc=fwcem_dn_arr[i],
                         sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,
+                        cosm_box=cosm_box,
+                        cosm_tail=cosm_tail,
+                        mode=mode
                         ) * cr_dqval
 
     # add the two masks to the all_dq mask
@@ -236,7 +257,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
 
 def update_to_l2a(input_dataset):
     """
-    Updates the data level to L2a. Only works on L1 data. 
+    Updates the data level to L2a. Only works on L1 data.
 
     Currently only checks that data is at the L1 level
 
