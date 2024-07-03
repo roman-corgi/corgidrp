@@ -137,9 +137,6 @@ def compute_combinations(iteration, r=2):
         iteration (np.array): Array from which to create combinations of elements
         r (int): (Optional) Length of combinations (default: 2)
 
-    Returns:
-        combination (generator): Generator object of r-length array element combinations
-    
     """
     inds = np.indices(np.shape(iteration))
     pool = tuple(inds[0])
