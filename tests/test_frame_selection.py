@@ -34,6 +34,21 @@ def test_bpfrac_cutoff():
     pruned_dataset = frame_select(default_dataset, bpix_frac=0.5)
     assert len(pruned_dataset) != len(default_dataset)
     assert len(pruned_dataset) == 4
+    assert default_dataset[0].filename in pruned_dataset[0].ext_hdr['HISTORY'][-1] # test history
+
+    # allowing DQ = 1 should make no frames get dropped 
+    pruned_dataset = frame_select(default_dataset, bpix_frac=0.5, allowed_bpix=1)
+    assert len(pruned_dataset) == len(default_dataset)
+    assert len(pruned_dataset) == 5
+
+    # allowing DQ = 1 should not affect DQ = 2 
+    default_dataset[0].dq[0:512] = 2
+    default_dataset[0].dq[-1,-1] = 2
+    pruned_dataset = frame_select(default_dataset, bpix_frac=0.5, allowed_bpix=1)
+    assert len(pruned_dataset) != len(default_dataset)
+    assert len(pruned_dataset) == 4
+    assert default_dataset[0].filename in pruned_dataset[0].ext_hdr['HISTORY'][-1] # test history
+
 
 def test_overexp():
     """
