@@ -14,7 +14,7 @@ class Dataset():
 
     Attributes:
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
-        frames (list): list of data objects (probably corgidrp.data.Image)
+        frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
     def __init__(self, frames_or_filepaths):
         """
