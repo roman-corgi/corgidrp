@@ -1,6 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data 
 import numpy as np
-import corgidrp.detector as detector
+import corgidrp.data as data
 
 def add_photon_noise(input_dataset):
     """
@@ -91,23 +91,70 @@ def flat_division(input_dataset, flat_field):
 
     return flatdiv_dataset
 
-def frame_select(input_dataset, bpix_frac=100., overexp=False, tt_thres=None):
-  
+def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_thres=None):
     """
     
     Selects the frames that we want to use for further processing.
-    Not currently implemented!! 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        bpix_frac (float): what percent of the image needs to be bad to discard. Default: 100% (not used)
+        bpix_frac (float): greater than fraction of the image needs to be bad to discard. Default: 1.0 (not used)
+        allowed_bpix (int): sum of DQ values that are allowed and not counted towards to bpix fraction 
+                            (e.g., 6 means 2 and 4 are not considered bad). 
+                            Default is 0 (all nonzero DQ flags are considered bad)
         overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
         tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used) 
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
     """
-    return input_dataset.copy()
+    pruned_dataset = input_dataset.copy()
+    reject_flags = np.zeros(len(input_dataset))
+    reject_reasons = {}
+
+    disallowed_bits = np.invert(allowed_bpix) # invert the mask
+
+    for i, frame in enumerate(input_dataset.frames):
+        reject_reasons[i] = [] # list of rejection reasons
+        if bpix_frac < 1:
+            masked_dq = np.bitwise_and(frame.dq, disallowed_bits) # handle allowed_bpix values
+            numbadpix = np.size(np.where(masked_dq > 0)[0])
+            frame_badpix_frac = numbadpix / np.size(masked_dq)
+            # if fraction of bad pixel over threshold, mark is as bad
+            if frame_badpix_frac > bpix_frac:
+                reject_flags[i] += 1
+                reject_reasons[i].append("bad pix frac {0:.5f} > {1:.5f}"
+                                         .format(frame_badpix_frac, bpix_frac))
+        if overexp:
+            if frame.ext_hdr['OVEREXP']:
+                reject_flags[i] += 2 # use distinct bits in case it's useful
+                reject_reasons[i].append("OVEREXP = T")
+        if tt_thres is not None:
+            if frame.ext_hdr['RESZ2RMS'] > tt_thres:
+                reject_flags[i] += 4 # use distinct bits in case it's useful
+                reject_reasons[i].append("tt rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ2RMS'], tt_thres))
+    
+    good_frames = np.where(reject_flags == 0)
+    bad_frames = np.where(reject_flags > 0)
+    # check that we didn't remove all of the good frames
+    if np.size(good_frames) == 0:
+        raise ValueError("No good frames were selected. Unable to continue")
+
+    pruned_frames = pruned_dataset.frames[good_frames]
+    pruned_dataset = data.Dataset(pruned_frames)
+
+    # history message of which frames were removed and why
+    history_msg = "Removed {0} frames:".format(np.size(bad_frames))
+    for bad_index in bad_frames[0]:
+        bad_frame = input_dataset.frames[bad_index]
+        bad_reasons = "; ".join(reject_reasons[bad_index])
+        history_msg += " {0} ({1}),".format(bad_frame.filename, bad_reasons)
+    history_msg = history_msg[:-1] # remove last comma or :
+
+    pruned_dataset.update_after_processing_step(history_msg)
+
+    return pruned_dataset
 
 def convert_to_electrons(input_dataset, k_gain): 
     """
