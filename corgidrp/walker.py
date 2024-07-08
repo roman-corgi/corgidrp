@@ -15,6 +15,28 @@ all_steps = {
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
+def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir):
+    """
+    Automatically create a recipe and process the input filelist.
+    Does both the `autogen_recipe` and `run_recipe` steps.
+
+    Args:
+        filelist (list of str): list of filepaths to files
+        CPGS_XML_filepath (str): path to CPGS XML file for this set of files in filelist
+        outputdir (str): output directory folderpath
+
+    Returns:
+        json: the JSON recipe that was used for processing
+    """
+    # generate recipe
+    recipe = autogen_recipe(filelist, outputdir)
+
+    # process_recipe
+    run_recipe(recipe)
+
+    return recipe
+
+
 def autogen_recipe(filelist, outputdir, template=None):
     """
     Automatically creates a recipe by identifyng and populating a template
