@@ -1,9 +1,11 @@
 import astropy.io.fits as fits
+from astropy.time import Time
 import numpy as np
 
 import corgidrp.data as data
 import corgidrp.detector as detector
 import os
+
 
 
 def create_dark_calib_files(filedir=None, numfiles=10):
@@ -35,6 +37,65 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     dataset = data.Dataset(frames)
     return dataset
 
+def create_simflat_dataset(filedir=None, numfiles=10):
+    """
+    Create simulated data to check the flat division
+    
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 10.
+
+    Returns:
+        corgidrp.data.Dataset:
+        The simulated dataset
+    """
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+
+    filepattern = "sim_flat_{0:04d}.fits"
+    frames = []
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+        # generate images in normal distribution with mean 1 and std 0.01
+        np.random.seed(456+i); sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    dataset = data.Dataset(frames)
+    return dataset
+
+def create_flatfield_dummy(filedir=None, numfiles=2):
+    
+    """
+    Turn this flat field dataset of image frames that were taken for performing the flat calibration and
+    to make one master flat image
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset.  Defaults to 1 to create the dummy flat can be changed to any number
+        
+    Returns:
+        corgidrp.data.Dataset: 
+        a set of flat field images 
+    """
+    ## Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+        
+    filepattern= "flat_field_{0:01d}.fits"
+    frames=[]
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+        np.random.seed(456+i); sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    flatfield = data.Dataset(frames)
+    return flatfield
+
 def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     """
     Create simulated data to non-linear data to test non-linearity correction.
@@ -57,8 +118,8 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
-        #Add the EMGAIN to the headers
-        exthdr['EMGAIN'] = em_gain
+        #Add the CMDGAIN to the headers
+        exthdr['CMDGAIN'] = em_gain
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])
@@ -79,7 +140,66 @@ def create_nonlinear_dataset(filedir=None, numfiles=2,em_gain=2000):
     dataset = data.Dataset(frames)
     return dataset
 
+def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
+    """
+    Create simulated non-linear data with cosmic rays to test CR detection.
 
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        datetime (astropy.time.Time): (Optional) Date and time of the observations to simulate.
+        numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
+        em_gain (int): The EM gain to use for the simulated data.  Defaults to 2000.
+        numCRs (int): The number of CR hits to inject. Defaults to 5.
+        plateau_length (int): The minimum length of a CR plateau that will be flagged by the filter.
+
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset.
+    """
+
+    if datetime is None:
+        datetime = Time('2024-01-01T11:00:00.000Z')
+
+    detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
+    
+    kgain = detector_params.params['kgain']
+    fwc_em_dn = detector_params.params['fwc_em'] / kgain
+    fwc_pp_dn = detector_params.params['fwc_pp'] / kgain
+    fwc = np.min([fwc_em_dn,em_gain*fwc_pp_dn])
+    dataset = create_nonlinear_dataset(filedir=None, numfiles=numfiles,em_gain=em_gain)
+
+    im_width = dataset.all_data.shape[-1]
+
+    # Overwrite dataset with a poisson distribution
+    np.random.seed(123)
+    dataset.all_data[:,:,:] = np.random.poisson(lam=150,size=dataset.all_data.shape).astype(np.float64)
+
+    # Loop over images in dataset
+    for i in range(len(dataset.all_data)):
+
+        # Save the date
+        dataset[i].ext_hdr['DATETIME'] = str(datetime)
+
+        # Pick random locations to add a cosmic ray
+        for x in range(numCRs):
+            np.random.seed(123+x)
+            loc = np.round(np.random.uniform(0,im_width-1, size=2)).astype(int)
+
+            # Add the CR plateau
+            tail_start = np.min([loc[1]+plateau_length,im_width])
+            dataset.all_data[i,loc[0],loc[1]:tail_start] += fwc
+
+            if tail_start < im_width-1:
+                tail_len = im_width-tail_start
+                cr_tail = [fwc/(j+1) for j in range(tail_len)]
+                dataset.all_data[i,loc[0],tail_start:] += cr_tail
+
+        # Save frame if desired
+        if filedir is not None:
+            filepattern = "simcal_cosmics_{0:04d}.fits"
+            dataset[i].save(filedir=filedir, filename=filepattern.format(i))
+
+    return dataset
 
 def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     """
@@ -125,7 +245,6 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     dataset = data.Dataset(frames)
 
     return dataset
-
 
 def create_default_headers(obstype="SCI"):
     """
@@ -202,3 +321,38 @@ def create_default_headers(obstype="SCI"):
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
+  
+  
+def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
+    """
+    Create simulated bad pixel map data. Code value is 4.
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        col_bp (array): (Optional) Array of column indices where bad detector
+            pixels are found.
+        row_bp (array): (Optional) Array of row indices where bad detector
+            pixels are found.
+
+    Returns:
+        corgidrp.data.BadPixelMap:
+            The simulated dataset
+    """
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+
+    prihdr, exthdr = create_default_headers()
+    sim_data = np.zeros([1024,1024], dtype = np.uint16)
+    if col_bp is not None and row_bp is not None:
+        for i_col in col_bp:
+            for i_row in row_bp:
+                sim_data[i_col, i_row] += 4
+    frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    if filedir is not None:
+        frame.save(filedir=filedir, filename= "sim_bad_pixel.fits")
+
+    badpixelmap = data.Dataset([frame])
+
+    return badpixelmap
