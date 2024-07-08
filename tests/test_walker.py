@@ -45,11 +45,10 @@ def test_autoreducing():
     mycaldb = caldb.CalDB()
     mycaldb.create_entry(new_nonlinearity)
 
-    # generate recipe
-    recipe = walker.autogen_recipe(filelist, outputdir)
+    CPGS_XML_filepath = "" # not yet implemented
 
-    # process_recipe
-    walker.run_recipe(recipe)
+    # generate recipe and run it
+    recipe = walker.walk_corgidrp(filelist, CPGS_XML_filepath, outputdir)
 
     # check that the output dataset is saved to the output dir with the same filename as the input filenames
     output_files = [os.path.join(outputdir, frame.filename) for frame in l1_dataset]
@@ -62,6 +61,9 @@ def test_autoreducing():
         # do a string comparison, easiest way to check
         hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
         assert json.dumps(hdr_recipe) == json.dumps(recipe)
+
+
+
 if __name__ == "__main__":
     test_autoreducing()
 
