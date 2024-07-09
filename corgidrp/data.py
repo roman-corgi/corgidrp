@@ -663,7 +663,6 @@ class NonLinearityCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
 
-
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -678,7 +677,7 @@ class KGain(Image):
         value: the getter of the kgain value
         _kgain (float): the value of kgain
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset = None):
        # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
@@ -687,7 +686,7 @@ class KGain(Image):
             raise ValueError('The KGain calibration data should be just one float value')
 
         self._kgain = self.data[0,0] 
-
+        
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new KGain file
