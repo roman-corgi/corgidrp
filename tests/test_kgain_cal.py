@@ -17,7 +17,7 @@ from astropy.io import fits
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import (create_default_headers, make_fluxmap_frame)
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params)
 
 ######################## function definitions ###############################
@@ -45,68 +45,6 @@ def nonlin_coefs(filename,EMgain,order):
     fitVals = np.polyval(coeffs,DNs)
     
     return coeffs, DNs, fitVals
-
-def nonlin_factor(coeffs,DN):
-    # input ceoffs from nonlin_ceofs and a DN value and return the 
-    # nonlinearity factor
-    min_value = 800.0
-    max_value = 10000.0
-    f_nonlin = np.polyval(coeffs, DN)
-    # Control values outside the min/max range
-    f_nonlin = np.where(DN < min_value, np.polyval(coeffs, min_value), f_nonlin)
-    f_nonlin = np.where(DN > max_value, np.polyval(coeffs, max_value), f_nonlin)
-    
-    return f_nonlin
-
-def make_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
-    # makes a SCI-sized frame with simulated noise and a fluxmap
-    # f_map is the fluxmap in e/s/px and is 1024x1024 pixels in size
-    # rn is read noise in electrons
-    # bias is in electrons
-    # time is exposure time in sec
-    # coeffs is the array of cubic polynomial coefficients from nonlin_coefs
-    # if nonlin_flag is True, then nonlinearity is applied
-    
-    # Generate random values of rn in elecrons from a Gaussian distribution
-    random_array = np.random.normal(0, rn, (1200, 2200)) # e-
-    # Generate random values from fluxmap from a Poisson distribution
-    Poiss_noise_arr = emgain*np.random.poisson(time*f_map) # e-
-    signal_arr = np.zeros((1200,2200))
-    start_row = 10
-    start_col = 1100
-    signal_arr[start_row:start_row + Poiss_noise_arr.shape[0], 
-                start_col:start_col + Poiss_noise_arr.shape[1]] = Poiss_noise_arr
-    temp = random_array + signal_arr # e-
-    if nonlin_flag:
-        temp2 = nonlin_factor(coeffs, signal_arr/kgain)
-        frame = np.round((bias + random_array + signal_arr/temp2)/kgain) # DN
-    else:    
-        frame = np.round((bias+temp)/kgain) # DN
-        
-    prhd, exthd = create_default_headers()
-    err = np.ones([1200,2200]) * 0.5
-    dq = np.zeros([1200,2200], dtype = np.uint16)
-    image1 = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
-        dq = dq)
-    data_frame = Dataset([image1])
-    return data_frame
-
-def count_contiguous_repeats(arr):
-    """Input is 1d array of exposure times. If input array is empty, returns
-    empty array. Returns the count of the contiguous repeated exposure times.
-    """
-    if isinstance(arr, (np.ndarray, list)) and len(arr) == 0:
-        return []
-    counts = []
-    current_count = 1
-    for i in range(1, len(arr)):
-        if arr[i] == arr[i - 1]:
-            current_count += 1
-        else:
-            counts.append(current_count)
-            current_count = 1
-    counts.append(current_count)  # append the count of the last element
-    return counts
 
 ############### make stacks with simulated frames ##################
 
@@ -144,9 +82,10 @@ else:
 
 frame_list2 = []
 # make 30 uniform frames with emgain = 1
-## DATA: make_frame
+## DATA: make_fluxmap_frame
 for j in range(30):
-    frame2 = make_frame(fluxMap,bias,kgain_in,rn_in,emgain,7.0,coeffs_1,nonlin_flag)
+    frame2 = make_fluxmap_frame(fluxMap,bias,kgain_in,rn_in,emgain,7.0,coeffs_1,
+        nonlin_flag=nonlin_flag)
     frame_list2.append(frame2)
 # Remove singleton dimensions
 stack_arr2 = np.squeeze(np.stack(frame_list2))
@@ -170,8 +109,8 @@ for j in range(len(exp_repeat_counts)):
     for t in range(exp_repeat_counts[j]):
         # Simulate full frame
         exp_time = exp_time_loop[t+j*exp_repeat_counts[j]]
-        frame_sim = make_frame(fluxMap,bias,kgain_in,rn_in,g,
-                               exp_time,coeffs,nonlin_flag)
+        frame_sim = make_fluxmap_frame(fluxMap,bias,kgain_in,rn_in,g,
+                               exp_time,coeffs,nonlin_flag=nonlin_flag)
         frame_list.append(frame_sim)
     frame_stack = np.stack(frame_list)
     stack_list.append(frame_stack)
