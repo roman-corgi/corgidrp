@@ -10,7 +10,8 @@ import io
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from corgidrp.calibrate_kgain import check, copy_and_cast
+from corgidrp import check
+from corgidrp.calibrate_kgain import copy_and_cast
 
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
