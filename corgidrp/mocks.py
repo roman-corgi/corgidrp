@@ -1,10 +1,11 @@
+import os
+import numpy as np
 import astropy.io.fits as fits
 from astropy.time import Time
-import numpy as np
 
 import corgidrp.data as data
 import corgidrp.detector as detector
-import os
+from corgidrp.data import Image, Dataset
 
 
 
@@ -357,13 +358,46 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
 
     return badpixelmap
 
-def make_fluxmap_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
-    """ This function makes a SCI-sized frame with simulated noise and a fluxmap
-    f_map is the fluxmap in e/s/px and is 1024x1024 pixels in size rn is read
-    noise in electrons bias is in electrons time is exposure time in sec coeffs
-    is the array of cubic polynomial coefficients from nonlin_coefs if
-    nonlin_flag is True, then nonlinearity is applied.
+def make_fluxmap_frame(
+        f_map,
+        bias,
+        kgain,
+        rn,
+        emgain, 
+        time,
+        coeffs,
+        nonlin_flag=False,
+        ):
+    """ This function makes a SCI-sized frame with simulated noise and a fluxmap.
+
+    Args:
+        f_map (array) : fluxmap in e/s/px. Its size is 1024x1024 pixels.
+        bias (float) : bias value in electrons.
+        kgain (float) : value of K-Gain in electrons per DN.
+        rn (float) : read noise in electrons.
+        emgain (float) : calue of EM gain. 
+        time (float) :  exposure time in sec.
+        coeffs (array) : array of cubic polynomial coefficients from nonlin_coefs.
+        nonlin_flag (bool) : (Optional) if nonlin_flag is True, then nonlinearity is applied.
     """
+    def nonlin_factor(coeffs,DN):
+        """ Takes array of nonlinearity coefficients (from nonlin_coefs function)
+        and an array of DN values and returns the nonlinearity values array. If the
+        DN value is less 800 DN, then the nonlinearity value at 800 DN is returned.
+        If the DN value is greater than 10000 DN, then the nonlinearity value at
+        10000 DN is returned.
+        """
+        # input coeffs from nonlin_ceofs and a DN value and return the
+        # nonlinearity factor
+        min_value = 800.0
+        max_value = 10000.0
+        f_nonlin = np.polyval(coeffs, DN)
+        # Control values outside the min/max range
+        f_nonlin = np.where(DN < min_value, np.polyval(coeffs, min_value), f_nonlin)
+        f_nonlin = np.where(DN > max_value, np.polyval(coeffs, max_value), f_nonlin)
+
+        return f_nonlin
+
     # Generate random values of rn in elecrons from a Gaussian distribution
     random_array = np.random.normal(0, rn, (1200, 2200)) # e-
     # Generate random values from fluxmap from a Poisson distribution
