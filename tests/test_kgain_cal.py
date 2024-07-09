@@ -90,6 +90,9 @@ def make_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
     return data_frame
 
 def count_contiguous_repeats(arr):
+    """Input is 1d array of exposure times. If input array is empty, returns
+    empty array. Returns the count of the contiguous repeated exposure times.
+    """
     if isinstance(arr, (np.ndarray, list)) and len(arr) == 0:
         return []
     counts = []

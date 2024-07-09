@@ -21,6 +21,13 @@ from test_kgain_cal import ut_check
 
 # function definitions
 def nonlin_coefs(filename,EMgain,order):
+    """ Reads TVAC nonlinearity table from location specified by ‘filename’.
+    The column in the table closest to the ‘EMgain’ value is selected and fits
+    a polynomial of order ‘order’. The coefficients of the fit are adjusted so
+    that the polynomial function equals unity at 3000 DN. Outputs array polynomial
+    coefficients, array of DN values from the TVAC table, and an array of the
+    polynomial function values for all the DN values.
+    """
     # filename is the name of the csv text file containing the TVAC nonlin table
     # EM gain selects the closest column in the table
     # Load the specified file
@@ -45,6 +52,12 @@ def nonlin_coefs(filename,EMgain,order):
     return coeffs, DNs, fitVals
 
 def nonlin_factor(coeffs,DN):
+    """ Takes array of nonlinearity coefficients (from nonlin_coefs function)
+    and an array of DN values and returns the nonlinearity values array. If the
+    DN value is less 800 DN, then the nonlinearity value at 800 DN is returned.
+    If the DN value is greater than 10000 DN, then the nonlinearity value at
+    10000 DN is returned.
+    """
     # input ceoffs from nonlin_ceofs and a DN value and return the 
     # nonlinearity factor
     min_value = 800.0
