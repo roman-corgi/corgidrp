@@ -30,6 +30,10 @@ def test_autoreducing():
     # fake the emgain
     for image in l1_dataset:
         image.ext_hdr['EMGAIN'] = 1
+    # simulate the expected CGI naming convention
+    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
     l1_dataset.save(datadir)
     filelist = [frame.filepath for frame in l1_dataset]
 
@@ -50,8 +54,9 @@ def test_autoreducing():
     # generate recipe and run it
     recipe = walker.walk_corgidrp(filelist, CPGS_XML_filepath, outputdir)
 
-    # check that the output dataset is saved to the output dir with the same filename as the input filenames
-    output_files = [os.path.join(outputdir, frame.filename) for frame in l1_dataset]
+    # check that the output dataset is saved to the output dir
+    # filenames have been updated to L2a. 
+    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a_")) for frame in l1_dataset]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     # check that the recipe is saved into the header.
