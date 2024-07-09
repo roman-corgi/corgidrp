@@ -356,3 +356,34 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     badpixelmap = data.Dataset([frame])
 
     return badpixelmap
+
+def make_fluxmap_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
+    """ This function makes a SCI-sized frame with simulated noise and a fluxmap
+    f_map is the fluxmap in e/s/px and is 1024x1024 pixels in size rn is read
+    noise in electrons bias is in electrons time is exposure time in sec coeffs
+    is the array of cubic polynomial coefficients from nonlin_coefs if
+    nonlin_flag is True, then nonlinearity is applied.
+    """
+    # Generate random values of rn in elecrons from a Gaussian distribution
+    random_array = np.random.normal(0, rn, (1200, 2200)) # e-
+    # Generate random values from fluxmap from a Poisson distribution
+    Poiss_noise_arr = emgain*np.random.poisson(time*f_map) # e-
+    signal_arr = np.zeros((1200,2200))
+    start_row = 10
+    start_col = 1100
+    signal_arr[start_row:start_row + Poiss_noise_arr.shape[0],
+                start_col:start_col + Poiss_noise_arr.shape[1]] = Poiss_noise_arr
+    temp = random_array + signal_arr # e-
+    if nonlin_flag:
+        temp2 = nonlin_factor(coeffs, signal_arr/kgain)
+        frame = np.round((bias + random_array + signal_arr/temp2)/kgain) # DN
+    else:
+        frame = np.round((bias+temp)/kgain) # DN
+
+    prhd, exthd = create_default_headers()
+    err = np.ones([1200,2200]) * 0.5
+    dq = np.zeros([1200,2200], dtype = np.uint16)
+    image1 = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
+        dq = dq)
+    data_frame = Dataset([image1])
+    return data_frame
