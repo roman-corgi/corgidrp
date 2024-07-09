@@ -4,15 +4,95 @@ import numpy as np
 import warnings
 from scipy.optimize import curve_fit
 
+from corgidrp import check
 import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_headers
+
+# Dictionary with constant kgain parameters
+kgain_params= {
+# offset ROI constants
+'offset_rowroi1': 99,
+'offset_rowroi2': 1000,
+'offset_colroi1': 799,
+'offset_colroi2': 1000,
+
+# ROI constants
+'rowroi1': 9,
+'rowroi2': 1000,
+'colroi1': 1199,
+'colroi2': 2000,
+
+# read noise bins range limits
+'rn_bins1': -200,
+'rn_bins2': 201,
+
+# maximum DN value to be included in PTC
+'max_DN_val': 13000,
+
+# number of bins in the signal variables
+'signal_bins_N': 400,
+}
+
+def check_kgain_params(
+    ):
+    """ Checks integrity of kgain parameters in the dictionary kgain_params. """
+    if 'offset_rowroi1' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'offset_rowroi2' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'offset_colroi1' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'offset_colroi2' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowroi1' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowroi2' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colroi1' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colroi2' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rn_bins1' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rn_bins2' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'max_DN_val' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'signal_bins_N' not in kgain_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+
+    if not isinstance(kgain_params['offset_rowroi1'], (float, int)):
+        raise TypeError('offset_rowroi1 is not a number')
+    if not isinstance(kgain_params['offset_rowroi2'], (float, int)):
+        raise TypeError('offset_rowroi2 is not a number')
+    if not isinstance(kgain_params['offset_colroi1'], (float, int)):
+        raise TypeError('offset_colroi1 is not a number')
+    if not isinstance(kgain_params['offset_colroi2'], (float, int)):
+        raise TypeError('offset_colroi2 is not a number')
+    if not isinstance(kgain_params['rowroi1'], (float, int)):
+        raise TypeError('rowroi1 is not a number')
+    if not isinstance(kgain_params['rowroi2'], (float, int)):
+        raise TypeError('rowroi2 is not a number')
+    if not isinstance(kgain_params['colroi1'], (float, int)):
+        raise TypeError('colroi1 is not a number')
+    if not isinstance(kgain_params['colroi2'], (float, int)):
+        raise TypeError('colroi2 is not a number')
+    if not isinstance(kgain_params['rn_bins1'], (float, int)):
+        raise TypeError('rn_bins1 is not a number')
+    if not isinstance(kgain_params['rn_bins2'], (float, int)):
+        raise TypeError('rn_bins2 is not a number')
+    if not isinstance(kgain_params['max_DN_val'], (float, int)):
+        raise TypeError('max_DN_val is not a number')
+    if not isinstance(kgain_params['signal_bins_N'], (float, int)):
+        raise TypeError('signal_bins_N is not a number')
 
 class CalKgainException(Exception):
     """Exception class for calibrate_kgain."""
 
 def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val, 
-                    binwidth=68, mkplot=None, verbose=None):
+                    binwidth=68, mkplot=None, log_plot1=-1, log_plot2=4,
+                    log_plot3=200, verbose=None):
     """Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
     exposure time, this function subtracts the prescan bias from each frame. It 
@@ -70,7 +150,16 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     mkplot : boolean
         Option to display plots. Default is None. If mkplot is anything other 
         than None, then this option is chosen.
-        
+
+    log_plot1 : int
+        log plot min value in np.logspace.
+
+    log_plot2 : int
+        log plot max value in np.logspace.
+
+    log_plot3 : int
+        Number of elements in np.logspace.
+    
     verbose : boolean
         Option to display various diagnostic print messages. Default is None. 
         If mkplot is anything other than None, then this option is chosen.
@@ -95,78 +184,13 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     
     ptc : array-like
         array of size N x 2, where N is the number of bins set by the 'signal_bins_N' 
-        parameter in detector.kgain_params. The first column is the mean (DN) and 
+        parameter in the dictionary kgain_params. The first column is the mean (DN) and 
         the second column is standard deviation (DN) corrected for read noise.
     
     """
     # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
     stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)
 
-    # input checks
-    from corgidrp.detector import kgain_params as master_files
-    # check pointer yaml file
-    if 'offset_rowroi1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_rowroi2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_colroi1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_colroi2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowroi1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowroi2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colroi1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colroi2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rn_bins1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rn_bins2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'max_DN_val' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'signal_bins_N' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'logplot1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'logplot2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'logplot3' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-
-    if not isinstance(master_files['offset_rowroi1'], (float, int)):
-        raise TypeError('offset_rowroi1 is not a number')
-    if not isinstance(master_files['offset_rowroi2'], (float, int)):
-        raise TypeError('offset_rowroi2 is not a number')
-    if not isinstance(master_files['offset_colroi1'], (float, int)):
-        raise TypeError('offset_colroi1 is not a number')
-    if not isinstance(master_files['offset_colroi2'], (float, int)):
-        raise TypeError('offset_colroi2 is not a number')
-    if not isinstance(master_files['rowroi1'], (float, int)):
-        raise TypeError('rowroi1 is not a number')
-    if not isinstance(master_files['rowroi2'], (float, int)):
-        raise TypeError('rowroi2 is not a number')
-    if not isinstance(master_files['colroi1'], (float, int)):
-        raise TypeError('colroi1 is not a number')
-    if not isinstance(master_files['colroi2'], (float, int)):
-        raise TypeError('colroi2 is not a number')
-    if not isinstance(master_files['rn_bins1'], (float, int)):
-        raise TypeError('rn_bins1 is not a number')
-    if not isinstance(master_files['rn_bins2'], (float, int)):
-        raise TypeError('rn_bins2 is not a number')
-    if not isinstance(master_files['max_DN_val'], (float, int)):
-        raise TypeError('max_DN_val is not a number')
-    if not isinstance(master_files['signal_bins_N'], (float, int)):
-        raise TypeError('signal_bins_N is not a number')
-    if not isinstance(master_files['logplot1'], (float, int)):
-        raise TypeError('logplot1 is not a number')
-    if not isinstance(master_files['logplot2'], (float, int)):
-        raise TypeError('logplot2 is not a number')
-    if not isinstance(master_files['logplot3'], (float, int)):
-        raise TypeError('logplot3 is not a number')
-    
     # check parameters
     if type(stack_arr) != np.ndarray:
         raise TypeError('stack_arr must be an ndarray.')
@@ -208,6 +232,12 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         raise CalKgainException('binwidth must be >= 10.')
     if binwidth > 800:
         raise CalKgainException('binwidth must be < 800.')
+    if not isinstance(log_plot1, (float, int)):
+        raise TypeError('logplot1 is not a number')
+    if not isinstance(log_plot2, (float, int)):
+        raise TypeError('logplot2 is not a number')
+    if not isinstance(log_plot3, (float, int)):
+        raise TypeError('logplot3 is not a number')
     
     ################### function defs #####################
     
@@ -349,22 +379,19 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     ######################### start of main code #############################
     
     # get relevant constants
-    from corgidrp.detector import kgain_params as constants_config
-    offset_rowroi1 = constants_config['offset_rowroi1']
-    offset_rowroi2 = constants_config['offset_rowroi2']
-    offset_colroi1 = constants_config['offset_colroi1']
-    offset_colroi2 = constants_config['offset_colroi2']
-    rowroi1 = constants_config['rowroi1']
-    rowroi2 = constants_config['rowroi2']
-    colroi1 = constants_config['colroi1']
-    colroi2 = constants_config['colroi2']
-    rn_bins1 = constants_config['rn_bins1']
-    rn_bins2 = constants_config['rn_bins2']
-    max_DN_val = constants_config['max_DN_val']
-    signal_bins_N = constants_config['signal_bins_N']
-    log_plot1 = constants_config['logplot1']
-    log_plot2 = constants_config['logplot2']
-    log_plot3 = constants_config['logplot3']
+    offset_rowroi1 = kgain_params['offset_rowroi1']
+    offset_rowroi2 = kgain_params['offset_rowroi2']
+    offset_colroi1 = kgain_params['offset_colroi1']
+    offset_colroi2 = kgain_params['offset_colroi2']
+    rowroi1 = kgain_params['rowroi1']
+    rowroi2 = kgain_params['rowroi2']
+    colroi1 = kgain_params['colroi1']
+    colroi2 = kgain_params['colroi2']
+    rn_bins1 = kgain_params['rn_bins1']
+    rn_bins2 = kgain_params['rn_bins2']
+    max_DN_val = kgain_params['max_DN_val']
+    signal_bins_N = kgain_params['signal_bins_N']
+
 
     if mkplot is not None:
         # Avoid issues with importing matplotlib on headless servers without GUI

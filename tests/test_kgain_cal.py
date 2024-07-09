@@ -14,9 +14,11 @@ import warnings
 import numpy as np
 from astropy.io import fits
 
+import test_check
+from corgidrp import check
 from corgidrp.data import Image, Dataset
 from corgidrp.mocks import create_default_headers
-from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, check)
+from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params)
 
 ######################## function definitions ###############################
 
@@ -248,7 +250,7 @@ class TestCalibrateKgain(unittest.TestCase):
 
     def test_psi(self):
         """These three below must be positive scalar integers."""
-        check_list = ut_check.psilist
+        check_list = test_check.psilist
         # min_val
         for perr in check_list:
             with self.assertRaises(TypeError):
@@ -275,7 +277,7 @@ class TestCalibrateKgain(unittest.TestCase):
     
     def test_rps(self):
         """emgain must be a real positive scalar."""
-        check_list = ut_check.rpslist
+        check_list = test_check.rpslist
         # min_write
         for rerr in check_list:
             with self.assertRaises(TypeError):
