@@ -147,8 +147,7 @@ class TestCalibrateKgain(unittest.TestCase):
         calibrate_kgain(stack_arr, stack_arr2, self.emgain,
             self.min_val, self.max_val, self.binwidth)
         
-        from corgidrp.detector import kgain_params as constants_config
-        signal_bins_N = constants_config['signal_bins_N']
+        signal_bins_N = kgain_params['signal_bins_N']
         # kgain - should be close to the assumed value
         self.assertTrue(np.isclose(round(kgain.value,1), kgain_in, atol=0.5))
         # read noises. these are not requirements, but nice to check

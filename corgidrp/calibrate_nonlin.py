@@ -15,7 +15,7 @@ from corgidrp.calibrate_kgain import copy_and_cast
 
 
 # Dictionary with constant non-linearity calibration parameters
-nolin_params = {
+nonlin_params = {
     # offset column ROI range
     'offset_colroi1': 799,
     'offset_colroi2': 1000,
@@ -280,6 +280,26 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
     stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)    
 
+    # Get relevant constants
+    offset_colroi1 = nonlin_params['offset_colroi1']
+    offset_colroi2 = nonlin_params['offset_colroi2']
+    rowroi1 = nonlin_params['rowroi1']
+    rowroi2 = nonlin_params['rowroi2']
+    colroi1 = nonlin_params['colroi1']
+    colroi2 = nonlin_params['colroi2']
+    rowback11 = nonlin_params['rowback11']
+    rowback12 = nonlin_params['rowback12']
+    rowback21 = nonlin_params['rowback21']
+    rowback22 = nonlin_params['rowback22']
+    colback11 = nonlin_params['colback11']
+    colback12 = nonlin_params['colback12']
+    colback21 = nonlin_params['colback21']
+    colback22 = nonlin_params['colback22']
+    min_exp_time = nonlin_params['min_exp_time']
+    num_bins = nonlin_params['num_bins']
+    min_bin = nonlin_params['min_bin']
+    min_mask_factor = nonlin_params['min_mask_factor']
+
     # input checks
     if type(stack_arr) != np.ndarray:
         raise TypeError('stack_arr must be an ndarray.')
@@ -355,45 +375,25 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     if rms_low_limit >= rms_upp_limit:
         raise CalNonlinException('rms_upp_limit must be greater than rms_low_limit')
 
-    if not isinstance(master_files['lowess_frac'], (float, int)):
+    if not isinstance(lowess_frac, (float, int)):
         raise TypeError('lowess_frac is not a number')
-    if not isinstance(master_files['rms_low_limit'], (float, int)):
+    if not isinstance(rms_low_limit, (float, int)):
         raise TypeError('rms_low_limit is not a number')
-    if not isinstance(master_files['rms_upp_limit'], (float, int)):
+    if not isinstance(rms_upp_limit, (float, int)):
         raise TypeError('rms_upp_limit is not a number')
-    if not isinstance(master_files['fit_upp_cutoff1'], (float, int)):
+    if not isinstance(fit_upp_cutoff1, (float, int)):
         raise TypeError('fit_upp_cutoff1 is not a number')
-    if not isinstance(master_files['fit_upp_cutoff2'], (float, int)):
+    if not isinstance(fit_upp_cutoff2, (float, int)):
         raise TypeError('fit_upp_cutoff2 is not a number')
-    if not isinstance(master_files['fit_low_cutoff1'], (float, int)):
+    if not isinstance(fit_low_cutoff1, (float, int)):
         raise TypeError('fit_low_cutoff1 is not a number')
-    if not isinstance(master_files['fit_low_cutoff2'], (float, int)):
+    if not isinstance(fit_low_cutoff2, (float, int)):
         raise TypeError('fit_low_cutoff2 is not a number')
     
     ######################### start of main code #############################
     
-    # Get relevant constants
-    offset_colroi1 = master_files['offset_colroi1']
-    offset_colroi2 = master_files['offset_colroi2']
-    rowroi1 = master_files['rowroi1']
-    rowroi2 = master_files['rowroi2']
-    colroi1 = master_files['colroi1']
-    colroi2 = master_files['colroi2']
-    rowback11 = master_files['rowback11']
-    rowback12 = master_files['rowback12']
-    rowback21 = master_files['rowback21']
-    rowback22 = master_files['rowback22']
-    colback11 = master_files['colback11']
-    colback12 = master_files['colback12']
-    colback21 = master_files['colback21']
-    colback22 = master_files['colback22']
-    min_exp_time = master_files['min_exp']
-    num_bins = master_files['num_bins']
-    min_bin = master_files['min_bin']
-    min_mask_factor = master_files['min_mask_factor']
-    
     # Define offset columns ROI range
-    offset_colroi = slice(params_offset_colroi1,offset_colroi2)
+    offset_colroi = slice(offset_colroi1,offset_colroi2)
     
     # Define pixel ROIs
     rowroi = list(range(rowroi1, rowroi2))
