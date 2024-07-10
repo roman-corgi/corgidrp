@@ -13,14 +13,21 @@ import numpy as np
 from astropy.io import fits
 from pathlib import Path
 
+import test_check
+from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import (create_default_headers, make_fluxmap_frame)
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException)
-from corgidrp.calibrate_kgain import check
-from test_kgain_cal import ut_check
 
 # function definitions
 def nonlin_coefs(filename,EMgain,order):
+    """ Reads TVAC nonlinearity table from location specified by ‘filename’.
+    The column in the table closest to the ‘EMgain’ value is selected and fits
+    a polynomial of order ‘order’. The coefficients of the fit are adjusted so
+    that the polynomial function equals unity at 3000 DN. Outputs array polynomial
+    coefficients, array of DN values from the TVAC table, and an array of the
+    polynomial function values for all the DN values.
+    """
     # filename is the name of the csv text file containing the TVAC nonlin table
     # EM gain selects the closest column in the table
     # Load the specified file
@@ -43,51 +50,6 @@ def nonlin_coefs(filename,EMgain,order):
     fitVals = np.polyval(coeffs,DNs)
     
     return coeffs, DNs, fitVals
-
-def nonlin_factor(coeffs,DN):
-    # input ceoffs from nonlin_ceofs and a DN value and return the 
-    # nonlinearity factor
-    min_value = 800.0
-    max_value = 10000.0
-    f_nonlin = np.polyval(coeffs, DN)
-    # Control values outside the min/max range
-    f_nonlin = np.where(DN < min_value, np.polyval(coeffs, min_value), f_nonlin)
-    f_nonlin = np.where(DN > max_value, np.polyval(coeffs, max_value), f_nonlin)
-    
-    return f_nonlin
-
-def make_frame(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag):
-    # makes a SCI-sized frame with simulated noise and a fluxmap
-    # f_map is the fluxmap in e/s/px and is 1024x1024 pixels in size
-    # rn is read noise in electrons
-    # bias is in electrons
-    # time is exposure time in sec
-    # coeffs is the array of cubic polynomial coefficients from nonlin_coefs
-    # if nonlin_flag is True, then nonlinearity is applied
-    
-    # Generate random values of rn in elecrons from a Gaussian distribution
-    random_array = np.random.normal(0, rn, (1200, 2200)) # e-
-    # Generate random values from fluxmap from a Poisson distribution
-    Poiss_noise_arr = emgain*np.random.poisson(time*f_map) # e-
-    signal_arr = np.zeros((1200,2200))
-    start_row = 10
-    start_col = 1100
-    signal_arr[start_row:start_row + Poiss_noise_arr.shape[0], 
-                start_col:start_col + Poiss_noise_arr.shape[1]] = Poiss_noise_arr
-    temp = random_array + signal_arr # e-
-    if nonlin_flag:
-        temp2 = nonlin_factor(coeffs, signal_arr/kgain)
-        frame = np.round((bias + random_array + signal_arr/temp2)/kgain) # DN
-    else:    
-        frame = np.round((bias+temp)/kgain) # DN
-        
-    prhd, exthd = create_default_headers()
-    err = np.ones([1200,2200]) * 0.5
-    dq = np.zeros([1200,2200], dtype = np.uint16)
-    image1 = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
-        dq = dq)
-    data_frame = Dataset([image1])
-    return data_frame
 
 ############################# prepare simulated frames #######################
 
@@ -131,7 +93,8 @@ emgain = 1.0
 frame_list2 = []
 # make 30 uniform frames with emgain = 1
 for j in range(30):
-    frame2 = make_frame(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,nonlin_flag)
+    frame2 = make_fluxmap_frame(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
+        nonlin_flag=nonlin_flag)
     frame_list2.append(frame2)
 stack_arr2 = np.stack(frame_list2)
 
@@ -153,13 +116,17 @@ for iG in range(len(gain_arr0)):
     for t in exp_time_loop:
         # Simulate full frame
         if iG == 0:
-            frame_sim = make_frame(fluxMap1,bias,kgain,rn,g,t,coeffs,nonlin_flag)
+            frame_sim = make_fluxmap_frame(fluxMap1,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
         elif iG == 1:
-            frame_sim = make_frame(fluxMap2,bias,kgain,rn,g,t,coeffs,nonlin_flag)
+            frame_sim = make_fluxmap_frame(fluxMap2,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
         elif iG == 2:
-            frame_sim = make_frame(fluxMap3,bias,kgain,rn,g,t,coeffs,nonlin_flag)
+            frame_sim = make_fluxmap_frame(fluxMap3,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
         else:
-            frame_sim = make_frame(fluxMap4,bias,kgain,rn,g,t,coeffs,nonlin_flag)
+            frame_sim = make_fluxmap_frame(fluxMap4,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
         frame_list.append(frame_sim)
     frame_stack = np.stack(frame_list)
     stack_list.append(frame_stack)
@@ -301,13 +268,13 @@ class TestCalibrateNonlin(unittest.TestCase):
     
     def test_exp_time_stack_arr(self):
         """exp_time_stack_arr must be a 1-D, real array."""
-        for terr0 in ut_check.oneDlist:
+        for terr0 in test_check.oneDlist:
             with self.assertRaises(TypeError):
                 calibrate_nonlin(stack_arr, terr0, 
                                     self.time_stack_arr, self.len_list, stack_arr2, 
                                     self.actual_gain_arr, self.norm_val, 
                                     self.min_write, self.max_write)
-        for terr0 in ut_check.rarraylist:
+        for terr0 in test_check.rarraylist:
             with self.assertRaises(TypeError):
                 calibrate_nonlin(stack_arr, terr0, 
                                     self.time_stack_arr, self.len_list, stack_arr2, 
@@ -393,7 +360,7 @@ class TestCalibrateNonlin(unittest.TestCase):
     
     def test_rps(self):
         """these two below must be real positive scalars."""
-        check_list = ut_check.rpslist
+        check_list = test_check.rpslist
         # min_write
         for rerr in check_list:
             with self.assertRaises(TypeError):
@@ -420,7 +387,7 @@ class TestCalibrateNonlin(unittest.TestCase):
     
     def test_psi(self):
         """norm_val must be a positive scalar integer."""
-        check_list = ut_check.psilist
+        check_list = test_check.psilist
         # norm_val
         for mmerr in check_list:
             with self.assertRaises(TypeError):

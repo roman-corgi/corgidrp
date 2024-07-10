@@ -10,7 +10,118 @@ import io
 import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
-from corgidrp.calibrate_kgain import check, copy_and_cast
+from corgidrp import check
+from corgidrp.calibrate_kgain import copy_and_cast
+
+
+# Dictionary with constant non-linearity calibration parameters
+nonlin_params = {
+    # offset column ROI range
+    'offset_colroi1': 799,
+    'offset_colroi2': 1000,
+    
+    # ROI constants
+    'rowroi1': 305,
+    'rowroi2': 736,
+    'colroi1': 1385,
+    'colroi2': 1846,
+     
+    # background ROIs
+    'rowback11': 20,
+    'rowback12': 301,
+    'rowback21': 740,
+    'rowback22': 1001,
+    'colback11': 1200,
+    'colback12': 2001,
+    'colback21': 1200,
+    'colback22': 2001,
+     
+    # minimum exposure time, s
+    'min_exp_time': 0,
+    'num_bins': 50,
+    'min_bin': 200,
+     
+    # factor to mutiply bin_edge values when making mask
+    'min_mask_factor': 1.1,
+    }
+ 
+def check_nonlin_params(
+    ):
+    """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
+    if 'offset_colroi1' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'offset_colroi2' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowroi1' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowroi2' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colroi1' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colroi2' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowback11' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowback12' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowback21' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'rowback22' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colback11' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colback12' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colback21' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'colback22' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'min_exp_time' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'num_bins' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'min_bin' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    if 'min_mask_factor' not in nonlin_params:
+        raise ValueError('Missing parameter in directory pointer YAML file.')
+    
+    if not isinstance(nonlin_params['offset_colroi1'], (float, int)):
+        raise TypeError('offset_colroi1 is not a number')
+    if not isinstance(nonlin_params['offset_colroi2'], (float, int)):
+        raise TypeError('offset_colroi2 is not a number')
+    if not isinstance(nonlin_params['rowroi1'], (float, int)):
+        raise TypeError('rowroi1 is not a number')
+    if not isinstance(nonlin_params['rowroi2'], (float, int)):
+        raise TypeError('rowroi2 is not a number')
+    if not isinstance(nonlin_params['colroi1'], (float, int)):
+        raise TypeError('colroi1 is not a number')
+    if not isinstance(nonlin_params['colroi2'], (float, int)):
+        raise TypeError('colroi2 is not a number')
+    if not isinstance(nonlin_params['rowback11'], (float, int)):
+        raise TypeError('rowback11 is not a number')
+    if not isinstance(nonlin_params['rowback12'], (float, int)):
+        raise TypeError('rowback12 is not a number')
+    if not isinstance(nonlin_params['rowback21'], (float, int)):
+        raise TypeError('rowback21 is not a number')
+    if not isinstance(nonlin_params['rowback22'], (float, int)):
+        raise TypeError('rowback22 is not a number')
+    if not isinstance(nonlin_params['colback11'], (float, int)):
+        raise TypeError('colback11 is not a number')
+    if not isinstance(nonlin_params['colback12'], (float, int)):
+        raise TypeError('colback12 is not a number')
+    if not isinstance(nonlin_params['colback21'], (float, int)):
+        raise TypeError('colback21 is not a number')
+    if not isinstance(nonlin_params['colback22'], (float, int)):
+        raise TypeError('colback22 is not a number')
+    if not isinstance(nonlin_params['min_exp_time'], (float, int)):
+        raise TypeError('min_exp_time is not a number')
+    if not isinstance(nonlin_params['num_bins'], (float, int)):
+        raise TypeError('num_bins is not a number')
+    if not isinstance(nonlin_params['min_bin'], (float, int)):
+        raise TypeError('min_bin is not a number')
+    if not isinstance(nonlin_params['min_mask_factor'], (float, int)):
+        raise TypeError('min_mask_factor is not a number')
+    
 
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
@@ -18,6 +129,9 @@ class CalNonlinException(Exception):
 def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list, 
                      stack_arr2, actual_gain_arr, norm_val = 2500, 
                      min_write = 800.0, max_write = 10000.0,
+                     lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
+                     fit_upp_cutoff1 = -2, fit_upp_cutoff2 = -3,
+                     fit_low_cutoff1 = 2, fit_low_cutoff2 = 1,
                      mkplot=None, verbose=None):
     """Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
     frames ranging over exposure time, each sub-stack having at least 1 illuminated 
@@ -109,6 +223,31 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     max_write : float
         Maximum mean value in DN to output in nonlin_arr and csv_lines. 
         (10000.0 recommended)
+
+    lowess_frac (float) : factor to use in lowess smoothing function, larger is
+        smoother
+
+    rms_low_limit (float) : rms relative error selection limits for linear fit.
+        Lower limit.
+
+    rms_upp_limit (float) : rms relative error selection limits for linear fit.
+        Upper limit.
+
+    fit_upp_cutoff1 (int) : polyfit upper cutoff. The following limits were
+        determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
+        this is the upper value applied to select the data to be fitted.
+
+    fit_upp_cutoff2 (int) : polyfit upper cutoff. The following limits were
+        determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
+        this is the upper value applied to select the data to be fitted.
+
+    fit_low_cutoff1 (int) : polyfit upper cutoff. The following limits were
+        determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
+        this is the lower value applied to select the data to be fitted.
+
+    fit_low_cutoff2 (int) : polyfit upper cutoff. The following limits were
+        determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
+        this is the lower value applied to select the data to be fitted.
     
     mkplot : boolean
         Option to display plots. Default is None. If mkplot is anything other 
@@ -141,140 +280,27 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
     stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)    
 
-    # input checks
-    # load in default parameters
-    from corgidrp.detector import nonlin_params as master_files
+    # Get relevant constants
+    offset_colroi1 = nonlin_params['offset_colroi1']
+    offset_colroi2 = nonlin_params['offset_colroi2']
+    rowroi1 = nonlin_params['rowroi1']
+    rowroi2 = nonlin_params['rowroi2']
+    colroi1 = nonlin_params['colroi1']
+    colroi2 = nonlin_params['colroi2']
+    rowback11 = nonlin_params['rowback11']
+    rowback12 = nonlin_params['rowback12']
+    rowback21 = nonlin_params['rowback21']
+    rowback22 = nonlin_params['rowback22']
+    colback11 = nonlin_params['colback11']
+    colback12 = nonlin_params['colback12']
+    colback21 = nonlin_params['colback21']
+    colback22 = nonlin_params['colback22']
+    min_exp_time = nonlin_params['min_exp_time']
+    num_bins = nonlin_params['num_bins']
+    min_bin = nonlin_params['min_bin']
+    min_mask_factor = nonlin_params['min_mask_factor']
 
-    # check pointer yaml file
-    if 'offset_colroi1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_colroi2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowroi1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowroi2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colroi1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colroi2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowback11' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowback12' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowback21' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rowback22' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colback11' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colback12' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colback21' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'colback22' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'min_exp' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'num_bins' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'min_bin' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'min_mask_factor' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'lowess_frac' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rms_low_limit' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'rms_upp_limit' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'fit_upp_cutoff1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'fit_upp_cutoff2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'fit_low_cutoff1' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'fit_low_cutoff2' not in master_files:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    
-    if not isinstance(master_files['offset_colroi1'], (float, int)):
-        raise TypeError('offset_colroi1 is not a number')
-    if not isinstance(master_files['offset_colroi2'], (float, int)):
-        raise TypeError('offset_colroi2 is not a number')
-    if not isinstance(master_files['rowroi1'], (float, int)):
-        raise TypeError('rowroi1 is not a number')
-    if not isinstance(master_files['rowroi2'], (float, int)):
-        raise TypeError('rowroi2 is not a number')
-    if not isinstance(master_files['colroi1'], (float, int)):
-        raise TypeError('colroi1 is not a number')
-    if not isinstance(master_files['colroi2'], (float, int)):
-        raise TypeError('colroi2 is not a number')
-    if not isinstance(master_files['rowback11'], (float, int)):
-        raise TypeError('rowback11 is not a number')
-    if not isinstance(master_files['rowback12'], (float, int)):
-        raise TypeError('rowback12 is not a number')
-    if not isinstance(master_files['rowback21'], (float, int)):
-        raise TypeError('rowback21 is not a number')
-    if not isinstance(master_files['rowback22'], (float, int)):
-        raise TypeError('rowback22 is not a number')
-    if not isinstance(master_files['colback11'], (float, int)):
-        raise TypeError('colback11 is not a number')
-    if not isinstance(master_files['colback12'], (float, int)):
-        raise TypeError('colback12 is not a number')
-    if not isinstance(master_files['colback21'], (float, int)):
-        raise TypeError('colback21 is not a number')
-    if not isinstance(master_files['colback22'], (float, int)):
-        raise TypeError('colback22 is not a number')
-    if not isinstance(master_files['min_exp'], (float, int)):
-        raise TypeError('min_exp is not a number')
-    if not isinstance(master_files['num_bins'], (float, int)):
-        raise TypeError('num_bins is not a number')
-    if not isinstance(master_files['min_bin'], (float, int)):
-        raise TypeError('min_bin is not a number')
-    if not isinstance(master_files['min_mask_factor'], (float, int)):
-        raise TypeError('min_mask_factor is not a number')
-    if not isinstance(master_files['lowess_frac'], (float, int)):
-        raise TypeError('lowess_frac is not a number')
-    if not isinstance(master_files['rms_low_limit'], (float, int)):
-        raise TypeError('rms_low_limit is not a number')
-    if not isinstance(master_files['rms_upp_limit'], (float, int)):
-        raise TypeError('rms_upp_limit is not a number')
-    if not isinstance(master_files['fit_upp_cutoff1'], (float, int)):
-        raise TypeError('fit_upp_cutoff1 is not a number')
-    if not isinstance(master_files['fit_upp_cutoff2'], (float, int)):
-        raise TypeError('fit_upp_cutoff2 is not a number')
-    if not isinstance(master_files['fit_low_cutoff1'], (float, int)):
-        raise TypeError('fit_low_cutoff1 is not a number')
-    if not isinstance(master_files['fit_low_cutoff2'], (float, int)):
-        raise TypeError('fit_low_cutoff2 is not a number')
-    
-    # get relevant constants
-    offset_colroi1 = master_files['offset_colroi1']
-    offset_colroi2 = master_files['offset_colroi2']
-    rowroi1 = master_files['rowroi1']
-    rowroi2 = master_files['rowroi2']
-    colroi1 = master_files['colroi1']
-    colroi2 = master_files['colroi2']
-    rowback11 = master_files['rowback11']
-    rowback12 = master_files['rowback12']
-    rowback21 = master_files['rowback21']
-    rowback22 = master_files['rowback22']
-    colback11 = master_files['colback11']
-    colback12 = master_files['colback12']
-    colback21 = master_files['colback21']
-    colback22 = master_files['colback22']
-    min_exp_time = master_files['min_exp']
-    num_bins = master_files['num_bins']
-    min_bin = master_files['min_bin']
-    min_mask_factor = master_files['min_mask_factor']
-    lowess_frac = master_files['lowess_frac']
-    rms_low_limit = master_files['rms_low_limit']
-    rms_upp_limit = master_files['rms_upp_limit']
-    fit_upp_cutoff1 = master_files['fit_upp_cutoff1']
-    fit_upp_cutoff2 = master_files['fit_upp_cutoff2']
-    fit_low_cutoff1 = master_files['fit_low_cutoff1']
-    fit_low_cutoff2 = master_files['fit_low_cutoff2']
-    
+    # input checks
     if type(stack_arr) != np.ndarray:
         raise TypeError('stack_arr must be an ndarray.')
     if np.ndim(stack_arr) != 3:
@@ -348,6 +374,21 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     check.real_nonnegative_scalar(rms_upp_limit, 'rms_upp_limit', TypeError)
     if rms_low_limit >= rms_upp_limit:
         raise CalNonlinException('rms_upp_limit must be greater than rms_low_limit')
+
+    if not isinstance(lowess_frac, (float, int)):
+        raise TypeError('lowess_frac is not a number')
+    if not isinstance(rms_low_limit, (float, int)):
+        raise TypeError('rms_low_limit is not a number')
+    if not isinstance(rms_upp_limit, (float, int)):
+        raise TypeError('rms_upp_limit is not a number')
+    if not isinstance(fit_upp_cutoff1, (float, int)):
+        raise TypeError('fit_upp_cutoff1 is not a number')
+    if not isinstance(fit_upp_cutoff2, (float, int)):
+        raise TypeError('fit_upp_cutoff2 is not a number')
+    if not isinstance(fit_low_cutoff1, (float, int)):
+        raise TypeError('fit_low_cutoff1 is not a number')
+    if not isinstance(fit_low_cutoff2, (float, int)):
+        raise TypeError('fit_low_cutoff2 is not a number')
     
     ######################### start of main code #############################
     
