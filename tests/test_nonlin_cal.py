@@ -268,13 +268,13 @@ class TestCalibrateNonlin(unittest.TestCase):
     
     def test_exp_time_stack_arr(self):
         """exp_time_stack_arr must be a 1-D, real array."""
-        for terr0 in ut_check.oneDlist:
+        for terr0 in test_check.oneDlist:
             with self.assertRaises(TypeError):
                 calibrate_nonlin(stack_arr, terr0, 
                                     self.time_stack_arr, self.len_list, stack_arr2, 
                                     self.actual_gain_arr, self.norm_val, 
                                     self.min_write, self.max_write)
-        for terr0 in ut_check.rarraylist:
+        for terr0 in test_check.rarraylist:
             with self.assertRaises(TypeError):
                 calibrate_nonlin(stack_arr, terr0, 
                                     self.time_stack_arr, self.len_list, stack_arr2, 
@@ -360,7 +360,7 @@ class TestCalibrateNonlin(unittest.TestCase):
     
     def test_rps(self):
         """these two below must be real positive scalars."""
-        check_list = ut_check.rpslist
+        check_list = test_check.rpslist
         # min_write
         for rerr in check_list:
             with self.assertRaises(TypeError):
@@ -387,7 +387,7 @@ class TestCalibrateNonlin(unittest.TestCase):
     
     def test_psi(self):
         """norm_val must be a positive scalar integer."""
-        check_list = ut_check.psilist
+        check_list = test_check.psilist
         # norm_val
         for mmerr in check_list:
             with self.assertRaises(TypeError):
