@@ -9,7 +9,7 @@ import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_headers
 
-# Dictionary with constant kgain parameters
+# Dictionary with constant kgain calibration parameters
 kgain_params= {
 # offset ROI constants
 'offset_rowroi1': 99,
