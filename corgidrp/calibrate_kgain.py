@@ -103,7 +103,8 @@ def frameProc(frame, offset_colroi, emgain):
     Args:
       frame (np.array): L1 frame
       offset_colroi (int): column range
-      emgain(int): EM gain value   
+      emgain (int): EM gain value   
+      
     Returns:
       np.array: bias subtracted frame
     """
@@ -128,8 +129,10 @@ def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
       mean_frame (np.array): mean frame of uniform exposure time
       binwidth (int): width of each bin
       max_DN (int): maximum DN value
+      
     Returns:
-      np.array, np.array: mean array and noise array
+      np.array: mean array
+      np.array: mean array
     """
     # calculate the size of output arrays
     rows, cols = frame_in.shape
@@ -171,10 +174,12 @@ def diff2std(diff_frame, offset_rowroi, offset_colroi):
     """
     calculate the standard deviation of the frame difference, 
     diff_frame within the ROI row and column boundaries.
+    
     Args:
       diff_frame (np.array): frame diffference
       offset_rowroi (int): row of region of interest
       offset_colroi (int): column of region of interest
+      
     Returns:
       np.array: standard deviation of frame difference
     """
@@ -187,11 +192,13 @@ def diff2std(diff_frame, offset_rowroi, offset_colroi):
 def gauss(x, A, mean, sigma):
     """
     Gauss function. Called by sgaussfit.
+    
     Args:
       x (np.array): input array
       A (float): amplitude
       mean (float): mean value
       sigma (float): sigma
+    
     Returns:
       np.array: Gauss function
     """
@@ -201,12 +208,15 @@ def sgaussfit(xdata, ydata, gaussinp):
     """
     Find fitting parameters to Gauss function. Called by Single_peakfit. 
     gaussinp is an array containing initial values of A, mean, sigma.
+    
     Args:
       xdata (np.array): input x array
       ydata (np.array): input y array
       gaussinp (np.array): initial guess array
+    
     Returns:
-      np.array, np.array: fit parameters
+      np.array: fit parameters
+      np.array: fit parameters
     """
     popt, pcov = curve_fit(gauss, xdata, ydata, p0=gaussinp)
     sse = np.sum((ydata - gauss(xdata, *popt)) ** 2)
@@ -216,9 +226,11 @@ def Single_peakfit(xdata, ydata):
     """
     Fit Gauss function to x, y data. Returns mean and sigma. Only sigma 
     is used in main code call.
+    
     Args:
       xdata (np.array): x data
       ydata (np.array): y data
+    
     Returns:
       float: sigma
     """
@@ -236,11 +248,13 @@ def histc_roi(frame,offset_rowroi,offset_colroi,rn_bins):
     """
     Histogram of pixel values of frame within the ROI and bins defined in 
     rn_bins. Returns the counts in each bin.
+    
     Args:
       frame (np.array): frame
       offset_rowroi (int): row of region of interest
       offset_colroi (int): column of region of interest
       rn_bins (int): histogram bins
+    
     Returns:
       np.array: counts in each bin
     """
@@ -253,10 +267,13 @@ def histc_roi(frame,offset_rowroi,offset_colroi,rn_bins):
 def calculate_mode(arr):
     """
     calculates histogram of an array
+    
     Args:
       arr (np.array): input array
+    
     Returns:
-      np.array, np.array: bin center counts
+      np.array: bin center values
+      np.array: bin center counts
     """
     counts, bin_edges = np.histogram(arr)
     # Calculate bin centers (values)
@@ -317,7 +334,6 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         span from about 100 to about 10000 DN. note: unity em gain is 
         recommended when k-gain is the primary desired product, since it is 
         known more accurately than non-unity values.)
-    
       stack_arr2 (np.array):
         The stack of EXCAM illuminated pupil L1 SCI frames (counts in DN). 
         stack_arr2 contains a stack of at least 30 frames of uniform exposure 
@@ -327,41 +343,32 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         accurately than non-unity values. stack_arr and stack_arr2 must be 
         obtained under the same positioning of the pupil relative to the 
         detector.
-    
       emgain (float):
         The value of the measured/actual EM gain used to collect the frames used 
         to build the stack_arr and stack_arr2 arrays. Must be >= 1.0. (note: 
         unity em gain is recommended when k-gain is the primary desired product, 
         since it is known more accurately than non-unity values.)
-    
       min_val (int): 
         Minimum value (in DN) of mean values from sub-stacks to use in calculating 
-        kgain. (> 400 recommended)
-        
+        kgain. (> 400 recommended)  
       max_val (int):
         Maximum value (in DN) of mean values from sub-stacks to use in calculating 
         kgain. Choose value that avoids large deviations from linearity at high 
         counts. (< 6,000 recommended)
-    
       binwidth (int):
         Width of each bin for calculating std devs and means from each 
         sub-stack in stack_arr. Maximum value of binwidth is 800. NOTE: small 
         values increase computation time.
         (minimum 10; binwidth between 65 and 75 recommended)
-    
       mkplot (boolean):
         Option to display plots. Default is None. If mkplot is anything other 
         than None, then this option is chosen.
-
       log_plot1 (int):
         log plot min value in np.logspace.
-
       log_plot2 (int):
         log plot max value in np.logspace.
-
       log_plot3 (int):
         Number of elements in np.logspace.
-    
       verbose (boolean):
         Option to display various diagnostic print messages. Default is None. 
         If mkplot is anything other than None, then this option is chosen.
@@ -371,23 +378,19 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         kgain estimate from the least-squares fit to the photon transfer curve 
         (in e-/DN). The expected value of kgain for EXCAM with flight readout 
         sequence should be between 8 and 9 e-/DN.
-    
       float:
         Read noise estimate from the prescan regions (in e-), calculated from 
         the Gaussian fit std devs (in DN) multiplied by kgain. This value 
         should be considered the true read noise, not affected by the fixed 
         pattern noise. 
-    
       float:
         Read noise estimate from the prescan regions (in e-), calculated from 
         simple std devs (in DN) multiplied by kgain. This value should be 
         larger than read_noise_gauss and is affected by the fixed pattern noise.
-    
       np.array: ptc,
         array of size N x 2, where N is the number of bins set by the 'signal_bins_N' 
         parameter in the dictionary kgain_params. The first column is the mean (DN) and 
         the second column is standard deviation (DN) corrected for read noise.
-    
     """
     # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
     stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)
@@ -783,9 +786,11 @@ def copy_and_cast(stack_arr_drp, stack_arr2_drp):
     """ 
     Copies and casts input stacks of CORGIDRP Data Image objects into numpy
     arrays to perform computations.
+    
     Args:
       stack_arr_drp (list): list of data.Image objects 
       stack_arr2_drp (list): list of data.Image objects
+    
     Returns:
       np.array, np.array: copied arrays
     
