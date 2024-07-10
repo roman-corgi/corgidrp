@@ -369,7 +369,7 @@ def nonlin_factor(coeffs,DN):
     
     Args:
        coeffs (np.array): nonlinearity coefficients
-       DN(int): DN value
+       DN (int): DN value
        
     Returns:
        float: nonlinearity value
@@ -399,14 +399,14 @@ def make_fluxmap_frame(
     This function makes a SCI-sized frame with simulated noise and a fluxmap.
 
     Args:
-        f_map (array) : fluxmap in e/s/px. Its size is 1024x1024 pixels.
-        bias (float) : bias value in electrons.
-        kgain (float) : value of K-Gain in electrons per DN.
-        rn (float) : read noise in electrons.
-        emgain (float) : calue of EM gain. 
-        time (float) :  exposure time in sec.
-        coeffs (array) : array of cubic polynomial coefficients from nonlin_coefs.
-        nonlin_flag (bool) : (Optional) if nonlin_flag is True, then nonlinearity is applied.
+        f_map (np.array): fluxmap in e/s/px. Its size is 1024x1024 pixels.
+        bias (float): bias value in electrons.
+        kgain (float): value of K-Gain in electrons per DN.
+        rn (float): read noise in electrons.
+        emgain (float): calue of EM gain. 
+        time (float):  exposure time in sec.
+        coeffs (np.array): array of cubic polynomial coefficients from nonlin_coefs.
+        nonlin_flag (bool): (Optional) if nonlin_flag is True, then nonlinearity is applied.
         
     Returns:
         corgidrp.data.Dataset
