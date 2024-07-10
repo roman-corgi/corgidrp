@@ -90,10 +90,213 @@ def check_kgain_params(
 class CalKgainException(Exception):
     """Exception class for calibrate_kgain."""
 
+################### function defs #####################
+    
+def frameProc(frame, offset_colroi, emgain):
+    """ 
+    simple row-bias subtraction using prescan region 
+    frame is an L1 SCI-size frame, offset_colroi is the 
+    column range in the prescan region to use to calculate 
+    the median for each row. em gain is the actual emgain used 
+    to collect the frame.
+        
+    Args:
+      frame (np.array): L1 frame
+      offset_colroi (int): column range
+      emgain(int): EM gain value   
+    Returns:
+      np.array: bias subtracted frame
+    """
+      
+    frame = np.float64(frame)
+    row_meds = np.median(frame[:,offset_colroi], axis=1)
+    row_meds = row_meds[:, np.newaxis]
+    frame -= row_meds
+    frame = frame/emgain
+    return frame
+    
+def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
+    """ 
+    frame_in is a bias-corrected frame trimmed to the ROI. mean_frame is 
+    the scaled high SNR mean frame made from the >=30 frames of uniform 
+    exposure time, binwidth is an integer equal to the width of each bin, 
+    max_DN is an integer equal to the maximum DN value to be included in 
+    the bins.
+       
+    Args:
+      frame_in (np.array): bias corrected frame
+      mean_frame (np.array): mean frame of uniform exposure time
+      binwidth (int): width of each bin
+      max_DN (int): maximum DN value
+    Returns:
+      np.array, np.array: mean array and noise array
+    """
+    # calculate the size of output arrays
+    rows, cols = frame_in.shape
+    out_rows, out_cols = rows // binwidth, cols // binwidth
+      
+    local_mean_array = np.zeros((out_rows, out_cols))
+    local_noise_array = np.zeros((out_rows, out_cols))
+        
+    # Define the bin edges
+    row_bins = np.arange(1, rows + 1, binwidth)
+    col_bins = np.arange(1, cols + 1, binwidth)
+        
+    tot_bins = len(row_bins) * len(col_bins)
+    DN_bin = max_DN / tot_bins
+        
+    # Flatten the arrays for easier indexing
+    mean_flat = mean_frame.flatten()
+    frame_in_flat = frame_in.flatten()
+        
+    DN_val = 0
+    for m in range(len(row_bins) - 1):
+        for n in range(len(col_bins) - 1):
+            DN_val += DN_bin
+                
+            # Create masks based on DN values
+            mean_idx = (mean_flat >= DN_val) & (mean_flat < (DN_val + DN_bin))
+                
+            # Ensure that there is at least one element to calculate mean and std
+            if np.any(mean_idx):
+                local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx])
+                local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx])
+            else:
+                local_mean_array[m, n] = 0
+                local_noise_array[m, n] = 0
+        
+    return local_mean_array, local_noise_array
+
+def diff2std(diff_frame, offset_rowroi, offset_colroi):
+    """
+    calculate the standard deviation of the frame difference, 
+    diff_frame within the ROI row and column boundaries.
+    Args:
+      diff_frame (np.array): frame diffference
+      offset_rowroi (int): row of region of interest
+      offset_colroi (int): column of region of interest
+    Returns:
+      np.array: standard deviation of frame difference
+    """
+        
+    selected_area = diff_frame[offset_rowroi, offset_colroi]
+    std_value = np.std(selected_area.reshape(-1), ddof=1)
+    # dividing by sqrt(2) since we want std of one frame
+    return std_value / np.sqrt(2)
+    
+def gauss(x, A, mean, sigma):
+    """
+    Gauss function. Called by sgaussfit.
+    Args:
+      x (np.array): input array
+      A (float): amplitude
+      mean (float): mean value
+      sigma (float): sigma
+    Returns:
+      np.array: Gauss function
+    """
+    return A * np.exp(-0.5 * ((x - mean) ** 2) / (sigma ** 2))
+    
+def sgaussfit(xdata, ydata, gaussinp):
+    """
+    Find fitting parameters to Gauss function. Called by Single_peakfit. 
+    gaussinp is an array containing initial values of A, mean, sigma.
+    Args:
+      xdata (np.array): input x array
+      ydata (np.array): input y array
+      gaussinp (np.array): initial guess array
+    Returns:
+      np.array, np.array: fit parameters
+    """
+    popt, pcov = curve_fit(gauss, xdata, ydata, p0=gaussinp)
+    sse = np.sum((ydata - gauss(xdata, *popt)) ** 2)
+    return popt, lambda params: (sse, gauss(xdata, *params))
+    
+def Single_peakfit(xdata, ydata):
+    """
+    Fit Gauss function to x, y data. Returns mean and sigma. Only sigma 
+    is used in main code call.
+    Args:
+      xdata (np.array): x data
+      ydata (np.array): y data
+    Returns:
+      float: sigma
+    """
+    astart = np.max(ydata)
+    mustart = xdata[np.argmax(ydata)]
+    sigmastart = 10
+    sgaussinp = [astart, mustart, sigmastart]
+    
+    estimates, model = sgaussfit(xdata, ydata, sgaussinp)
+    a1, mu1, sigma = estimates
+
+    return sigma
+    
+def histc_roi(frame,offset_rowroi,offset_colroi,rn_bins):
+    """
+    Histogram of pixel values of frame within the ROI and bins defined in 
+    rn_bins. Returns the counts in each bin.
+    Args:
+      frame (np.array): frame
+      offset_rowroi (int): row of region of interest
+      offset_colroi (int): column of region of interest
+      rn_bins (int): histogram bins
+    Returns:
+      np.array: counts in each bin
+    """
+    selected_area = frame[offset_rowroi,offset_colroi]
+    data_reshaped = selected_area.ravel()
+    counts, _ = np.histogram(data_reshaped, bins=rn_bins)
+      
+    return counts
+    
+def calculate_mode(arr):
+    """
+    calculates histogram of an array
+    Args:
+      arr (np.array): input array
+    Returns:
+      np.array, np.array: bin center counts
+    """
+    counts, bin_edges = np.histogram(arr)
+    # Calculate bin centers (values)
+    values = (bin_edges[:-1] + bin_edges[1:]) / 2
+    max_count_index = np.argmax(counts)
+    return values[max_count_index], counts[max_count_index]
+
+def sigma_clip(data, sigma=2.5, max_iters=6):
+    """
+    Perform sigma-clipping on the data.
+      
+    Args:
+       data (np.array): The input data to be sigma-clipped.
+       sigma (float): The number of standard deviations to use for clipping.
+       max_iters (int): The maximum number of iterations to perform.
+    
+    Returns:
+      np.ndarray: The sigma-clipped data.
+      np.ndarray: A boolean mask where True indicates a clipped value.
+    """
+    data = np.asarray(data)
+    clipped_data = data.copy()
+      
+    for i in range(max_iters):
+        mean = np.mean(clipped_data)
+        std = np.std(clipped_data)
+        mask = np.abs(clipped_data - mean) > sigma * std
+        if not np.any(mask):
+            break
+        clipped_data = clipped_data[~mask]
+        
+    return clipped_data, mask
+    
+######################### start of main code #############################
+
 def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val, 
-                    binwidth=68, mkplot=None, log_plot1=-1, log_plot2=4,
-                    log_plot3=200, verbose=None):
-    """Given an array of frame stacks for various exposure times, each sub-stack
+                    binwidth=68, mkplot=False, log_plot1=-1, log_plot2=4,
+                    log_plot3=200, verbose=False):
+    """
+    Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
     exposure time, this function subtracts the prescan bias from each frame. It 
     also creates a mean pupil array from a separate stack of frames of uniform 
@@ -103,9 +306,8 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     defined minimum and maximum mean values. A photon transfer curve is plotted 
     from the std dev and mean values from the bins. 
     
-    Parameters
-    ----------
-    stack_arr : array-like
+    Args:
+      stack_arr (np.array):
         The stack of stacks of EXCAM illuminated pupil L1 SCI frames (counts 
         in DN) having a range of exp times. stack_arr contains a stack of 
         stacks, and all sub-stacks must have the same number of frames, which 
@@ -116,7 +318,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         recommended when k-gain is the primary desired product, since it is 
         known more accurately than non-unity values.)
     
-    stack_arr2 : array-like
+      stack_arr2 (np.array):
         The stack of EXCAM illuminated pupil L1 SCI frames (counts in DN). 
         stack_arr2 contains a stack of at least 30 frames of uniform exposure 
         time, such that the net mean counts in the pupil region is a few thousand 
@@ -126,63 +328,62 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         obtained under the same positioning of the pupil relative to the 
         detector.
     
-    emgain : float
+      emgain (float):
         The value of the measured/actual EM gain used to collect the frames used 
         to build the stack_arr and stack_arr2 arrays. Must be >= 1.0. (note: 
         unity em gain is recommended when k-gain is the primary desired product, 
         since it is known more accurately than non-unity values.)
     
-    min_val : int
+      min_val (int): 
         Minimum value (in DN) of mean values from sub-stacks to use in calculating 
         kgain. (> 400 recommended)
         
-    max_val : int
+      max_val (int):
         Maximum value (in DN) of mean values from sub-stacks to use in calculating 
         kgain. Choose value that avoids large deviations from linearity at high 
         counts. (< 6,000 recommended)
     
-    binwidth : int
+      binwidth (int):
         Width of each bin for calculating std devs and means from each 
         sub-stack in stack_arr. Maximum value of binwidth is 800. NOTE: small 
         values increase computation time.
         (minimum 10; binwidth between 65 and 75 recommended)
     
-    mkplot : boolean
+      mkplot (boolean):
         Option to display plots. Default is None. If mkplot is anything other 
         than None, then this option is chosen.
 
-    log_plot1 : int
+      log_plot1 (int):
         log plot min value in np.logspace.
 
-    log_plot2 : int
+      log_plot2 (int):
         log plot max value in np.logspace.
 
-    log_plot3 : int
+      log_plot3 (int):
         Number of elements in np.logspace.
     
-    verbose : boolean
+      verbose (boolean):
         Option to display various diagnostic print messages. Default is None. 
         If mkplot is anything other than None, then this option is chosen.
     
-    Returns
-    -------
-    kgain: KGain data type
+    Returns:
+      corgidrp.data.KGain:
         kgain estimate from the least-squares fit to the photon transfer curve 
         (in e-/DN). The expected value of kgain for EXCAM with flight readout 
         sequence should be between 8 and 9 e-/DN.
     
-    read_noise_gauss : float
+      float:
         Read noise estimate from the prescan regions (in e-), calculated from 
         the Gaussian fit std devs (in DN) multiplied by kgain. This value 
         should be considered the true read noise, not affected by the fixed 
         pattern noise. 
     
-    read_noise_stdev : float
+      float:
         Read noise estimate from the prescan regions (in e-), calculated from 
         simple std devs (in DN) multiplied by kgain. This value should be 
         larger than read_noise_gauss and is affected by the fixed pattern noise.
     
-    ptc : array-like
+      np.array: ptc,
         array of size N x 2, where N is the number of bins set by the 'signal_bins_N' 
         parameter in the dictionary kgain_params. The first column is the mean (DN) and 
         the second column is standard deviation (DN) corrected for read noise.
@@ -238,145 +439,6 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         raise TypeError('logplot2 is not a number')
     if not isinstance(log_plot3, (float, int)):
         raise TypeError('logplot3 is not a number')
-    
-    ################### function defs #####################
-    
-    def frameProc(frame, offset_colroi, emgain):
-        """ simple row-bias subtraction using prescan region 
-        frame is an L1 SCI-size frame, offset_colroi is the 
-        column range in the prescan region to use to calculate 
-        the median for each row. em gain is the actual emgain used 
-        to collect the frame.
-        """
-        
-        frame = np.float64(frame)
-
-        row_meds = np.median(frame[:,offset_colroi], axis=1)
-        row_meds = row_meds[:, np.newaxis]
-        frame -= row_meds
-        frame = frame/emgain
-        return frame
-    
-    def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
-        """ frame_in is a bias-corrected frame trimmed to the ROI. mean_frame is 
-        the scaled high SNR mean frame made from the >=30 frames of uniform 
-        exposure time, binwidth is an integer equal to the width of each bin, 
-        max_DN is an integer equal to the maximum DN value to be included in 
-        the bins.
-        """
-        # calculate the size of output arrays
-        rows, cols = frame_in.shape
-        out_rows, out_cols = rows // binwidth, cols // binwidth
-        
-        local_mean_array = np.zeros((out_rows, out_cols))
-        local_noise_array = np.zeros((out_rows, out_cols))
-        
-        # Define the bin edges
-        row_bins = np.arange(1, rows + 1, binwidth)
-        col_bins = np.arange(1, cols + 1, binwidth)
-        
-        tot_bins = len(row_bins) * len(col_bins)
-        DN_bin = max_DN / tot_bins
-        
-        # Flatten the arrays for easier indexing
-        mean_flat = mean_frame.flatten()
-        frame_in_flat = frame_in.flatten()
-        
-        DN_val = 0
-        for m in range(len(row_bins) - 1):
-            for n in range(len(col_bins) - 1):
-                DN_val += DN_bin
-                
-                # Create masks based on DN values
-                mean_idx = (mean_flat >= DN_val) & (mean_flat < (DN_val + DN_bin))
-                
-                # Ensure that there is at least one element to calculate mean and std
-                if np.any(mean_idx):
-                    local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx])
-                    local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx])
-                else:
-                    local_mean_array[m, n] = 0
-                    local_noise_array[m, n] = 0
-        
-        return local_mean_array, local_noise_array
-
-    def diff2std(diff_frame, offset_rowroi, offset_colroi):
-        """calculate the standard deviation of the frame difference, 
-        diff_frame within the ROI row and column boundaries.
-        """
-        
-        selected_area = diff_frame[offset_rowroi, offset_colroi]
-        std_value = np.std(selected_area.reshape(-1), ddof=1)
-        # dividing by sqrt(2) since we want std of one frame
-        return std_value / np.sqrt(2)
-    
-    def gauss(x, A, mean, sigma):
-        """Gauss function. Called by sgaussfit."""
-        return A * np.exp(-0.5 * ((x - mean) ** 2) / (sigma ** 2))
-    
-    def sgaussfit(xdata, ydata, gaussinp):
-        """Find fitting parameters to Gauss function. Called by Single_peakfit. 
-        gaussinp is an array containing initial values of A, mean, sigma."""
-        popt, pcov = curve_fit(gauss, xdata, ydata, p0=gaussinp)
-        sse = np.sum((ydata - gauss(xdata, *popt)) ** 2)
-        return popt, lambda params: (sse, gauss(xdata, *params))
-    
-    def Single_peakfit(xdata, ydata):
-        """Fit Gauss funxtion to x, y data. Returns mean and sigma. Only sigma 
-        is used in main code call."""
-        astart = np.max(ydata)
-        mustart = xdata[np.argmax(ydata)]
-        sigmastart = 10
-        sgaussinp = [astart, mustart, sigmastart]
-    
-        estimates, model = sgaussfit(xdata, ydata, sgaussinp)
-        a1, mu1, sigma = estimates
-
-        return sigma
-    
-    def histc_roi(frame,offset_rowroi,offset_colroi,rn_bins):
-        """Histogram of pixel values of frame within the ROI and bins defined in 
-        rn_bins. Returns the counts in each bin."""
-        selected_area = frame[offset_rowroi,offset_colroi]
-        data_reshaped = selected_area.ravel()
-        counts, _ = np.histogram(data_reshaped, bins=rn_bins)
-        
-        return counts
-    
-    def calculate_mode(arr):
-        counts, bin_edges = np.histogram(arr)
-        # Calculate bin centers (values)
-        values = (bin_edges[:-1] + bin_edges[1:]) / 2
-        max_count_index = np.argmax(counts)
-        return values[max_count_index], counts[max_count_index]
-
-    def sigma_clip(data, sigma=2.5, max_iters=6):
-        """
-        Perform sigma-clipping on the data.
-        
-        Parameters:
-        data (array-like): The input data to be sigma-clipped.
-        sigma (float): The number of standard deviations to use for clipping.
-        max_iters (int): The maximum number of iterations to perform.
-    
-        Returns:
-        clipped_data (np.ndarray): The sigma-clipped data.
-        mask (np.ndarray): A boolean mask where True indicates a clipped value.
-        """
-        data = np.asarray(data)
-        clipped_data = data.copy()
-        
-        for i in range(max_iters):
-            mean = np.mean(clipped_data)
-            std = np.std(clipped_data)
-            mask = np.abs(clipped_data - mean) > sigma * std
-            if not np.any(mask):
-                break
-            clipped_data = clipped_data[~mask]
-        
-        return clipped_data, mask
-    
-    ######################### start of main code #############################
     
     # get relevant constants
     offset_rowroi1 = kgain_params['offset_rowroi1']
@@ -437,7 +499,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     frame_slice = good_mean_frame[rowroi, colroi]
     
     # If requested, create a figure and plot the sliced frame
-    if mkplot is not None:
+    if mkplot:
         plt.figure()
         # 'viridis' is a common colormap
         plt.imshow(frame_slice, aspect='equal', cmap='viridis')
@@ -462,7 +524,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         index_pairs += [(i, i + 1) for i in range(4, nFrames - 1)]
     
     for jj in range(nSets):
-        if verbose is not None:
+        if verbose:
             print(jj)
         
         # multi-frame analysis method
@@ -608,14 +670,14 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     # equation: k_gain = mean / signal variance
     kgain_arr = 10**(x_vals)/(10**y_vals)**2
     
-    if mkplot is not None:
+    if mkplot:
         plt.figure()
         # 'auto' lets matplotlib decide the number of bins
         plt.hist(kgain_arr, bins='auto', log=True)
         plt.title('Histogram of kgain values')
         plt.show()
     
-    if mkplot is not None:
+    if mkplot:
         plt.figure()
         plt.plot(10**x_vals, kgain_arr, marker='o', linestyle='-', color='b', label='kgain')
         # Set y-axis range
@@ -633,7 +695,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     # adopt 'mode_kgain' as the final value to return
     kgain = mode_kgain
 
-    if mkplot is not None:
+    if mkplot:
        plt.figure()
        # 'auto' lets matplotlib decide the number of bins
        plt.hist(kgain_clipped, bins='auto', log=True)
@@ -651,7 +713,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     mean_rn_std_e = mean_rn_std_DN * kgain
     
     # If requested, plotting
-    if mkplot is not None:
+    if mkplot:
         # Create log-spaced averages for plotting
         full_range_averages = np.logspace(log_plot1, log_plot2, log_plot3)
         
@@ -718,8 +780,15 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     return (kgain, mean_rn_gauss_e, mean_rn_std_e, ptc)
     
 def copy_and_cast(stack_arr_drp, stack_arr2_drp):
-    """ Copies and casts input stacks of CORGIDRP Data Image objects into numpy
+    """ 
+    Copies and casts input stacks of CORGIDRP Data Image objects into numpy
     arrays to perform computations.
+    Args:
+      stack_arr_drp (list): list of data.Image objects 
+      stack_arr2_drp (list): list of data.Image objects
+    Returns:
+      np.array, np.array: copied arrays
+    
     """
     stack_arr = stack_arr_drp.copy()
     stack_arr2 = stack_arr2_drp.copy()

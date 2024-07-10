@@ -122,111 +122,100 @@ min_val = 800
 max_val = 3000
 binwidth = 68
 
-################### define class for tests ######################
-
-class TestCalibrateKgain(unittest.TestCase):
-    """Unit tests for calibrate_kgain method."""
-    
-    # sort out paths
-    local_path = os.path.dirname(os.path.realpath(__file__))
-
-    def setUp(self):
-
-        self.emgain = emgain
-        self.min_val = min_val
-        self.max_val = max_val
-        self.binwidth = binwidth
-
-        # filter out expected warnings
-        warnings.filterwarnings('ignore', category=UserWarning,
-            module='kgain.calibrate_kgain')
-
-    def test_expected_results_sub(self):
-        """Outputs are as expected, for imported frames."""
-        (kgain, read_noise_gauss, read_noise_stdev, ptc) = \
-        calibrate_kgain(stack_arr, stack_arr2, self.emgain,
-            self.min_val, self.max_val, self.binwidth)
+def test_expected_results_sub():
+    """Outputs are as expected, for imported frames."""
+    (kgain, read_noise_gauss, read_noise_stdev, ptc) = \
+    calibrate_kgain(stack_arr, stack_arr2, emgain,
+        min_val, max_val, binwidth)
         
-        signal_bins_N = kgain_params['signal_bins_N']
-        # kgain - should be close to the assumed value
-        self.assertTrue(np.isclose(round(kgain.value,1), kgain_in, atol=0.5))
-        # read noises. these are not requirements, but nice to check
-        self.assertTrue(np.isclose(round(read_noise_gauss,1), rn_in, atol=8))
-        self.assertTrue(np.isclose(round(read_noise_stdev,1), rn_in, atol=8))
-        # check that the ptc output is the correct size
-        self.assertTrue(np.all(np.equal(ptc.shape, (signal_bins_N,2))))
+    signal_bins_N = kgain_params['signal_bins_N']
+    # kgain - should be close to the assumed value
+    assert np.isclose(round(kgain.value,1), kgain_in, atol=0.5)
+    # read noises. these are not requirements, but nice to check
+    assert np.isclose(round(read_noise_gauss,1), rn_in, atol=8)
+    assert np.isclose(round(read_noise_stdev,1), rn_in, atol=8)
+    # check that the ptc output is the correct size
+    assert np.all(np.equal(ptc.shape, (signal_bins_N,2)))
 
-    def test_4D(self):
-        """stack_arr should be 4-D."""
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr[0], stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth)
+def test_4D():
+    """stack_arr should be 4-D."""
+    with pytest.raises(CalKgainException):
+        calibrate_kgain(stack_arr[0], stack_arr2, emgain, 
+            min_val, max_val, binwidth)
 
-    def test_sub_stack_len(self):
-        """stack_arr must have at least 10 sub-stacks."""
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr[0:8], stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth)
+def test_sub_stack_len():
+    """stack_arr must have at least 10 sub-stacks."""
+    with pytest.raises(CalKgainException):
+        calibrate_kgain(stack_arr[0:8], stack_arr2, emgain, 
+            min_val, max_val, binwidth)
 
-    def test_sub_sub_stack_len(self):
-        """Each sub-stack of stack_arr must have 5 sub-stacks."""
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr[:,0:3], stack_arr2, self.emgain, 
-                self.min_val, self.max_val, self.binwidth)
+def test_sub_sub_stack_len():
+    """Each sub-stack of stack_arr must have 5 sub-stacks."""
+    with pytest.raises(CalKgainException):
+        calibrate_kgain(stack_arr[:,0:3], stack_arr2, emgain, 
+            min_val, max_val, binwidth)
     
-    def test_3D(self):
-        """stack_arr2 must be 3-D."""
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr, stack_arr2[0], self.emgain, 
-                self.min_val, self.max_val, self.binwidth)
+def test_3D():
+    """stack_arr2 must be 3-D."""
+    with pytest.raises(CalKgainException):
+       calibrate_kgain(stack_arr, stack_arr2[0], emgain, 
+            min_val, max_val, binwidth)
     
-    def test_sub_stack2_len(self):
-        """stack_arr2 must have at least 30 sub-stacks."""
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr, stack_arr2[0:28], self.emgain, 
-                self.min_val, self.max_val, self.binwidth)
+def test_sub_stack2_len():
+    """stack_arr2 must have at least 30 sub-stacks."""
+    with pytest.raises(CalKgainException):
+        calibrate_kgain(stack_arr, stack_arr2[0:28], emgain, 
+            min_val, max_val, binwidth)
 
-    def test_psi(self):
-        """These three below must be positive scalar integers."""
-        check_list = test_check.psilist
-        # min_val
-        for perr in check_list:
-            with self.assertRaises(TypeError):
-                calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                    perr, self.max_val, self.binwidth)
+def test_psi():
+    """These three below must be positive scalar integers."""
+    check_list = test_check.psilist
+    # min_val
+    for perr in check_list:
+        with pytest.raises(TypeError):
+            calibrate_kgain(stack_arr, stack_arr2, emgain, 
+                perr, max_val, binwidth)
+    # max_val
+    for perr in check_list:
+        with pytest.raises(TypeError):
+            calibrate_kgain(stack_arr, stack_arr2, emgain, 
+                min_val, perr, binwidth)
 
-        # max_val
-        for perr in check_list:
-            with self.assertRaises(TypeError):
-                calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                    self.min_val, perr, self.binwidth)
-
-        # binwidth
-        for perr in check_list:
-            with self.assertRaises(TypeError):
-                calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                    self.min_val, self.max_val, perr)
-        
-    def test_binwidth(self):
-        """binwidth must be >= 10."""
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr, stack_arr2, self.emgain, 
-                self.min_val, self.max_val, 9)
-    
-    def test_rps(self):
-        """emgain must be a real positive scalar."""
-        check_list = test_check.rpslist
-        # min_write
-        for rerr in check_list:
-            with self.assertRaises(TypeError):
-                calibrate_kgain(stack_arr, stack_arr2, rerr, 
-                    self.min_val, self.max_val, self.binwidth)
-    
-    def test_emgain(self):
-        """emgain must be >= 1."""
-        with self.assertRaises(CalKgainException):
-            calibrate_kgain(stack_arr, stack_arr2, 0.5, 
-                self.min_val, self.max_val, self.binwidth)
+    # binwidth
+    for perr in check_list:
+        with pytest.raises(TypeError):
+            calibrate_kgain(stack_arr, stack_arr2, emgain, 
+                min_val, max_val, perr)
+      
+def test_binwidth():
+    """binwidth must be >= 10."""
+    with pytest.raises(CalKgainException):
+        calibrate_kgain(stack_arr, stack_arr2, emgain, 
+            min_val, max_val, 9)
+ 
+def test_rps():
+    """emgain must be a real positive scalar."""
+    check_list = test_check.rpslist
+    # min_write
+    for rerr in check_list:
+        with pytest.raises(TypeError):
+            calibrate_kgain(stack_arr, stack_arr2, rerr, 
+                min_val, max_val, binwidth)
+   
+def test_emgain():
+    """emgain must be >= 1."""
+    with pytest.raises(CalKgainException):
+        calibrate_kgain(stack_arr, stack_arr2, 0.5, 
+            min_val, max_val, binwidth)
 
 if __name__ == '__main__':
-    unittest.main()
+    test_expected_results_sub()
+    test_4D()
+    test_sub_stack_len()
+    test_sub_sub_stack_len()
+    test_3D()
+    test_sub_stack2_len()
+    test_psi()
+    test_binwidth()
+    test_rps()
+    test_emgain()
