@@ -192,18 +192,18 @@ def test_expected_results_nom_sub():
     assert np.less(rms3,0.0035)
     assert np.less(rms4,0.0035)
     # check that the first element in the first column is equal to min_write
-    assert np.equal(nonlin_arr[0,0], self.min_write)
+    assert np.equal(nonlin_arr[0,0], min_write)
     # check that the last element in the first column is equal to max_write
-    assert np.equal(nonlin_arr[-1,0], self.max_write)
+    assert np.equal(nonlin_arr[-1,0], max_write)
     # check that the unity value is in the correct row
     norm_ind = np.where(nonlin_arr[:, 1] == 1)[0]
     assert np.equal(nonlin_arr[norm_ind,1], 1)
     assert np.equal(nonlin_arr[norm_ind,-1], 1)
     # check that norm_val is correct
-    assert np.equal(nonlin_arr[norm_ind,0], self.norm_val)
+    assert np.equal(nonlin_arr[norm_ind,0], norm_val)
     # check one of the header values
     assert np.equal(headers[1].astype(float), 1)
-    assert np.equal(len(means_min_max),len(self.actual_gain_arr))
+    assert np.equal(len(means_min_max),len(actual_gain_arr))
        
 def test_expected_results_time_stack_sub():
     """Outputs are as expected for the provided frames with 
@@ -241,7 +241,7 @@ def test_3D_1():
 def test_sub_stack_len_1():
     """Number of sub-stacks in stack_arr must '
             'equal the sum of the elements in len_list."""
-    sum_len_list = np.sum(self.len_list)-1
+    sum_len_list = np.sum(len_list)-1
     with pytest.assertRaises(CalNonlinException):
         calibrate_nonlin(stack_arr[0:sum_len_list], exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2, 
@@ -282,7 +282,7 @@ def test_exp_time_stack_arr():
 def test_exp_time_stack_arr_gt0():
     """exp_time_stack_arr elements must all be greater than 0."""
     #same length as exp_time_stack_arr, but contains 0
-    exp_arr = np.arange(0,len(self.exp_time_stack_arr))
+    exp_arr = np.arange(0,len(exp_time_stack_arr))
     with pytest.assertRaises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_arr, 
                             time_stack_arr, len_list, stack_arr2, 
@@ -298,7 +298,7 @@ def test_exp_time_stack_arr_rept():
     no_repeat_arr = np.copy(exp_time_stack_arr)
     # replace the last 5 exposure times (repeated) in first subgroup of 
     # frames with different exp times
-    no_repeat_arr[self.len_list[0]-5:self.len_list[0]] = \
+    no_repeat_arr[len_list[0]-5:len_list[0]] = \
         1 + no_repeat_arr[len_list[0]-10:len_list[0]-5]
     with pytest.assertRaises(CalNonlinException):
         calibrate_nonlin(stack_arr, no_repeat_arr, 
@@ -308,7 +308,7 @@ def test_exp_time_stack_arr_rept():
         
 def test_unique_time_stack_arr():
     """All elements of time_stack_arr must be unique."""
-    terr = self.time_stack_arr
+    terr = time_stack_arr
     terr[1] = terr[0] # set second element equal to the first
     with pytest.assertRaises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
