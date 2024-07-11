@@ -133,14 +133,14 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
                      fit_upp_cutoff1 = -2, fit_upp_cutoff2 = -3,
                      fit_low_cutoff1 = 2, fit_low_cutoff2 = 1,
                      mkplot=None, verbose=None):
-    """Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
+    """
+    Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
     frames ranging over exposure time, each sub-stack having at least 1 illuminated 
     pupil SCI-sized L1 frame for each exposure time, this function processes the 
     frames to create a nonlinearity table. A mean pupil array is created from a 
     separate stack of frames of constant exposure time and used to make a mask; 
     the mask is used to select pixels in each frame in the large array of stacks 
     in order to calculate its mean signal.
-    
     Two sub-stacks/groups of frames at each EM gain value contain noncontiguous 
     frames with the same (repeated) exposure time, taken near the start and end 
     of the frame sequence. Their mean signals are computed and used to correct for 
@@ -148,7 +148,6 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     given EM gain, depending on when the frames were taken. The repeated exposure 
     time frames should only be repeated once (as opposed to 3 times, etc) and 
     other sets of exposure times for each EM gain should not be repeated.
-    
     Note, it is assumed that the frames for the large array of stacks are 
     collected in a systematic way, such that frames having the same exposure 
     time for a given EM gain are collected contiguously (with the exception of 
@@ -156,7 +155,6 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     group must also be time ordered. For best results, the mean signal in the 
     pupil region for the longest exposure time at each em gain setting should 
     be between 8000 and 10000 DN.
-    
     A linear fit is applied to the corrected mean signals versus exposure time. 
     Relative gain values are calculated from the ratio of the mean signals 
     to the linear fit. Nonlinearity is then calculated from the inverse of
@@ -167,9 +165,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     nonlinearity values. The mean values start with min_write and run through 
     max_write.
     
-    Parameters
-    ----------
-    stack_arr : array-like
+    Args:
+      stack_arr (np.array):
         stack_arr is a stack of frames of dimention 3, which is implicitly 
         subdivided into smaller ranges of grouped frames. The frames are EXCAM 
         illuminated pupil L1 SCI frames. There must be one or more unique EM 
@@ -177,103 +174,82 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         number of frames for each EM gain can vary. The size of stack_arr is: 
         Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having 
         EM gain value g, and the sum is over g.
-    
-    exp_time_stack_arr : array-like
+      exp_time_stack_arr (np.array):
         exp_time_stack_arr is an array of dimension 1 of exposure times (in s) 
         corresponding to the frames in stack_arr in the order found there. The 
         length of exp_time_stack_arr must equal the number of frames used to 
         construct stack_arr. There must be at least 20 unique exposure times at 
         each EM gain. The values must be greater than 0.
-    
-    time_stack_arr : array-like
+      time_stack_arr (np.array):
         time_stack_arr is an array of dimension 1 of date-time strings 
         corresponding to the frames in stack_arr in the same order found there. 
         The length of time_stack_arr must equal the number of frames in 
         stack_arr. All the elements must be unique. The frames in a given group 
         of constant EM gain must be time-ordered.
-        
-    len_list : list
+      len_list (list):
         len_list is a list of the number of frames in each em gain group of 
         frames in stack_arr in the same order. The sum of elements of len_list 
         must equal to the number of sub-stacks in stack_arr. The number of 
         elements (= the number of unique em gain values) in len_list must be 
         one or greater.
-    
-    stack_arr2 : array-like
+      stack_arr2 (np.array):
         stack_arr2 is a stack array of EXCAM unity EM gain illuminated pupil L1 
         SCI frames. stack_arr2 contains a stack of frames of uniform exp time, 
         such that the mean signal in the pupil regions is a few thousand DN.
-    
-    actual_gain_arr : array-like
+      actual_gain_arr (np.array):
         The array of actual EM gain values (as opposed to commanded EM gain) 
         corresponding to the number of EM gain values used to construct 
         stack_arr and in the same order. Note: calibrate_nonlin does not 
         calculate actual EM gain values -- they must be provided in this array. 
         The length of actual_gain_arr must equal the length of len_list. Values 
-        must be >= 1.0.
-        
-    norm_val : int
+        must be >= 1.0. 
+      norm_val (int):
         Value in DN to normalize the nonlinearity values to. Must be greater than 
         0 and must be divisible by 20 without remainder. (1500 to 3000 recommended).
-    
-    min_write : float
+      min_write (float):
         Minimum mean value in DN to output in nonlin_arr and csv_lines. 
         (800.0 recommended)
-    
-    max_write : float
+      max_write (float):
         Maximum mean value in DN to output in nonlin_arr and csv_lines. 
         (10000.0 recommended)
-
-    lowess_frac (float) : factor to use in lowess smoothing function, larger is
+      lowess_frac (float): factor to use in lowess smoothing function, larger is
         smoother
-
-    rms_low_limit (float) : rms relative error selection limits for linear fit.
+      rms_low_limit (float): rms relative error selection limits for linear fit.
         Lower limit.
-
-    rms_upp_limit (float) : rms relative error selection limits for linear fit.
+      rms_upp_limit (float): rms relative error selection limits for linear fit.
         Upper limit.
-
-    fit_upp_cutoff1 (int) : polyfit upper cutoff. The following limits were
+      fit_upp_cutoff1 (int): polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
         this is the upper value applied to select the data to be fitted.
-
-    fit_upp_cutoff2 (int) : polyfit upper cutoff. The following limits were
+      fit_upp_cutoff2 (int): polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
         this is the upper value applied to select the data to be fitted.
-
-    fit_low_cutoff1 (int) : polyfit upper cutoff. The following limits were
+      fit_low_cutoff1 (int): polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
         this is the lower value applied to select the data to be fitted.
-
-    fit_low_cutoff2 (int) : polyfit upper cutoff. The following limits were
+      fit_low_cutoff2 (int): polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
         this is the lower value applied to select the data to be fitted.
-    
-    mkplot : boolean
+      mkplot (boolean):
         Option to display plots. Default is None. If mkplot is anything other 
         than None, then this option is chosen.
-        
-    verbose : boolean
+      verbose (boolean):
         Option to display various diagnostic print messages. Default is None. 
         If verbose is anything other than None, then this option is chosen.
     
-    Returns
-    -------
-    headers: array-like
+    Returns:
+      headers (np.array):
         1-D array of headers used to build csv-lines. The length is equal to 
         the number of columns in 'nonlin_arr' and is one greater than the 
         length of 'actual_gain_arr'.
-    
-    nonlin_arr: array-like
+      nonlin_arr (np.array):
         2-D array with nonlinearity values for input signal level (DN) in rows 
         and EM gain values in columns. The input signal in DN is the first column. 
         Signal values start with min_write and run through max_write in steps 
         of 20 DN.
-    
-    csv_lines : list
+      csv_lines (list):
         List of strings containing the contents of 'headers' and 'nonlin_arr'.
-    
-    means_min_max : array-like
+      means_min_max (np.array):
         minima and maxima of mean values (in DN) used the fit each for EM gain. 
         The size of means_min_max is N x 2, where N is the length of actual_gain_arr.
     """
