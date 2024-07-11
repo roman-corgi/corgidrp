@@ -46,6 +46,31 @@ def nonlin_coefs(filename,EMgain,order):
     
     return coeffs, DNs, fitVals
 
+def count_contiguous_repeats(arr):
+    """
+    This function returns the count of the contiguous repeated exposure times.
+    If input array is empty, returns empty array.
+
+    Args:
+        arr (np.array): 1d array of exposure times.
+
+    Returns:
+        counts (list): count of the contiguous repeated exposure times
+    """
+
+    if isinstance(arr, (np.ndarray, list)) and len(arr) == 0:
+        return []
+    counts = []
+    current_count = 1
+    for i in range(1, len(arr)):
+        if arr[i] == arr[i - 1]:
+            current_count += 1
+        else:
+            counts.append(current_count)
+            current_count = 1
+    counts.append(current_count)  # append the count of the last element
+    return counts
+
 ############### make stacks with simulated frames ##################
 
 # path to nonlin table made from running calibrate_nonlin.py on TVAC frames
