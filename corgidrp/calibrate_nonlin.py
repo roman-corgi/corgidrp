@@ -132,7 +132,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
                      fit_upp_cutoff1 = -2, fit_upp_cutoff2 = -3,
                      fit_low_cutoff1 = 2, fit_low_cutoff2 = 1,
-                     mkplot=None, verbose=None):
+                     make_plot=True, plot_outdir='figures', show_plot=False,
+                     verbose=False):
     """
     Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
     frames ranging over exposure time, each sub-stack having at least 1 illuminated 
@@ -166,91 +167,79 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     max_write.
     
     Args:
-      stack_arr (np.array):
-        stack_arr is a stack of frames of dimention 3, which is implicitly 
+      stack_arr (np.array): stack of frames of dimention 3, which is implicitly 
         subdivided into smaller ranges of grouped frames. The frames are EXCAM 
         illuminated pupil L1 SCI frames. There must be one or more unique EM 
         gain values and at least 20 unique exposure times for each EM gain. The 
         number of frames for each EM gain can vary. The size of stack_arr is: 
         Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having 
         EM gain value g, and the sum is over g.
-      exp_time_stack_arr (np.array):
-        exp_time_stack_arr is an array of dimension 1 of exposure times (in s) 
-        corresponding to the frames in stack_arr in the order found there. The 
-        length of exp_time_stack_arr must equal the number of frames used to 
-        construct stack_arr. There must be at least 20 unique exposure times at 
+      exp_time_stack_arr (np.array): array of dimension 1 of exposure times
+        (in s) corresponding to the frames in stack_arr in the order found there.
+        The length of exp_time_stack_arr must equal the number of frames used to
+        construct stack_arr. There must be at least 20 unique exposure times at
         each EM gain. The values must be greater than 0.
-      time_stack_arr (np.array):
-        time_stack_arr is an array of dimension 1 of date-time strings 
-        corresponding to the frames in stack_arr in the same order found there. 
-        The length of time_stack_arr must equal the number of frames in 
-        stack_arr. All the elements must be unique. The frames in a given group 
-        of constant EM gain must be time-ordered.
-      len_list (list):
-        len_list is a list of the number of frames in each em gain group of 
+      time_stack_arr (np.array): array of dimension 1 of date-time strings
+        corresponding to the frames in stack_arr in the same order found there.
+        The length of time_stack_arr must equal the number of frames in stack_arr.
+        All the elements must be unique. The frames in a given group of constant
+        EM gain must be time-ordered.
+      len_list (list): list of the number of frames in each em gain group of 
         frames in stack_arr in the same order. The sum of elements of len_list 
         must equal to the number of sub-stacks in stack_arr. The number of 
         elements (= the number of unique em gain values) in len_list must be 
         one or greater.
-      stack_arr2 (np.array):
-        stack_arr2 is a stack array of EXCAM unity EM gain illuminated pupil L1 
+      stack_arr2 (np.array): stack array of EXCAM unity EM gain illuminated pupil L1 
         SCI frames. stack_arr2 contains a stack of frames of uniform exp time, 
         such that the mean signal in the pupil regions is a few thousand DN.
-      actual_gain_arr (np.array):
-        The array of actual EM gain values (as opposed to commanded EM gain) 
-        corresponding to the number of EM gain values used to construct 
-        stack_arr and in the same order. Note: calibrate_nonlin does not 
-        calculate actual EM gain values -- they must be provided in this array. 
+      actual_gain_arr (np.array): the array of actual EM gain values (as opposed
+        to commanded EM gain) corresponding to the number of EM gain values used
+        to construct stack_arr and in the same order. Note: calibrate_nonlin does
+        not calculate actual EM gain values -- they must be provided in this array. 
         The length of actual_gain_arr must equal the length of len_list. Values 
         must be >= 1.0. 
-      norm_val (int):
-        Value in DN to normalize the nonlinearity values to. Must be greater than 
-        0 and must be divisible by 20 without remainder. (1500 to 3000 recommended).
-      min_write (float):
-        Minimum mean value in DN to output in nonlin_arr and csv_lines. 
-        (800.0 recommended)
-      max_write (float):
-        Maximum mean value in DN to output in nonlin_arr and csv_lines. 
-        (10000.0 recommended)
-      lowess_frac (float): factor to use in lowess smoothing function, larger is
-        smoother
-      rms_low_limit (float): rms relative error selection limits for linear fit.
-        Lower limit.
-      rms_upp_limit (float): rms relative error selection limits for linear fit.
-        Upper limit.
-      fit_upp_cutoff1 (int): polyfit upper cutoff. The following limits were
+      norm_val (int): (Optional) Value in DN to normalize the nonlinearity values to.
+        Must be greater than 0 and must be divisible by 20 without remainder.
+        (1500 to 3000 recommended).
+      min_write (float): (Optional) Minimum mean value in DN to output in
+        nonlin_arr and csv_lines. (800.0 recommended)
+      max_write (float): (Optional) Maximum mean value in DN to output in
+        nonlin_arr and csv_lines. (10000.0 recommended)
+      lowess_frac (float): (Optional) factor to use in lowess smoothing function,
+        larger is smoother
+      rms_low_limit (float): (Optional) rms relative error selection limits for
+        linear fit. Lower limit.
+      rms_upp_limit (float): (Optional) rms relative error selection limits for
+        linear fit. Upper limit.
+      fit_upp_cutoff1 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
         this is the upper value applied to select the data to be fitted.
-      fit_upp_cutoff2 (int): polyfit upper cutoff. The following limits were
+      fit_upp_cutoff2 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
         this is the upper value applied to select the data to be fitted.
-      fit_low_cutoff1 (int): polyfit upper cutoff. The following limits were
+      fit_low_cutoff1 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
         this is the lower value applied to select the data to be fitted.
-      fit_low_cutoff2 (int): polyfit upper cutoff. The following limits were
+      fit_low_cutoff2 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
         this is the lower value applied to select the data to be fitted.
-      mkplot (boolean):
-        Option to display plots. Default is None. If mkplot is anything other 
-        than None, then this option is chosen.
-      verbose (boolean):
-        Option to display various diagnostic print messages. Default is None. 
-        If verbose is anything other than None, then this option is chosen.
+      make_plot (bool): (Optional) generate and store plots. Default is True.
+      plot_outdir (str): (Optional) Output directory to store figues. Default is
+        'figures'. The default directory is not tracked by git.
+      show_plot (bool): (Optional) display the plots. Default is False.
+      verbose (bool): (Optional) display various diagnostic print messages.
+        Default is False.
     
     Returns:
-      headers (np.array):
-        1-D array of headers used to build csv-lines. The length is equal to 
+      headers (np.array): 1-D array of headers used to build csv-lines. The length is equal to 
         the number of columns in 'nonlin_arr' and is one greater than the 
         length of 'actual_gain_arr'.
-      nonlin_arr (np.array):
-        2-D array with nonlinearity values for input signal level (DN) in rows 
+      nonlin_arr (np.array): 2-D array with nonlinearity values for input signal level (DN) in rows 
         and EM gain values in columns. The input signal in DN is the first column. 
         Signal values start with min_write and run through max_write in steps 
         of 20 DN.
-      csv_lines (list):
-        List of strings containing the contents of 'headers' and 'nonlin_arr'.
-      means_min_max (np.array):
-        minima and maxima of mean values (in DN) used the fit each for EM gain. 
+      csv_lines (list): List of strings containing the contents of 'headers' and 'nonlin_arr'.
+      means_min_max (np.array): minima and maxima of mean values (in DN) used the fit each for EM gain. 
         The size of means_min_max is N x 2, where N is the length of actual_gain_arr.
     """
     # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
@@ -365,6 +354,16 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         raise TypeError('fit_low_cutoff1 is not a number')
     if not isinstance(fit_low_cutoff2, (float, int)):
         raise TypeError('fit_low_cutoff2 is not a number')
+
+    if make_plot is True:
+        # Avoid issues with importing matplotlib on headless servers without GUI
+        # support without proper configuration
+        import matplotlib.pyplot as plt
+        # Output directory
+        if os.path.exists(plot_outdir) is False:
+            os.mkdir(plot_outdir)
+            if verbose:
+                print('Output directory for figures created in ', os.getcwd())
     
     ######################### start of main code #############################
     
@@ -408,7 +407,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         good_mean_frame /= mean_frame_index 
     
     # plot, if requested
-    if mkplot is not None:
+    if make_plot:
+        fname = 'non_lin_good_frame'
         # Slice the good_mean_frame array
         frame_slice = good_mean_frame[np.ix_(rowroi, colroi)]
         # Create a figure and plot the sliced frame
@@ -417,13 +417,19 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         plt.imshow(frame_slice, aspect='equal', cmap='viridis')
         plt.colorbar()
         plt.title('Good quality mean frame')
-        plt.show()
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
     
     # Convert to numpy arrays if they are not already
     rowroi = np.array(rowroi)
     colroi = np.array(colroi)
     
-    if mkplot is not None:
+    if make_plot:
+        fname = 'non_lin_mean_frame_histogram'
         # Plot a histogram of the values within the specified ROI
         roi_values = good_mean_frame[rowroi[:, None], colroi]
         plt.figure()
@@ -432,7 +438,12 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         plt.gca().set_yscale('log')
         plt.gca().set_xscale('log')
         plt.title('Histogram of Mean Frame in ROI')
-        plt.show()
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
     
     # find minimum in histogram
     # 1000-1500 DN recommended when the peak of histogram of  
@@ -462,21 +473,28 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     mask = np.where(good_mean_frame < min_mask, 0, 1)
     
     # plot, if requested
-    if mkplot is not None:
+    if make_plot:
+        fname = 'non_lin_mask'
         # Plot the mask
         plt.figure()
         plt.imshow(mask, cmap='gray')
         plt.title('Mask')
         plt.colorbar()
-        plt.show()
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
         
+        fname = 'non_lin_mean_frame'
         # Plot the mean frame
         plt.figure()
         # 'viridis' is a good default color map
         plt.imshow(good_mean_frame, cmap='viridis')
         plt.title('Mean Frame')
         plt.colorbar()
-        plt.show()
+        plt.close()
     
     # initialize arrays for nonlin results table
     nonlin = []
@@ -519,7 +537,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
                 group_mean_time.append(np.mean(del_s))
                 first_flag = True
         
-        if verbose is not None:
+        if verbose is True:
             print(group_mean_time)
         
         # Additional setup
@@ -668,7 +686,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         second_half = len(repeat_times_idx)
         second_half_mean_time = delta_ctimes_s.iloc[repeat_times_idx[first_half:second_half]].mean()
         
-        if verbose is not None:
+        if verbose is True:
             print("First half mean time:", first_half_mean_time)
             print("Second half mean time:", second_half_mean_time)
         
@@ -692,7 +710,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         filt_exp_times_sorted, I = np.sort(filtered_exposure_times), np.argsort(filtered_exposure_times)
         corr_mean_signal_sorted = np.array(corr_mean_signal)[I]
         
-        if mkplot is not None:
+        if make_plot:
+            fname = 'non_lin_signal_vs_exp'
             # Plotting the corrected mean signal against sorted exposure times
             plt.figure()
             plt.plot(filt_exp_times_sorted, corr_mean_signal_sorted, 'o', label='Data Points')
@@ -716,13 +735,19 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
                             corr_mean_signal_sorted[fit_low_cutoff2:fit_upp_cutoff2], 1)
         y1 = np.polyval(p1, filt_exp_times_sorted)
         
-        if mkplot is not None:
+        if make_plot:
+            fname = 'non_lin_fit'
             # Plot the fitted line
             plt.plot(filt_exp_times_sorted, y1, label='Fitted Line')
             
             # Show the plot with legend
             plt.legend()
-            plt.show()
+            plt.savefig(f'{plot_outdir}/{fname}')
+            if verbose:
+                print(f'Figure {fname} stored in {plot_outdir}')
+            if show_plot:
+                plt.show()
+            plt.close()
         
         # Calculating relative gain
         rel_gain = corr_mean_signal_sorted / y1
@@ -736,7 +761,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         temp_max = np.max(corr_mean_signal_sorted)
         means_min_max.append([temp_min,temp_max])
         
-        if mkplot is not None:
+        if make_plot:
             # Plotting Signal vs. Relative Gain
             plt.figure()
             plt.plot(corr_mean_signal_sorted, rel_gain, 'o', label='Original Data')
@@ -753,7 +778,12 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
             
             # Show legend and plot
             plt.legend()
-            plt.show()
+            plt.savefig(f'{plot_outdir}/{fname}')
+            if verbose:
+                print(f'Figure {fname} stored in {plot_outdir}')
+            if show_plot:
+                plt.show()
+            plt.close()
         
         # Generate evenly spaced values between 20 and 14000
         mean_linspace = np.linspace(20, 14000, 1+int((14000-20)/20))
@@ -773,7 +803,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
                           'of the means for the current EM gain. Extrapolation '
                           'will be used for norm_val.')
         
-        if mkplot is not None:
+        if make_plot:
+            fname = 'non_lin_fit_norm_dn'
             # Plotting Signal vs. Relative Gain normalized at norm_val DN
             plt.figure()
             plt.plot(corr_mean_signal_sorted, rel_gain / normconst, 'o', label='Original Data')
@@ -788,7 +819,12 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
             # Plot the interpolated data
             plt.plot(mean_linspace, rel_gain_interp, 'r-', label='Interpolated Data')
             plt.legend()
-            plt.show()
+            plt.savefig(f'{plot_outdir}/{fname}')
+            if verbose:
+                print(f'Figure {fname} stored in {plot_outdir}')
+            if show_plot:
+                plt.show()
+            plt.close()
         
         # NOTE: nonlinearity is equal to 1/rel_gain
         # multiply raw data by 1/rel_gain to correct for nonlinearity

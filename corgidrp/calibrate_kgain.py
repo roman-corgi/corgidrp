@@ -310,8 +310,8 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
 ######################### start of main code #############################
 
 def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val, 
-                    binwidth=68, mkplot=False, log_plot1=-1, log_plot2=4,
-                    log_plot3=200, verbose=False):
+                    binwidth=68, make_plot=True, plot_outdir='figures', show_plot=False,
+                    log_plot1=-1, log_plot2=4, log_plot3=200, verbose=False):
     """
     Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
@@ -356,41 +356,37 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         kgain. Choose value that avoids large deviations from linearity at high 
         counts. (< 6,000 recommended)
       binwidth (int):
-        Width of each bin for calculating std devs and means from each 
+        (Optional) Width of each bin for calculating std devs and means from each 
         sub-stack in stack_arr. Maximum value of binwidth is 800. NOTE: small 
         values increase computation time.
         (minimum 10; binwidth between 65 and 75 recommended)
-      mkplot (boolean):
-        Option to display plots. Default is None. If mkplot is anything other 
-        than None, then this option is chosen.
-      log_plot1 (int):
-        log plot min value in np.logspace.
-      log_plot2 (int):
-        log plot max value in np.logspace.
-      log_plot3 (int):
-        Number of elements in np.logspace.
-      verbose (boolean):
-        Option to display various diagnostic print messages. Default is None. 
-        If mkplot is anything other than None, then this option is chosen.
+      make_plot (bool): (Optional) generate and store plots. Default is True.
+      plot_outdir (str): (Optional) Output directory to store figues. Default is
+        'figures'. The default directory is not tracked by git.
+      show_plot (bool): (Optional) display the plots. Default is False.
+      log_plot1 (int): log plot min value in np.logspace.
+      log_plot2 (int): log plot max value in np.logspace.
+      log_plot3 (int): Number of elements in np.logspace.
+      verbose (bool): (Optional) display various diagnostic print messages.
+        Default is False. 
     
     Returns:
-      corgidrp.data.KGain:
-        kgain estimate from the least-squares fit to the photon transfer curve 
-        (in e-/DN). The expected value of kgain for EXCAM with flight readout 
-        sequence should be between 8 and 9 e-/DN.
-      float:
-        Read noise estimate from the prescan regions (in e-), calculated from 
-        the Gaussian fit std devs (in DN) multiplied by kgain. This value 
-        should be considered the true read noise, not affected by the fixed 
-        pattern noise. 
-      float:
-        Read noise estimate from the prescan regions (in e-), calculated from 
-        simple std devs (in DN) multiplied by kgain. This value should be 
-        larger than read_noise_gauss and is affected by the fixed pattern noise.
-      np.array: ptc,
-        array of size N x 2, where N is the number of bins set by the 'signal_bins_N' 
-        parameter in the dictionary kgain_params. The first column is the mean (DN) and 
-        the second column is standard deviation (DN) corrected for read noise.
+      corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
+        transfer curve (in e-/DN). The expected value of kgain for EXCAM with
+        flight readout sequence should be between 8 and 9 e-/DN.
+
+      read_noise_gauss (float): (KGain header) read noise estimate from the prescan
+        regions (in e-), calculated from the Gaussian fit std devs (in DN)
+        multiplied by kgain. This value should be considered the true read noise,
+        not affected by the fixed pattern noise. 
+      read_noise_stdev (float): (KGain header) read noise estimate from the prescan
+        regions (in e-), calculated from simple std devs (in DN) multiplied by
+        kgain. This value should be larger than read_noise_gauss and is affected
+        by the fixed pattern noise.
+      ptc (np.array): (KGain HDU extension) array of size N x 2, where N is the
+        number of bins set by the 'signal_bins_N' parameter in the dictionary
+        kgain_params. The first column is the mean (DN) and the second column is
+        standard deviation (DN) corrected for read noise.
     """
     # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
     stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)
@@ -458,10 +454,15 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     signal_bins_N = kgain_params['signal_bins_N']
 
 
-    if mkplot is not None:
+    if make_plot is True:
         # Avoid issues with importing matplotlib on headless servers without GUI
         # support without proper configuration
         import matplotlib.pyplot as plt
+        # Output directory
+        if os.path.exists(plot_outdir) is False:
+            os.mkdir(plot_outdir)
+            if verbose:
+                print('Output directory for figures created in ', os.getcwd())
     
     # Prescan region
     offset_rowroi = slice(offset_rowroi1,offset_rowroi2)
@@ -502,13 +503,19 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     frame_slice = good_mean_frame[rowroi, colroi]
     
     # If requested, create a figure and plot the sliced frame
-    if mkplot:
+    if make_plot:
+        fname = 'kgain_mean_frame'
         plt.figure()
         # 'viridis' is a common colormap
         plt.imshow(frame_slice, aspect='equal', cmap='viridis')
         plt.colorbar()
         plt.title('Good quality mean frame')
-        plt.show()
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
     
     nFrames = len(stack_arr[0]) # number of frames in an exposure set
     nSets = len(stack_arr) # number of exposure sets
@@ -673,14 +680,21 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     # equation: k_gain = mean / signal variance
     kgain_arr = 10**(x_vals)/(10**y_vals)**2
     
-    if mkplot:
+    if make_plot:
+        fname = 'kgain_histogram'
         plt.figure()
         # 'auto' lets matplotlib decide the number of bins
         plt.hist(kgain_arr, bins='auto', log=True)
         plt.title('Histogram of kgain values')
-        plt.show()
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
     
-    if mkplot:
+    if make_plot:
+        fname = 'kgain_vs_mean'
         plt.figure()
         plt.plot(10**x_vals, kgain_arr, marker='o', linestyle='-', color='b', label='kgain')
         # Set y-axis range
@@ -690,7 +704,12 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         # Add a grid
         plt.grid(True)
         plt.title('kgain versus mean')
-        plt.show()
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
     
     kgain_clipped, _ = sigma_clip(kgain_arr)
     mode_kgain,_ = calculate_mode(kgain_clipped)
@@ -698,12 +717,18 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     # adopt 'mode_kgain' as the final value to return
     kgain = mode_kgain
 
-    if mkplot:
-       plt.figure()
-       # 'auto' lets matplotlib decide the number of bins
-       plt.hist(kgain_clipped, bins='auto', log=True)
-       plt.title('Histogram of clipped kgain values')
-       plt.show() 
+    if make_plot:
+        fname = 'kgain_clipped_histogram'
+        plt.figure()
+        # 'auto' lets matplotlib decide the number of bins
+        plt.hist(kgain_clipped, bins='auto', log=True)
+        plt.title('Histogram of clipped kgain values')
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
     
     # parameter for plot
     parm1 = -0.5*np.log10(kgain)
@@ -716,7 +741,8 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
     mean_rn_std_e = mean_rn_std_DN * kgain
     
     # If requested, plotting
-    if mkplot:
+    if make_plot:
+        fname = 'kgain_ptc'
         # Create log-spaced averages for plotting
         full_range_averages = np.logspace(log_plot1, log_plot2, log_plot3)
         
@@ -768,8 +794,12 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         plt.gcf().set_dpi(100)
         plt.gcf().set_size_inches(20, 10)
         
-        # Display the plot
-        plt.show()
+        plt.savefig(f'{plot_outdir}/{fname}')
+        if verbose:
+            print(f'Figure {fname} stored in {plot_outdir}')
+        if show_plot:
+            plt.show()
+        plt.close()
     
     # prepare PTC array
     ptc_list = [compiled_binned_averages, 
@@ -778,7 +808,19 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
 
     prhd, exthd = create_default_headers()
     gain_value = np.array([[kgain]])
-    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd)
+
+
+    # WARNING: This is only to work on other changes in the KGain/Non-linearity calibration PR
+    dat_mock = np.ones([1024,1024]) * 2
+    err_mock = np.ones([1,1024,1024]) * 0.5
+    image1_mock = data.Image(dat_mock,pri_hdr = prhd, ext_hdr = exthd, err = err_mock)
+    image2_mock = image1_mock.copy()
+    image1_mock.filename = "test1"
+    image2_mock.filename = "test2"
+    dataset_mock= data.Dataset([image1_mock, image2_mock])
+    print('--- WARNING (Debugging ONLY) Replace mock dataset in calibrate_kgain by appropriate value.---')
+
+    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_mock)
     
     return (kgain, mean_rn_gauss_e, mean_rn_std_e, ptc)
     
