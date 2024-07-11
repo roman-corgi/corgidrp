@@ -233,7 +233,7 @@ def test_expected_results_time_stack_sub():
   
 def test_3D_1():
     """stack_arr must be 3-D."""
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr[0], exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             actual_gain_arr, norm_val, min_write, 
@@ -242,7 +242,7 @@ def test_sub_stack_len_1():
     """Number of sub-stacks in stack_arr must '
             'equal the sum of the elements in len_list."""
     sum_len_list = np.sum(len_list)-1
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr[0:sum_len_list], exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             actual_gain_arr, norm_val, min_write, 
@@ -250,7 +250,7 @@ def test_sub_stack_len_1():
 
 def test_3D_2():
     """stack_arr2 must be 3-D."""
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2[0], 
                             actual_gain_arr, norm_val, min_write, 
@@ -258,7 +258,7 @@ def test_3D_2():
     
 def test_sub_stack2_len():
     """stack_arr2 should have at least 30 sub-stacks."""
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2[0:28], 
                             actual_gain_arr, norm_val, min_write, 
@@ -267,13 +267,13 @@ def test_sub_stack2_len():
 def test_exp_time_stack_arr():
     """exp_time_stack_arr must be a 1-D, real array."""
     for terr0 in test_check.oneDlist:
-        with pytest.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             calibrate_nonlin(stack_arr, terr0, 
                                 time_stack_arr, len_list, stack_arr2, 
                                 actual_gain_arr, norm_val, 
                                 min_write, max_write)
     for terr0 in test_check.rarraylist:
-        with pytest.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             calibrate_nonlin(stack_arr, terr0, 
                                 time_stack_arr, len_list, stack_arr2, 
                                 actual_gain_arr, norm_val, 
@@ -283,7 +283,7 @@ def test_exp_time_stack_arr_gt0():
     """exp_time_stack_arr elements must all be greater than 0."""
     #same length as exp_time_stack_arr, but contains 0
     exp_arr = np.arange(0,len(exp_time_stack_arr))
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             actual_gain_arr, norm_val, min_write, 
@@ -300,7 +300,7 @@ def test_exp_time_stack_arr_rept():
     # frames with different exp times
     no_repeat_arr[len_list[0]-5:len_list[0]] = \
         1 + no_repeat_arr[len_list[0]-10:len_list[0]-5]
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, no_repeat_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             actual_gain_arr, norm_val, min_write, 
@@ -310,7 +310,7 @@ def test_unique_time_stack_arr():
     """All elements of time_stack_arr must be unique."""
     terr = time_stack_arr
     terr[1] = terr[0] # set second element equal to the first
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             terr, len_list, stack_arr2, 
                             actual_gain_arr, norm_val, min_write, 
@@ -320,7 +320,7 @@ def test_len_list():
     """len_list must have at least one element."""
     # make an empty list
     empty_list = []
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             time_stack_arr, empty_list, stack_arr2, 
                             actual_gain_arr, norm_val, min_write, 
@@ -330,7 +330,7 @@ def test_actual_gain_arr_len():
     """Length of actual_gain_arr must be equal to length of len_list."""
     # make array with fewer elements than len_list
     act_err1 = np.arange(1,len(len_list)-1)
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             act_err1, norm_val, min_write, 
@@ -341,7 +341,7 @@ def test_actual_gain_arr_1():
     # make array with an element less than 1
     act_err2 = np.arange(1,len(actual_gain_arr))
     act_err2[0] = 0.5
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             act_err2, norm_val, min_write, 
@@ -350,7 +350,7 @@ def test_actual_gain_arr_1():
 def test_norm_val():
     """norm_val must be divisible by 20."""
     norm_not_div_20 = 2010
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             actual_gain_arr, norm_not_div_20, min_write, 
@@ -361,14 +361,14 @@ def test_rps():
     check_list = test_check.rpslist
     # min_write
     for rerr in check_list:
-        with pytest.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                                 time_stack_arr, len_list, stack_arr2, 
                                 actual_gain_arr, norm_val, rerr, 
                                 max_write)
     # max_write
     for rerr in check_list:
-        with pytest.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                                 time_stack_arr, len_list, stack_arr2, 
                                 actual_gain_arr, norm_val, 
@@ -377,7 +377,7 @@ def test_rps():
 def test_max_gt_min():
     """max_write must be greater than min_write."""
     werr = min_write # set the max_write value to the min_write value
-    with pytest.assertRaises(CalNonlinException):
+    with pytest.raises(CalNonlinException):
         calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                             time_stack_arr, len_list, stack_arr2, 
                             actual_gain_arr, norm_val, 
@@ -388,7 +388,7 @@ def test_psi():
     check_list = test_check.psilist
     # norm_val
     for mmerr in check_list:
-        with pytest.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             calibrate_nonlin(stack_arr, exp_time_stack_arr, 
                                 time_stack_arr, len_list, stack_arr2, 
                                 actual_gain_arr, mmerr, 

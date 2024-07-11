@@ -62,6 +62,7 @@ tests/simdata/*
 # editor files
 .vscode/*
 .*.swp
+.exrc
 
 #jupyter cruft
 .ipynb_checkpoints
@@ -72,3 +73,7 @@ tests/simdata/*
 # data files
 *.fits
 *.FITS
+
+# Output figures
+figures/
+tests/figures/
