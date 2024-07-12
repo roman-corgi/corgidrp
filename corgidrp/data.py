@@ -4,6 +4,7 @@ import numpy.ma as ma
 import corgidrp
 import astropy.io.fits as fits
 import astropy.time as time
+import pandas as pd
 
 class Dataset():
     """
@@ -183,6 +184,57 @@ class Dataset():
         self.all_err = np.array([frame.err for frame in self.frames])   
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]               
+
+    def split_dataset(self, prihdr_keywords=None, exthdr_keywords=None):
+        """
+        Splits up this dataset into multiple smaller datasets that have the same set of header keywords
+        The code uses all keywords together to determine an unique group
+
+        Args: 
+            prihdr_keywords (list of str): list of primary header keywords to split
+            exthdr_keywords (list of str): list of 1st extension header keywords to split on
+
+        Returns:
+            list of datasets: list of sub datasets
+            list of tuples: list of each set of unique header keywords. pri_hdr keywords occur before ext_hdr keywords
+        """
+        if prihdr_keywords is None and exthdr_keywords is None:
+            raise ValueError("No prihdr or exthdr keywords passed in to split dataset")
+        
+        col_names = []
+        col_vals = []
+        if prihdr_keywords is not None:
+            for key in prihdr_keywords:
+                dataset_vals = [frame.pri_hdr[key] for frame in self.frames]
+
+                col_names.append(key)
+                col_vals.append(dataset_vals)
+
+        if exthdr_keywords is not None:
+            for key in exthdr_keywords:
+                dataset_vals = [frame.ext_hdr[key] for frame in self.frames]
+
+                col_names.append(key)
+                col_vals.append(dataset_vals)
+
+        all_data = np.array(col_vals).T
+        
+        # track all combinations
+        df = pd.DataFrame(data=all_data, columns=col_names)
+
+        grouped = df.groupby(col_names)
+        
+        unique_vals = list(grouped.indices.keys()) # each unique set of values
+        split_datasets = []
+        for combo in grouped.indices:
+            dataset_indices = grouped.indices[combo]
+            sub_dataset = self[dataset_indices]
+            split_datasets.append(sub_dataset)
+
+        return split_datasets, unique_vals
+
+
+
 
 class Image():
     """
