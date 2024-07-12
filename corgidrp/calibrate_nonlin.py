@@ -167,23 +167,26 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     max_write.
     
     Args:
-      stack_arr (np.array): stack of frames of dimention 3, which is implicitly 
+      stack_arr (np.array): stack of frames of dimension 3, which is implicitly 
         subdivided into smaller ranges of grouped frames. The frames are EXCAM 
         illuminated pupil L1 SCI frames. There must be one or more unique EM 
         gain values and at least 20 unique exposure times for each EM gain. The 
         number of frames for each EM gain can vary. The size of stack_arr is: 
         Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having 
-        EM gain value g, and the sum is over g.
+        EM gain value g, and the sum is over g. Each substack of stack_arr must
+        have a group of frames with a repeated exposure time.
       exp_time_stack_arr (np.array): array of dimension 1 of exposure times
         (in s) corresponding to the frames in stack_arr in the order found there.
         The length of exp_time_stack_arr must equal the number of frames used to
         construct stack_arr. There must be at least 20 unique exposure times at
-        each EM gain. The values must be greater than 0.
+        each EM gain. The values must be greater than 0. Each element of
+        exp_time_stack_arr must be greater than min_exp_time.
       time_stack_arr (np.array): array of dimension 1 of date-time strings
         corresponding to the frames in stack_arr in the same order found there.
         The length of time_stack_arr must equal the number of frames in stack_arr.
         All the elements must be unique. The frames in a given group of constant
-        EM gain must be time-ordered.
+        EM gain must be time-ordered. Elements of time_stack_arr must be in
+        increasing time order for each EM gain value.
       len_list (list): list of the number of frames in each em gain group of 
         frames in stack_arr in the same order. The sum of elements of len_list 
         must equal to the number of sub-stacks in stack_arr. The number of 
@@ -192,6 +195,8 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
       stack_arr2 (np.array): stack array of EXCAM unity EM gain illuminated pupil L1 
         SCI frames. stack_arr2 contains a stack of frames of uniform exp time, 
         such that the mean signal in the pupil regions is a few thousand DN.
+        stack_arr2 must be 3-D (i.e., a stack of 2-D sub-stacks).
+        Number of frames in stack_arr2 must be at least 30.
       actual_gain_arr (np.array): the array of actual EM gain values (as opposed
         to commanded EM gain) corresponding to the number of EM gain values used
         to construct stack_arr and in the same order. Note: calibrate_nonlin does
@@ -210,7 +215,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
       rms_low_limit (float): (Optional) rms relative error selection limits for
         linear fit. Lower limit.
       rms_upp_limit (float): (Optional) rms relative error selection limits for
-        linear fit. Upper limit.
+        linear fit. Upper limit. rms_upp_limit must be greater than rms_low_limit.
       fit_upp_cutoff1 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
         this is the upper value applied to select the data to be fitted.
