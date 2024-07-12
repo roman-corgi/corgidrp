@@ -277,7 +277,11 @@ def update_to_l2a(input_dataset):
     updated_dataset = input_dataset.copy(copy_data=False)
 
     for frame in updated_dataset:
+        # update header
         frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        # update filename convention. The file convention should be
+        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
+        frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)
 
     history_msg = "Updated Data Level to L2a"
     updated_dataset.update_after_processing_step(history_msg)
