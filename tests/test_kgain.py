@@ -14,9 +14,14 @@ def test_kgain():
     prhd, exthd = create_default_headers()
     dat = np.ones([1024,1024]) * 2
     err = np.ones([1,1024,1024]) * 0.5
+    image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
+    image2 = image1.copy()
+    image1.filename = "test1"
+    image2.filename = "test2"
+    dataset= data.Dataset([image1, image2])
 
     gain_value = np.array([[9.55]])
-    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd)
+    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
     assert kgain.value == gain_value[0,0]
     assert kgain.data[0,0] == gain_value[0,0]
 
@@ -37,10 +42,6 @@ def test_kgain():
     assert kgain_copy.value == gain_value[0,0]
 
     # test convert_to_electrons
-    image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
-    image2 = image1.copy()
-    dataset= data.Dataset([image1, image2])
-
     k_gain = kgain.value
 
     gain_dataset = l2a_to_l2b.convert_to_electrons(dataset, kgain)

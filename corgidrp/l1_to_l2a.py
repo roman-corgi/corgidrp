@@ -119,7 +119,9 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thresh=0.85, cosm_filter=2):
+def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
+                       plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
+                       mode='image'):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -131,13 +133,30 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thr
         detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
         sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
-            pixels. Interval 0 to 1, defaults to 0.99. Lower numbers are more aggressive in flagging saturation.
+            pixels. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging saturation.
         plat_thresh (float):
             Multiplication factor for pixel full-well capacity (fwc) that determines edges of cosmic
-            plateau. Interval 0 to 1, defaults to 0.85. Lower numbers are more aggressive in flagging cosmic
+            plateau. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging cosmic
             ray hits.
         cosm_filter (int):
-            Minimum length in pixels of cosmic plateus to be identified. Defaults to 2
+            Minimum length in pixels of cosmic plateaus to be identified. Defaults to 1.
+        cosm_box (int):
+            Number of pixels out from an identified cosmic head (i.e., beginning of
+            the plateau) to mask out.
+            For example, if cosm_box is 3, a 7x7 box is masked,
+            with the cosmic head as the center pixel of the box. Defaults to 3.
+        cosm_tail (int):
+            Number of pixels in the row downstream of the end of a cosmic plateau
+            to mask.  If cosm_tail is greater than the number of
+            columns left to the end of the row from the cosmic
+            plateau, the cosmic masking ends at the end of the row. Defaults to 10.
+        mode (string):
+            If 'image', an image-area input is assumed, and if the input
+            tail length is longer than the length to the end of the image-area row,
+            the mask is truncated at the end of the row.
+            If 'full', a full-frame input is assumed, and if the input tail length
+            is longer than the length to the end of the full-frame row, the masking
+            continues onto the next row.  Defaults to 'image'.
 
     Returns:
         corgidrp.data.Dataset:
@@ -187,6 +206,9 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.99, plat_thr
                         sat_thresh=sat_thresh,
                         plat_thresh=plat_thresh,
                         cosm_filter=cosm_filter,
+                        cosm_box=cosm_box,
+                        cosm_tail=cosm_tail,
+                        mode=mode
                         ) * cr_dqval
 
     # add the two masks to the all_dq mask
@@ -254,7 +276,11 @@ def update_to_l2a(input_dataset):
     updated_dataset = input_dataset.copy(copy_data=False)
 
     for frame in updated_dataset:
+        # update header
         frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        # update filename convention. The file convention should be
+        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
+        frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)
 
     history_msg = "Updated Data Level to L2a"
     updated_dataset.update_after_processing_step(history_msg)
