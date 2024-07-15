@@ -309,7 +309,7 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
     
 ######################### start of main code #############################
 
-def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val, 
+def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000, 
                     binwidth=68, make_plot=True, plot_outdir='figures', show_plot=False,
                     log_plot1=-1, log_plot2=4, log_plot3=200, verbose=False):
     """
@@ -388,6 +388,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val, max_val,
         kgain_params. The first column is the mean (DN) and the second column is
         standard deviation (DN) corrected for read noise.
     """
+    breakpoint()
     # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
     stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)
 
