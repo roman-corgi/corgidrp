@@ -427,7 +427,7 @@ def nonlin_factor(coeffs,DN):
 
     return f_nonlin
 
-def make_fluxmap_frame(
+def make_fluxmap_image(
         f_map,
         bias,
         kgain,
@@ -451,7 +451,7 @@ def make_fluxmap_frame(
         nonlin_flag (bool): (Optional) if nonlin_flag is True, then nonlinearity is applied.
         
     Returns:
-        corgidrp.data.Dataset
+        corgidrp.data.Image
     """
     # Generate random values of rn in elecrons from a Gaussian distribution
     random_array = np.random.normal(0, rn, (1200, 2200)) # e-
@@ -470,9 +470,13 @@ def make_fluxmap_frame(
         frame = np.round((bias+temp)/kgain) # DN
 
     prhd, exthd = create_default_headers()
+    # Record actual commanded EM
+    exthd['CMDGAIN'] = emgain
+    # Record actual exposure time
+    exthd['EXPTIME'] = time
+    # Mock error maps
     err = np.ones([1200,2200]) * 0.5
     dq = np.zeros([1200,2200], dtype = np.uint16)
-    image1 = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
+    image = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
-    data_frame = Dataset([image1])
-    return data_frame
+    return image
