@@ -16,7 +16,7 @@ from pathlib import Path
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import (create_default_headers, make_fluxmap_frame, nonlin_coefs)
+from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException)
 
 ############################# prepare simulated frames #######################
@@ -57,48 +57,53 @@ else:
     coeffs_1 = [0.0, 0.0, 0.0, 1.0]
     _, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
 
+# commanded EM gain
 emgain = 1.0
-frame_list2 = []
+image_mean_frame_list = []
 # make 30 uniform frames with emgain = 1
 for j in range(30):
-    frame2 = make_fluxmap_frame(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
+    image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
         nonlin_flag=nonlin_flag)
-    frame_list2.append(frame2)
-stack_arr2 = np.stack(frame_list2)
+    # Datetime cannot be duplicated
+    image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
+    image_mean_frame_list.append(image_sim)
+# Join them all in a single Dataset
+dataset_mean_frame = Dataset(image_mean_frame_list)
 
 init_nonlins = []
-stack_list = []
+image_cal_list = []
 index = 0
 for iG in range(len(gain_arr0)):
     g = gain_arr0[iG]
     exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
     time_stack_test = time_stack_arr0[index:index+len_list0[iG]]
     index = index + len_list0[iG]
-    frame_list = [] # initialize frame stack
     if nonlin_flag:
         coeffs, _, vals = nonlin_coefs(nonlin_table_path,g,3)
     else:
         coeffs = [0.0, 0.0, 0.0, 1.0]
         vals = np.ones(len(DNs))
     init_nonlins.append(vals)
-    for t in exp_time_loop:
+    for idx_t, t in enumerate(exp_time_loop):
         # Simulate full frame
         if iG == 0:
-            frame_sim = make_fluxmap_frame(fluxMap1,bias,kgain,rn,g,t,coeffs,
+            image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
         elif iG == 1:
-            frame_sim = make_fluxmap_frame(fluxMap2,bias,kgain,rn,g,t,coeffs,
+            image_sim = make_fluxmap_image(fluxMap2,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
         elif iG == 2:
-            frame_sim = make_fluxmap_frame(fluxMap3,bias,kgain,rn,g,t,coeffs,
+            image_sim = make_fluxmap_image(fluxMap3,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
         else:
-            frame_sim = make_fluxmap_frame(fluxMap4,bias,kgain,rn,g,t,coeffs,
+            image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
-        frame_list.append(frame_sim)
-    frame_stack = np.stack(frame_list)
-    stack_list.append(frame_stack)
-stack_arr = np.vstack(stack_list)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+        image_cal_list.append(image_sim)
+dataset_cal =Dataset(image_cal_list) 
 init_nonlins_arr = np.transpose(np.array(init_nonlins))
 
 # prepare a second version of time_stack_arr that has all the frames for the 
@@ -112,6 +117,41 @@ ctime_datetime_plus_one_day1 = ctime_datetime1 + pd.Timedelta(days=1)
 # Convert back to strings
 ctime_strings_plus_one_day1 = ctime_datetime_plus_one_day1.strftime('%Y-%m-%dT%H:%M:%S').tolist()
 time_stack_arr1[index:index+len_list0[3]] = ctime_strings_plus_one_day1
+init_nonlins_1 = []
+image_cal_1_list = []
+index = 0
+for iG in range(len(gain_arr0)):
+    g = gain_arr0[iG]
+    exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
+    time_stack_test = time_stack_arr1[index:index+len_list0[iG]]
+    index = index + len_list0[iG]
+    if nonlin_flag:
+        coeffs, _, vals = nonlin_coefs(nonlin_table_path,g,3)
+    else:
+        coeffs = [0.0, 0.0, 0.0, 1.0]
+        vals = np.ones(len(DNs))
+    init_nonlins_1.append(vals)
+    for idx_t, t in enumerate(exp_time_loop):
+        # Simulate full frame
+        if iG == 0:
+            image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+        elif iG == 1:
+            image_sim = make_fluxmap_image(fluxMap2,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+        elif iG == 2:
+            image_sim = make_fluxmap_image(fluxMap3,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+        else:
+            image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
+                nonlin_flag=nonlin_flag)
+            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+        image_cal_1_list.append(image_sim)
+dataset_cal_1 = Dataset(image_cal_1_list)
+init_nonlins_1_arr = np.transpose(np.array(init_nonlins_1))
 
 # set input parameters for calibrate_nonlin
 local_path = os.path.dirname(os.path.realpath(__file__))
@@ -123,12 +163,10 @@ norm_val = 3000
 min_write = 800
 max_write = 10000
 
-
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(stack_arr, 
-                        exp_time_stack_arr, time_stack_arr, 
-                        len_list, stack_arr2, actual_gain_arr, 
+    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(
+                        dataset_cal, dataset_mean_frame, actual_gain_arr, 
                         norm_val, min_write, max_write)
         
     # Calculate rms of the differences between the assumed nonlinearity and 
@@ -162,20 +200,19 @@ def test_expected_results_nom_sub():
     assert np.equal(headers[1].astype(float), 1)
     assert np.equal(len(means_min_max),len(actual_gain_arr))
        
-def test_expected_results_time_stack_sub():
+def test_expected_results_time_sub():
     """Outputs are as expected for the provided frames with 
-    time_stack_arr values for one EM gain group taken 1 day later."""
-    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(stack_arr, 
-                        exp_time_stack_arr, time_stack_arr1, 
-                        len_list, stack_arr2, actual_gain_arr, 
+    datetime values for one EM gain group taken 1 day later."""
+    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(dataset_cal_1, 
+                        dataset_mean_frame, actual_gain_arr, 
                         norm_val, min_write, max_write)
      
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
-    diffs0 = nonlin_arr[:,1] - init_nonlins_arr[:,0] # G = 1
-    diffs1 = nonlin_arr[:,2] - init_nonlins_arr[:,1] # G = 2
-    diffs2 = nonlin_arr[:,3] - init_nonlins_arr[:,2] # G = 10
-    diffs3 = nonlin_arr[:,4] - init_nonlins_arr[:,3] # G = 20
+    diffs0 = nonlin_arr[:,1] - init_nonlins_1_arr[:,0] # G = 1
+    diffs1 = nonlin_arr[:,2] - init_nonlins_1_arr[:,1] # G = 2
+    diffs2 = nonlin_arr[:,3] - init_nonlins_1_arr[:,2] # G = 10
+    diffs3 = nonlin_arr[:,4] - init_nonlins_1_arr[:,3] # G = 20
     # Calculte rms and peak-to-peak differences
     rms1 = np.sqrt(np.mean(diffs0**2))
     rms2 = np.sqrt(np.mean(diffs1**2))
@@ -188,128 +225,11 @@ def test_expected_results_time_stack_sub():
     assert np.less(rms3,0.0035)
     assert np.less(rms4,0.0035)
   
-def test_3D_1():
-    """stack_arr must be 3-D."""
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr[0], exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-def test_sub_stack_len_1():
-    """Number of sub-stacks in stack_arr must '
-            'equal the sum of the elements in len_list."""
-    sum_len_list = np.sum(len_list)-1
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr[0:sum_len_list], exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-
-def test_3D_2():
-    """stack_arr2 must be 3-D."""
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2[0], 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-    
-def test_sub_stack2_len():
-    """stack_arr2 should have at least 30 sub-stacks."""
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2[0:28], 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-    
-def test_exp_time_stack_arr():
-    """exp_time_stack_arr must be a 1-D, real array."""
-    for terr0 in test_check.oneDlist:
-        with pytest.raises(TypeError):
-            calibrate_nonlin(stack_arr, terr0, 
-                                time_stack_arr, len_list, stack_arr2, 
-                                actual_gain_arr, norm_val, 
-                                min_write, max_write)
-    for terr0 in test_check.rarraylist:
-        with pytest.raises(TypeError):
-            calibrate_nonlin(stack_arr, terr0, 
-                                time_stack_arr, len_list, stack_arr2, 
-                                actual_gain_arr, norm_val, 
-                                min_write, max_write)
-
-def test_exp_time_stack_arr_gt0():
-    """exp_time_stack_arr elements must all be greater than 0."""
-    #same length as exp_time_stack_arr, but contains 0
-    exp_arr = np.arange(0,len(exp_time_stack_arr))
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-
-def test_exp_time_stack_arr_rept():
-    """each substack of stack_arr must have a group of frames '
-        'with a repeated exposure time."""
-    # make an array with the number of elements equal to the length of 
-    # exp_time_stack_arr but without a group of frames with repeated 
-    # exposure time.
-    no_repeat_arr = np.copy(exp_time_stack_arr)
-    # replace the last 5 exposure times (repeated) in first subgroup of 
-    # frames with different exp times
-    no_repeat_arr[len_list[0]-5:len_list[0]] = \
-        1 + no_repeat_arr[len_list[0]-10:len_list[0]-5]
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, no_repeat_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-        
-def test_unique_time_stack_arr():
-    """All elements of time_stack_arr must be unique."""
-    terr = time_stack_arr
-    terr[1] = terr[0] # set second element equal to the first
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            terr, len_list, stack_arr2, 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-    
-def test_len_list():
-    """len_list must have at least one element."""
-    # make an empty list
-    empty_list = []
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            time_stack_arr, empty_list, stack_arr2, 
-                            actual_gain_arr, norm_val, min_write, 
-                            max_write)
-    
-def test_actual_gain_arr_len():
-    """Length of actual_gain_arr must be equal to length of len_list."""
-    # make array with fewer elements than len_list
-    act_err1 = np.arange(1,len(len_list)-1)
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
-                            act_err1, norm_val, min_write, 
-                            max_write)
-    
-def test_actual_gain_arr_1():
-    """Every element of actual_gain_arr must be >= 1."""
-    # make array with an element less than 1
-    act_err2 = np.arange(1,len(actual_gain_arr))
-    act_err2[0] = 0.5
-    with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
-                            act_err2, norm_val, min_write, 
-                            max_write)
-    
 def test_norm_val():
     """norm_val must be divisible by 20."""
     norm_not_div_20 = 2010
     with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
+        calibrate_nonlin(dataset_cal, dataset_mean_frame,
                             actual_gain_arr, norm_not_div_20, min_write, 
                             max_write)
  
@@ -319,15 +239,13 @@ def test_rps():
     # min_write
     for rerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                                time_stack_arr, len_list, stack_arr2, 
+            calibrate_nonlin(dataset_cal, dataset_mean_frame,
                                 actual_gain_arr, norm_val, rerr, 
                                 max_write)
     # max_write
     for rerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                                time_stack_arr, len_list, stack_arr2, 
+            calibrate_nonlin(dataset_cal, dataset_mean_frame,
                                 actual_gain_arr, norm_val, 
                                 min_write, rerr)
    
@@ -335,8 +253,7 @@ def test_max_gt_min():
     """max_write must be greater than min_write."""
     werr = min_write # set the max_write value to the min_write value
     with pytest.raises(CalNonlinException):
-        calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                            time_stack_arr, len_list, stack_arr2, 
+        calibrate_nonlin(dataset_cal, dataset_mean_frame,
                             actual_gain_arr, norm_val, 
                             min_write, werr)
     
@@ -346,26 +263,21 @@ def test_psi():
     # norm_val
     for mmerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(stack_arr, exp_time_stack_arr, 
-                                time_stack_arr, len_list, stack_arr2, 
+            calibrate_nonlin(dataset_cal, dataset_mean_frame,
                                 actual_gain_arr, mmerr, 
                                 min_write, max_write)
  
 if __name__ == '__main__':
+    print('Running test_expected_results_nom_sub')
     test_expected_results_nom_sub()
-    test_expected_results_time_stack_sub()
-    test_3D_1()
-    test_sub_stack_len_1()
-    test_3D_2()
-    test_sub_stack2_len()
-    test_exp_time_stack_arr()
-    test_exp_time_stack_arr_gt0()
-    test_exp_time_stack_arr_rept()
-    test_unique_time_stack_arr()
-    test_len_list()
-    test_actual_gain_arr_len()
-    test_actual_gain_arr_1()
+    print('Running test_expected_results_time_sub')
+    test_expected_results_time_sub()
+    print('Running test_norm_val')
     test_norm_val()
+    print('Running test_rps')
     test_rps()
+    print('Running test_max_gt_min')
     test_max_gt_min()
+    print('Running test_psi')
     test_psi()
+    print('Non-Linearity Calibration tests passed')

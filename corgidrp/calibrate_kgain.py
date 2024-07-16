@@ -825,47 +825,34 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
     
     return kgain
     
-def copy_and_cast(stack_arr_drp, stack_arr2_drp):
+def dataset_2_stack(dataset, prihdr_keywords=None, exthdr_keywords=None):
     """ 
-    Copies and casts input stacks of CORGIDRP Data Image objects into numpy
-    arrays to perform computations.
-    
+    Casts a CORGIDRP Dataset object into a stack of numpy arrays sharing the same
+    keyword value. It also returns the list of unique keyword values in the split.
+
     Args:
-      stack_arr_drp (list): list of data.Image objects 
-      stack_arr2_drp (list): list of data.Image objects
-    
+        dataset_cal (corgidrp.Dataset): A list of Image objects.
+        prihdr_keywords (list of str): list of primary header keywords to split
+        exthdr_keywords (list of str): list of 1st extension header keywords to
+        split on      
     Returns:
-      np.array, np.array: copied arrays
+        list of datasets: list of sub datasets
+        list of tuples: list of each set of unique header keywords. pri_hdr
+        keywords occur before ext_hdr keywords
+      
     
     """
-    stack_arr = stack_arr_drp.copy()
-    stack_arr2 = stack_arr2_drp.copy()
-    stack_list = []
-    for j in range(stack_arr.shape[0]):
-        if stack_arr.ndim > 1:
-            if stack_arr.shape[1] > 1:
-                frame_list = []
-                for t in range(stack_arr.shape[1]):
-                    frame_sim = stack_arr[j][t].data
-                    frame_list.append(frame_sim)
-            else:
-                frame_list = np.stack(stack_arr[j][0].data)
-        else:
-            frame_list = np.stack(stack_arr[0].data)
-        stack_list.append(frame_list)
-    stack_arr = np.stack(stack_list)
+# cal_arr, exp_time_cal_arr, datetime_cal_arr
+# exp_time_stack_arr, time_stack_arr, len_list,
+    # Split Dataset
+    dataset_cp = dataset.copy()
+    split = dataset_cp.split_dataset(prihdr_keywords=prihdr_keywords,
+        exthdr_keywords=exthdr_keywords)
+    stack = []
+    for data_set in split[1]:
+        
 
-    frame_list2 = []
-    if type(stack_arr2) == Image:
-        frame_list2.append(stack_arr2.data)
-    else:
-        for j in range(stack_arr2.shape[0]):
-            if stack_arr2.ndim > 1:
-                frame2 = stack_arr2[j][0].data
-            else:
-                frame2 = stack_arr2[j].data
-            frame_list2.append(frame2)
-    stack_arr2 = np.stack(frame_list2)
 
-    return stack_arr, stack_arr2
+
+    breakpoint()
     

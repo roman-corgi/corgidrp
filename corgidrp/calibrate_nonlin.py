@@ -11,8 +11,6 @@ import matplotlib.pyplot as plt
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from corgidrp import check
-from corgidrp.calibrate_kgain import copy_and_cast
-
 
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params = {
@@ -126,8 +124,8 @@ def check_nonlin_params(
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
 
-def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list, 
-                     stack_arr2, actual_gain_arr, norm_val = 2500, 
+def calibrate_nonlin(dataset_cal, dataset_mean_frame,
+                     actual_gain_arr, norm_val = 2500, 
                      min_write = 800.0, max_write = 10000.0,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
                      fit_upp_cutoff1 = -2, fit_upp_cutoff2 = -3,
@@ -167,39 +165,23 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     max_write.
     
     Args:
-      stack_arr (np.array): stack of frames of dimension 3, which is implicitly 
+      dataset_cal (corgidrp.Dataset): dataset of Images, which is implicitly 
         subdivided into smaller ranges of grouped frames. The frames are EXCAM 
         illuminated pupil L1 SCI frames. There must be one or more unique EM 
         gain values and at least 20 unique exposure times for each EM gain. The 
-        number of frames for each EM gain can vary. The size of stack_arr is: 
+        number of frames for each EM gain can vary. The size of dataset_cal is: 
         Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having 
-        EM gain value g, and the sum is over g. Each substack of stack_arr must
+        EM gain value g, and the sum is over g. Each substack of dataset_cal must
         have a group of frames with a repeated exposure time.
-      exp_time_stack_arr (np.array): array of dimension 1 of exposure times
-        (in s) corresponding to the frames in stack_arr in the order found there.
-        The length of exp_time_stack_arr must equal the number of frames used to
-        construct stack_arr. There must be at least 20 unique exposure times at
-        each EM gain. The values must be greater than 0. Each element of
-        exp_time_stack_arr must be greater than min_exp_time.
-      time_stack_arr (np.array): array of dimension 1 of date-time strings
-        corresponding to the frames in stack_arr in the same order found there.
-        The length of time_stack_arr must equal the number of frames in stack_arr.
-        All the elements must be unique. The frames in a given group of constant
-        EM gain must be time-ordered. Elements of time_stack_arr must be in
-        increasing time order for each EM gain value.
-      len_list (list): list of the number of frames in each em gain group of 
-        frames in stack_arr in the same order. The sum of elements of len_list 
-        must equal to the number of sub-stacks in stack_arr. The number of 
-        elements (= the number of unique em gain values) in len_list must be 
-        one or greater.
-      stack_arr2 (np.array): stack array of EXCAM unity EM gain illuminated pupil L1 
-        SCI frames. stack_arr2 contains a stack of frames of uniform exp time, 
+      dataset_mean_frame (corgidrp.Dataset): dataset of EXCAM unity EM gain
+        illuminated pupil L1 SCI frames. dataset_mean_frame contains a stack of
+        frames of uniform exp time, 
         such that the mean signal in the pupil regions is a few thousand DN.
-        stack_arr2 must be 3-D (i.e., a stack of 2-D sub-stacks).
-        Number of frames in stack_arr2 must be at least 30.
+        dataset_mean_frame must be 3-D (i.e., a stack of 2-D sub-stacks).
+        Number of frames in dataset_mean_frame must be at least 30.
       actual_gain_arr (np.array): the array of actual EM gain values (as opposed
         to commanded EM gain) corresponding to the number of EM gain values used
-        to construct stack_arr and in the same order. Note: calibrate_nonlin does
+        to construct dataset_cal and in the same order. Note: calibrate_nonlin does
         not calculate actual EM gain values -- they must be provided in this array. 
         The length of actual_gain_arr must equal the length of len_list. Values 
         must be >= 1.0. 
@@ -247,9 +229,20 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
       means_min_max (np.array): minima and maxima of mean values (in DN) used the fit each for EM gain. 
         The size of means_min_max is N x 2, where N is the length of actual_gain_arr.
     """
-    # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
-    stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)    
-
+    # dataset_cal.all_data must be 3-D 
+    if np.ndim(dataset_cal.all_data) != 3:
+        raise Exception('dataset_cal.all_data must be 3-D')
+    # dataset_mean_frame.all_data must be 3-D
+    if np.ndim(dataset_mean_frame.all_data) != 3:
+        raise Exception('dataset_mean_frame.all_data must be 3-D')
+    # dataset_mean_frame must have at least 30 frames
+    if len(dataset_mean_frame.all_data) < 30:
+        raise Exception('dataset_mean_frame must have at least 30 frames')
+    # cast dataset objects into np arrays for convenience 
+    cal_arr, exp_arr, datetime_arr, len_list, _ = \
+        nonlin_dataset_2_stack(dataset_cal)
+    mean_frame_arr, exp_mean_frame, _, _, em_mean_frame = \
+        nonlin_dataset_2_stack(dataset_mean_frame)
     # Get relevant constants
     offset_colroi1 = nonlin_params['offset_colroi1']
     offset_colroi2 = nonlin_params['offset_colroi2']
@@ -270,48 +263,52 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     min_bin = nonlin_params['min_bin']
     min_mask_factor = nonlin_params['min_mask_factor']
 
-    # input checks
-    if type(stack_arr) != np.ndarray:
-        raise TypeError('stack_arr must be an ndarray.')
-    if np.ndim(stack_arr) != 3:
-        raise CalNonlinException('stack_arr must be 3-D')
-    if np.sum(len_list) != len(stack_arr):
-        raise CalNonlinException('Number of sub-stacks in stack_arr must '
+    if type(cal_arr) != np.ndarray:
+        raise TypeError('cal_arr must be an ndarray.')
+    if np.ndim(cal_arr) != 3:
+        raise CalNonlinException('cal_arr must be 3-D')
+    if np.sum(len_list) != len(cal_arr):
+        raise CalNonlinException('Number of sub-stacks in cal_arr must '
                 'equal the sum of the elements in len_list')
     if len(len_list) < 1:
         raise CalNonlinException('Number of elements in len_list must '
                 'be greater than or equal to 1.')
-    if len(np.unique(time_stack_arr)) != len(time_stack_arr):
-        raise CalNonlinException('All elements of time_stack_arr must be unique.')
+    if len(np.unique(datetime_arr)) != len(datetime_arr):
+        raise CalNonlinException('All elements of datetime_arr must be unique.')
     for g_index in range(len(len_list)):
         # Define the start and stop indices
         start_index = int(np.sum(len_list[0:g_index]))
         stop_index = start_index + len_list[g_index]
         # Convert camera times to datetime objects
-        ctim_strings = time_stack_arr[start_index:stop_index]
+        ctim_strings = datetime_arr[start_index:stop_index]
         ctim_datetime = pd.to_datetime(ctim_strings, errors='coerce')
         # Check if the array is time-ordered in increasing order
         is_increasing = np.all(ctim_datetime[:-1] <= ctim_datetime[1:])
         if not is_increasing:
-            raise CalNonlinException('Elements of time_stack_arr must be '
+            raise CalNonlinException('Elements of datetime_arr must be '
                     'in increasing time order for each EM gain value.')
-    if type(stack_arr2) != np.ndarray:
-        raise TypeError('stack_arr2 must be an ndarray.')
-    if np.ndim(stack_arr2) != 3:
-        raise CalNonlinException('stack_arr2 must be 3-D (i.e., a stack of '
+    if type(mean_frame_arr) != np.ndarray:
+        raise TypeError('mean_frame_arr must be an ndarray.')
+    if np.ndim(mean_frame_arr) != 3:
+        raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
-    if len(stack_arr2) < 30:
-        raise CalNonlinException('Number of frames in stack_arr2 must '
+    if len(mean_frame_arr) < 30:
+        raise CalNonlinException('Number of frames in mean_frame_arr must '
                 'be at least 30.')
-    check.real_array(exp_time_stack_arr, 'exp_time_stack_arr', TypeError)
-    check.oneD_array(exp_time_stack_arr, 'exp_time_stack_arr', TypeError)
-    if (exp_time_stack_arr <= min_exp_time).any():
-        raise CalNonlinException('Each element of exp_time_stack_arr must be '
+    if np.all(exp_mean_frame == exp_mean_frame[0]) is False:
+        raise CalNonlinException('All expsoure times in mean_frame_arr must be equal.')
+    if np.all(em_mean_frame == 1) is False:
+        raise CalNonlinException('EM must be unity for mean_frame_arr must be equal.')
+    
+    check.real_array(exp_arr, 'exp_arr', TypeError)
+    check.oneD_array(exp_arr, 'exp_arr', TypeError)
+    if (exp_arr <= min_exp_time).any():
+        raise CalNonlinException('Each element of exp_arr must be '
             ' greater than min_exp_time.')
     index = 0
     r_flag = True
     for x in range(len(len_list)):
-        temp = np.copy(exp_time_stack_arr[index:index+len_list[x]])
+        temp = np.copy(exp_arr[index:index+len_list[x]])
         # Unique counts of exposure times
         _, u_counts = np.unique(temp, return_counts=True)
         # Check if all elements are the same
@@ -320,7 +317,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
             r_flag = False
         index = index + len_list[x]
     if not r_flag:
-        raise CalNonlinException('each substack of stack_arr must have a '
+        raise CalNonlinException('each substack of cal_arr must have a '
             'group of frames with a repeated exposure time.')   
     if len(len_list) != len(actual_gain_arr):
         raise CalNonlinException('Length of actual_gain_arr be the same as the '
@@ -387,16 +384,16 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     
     ####################### create good_mean_frame ###################
     
-    nrow = len(stack_arr2[0])
-    ncol = len(stack_arr2[0][0])
+    nrow = len(mean_frame_arr[0])
+    ncol = len(mean_frame_arr[0][0])
     
     good_mean_frame = np.zeros((nrow, ncol))
-    nFrames = len(stack_arr2)
+    nFrames = len(mean_frame_arr)
     
     mean_frame_index = 0
-    # Loop over the stack_arr2 frames
+    # Loop over the mean_frame_arr frames
     for i in range(nFrames):
-        frame = stack_arr2[i]
+        frame = mean_frame_arr[i]
         frame = frame.astype(np.float64)
     
         # Subtract row-wise medians
@@ -511,17 +508,17 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         start_index = int(np.sum(len_list[0:gain_index]))
         stop_index = start_index + len_list[gain_index]
         # Convert camera times to datetime objects
-        ctime_strings = time_stack_arr[start_index:stop_index]
+        ctime_strings = datetime_arr[start_index:stop_index]
         ctime_datetime = pd.to_datetime(ctime_strings, errors='coerce')
         
         # Select exp times for this em gain
-        exp_time_arr = exp_time_stack_arr[start_index:stop_index]
+        exp_em = exp_arr[start_index:stop_index]
         
         # select frames for this em gain
-        full_flst = stack_arr[start_index:stop_index]
+        full_flst = cal_arr[start_index:stop_index]
         
         # Unique exposure times and their counts
-        exposure_strings_list, counts = np.unique(exp_time_arr, return_counts=True)
+        exposure_strings_list, counts = np.unique(exp_em, return_counts=True)
         
         # Grouping exposures and finding the max count
         max_count_index = np.argmax(counts)
@@ -532,7 +529,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         first_flag = False
         
         for t0 in exposure_strings_list:
-            idx = np.where(exp_time_arr == t0)[0]
+            idx = np.where(exp_em == t0)[0]
             if t0 != repeat_exp:
                 del_s = (ctime_datetime[idx] - ctime_datetime[0]).total_seconds()
                 group_mean_time.append(np.mean(del_s))
@@ -559,7 +556,7 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         
                 # Filtering frames based on the current exposure time
                 selected_files = [
-                    full_flst[idx] for idx, exp_time in enumerate(exp_time_arr) if exp_time == current_exposure_time
+                    full_flst[idx] for idx, exp_time in enumerate(exp_em) if exp_time == current_exposure_time
                 ]
 
                 filtered_exposure_times.append(current_exposure_time)
@@ -679,10 +676,9 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
         delta_signal = repeat2_mean_signal - repeat1_mean_signal
         
         # Assuming all_exposure_strings and repeat_exp are already defined
-        #exp_time_arr = np.array(all_exposure_strings)  # Convert to numpy array if needed
         
         # Find indices of the frames where the exposure time matches repeat_exp
-        repeat_times_idx = np.where(exp_time_arr == repeat_exp)[0]  # np.where returns a tuple, extract first element
+        repeat_times_idx = np.where(exp_em == repeat_exp)[0]  # np.where returns a tuple, extract first element
         
         # Calculate the mean times for the first and second halves of these indices
         first_half = len(repeat_times_idx) // 2
@@ -862,3 +858,66 @@ def calibrate_nonlin(stack_arr, exp_time_stack_arr, time_stack_arr, len_list,
     means_min_max = np.array(means_min_max)
     
     return (headers, nonlin_arr3, csv_lines, means_min_max)
+
+def nonlin_dataset_2_stack(dataset):
+    """
+    Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
+    of numpy arrays sharing the same keyword value. It also returns the list of
+    unique EM values and set of exposure times used with each EM. Note: EM gain
+    is the commanded values: CMDGAIN.
+
+    This function also performs a set of tests about the data type and values in
+    dataset.
+
+    Args:
+        dataset (corgidrp.Dataset): A list of Image objects.
+    Returns:
+        stack of stacks of data array associated with each frame
+        array of exposure times associated with each frame
+        array of datetimes associated with each frame
+        list with the number of frames with same EM gain
+        List of (commanded) EM gains
+
+    """
+    # Split Dataset
+    dataset_cp = dataset.copy()
+    split = dataset_cp.split_dataset(exthdr_keywords=['CMDGAIN'])
+    
+    # Data
+    stack = []
+    # Exposure times
+    exp_times = []
+    # Datetimes
+    datetimes = []
+    # Size of each sub stack
+    len_sstack = []
+    for idx_set, data_set in enumerate(split[1]):
+        # Second layer (array of different exposure times)
+        sub_stack = []
+        len_sstack.append(len(split[0][idx_set].frames))
+        for frame in split[0][idx_set].frames:
+            sub_stack.append(frame.data)
+            exp_time = frame.ext_hdr['EXPTIME']
+            if isinstance(exp_time, float) is False:
+                raise Exception('Exposure times must be float')
+            if exp_time <=0:
+                raise Exception('Exposure times must be positive')
+            exp_times.append(exp_time)
+            datetime = frame.ext_hdr['DATETIME']
+            if isinstance(datetime, str) is False:
+                raise Exception('DATETIME must be a string')
+            datetimes.append(frame.ext_hdr['DATETIME'])
+        # First layer (array of unique EM values)
+        stack.append(np.stack(sub_stack))
+    # All elements of datetimes must be unique
+    if len(datetimes) != len(set(datetimes)):
+        raise Exception('DATETIMEs cannot be duplicated')
+    # Length of substack must be at least 1
+    if len(len_sstack) == 0:
+        raise Exception('Substacks must have at least one element')
+    # Every EM gain must be greater than or equal to 1
+    if np.any(np.array(split[1]) < 1):
+        raise Exception('EM gains must be greater than or equal to 1') 
+
+    return (np.vstack(stack), np.array(exp_times), np.array(datetimes),
+        len_sstack, np.array(split[1]))
