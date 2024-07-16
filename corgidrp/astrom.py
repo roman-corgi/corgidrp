@@ -141,16 +141,19 @@ def compute_combinations(iteration, r=2):
     inds = np.indices(np.shape(iteration))
     pool = tuple(inds[0])
     n = len(pool)
-    indices = list(range(2))
+    if r > n:
+        return
+    
+    indices = list(range(r))
     yield tuple(pool[i] for i in indices)
     while True:
-        for i in reversed(range(2)):
-            if indices[i] != i + n - 2:
+        for i in reversed(range(r)):
+            if indices[i] != i + n - r:
                 break
         else:
             return
         indices[i] += 1
-        for j in range(i+1, 2):
+        for j in range(i+1, r):
             indices[j] = indices[j-1] + 1
         yield tuple(pool[i] for i in indices)
 
@@ -382,14 +385,14 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def astrometric_calibration(input_dataset, guesses, target_coordinate):
+def boresight_calibration(input_dataset, guesses):
     """
     Perform the boresight calibration of a dataset.
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a single image for astrometric calibration
         guesses (str): Path to file with x,y [pixel] locations of sources AND RA,DEC [deg] true source positions
-        target_coordinate (str): Path to file with RA,DEC coordinate of target source 
+    #    target_coordinate (str): Path to file with RA,DEC coordinate of target source 
         
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -402,18 +405,21 @@ def astrometric_calibration(input_dataset, guesses, target_coordinate):
         if 'x' and 'y' and 'RA' and 'DEC' not in guesses.colnames:
             raise ValueError('guesses must have column names [\'x\',\'y\',\'RA\',\'DEC\']')
 
-    if type(target_coordinate) is not str:
-        raise TypeError('target_coordinate must be a str')
-    else:
-        target = ascii.read(target_coordinate)
-        if 'RA' and 'DEC' not in target.colnames:
-            raise ValueError('target_coordinate must have column names [\'RA\',\'DEC\']')
-        else:
-            target_coordinate = (target['RA'][0], target['DEC'][0])
+    # if type(target_coordinate) is not str:
+    #     raise TypeError('target_coordinate must be a str')
+    # else:
+    #     target = ascii.read(target_coordinate)
+    #     if 'RA' and 'DEC' not in target.colnames:
+    #         raise ValueError('target_coordinate must have column names [\'RA\',\'DEC\']')
+    #     else:
+    #         target_coordinate = (target['RA'][0], target['DEC'][0])
 
     # load in the data
     dataset = input_dataset.copy()
     image = dataset[0].data
+
+    # call the target coordinates from the image header
+    target_coordinate = (dataset[0].ext_hdr['CRVAL1'], dataset[0].ext_hdr['CRVAL2'])
 
     # compute the calibration properties
     cal_properties = compute_platescale_and_northangle(image=image, source_info=guesses, center_coord=target_coordinate)

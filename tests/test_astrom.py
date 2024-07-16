@@ -1,5 +1,7 @@
 import os
 import numpy as np
+import sys
+sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp
 from corgidrp import data, mocks, astrom
 import astropy
@@ -22,7 +24,7 @@ def test_astrom():
 
     image_path = os.path.join(datadir, 'simcal_astrom.fits')
     guess_path = os.path.join(datadir, 'guesses.csv')
-    target_path = os.path.join(datadir, 'target_guess.csv')
+    # target_path = os.path.join(datadir, 'target_guess.csv')
 
     # open the image
     dataset = corgidrp.data.Dataset([image_path])
@@ -30,7 +32,7 @@ def test_astrom():
     assert type(dataset[0]) == corgidrp.data.Image
 
     # perform the astrometric calibration
-    astrom_cal = corgidrp.astrom.astrometric_calibration(input_dataset=dataset, guesses=guess_path, target_coordinate=target_path)
+    astrom_cal = corgidrp.astrom.boresight_calibration(input_dataset=dataset, guesses=guess_path)
     assert len(astrom_cal.data) == 4
 
     # the data was generated to have the following image properties
@@ -50,8 +52,7 @@ def test_astrom():
     assert dec <= np.max(guesses['DEC'])
 
     # the image was generated to have no offset, so check that boresight center is close to target
-    target = ascii.read(target_path)
-    expected_ra, expected_dec = target['RA'][0], target['DEC'][0]
+    expected_ra, expected_dec = dataset[0].ext_hdr['CRVAL1'], dataset[0].ext_hdr['CRVAL2']
     error_window = (30 * astropy.units.mas).to(astropy.units.deg).value
     assert np.abs(expected_ra - ra) < error_window
     assert np.abs(expected_dec - dec) < error_window
