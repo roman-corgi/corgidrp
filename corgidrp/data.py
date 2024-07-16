@@ -721,24 +721,48 @@ class KGain(Image):
 
     Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        ptc (np.array): 2 column array with the photon transfer curve
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the err extension header (required only if raw data is passed in)
+        ptc_hdr (astropy.io.fits.Header): the ptc extension header (required only if raw data is passed in)
         input_dataset (corgidrp.data.Dataset): the Image files combined together to make this KGain file (required only if raw 2D data is passed in)
     
     Attrs:
         value: the getter of the kgain value
         _kgain (float): the value of kgain
+        error: the getter of the kgain error value
+        _kgain_error (float): the value of kgain error
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset = None):
+    def __init__(self, data_or_filepath, err = None, ptc = None, pri_hdr=None, ext_hdr=None, err_hdr = None, ptc_hdr = None, input_dataset = None):
        # run the image class contructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
 
         # File format checks
         if self.data.shape != (1,1):
             raise ValueError('The KGain calibration data should be just one float value')
 
         self._kgain = self.data[0,0] 
+        self._kgain_error = self.err[0,0]
         
+        if isinstance(data_or_filepath, str):
+            # a filepath is passed in
+            with fits.open(data_or_filepath) as hdulist:
+                self.ptc_hdr = hdulist[3].header
+                # ptc data is in FITS extension
+                self.ptc = hdulist[3].data
+        
+        else:
+            if ptc is not None:
+                self.ptc = ptc
+            else:
+               self.ptc = np.zeros([2,0])
+            if ptc_hdr is not None:
+                self.ptc_hdr = ptc_hdr
+            else:
+                self.ptc_hdr = fits.Header()
+        
+        self.ptc_hdr["EXTNAME"] = "PTC"
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new KGain file
@@ -770,7 +794,11 @@ class KGain(Image):
     @property
     def value(self):
         return self._kgain
- 
+    
+    @property
+    def error(self):
+        return self._kgain_error
+    
     def copy(self, copy_data = True):
         """
         Make a copy of this KGain file. including data and headers.
@@ -785,10 +813,14 @@ class KGain(Image):
         """
         if copy_data:
             new_data = np.copy(self.data)
+            new_ptc = np.copy(self.ptc)
+            new_err = np.copy(self.err)
         else:
             new_data = self.data # this is just pointer referencing
-    
-        new_kg = KGain(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
+            new_ptc = self.ptc
+            new_err = np.copy(self.err)
+        
+        new_kg = KGain(new_data, err = new_err, ptc = new_ptc, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err_hdr = self.err_hdr.copy(), ptc_hdr = self.ptc_hdr.copy())
         
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_kg.filename = self.filename
@@ -797,8 +829,39 @@ class KGain(Image):
         # update DRP version tracking
         self.ext_hdr['DRPVERSN'] =  corgidrp.version
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
+        
         return new_kg
+
+
+    def save(self, filename=None, filedir=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filename (str): filepath to save to. Use self.filename if not specified
+            filedir (str): filedir to save to. Use self.filedir if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        errhdu = fits.ImageHDU(data=self.err, header = self.err_hdr)
+        hdulist.append(errhdu)
+
+        ptchdu = fits.ImageHDU(data=self.ptc, header = self.ptc_hdr)
+        hdulist.append(ptchdu)
+
+        hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
+
 
 class BadPixelMap(Image):
     """
