@@ -821,9 +821,9 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
     dataset_mock= data.Dataset([image1_mock, image2_mock])
     print('--- WARNING (Debugging ONLY) Replace mock dataset in calibrate_kgain by appropriate value.---')
 
-    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_mock)
+    kgain = data.KGain(gain_value, err = np.array([[[mean_rn_gauss_DN]]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_mock)
     
-    return (kgain, mean_rn_gauss_e, mean_rn_std_e, ptc)
+    return kgain
     
 def copy_and_cast(stack_arr_drp, stack_arr2_drp):
     """ 
