@@ -59,19 +59,18 @@ else:
 
 # commanded EM gain
 emgain = 1.0
-image_mean_frame_list = []
+frame_list = []
 # make 30 uniform frames with emgain = 1
 for j in range(30):
     image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
         nonlin_flag=nonlin_flag)
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
-    image_mean_frame_list.append(image_sim)
-# Join them all in a single Dataset
-dataset_mean_frame = Dataset(image_mean_frame_list)
+    # Temporary keyword value. Mean frame is TBD
+    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
+    frame_list.append(image_sim)
 
 init_nonlins = []
-image_cal_list = []
 index = 0
 for iG in range(len(gain_arr0)):
     g = gain_arr0[iG]
@@ -102,8 +101,10 @@ for iG in range(len(gain_arr0)):
             image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
             image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        image_cal_list.append(image_sim)
-dataset_cal =Dataset(image_cal_list) 
+        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
+        frame_list.append(image_sim)
+# Join all frames in a Dataset
+dataset_nl = Dataset(frame_list) 
 init_nonlins_arr = np.transpose(np.array(init_nonlins))
 
 # prepare a second version of time_stack_arr that has all the frames for the 
@@ -118,8 +119,17 @@ ctime_datetime_plus_one_day1 = ctime_datetime1 + pd.Timedelta(days=1)
 ctime_strings_plus_one_day1 = ctime_datetime_plus_one_day1.strftime('%Y-%m-%dT%H:%M:%S').tolist()
 time_stack_arr1[index:index+len_list0[3]] = ctime_strings_plus_one_day1
 init_nonlins_1 = []
-image_cal_1_list = []
+frame_list = []
 index = 0
+# make 30 uniform frames with emgain = 1
+for j in range(30):
+    image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
+        nonlin_flag=nonlin_flag)
+    # Datetime cannot be duplicated
+    image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
+    # Temporary keyword value. Mean frame is TBD
+    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
+    frame_list.append(image_sim)
 for iG in range(len(gain_arr0)):
     g = gain_arr0[iG]
     exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
@@ -149,8 +159,9 @@ for iG in range(len(gain_arr0)):
             image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
             image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        image_cal_1_list.append(image_sim)
-dataset_cal_1 = Dataset(image_cal_1_list)
+        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
+        frame_list.append(image_sim)
+dataset_nl_1 = Dataset(frame_list)
 init_nonlins_1_arr = np.transpose(np.array(init_nonlins_1))
 
 # set input parameters for calibrate_nonlin
@@ -159,15 +170,15 @@ exp_time_stack_arr = exp_time_stack_arr0
 time_stack_arr = time_stack_arr0
 len_list = len_list0
 actual_gain_arr = gain_arr0
+actual_gain_mean_frame = 1
 norm_val = 3000
 min_write = 800
 max_write = 10000
 
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(
-                        dataset_cal, dataset_mean_frame, actual_gain_arr, 
-                        norm_val, min_write, max_write)
+    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(dataset_nl,
+                        actual_gain_arr, actual_gain_mean_frame, norm_val, min_write, max_write)
         
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
@@ -203,9 +214,8 @@ def test_expected_results_nom_sub():
 def test_expected_results_time_sub():
     """Outputs are as expected for the provided frames with 
     datetime values for one EM gain group taken 1 day later."""
-    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(dataset_cal_1, 
-                        dataset_mean_frame, actual_gain_arr, 
-                        norm_val, min_write, max_write)
+    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(dataset_nl, 
+                        actual_gain_arr, actual_gain_mean_frame, norm_val, min_write, max_write)
      
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
@@ -229,9 +239,8 @@ def test_norm_val():
     """norm_val must be divisible by 20."""
     norm_not_div_20 = 2010
     with pytest.raises(CalNonlinException):
-        calibrate_nonlin(dataset_cal, dataset_mean_frame,
-                            actual_gain_arr, norm_not_div_20, min_write, 
-                            max_write)
+        calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
+                            norm_not_div_20, min_write, max_write)
  
 def test_rps():
     """these two below must be real positive scalars."""
@@ -239,23 +248,20 @@ def test_rps():
     # min_write
     for rerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(dataset_cal, dataset_mean_frame,
-                                actual_gain_arr, norm_val, rerr, 
-                                max_write)
+            calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
+                                norm_val, rerr, max_write)
     # max_write
     for rerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(dataset_cal, dataset_mean_frame,
-                                actual_gain_arr, norm_val, 
-                                min_write, rerr)
+            calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
+                                norm_val, min_write, rerr)
    
 def test_max_gt_min():
     """max_write must be greater than min_write."""
     werr = min_write # set the max_write value to the min_write value
     with pytest.raises(CalNonlinException):
-        calibrate_nonlin(dataset_cal, dataset_mean_frame,
-                            actual_gain_arr, norm_val, 
-                            min_write, werr)
+        calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
+                            norm_val, min_write, werr)
     
 def test_psi():
     """norm_val must be a positive scalar integer."""
@@ -263,9 +269,8 @@ def test_psi():
     # norm_val
     for mmerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(dataset_cal, dataset_mean_frame,
-                                actual_gain_arr, mmerr, 
-                                min_write, max_write)
+            calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
+                                mmerr, min_write, max_write)
  
 if __name__ == '__main__':
     print('Running test_expected_results_nom_sub')
