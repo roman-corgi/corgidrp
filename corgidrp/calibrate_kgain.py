@@ -97,7 +97,7 @@ def frameProc(frame, offset_colroi, emgain):
     simple row-bias subtraction using prescan region 
     frame is an L1 SCI-size frame, offset_colroi is the 
     column range in the prescan region to use to calculate 
-    the median for each row. em gain is the actual emgain used 
+    the median for each row. EM gain is the actual emgain used 
     to collect the frame.
         
     Args:
@@ -309,8 +309,9 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
     
 ######################### start of main code #############################
 
-def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000, 
-                    binwidth=68, make_plot=True, plot_outdir='figures', show_plot=False,
+def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+                    min_val=800, max_val=3000, binwidth=68, make_plot=True,
+                    plot_outdir='figures', show_plot=False,
                     log_plot1=-1, log_plot2=4, log_plot3=200, verbose=False):
     """
     Given an array of frame stacks for various exposure times, each sub-stack
@@ -324,30 +325,29 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
     from the std dev and mean values from the bins. 
     
     Args:
-      stack_arr (np.array):
-        The stack of stacks of EXCAM illuminated pupil L1 SCI frames (counts 
-        in DN) having a range of exp times. stack_arr contains a stack of 
-        stacks, and all sub-stacks must have the same number of frames, which 
-        is a minimum of 5. The frames in a sub-stack must all have the same 
-        exposure time time. Must have at least 10 sub-stacks. (More than 20 
-        sub-stacks recommended. The mean signal in the pupil region should 
-        span from about 100 to about 10000 DN. note: unity em gain is 
-        recommended when k-gain is the primary desired product, since it is 
-        known more accurately than non-unity values.)
-      stack_arr2 (np.array):
-        The stack of EXCAM illuminated pupil L1 SCI frames (counts in DN). 
-        stack_arr2 contains a stack of at least 30 frames of uniform exposure 
-        time, such that the net mean counts in the pupil region is a few thousand 
-        DN (2000 to 4000 DN recommended; note: unity em gain is recommended 
-        when k-gain is the primary desired product, since it is known more 
-        accurately than non-unity values. stack_arr and stack_arr2 must be 
-        obtained under the same positioning of the pupil relative to the 
-        detector.
-      emgain (float):
+      dataset_kgain (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
+        pupil L1 SCI frames (counts in DN) having a range of exp times.
+        datset_cal contains a set of subset of frames, and all subsets must have
+        the same number of frames, which is a minimum of 5. The frames in a subset
+        must all have the same exposure time. There must be at least 10 subsets 
+        (More than 20 sub-stacks recommended. The mean signal in the pupil region should 
+        span from about 100 to about 10000 DN.
+        In addition, dataset_kgain contains a set of at least 30 frames with the
+        same exposure time, such that the net mean counts
+        in the pupil region is a few thousand DN (2000 to 4000 DN recommended;
+        note: unity EM gain is recommended when k-gain is the primary desired
+        product, since it is known more accurately than non-unity values.
+        All data must be obtained under the same positioning of the pupil
+        relative to the detector. These frames are identified with the kewyord
+        'OBSTYPE'='MNFRAME' (TBD). 
+      actual_gain (float):
         The value of the measured/actual EM gain used to collect the frames used 
-        to build the stack_arr and stack_arr2 arrays. Must be >= 1.0. (note: 
-        unity em gain is recommended when k-gain is the primary desired product, 
+        to build the calibration data in dataset_kgain. Must be >= 1.0. (note: 
+        unity EM gain is recommended when k-gain is the primary desired product, 
         since it is known more accurately than non-unity values.)
+      actual_gain_mean_frame (float):
+        The value of the measured/actual EM gain used to collect the frames used
+        to build the mean frame in dataset_kgain. Commanded EM must be unity. 
       min_val (int): 
         Minimum value (in DN) of mean values from sub-stacks to use in calculating 
         kgain. (> 400 recommended)  
@@ -357,7 +357,7 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
         counts. (< 6,000 recommended)
       binwidth (int):
         (Optional) Width of each bin for calculating std devs and means from each 
-        sub-stack in stack_arr. Maximum value of binwidth is 800. NOTE: small 
+        sub-stack in dataset_kgain. Maximum value of binwidth is 800. NOTE: small 
         values increase computation time.
         (minimum 10; binwidth between 65 and 75 recommended)
       make_plot (bool): (Optional) generate and store plots. Default is True.
@@ -388,42 +388,56 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
         kgain_params. The first column is the mean (DN) and the second column is
         standard deviation (DN) corrected for read noise.
     """
-    breakpoint()
-    # copy stack_arr and stack_arr2 and cast them into np arrays for convenience
-    stack_arr, stack_arr2 = copy_and_cast(stack_arr, stack_arr2)
+    # cast dataset objects into np arrays for convenience
+    cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, _ = \
+        kgain_dataset_2_list(dataset_kgain)
 
-    # check parameters
-    if type(stack_arr) != np.ndarray:
-        raise TypeError('stack_arr must be an ndarray.')
-    if np.ndim(stack_arr) != 4:
-        raise CalKgainException('stack_arr must be 4-D (i.e., a stack of '
+    # check number of frames, unique EM value, exposure times and datetimes
+    tmp = cal_list[0]
+    for idx in range(4):
+        try:
+            tmp = tmp[idx]
+        except:
+            pass
+    if idx != 3:
+        raise CalKgainException('cal_list must be 4-D (i.e., a stack of '
                 '3-D sub-stacks)')
-    if len(stack_arr) <= 10:
-        raise CalKgainException('Number of sub-stacks in stack_arr must '
+    if len(cal_list) <= 10:
+        raise CalKgainException('Number of sub-stacks in cal_list must '
                 'be more than 10.')
-    if len(stack_arr) < 20 :
-        warnings.warn('Number of sub-stacks is less than 20, '
+    if len(cal_list) < 20 :
+        warnings.warn('Number of sub-stacks in cal_list is less than 20, '
         'which is the recommended minimum number for a good fit ')
-    for i in range(len(stack_arr)):
-        check.threeD_array(stack_arr[i], 'stack_arr['+str(i)+']', TypeError)
-        if len(stack_arr[i]) < 5:
-            raise CalKgainException('A sub-stack was found with less than 5 '
+    for i in range(len(cal_list)):
+        check.threeD_array(cal_list[i], 'cal_list['+str(i)+']', TypeError)
+        if len(cal_list[i]) < 5:
+            raise CalKgainException('A sub-stack in cal_list was found with less than 5 '
             'frames, which is the required minimum number per sub-stack')
-        if i > 0:
-            if np.shape(stack_arr[i-1]) != np.shape(stack_arr[i]):
-                raise CalKgainException('All sub-stacks must have the '
-                            'same number of frames and frame shape.')
-    if type(stack_arr2) != np.ndarray:
-        raise TypeError('stack_arr2 must be an ndarray.')
-    if np.ndim(stack_arr2) != 3:
-        raise CalKgainException('stack_arr must be 3-D (i.e., a stack of '
+# Waiting a response from guillermo Gonzalez (Sergi Hildebrandt)
+#        if i > 0:
+#            if len(cal_list[i-1]) != len(cal_list[i]):
+#                raise CalKgainException('All sub-stacks must have the '
+#                            'same number of frames and frame shape.')
+
+    tmp = mean_frame_list[0]
+    for idx in range(3):
+        try:
+            tmp = tmp[idx]
+        except:
+            pass
+    if idx != 2:    
+        raise CalKgainException('mean_frame_list must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
-    if len(stack_arr2) < 30:
-        raise CalKgainException('Number of sub-stacks in stack_arr2 must '
+    if len(mean_frame_list) < 30:
+        raise CalKgainException('Number of sub-stacks in mean_frame_list must '
                 'be equal to or greater than 30.')
-    check.real_positive_scalar(emgain, 'emgain', TypeError)
-    if emgain < 1:
-        raise CalKgainException('emgain must be >= 1.')
+
+    check.real_positive_scalar(actual_gain, 'actual_gain', TypeError)
+    if actual_gain < 1:
+        raise CalKgainException('Actual gain must be >= 1.')
+    check.real_positive_scalar(actual_gain_mean_frame, 'actual_gain_mean_frame', TypeError)
+    if actual_gain_mean_frame < 1:
+        raise CalKgainException('Actual gain must be >= 1.')
     check.positive_scalar_integer(min_val, 'min_val', TypeError)
     check.positive_scalar_integer(max_val, 'max_val', TypeError)
     if min_val >= max_val:
@@ -453,7 +467,6 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
     rn_bins2 = kgain_params['rn_bins2']
     max_DN_val = kgain_params['max_DN_val']
     signal_bins_N = kgain_params['signal_bins_N']
-
 
     if make_plot is True:
         # Avoid issues with importing matplotlib on headless servers without GUI
@@ -486,15 +499,15 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
     bin_locs = rn_bins[0:-1]
 
     max_DN = max_DN_val; # maximum DN value to be included in PTC
-    nrow = len(stack_arr[0][0])
-    ncol = len(stack_arr[0][0][0])
+    nrow = len(cal_list[0][0])
+    ncol = len(cal_list[0][0][0])
     
     # prepare "good mean frame"
     good_mean_frame = np.zeros((nrow, ncol))
-    nFrames2 = len(stack_arr2)
+    nFrames2 = len(mean_frame_list)
     for mean_frame_count in range(nFrames2):
-        frame = stack_arr2[mean_frame_count]
-        frame = frameProc(frame,colroi_fp,emgain)
+        frame = mean_frame_list[mean_frame_count]
+        frame = frameProc(frame, colroi_fp, actual_gain)
         
         good_mean_frame += frame  # Accumulate into good_mean_frame
     
@@ -518,8 +531,8 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
             plt.show()
         plt.close()
     
-    nFrames = len(stack_arr[0]) # number of frames in an exposure set
-    nSets = len(stack_arr) # number of exposure sets
+    nFrames = len(cal_list[0]) # number of frames in an exposure set
+    nSets = len(cal_list) # number of exposure sets
     
     # Start with specific offset indices for list comprehension in jj loop
     index_offsets = [2, 3, 1, 4, 5]
@@ -539,9 +552,9 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
             print(jj)
         
         # multi-frame analysis method
-        frames = [stack_arr[jj][nFrames - offset] for offset in index_offsets]
+        frames = [cal_list[jj][nFrames - offset] for offset in index_offsets]
         # subtract prescan row medians
-        frames = [frameProc(frames[x], colroi_fp, emgain) for x in range(len(frames))]
+        frames = [frameProc(frames[x], colroi_fp, actual_gain) for x in range(len(frames))]
         # Calculate frame differences
         frames_diff = [frames[j] - frames[k] for j, k in index_pairs]
         # calculate read noise with std from prescan
@@ -810,49 +823,84 @@ def calibrate_kgain(stack_arr, stack_arr2, emgain, min_val=800, max_val=3000,
     prhd, exthd = create_default_headers()
     gain_value = np.array([[kgain]])
 
-
-    # WARNING: This is only to work on other changes in the KGain/Non-linearity calibration PR
-    dat_mock = np.ones([1024,1024]) * 2
-    err_mock = np.ones([1,1024,1024]) * 0.5
-    image1_mock = data.Image(dat_mock,pri_hdr = prhd, ext_hdr = exthd, err = err_mock)
-    image2_mock = image1_mock.copy()
-    image1_mock.filename = "test1"
-    image2_mock.filename = "test2"
-    dataset_mock= data.Dataset([image1_mock, image2_mock])
-    print('--- WARNING (Debugging ONLY) Replace mock dataset in calibrate_kgain by appropriate value.---')
-
-    kgain = data.KGain(gain_value, err = np.array([[[mean_rn_gauss_DN]]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_mock)
+    kgain = data.KGain(gain_value, err = np.array([[[mean_rn_gauss_DN]]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_cal)
     
     return kgain
-    
-def dataset_2_stack(dataset, prihdr_keywords=None, exthdr_keywords=None):
-    """ 
-    Casts a CORGIDRP Dataset object into a stack of numpy arrays sharing the same
-    keyword value. It also returns the list of unique keyword values in the split.
+
+def kgain_dataset_2_list(dataset):
+    """
+    Casts the CORGIDRP Dataset object for K-gain calibration into a stack
+    of numpy arrays sharing the same keyword value. It also returns the list of
+    unique EM values and set of exposure times used with each EM. Note: EM gain
+    is the commanded values: CMDGAIN.
+
+    This function also performs a set of tests about the data type and values in
+    dataset.
 
     Args:
-        dataset_cal (corgidrp.Dataset): A list of Image objects.
-        prihdr_keywords (list of str): list of primary header keywords to split
-        exthdr_keywords (list of str): list of 1st extension header keywords to
-        split on      
+        dataset (corgidrp.Dataset): A list of Image objects.
     Returns:
-        list of datasets: list of sub datasets
-        list of tuples: list of each set of unique header keywords. pri_hdr
-        keywords occur before ext_hdr keywords
-      
-    
+        list with stack of stacks of data array associated with each frame
+        array of exposure times associated with each frame
+        array of datetimes associated with each frame
+        list with the number of frames with same EM gain
+        List of (commanded) EM gains
+
     """
-# cal_arr, exp_time_cal_arr, datetime_cal_arr
-# exp_time_stack_arr, time_stack_arr, len_list,
     # Split Dataset
     dataset_cp = dataset.copy()
-    split = dataset_cp.split_dataset(prihdr_keywords=prihdr_keywords,
-        exthdr_keywords=exthdr_keywords)
+    split = dataset_cp.split_dataset(exthdr_keywords=['EXPTIME'])
+
+    # Data
     stack = []
-    for data_set in split[1]:
-        
-
-
-
+    # Mean frame data
+    mean_frame_stack = []
+# Same exposure time, same EM gain (unity??) Docstrings
     breakpoint()
-    
+    # Exposure times
+    exp_times = []
+    # Datetimes
+    datetimes = []
+    # EM gains (There can only be an EM gain in the data used to calibrate K-gain)
+    em_gains = []
+    # Size of each sub stack
+    len_sstack = []
+    for idx_set, data_set in enumerate(split[0]):
+        # Second layer (array of different exposure times)
+        sub_stack = []
+        len_sstack.append(len(data_set.frames))
+        for frame in data_set.frames:
+            sub_stack.append(frame.data)
+            exp_time = frame.ext_hdr['EXPTIME']
+            if isinstance(exp_time, float) is False:
+                raise Exception('Exposure times must be float')
+            if exp_time <=0:
+                raise Exception('Exposure times must be positive')
+            exp_times.append(exp_time)
+            datetime = frame.ext_hdr['DATETIME']
+            if isinstance(datetime, str) is False:
+                raise Exception('DATETIME must be a string')
+            datetimes.append(datetime)
+            em_gain = frame.ext_hdr['CMDGAIN']
+            if em_gain < 1:
+                raise Exception('Commanded EM gain must be >= 1')
+            em_gains.append(em_gain)
+        # First layer (array of unique EXPTIME values)
+        stack.append(np.stack(sub_stack))
+
+    # There can only be an EM gain in the data used to calibrate K-gain
+    if len(set(em_gains)) != 1:
+        raise Exception('There can only be one commanded gain when calibrating K-Gain')
+    # All elements of datetimes must be unique
+    if len(datetimes) != len(set(datetimes)):
+        raise Exception('DATETIMEs cannot be duplicated')
+    # Length of substack must be at least 1
+    if len(len_sstack) == 0:
+        raise Exception('Substacks must have at least one element')
+
+    # Data used to generate a mean frame have the same exposure time
+    if len(stack) == 1:
+        stack = stack[0]
+
+    return (stack, np.array(exp_times), np.array(datetimes),
+        len_sstack, np.array(split[1]))
