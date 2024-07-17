@@ -46,7 +46,7 @@ class TPumpAnException(Exception):
 # My unit tests would probably detect even more
 # temperatures in a consistent way if I covered a smaller range of temperature.
 def tpump_analysis(base_dir, time_head, emgain_head,
-    num_pumps, non_lin_correction, mean_field = None, length_lim = 6,
+    num_pumps, non_lin_correction = None, mean_field = None, length_lim = 6,
     thresh_factor = 3, k_prob = 1, ill_corr = True, tfit_const = True,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
     tauc_max = 1e-5, pc_min = 0, pc_max = 2, offset_min = 10,
