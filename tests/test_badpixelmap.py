@@ -4,7 +4,7 @@ import numpy as np
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
-from corgidrp.detector_calibrations import create_bad_pixel_map
+from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 
 
 def test_badpixelmap(): 
