@@ -198,8 +198,9 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         have a group of frames with a repeated exposure time. In addition, there's
         a set of at least 30 frames used to generate a mean frame. These frames
         have the same exp time, such that the mean signal in the pupil regions
-        is a few thousand DN. They also have unity EM gain. These frames are
-        identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
+        is a few thousand DN, which helps identify the pixels containing the 
+        pupil image. They also have unity EM gain. These frames are identified
+        with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
       actual_gain_arr (np.array): the array of actual EM gain values (as opposed
         to commanded EM gain) corresponding to the number of EM gain values used
         to construct dataset_nl and in the same order. Note: calibrate_nonlin does
