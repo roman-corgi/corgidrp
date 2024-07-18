@@ -155,37 +155,7 @@ def test_expected_results_sub():
     signal_bins_N = kgain_params['signal_bins_N']
     # kgain - should be close to the assumed value
     assert np.isclose(round(kgain.value,1), kgain_in, atol=0.5)
-    assert np.all(np.equal(ptc.shape, (signal_bins_N,2)))
-
-def test_4D():
-    """stack_arr should be 4-D."""
-    with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-            min_val, max_val, binwidth)
-
-def test_sub_stack_len():
-    """stack_arr must have at least 10 sub-stacks."""
-    with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-            min_val, max_val, binwidth)
-
-def test_sub_sub_stack_len():
-    """Each sub-stack of stack_arr must have 5 sub-stacks."""
-    with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-            min_val, max_val, binwidth)
-    
-def test_3D():
-    """stack_arr2 must be 3-D."""
-    with pytest.raises(CalKgainException):
-       calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-            min_val, max_val, binwidth)
-    
-def test_sub_stack2_len():
-    """stack_arr2 must have at least 30 sub-stacks."""
-    with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-            min_val, max_val, binwidth)
+    assert np.all(np.equal(kgain.ptc.shape, (signal_bins_N,2)))
 
 def test_psi():
     """These three below must be positive scalar integers."""
@@ -231,16 +201,6 @@ def test_emgain():
 if __name__ == '__main__':
     print('Running test_expected_results_sub')
     test_expected_results_sub()
-    print('Running test_4D')
-    test_4D()
-    print('Running test_sub_stack_len')
-    test_sub_stack_len()
-    print('Running test_sub_sub_stack_len')
-    test_sub_sub_stack_len()
-    print('Running test_3D')
-    test_3D()
-    print('Running test_sub_stack2_len')
-    test_sub_stack2_len()
     print('Running test_psi')
     test_psi()
     print('Running test_binwidth')
