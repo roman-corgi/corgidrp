@@ -1,7 +1,8 @@
 import os
-from pathlib import Path
-import numpy as np
 import warnings
+import numpy as np
+import pandas as pd
+from pathlib import Path
 from scipy.optimize import curve_fit
 
 from corgidrp import check
@@ -389,8 +390,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         standard deviation (DN) corrected for read noise.
     """
     # cast dataset objects into np arrays for convenience
-    cal_list, mean_frame_list, exp_arr, datetime_arr = \
-        kgain_dataset_2_list(dataset_kgain)
+    cal_list, mean_frame_list = kgain_dataset_2_list(dataset_kgain)
 
     # check number of frames, unique EM value, exposure times and datetimes
     tmp = cal_list[0]
@@ -865,8 +865,8 @@ def kgain_dataset_2_list(dataset):
     for idx_set, data_set in enumerate(split[0]):
         # Second layer (array of different exposure times)
         sub_stack = []
-        len_sstack.append(len(data_set.frames))
         record_exp_time = True
+        record_len = True
         for frame in data_set.frames:
             if record_exp_time:
                 exp_time_mean_frame = frame.ext_hdr['EXPTIME']
@@ -880,6 +880,9 @@ def kgain_dataset_2_list(dataset):
                 mean_frame_stack.append(frame.data)
 
             else:
+                if record_len:
+                    len_sstack.append(len(data_set.frames))
+                    record_len = False
                 sub_stack.append(frame.data)
                 exp_time = frame.ext_hdr['EXPTIME']
                 if isinstance(exp_time, float) is False:
@@ -899,14 +902,30 @@ def kgain_dataset_2_list(dataset):
         if len(sub_stack) != 0:
             stack.append(np.stack(sub_stack))
 
+    # Exposure times may be duplicated in two different substacks
+    stack_cp = []
+    # Get size of substacks
+    len_sub = min(len_sstack)
+    # Length of substack must be at least 1
+    if len(len_sstack) == 0:
+        raise Exception('Substacks must have at least one element')
+    for sub in stack:
+        if len(sub) == len_sub:
+            stack_cp.append(sub)
+        else:
+            # Add extra care confirming all substacks have same # frames
+            if len(sub)/len_sub != len(sub)//len_sub:
+                raise Exception('All substacks must have the same number of frames')
+            idx_0 = 0
+            for rep in range(len(sub)//len_sub):
+                stack_cp.append(sub[idx_0:idx_0+len_sub])
+                idx_0 += len_sub
+    stack = stack_cp        
     # There can only be an EM gain in the data used to calibrate K-gain
     if len(set(em_gains)) != 1:
         raise Exception('There can only be one commanded gain when calibrating K-Gain')
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
         raise Exception('DATETIMEs cannot be duplicated')
-    # Length of substack must be at least 1
-    if len(len_sstack) == 0:
-        raise Exception('Substacks must have at least one element')
 
-    return stack, mean_frame_stack, np.array(exp_times), np.array(datetimes)
+    return stack, mean_frame_stack
