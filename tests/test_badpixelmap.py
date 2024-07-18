@@ -10,6 +10,8 @@ from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 def test_badpixelmap(): 
     '''
 
+    Tests the creation of badpixelmaps.
+
     Create master darks and master flats, inject some hot and cold pixels
     to create a master bad pixel map. 
 
@@ -64,8 +66,8 @@ def test_badpixelmap():
         for i_row in row_dead_pixel_test:
             flat_frame.data[i_col, i_row] = 0.3
 
-    ###### make the badpixel map:
-    badpixelmap = create_bad_pixel_map(dark_frame,flat_frame)
+    ###### make the badpixel map (input the flat_dataset just as a dummy):
+    badpixelmap = create_bad_pixel_map(flat_dataset, dark_frame,flat_frame)
     # Use np.unpackbits to unpack the bits - big endien
     badpixelmap_bits = np.unpackbits(badpixelmap.data[:, :, np.newaxis], axis=2)
 
