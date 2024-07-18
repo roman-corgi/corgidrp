@@ -2,31 +2,22 @@ import numpy as np
 from corgidrp.data import BadPixelMap, Dataset
 
 def create_bad_pixel_map(master_dark, master_flat, dthresh = 5., ffrac = 0.8, fwidth = 32):
-    '''
+    """
     Compute a fixed bad pixel map for EXCAM from a master dark and flat.
 
     Note that the master dark should not be a synthetic dark, since those are
     (presumably) free of bad pixels. 
 
-    Parameterss
-    ----------
-    master_dark (corgidrp.data.Dark): a master dark object - 
-    master_flat (corgidrp.data.FlatField) : a master flat field object
-    dthresh : float
-        Number of standard deviations above the mean to threshold for
-        hot pixels. Must be >= 0.
-    ffrac : float
-        Fraction of local mean value below which poorly-functioning pixels
-        are flagged. Must be >=0 and < 1.
-    fwidth : int
-        Number of pixels to include in local mean check with ffrac. Must be >0.
+    Args:
+        master_dark (corgidrp.data.Dark): A master dark object.
+        master_flat (corgidrp.data.FlatField): A master flat field object.
+        dthresh (float): Number of standard deviations above the mean to threshold for hot pixels. Must be >= 0.
+        ffrac (float): Fraction of local mean value below which poorly-functioning pixels are flagged. Must be >=0 and < 1.
+        fwidth (int): Number of pixels to include in local mean check with ffrac. Must be >0.
 
-    Returns
-    -------
-    badpixelmap (corgi.data.BadPixelMap) : array_like
-        2-D boolean array the same size as dark and flat, with bad pixels True.
-
-    '''
+    Returns:
+        corgi.data.BadPixelMap: A 2-D boolean array the same size as dark and flat, with bad pixels marked as True.
+    """
 
     #Extract data 
     dark_data = master_dark.data
@@ -65,24 +56,13 @@ def detect_hot_warm_pixels_from_dark(dark, dthresh):
 
     Ported from II&T pipeline
 
-    Parameters
-    ----------
-    dark : array_like
-        2-D array with master dark frame.
-    dthresh : float
-        Number of standard deviations above the mean to threshold for
-        hot pixels. Must be >= 0.
+    Args:
+        dark (array_like): 2-D array containing the master dark frame.
+        dthresh (float): Threshold for flagging hot pixels, specified as the number of standard deviations above the mean dark level. Must be >= 0.
 
-    Returns
-    -------
-    fixedbp_dark : array_like
-        2D boolean array the same size as dark, with bad pixels set as True.
-
+    Returns:
+        fixedbp_dark (array_like): A 2-D boolean array the same size as the input dark frame, with hot pixels marked as True.
     """
-
-    # Check inputs
-    # check.twoD_array(dark, 'dark', TypeError)
-    # check.real_nonnegative_scalar(dthresh, 'dthresh', TypeError)
 
     # Process dark frame
     fixedbp_dark = np.zeros(dark.shape).astype('bool')
@@ -109,20 +89,13 @@ def detect_dead_pixels_from_flat(flat, ffrac, fwidth):
 
     Ported from II&T pipeline
     
-    Parameters
-    ----------
-    flat : array_like
-        2-D array with master flat field.
-    ffrac : float
-        Fraction of local mean value below which poorly-functioning pixels
-        are flagged. Must be >=0.
-    fwidth : int
-        Number of pixels to include in local mean check with ffrac. Must be >0.
+    Args:
+        flat (array_like): 2-D array containing the master flat field.
+        ffrac (float): Fraction of the local mean value below which pixels are considered poorly-functioning.
+        fwidth (int): Width of the box used to calculate the local mean, in pixels.
 
-    Returns
-    -------
-    fixedbp_flat : array_like
-        2D boolean array the same size as flat, with bad pixels set as True.
+    Returns:
+        fixedbp_flat (array_like): A 2-D boolean array the same size as the input flat frame, with dead pixels marked as True.
 
     """
     # Check inputs
