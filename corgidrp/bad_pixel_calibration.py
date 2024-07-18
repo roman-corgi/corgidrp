@@ -1,7 +1,7 @@
 import numpy as np
 from corgidrp.data import BadPixelMap, Dataset
 
-def create_bad_pixel_map(master_dark, master_flat, dthresh = 5., ffrac = 0.8, fwidth = 32):
+def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac = 0.8, fwidth = 32):
     """
     Compute a fixed bad pixel map for EXCAM from a master dark and flat.
 
@@ -9,6 +9,7 @@ def create_bad_pixel_map(master_dark, master_flat, dthresh = 5., ffrac = 0.8, fw
     (presumably) free of bad pixels. 
 
     Args:
+        dataset (corgidrp.data.Dataset): A dataset that is ignored by this class. 
         master_dark (corgidrp.data.Dark): A master dark object.
         master_flat (corgidrp.data.FlatField): A master flat field object.
         dthresh (float): Number of standard deviations above the mean to threshold for hot pixels. Must be >= 0.
@@ -38,6 +39,8 @@ def create_bad_pixel_map(master_dark, master_flat, dthresh = 5., ffrac = 0.8, fw
 
     dark_hdr = master_dark.pri_hdr.copy()
     dark_ext_hdr = master_dark.ext_hdr.copy()
+
+    dark_ext_hdr['HISTORY'] = "Bad Pixel Map created using {} and {}".format(master_dark.filename,master_flat.filename)
 
     input_dataset = Dataset([master_dark,master_flat])
 
