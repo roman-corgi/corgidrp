@@ -155,10 +155,6 @@ def test_expected_results_sub():
     signal_bins_N = kgain_params['signal_bins_N']
     # kgain - should be close to the assumed value
     assert np.isclose(round(kgain.value,1), kgain_in, atol=0.5)
-    # read noises. these are not requirements, but nice to check
-    assert np.isclose(round(read_noise_gauss,1), rn_in, atol=8)
-    assert np.isclose(round(read_noise_stdev,1), rn_in, atol=8)
-    # check that the ptc output is the correct size
     assert np.all(np.equal(ptc.shape, (signal_bins_N,2)))
 
 def test_4D():

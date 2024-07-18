@@ -560,9 +560,6 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         rn_std = [diff2std(frames_diff[x], offset_rowroi, offset_colroi) for x 
             in range(len(frames_diff))]
         
-        # rn_std = [16.0 for x 
-        #     in range(len(frames_diff))]
-        
         counts_diff = [histc_roi(frames_diff[x], offset_rowroi, offset_colroi, rn_bins) for x 
             in range(len(frames_diff))]
         
@@ -822,7 +819,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     prhd, exthd = create_default_headers()
     gain_value = np.array([[kgain]])
 
-    kgain = data.KGain(gain_value, err = np.array([[[mean_rn_gauss_DN]]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
+    kgain = data.KGain(gain_value, err = np.array([[mean_rn_gauss_DN]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
     
     return kgain
 
@@ -902,9 +899,9 @@ def kgain_dataset_2_list(dataset):
         if len(sub_stack) != 0:
             stack.append(np.stack(sub_stack))
 
-    # Exposure times may be duplicated in two different substacks
+    # Need to split substacks with the same exposure times
     stack_cp = []
-    # Get size of substacks
+    # Get expected size of substacks
     len_sub = min(len_sstack)
     # Length of substack must be at least 1
     if len(len_sstack) == 0:
@@ -913,7 +910,7 @@ def kgain_dataset_2_list(dataset):
         if len(sub) == len_sub:
             stack_cp.append(sub)
         else:
-            # Add extra care confirming all substacks have same # frames
+            # Add extra care confirming all collected substacks have same # frames
             if len(sub)/len_sub != len(sub)//len_sub:
                 raise Exception('All substacks must have the same number of frames')
             idx_0 = 0
