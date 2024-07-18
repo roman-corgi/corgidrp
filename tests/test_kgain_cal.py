@@ -107,30 +107,28 @@ else:
     coeffs_1 = [0.0, 0.0, 0.0, 1.0]
     _, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
 
-image_mean_frame_list = []
+frame_list = []
 # make 30 uniform frames with emgain = 1
 for j in range(30):
     image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in,actual_gain,7.0,coeffs_1,
         nonlin_flag=nonlin_flag)
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
-    image_mean_frame_list.append(image_sim)
-# Join them all in a single Dataset
-dataset_mean_frame = Dataset(image_mean_frame_list)
+    # Temporary keyword value. Mean frame is TBD
+    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
+    frame_list.append(image_sim)
 
 index = 0
 iG = 0 # doing only the em gain = 1 case
 g = actual_gain
 exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
 index = index + len_list0[iG]
-frame_list = [] # initialize frame stack
 if nonlin_flag:
     coeffs, _, vals = nonlin_coefs(nonlin_table_path,g,3)
 else:
     coeffs = [0.0, 0.0, 0.0, 1.0]
     vals = np.ones(len(DNs))
 
-image_cal_list = []
 exp_repeat_counts = count_contiguous_repeats(exp_time_loop)
 for j in range(len(exp_repeat_counts)):
     for t in range(exp_repeat_counts[j]):
@@ -139,8 +137,10 @@ for j in range(len(exp_repeat_counts)):
         image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in,g,
                                exp_time,coeffs,nonlin_flag=nonlin_flag)
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
-        image_cal_list.append(image_sim)
-dataset_cal = Dataset(image_cal_list)
+        # OBSTYPE has no KGAIN value, but NONLIN
+        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
+        frame_list.append(image_sim)
+dataset_kg = Dataset(frame_list)
 
 # set input parameters for calibrate_kgain function
 min_val = 800
@@ -149,11 +149,7 @@ binwidth = 68
 
 def test_expected_results_sub():
     """Outputs are as expected, for imported frames."""
-    kgain = calibrate_kgain(dataset_cal, actual_gain,
-        min_val, max_val, binwidth)
-    breakpoint()
-    (kgain, read_noise_gauss, read_noise_stdev, ptc) = \
-    calibrate_kgain(dataset_cal, actual_gain, actual_gain_mean_frame,
+    kgain = calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
         min_val, max_val, binwidth)
         
     signal_bins_N = kgain_params['signal_bins_N']
@@ -168,31 +164,31 @@ def test_expected_results_sub():
 def test_4D():
     """stack_arr should be 4-D."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
             min_val, max_val, binwidth)
 
 def test_sub_stack_len():
     """stack_arr must have at least 10 sub-stacks."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
             min_val, max_val, binwidth)
 
 def test_sub_sub_stack_len():
     """Each sub-stack of stack_arr must have 5 sub-stacks."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
             min_val, max_val, binwidth)
     
 def test_3D():
     """stack_arr2 must be 3-D."""
     with pytest.raises(CalKgainException):
-       calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+       calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
             min_val, max_val, binwidth)
     
 def test_sub_stack2_len():
     """stack_arr2 must have at least 30 sub-stacks."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
             min_val, max_val, binwidth)
 
 def test_psi():
@@ -201,24 +197,24 @@ def test_psi():
     # min_val
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+            calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
                 perr, max_val, binwidth)
     # max_val
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+            calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
                 min_val, perr, binwidth)
 
     # binwidth
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+            calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
                 min_val, max_val, perr)
       
 def test_binwidth():
     """binwidth must be >= 10."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
             min_val, max_val, 9)
  
 def test_rps():
@@ -227,13 +223,13 @@ def test_rps():
     # min_write
     for rerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kgain, rerr, actual_gain_mean_frame,
+            calibrate_kgain(dataset_kg, rerr, actual_gain_mean_frame,
                 min_val, max_val, binwidth)
    
 def test_emgain():
     """emgain must be >= 1."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kgain, 0.5, actual_gain_mean_frame,
+        calibrate_kgain(dataset_kg, 0.5, actual_gain_mean_frame,
             min_val, max_val, binwidth)
 
 if __name__ == '__main__':

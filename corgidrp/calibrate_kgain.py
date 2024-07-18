@@ -347,7 +347,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         since it is known more accurately than non-unity values.)
       actual_gain_mean_frame (float):
         The value of the measured/actual EM gain used to collect the frames used
-        to build the mean frame in dataset_kgain. Commanded EM must be unity. 
+        to build the mean frame in dataset_kgain. note: commanded EM must be unity. 
       min_val (int): 
         Minimum value (in DN) of mean values from sub-stacks to use in calculating 
         kgain. (> 400 recommended)  
@@ -389,7 +389,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         standard deviation (DN) corrected for read noise.
     """
     # cast dataset objects into np arrays for convenience
-    cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, _ = \
+    cal_list, mean_frame_list, exp_arr, datetime_arr = \
         kgain_dataset_2_list(dataset_kgain)
 
     # check number of frames, unique EM value, exposure times and datetimes
@@ -413,11 +413,10 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         if len(cal_list[i]) < 5:
             raise CalKgainException('A sub-stack in cal_list was found with less than 5 '
             'frames, which is the required minimum number per sub-stack')
-# Waiting a response from guillermo Gonzalez (Sergi Hildebrandt)
-#        if i > 0:
-#            if len(cal_list[i-1]) != len(cal_list[i]):
-#                raise CalKgainException('All sub-stacks must have the '
-#                            'same number of frames and frame shape.')
+        if i > 0:
+            if len(cal_list[i-1]) != len(cal_list[i]):
+                raise CalKgainException('All sub-stacks must have the '
+                            'same number of frames and frame shape.')
 
     tmp = mean_frame_list[0]
     for idx in range(3):
@@ -823,14 +822,14 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     prhd, exthd = create_default_headers()
     gain_value = np.array([[kgain]])
 
-    kgain = data.KGain(gain_value, err = np.array([[[mean_rn_gauss_DN]]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_cal)
+    kgain = data.KGain(gain_value, err = np.array([[[mean_rn_gauss_DN]]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
     
     return kgain
 
 def kgain_dataset_2_list(dataset):
     """
-    Casts the CORGIDRP Dataset object for K-gain calibration into a stack
-    of numpy arrays sharing the same keyword value. It also returns the list of
+    Casts the CORGIDRP Dataset object for K-gain calibration into a list of
+    numpy arrays sharing the same exposure time. It also returns the list of
     unique EM values and set of exposure times used with each EM. Note: EM gain
     is the commanded values: CMDGAIN.
 
@@ -838,13 +837,13 @@ def kgain_dataset_2_list(dataset):
     dataset.
 
     Args:
-        dataset (corgidrp.Dataset): A list of Image objects.
+        dataset (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
+        pupil L1 SCI frames (counts in DN)
+
     Returns:
         list with stack of stacks of data array associated with each frame
         array of exposure times associated with each frame
         array of datetimes associated with each frame
-        list with the number of frames with same EM gain
-        List of (commanded) EM gains
 
     """
     # Split Dataset
@@ -855,8 +854,6 @@ def kgain_dataset_2_list(dataset):
     stack = []
     # Mean frame data
     mean_frame_stack = []
-# Same exposure time, same EM gain (unity??) Docstrings
-    breakpoint()
     # Exposure times
     exp_times = []
     # Datetimes
@@ -869,24 +866,38 @@ def kgain_dataset_2_list(dataset):
         # Second layer (array of different exposure times)
         sub_stack = []
         len_sstack.append(len(data_set.frames))
+        record_exp_time = True
         for frame in data_set.frames:
-            sub_stack.append(frame.data)
-            exp_time = frame.ext_hdr['EXPTIME']
-            if isinstance(exp_time, float) is False:
-                raise Exception('Exposure times must be float')
-            if exp_time <=0:
-                raise Exception('Exposure times must be positive')
-            exp_times.append(exp_time)
-            datetime = frame.ext_hdr['DATETIME']
-            if isinstance(datetime, str) is False:
-                raise Exception('DATETIME must be a string')
-            datetimes.append(datetime)
-            em_gain = frame.ext_hdr['CMDGAIN']
-            if em_gain < 1:
-                raise Exception('Commanded EM gain must be >= 1')
-            em_gains.append(em_gain)
-        # First layer (array of unique EXPTIME values)
-        stack.append(np.stack(sub_stack))
+            if record_exp_time:
+                exp_time_mean_frame = frame.ext_hdr['EXPTIME']
+                record_exp_time = False
+            if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
+                raise Exception('Frames in the same data set must have the same exposure time')
+
+            if frame.ext_hdr['OBSTYPE'] == 'MNFRAME':
+                if frame.ext_hdr['CMDGAIN'] != 1:
+                    raise Exception('The commanded gain used to build the mean frame must be unity')
+                mean_frame_stack.append(frame.data)
+
+            else:
+                sub_stack.append(frame.data)
+                exp_time = frame.ext_hdr['EXPTIME']
+                if isinstance(exp_time, float) is False:
+                    raise Exception('Exposure times must be float')
+                if exp_time <=0:
+                    raise Exception('Exposure times must be positive')
+                exp_times.append(exp_time)
+                datetime = frame.ext_hdr['DATETIME']
+                if isinstance(datetime, str) is False:
+                    raise Exception('DATETIME must be a string')
+                datetimes.append(datetime)
+                em_gain = frame.ext_hdr['CMDGAIN']
+                if em_gain < 1:
+                    raise Exception('Commanded EM gain must be >= 1')
+                em_gains.append(em_gain)
+        # Calibration data may have different subsets
+        if len(sub_stack) != 0:
+            stack.append(np.stack(sub_stack))
 
     # There can only be an EM gain in the data used to calibrate K-gain
     if len(set(em_gains)) != 1:
@@ -898,9 +909,4 @@ def kgain_dataset_2_list(dataset):
     if len(len_sstack) == 0:
         raise Exception('Substacks must have at least one element')
 
-    # Data used to generate a mean frame have the same exposure time
-    if len(stack) == 1:
-        stack = stack[0]
-
-    return (stack, np.array(exp_times), np.array(datetimes),
-        len_sstack, np.array(split[1]))
+    return stack, mean_frame_stack, np.array(exp_times), np.array(datetimes)

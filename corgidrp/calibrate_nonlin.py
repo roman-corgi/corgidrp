@@ -208,7 +208,7 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         must be >= 1.0. 
       actual_gain_mean_frame (float):
         The value of the measured/actual EM gain used to collect the frames used
-        to build the mean frame in dataset_kgain. Commanded EM must be unity.
+        to build the mean frame in dataset_kgain. note: commanded EM must be unity.
       norm_val (int): (Optional) Value in DN to normalize the nonlinearity values to.
         Must be greater than 0 and must be divisible by 20 without remainder.
         (1500 to 3000 recommended).
@@ -883,15 +883,15 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
 def nonlin_dataset_2_stack(dataset):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
-    of numpy arrays sharing the same keyword value. It also returns the list of
-    unique EM values and set of exposure times used with each EM. Note: EM gain
-    is the commanded values: CMDGAIN.
-
-    This function also performs a set of tests about the data type and values in
-    dataset.
+    of numpy arrays sharing the same commanded gain value. It also returns the list of
+    unique EM values and set of exposure times used with each EM. Note: it also
+    performs a set of tests about the integrity of the data type and values in
+    the dataset.
 
     Args:
-        dataset (corgidrp.Dataset): A list of Image objects.
+        dataset (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
+        pupil L1 SCI frames (counts in DN)
+
     Returns:
         numpy array with stack of stacks of data array associated with each frame
         array of exposure times associated with each frame
