@@ -6,18 +6,18 @@ noises included. The assumed flux map is a realistic pupil image.
 """
 
 import os
-import pandas as pd
 import pytest
 import warnings
 import numpy as np
-from astropy.io import fits
+import pandas as pd
 from pathlib import Path
+from astropy.io import fits
 
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException)
+from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
 
 ############################# prepare simulated frames #######################
 
