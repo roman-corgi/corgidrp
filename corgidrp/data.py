@@ -246,22 +246,21 @@ class Image():
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         err (np.array): 2-D/3-D uncertainty data
-        dq (np.array): 2-D data quality, 0: good. Other values track different causes for bad pixels and other pixel-level effects in accordance with the DRP implementation document.
-        bias (np.array): 1-D bias data
+        dq (np.array): 2-D data quality, 0: good. Other values track different causes for bad pixels and other pixel-level effects in accordance with the DRP implementation document.x
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
         bias_hdr (astropy.io.fits.Header): the bias extension header
+        hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that contains any other extension types. 
 
     Attributes:
         data (np.array): 2-D data for this Image
         err (np.array): 2-D uncertainty
         dq (np.array): 2-D data quality
-        bias (np.array): 1-D bias data
         pri_hdr (astropy.io.fits.Header): primary header
         ext_hdr (astropy.io.fits.Header): image extension header. Generally this header will be edited/added to
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
-        bias_hdr (astropy.io.fits.Header): the bias extension header
+        hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that contains any other extension types.
         filename (str): the filename corresponding to this Image
         filedir (str): the file directory on disk where this image is to be/already saved.
         filepath (str): full path to the file on disk (if it exists)
@@ -270,10 +269,16 @@ class Image():
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
-                self.pri_hdr = hdulist[0].header
-                # image data is in FITS extension
-                self.ext_hdr = hdulist[1].header
-                self.data = hdulist[1].data
+                
+                #Pop out the primary header
+                self.pri_hdr = hdulist.pop(0).header
+                #Pop out the image extension
+                first_hdu = hdulist.pop(0)
+                self.ext_hdr = first_hdu.header
+                self.data = first_hdu.data
+
+                #A list of extensions
+                hdu_names = [hdu.name for hdu in hdulist]
 
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
@@ -285,9 +290,10 @@ class Image():
                     else:
                         self.err = err.reshape((1,)+err.shape)
                 # we assume that the ERR extension is index 2 of hdulist
-                elif len(hdulist)>2:
-                    self.err = hdulist[2].data
-                    self.err_hdr = hdulist[2].header
+                elif "ERR" in hdu_names:
+                    err_hdu = hdulist.pop("ERR")
+                    self.err = err_hdu.data
+                    self.err_hdr = err_hdu.header
                     if self.err.ndim == 2:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
@@ -298,9 +304,10 @@ class Image():
                         raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                     self.dq = dq
                 # we assume that the DQ extension is index 3 of hdulist
-                elif len(hdulist)>3:
-                    self.dq = hdulist[3].data
-                    self.dq_hdr = hdulist[3].header
+                elif "DQ" in hdu_names:
+                    dq_hdu = hdulist.pop("DQ")
+                    self.dq = dq_hdu.data
+                    self.dq_hdr = dq_hdu.header
                 else:
                     self.dq = np.zeros(self.data.shape, dtype = int)
 
