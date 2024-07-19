@@ -51,7 +51,6 @@ def tpump_analysis(base_dir, time_head, emgain_head,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
     tauc_max = 1e-5, pc_min = 0, pc_max = 2, offset_min = 10,
     offset_max = 10,
-    save_temps = None, load_temps = None,
     cs_fit_thresh = 0.8, E_min = 0, E_max = 1, cs_min = 0,
     cs_max = 50, bins_E = 100, bins_cs = 10, input_T = 180,
     sample_data = False):
@@ -96,8 +95,6 @@ def tpump_analysis(base_dir, time_head, emgain_head,
         the sample_data parameter needs to be set to True.  (See below for
         information on sample_data.)
 
-        If load_temps is not None, base_dir is not used at all. (See below for
-        information on load_temps.)
     time_head : str
         Keyword corresponding to phase time for each FITS file.  Keyword value
         assumed to be float (units of microseconds).
@@ -249,15 +246,6 @@ def tpump_analysis(base_dir, time_head, emgain_head,
         bias, the subtraction that occured in illumination_correction(),
         and any erroneous estimation of k gain. It acts as a nuisance
         parameter in the fit.  Units of e-.
-    save_temps : str or None, optional
-        If input is a string, it should be the absolute path, including the
-        desired filename, for where to save the temps dictionary.  The file
-        will be saved as a .npy file, so your filename should end with .npy.
-        If None, the temps dictionary is not saved.  Defaults to None.
-    load_temps : str or None, optional
-        If input is a string, it should be the absolute path of the .npy file
-        containing the 'temps' dictionary.  If input is None, no file is
-        loaded.  Defaults to None.
     cs_fit_thresh : (0, 1), optional
         The minimum value required for adjusted coefficient of determination
         (adjusted R^2) for curve fitting for the capture cross section
@@ -377,11 +365,7 @@ def tpump_analysis(base_dir, time_head, emgain_head,
         temperatures.
     unused_fit_data : int or None
         Number of times traps were identified that were not matched up for
-        sub-electrode location determination.  If the input load_temps is not
-        None, this will return as None since the code was called to start at
-        the point at which the temps dictionary has already been generated, and
-        that is after all fitting that determines unused_fit_data has been
-        done.
+        sub-electrode location determination. 
     unused_temp_fit_data : int
         Number of times traps were identified that did not get used in
         identifying release time constant values across all temperatures
@@ -457,823 +441,808 @@ def tpump_analysis(base_dir, time_head, emgain_head,
     # tau_min and tau_max are outside of 1e-6 to 1e-2.
     tau_outside = 0
     if load_temps is None:
-        temps = {}
-        for dir in os.listdir(base_dir):
-            sch_dir_path = os.path.abspath(Path(base_dir, dir))
-            if os.path.isfile(sch_dir_path): # just want directories
+    temps = {}
+    for dir in os.listdir(base_dir):
+        sch_dir_path = os.path.abspath(Path(base_dir, dir))
+        if os.path.isfile(sch_dir_path): # just want directories
+            continue
+        try:
+            curr_temp = float(dir[0:-1])
+        except:
+            raise TPumpAnException('Temperature folder label must be '
+            'a number up to the last character.')
+        schemes = {}
+        # initializing eperdn here; used if scheme is 1
+        eperdn = 1
+        # check to make sure no two scheme folders the same (1 per scheme)
+        sch_list = []
+        for scheme in os.listdir(sch_dir_path):
+            scheme_path = os.path.abspath(Path(sch_dir_path, scheme))
+            if os.path.isfile(scheme_path): # just want directories
                 continue
+            sch_list.append(scheme[-1])
             try:
-                curr_temp = float(dir[0:-1])
+                int(scheme[-1])
             except:
-                raise TPumpAnException('Temperature folder label must be '
-                'a number up to the last character.')
-            schemes = {}
-            # initializing eperdn here; used if scheme is 1
-            eperdn = 1
-            # check to make sure no two scheme folders the same (1 per scheme)
-            sch_list = []
-            for scheme in os.listdir(sch_dir_path):
-                scheme_path = os.path.abspath(Path(sch_dir_path, scheme))
-                if os.path.isfile(scheme_path): # just want directories
-                    continue
-                sch_list.append(scheme[-1])
-                try:
-                    int(scheme[-1])
-                except:
-                    raise TPumpAnException('Last character of the scheme '
-                    'folder label must be a number')
-            for num in sch_list:
-                if sch_list.count(num) > 1:
-                    raise TPumpAnException('More than one folder for a single '
-                    'scheme found.  Should only be one folder per scheme.')
-            for sch_dir in sorted(os.listdir(sch_dir_path)):
-                scheme_path = os.path.abspath(Path(sch_dir_path, sch_dir))
-                if os.path.isfile(scheme_path): # just want directories
-                    continue
-                curr_sch = int(sch_dir[-1])
-                # if Scheme_1 present, the following shouldn't happen
-                if schemes == {} and curr_sch != 1:
-                    raise TPumpAnException('Scheme 1 files must run first for'
-                        ' an accurate eperdn estimation')
-                frames = []
-                cor_frames = []
-                timings = []
-                curr_sch_path = os.path.abspath(Path(sch_dir_path, sch_dir))
-                for file in os.listdir(curr_sch_path):
-                    f = os.path.join(curr_sch_path, file)
-                    if os.path.isfile(f) and f.endswith('.fits') and \
-                        not sample_data:
+                raise TPumpAnException('Last character of the scheme '
+                'folder label must be a number')
+        for num in sch_list:
+            if sch_list.count(num) > 1:
+                raise TPumpAnException('More than one folder for a single '
+                'scheme found.  Should only be one folder per scheme.')
+        for sch_dir in sorted(os.listdir(sch_dir_path)):
+            scheme_path = os.path.abspath(Path(sch_dir_path, sch_dir))
+            if os.path.isfile(scheme_path): # just want directories
+                continue
+            curr_sch = int(sch_dir[-1])
+            # if Scheme_1 present, the following shouldn't happen
+            if schemes == {} and curr_sch != 1:
+                raise TPumpAnException('Scheme 1 files must run first for'
+                    ' an accurate eperdn estimation')
+            frames = []
+            cor_frames = []
+            timings = []
+            curr_sch_path = os.path.abspath(Path(sch_dir_path, sch_dir))
+            for file in os.listdir(curr_sch_path):
+                f = os.path.join(curr_sch_path, file)
+                if os.path.isfile(f) and f.endswith('.fits') and \
+                    not sample_data:
+                    try:
+                        data = fits.getdata(f, 1) #1st extension for image
+                        data = data.astype(float)
+                    except:
+                        raise TPumpAnException('Must be .fits files with '
+                        'image data in 1st extension')
+                    with fits.open(f) as hdul:
                         try:
-                            data = fits.getdata(f, 1) #1st extension for image
-                            data = data.astype(float)
+                            hdr = hdul[0].header
+                            # time from FITS header in us, so convert to s
+                            t = float(hdr[time_head])/10**6
+                            em_gain = float(hdr[emgain_head])
                         except:
-                            raise TPumpAnException('Must be .fits files with '
-                            'image data in 1st extension')
-                        with fits.open(f) as hdul:
-                            try:
-                                hdr = hdul[0].header
-                                # time from FITS header in us, so convert to s
-                                t = float(hdr[time_head])/10**6
-                                em_gain = float(hdr[emgain_head])
-                            except:
-                                raise TPumpAnException('Primary header must '
-                                'contain correct keys for phase time and EM '
-                                'gain')
-                        timings.append(t)
-                        # getting image area (all physical CCD pixels)
-                        d = imaging_slice(data)
-                        # need to subtract bias if we are to extract eperdn
-                        # getting all physical CCD pixels
-                        prows, pcols, r0c0 = imaging_area_geometry()
-                        if prows > np.shape(data)[0] or \
-                            pcols > np.shape(data)[1] or \
-                            r0c0[0] > np.shape(data)[0] or \
-                            r0c0[1] > np.shape(data)[1]:
-                            raise TPumpAnException('Assumed geometry from detector.py inconsistent'
-                            ' with frame')
-                        # Get prescan region
-                        prescan = slice_section(data,'SCI','prescan')
-                        # select the good cols for getting row-by-row bias
-                        # we don't use Process class here to avoid having to
-                        # input fwc params, etc
-                        st = detector_areas['SCI']['col_start']
-                        end = detector_areas['SCI']['col_end']
-                        p_r0 = detector_areas['SCI']['r0c0'][0]
-                        i_r0 = r0c0[0]
-                        # prescan relative to image rows
-                        al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
-                        bias_dn = np.median(al_prescan[:,st:end],
-                                axis=1)[:, np.newaxis]
-                        d -= bias_dn
-                        #CIC also present in prescan, and signal is mainly
-                        #gained CIC, so in image area, expect to have
-                        # roughly 0 median
+                            raise TPumpAnException('Primary header must '
+                            'contain correct keys for phase time and EM '
+                            'gain')
+                    timings.append(t)
+                    # getting image area (all physical CCD pixels)
+                    d = imaging_slice(data)
+                    # need to subtract bias if we are to extract eperdn
+                    # getting all physical CCD pixels
+                    prows, pcols, r0c0 = imaging_area_geometry()
+                    if prows > np.shape(data)[0] or \
+                        pcols > np.shape(data)[1] or \
+                        r0c0[0] > np.shape(data)[0] or \
+                        r0c0[1] > np.shape(data)[1]:
+                        raise TPumpAnException('Assumed geometry from detector.py inconsistent'
+                        ' with frame')
+                    # Get prescan region
+                    prescan = slice_section(data,'SCI','prescan')
+                    # select the good cols for getting row-by-row bias
+                    # we don't use Process class here to avoid having to
+                    # input fwc params, etc
+                    st = detector_areas['SCI']['col_start']
+                    end = detector_areas['SCI']['col_end']
+                    p_r0 = detector_areas['SCI']['r0c0'][0]
+                    i_r0 = r0c0[0]
+                    # prescan relative to image rows
+                    al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
+                    bias_dn = np.median(al_prescan[:,st:end],
+                            axis=1)[:, np.newaxis]
+                    d -= bias_dn
+                    #CIC also present in prescan, and signal is mainly
+                    #gained CIC, so in image area, expect to have
+                    # roughly 0 median
 
-                        # nonlinearity correction done assuming
-                        # row-by-row bias subtraction, too, I believe.
-                        # could have non-linearity (flat field, but dipoles),
-                        # incurred at ADU, after frame is read out;
-                        # correct for it if needed (with residual nonlinearity)
-                        if non_lin_correction is not None:
-                            d *= get_relgains(d, em_gain, non_lin_correction)
-                        
-                        d = d/em_gain
-                        frames.append(d)
-                    if os.path.isfile(f) and f.endswith('.mat') and \
-                         sample_data:
-                        try:
-                            data = read_mat(f)
-                            data = (data['frame_data']).astype(float)
-                        except:
-                            raise TPumpAnException('Sample data from Alfresco '
-                            'must be .mat type.')
-                        if np.shape(data) != (2200, 1080):
-                            raise TPumpAnException('Matlab data from Alfresco '
-                            'sample data must be of shape '
-                            '(rows, cols) = (2200, 1080).')
-                        # extracting time from Nathan's file name
-                        # converting from us to s, too
-                        if 'us_' not in file:
-                            raise TPumpAnException('Filenames for sample data '
-                            'from Alfresco must contain \'us_\' in order for '
-                            'phase time to be read from them.')
-                        try:
-                            t = float(file[31:file.find("us_")])/10**6
-                        except:
-                            raise TPumpAnException('Filenames for sample data '
-                            'from Alfresco msut contain numerals for the phase'
-                            ' times in the right position.')
-                        timings.append(t)
-                        # For Nathan's particular data, size it to be
-                        # comparable to EDU
-                        d = data[15:15+1024,28:28+1024].copy()
-                        em_gain = 1
+                    # nonlinearity correction done assuming
+                    # row-by-row bias subtraction, too, I believe.
+                    # could have non-linearity (flat field, but dipoles),
+                    # incurred at ADU, after frame is read out;
+                    # correct for it if needed (with residual nonlinearity)
+                    if non_lin_correction is not None:
+                        d *= get_relgains(d, em_gain, non_lin_correction)
+                    
+                    d = d/em_gain
+                    frames.append(d)
+                if os.path.isfile(f) and f.endswith('.mat') and \
+                        sample_data:
+                    try:
+                        data = read_mat(f)
+                        data = (data['frame_data']).astype(float)
+                    except:
+                        raise TPumpAnException('Sample data from Alfresco '
+                        'must be .mat type.')
+                    if np.shape(data) != (2200, 1080):
+                        raise TPumpAnException('Matlab data from Alfresco '
+                        'sample data must be of shape '
+                        '(rows, cols) = (2200, 1080).')
+                    # extracting time from Nathan's file name
+                    # converting from us to s, too
+                    if 'us_' not in file:
+                        raise TPumpAnException('Filenames for sample data '
+                        'from Alfresco must contain \'us_\' in order for '
+                        'phase time to be read from them.')
+                    try:
+                        t = float(file[31:file.find("us_")])/10**6
+                    except:
+                        raise TPumpAnException('Filenames for sample data '
+                        'from Alfresco msut contain numerals for the phase'
+                        ' times in the right position.')
+                    timings.append(t)
+                    # For Nathan's particular data, size it to be
+                    # comparable to EDU
+                    d = data[15:15+1024,28:28+1024].copy()
+                    em_gain = 1
 
-                        #n1 = d[0:15, 0:]
-                        #n2 = d[15:, 0:28]
-                        #bias_dn = (np.median(n1)*np.size(n1) +
-                        #  np.median(n2)*np.size(n2))/(np.size(n1)+np.size(n2))
-                        noise = data[2100:2150, 100:1000].copy()
-                        bias_dn = np.median(noise)
-                        # don't worry about row-by-row for this sample data
-                        d = d - bias_dn
-                        #bias_dns.append(bias_dn)
+                    #n1 = d[0:15, 0:]
+                    #n2 = d[15:, 0:28]
+                    #bias_dn = (np.median(n1)*np.size(n1) +
+                    #  np.median(n2)*np.size(n2))/(np.size(n1)+np.size(n2))
+                    noise = data[2100:2150, 100:1000].copy()
+                    bias_dn = np.median(noise)
+                    # don't worry about row-by-row for this sample data
+                    d = d - bias_dn
+                    #bias_dns.append(bias_dn)
 
-                        # now do nonlinearity correction (before averaging
-                        # frames with same temp and phase time)
+                    # now do nonlinearity correction (before averaging
+                    # frames with same temp and phase time)
 
-                        # change to actual path if nonlinearity correction
-                        # desired (if EM gain known)
-                        # actually, don't need to average frames with same temp
-                        #  and phase time; curve_fit doesn't care
-                        #if you have mutliple values for the same data point!
+                    # change to actual path if nonlinearity correction
+                    # desired (if EM gain known)
+                    # actually, don't need to average frames with same temp
+                    #  and phase time; curve_fit doesn't care
+                    #if you have mutliple values for the same data point!
 
-                        # Nathan says could be useful but doesn't deserve too
-                        # much attention unless linearity is absolutely
-                        # horrible; enough traps causes good self-calibrating
-                        # of image
+                    # Nathan says could be useful but doesn't deserve too
+                    # much attention unless linearity is absolutely
+                    # horrible; enough traps causes good self-calibrating
+                    # of image
 
-                        if non_lin_correction is not None:
-                            d *= get_relgains(d, em_gain, non_lin_correction)
-                        d = d/em_gain
-                        #d *= 2500/d.max()
-                        frames.append(d)
-                # no need for cosmic ray removal since we do ill. correction
-                # plus cosmics wouldn't look same as it would on regular frame,
-                # and they affect the detection of dipoles (or very low chance)
-                # This can also be mitigated by taking multiple frames per
-                # phase time.
-                # no need for flat-fielding since trap pumping will be done
-                # while dark (i.e., a flat field of dark)
-                if frames == []:
-                    raise TPumpAnException('Scheme folder had no data '
-                    'files in it.')
-                # if curr_sch is 1, then this simply multiplies by 1
-                frames = np.stack(frames)*eperdn
-                timings = np.array(timings)
-                # min number of frames for a dipole should meet threshold so
-                # that it is
-                # considered a potential true trap, unless the number of
-                # available frames is smaller
-                length_limit = min(length_lim, len(np.unique(timings)))
-                #To accurately determine eperdn, the median level needs to be
-                #subtracted off if one is to compare, for P1,
-                # 2500e- sitting on top of nothing; if it were sitting on
-                # top of the mean field (i.e.,
-                #whatever injected charge is there after bias subtraction), it
-                #would be more than 2500e-.
-                # illumination correction only subtracts and doesn't divide,
-                # so e- units unaffected; the offset introduced taken care of
-                # by nuisance parameter 'offset' in curve fitting.
+                    if non_lin_correction is not None:
+                        d *= get_relgains(d, em_gain, non_lin_correction)
+                    d = d/em_gain
+                    #d *= 2500/d.max()
+                    frames.append(d)
+            # no need for cosmic ray removal since we do ill. correction
+            # plus cosmics wouldn't look same as it would on regular frame,
+            # and they affect the detection of dipoles (or very low chance)
+            # This can also be mitigated by taking multiple frames per
+            # phase time.
+            # no need for flat-fielding since trap pumping will be done
+            # while dark (i.e., a flat field of dark)
+            if frames == []:
+                raise TPumpAnException('Scheme folder had no data '
+                'files in it.')
+            # if curr_sch is 1, then this simply multiplies by 1
+            frames = np.stack(frames)*eperdn
+            timings = np.array(timings)
+            # min number of frames for a dipole should meet threshold so
+            # that it is
+            # considered a potential true trap, unless the number of
+            # available frames is smaller
+            length_limit = min(length_lim, len(np.unique(timings)))
+            #To accurately determine eperdn, the median level needs to be
+            #subtracted off if one is to compare, for P1,
+            # 2500e- sitting on top of nothing; if it were sitting on
+            # top of the mean field (i.e.,
+            #whatever injected charge is there after bias subtraction), it
+            #would be more than 2500e-.
+            # illumination correction only subtracts and doesn't divide,
+            # so e- units unaffected; the offset introduced taken care of
+            # by nuisance parameter 'offset' in curve fitting.
 
-                #And every time trap_id() called when local_ill_max
-                # and local_ill_min is not
-                # None, illumination_correction() has already been performed,
-                # and eperdn has already been applied, so the units are e-.
-                local_ill_frs = []
-                # reasonable binsize
-                nrows = frames[0].shape[0]
-                ncols = frames[0].shape[1]
-                small = min(nrows, ncols)
-                binsize = int(np.sqrt(small))
-                for frame in frames:
-                    img, local_ill = illumination_correction(frame,
-                        binsize = binsize, ill_corr=ill_corr)
-                    cor_frames.append(img)
-                    local_ill_frs.append(local_ill)
-                local_ill_max = np.max(np.stack(local_ill_frs), axis = 0)
-                local_ill_min = np.min(np.stack(local_ill_frs), axis = 0)
-                cor_frames = np.stack(cor_frames)
+            #And every time trap_id() called when local_ill_max
+            # and local_ill_min is not
+            # None, illumination_correction() has already been performed,
+            # and eperdn has already been applied, so the units are e-.
+            local_ill_frs = []
+            # reasonable binsize
+            nrows = frames[0].shape[0]
+            ncols = frames[0].shape[1]
+            small = min(nrows, ncols)
+            binsize = int(np.sqrt(small))
+            for frame in frames:
+                img, local_ill = illumination_correction(frame,
+                    binsize = binsize, ill_corr=ill_corr)
+                cor_frames.append(img)
+                local_ill_frs.append(local_ill)
+            local_ill_max = np.max(np.stack(local_ill_frs), axis = 0)
+            local_ill_min = np.min(np.stack(local_ill_frs), axis = 0)
+            cor_frames = np.stack(cor_frames)
 
-                rc_above, rc_below, rc_both = trap_id(cor_frames,
-                    local_ill_min, local_ill_max, timings,
-                    thresh_factor = thresh_factor, length_limit=length_limit)
+            rc_above, rc_below, rc_both = trap_id(cor_frames,
+                local_ill_min, local_ill_max, timings,
+                thresh_factor = thresh_factor, length_limit=length_limit)
 
-                # no minimum binsize b/c with each trap, there's a deficit and
-                # a surplus of equal amounts about the flat field, which
-                # doesn't change the median
+            # no minimum binsize b/c with each trap, there's a deficit and
+            # a surplus of equal amounts about the flat field, which
+            # doesn't change the median
 
-                # could fit eperdn as a nuisance param k multiplying,
-                # like k*Num_pumps*Pc*Pe, but some of k could bleed into
-                # Pc (and possibly Pe, but Pe can only range from 0 to 1/4 or
-                # 4/27 for scheme 1 or 2; so Pc should absorb it).
-                # So for accurate fitting, need to find k first.
-                # TODO v2: Make list of traps sorted by amp, and try
-                # trap_fit_const() on trap with highest amp.  If a 1-trap is
-                # good fit, assign k to be the factor by
-                # which Pc is bigger than 1.  If instead a 2-trap fits, then
-                # go to the next brightests trap, and repeat until you get a
-                # 1-trap fit.  Then I need to change doc string to indicate
-                # pc_max and pc_min still relevant even if tfit_const = False.
-                if curr_sch == 1:
-                    max_a = [] # initialize
-                    for i in rc_above:
-                        max_a.append(np.max(rc_above[i]['amps_above']))
-                    max_b = []
-                    for i in rc_below:
-                        max_b.append(np.max(rc_below[i]['amps_below']))
-                    max_bo = []
-                    for i in rc_both:
-                        max_bo.append(np.max(rc_both[i]['amps_both']))
-                    #peak_trap = max(max(max_a), max(max_b), max(max_bo))
-                    # to account for 2-traps, which are fewer and may not be
-                    # simply double the max trap amplitude, take median
-                    max_all = max_a + max_b + max_bo
-                    max_all = np.array(max_all)
-                    max_max_all = 0
-                    if len(max_all) != 0:
-                        max_max_all = max(max_all)
-                    if len(max_all) == 0 or max_max_all <= 0:
-                        raise TPumpAnException('No traps were found in '
-                        'scheme {} at temperature {} K.'.format(curr_sch,
-                        curr_temp))
-                    peak_trap = np.median(max_all)
-                    # eperdn applicable to all frames, a value for each temp
-                    # (which is expected to be the same for each temp)
-                    if k_prob == 1:
-                        prob_factor_eperdn = 1/4
-                    if k_prob == 2:
-                        prob_factor_eperdn = 4/27
-                    # if mean e- per pixel is lower than 2500e-, than max amp
-                    # is that mean e- per pixel amount
-                    if mean_field is not None:
-                        max_e = min(num_pumps*1*prob_factor_eperdn, mean_field)
-                    else:
-                        max_e = num_pumps*1*prob_factor_eperdn
-                    eperdn = max_e/peak_trap
-                    #convert to e-
-                    cor_frames *= eperdn
-
-                    for i in rc_above:
-                        rc_above[i]['amps_above'] *= eperdn
-                        rc_above[i]['loc_med_min'] *= eperdn
-                        rc_above[i]['loc_med_max'] *= eperdn
-                    for i in rc_below:
-                        rc_below[i]['amps_below'] *= eperdn
-                        rc_below[i]['loc_med_min'] *= eperdn
-                        rc_below[i]['loc_med_max'] *= eperdn
-                    for i in rc_both:
-                        rc_both[i]['amps_both'] *= eperdn
-                        rc_both[i]['loc_med_min'] *= eperdn
-                        rc_both[i]['loc_med_max'] *= eperdn
-                # below: short for no prob fit for scheme 1 above, below, both
-                no_prob1a = 0
-                no_prob1b = 0
-                no_prob1bo = 0
-                # delete coords that have None for trap_fit return
-                del_a_list = []
-                del_b_list = []
-                del_bo_list = []
-                # two- and one-trap counter over 'above', 'below', and 'both'
-                #(for internal testing)
-                two_trap_count = 0
-                one_trap_count = 0
-                # curve-fit 'above' traps
-                fit_a_count = 0
-                # of attempted fits that will be done
-                num_attempted_fits += len(rc_above)+len(rc_below)+len(rc_both)
+            # could fit eperdn as a nuisance param k multiplying,
+            # like k*Num_pumps*Pc*Pe, but some of k could bleed into
+            # Pc (and possibly Pe, but Pe can only range from 0 to 1/4 or
+            # 4/27 for scheme 1 or 2; so Pc should absorb it).
+            # So for accurate fitting, need to find k first.
+            # TODO v2: Make list of traps sorted by amp, and try
+            # trap_fit_const() on trap with highest amp.  If a 1-trap is
+            # good fit, assign k to be the factor by
+            # which Pc is bigger than 1.  If instead a 2-trap fits, then
+            # go to the next brightests trap, and repeat until you get a
+            # 1-trap fit.  Then I need to change doc string to indicate
+            # pc_max and pc_min still relevant even if tfit_const = False.
+            if curr_sch == 1:
+                max_a = [] # initialize
                 for i in rc_above:
-                    loc_med_min = rc_above[i]['loc_med_min']
-                    loc_med_max = rc_above[i]['loc_med_max']
-                    # set average offset to expected level after
-                    #illumination_correction(), which is 0 (b/c no negative
-                    # counts), by subtracting
-                    loc_avg = (loc_med_min+loc_med_max)/2
-                    off_min = 0 - max(offset_min,np.abs(loc_avg - loc_med_max))
-                    off_max = 0 + max(offset_max,np.abs(loc_med_min - loc_avg))
-                    if not tfit_const:
-                        fd = trap_fit(curr_sch, rc_above[i]['amps_above'],
-                            timings, num_pumps, tau_fit_thresh, tau_min,
-                            tau_max, tauc_min, tauc_max, off_min,
-                            off_max) #, k_min, k_max)
-                    if tfit_const:
-                        fd = trap_fit_const(curr_sch,
-                            rc_above[i]['amps_above'], timings, num_pumps,
-                            tau_fit_thresh, tau_min, tau_max, pc_min, pc_max,
-                            off_min, off_max)
-                    if fd is None:
-                        bad_fit_counter += 1
-                        print('bad fit above: ', i)
-                        del_a_list.append(i)
-                    if fd is not None:
-                        fit_a_count += 1
-                        # find out how many pixels were fitted for 2 traps
-                        #(for internal testing)
-                        temp_2_count = 0
-                        for key in fd.keys():
-                            # only meaningful if trap_fit_const() used
-                            #(for internal testing)
-                            # Pc - Pc_err > 1:
-                            if fd[key][0][0]-fd[key][0][1] > 1:
-                                pc_bigger_1 += 1
-                                if fd[key][0][0]+fd[key][0][1] > pc_biggest:
-                                    pc_biggest = fd[key][0][0]+fd[key][0][1]
-                            # only meaningful if tau bounds outside 1e-6, 1e-2
-                            #(for internal testing)
-                            #tau + tau_err < 1e-6, tau - tau_err < 1e-2:
-                            if fd[key][0][2]+fd[key][0][3] < 1e-6 or \
-                                fd[key][0][2]-fd[key][0][3] > 1e-2:
-                                tau_outside += 1
-                            if len(fd[key]) == 2:
-                                if fd[key][1][0]-fd[key][1][1] > 1:
-                                    pc_bigger_1 += 1
-                                    if fd[key][1][0]+fd[key][1][1] >pc_biggest:
-                                        pc_biggest =fd[key][1][0]+fd[key][1][1]
-                                if fd[key][1][2]+fd[key][1][3] < 1e-6 or \
-                                    fd[key][1][2]-fd[key][1][3] > 1e-2:
-                                    tau_outside += 1
-                            temp_2_count += len(fd[key])
-                        if temp_2_count == 2:
-                            two_trap_count += 1
-                            # overall trap count, before sub-el location
-                            pre_sub_el_count += 2
-                        if temp_2_count == 1:
-                            one_trap_count += 1
-                            # overall trap count, before sub-el location
-                            pre_sub_el_count += 1
-                        # check if no prob func 1 fits found
-                        if curr_sch == 1 and k_prob not in fd:
-                            no_prob1a += 1
-                        rc_above[i]['fit_data_above'] = fd
-                for no_fit_coord in del_a_list:
-                    rc_above.__delitem__(no_fit_coord)
-                # curve-fit 'below' traps
-                fit_b_count = 0
+                    max_a.append(np.max(rc_above[i]['amps_above']))
+                max_b = []
                 for i in rc_below:
-                    loc_med_min = rc_below[i]['loc_med_min']
-                    loc_med_max = rc_below[i]['loc_med_max']
-                    # set average offset to expected level after
-                    #illumination_correction(), which is 0 (b/c no negative
-                    # counts), by subtracting
-                    loc_avg = (loc_med_min+loc_med_max)/2
-                    off_min = 0 - max(offset_min,np.abs(loc_avg - loc_med_max))
-                    off_max = 0 + max(offset_max,np.abs(loc_med_min - loc_avg))
-                    if not tfit_const:
-                        fd = trap_fit(curr_sch, rc_below[i]['amps_below'],
-                            timings, num_pumps, tau_fit_thresh, tau_min,
-                            tau_max, tauc_min, tauc_max, off_min,
-                            off_max) #, k_min, k_max)
-                    if tfit_const:
-                        fd = trap_fit_const(curr_sch,
-                            rc_below[i]['amps_below'], timings, num_pumps,
-                            tau_fit_thresh, tau_min, tau_max, pc_min, pc_max,
-                            off_min, off_max)
-                    if fd is None:
-                        bad_fit_counter += 1
-                        print('bad fit below: ', i)
-                        del_b_list.append(i)
-                    if fd is not None:
-                        fit_b_count += 1
-                        # find out how many pixels were fitted for 2 traps
-                        temp_2_count = 0
-                        for key in fd.keys():
-                            # only meaningful if trap_fit_const() used
-                            #(for internal testing)
-                            #Pc - Pc_err >1:
-                            if fd[key][0][0]-fd[key][0][1] > 1:
-                                pc_bigger_1 += 1
-                                if fd[key][0][0]+fd[key][0][1] > pc_biggest:
-                                    pc_biggest = fd[key][0][0]+fd[key][0][1]
-                            # only meaningful if tau bounds outside 1e-6, 1e-2
-                            #(for internal testing)
-                            #tau + tau_err < 1e-6, tau - tau_err < 1e-2
-                            if fd[key][0][2]+fd[key][0][3] < 1e-6 or \
-                                fd[key][0][2]-fd[key][0][3] > 1e-2:
-                                tau_outside += 1
-                            if len(fd[key]) == 2:
-                                if fd[key][1][0]-fd[key][1][1] > 1:
-                                    pc_bigger_1 += 1
-                                    if fd[key][1][0]+fd[key][1][1] >pc_biggest:
-                                        pc_biggest =fd[key][1][0]+fd[key][1][1]
-                                if fd[key][1][2]+fd[key][1][3] < 1e-6 or \
-                                    fd[key][1][2]-fd[key][1][3] > 1e-2:
-                                    tau_outside += 1
-                            temp_2_count += len(fd[key])
-                        if temp_2_count == 2:
-                            two_trap_count += 1
-                            # overall trap count, before sub-el location
-                            pre_sub_el_count += 2
-                        if temp_2_count == 1:
-                            one_trap_count += 1
-                            # overall trap count, before sub-el location
-                            pre_sub_el_count += 1
-                        # check if no prob func 1 fits found
-                        if curr_sch == 1 and k_prob not in fd:
-                            no_prob1b += 1
-                        rc_below[i]['fit_data_below'] = fd
-                for no_fit_coord in del_b_list:
-                    rc_below.__delitem__(no_fit_coord)
-                # curve-fit 'both' traps
-                fit_bo_count = 0
+                    max_b.append(np.max(rc_below[i]['amps_below']))
+                max_bo = []
                 for i in rc_both:
-                    loc_med_min = rc_both[i]['loc_med_min']
-                    loc_med_max = rc_both[i]['loc_med_max']
-                    # set average offset to expected level after
-                    #illumination_correction(), which is 0 (b/c no negative
-                    # counts), by subtracting
-                    loc_avg = (loc_med_min+loc_med_max)/2
-                    off_min = 0 - max(offset_min,np.abs(loc_avg - loc_med_max))
-                    off_max = 0 + max(offset_max,np.abs(loc_med_min - loc_avg))
-                    if not tfit_const:
-                        fd = trap_fit(curr_sch, rc_both[i]['amps_both'],
-                            timings, num_pumps, tau_fit_thresh, tau_min,
-                            tau_max, tauc_min, tauc_max, off_min,
-                            off_max, #k_min, k_max,
-                            both_a = rc_both[i]['above'])
-                    if tfit_const:
-                        fd = trap_fit_const(curr_sch, rc_both[i]['amps_both'],
-                            timings, num_pumps, tau_fit_thresh, tau_min,
-                            tau_max, pc_min, pc_max, off_min,
-                            off_max, both_a = rc_both[i]['above'])
-                    if fd is None:
-                        bad_fit_counter += 1
-                        print('bad fit both: ', i)
-                        del_bo_list.append(i)
-                    if fd is not None:
-                        fit_bo_count += 1
-                        # all pixels in 'both' are 2-traps
+                    max_bo.append(np.max(rc_both[i]['amps_both']))
+                #peak_trap = max(max(max_a), max(max_b), max(max_bo))
+                # to account for 2-traps, which are fewer and may not be
+                # simply double the max trap amplitude, take median
+                max_all = max_a + max_b + max_bo
+                max_all = np.array(max_all)
+                max_max_all = 0
+                if len(max_all) != 0:
+                    max_max_all = max(max_all)
+                if len(max_all) == 0 or max_max_all <= 0:
+                    raise TPumpAnException('No traps were found in '
+                    'scheme {} at temperature {} K.'.format(curr_sch,
+                    curr_temp))
+                peak_trap = np.median(max_all)
+                # eperdn applicable to all frames, a value for each temp
+                # (which is expected to be the same for each temp)
+                if k_prob == 1:
+                    prob_factor_eperdn = 1/4
+                if k_prob == 2:
+                    prob_factor_eperdn = 4/27
+                # if mean e- per pixel is lower than 2500e-, than max amp
+                # is that mean e- per pixel amount
+                if mean_field is not None:
+                    max_e = min(num_pumps*1*prob_factor_eperdn, mean_field)
+                else:
+                    max_e = num_pumps*1*prob_factor_eperdn
+                eperdn = max_e/peak_trap
+                #convert to e-
+                cor_frames *= eperdn
+
+                for i in rc_above:
+                    rc_above[i]['amps_above'] *= eperdn
+                    rc_above[i]['loc_med_min'] *= eperdn
+                    rc_above[i]['loc_med_max'] *= eperdn
+                for i in rc_below:
+                    rc_below[i]['amps_below'] *= eperdn
+                    rc_below[i]['loc_med_min'] *= eperdn
+                    rc_below[i]['loc_med_max'] *= eperdn
+                for i in rc_both:
+                    rc_both[i]['amps_both'] *= eperdn
+                    rc_both[i]['loc_med_min'] *= eperdn
+                    rc_both[i]['loc_med_max'] *= eperdn
+            # below: short for no prob fit for scheme 1 above, below, both
+            no_prob1a = 0
+            no_prob1b = 0
+            no_prob1bo = 0
+            # delete coords that have None for trap_fit return
+            del_a_list = []
+            del_b_list = []
+            del_bo_list = []
+            # two- and one-trap counter over 'above', 'below', and 'both'
+            #(for internal testing)
+            two_trap_count = 0
+            one_trap_count = 0
+            # curve-fit 'above' traps
+            fit_a_count = 0
+            # of attempted fits that will be done
+            num_attempted_fits += len(rc_above)+len(rc_below)+len(rc_both)
+            for i in rc_above:
+                loc_med_min = rc_above[i]['loc_med_min']
+                loc_med_max = rc_above[i]['loc_med_max']
+                # set average offset to expected level after
+                #illumination_correction(), which is 0 (b/c no negative
+                # counts), by subtracting
+                loc_avg = (loc_med_min+loc_med_max)/2
+                off_min = 0 - max(offset_min,np.abs(loc_avg - loc_med_max))
+                off_max = 0 + max(offset_max,np.abs(loc_med_min - loc_avg))
+                if not tfit_const:
+                    fd = trap_fit(curr_sch, rc_above[i]['amps_above'],
+                        timings, num_pumps, tau_fit_thresh, tau_min,
+                        tau_max, tauc_min, tauc_max, off_min,
+                        off_max) #, k_min, k_max)
+                if tfit_const:
+                    fd = trap_fit_const(curr_sch,
+                        rc_above[i]['amps_above'], timings, num_pumps,
+                        tau_fit_thresh, tau_min, tau_max, pc_min, pc_max,
+                        off_min, off_max)
+                if fd is None:
+                    bad_fit_counter += 1
+                    print('bad fit above: ', i)
+                    del_a_list.append(i)
+                if fd is not None:
+                    fit_a_count += 1
+                    # find out how many pixels were fitted for 2 traps
+                    #(for internal testing)
+                    temp_2_count = 0
+                    for key in fd.keys():
+                        # only meaningful if trap_fit_const() used
+                        #(for internal testing)
+                        # Pc - Pc_err > 1:
+                        if fd[key][0][0]-fd[key][0][1] > 1:
+                            pc_bigger_1 += 1
+                            if fd[key][0][0]+fd[key][0][1] > pc_biggest:
+                                pc_biggest = fd[key][0][0]+fd[key][0][1]
+                        # only meaningful if tau bounds outside 1e-6, 1e-2
+                        #(for internal testing)
+                        #tau + tau_err < 1e-6, tau - tau_err < 1e-2:
+                        if fd[key][0][2]+fd[key][0][3] < 1e-6 or \
+                            fd[key][0][2]-fd[key][0][3] > 1e-2:
+                            tau_outside += 1
+                        if len(fd[key]) == 2:
+                            if fd[key][1][0]-fd[key][1][1] > 1:
+                                pc_bigger_1 += 1
+                                if fd[key][1][0]+fd[key][1][1] >pc_biggest:
+                                    pc_biggest =fd[key][1][0]+fd[key][1][1]
+                            if fd[key][1][2]+fd[key][1][3] < 1e-6 or \
+                                fd[key][1][2]-fd[key][1][3] > 1e-2:
+                                tau_outside += 1
+                        temp_2_count += len(fd[key])
+                    if temp_2_count == 2:
                         two_trap_count += 1
                         # overall trap count, before sub-el location
                         pre_sub_el_count += 2
-                        temp_2_count = 0
-                        for val in fd.values():
-                            for pval in val.values():
-                            # only meaningful if trap_fit_const() used
+                    if temp_2_count == 1:
+                        one_trap_count += 1
+                        # overall trap count, before sub-el location
+                        pre_sub_el_count += 1
+                    # check if no prob func 1 fits found
+                    if curr_sch == 1 and k_prob not in fd:
+                        no_prob1a += 1
+                    rc_above[i]['fit_data_above'] = fd
+            for no_fit_coord in del_a_list:
+                rc_above.__delitem__(no_fit_coord)
+            # curve-fit 'below' traps
+            fit_b_count = 0
+            for i in rc_below:
+                loc_med_min = rc_below[i]['loc_med_min']
+                loc_med_max = rc_below[i]['loc_med_max']
+                # set average offset to expected level after
+                #illumination_correction(), which is 0 (b/c no negative
+                # counts), by subtracting
+                loc_avg = (loc_med_min+loc_med_max)/2
+                off_min = 0 - max(offset_min,np.abs(loc_avg - loc_med_max))
+                off_max = 0 + max(offset_max,np.abs(loc_med_min - loc_avg))
+                if not tfit_const:
+                    fd = trap_fit(curr_sch, rc_below[i]['amps_below'],
+                        timings, num_pumps, tau_fit_thresh, tau_min,
+                        tau_max, tauc_min, tauc_max, off_min,
+                        off_max) #, k_min, k_max)
+                if tfit_const:
+                    fd = trap_fit_const(curr_sch,
+                        rc_below[i]['amps_below'], timings, num_pumps,
+                        tau_fit_thresh, tau_min, tau_max, pc_min, pc_max,
+                        off_min, off_max)
+                if fd is None:
+                    bad_fit_counter += 1
+                    print('bad fit below: ', i)
+                    del_b_list.append(i)
+                if fd is not None:
+                    fit_b_count += 1
+                    # find out how many pixels were fitted for 2 traps
+                    temp_2_count = 0
+                    for key in fd.keys():
+                        # only meaningful if trap_fit_const() used
+                        #(for internal testing)
+                        #Pc - Pc_err >1:
+                        if fd[key][0][0]-fd[key][0][1] > 1:
+                            pc_bigger_1 += 1
+                            if fd[key][0][0]+fd[key][0][1] > pc_biggest:
+                                pc_biggest = fd[key][0][0]+fd[key][0][1]
+                        # only meaningful if tau bounds outside 1e-6, 1e-2
+                        #(for internal testing)
+                        #tau + tau_err < 1e-6, tau - tau_err < 1e-2
+                        if fd[key][0][2]+fd[key][0][3] < 1e-6 or \
+                            fd[key][0][2]-fd[key][0][3] > 1e-2:
+                            tau_outside += 1
+                        if len(fd[key]) == 2:
+                            if fd[key][1][0]-fd[key][1][1] > 1:
+                                pc_bigger_1 += 1
+                                if fd[key][1][0]+fd[key][1][1] >pc_biggest:
+                                    pc_biggest =fd[key][1][0]+fd[key][1][1]
+                            if fd[key][1][2]+fd[key][1][3] < 1e-6 or \
+                                fd[key][1][2]-fd[key][1][3] > 1e-2:
+                                tau_outside += 1
+                        temp_2_count += len(fd[key])
+                    if temp_2_count == 2:
+                        two_trap_count += 1
+                        # overall trap count, before sub-el location
+                        pre_sub_el_count += 2
+                    if temp_2_count == 1:
+                        one_trap_count += 1
+                        # overall trap count, before sub-el location
+                        pre_sub_el_count += 1
+                    # check if no prob func 1 fits found
+                    if curr_sch == 1 and k_prob not in fd:
+                        no_prob1b += 1
+                    rc_below[i]['fit_data_below'] = fd
+            for no_fit_coord in del_b_list:
+                rc_below.__delitem__(no_fit_coord)
+            # curve-fit 'both' traps
+            fit_bo_count = 0
+            for i in rc_both:
+                loc_med_min = rc_both[i]['loc_med_min']
+                loc_med_max = rc_both[i]['loc_med_max']
+                # set average offset to expected level after
+                #illumination_correction(), which is 0 (b/c no negative
+                # counts), by subtracting
+                loc_avg = (loc_med_min+loc_med_max)/2
+                off_min = 0 - max(offset_min,np.abs(loc_avg - loc_med_max))
+                off_max = 0 + max(offset_max,np.abs(loc_med_min - loc_avg))
+                if not tfit_const:
+                    fd = trap_fit(curr_sch, rc_both[i]['amps_both'],
+                        timings, num_pumps, tau_fit_thresh, tau_min,
+                        tau_max, tauc_min, tauc_max, off_min,
+                        off_max, #k_min, k_max,
+                        both_a = rc_both[i]['above'])
+                if tfit_const:
+                    fd = trap_fit_const(curr_sch, rc_both[i]['amps_both'],
+                        timings, num_pumps, tau_fit_thresh, tau_min,
+                        tau_max, pc_min, pc_max, off_min,
+                        off_max, both_a = rc_both[i]['above'])
+                if fd is None:
+                    bad_fit_counter += 1
+                    print('bad fit both: ', i)
+                    del_bo_list.append(i)
+                if fd is not None:
+                    fit_bo_count += 1
+                    # all pixels in 'both' are 2-traps
+                    two_trap_count += 1
+                    # overall trap count, before sub-el location
+                    pre_sub_el_count += 2
+                    temp_2_count = 0
+                    for val in fd.values():
+                        for pval in val.values():
+                        # only meaningful if trap_fit_const() used
+                        #(for internal testing)
+                        #Pc - Pc_err > 1:
+                            if pval[0][0]-pval[0][1] > 1:
+                                pc_bigger_1 += 1
+                                if pval[0][0]+pval[0][1] > pc_biggest:
+                                    pc_biggest = pval[0][0]+pval[0][1]
+                            # meaningful if tau bounds outside 1e-6, 1e-2
                             #(for internal testing)
-                            #Pc - Pc_err > 1:
-                                if pval[0][0]-pval[0][1] > 1:
-                                    pc_bigger_1 += 1
-                                    if pval[0][0]+pval[0][1] > pc_biggest:
-                                        pc_biggest = pval[0][0]+pval[0][1]
-                                # meaningful if tau bounds outside 1e-6, 1e-2
-                                #(for internal testing)
-                                #tau + tau_err < 1e-6, tau - tau_err < 1e-2:
-                                if pval[0][2]+pval[0][3] < 1e-6 or \
-                                    pval[0][2]-pval[0][3] > 1e-2:
-                                    tau_outside += 1
-                        # check if no prob func 1 fits found
-                        if curr_sch == 1 and (k_prob not in fd['a']) and \
-                            (k_prob not in fd['b']):
-                            no_prob1bo += 1
-                        rc_both[i]['fit_data_both'] = fd
-                        # make new dictionary for this coord in 'above' since
-                        # by construction it doesn't exist as an 'above'
-                        # entry yet
-                        rc_above[i] = {'fit_data_above': fd['a'],
-                            'amps_above': rc_both[i]['above']['amp']}
-                        # similarly for 'below'
-                        rc_below[i] = {'fit_data_below': fd['b'],
-                            'amps_below': rc_both[i]['below']['amp']}
-                for no_fit_coord in del_bo_list:
-                    rc_both.__delitem__(no_fit_coord)
+                            #tau + tau_err < 1e-6, tau - tau_err < 1e-2:
+                            if pval[0][2]+pval[0][3] < 1e-6 or \
+                                pval[0][2]-pval[0][3] > 1e-2:
+                                tau_outside += 1
+                    # check if no prob func 1 fits found
+                    if curr_sch == 1 and (k_prob not in fd['a']) and \
+                        (k_prob not in fd['b']):
+                        no_prob1bo += 1
+                    rc_both[i]['fit_data_both'] = fd
+                    # make new dictionary for this coord in 'above' since
+                    # by construction it doesn't exist as an 'above'
+                    # entry yet
+                    rc_above[i] = {'fit_data_above': fd['a'],
+                        'amps_above': rc_both[i]['above']['amp']}
+                    # similarly for 'below'
+                    rc_below[i] = {'fit_data_below': fd['b'],
+                        'amps_below': rc_both[i]['below']['amp']}
+            for no_fit_coord in del_bo_list:
+                rc_both.__delitem__(no_fit_coord)
 
-                print('temperature: ', curr_temp, ', scheme: ', curr_sch,
-                    ', number of two-trap pixels (before sub-electrode '
-                    'location): ', two_trap_count, ', number of one-trap '
-                    'pixels (before sub-electrode location): ',
-                    one_trap_count, ', eperdn: ', eperdn)
-                print('above traps found: ', rc_above.keys())
-                print('below traps found: ', rc_below.keys())
-                print('both traps found: ', rc_both.keys())
-                print('bad fit counter: ', bad_fit_counter, '_____________')
-                if curr_sch == 1 and \
-                    (fit_a_count + fit_b_count + fit_bo_count -
-                    (no_prob1a + no_prob1b + no_prob1bo)) == 0:
-                    #so no traps for prob 1 in scheme 1, so eperdn should be
-                    # set according to prob 2 in scheme 1
-                    tot = fit_a_count + fit_b_count + fit_bo_count
-                    # could still be traps in barrier electrodes 1 and 3, but
-                    # realistically none if this fails with both choices of
-                    # k_prob
-                    raise TPumpAnException('No traps for probability function '
-                    '1 found under scheme 1. Re-run with prob_factor_eperdn '
-                    '= 4/27 and k_prob = 2. If that failed, no traps '
-                    'present in frame. Total # of trap pixels found for '
-                    'scheme 1 at current temperature: ', tot)
-                #TODO v2.0: COULD happen that you happen traps in schemes 2, 3,
-                #  and 4 but none in sch 1.  Could account for this, but
-                # wouldn't have very good statistics in schemes 3 and 4 for
-                # traps that approach Pc ~ 1.  In any case, no traps in sch 1
-                # would be very rare.
-                # collecting in convenient dictionary for further manipulation
-                schemes[curr_sch] = {'rc_above': rc_above,
-                    'rc_below': rc_below, 'rc_both': rc_both,
-                    'timings': timings}
-            # for a given scheme, the bright pixel coords for "above" CAN
-            # be the same as those for "below" (for different ranges of phase
-            # time or overlapping phase times)
-            traps = {}
-            # rc_both has been split up into rc_above and rc_below
-            # For a given scheme, rc_below, rc_above, rc_both: each has
-            # unique coord keys, but across dictionaries, there is overlap now
-            # for the 'both' coords
+            print('temperature: ', curr_temp, ', scheme: ', curr_sch,
+                ', number of two-trap pixels (before sub-electrode '
+                'location): ', two_trap_count, ', number of one-trap '
+                'pixels (before sub-electrode location): ',
+                one_trap_count, ', eperdn: ', eperdn)
+            print('above traps found: ', rc_above.keys())
+            print('below traps found: ', rc_below.keys())
+            print('both traps found: ', rc_both.keys())
+            print('bad fit counter: ', bad_fit_counter, '_____________')
+            if curr_sch == 1 and \
+                (fit_a_count + fit_b_count + fit_bo_count -
+                (no_prob1a + no_prob1b + no_prob1bo)) == 0:
+                #so no traps for prob 1 in scheme 1, so eperdn should be
+                # set according to prob 2 in scheme 1
+                tot = fit_a_count + fit_b_count + fit_bo_count
+                # could still be traps in barrier electrodes 1 and 3, but
+                # realistically none if this fails with both choices of
+                # k_prob
+                raise TPumpAnException('No traps for probability function '
+                '1 found under scheme 1. Re-run with prob_factor_eperdn '
+                '= 4/27 and k_prob = 2. If that failed, no traps '
+                'present in frame. Total # of trap pixels found for '
+                'scheme 1 at current temperature: ', tot)
+            #TODO v2.0: COULD happen that you happen traps in schemes 2, 3,
+            #  and 4 but none in sch 1.  Could account for this, but
+            # wouldn't have very good statistics in schemes 3 and 4 for
+            # traps that approach Pc ~ 1.  In any case, no traps in sch 1
+            # would be very rare.
+            # collecting in convenient dictionary for further manipulation
+            schemes[curr_sch] = {'rc_above': rc_above,
+                'rc_below': rc_below, 'rc_both': rc_both,
+                'timings': timings}
+        # for a given scheme, the bright pixel coords for "above" CAN
+        # be the same as those for "below" (for different ranges of phase
+        # time or overlapping phase times)
+        traps = {}
+        # rc_both has been split up into rc_above and rc_below
+        # For a given scheme, rc_below, rc_above, rc_both: each has
+        # unique coord keys, but across dictionaries, there is overlap now
+        # for the 'both' coords
 
-            # getting coords that are shared across schemes
-            def _el_loc_coords2(sch1, or1, sch2, or2):
-                """Gets coordinates of dipoles shared across 2 schemes (sch1
-                and sch2) with orientations or1 and or2 at a
-                given temperature.
-                For the purpose of sub-electrode location."""
-                coords = list(set(schemes[sch1]['rc_'+or1]) -
-                    (set(schemes[sch1]['rc_'+or1]) -
-                    set(schemes[sch2]['rc_'+or2])))
-                return coords
+        # getting coords that are shared across schemes
+        def _el_loc_coords2(sch1, or1, sch2, or2):
+            """Gets coordinates of dipoles shared across 2 schemes (sch1
+            and sch2) with orientations or1 and or2 at a
+            given temperature.
+            For the purpose of sub-electrode location."""
+            coords = list(set(schemes[sch1]['rc_'+or1]) -
+                (set(schemes[sch1]['rc_'+or1]) -
+                set(schemes[sch2]['rc_'+or2])))
+            return coords
 
-            def _el_loc_coords3(sch1, or1, sch2, or2, sch3, or3):
-                """Gets coordinates of dipoles shared across 3 schemes (sch1,
-                sch2, and sch3) with orientations or1 and or2 and or3 at a
-                given temperature.
-                For the purpose of sub-electrode location."""
-                coords12 = _el_loc_coords2(sch1, or1, sch2, or2)
-                coords23 = _el_loc_coords2(sch2, or2, sch3, or3)
-                coords123 = list(set(coords12) - (set(coords12) -
-                    set(coords23)))
-                return coords123
+        def _el_loc_coords3(sch1, or1, sch2, or2, sch3, or3):
+            """Gets coordinates of dipoles shared across 3 schemes (sch1,
+            sch2, and sch3) with orientations or1 and or2 and or3 at a
+            given temperature.
+            For the purpose of sub-electrode location."""
+            coords12 = _el_loc_coords2(sch1, or1, sch2, or2)
+            coords23 = _el_loc_coords2(sch2, or2, sch3, or3)
+            coords123 = list(set(coords12) - (set(coords12) -
+                set(coords23)))
+            return coords123
 
-            def _el_loc_2(sch1, or1, prob1, sch2, or2, prob2, i, subel_loc):
-                """At a given temperature, for coordinate i shared across 2
-                schemes (sch1 and sch2), match up dipoles that meet the
-                orientation (or1 and or2) and probability function
-                specifications (prob1 and prob2) for a sub-electrode location
-                (subel_loc) with release time constant (tau) values and
-                uncertainties such that uncertainty window across both schemes
-                is minimized (thus identifying these data with the same
-                physical trap).   It also outputs capture probability info
-                which may be useful for future analysis.  It appends all this
-                to the traps dictionary and deletes these dipole entries from
-                the schemes dictionary so that they aren't used for matching up
-                again.
-                """
-                max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
-                max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
-                fd1 = schemes[sch1]['rc_'+or1][i]['fit_data_'+or1]
-                fd2 = schemes[sch2]['rc_'+or2][i]['fit_data_'+or2]
-                if prob1 in fd1 and prob2 in fd2:
-                    # to account for the case of 2 same sub-el traps for a
-                    # given pixel:
-                    iterations = min(len(fd1[prob1]), len(fd2[prob2]))
-                    for iteration in range(iterations):
-                        # initialize minimum difference b/w lower and upper
-                        # bounds on tau
-                        min_range = np.inf
-                        j0 = None
-                        k0 = None
-                        tau_avg = None
-                        tau_up = None
-                        for j in fd1[prob1]:
-                            for k in fd2[prob2]:
-                                # find pair that minimizes overall uncertainty
-                                # window; it's okay if individual tau windows
-                                # don't overlap since systematic errors may
-                                # have affecte them
+        def _el_loc_2(sch1, or1, prob1, sch2, or2, prob2, i, subel_loc):
+            """At a given temperature, for coordinate i shared across 2
+            schemes (sch1 and sch2), match up dipoles that meet the
+            orientation (or1 and or2) and probability function
+            specifications (prob1 and prob2) for a sub-electrode location
+            (subel_loc) with release time constant (tau) values and
+            uncertainties such that uncertainty window across both schemes
+            is minimized (thus identifying these data with the same
+            physical trap).   It also outputs capture probability info
+            which may be useful for future analysis.  It appends all this
+            to the traps dictionary and deletes these dipole entries from
+            the schemes dictionary so that they aren't used for matching up
+            again.
+            """
+            max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
+            max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
+            fd1 = schemes[sch1]['rc_'+or1][i]['fit_data_'+or1]
+            fd2 = schemes[sch2]['rc_'+or2][i]['fit_data_'+or2]
+            if prob1 in fd1 and prob2 in fd2:
+                # to account for the case of 2 same sub-el traps for a
+                # given pixel:
+                iterations = min(len(fd1[prob1]), len(fd2[prob2]))
+                for iteration in range(iterations):
+                    # initialize minimum difference b/w lower and upper
+                    # bounds on tau
+                    min_range = np.inf
+                    j0 = None
+                    k0 = None
+                    tau_avg = None
+                    tau_up = None
+                    for j in fd1[prob1]:
+                        for k in fd2[prob2]:
+                            # find pair that minimizes overall uncertainty
+                            # window; it's okay if individual tau windows
+                            # don't overlap since systematic errors may
+                            # have affecte them
+                            #index 2: corresponds to tau
+                            #index 3: corresponds to tau_err
+                            up = max(j[2] + j[3], k[2] + k[3])
+                            low = min(j[2] - j[3], k[2] - k[3])
+                            if (up-low) < min_range:
+                                min_range = up - low
+                                j0 = j
+                                k0 = k
+                                tau_avg = (up + low)/2
+                                tau_up = up
+                    # TODO v2.0:  seek absolute best pairings by
+                    # across all traps in a given pixel by
+                    # earmarking the fit data that have been
+                    # selected above, and after full matching-
+                    # up process, compare the earmarked ones
+                    # to determine optimal sets so that the reported
+                    # uncertainties for each trap's tau is overall
+                    # minimized.
+                    # Could append to
+                    # each selected fit data list the j and k values of the
+                    # other fit data set(s) it was matched with.
+                    if (j0 is not None) and (k0 is not None) and (tau_avg
+                        is not None) and (tau_up is not None):
+                        #  Need amps in traps output? Sure, max amp value,
+                        # so that the starting charge packet and the max
+                        # amp after all the pumps gives a range of charge
+                        # packet value corresponding to tau values
+                        # (even though the fitting itself assumed constant
+                        # charge packet value).
+                        cap1 = j0[0]
+                        cap1_err = j0[1]
+                        cap2 = k0[0]
+                        cap2_err = k0[1]
+                        # pixel could have more than one trap,
+                        #so trap[i] could already exist at given iteration
+                        if i not in traps:
+                            traps[i] = []
+                        traps[i].append([subel_loc, tau_avg,
+                                        tau_up - tau_avg,
+                                        [cap1, cap1_err, max_amp1, cap2,
+                                        cap2_err, max_amp2], iteration])
+                        # now remove these trap data b/c they've been
+                        #  matched
+                        fd1[prob1].remove(j0)
+                        fd2[prob2].remove(k0)
+
+        def _el_loc_3(sch1, or1, prob1, sch2, or2, prob2, sch3, or3, prob3,
+            i, subel_loc):
+            """At a given temperature, for coordinate i shared across 3
+            schemes (sch1, sch2, and sch3), match up dipoles that meet the
+            orientation (or1,  or2, and or3) and probability function
+            specifications (prob1, prob2, and prob3) for a sub-electrode
+            location (subel_loc) with release time constant (tau) values
+            and uncertainties such that uncertainty window across the
+            schemes is minimized (thus identifying these data with the same
+            physical trap).   It also outputs capture probability info
+            which may be useful for future analysis.  It appends all this
+            to the traps dictionary and deletes these dipole entries from
+            the schemes dictionary so that they aren't used for matching up
+            again.
+            """
+            max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
+            max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
+            max_amp3 = max(schemes[sch3]['rc_'+or3][i]['amps_'+or3])
+            fd1 = schemes[sch1]['rc_'+or1][i]['fit_data_'+or1]
+            fd2 = schemes[sch2]['rc_'+or2][i]['fit_data_'+or2]
+            fd3 = schemes[sch3]['rc_'+or3][i]['fit_data_'+or3]
+            if prob1 in fd1 and prob2 in fd2 and prob3 in fd3:
+                # to account for the case of 2 same sub-el traps for a
+                # given pixel:
+                iterations = min(len(fd1[prob1]), len(fd2[prob2]))
+                for iteration in range(iterations):
+                    # initialize minimum difference b/w central values
+                    min_range = np.inf
+                    j0 = None
+                    k0 = None
+                    l0 = None
+                    tau_avg = None
+                    tau_up = None
+                    for j in fd1[prob1]:
+                        for k in fd2[prob2]:
+                            for l in fd3[prob3]:
+                                # find pair that minimizes overall
+                                # uncertainty window; it's okay if
+                                # individual tau windows
+                                #  don't overlap since systematic errors
+                                # may have affected them
                                 #index 2: corresponds to tau
                                 #index 3: corresponds to tau_err
-                                up = max(j[2] + j[3], k[2] + k[3])
-                                low = min(j[2] - j[3], k[2] - k[3])
-                                if (up-low) < min_range:
+                                up = max(j[2] + j[3], k[2] + k[3],
+                                    l[2] + l[3])
+                                low= min(j[2] - j[3], k[2] - k[3],
+                                    l[2] - l[3])
+                                if(up - low) < min_range:
                                     min_range = up - low
                                     j0 = j
                                     k0 = k
+                                    l0 = l
                                     tau_avg = (up + low)/2
                                     tau_up = up
-                        # TODO v2.0:  seek absolute best pairings by
-                        # across all traps in a given pixel by
-                        # earmarking the fit data that have been
-                        # selected above, and after full matching-
-                        # up process, compare the earmarked ones
-                        # to determine optimal sets so that the reported
-                        # uncertainties for each trap's tau is overall
-                        # minimized.
-                        # Could append to
-                        # each selected fit data list the j and k values of the
-                        # other fit data set(s) it was matched with.
-                        if (j0 is not None) and (k0 is not None) and (tau_avg
-                            is not None) and (tau_up is not None):
-                            #  Need amps in traps output? Sure, max amp value,
-                            # so that the starting charge packet and the max
-                            # amp after all the pumps gives a range of charge
-                            # packet value corresponding to tau values
-                            # (even though the fitting itself assumed constant
-                            # charge packet value).
-                            cap1 = j0[0]
-                            cap1_err = j0[1]
-                            cap2 = k0[0]
-                            cap2_err = k0[1]
-                            # pixel could have more than one trap,
-                            #so trap[i] could already exist at given iteration
-                            if i not in traps:
-                                traps[i] = []
-                            traps[i].append([subel_loc, tau_avg,
-                                            tau_up - tau_avg,
-                                            [cap1, cap1_err, max_amp1, cap2,
-                                            cap2_err, max_amp2], iteration])
-                            # now remove these trap data b/c they've been
-                            #  matched
-                            fd1[prob1].remove(j0)
-                            fd2[prob2].remove(k0)
+                    # TODO v2.0:  seek absolute best pairings by
+                    # across all traps in a given pixel by
+                    # earmarking the fit data that have been
+                    # selected above, and after full matching
+                    # up process, compare the earmarked ones
+                    # (along with any fit data that didn't get
+                    # chosen for traps) to determine optimal
+                    # pairings so that the least amount of fit
+                    # data goes unused for trap locations.  Could append to
+                    # each selected fit data list the j and k values of the
+                    # other fit data set(s) it was matched with.
+                    if (j0 is not None) and (k0 is not None) and (l0
+                        is not None) and (tau_avg is not None) and (tau_up
+                        is not None):
 
-            def _el_loc_3(sch1, or1, prob1, sch2, or2, prob2, sch3, or3, prob3,
-                i, subel_loc):
-                """At a given temperature, for coordinate i shared across 3
-                schemes (sch1, sch2, and sch3), match up dipoles that meet the
-                orientation (or1,  or2, and or3) and probability function
-                specifications (prob1, prob2, and prob3) for a sub-electrode
-                location (subel_loc) with release time constant (tau) values
-                and uncertainties such that uncertainty window across the
-                schemes is minimized (thus identifying these data with the same
-                physical trap).   It also outputs capture probability info
-                which may be useful for future analysis.  It appends all this
-                to the traps dictionary and deletes these dipole entries from
-                the schemes dictionary so that they aren't used for matching up
-                again.
-                """
-                max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
-                max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
-                max_amp3 = max(schemes[sch3]['rc_'+or3][i]['amps_'+or3])
-                fd1 = schemes[sch1]['rc_'+or1][i]['fit_data_'+or1]
-                fd2 = schemes[sch2]['rc_'+or2][i]['fit_data_'+or2]
-                fd3 = schemes[sch3]['rc_'+or3][i]['fit_data_'+or3]
-                if prob1 in fd1 and prob2 in fd2 and prob3 in fd3:
-                    # to account for the case of 2 same sub-el traps for a
-                    # given pixel:
-                    iterations = min(len(fd1[prob1]), len(fd2[prob2]))
-                    for iteration in range(iterations):
-                        # initialize minimum difference b/w central values
-                        min_range = np.inf
-                        j0 = None
-                        k0 = None
-                        l0 = None
-                        tau_avg = None
-                        tau_up = None
-                        for j in fd1[prob1]:
-                            for k in fd2[prob2]:
-                                for l in fd3[prob3]:
-                                    # find pair that minimizes overall
-                                    # uncertainty window; it's okay if
-                                    # individual tau windows
-                                    #  don't overlap since systematic errors
-                                    # may have affected them
-                                    #index 2: corresponds to tau
-                                    #index 3: corresponds to tau_err
-                                    up = max(j[2] + j[3], k[2] + k[3],
-                                        l[2] + l[3])
-                                    low= min(j[2] - j[3], k[2] - k[3],
-                                        l[2] - l[3])
-                                    if(up - low) < min_range:
-                                        min_range = up - low
-                                        j0 = j
-                                        k0 = k
-                                        l0 = l
-                                        tau_avg = (up + low)/2
-                                        tau_up = up
-                        # TODO v2.0:  seek absolute best pairings by
-                        # across all traps in a given pixel by
-                        # earmarking the fit data that have been
-                        # selected above, and after full matching
-                        # up process, compare the earmarked ones
-                        # (along with any fit data that didn't get
-                        # chosen for traps) to determine optimal
-                        # pairings so that the least amount of fit
-                        # data goes unused for trap locations.  Could append to
-                        # each selected fit data list the j and k values of the
-                        # other fit data set(s) it was matched with.
-                        if (j0 is not None) and (k0 is not None) and (l0
-                            is not None) and (tau_avg is not None) and (tau_up
-                            is not None):
+                        cap1 = j0[0]
+                        cap1_err = j0[1]
+                        cap2 = k0[0]
+                        cap2_err = k0[1]
+                        cap3 = l0[0]
+                        cap3_err = l0[1]
+                        # pixel could have more than one trap,
+                        #so trap[i] could already exist at given iteration
+                        if i not in traps:
+                            traps[i] = []
+                        traps[i].append([subel_loc, tau_avg,
+                                        tau_up - tau_avg,
+                                        [cap1, cap1_err, max_amp1, cap2,
+                                        cap2_err, max_amp2, cap3, cap3_err,
+                                        max_amp3], iteration])
+                        # now remove these trap data b/c they've been
+                        # matched
+                        fd1[prob1].remove(j0)
+                        fd2[prob2].remove(k0)
+                        fd3[prob3].remove(l0)
 
-                            cap1 = j0[0]
-                            cap1_err = j0[1]
-                            cap2 = k0[0]
-                            cap2_err = k0[1]
-                            cap3 = l0[0]
-                            cap3_err = l0[1]
-                            # pixel could have more than one trap,
-                            #so trap[i] could already exist at given iteration
-                            if i not in traps:
-                                traps[i] = []
-                            traps[i].append([subel_loc, tau_avg,
-                                            tau_up - tau_avg,
-                                            [cap1, cap1_err, max_amp1, cap2,
-                                            cap2_err, max_amp2, cap3, cap3_err,
-                                            max_amp3], iteration])
-                            # now remove these trap data b/c they've been
-                            # matched
-                            fd1[prob1].remove(j0)
-                            fd2[prob2].remove(k0)
-                            fd3[prob3].remove(l0)
-
-            # go through all 3-scheme sub-electrode locations first, since
-            # there could be scenarios where a pixel has 2-traps in different
-            # schemes that can match a 2-scheme ID and rob from a true 3-scheme
-            #only do these operations if all 4 schemes present
-            if set([1,2,3,4]) == set(schemes.keys()):
-                # LHS of electrode 2: sch 1 'above', sch 2 'below', sch 4 'above'
-                LHSel2_coords = _el_loc_coords3(1, 'above', 2, 'below',
-                    4, 'above')
-                # RHS of electrode 2
-                RHSel2_coords = _el_loc_coords3(1, 'above', 2, 'below',
-                    4, 'below')
-                # LHS of electrode 4
-                LHSel4_coords = _el_loc_coords3(1, 'below', 2, 'above',
-                    3, 'above')
-                # RHS of electrode 4
-                RHSel4_coords = _el_loc_coords3(1, 'below', 2, 'above',
-                    3, 'below')
-                for i in LHSel2_coords:
-                    # sch1 'above' prob2, sch2 'below' prob1, sch4 'above'prob3
-                    _el_loc_3(1, 'above', 2, 2, 'below', 1, 4, 'above', 3,
-                        i, 'LHSel2')
-                for i in RHSel2_coords:
-                    _el_loc_3(1, 'above', 1, 2, 'below', 2, 4, 'below', 3,
-                        i, 'RHSel2')
-                for i in LHSel4_coords:
-                    _el_loc_3(1, 'below', 1, 2, 'above', 2, 3, 'above', 3,
-                        i, 'LHSel4')
-                for i in RHSel4_coords:
-                    _el_loc_3(1, 'below', 2, 2, 'above', 1, 3, 'below', 3,
-                        i, 'RHSel4')
-                # now go through all 2-scheme sub-electrode locations
-                # LHS of electrode 1: scheme 1 'below' and scheme 3 'below'
-                LHSel1_coords = _el_loc_coords2(1, 'below', 3, 'below')
-                # center of electrode 1
-                CENel1_coords = _el_loc_coords2(3, 'below', 4, 'above')
-                # RHS of electrode 1
-                RHSel1_coords = _el_loc_coords2(1, 'above', 4, 'above')
-                # center of electrode 2
-                CENel2_coords = _el_loc_coords2(1, 'above', 2, 'below')
-                # LHS of electrode 3
-                LHSel3_coords = _el_loc_coords2(2, 'below', 4, 'below')
-                # center of electrode 3
-                CENel3_coords = _el_loc_coords2(3, 'above', 4, 'below')
-                # RHS of electrode 3
-                RHSel3_coords = _el_loc_coords2(2, 'above', 3, 'above')
-                # center of electrode 4
-                CENel4_coords = _el_loc_coords2(1, 'below', 2, 'above')
-                for i in LHSel1_coords:
-                    # scheme 1 'below' prob 1, scheme 3 'below' prob 3
-                    _el_loc_2(1, 'below', 1, 3, 'below', 3, i, 'LHSel1')
-                for i in CENel1_coords:
-                    _el_loc_2(3, 'below', 2, 4, 'above', 2, i, 'CENel1')
-                for i in RHSel1_coords:
-                    _el_loc_2(1, 'above', 1, 4, 'above', 3, i, 'RHSel1')
-                for i in CENel2_coords:
-                    _el_loc_2(1, 'above', 1, 2, 'below', 1, i, 'CENel2')
-                for i in LHSel3_coords:
-                    _el_loc_2(2, 'below', 1, 4, 'below', 3, i, 'LHSel3')
-                for i in CENel3_coords:
-                    _el_loc_2(3, 'above', 2, 4, 'below', 2, i, 'CENel3')
-                for i in RHSel3_coords:
-                    _el_loc_2(2, 'above', 1, 3, 'above', 3, i, 'RHSel3')
-                for i in CENel4_coords:
-                    _el_loc_2(1, 'below', 1, 2, 'above', 1, i, 'CENel4')
+        # go through all 3-scheme sub-electrode locations first, since
+        # there could be scenarios where a pixel has 2-traps in different
+        # schemes that can match a 2-scheme ID and rob from a true 3-scheme
+        #only do these operations if all 4 schemes present
+        if set([1,2,3,4]) == set(schemes.keys()):
+            # LHS of electrode 2: sch 1 'above', sch 2 'below', sch 4 'above'
+            LHSel2_coords = _el_loc_coords3(1, 'above', 2, 'below',
+                4, 'above')
+            # RHS of electrode 2
+            RHSel2_coords = _el_loc_coords3(1, 'above', 2, 'below',
+                4, 'below')
+            # LHS of electrode 4
+            LHSel4_coords = _el_loc_coords3(1, 'below', 2, 'above',
+                3, 'above')
+            # RHS of electrode 4
+            RHSel4_coords = _el_loc_coords3(1, 'below', 2, 'above',
+                3, 'below')
+            for i in LHSel2_coords:
+                # sch1 'above' prob2, sch2 'below' prob1, sch4 'above'prob3
+                _el_loc_3(1, 'above', 2, 2, 'below', 1, 4, 'above', 3,
+                    i, 'LHSel2')
+            for i in RHSel2_coords:
+                _el_loc_3(1, 'above', 1, 2, 'below', 2, 4, 'below', 3,
+                    i, 'RHSel2')
+            for i in LHSel4_coords:
+                _el_loc_3(1, 'below', 1, 2, 'above', 2, 3, 'above', 3,
+                    i, 'LHSel4')
+            for i in RHSel4_coords:
+                _el_loc_3(1, 'below', 2, 2, 'above', 1, 3, 'below', 3,
+                    i, 'RHSel4')
+            # now go through all 2-scheme sub-electrode locations
+            # LHS of electrode 1: scheme 1 'below' and scheme 3 'below'
+            LHSel1_coords = _el_loc_coords2(1, 'below', 3, 'below')
+            # center of electrode 1
+            CENel1_coords = _el_loc_coords2(3, 'below', 4, 'above')
+            # RHS of electrode 1
+            RHSel1_coords = _el_loc_coords2(1, 'above', 4, 'above')
+            # center of electrode 2
+            CENel2_coords = _el_loc_coords2(1, 'above', 2, 'below')
+            # LHS of electrode 3
+            LHSel3_coords = _el_loc_coords2(2, 'below', 4, 'below')
+            # center of electrode 3
+            CENel3_coords = _el_loc_coords2(3, 'above', 4, 'below')
+            # RHS of electrode 3
+            RHSel3_coords = _el_loc_coords2(2, 'above', 3, 'above')
+            # center of electrode 4
+            CENel4_coords = _el_loc_coords2(1, 'below', 2, 'above')
+            for i in LHSel1_coords:
+                # scheme 1 'below' prob 1, scheme 3 'below' prob 3
+                _el_loc_2(1, 'below', 1, 3, 'below', 3, i, 'LHSel1')
+            for i in CENel1_coords:
+                _el_loc_2(3, 'below', 2, 4, 'above', 2, i, 'CENel1')
+            for i in RHSel1_coords:
+                _el_loc_2(1, 'above', 1, 4, 'above', 3, i, 'RHSel1')
+            for i in CENel2_coords:
+                _el_loc_2(1, 'above', 1, 2, 'below', 1, i, 'CENel2')
+            for i in LHSel3_coords:
+                _el_loc_2(2, 'below', 1, 4, 'below', 3, i, 'LHSel3')
+            for i in CENel3_coords:
+                _el_loc_2(3, 'above', 2, 4, 'below', 2, i, 'CENel3')
+            for i in RHSel3_coords:
+                _el_loc_2(2, 'above', 1, 3, 'above', 3, i, 'RHSel3')
+            for i in CENel4_coords:
+                _el_loc_2(1, 'below', 1, 2, 'above', 1, i, 'CENel4')
 
 
-            # see how many dipoles were not matched up in sub-electrode
-            # location
-            unused_fit_data = 0
-            for sch in schemes.values():
-                for coord in sch['rc_above'].values():
-                    unused_fit_data += len(coord['fit_data_above'])
-                for coord in sch['rc_below'].values():
-                    unused_fit_data += len(coord['fit_data_below'])
+        # see how many dipoles were not matched up in sub-electrode
+        # location
+        unused_fit_data = 0
+        for sch in schemes.values():
+            for coord in sch['rc_above'].values():
+                unused_fit_data += len(coord['fit_data_above'])
+            for coord in sch['rc_below'].values():
+                unused_fit_data += len(coord['fit_data_below'])
 
-            temps[curr_temp] = traps
-        if save_temps is not None:
-            try:
-                np.save(save_temps, temps)
-            except:
-                warnings.warn('File path for saving temps dictionary '
-                'was not recognized.')
-
-    if load_temps is not None:
-        try:
-            temps = np.load(load_temps, allow_pickle=True)
-            temps = temps.tolist()
-        except:
-            raise FileNotFoundError('load_temps file not found')
-
-
-
+        temps[curr_temp] = traps
+ 
     # initializing
     trap_list = []
     for temp in temps.values():
