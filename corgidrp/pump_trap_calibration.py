@@ -1388,12 +1388,27 @@ def tpump_analysis(base_dir, time_head, emgain_head,
                         (E_edges[i+1] + E_edges[i])/2,
                         (cs_edges[j+1] + cs_edges[j])/2])
 
-    return (trap_dict, trap_densities, bad_fit_counter, pre_sub_el_count,
-        unused_fit_data, unused_temp_fit_data, two_or_less_count,
-        noncontinuous_count)
+    
+    trapcal = create_TrapCalibration_from_trap_dict(trap_dict, input_dataset)
 
 
-def create_TrapCalibration_from_trap_dict(trap_dict,base_dir):
+    #Add all of the old default outputs as header keywords or extensions
+    trapcal.add_extension_hdu(np.array(trap_densities), name='trap_densities')
+    trapcal.ext_hdr['badfitct'] = (bad_fit_counter , 'bad_fit_counter')
+    trapcal.ext_hdr['prsbelct'] = (pre_sub_el_count, 'pre_sub_el_count')
+    trapcal.ext_hdr['unfitdat'] = (unused_fit_data, 'unused_fit_data')
+    trapcal.ext_hdr['untempfd'] = (unused_temp_fit_data, 'unused_temp_fit_data')
+    trapcal.ext_hdr['twoorles'] = (two_or_less_count, 'two_or_less_count')
+    trapcal.ext_hdr['noncontc'] = (noncontinuous_count, 'noncontinuous_count')
+    
+    return trapcal
+
+    # return (trap_dict, trap_densities, bad_fit_counter, pre_sub_el_count,
+    #     unused_fit_data, unused_temp_fit_data, two_or_less_count,
+    #     noncontinuous_count)
+
+
+def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     '''
     A function that converts a trap dictionary into a corgidrp.data.TrapCalibration
     file
@@ -1457,19 +1472,13 @@ def create_TrapCalibration_from_trap_dict(trap_dict,base_dir):
         #Release time constant at desired Temperature
         trap_cal_array[i,9] = dict_entry['tau at input T']
 
-    #We need headers and filenames. 
-    all_files = sorted(glob.glob(base_dir+"**/*.fits",recursive=True))
-
-    #Make a dataset with these files
-    dataset = Dataset(all_files)
-
     #Great the header from the fist file
-    first_file_pri_hdr = fits.open(all_files[0])[0].header
-    first_file_ext_hdr = fits.open(all_files[0])[1].header
+    first_file_pri_hdr = input_dataset[0].header
+    first_file_ext_hdr = input_dataset[1].header
 
     trapcal = TrapCalibration(trap_cal_array,pri_hdr = first_file_pri_hdr, 
                     ext_hdr = first_file_ext_hdr, 
-                    input_dataset=dataset)
+                    input_dataset=input_dataset)
     
     return trapcal
                     
