@@ -961,6 +961,8 @@ class DetectorParams(Image):
             self.err_hdr = fits.Header()
             self.dq_hdr = fits.Header()
 
+            self.hdu_list = fits.HDUList()
+
         # make a dictionary that's easy to use
         self.params = {}
         # load back in all the values from the header
