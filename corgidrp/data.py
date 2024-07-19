@@ -265,7 +265,7 @@ class Image():
         filedir (str): the file directory on disk where this image is to be/already saved.
         filepath (str): full path to the file on disk (if it exists)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, bias=None, err_hdr = None, dq_hdr = None, bias_hdr=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None, input_hdulist = None:
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
@@ -278,7 +278,7 @@ class Image():
                 self.data = first_hdu.data
 
                 #A list of extensions
-                hdu_names = [hdu.name for hdu in hdulist]
+                self.hdu_names = [hdu.name for hdu in hdulist]
 
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
@@ -289,8 +289,7 @@ class Image():
                         self.err = err
                     else:
                         self.err = err.reshape((1,)+err.shape)
-                # we assume that the ERR extension is index 2 of hdulist
-                elif "ERR" in hdu_names:
+                elif "ERR" in self.hdu_names:
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
@@ -303,24 +302,31 @@ class Image():
                     if np.shape(self.data) != np.shape(dq):
                         raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                     self.dq = dq
-                # we assume that the DQ extension is index 3 of hdulist
-                elif "DQ" in hdu_names:
+                
+                elif "DQ" in self.hdu_names:
                     dq_hdu = hdulist.pop("DQ")
                     self.dq = dq_hdu.data
                     self.dq_hdr = dq_hdu.header
                 else:
                     self.dq = np.zeros(self.data.shape, dtype = int)
 
-                if bias is not None:
-                    if (np.shape(self.data)[0],) != np.shape(bias):
-                        raise ValueError("The shape of bias is {0} while we are expecting shape {1}".format(bias.shape, self.data.shape))
-                    self.bias = bias
-                # we assume that the bias extension is index 4 of hdulist
-                elif len(hdulist)>4:
-                    self.bias = hdulist[4].data
-                    self.bias_hdr = hdulist[4].header
-                else:
-                    self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
+
+                if hdulist is not None:
+                    self.hdu_list = input_hdulist
+                else: 
+                    #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
+                    self.hdu_list = hdulist
+
+                # if bias is not None:
+                #     if (np.shape(self.data)[0],) != np.shape(bias):
+                #         raise ValueError("The shape of bias is {0} while we are expecting shape {1}".format(bias.shape, self.data.shape))
+                #     self.bias = bias
+                # # we assume that the bias extension is index 4 of hdulist
+                # elif len(hdulist)>4:
+                #     self.bias = hdulist[4].data
+                #     self.bias_hdr = hdulist[4].header
+                # else:
+                #     self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -367,6 +373,12 @@ class Image():
             else:
                 self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
 
+            #Take the input hdulist or make a blank one. 
+            if input_hdulist is not None:
+                self.hdu_list = input_hdulist
+            else: 
+                self.hdu_list = fits.HDUList()
+
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
@@ -384,9 +396,9 @@ class Image():
         if not hasattr(self, 'dq_hdr'):
             self.dq_hdr = fits.Header()
         self.dq_hdr["EXTNAME"] = "DQ"
-        if not hasattr(self, 'bias_hdr'):
-            self.bias_hdr = fits.Header()
-        self.bias_hdr["EXTNAME"] = "BIAS"
+        # if not hasattr(self, 'bias_hdr'):
+        #     self.bias_hdr = fits.Header()
+        # self.bias_hdr["EXTNAME"] = "BIAS"
         
         # discard individual errors if we aren't tracking them but multiple error terms are passed in
         if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
@@ -431,8 +443,11 @@ class Image():
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
 
-        biashdu = fits.ImageHDU(data=self.bias, header = self.bias_hdr)
-        hdulist.append(biashdu)
+        for hdu in self.hdu_list:
+            hdulist.append(hdu)
+
+        # biashdu = fits.ImageHDU(data=self.bias, header = self.bias_hdr)
+        # hdulist.append(biashdu)
 
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
@@ -466,14 +481,16 @@ class Image():
             new_data = np.copy(self.data)
             new_err = np.copy(self.err)
             new_dq = np.copy(self.dq)
-            new_bias = np.copy(self.bias)
+            # new_bias = np.copy(self.bias)
+            new_hdulist = self.hdu_list.copy()
         else:
             new_data = self.data # this is just pointer referencing
             new_err = self.err
             new_dq = self.dq
-            new_bias = self.bias
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, bias=new_bias, 
-                        err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy(), bias_hdr = self.bias_hdr.copy())
+            new_hdulist = self.hdu_list
+            # new_bias = self.bias
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, input_hdulist = new_hdulist,
+                        err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
 
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
@@ -548,8 +565,6 @@ class Image():
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(err_name)    
 
-    
-
     def get_hash(self):
         """
         Computes the hash of the data, err, and dq. Does not use the header information.
@@ -564,6 +579,23 @@ class Image():
         total_bytes = data_bytes + err_bytes + dq_bytes
 
         return str(hash(total_bytes))
+
+    def add_extension_hdu(self, name, data = None, header=None):
+        """
+
+        Create a new hdu extension and append it to the hdu_list
+
+        Args:
+            name (str): The name of the new extension
+            data (array, optional): Some kind of data. Defaults to None.
+            header (astropy.io.fits.Header, optional): _description_. Defaults to None.
+        """
+        new_hdu = fits.ImageHDU(data=data, header=header, name=name)
+
+        if name in self.hdu_names:
+            raise ValueError("Extension name already exists in HDU list")
+        else: 
+            self.hdu_list.append(new_hdu)
 
 
 class Dark(Image):
