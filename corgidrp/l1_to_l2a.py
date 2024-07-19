@@ -108,7 +108,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.data = out_frames_data_arr[i]
         frame.err = out_frames_err_arr[i]
         frame.dq = out_frames_dq_arr[i]
-        frame.bias = out_frames_bias_arr[i]
+        # frame.bias = out_frames_bias_arr[i]
+        frame.add_extension_hdu("BIAS",data=out_frames_bias_arr[i])
 
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")

@@ -249,7 +249,6 @@ class Image():
         dq (np.array): 2-D data quality, 0: good. Other values track different causes for bad pixels and other pixel-level effects in accordance with the DRP implementation document.x
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
-        bias_hdr (astropy.io.fits.Header): the bias extension header
         hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that contains any other extension types. 
 
     Attributes:
@@ -265,7 +264,7 @@ class Image():
         filedir (str): the file directory on disk where this image is to be/already saved.
         filepath (str): full path to the file on disk (if it exists)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None, input_hdulist = None:
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None, input_hdulist = None):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
@@ -311,22 +310,11 @@ class Image():
                     self.dq = np.zeros(self.data.shape, dtype = int)
 
 
-                if hdulist is not None:
+                if input_hdulist is not None:
                     self.hdu_list = input_hdulist
                 else: 
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
                     self.hdu_list = hdulist
-
-                # if bias is not None:
-                #     if (np.shape(self.data)[0],) != np.shape(bias):
-                #         raise ValueError("The shape of bias is {0} while we are expecting shape {1}".format(bias.shape, self.data.shape))
-                #     self.bias = bias
-                # # we assume that the bias extension is index 4 of hdulist
-                # elif len(hdulist)>4:
-                #     self.bias = hdulist[4].data
-                #     self.bias_hdr = hdulist[4].header
-                # else:
-                #     self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -348,6 +336,9 @@ class Image():
             self.data = data_or_filepath
             self.filedir = "."
             self.filename = ""
+
+            # self.hdu_names = [hdu.name for hdu in self.hdu_list]
+
             if err is not None:
                 if np.shape(self.data) != np.shape(err)[-2:]:
                     raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-2:], self.data.shape))
@@ -366,39 +357,39 @@ class Image():
             else:
                 self.dq = np.zeros(self.data.shape, dtype = int)
 
-            if bias is not None:
-                if (np.shape(self.data)[0],) != np.shape(bias):
-                    raise ValueError("The shape of bias is {0} while we are expecting shape {1}".format(bias.shape, self.data.shape))
-                self.bias = bias.astype(np.float32)
-            else:
-                self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
+            #The default hdu extensions
+            self.hdu_names = ["ERR", "DQ"]
 
             #Take the input hdulist or make a blank one. 
             if input_hdulist is not None:
                 self.hdu_list = input_hdulist
+                #Keep track of the names 
+                for hdu in input_hdulist:
+                    self.hdu_names.append(hdu.name)
             else: 
                 self.hdu_list = fits.HDUList()
+
+            
+            
+            #A list of extensions
+            
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
 
+        
         # we assume that if the err_hdr and dq_hdr is given as parameter they supersede eventual existing err_hdr and dq_hdr
         if err_hdr is not None:
             self.err_hdr = err_hdr
         if dq_hdr is not None:
             self.dq_hdr = dq_hdr
-        if bias_hdr is not None:
-            self.bias_hdr = bias_hdr
         if not hasattr(self, 'err_hdr'):
             self.err_hdr = fits.Header()
         self.err_hdr["EXTNAME"] = "ERR"
         if not hasattr(self, 'dq_hdr'):
             self.dq_hdr = fits.Header()
         self.dq_hdr["EXTNAME"] = "DQ"
-        # if not hasattr(self, 'bias_hdr'):
-        #     self.bias_hdr = fits.Header()
-        # self.bias_hdr["EXTNAME"] = "BIAS"
         
         # discard individual errors if we aren't tracking them but multiple error terms are passed in
         if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
@@ -446,9 +437,6 @@ class Image():
         for hdu in self.hdu_list:
             hdulist.append(hdu)
 
-        # biashdu = fits.ImageHDU(data=self.bias, header = self.bias_hdr)
-        # hdulist.append(biashdu)
-
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
@@ -481,14 +469,12 @@ class Image():
             new_data = np.copy(self.data)
             new_err = np.copy(self.err)
             new_dq = np.copy(self.dq)
-            # new_bias = np.copy(self.bias)
             new_hdulist = self.hdu_list.copy()
         else:
             new_data = self.data # this is just pointer referencing
             new_err = self.err
             new_dq = self.dq
             new_hdulist = self.hdu_list
-            # new_bias = self.bias
         new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, input_hdulist = new_hdulist,
                         err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
 
@@ -971,11 +957,9 @@ class DetectorParams(Image):
             self.data = np.zeros([1,1])
             self.dq = np.zeros([1,1])
             self.err = np.zeros([1,1])
-            self.bias = np.zeros([1,1])
 
             self.err_hdr = fits.Header()
             self.dq_hdr = fits.Header()
-            self.bias_hdr = fits.Header()
 
         # make a dictionary that's easy to use
         self.params = {}
