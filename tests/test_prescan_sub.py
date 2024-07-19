@@ -364,11 +364,11 @@ def test_bias_zeros_frame():
             if np.max(np.abs(output_dataset.all_err)) > tol:
                 raise Exception(f'Operating on all zero frame did not return all zero error.')           
             
-            for frame in output_dataset:
+            for i,frame in enumerate(output_dataset):
                 try: 
                     frame_bias = frame.hdu_list['BIAS'].data
                 except KeyError:
-                    raise Exception(f"BIAS extension not found in frame {i}.")
+                    raise Exception(f"BIAS extension not found in frame {i}.".format(i))
                 
                 if np.max(np.abs(frame_bias)) > tol:
                     raise Exception(f'Operating on all zero frame did not return all zero bias.')
