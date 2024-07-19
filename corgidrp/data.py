@@ -925,7 +925,7 @@ class DetectorParams(Image):
             # run the image class contructor
             super().__init__(data_or_filepath)
 
-            # double check that this is actually a bad pixel map that got read in
+            # double check that this is actually a DetectorParams file that got read in
             # since if only a filepath was passed in, any file could have been read in
             if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'DetectorParams':
                 raise ValueError("File that was loaded was not a DetectorParams file.")
