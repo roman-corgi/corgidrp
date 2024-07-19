@@ -45,15 +45,16 @@ class TPumpAnException(Exception):
 # real life over a small range of temperatures.
 # My unit tests would probably detect even more
 # temperatures in a consistent way if I covered a smaller range of temperature.
-def tpump_analysis(base_dir, time_head, emgain_head,
-    num_pumps, non_lin_correction = None, mean_field = None, length_lim = 6,
+def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head = 'EM_GAIN', 
+                   non_lin_correction = None, mean_field = None, length_lim = 6,
     thresh_factor = 3, k_prob = 1, ill_corr = True, tfit_const = True,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
     tauc_max = 1e-5, pc_min = 0, pc_max = 2, offset_min = 10,
     offset_max = 10,
     cs_fit_thresh = 0.8, E_min = 0, E_max = 1, cs_min = 0,
     cs_max = 50, bins_E = 100, bins_cs = 10, input_T = 180,
-    sample_data = False):
+    sample_data = False,
+    verbose=False):
     """This function analyzes trap-pumped frames and outputs the location of
     each radiation trap (pixel and sub-electrode location within the pixel),
     everything needed to determine the release time constant at any temperature
@@ -375,6 +376,10 @@ def tpump_analysis(base_dir, time_head, emgain_head,
         Number of traps that appeared at a noncontinuous series of
         temperatures.
     """
+    
+    # Make a copy of the input dataset to operate on
+    working_dataset = input_dataset.copy()
+
     if type(sample_data) != bool:
         raise TypeError('sample_data should be True or False')
     if not sample_data: # don't need these for the Alfresco sample data
@@ -440,41 +445,59 @@ def tpump_analysis(base_dir, time_head, emgain_head,
     # count # times emit time constant > 1e-2 or < 1e-6. Relevant only if
     # tau_min and tau_max are outside of 1e-6 to 1e-2.
     tau_outside = 0
-    if load_temps is None:
+    
     temps = {}
-    for dir in os.listdir(base_dir):
+
+    #First we'll sort the input dataset by temperature
+    dataset_list, dataset_temperatures = working_dataset.split_dataset(exthdr_keywords = ['EXCAMT'])
+
+
+    # for dir in os.listdir(base_dir):
+    for i,dataset in enumerate(dataset_list):
+
         sch_dir_path = os.path.abspath(Path(base_dir, dir))
-        if os.path.isfile(sch_dir_path): # just want directories
-            continue
-        try:
-            curr_temp = float(dir[0:-1])
-        except:
-            raise TPumpAnException('Temperature folder label must be '
-            'a number up to the last character.')
+  
+        curr_temp = dataset_temperatures[i]
         schemes = {}
         # initializing eperdn here; used if scheme is 1
         eperdn = 1
         # check to make sure no two scheme folders the same (1 per scheme)
         sch_list = []
-        for scheme in os.listdir(sch_dir_path):
-            scheme_path = os.path.abspath(Path(sch_dir_path, scheme))
-            if os.path.isfile(scheme_path): # just want directories
-                continue
-            sch_list.append(scheme[-1])
-            try:
-                int(scheme[-1])
-            except:
-                raise TPumpAnException('Last character of the scheme '
-                'folder label must be a number')
-        for num in sch_list:
-            if sch_list.count(num) > 1:
-                raise TPumpAnException('More than one folder for a single '
-                'scheme found.  Should only be one folder per scheme.')
-        for sch_dir in sorted(os.listdir(sch_dir_path)):
-            scheme_path = os.path.abspath(Path(sch_dir_path, sch_dir))
-            if os.path.isfile(scheme_path): # just want directories
-                continue
-            curr_sch = int(sch_dir[-1])
+
+        # for scheme in os.listdir(sch_dir_path):
+        #     scheme_path = os.path.abspath(Path(sch_dir_path, scheme))
+        #     if os.path.isfile(scheme_path): # just want directories
+        #         continue
+        #     sch_list.append(scheme[-1])
+        #     try:
+        #         int(scheme[-1])
+        #     except:
+        #         raise TPumpAnException('Last character of the scheme '
+        #         'folder label must be a number')
+            
+        scheme_datasets, sch_list = dataset.split_dataset(exthdr_keywords = ['TPSCHEME'])
+        #Convert the schemes to integers
+        sch_list = [int(scheme) for scheme in sch_list]
+
+        #Sort the things so that Scheme 1 is first
+        sch_order = np.argsort(sch_list)
+        sch_list = np.array(sch_list)[sch_order]
+        scheme_datasets = np.array(scheme_datasets)[sch_order]
+
+        #TODO: Make a check to make sure that one of the schemes is Scheme 1   
+
+        
+        # for num in sch_list:
+        #     if sch_list.count(num) > 1:
+        #         raise TPumpAnException('More than one folder for a single '
+        #         'scheme found.  Should only be one folder per scheme.')
+            
+        # for sch_dir in sorted(os.listdir(sch_dir_path)):
+        for curr_sch in sch_list: 
+            # scheme_path = os.path.abspath(Path(sch_dir_path, sch_dir))
+            # if os.path.isfile(scheme_path): # just want directories
+                # continue
+            # curr_sch = int(sch_dir[-1])
             # if Scheme_1 present, the following shouldn't happen
             if schemes == {} and curr_sch != 1:
                 raise TPumpAnException('Scheme 1 files must run first for'
@@ -482,126 +505,69 @@ def tpump_analysis(base_dir, time_head, emgain_head,
             frames = []
             cor_frames = []
             timings = []
-            curr_sch_path = os.path.abspath(Path(sch_dir_path, sch_dir))
-            for file in os.listdir(curr_sch_path):
-                f = os.path.join(curr_sch_path, file)
-                if os.path.isfile(f) and f.endswith('.fits') and \
-                    not sample_data:
-                    try:
-                        data = fits.getdata(f, 1) #1st extension for image
-                        data = data.astype(float)
-                    except:
-                        raise TPumpAnException('Must be .fits files with '
-                        'image data in 1st extension')
-                    with fits.open(f) as hdul:
-                        try:
-                            hdr = hdul[0].header
-                            # time from FITS header in us, so convert to s
-                            t = float(hdr[time_head])/10**6
-                            em_gain = float(hdr[emgain_head])
-                        except:
-                            raise TPumpAnException('Primary header must '
-                            'contain correct keys for phase time and EM '
-                            'gain')
-                    timings.append(t)
-                    # getting image area (all physical CCD pixels)
-                    d = imaging_slice(data)
-                    # need to subtract bias if we are to extract eperdn
-                    # getting all physical CCD pixels
-                    prows, pcols, r0c0 = imaging_area_geometry()
-                    if prows > np.shape(data)[0] or \
-                        pcols > np.shape(data)[1] or \
-                        r0c0[0] > np.shape(data)[0] or \
-                        r0c0[1] > np.shape(data)[1]:
-                        raise TPumpAnException('Assumed geometry from detector.py inconsistent'
-                        ' with frame')
-                    # Get prescan region
-                    prescan = slice_section(data,'SCI','prescan')
-                    # select the good cols for getting row-by-row bias
-                    # we don't use Process class here to avoid having to
-                    # input fwc params, etc
-                    st = detector_areas['SCI']['col_start']
-                    end = detector_areas['SCI']['col_end']
-                    p_r0 = detector_areas['SCI']['r0c0'][0]
-                    i_r0 = r0c0[0]
-                    # prescan relative to image rows
-                    al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
-                    bias_dn = np.median(al_prescan[:,st:end],
-                            axis=1)[:, np.newaxis]
-                    d -= bias_dn
-                    #CIC also present in prescan, and signal is mainly
-                    #gained CIC, so in image area, expect to have
-                    # roughly 0 median
+            
+            for frame in scheme_datasets[sch_list == curr_sch]:
 
-                    # nonlinearity correction done assuming
-                    # row-by-row bias subtraction, too, I believe.
-                    # could have non-linearity (flat field, but dipoles),
-                    # incurred at ADU, after frame is read out;
-                    # correct for it if needed (with residual nonlinearity)
-                    if non_lin_correction is not None:
-                        d *= get_relgains(d, em_gain, non_lin_correction)
-                    
-                    d = d/em_gain
-                    frames.append(d)
-                if os.path.isfile(f) and f.endswith('.mat') and \
-                        sample_data:
-                    try:
-                        data = read_mat(f)
-                        data = (data['frame_data']).astype(float)
-                    except:
-                        raise TPumpAnException('Sample data from Alfresco '
-                        'must be .mat type.')
-                    if np.shape(data) != (2200, 1080):
-                        raise TPumpAnException('Matlab data from Alfresco '
-                        'sample data must be of shape '
-                        '(rows, cols) = (2200, 1080).')
-                    # extracting time from Nathan's file name
-                    # converting from us to s, too
-                    if 'us_' not in file:
-                        raise TPumpAnException('Filenames for sample data '
-                        'from Alfresco must contain \'us_\' in order for '
-                        'phase time to be read from them.')
-                    try:
-                        t = float(file[31:file.find("us_")])/10**6
-                    except:
-                        raise TPumpAnException('Filenames for sample data '
-                        'from Alfresco msut contain numerals for the phase'
-                        ' times in the right position.')
-                    timings.append(t)
-                    # For Nathan's particular data, size it to be
-                    # comparable to EDU
-                    d = data[15:15+1024,28:28+1024].copy()
-                    em_gain = 1
+                #Get the data and important parameteres
+                # data = frame.data
+                phase_time = float(frame.ext_hdr[time_head])/10**6
+                em_gain = float(frame.ext_hdr[emgain_head])
 
-                    #n1 = d[0:15, 0:]
-                    #n2 = d[15:, 0:28]
-                    #bias_dn = (np.median(n1)*np.size(n1) +
-                    #  np.median(n2)*np.size(n2))/(np.size(n1)+np.size(n2))
-                    noise = data[2100:2150, 100:1000].copy()
-                    bias_dn = np.median(noise)
-                    # don't worry about row-by-row for this sample data
-                    d = d - bias_dn
-                    #bias_dns.append(bias_dn)
+                timings.append(phase_time)   
 
-                    # now do nonlinearity correction (before averaging
-                    # frames with same temp and phase time)
+                #MMB: I'm comment out all this for now, as it looks to all be the L1 -> L2 processing
+                ## Summary of the steps below: 
+                ## 1. Get the imaging area of the detector
+                ## 2. Subtract the bias from the prescan region
+                ## 3. Apply the non-linearity correction
+                ## 4. Apply the EM gain - Note, if we remove these steps here, then we can completely ignore EMGAIN here. 
+                ## These all have step functions. 
 
-                    # change to actual path if nonlinearity correction
-                    # desired (if EM gain known)
-                    # actually, don't need to average frames with same temp
-                    #  and phase time; curve_fit doesn't care
-                    #if you have mutliple values for the same data point!
 
-                    # Nathan says could be useful but doesn't deserve too
-                    # much attention unless linearity is absolutely
-                    # horrible; enough traps causes good self-calibrating
-                    # of image
+                # getting image area (all physical CCD pixels)
+                # d = imaging_slice(data)
+                # # need to subtract bias if we are to extract eperdn
+                # # getting all physical CCD pixels
 
-                    if non_lin_correction is not None:
-                        d *= get_relgains(d, em_gain, non_lin_correction)
-                    d = d/em_gain
-                    #d *= 2500/d.max()
-                    frames.append(d)
+                # # get the imaging area geometry
+                # prows, pcols, r0c0 = imaging_area_geometry()
+                # if prows > np.shape(data)[0] or \
+                #     pcols > np.shape(data)[1] or \
+                #     r0c0[0] > np.shape(data)[0] or \
+                #     r0c0[1] > np.shape(data)[1]:
+                #     raise TPumpAnException('Assumed geometry from detector.py inconsistent'
+                #     ' with frame')
+                # # Get prescan region
+                # prescan = slice_section(data,'SCI','prescan')
+                # # select the good cols for getting row-by-row bias
+                # # we don't use Process class here to avoid having to
+                # # input fwc params, etc
+                # st = detector_areas['SCI']['col_start']
+                # end = detector_areas['SCI']['col_end']
+                # p_r0 = detector_areas['SCI']['r0c0'][0]
+                # i_r0 = r0c0[0]
+                # # prescan relative to image rows
+                # al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
+                # bias_dn = np.median(al_prescan[:,st:end],
+                #         axis=1)[:, np.newaxis]
+                # d -= bias_dn
+                
+                # #CIC also present in prescan, and signal is mainly
+                # #gained CIC, so in image area, expect to have
+                # # roughly 0 median
+
+                # # nonlinearity correction done assuming
+                # # row-by-row bias subtraction, too, I believe.
+                # # could have non-linearity (flat field, but dipoles),
+                # # incurred at ADU, after frame is read out;
+                # # correct for it if needed (with residual nonlinearity)
+                # if non_lin_correction is not None:
+                #     d *= get_relgains(d, em_gain, non_lin_correction)
+                
+                # d = d/em_gain
+
+                frames.append(frame.data)
+
             # no need for cosmic ray removal since we do ill. correction
             # plus cosmics wouldn't look same as it would on regular frame,
             # and they affect the detection of dipoles (or very low chance)
@@ -609,9 +575,9 @@ def tpump_analysis(base_dir, time_head, emgain_head,
             # phase time.
             # no need for flat-fielding since trap pumping will be done
             # while dark (i.e., a flat field of dark)
-            if frames == []:
-                raise TPumpAnException('Scheme folder had no data '
-                'files in it.')
+            # if frames == []:
+            #     raise TPumpAnException('Scheme folder had no data '
+            #     'files in it.')
             # if curr_sch is 1, then this simply multiplies by 1
             frames = np.stack(frames)*eperdn
             timings = np.array(timings)
@@ -931,15 +897,17 @@ def tpump_analysis(base_dir, time_head, emgain_head,
             for no_fit_coord in del_bo_list:
                 rc_both.__delitem__(no_fit_coord)
 
-            print('temperature: ', curr_temp, ', scheme: ', curr_sch,
-                ', number of two-trap pixels (before sub-electrode '
-                'location): ', two_trap_count, ', number of one-trap '
-                'pixels (before sub-electrode location): ',
-                one_trap_count, ', eperdn: ', eperdn)
-            print('above traps found: ', rc_above.keys())
-            print('below traps found: ', rc_below.keys())
-            print('both traps found: ', rc_both.keys())
-            print('bad fit counter: ', bad_fit_counter, '_____________')
+            if verbose: 
+                print('temperature: ', curr_temp, ', scheme: ', curr_sch,
+                    ', number of two-trap pixels (before sub-electrode '
+                    'location): ', two_trap_count, ', number of one-trap '
+                    'pixels (before sub-electrode location): ',
+                    one_trap_count, ', eperdn: ', eperdn)
+                print('above traps found: ', rc_above.keys())
+                print('below traps found: ', rc_below.keys())
+                print('both traps found: ', rc_both.keys())
+                print('bad fit counter: ', bad_fit_counter, '_____________')
+                
             if curr_sch == 1 and \
                 (fit_a_count + fit_b_count + fit_bo_count -
                 (no_prob1a + no_prob1b + no_prob1bo)) == 0:
