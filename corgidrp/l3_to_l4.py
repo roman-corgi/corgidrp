@@ -13,7 +13,7 @@ def distortion_correction(input_dataset, distortion_calibration):
         corgidrp.data.Dataset: a version of the input dataset with the distortion correction applied
     """
 
-    return None
+    return input_dataset.copy()
 
 def find_star(input_dataset):
     """
@@ -27,7 +27,7 @@ def find_star(input_dataset):
         corgidrp.data.Dataset: a version of the input dataset with the stars identified
     """
 
-    return None
+    return input_dataset.copy()
 
 def do_psf_subtraction(input_dataset, reference_star_dataset=None):
     """
@@ -42,4 +42,4 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None):
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied
     """
 
-    return None
+    return input_dataset.copy()

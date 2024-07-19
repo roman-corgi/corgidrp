@@ -218,6 +218,8 @@ def test_err_array_sizes():
     dark_frame.save(filedir=calibdir, filename=dark_filename)
     testcaldb.scan_dir_for_new_entries(calibdir)
     
+
+
 def teardown_module():
     """
     Runs automatically at the end. ONLY IN PYTEST
