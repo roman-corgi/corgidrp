@@ -1,6 +1,8 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
 import corgidrp.data as data
+from corgidrp.darks import build_synthesized_dark
+from corgidrp.detector import detector_areas
 
 def add_photon_noise(input_dataset):
     """
@@ -28,36 +30,69 @@ def add_photon_noise(input_dataset):
     return phot_noise_dataset
 
 
-def dark_subtraction(input_dataset, dark_frame):
+def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None):
     """
 
-    Perform dark current subtraction of a dataset using the corresponding dark frame
+    Perform dark subtraction of a dataset using the corresponding dark frame.  The dark frame can be either a synthesized master dark (made for any given EM gain and exposure time)
+    or for a traditional master dark (average of darks taken at the EM gain and exposure time of the corresponding observation).  The master dark is also saved if it is of the synthesized type after it is built.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
-        dark_frame (corgidrp.data.Dark): a Dark frame
+        dark (corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps): If dark is of the corgidrp.data.Dark type, dark subtraction will be done immediately.
+            If dark is of the corgidrp.data.DetectorNoiseMaps type, a synthesized master is created using calibrated noise maps for the EM gain and exposure time used in the frames in input_dataset.
+        detector_regions: (dict):  A dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        outputdir (string): Filepath for output directory where to save the master dark if it is a synthesized master dark.  Defaults to current directory.
 
     Returns:
-        corgidrp.data.Dataset: a dark subtracted version of the input dataset including error propagation
+        corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
+    _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    if len(unique_vals) > 1:
+        raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
+
+    if detector_regions is None:
+        detector_regions = detector_areas
     # you should make a copy the dataset to start
     darksub_dataset = input_dataset.copy()
+    rows = detector_regions['SCI']['frame_rows']
+    cols = detector_regions['SCI']['frame_cols']
+    im_rows = detector_regions['SCI']['image']['rows']
+    im_cols = detector_regions['SCI']['image']['cols']
 
-    darksub_cube = darksub_dataset.all_data - dark_frame.data
+    if type(dark) is data.DetectorNoiseMaps:
+        if input_dataset.frames[0].data.shape == (rows, cols):
+            full_frame = True
+        elif input_dataset.frames[0].data.shape == (im_rows, im_cols):
+            full_frame = False
+        else:
+            raise Exception('Frames in input_dataset do not have valid SCI full-frame or image dimensions.')
+        dark = build_synthesized_dark(dark, input_dataset, detector_regions=detector_regions, full_frame=full_frame)
+        if outputdir is None:
+            outputdir = '.' #current directory
+        dark.save(filedir=outputdir)
+    elif type(dark) is data.Dark:
+       # In this case, the Dark loaded in should already match the arry dimensions
+       # of input_dataset, specified by full_frame argument of build_trad_dark
+       # when this Dark was built
+       pass
+    else:
+        raise Exception('dark type should be either corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps.')
+
+    darksub_cube = darksub_dataset.all_data - dark.data
 
     # propagate the error of the dark frame
-    if hasattr(dark_frame, "err"):
-        darksub_dataset.add_error_term(dark_frame.err[0], "dark_error")
+    if hasattr(dark, "err"):
+        darksub_dataset.add_error_term(dark.err[0], "dark_error")
     else:
         raise Warning("no error attribute in the dark frame")
 
-    if hasattr(dark_frame, "dq"):
-        new_all_dq = darksub_dataset.all_dq + dark_frame.dq[0]
+    if hasattr(dark, "dq"):
+        new_all_dq = np.bitwise_or(darksub_dataset.all_dq, dark.dq)
     else:
         new_all_dq = None
 
     #darksub_dataset.all_err = np.array([frame.err for frame in darksub_dataset.frames])
-    history_msg = "Dark subtracted using dark {0}".format(dark_frame.filename)
+    history_msg = "Dark subtracted using dark {0}.  Units changed from detected electrons to photoelectrons.".format(dark.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
     darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"photoelectrons"})

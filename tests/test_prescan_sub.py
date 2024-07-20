@@ -5,7 +5,7 @@ import corgidrp
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
-from corgidrp.detector import detector_areas
+from corgidrp.detector import detector_areas, unpack_geom
 
 import numpy as np
 import yaml
@@ -15,6 +15,24 @@ from pathlib import Path
 from pytest import approx
 
 old_err_tracking = corgidrp.track_individual_errors
+
+# make a mock DetectorNoiseMaps instance (to get the bias offset input)
+im_rows, im_cols, _ = unpack_geom('SCI', 'image', detector_areas)
+rows = detector_areas['SCI']['frame_rows']
+cols = detector_areas['SCI']['frame_cols']
+
+Fd = np.ones((rows, cols))
+Dd = 3/3600*np.ones((rows, cols))
+Cd = 0.02*np.ones((rows, cols))
+
+Ferr = np.zeros((rows, cols))
+Derr = np.zeros((rows, cols))
+Cerr = np.zeros((rows, cols))
+Fdq = Ferr.copy().astype(int)
+Ddq = Derr.copy().astype(int)
+Cdq = Cerr.copy().astype(int)
+noise_maps = mocks.create_noise_maps(Fd, Ferr, Fdq, Cd,
+                                            Cerr, Cdq, Dd, Derr, Ddq)
 
 # Expected output image shapes
 shapes = {
@@ -286,7 +304,7 @@ def test_prescan_sub():
             raise Exception(f"Mock dataset is an unexpected length ({len(dataset)}).")
 
         for return_full_frame in [True, False]:
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
 
             # Check that output shape is as expected
             output_shape = output_dataset[0].data.shape
@@ -351,7 +369,7 @@ def test_bias_zeros_frame():
 
         for return_full_frame in [True, False]:
 
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            output_dataset = prescan_biassub(dataset, noise_maps=None, return_full_frame=return_full_frame)
 
             if np.max(np.abs(output_dataset.all_data)) > tol:
                 raise Exception(f'Operating on all zero frame did not return all zero frame.')
@@ -395,7 +413,7 @@ def test_bias_hvoff():
 
         for return_full_frame in [True, False]:
 
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
 
             # Compare bias measurement to expectation
             if np.any(np.abs(output_dataset[0].bias - bval) > tol):
@@ -444,7 +462,7 @@ def test_bias_hvon():
                                    + bias)
 
         for return_full_frame in [True, False]:
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
             if np.any(np.abs(output_dataset[0].bias - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
 
@@ -465,7 +483,7 @@ def test_bias_uniform_value():
         dataset.all_data[:,:,:] = bval
 
         for return_full_frame in [True, False]:
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            output_dataset = prescan_biassub(dataset, noise_maps=None, return_full_frame=return_full_frame)
             if np.max(np.abs(output_dataset.all_data)) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for uniform value.')
 
@@ -496,9 +514,13 @@ def test_bias_offset():
         cols = detector_areas[obstype]['prescan']['cols']
         dataset_10.all_data[:,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += bias_offset
 
+        noise_maps0 = noise_maps.copy()
+        noise_maps0.bias_offset = 0
+        noise_maps10 = noise_maps.copy()
+        noise_maps10.bias_offset = 10
         for return_full_frame in [True,False]:
-            output_dataset_0 = prescan_biassub(dataset_0, return_full_frame=return_full_frame,bias_offset=0)
-            output_dataset_10 = prescan_biassub(dataset_10, return_full_frame=return_full_frame,bias_offset=bias_offset)
+            output_dataset_0 = prescan_biassub(dataset_0, noise_maps0, return_full_frame=return_full_frame)
+            output_dataset_10 = prescan_biassub(dataset_10, noise_maps10, return_full_frame=return_full_frame)
 
             # Compare science image region only
             if return_full_frame:
