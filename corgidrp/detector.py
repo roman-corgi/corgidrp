@@ -5,28 +5,6 @@ import corgidrp.data as data
 from scipy import interpolate
 from scipy.ndimage import median_filter
 
-def create_dark_calib(dark_dataset):
-    """
-    Turn this dataset of image frames that were taken to measure
-    the dark current into a dark calibration frame and determines the corresponding error
-
-    Args:
-        dark_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
-
-    Returns:
-        data.Dark: a dark calibration frame
-    """
-    combined_frame = np.nanmean(dark_dataset.all_data, axis=0)
-
-    new_dark = data.Dark(combined_frame, pri_hdr=dark_dataset[0].pri_hdr.copy(),
-                         ext_hdr=dark_dataset[0].ext_hdr.copy(), input_dataset=dark_dataset)
-
-    # determine the standard error of the mean: stddev/sqrt(n_frames)
-    new_dark.err = np.nanstd(dark_dataset.all_data, axis=0)/np.sqrt(len(dark_dataset))
-    new_dark.err = new_dark.err.reshape((1,)+new_dark.err.shape) #Get it into the right dimensions
-
-    return new_dark
-
 def create_flatfield(flat_dataset):
 
     """
@@ -265,39 +243,41 @@ detector_areas= {
     }
 
 
-def slice_section(frame, d_areas, obstype, key):
+def slice_section(frame, obstype, key, detector_regions=None):
 
     """
     Slice 2d section out of frame
 
     Args:
         frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
-        d_areas (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
         obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         key (str): Keyword referencing section to be sliced; must exist in detector_areas
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
         np.ndarray: a 2D array of the specified detector area
     """
-    rows = d_areas[obstype][key]['rows']
-    cols = d_areas[obstype][key]['cols']
-    r0c0 = d_areas[obstype][key]['r0c0']
+    if detector_regions is None:
+            detector_regions = detector_areas
+    rows = detector_regions[obstype][key]['rows']
+    cols = detector_regions[obstype][key]['cols']
+    r0c0 = detector_regions[obstype][key]['r0c0']
 
     section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
     if section.size == 0:
         raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
     return section
 
-def unpack_geom(d_areas, obstype, key):
+def unpack_geom(obstype, key, detector_regions=None):
         """Safely check format of geom sub-dictionary and return values.
 
         Args:
-            d_areas: dict
-            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
             obstype: str
             Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
             key: str
             Desired section
+            detector_regions: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
         Returns:
             rows: int
@@ -307,22 +287,25 @@ def unpack_geom(d_areas, obstype, key):
             r0c0: tuple
             Tuple of (row position, column position) of corner closest to (0,0)
         """
-        coords = d_areas[obstype][key]
+        if detector_regions is None:
+            detector_regions = detector_areas
+        coords = detector_regions[obstype][key]
         rows = coords['rows']
         cols = coords['cols']
         r0c0 = coords['r0c0']
 
         return rows, cols, r0c0
 
-def imaging_area_geom(d_areas, obstype):
+def imaging_area_geom(obstype, detector_regions=None):
         """Return geometry of imaging area (including shielded pixels)
         in reference to full frame.  Different from normal image area.
 
         Args:
-            d_areas: dict
-            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
             obstype: str
             Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+            detector_regions: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+
 
         Returns:
             rows: int
@@ -332,20 +315,22 @@ def imaging_area_geom(d_areas, obstype):
             r0c0: tuple
             Tuple of (row position, column position) of corner closest to (0,0)
         """
-        _, cols_pre, _ = unpack_geom(d_areas, obstype, 'prescan')
-        _, cols_serial_ovr, _ = unpack_geom(d_areas, obstype, 'serial_overscan')
-        rows_parallel_ovr, _, _ = unpack_geom(d_areas, obstype, 'parallel_overscan')
+        if detector_regions is None:
+            detector_regions = detector_areas
+        _, cols_pre, _ = unpack_geom(obstype, 'prescan', detector_regions)
+        _, cols_serial_ovr, _ = unpack_geom(obstype, 'serial_overscan', detector_regions)
+        rows_parallel_ovr, _, _ = unpack_geom(obstype, 'parallel_overscan', detector_regions)
         #_, _, r0c0_image = self._unpack_geom('image')
-        fluxmap_rows, _, r0c0_image = unpack_geom(d_areas, obstype, 'image')
+        fluxmap_rows, _, r0c0_image = unpack_geom(obstype, 'image', detector_regions)
 
-        rows_im = d_areas[obstype]['frame_rows'] - rows_parallel_ovr
-        cols_im = d_areas[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
+        rows_im = detector_regions[obstype]['frame_rows'] - rows_parallel_ovr
+        cols_im = detector_regions[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
         r0c0_im = r0c0_image.copy()
         r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
 
         return rows_im, cols_im, r0c0_im
 
-def imaging_slice(d_areas, obstype, frame):
+def imaging_slice(obstype, frame, detector_regions=None):
         """Select only the real counts from full frame and exclude virtual.
         Includes shielded pixels.
 
@@ -353,19 +338,19 @@ def imaging_slice(d_areas, obstype, frame):
         acting on only the image frame.
 
         Args:
-            d_areas: dict
-            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.
             obstype: str
             Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
             frame: array_like
             Input frame
+            detector_regions: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
         Returns:
             sl: array_like
             Imaging slice
 
         """
-        rows, cols, r0c0 = imaging_area_geom(d_areas, obstype)
+        rows, cols, r0c0 = imaging_area_geom(obstype, detector_regions)
         sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
         return sl
 

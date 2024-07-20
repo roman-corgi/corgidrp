@@ -68,25 +68,23 @@ detector_areas_test= {
         }
 }
 
-def create_noise_maps(F, Ferr, Fdq, C, Cerr, Cdq, D, Derr, Ddq):
+def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CIC_map_dq, DC_map, DC_map_err, DC_map_dq):
     '''
     Create simulated noise maps for test_masterdark_from_noisemaps.py.
 
     Arguments:
-        F: 2D np.array for fixed-pattern noise (FPN) data array
-        Ferr: 2D np.array for FPN err array
-        Fdq: 2D np.array for FPN DQ array
-        C: 2D np.array for clock-induced charge (CIC) data array
-        Cerr: 2D np.array for CIC err array
-        Cdq: 2D np.array for CIC DQ array
-        D: 2D np.array for dark current data array
-        Derr: 2D np.array for dark current err array
-        Ddq: 2D np.array for dark current DQ array
+        FPN_map: 2D np.array for fixed-pattern noise (FPN) data array
+        FPN_map_err: 2D np.array for FPN err array
+        FPN_map_dq: 2D np.array for FPN DQ array
+        CIC_map: 2D np.array for clock-induced charge (CIC) data array
+        CIC_map_err: 2D np.array for CIC err array
+        CIC_map_dq: 2D np.array for CIC DQ array
+        DC_map: 2D np.array for dark current data array
+        DC_map_err: 2D np.array for dark current err array
+        DC_map_dq: 2D np.array for dark current DQ array
 
     Returns:
-        Fnoisemap: corgidrp.data.NoiseMap instance for FPN
-        Cnoisemap: corgidrp.data.NoiseMap instance for CIC
-        Dnoisemap: corgidrp.data.NoiseMap instance for dark current
+        corgidrp.data.DetectorNoiseMaps instance
     '''
 
     prihdr, exthdr = create_default_headers()
@@ -96,39 +94,37 @@ def create_noise_maps(F, Ferr, Fdq, C, Cerr, Cdq, D, Derr, Ddq):
         exthdr['EMGAIN_M'] = None
     exthdr['CMDGAIN'] = None
     exthdr['KGAIN'] = None
-    exthdr['BUNIT'] = 'detected electrons'
+    exthdr['BUNIT'] = 'detected EM electrons'
     exthdr['HIERARCH DATA_LEVEL'] = None
     # simulate raw data filenames
     exthdr['DRPNFILE'] = 2
     exthdr['FILE0'] = '0.fits'
     exthdr['FILE1'] = '1.fits'
+    exthdr['B_O'] = 0.01
+    exthdr['B_O_UNIT'] = 'DN'
+    exthdr['B_O_ERR'] = 0.001
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
-    exthdr['DATATYPE'] = 'NoiseMap'
+    err_hdr['BUNIT'] = 'detected EM electrons'
+    exthdr['DATATYPE'] = 'DetectorNoiseMaps'
+    input_data = np.stack([FPN_map, CIC_map, DC_map])
+    err = np.stack([[FPN_map_err, CIC_map_err, DC_map_err]])
+    dq = np.stack([FPN_map_dq, CIC_map_dq, DC_map_dq])
+    noise_maps = data.DetectorNoiseMaps(input_data, pri_hdr=prihdr, ext_hdr=exthdr, err=err,
+                              dq=dq, err_hdr=err_hdr)
+    return noise_maps
 
-    Fnoisemap = data.NoiseMap(F, 'FPN', pri_hdr=prihdr, ext_hdr=exthdr, err=Ferr,
-                              dq=Fdq, err_hdr=err_hdr)
-
-    Cnoisemap = data.NoiseMap(C, 'CIC', pri_hdr=prihdr, ext_hdr=exthdr, err=Cerr,
-                              dq=Cdq, err_hdr=err_hdr)
-
-    Dnoisemap = data.NoiseMap(D, 'DC', pri_hdr=prihdr, ext_hdr=exthdr, err=Derr,
-                              dq=Ddq, err_hdr=err_hdr)
-
-    return Fnoisemap, Cnoisemap, Dnoisemap
-
-def create_synthesized_master_dark_calib(d_areas):
+def create_synthesized_master_dark_calib(detector_areas):
     '''
     Create simulated data specifically for test_calibrate_darks_lsq.py.
 
     Args:
-        d_areas: dict
+        detector_areas: dict
     a dictionary of detector geometry properties.  Keys should be as found
     in detector_areas in detector.py.
 
     Returns:
-        datasets: List of corgidrp.data.Dataset instances
+        dataset: corgidrp.data.Dataset instances
     The simulated dataset
     '''
 
@@ -137,11 +133,11 @@ def create_synthesized_master_dark_calib(d_areas):
     read_noise=100 # e-/pix/frame
     bias=2000 # e-
     eperdn = 7 # e-/DN conversion; used in this example for all stacks
-    g_picks = (np.linspace(2, 5000, 7))
-    t_picks = (np.linspace(2, 100, 7))
-    grid = np.meshgrid(g_picks, t_picks)
-    g_arr = grid[0].ravel()
-    t_arr = grid[1].ravel()
+    EMgain_picks = (np.linspace(2, 5000, 7))
+    exptime_picks = (np.linspace(2, 100, 7))
+    grid = np.meshgrid(EMgain_picks, exptime_picks)
+    EMgain_arr = grid[0].ravel()
+    exptime_arr = grid[1].ravel()
     #added in after emccd_detect makes the frames (see below)
     # The mean FPN that will be found is eperdn*(FPN//eperdn)
     # due to how I simulate it and then convert the frame to uint16
@@ -150,23 +146,22 @@ def create_synthesized_master_dark_calib(d_areas):
     N = 30 #Use N=600 for results with better fits (higher values for adjusted
     # R^2 per pixel)
     # image area, including "shielded" rows and cols:
-    imrows, imcols, imr0c0 = imaging_area_geom(d_areas, 'SCI')
-    prerows, precols, prer0c0 = unpack_geom(d_areas, 'SCI', 'prescan')
+    imrows, imcols, imr0c0 = imaging_area_geom('SCI', detector_areas)
+    prerows, precols, prer0c0 = unpack_geom('SCI', 'prescan', detector_areas)
 
-    datasets = []
-    for i in range(len(g_arr)):
-        frame_list = []
+    frame_list = []
+    for i in range(len(EMgain_arr)):
         for l in range(N): #number of frames to produce
             # Simulate full dark frame (image area + the rest)
-            frame_rows = d_areas['SCI']['frame_rows']
-            frame_cols = d_areas['SCI']['frame_cols']
+            frame_rows = detector_areas['SCI']['frame_rows']
+            frame_cols = detector_areas['SCI']['frame_cols']
             frame_dn_dark = np.zeros((frame_rows, frame_cols))
-            im = np.random.poisson(cic*g_arr[i]+
-                                t_arr[i]*g_arr[i]*dark_current,
+            im = np.random.poisson(cic*EMgain_arr[i]+
+                                exptime_arr[i]*EMgain_arr[i]*dark_current,
                                 size=(frame_rows, frame_cols))
             frame_dn_dark = im
             # prescan has no dark current
-            pre = np.random.poisson(cic*g_arr[i],
+            pre = np.random.poisson(cic*EMgain_arr[i],
                                     size=(prerows, precols))
             frame_dn_dark[prer0c0[0]:prer0c0[0]+prerows,
                             prer0c0[1]:prer0c0[1]+precols] = pre
@@ -191,14 +186,13 @@ def create_synthesized_master_dark_calib(d_areas):
             prihdr, exthdr = create_default_headers()
             frame = data.Image(frame_dn_dark, pri_hdr=prihdr,
                             ext_hdr=exthdr)
-            frame.ext_hdr['CMDGAIN'] = g_arr[i]
-            frame.ext_hdr['EXPTIME'] = t_arr[i]
+            frame.ext_hdr['CMDGAIN'] = EMgain_arr[i]
+            frame.ext_hdr['EXPTIME'] = exptime_arr[i]
             frame.ext_hdr['KGAIN'] = eperdn
             frame_list.append(frame)
-        dataset = data.Dataset(frame_list)
-        datasets.append(dataset.copy())
+    dataset = data.Dataset(frame_list)
 
-    return datasets
+    return dataset
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
@@ -221,7 +215,8 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
-        np.random.seed(456+i); sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
+        exthdr['KGAIN'] = 7
+        np.random.seed(456+i); sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
@@ -232,7 +227,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
 def create_simflat_dataset(filedir=None, numfiles=10):
     """
     Create simulated data to check the flat division
-    
+
     Args:
         filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset.  Defaults to 10.
@@ -259,7 +254,7 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     return dataset
 
 def create_flatfield_dummy(filedir=None, numfiles=2):
-    
+
     """
     Turn this flat field dataset of image frames that were taken for performing the flat calibration and
     to make one master flat image
@@ -267,15 +262,15 @@ def create_flatfield_dummy(filedir=None, numfiles=2):
     Args:
         filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset.  Defaults to 1 to create the dummy flat can be changed to any number
-        
+
     Returns:
-        corgidrp.data.Dataset: 
-        a set of flat field images 
+        corgidrp.data.Dataset:
+        a set of flat field images
     """
     ## Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
-        
+
     filepattern= "flat_field_{0:01d}.fits"
     frames=[]
     for i in range(numfiles):
@@ -513,8 +508,8 @@ def create_default_headers(obstype="SCI"):
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
-  
-  
+
+
 def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     """
     Create simulated bad pixel map data. Code value is 4.

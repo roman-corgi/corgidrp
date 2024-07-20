@@ -29,8 +29,7 @@ labels = {data.Dark: "Dark",
           data.NonLinearityCalibration: "NonLinearityCalibration",
           data.BadPixelMap: "BadPixelMap",
           data.KGain : "KGain",
-          data.NoiseMap: "NoiseMap",
-          data.BiasOffset: "BiasOffset",
+          data.DetectorNoiseMaps: "DetectorNoiseMaps",
           data.DetectorParams : "DetectorParams"}
 
 class CalDB:
