@@ -152,8 +152,8 @@ def frameProc(frame, offset_colroi, emgain):
 def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
                      norm_val = 2500, min_write = 800.0, max_write = 10000.0,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
-                     fit_upp_cutoff1 = -2, fit_upp_cutoff2 = -3,
-                     fit_low_cutoff1 = 2, fit_low_cutoff2 = 1,
+                     pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
+                     pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=True, plot_outdir='figures', show_plot=False,
                      verbose=False):
     """
@@ -224,16 +224,16 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         linear fit. Lower limit.
       rms_upp_limit (float): (Optional) rms relative error selection limits for
         linear fit. Upper limit. rms_upp_limit must be greater than rms_low_limit.
-      fit_upp_cutoff1 (int): (Optional) polyfit upper cutoff. The following limits were
+      pfit_upp_cutoff1 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
         this is the upper value applied to select the data to be fitted.
-      fit_upp_cutoff2 (int): (Optional) polyfit upper cutoff. The following limits were
+      pfit_upp_cutoff2 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
         this is the upper value applied to select the data to be fitted.
-      fit_low_cutoff1 (int): (Optional) polyfit upper cutoff. The following limits were
+      pfit_low_cutoff1 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_low_limit < rms_y_rel_err < rms_upp_limit,
         this is the lower value applied to select the data to be fitted.
-      fit_low_cutoff2 (int): (Optional) polyfit upper cutoff. The following limits were
+      pfit_low_cutoff2 (int): (Optional) polyfit upper cutoff. The following limits were
         determined with simulated frames. If rms_y_rel_err >= rms_upp_limit,
         this is the lower value applied to select the data to be fitted.
       make_plot (bool): (Optional) generate and store plots. Default is True.
@@ -368,14 +368,14 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         raise TypeError('rms_low_limit is not a number')
     if not isinstance(rms_upp_limit, (float, int)):
         raise TypeError('rms_upp_limit is not a number')
-    if not isinstance(fit_upp_cutoff1, (float, int)):
-        raise TypeError('fit_upp_cutoff1 is not a number')
-    if not isinstance(fit_upp_cutoff2, (float, int)):
-        raise TypeError('fit_upp_cutoff2 is not a number')
-    if not isinstance(fit_low_cutoff1, (float, int)):
-        raise TypeError('fit_low_cutoff1 is not a number')
-    if not isinstance(fit_low_cutoff2, (float, int)):
-        raise TypeError('fit_low_cutoff2 is not a number')
+    if not isinstance(pfit_upp_cutoff1, (float, int)):
+        raise TypeError('pfit_upp_cutoff1 is not a number')
+    if not isinstance(pfit_upp_cutoff2, (float, int)):
+        raise TypeError('pfit_upp_cutoff2 is not a number')
+    if not isinstance(pfit_low_cutoff1, (float, int)):
+        raise TypeError('pfit_low_cutoff1 is not a number')
+    if not isinstance(pfit_low_cutoff2, (float, int)):
+        raise TypeError('pfit_low_cutoff2 is not a number')
 
     if make_plot is True:
         # Avoid issues with importing matplotlib on headless servers without GUI
@@ -752,11 +752,11 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         if rms_y_rel_err < rms_low_limit:
             p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
         elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
-            p1 = np.polyfit(filt_exp_times_sorted[fit_low_cutoff1:fit_upp_cutoff1], 
-                            corr_mean_signal_sorted[fit_low_cutoff1:fit_upp_cutoff1], 1)
+            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
+                            corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
         else:
-            p1 = np.polyfit(filt_exp_times_sorted[fit_low_cutoff2:fit_upp_cutoff2], 
-                            corr_mean_signal_sorted[fit_low_cutoff2:fit_upp_cutoff2], 1)
+            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
+                            corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
         y1 = np.polyval(p1, filt_exp_times_sorted)
         
         if make_plot:
@@ -880,7 +880,6 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     
     means_min_max = np.array(means_min_max)
     
-    breakpoint()
     return (headers, nonlin_arr3, csv_lines, means_min_max)
 
 def nonlin_dataset_2_stack(dataset):
