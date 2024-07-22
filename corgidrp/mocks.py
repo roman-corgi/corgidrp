@@ -380,10 +380,6 @@ def create_astrom_data(field_path, filedir=None):
     # Make filedir if it does not exist
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
-
-    cal_field = ascii.read(field_path)
-    cal_SkyCoords = SkyCoord(ra= cal_field['RA'], dec= cal_field['DEC'], 
-                             unit='deg', frame='icrs')
     
     # hard coded image properties
     size = (1024, 1024)
@@ -394,6 +390,13 @@ def create_astrom_data(field_path, filedir=None):
     platescale = 21.8   #[mas]
     rotation = 45       #[deg]
     fwhm = 3
+    subfield_radius = 0.02 #[deg]
+    
+    # load in the field data and restrict to 0.02 [deg] radius around target
+    cal_field = ascii.read(field_path)
+    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - subfield_radius) & (cal_field['DEC'] <= target[1] + subfield_radius))]
+
+    cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
 
     # create the simulated image header
     vert_ang = np.radians(rotation)
@@ -422,15 +425,15 @@ def create_astrom_data(field_path, filedir=None):
 
     # create the image data
     xpix, ypix = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
-    xpix_inds = np.where((xpix >= 0) & (xpix <= 1024) & (ypix >= 0) & (ypix <= 1024))[0]
-    ypix_inds = np.where((ypix >= 0) & (ypix <= 1024) & (xpix >= 0) & (xpix <= 1024))[0]
-    xpix = xpix[xpix_inds]
-    ypix = ypix[ypix_inds]
+    pix_inds = np.where((xpix >= 0) & (xpix <= 1024) & (ypix >= 0) & (ypix <= 1024))[0]
 
-    amplitudes = np.power(10, ((cal_field['VMAG'] - 22.5) / (-2.5))) * 10
+    xpix = xpix[pix_inds]
+    ypix = ypix[pix_inds]
+
+    amplitudes = np.power(10, ((subfield['VMAG'][pix_inds] - 22.5) / (-2.5))) * 10  
 
     # inject gaussian psf stars
-    for xpos, ypos, amplitude in zip(xpix, ypix, amplitudes):
+    for xpos, ypos, amplitude in zip(xpix, ypix, amplitudes):  
         stampsize = int(np.ceil(3 * fwhm))
         sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
         
@@ -479,6 +482,9 @@ def create_astrom_data(field_path, filedir=None):
     # load as an image object
     frames = []
     prihdr, exthdr = create_default_headers()
+    prihdr['RA'] = target[0]
+    prihdr['DEC'] = target[1]
+
     newhdr = fits.Header(new_hdr)
     frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
     filename = "simcal_astrom.fits"
@@ -487,14 +493,9 @@ def create_astrom_data(field_path, filedir=None):
         guess = Table()
         guess['x'] = [int(x) for x in xpix]
         guess['y'] = [int(y) for y in ypix]
-        guess['RA'] = cal_SkyCoords[xpix_inds].ra
-        guess['DEC'] = cal_SkyCoords[ypix_inds].dec
+        guess['RA'] = cal_SkyCoords[pix_inds].ra
+        guess['DEC'] = cal_SkyCoords[pix_inds].dec
         ascii.write(guess, filedir+'/guesses.csv', overwrite=True)
-
-        center = Table()
-        center['RA'] = [target[0]]
-        center['DEC'] = [target[1]]
-        ascii.write(center, filedir+'/target_guess.csv', overwrite=True)
 
         frame.save(filedir=filedir, filename=filename)
 
