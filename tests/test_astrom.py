@@ -1,7 +1,8 @@
 import os
 import numpy as np
 import pytest
-
+import sys
+sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp
 from corgidrp import data, mocks, astrom
 import astropy
@@ -23,8 +24,6 @@ def test_astrom():
     corgidrp.mocks.create_astrom_data(field_path=field_path, filedir=datadir)
 
     image_path = os.path.join(datadir, 'simcal_astrom.fits')
-    # guess_path = os.path.join(datadir, 'guesses.csv')
-    # target_path = os.path.join(datadir, 'target_guess.csv')
 
     # open the image
     dataset = corgidrp.data.Dataset([image_path])

@@ -75,8 +75,8 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
         
     """
     #### Centroid on location of star ###
-    yind = ystar_guess
-    xind = xstar_guess
+    yind = int(ystar_guess)
+    xind = int(xstar_guess)
         
     ymin = yind - rad
     ymax = yind + rad + 1
