@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pytest
 
 import corgidrp
 from corgidrp import data, mocks, astrom
@@ -22,7 +23,7 @@ def test_astrom():
     corgidrp.mocks.create_astrom_data(field_path=field_path, filedir=datadir)
 
     image_path = os.path.join(datadir, 'simcal_astrom.fits')
-    guess_path = os.path.join(datadir, 'guesses.csv')
+    # guess_path = os.path.join(datadir, 'guesses.csv')
     # target_path = os.path.join(datadir, 'target_guess.csv')
 
     # open the image
@@ -31,7 +32,7 @@ def test_astrom():
     assert type(dataset[0]) == corgidrp.data.Image
 
     # perform the astrometric calibration
-    astrom_cal = corgidrp.astrom.boresight_calibration(input_dataset=dataset, guesses=guess_path)
+    astrom_cal = corgidrp.astrom.boresight_calibration(input_dataset=dataset, field_path=field_path)
     assert len(astrom_cal.data) == 4
 
     # the data was generated to have the following image properties
@@ -39,22 +40,16 @@ def test_astrom():
     expected_northangle = 45
 
     # check orientation is correct within 0.3 [deg]
-    assert np.abs(expected_platescale - astrom_cal.platescale) < 0.5  # not sure how accurate this needs to be
-    assert np.abs(expected_northangle - astrom_cal.northangle) < 0.3
+    # and plate scale is correct within 0.5 [mas] (arbitrary)
+    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.3)
 
-    # check that derived center coordinate falls within the field limits/ skycoords used
-    guesses = ascii.read(guess_path)
+    # check that the center is correct within 30 [mas]
+    # the simulated image should have no shift from the target
+    target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
-    assert ra >= np.min(guesses['RA'])
-    assert ra <= np.max(guesses['RA'])
-    assert dec >= np.min(guesses['DEC'])
-    assert dec <= np.max(guesses['DEC'])
-
-    # the image was generated to have no offset, so check that boresight center is close to target
-    expected_ra, expected_dec = dataset[0].ext_hdr['CRVAL1'], dataset[0].ext_hdr['CRVAL2']
-    error_window = (30 * astropy.units.mas).to(astropy.units.deg).value
-    assert np.abs(expected_ra - ra) < error_window
-    assert np.abs(expected_dec - dec) < error_window
+    assert ra == pytest.approx(target[0], abs=0.0000083)
+    assert dec == pytest.approx(target[1], abs=0.0000083)
 
 if __name__ == "__main__":
     test_astrom()
