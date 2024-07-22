@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
+from corgidrp.calibrate_kgain import CalKgainException
 
 from corgidrp import check
 
