@@ -377,20 +377,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
         transfer curve (in e-/DN). The expected value of kgain for EXCAM with
-        flight readout sequence should be between 8 and 9 e-/DN.
-
-      read_noise_gauss (float): (KGain header) read noise estimate from the prescan
-        regions (in e-), calculated from the Gaussian fit std devs (in DN)
-        multiplied by kgain. This value should be considered the true read noise,
-        not affected by the fixed pattern noise. 
-      read_noise_stdev (float): (KGain header) read noise estimate from the prescan
-        regions (in e-), calculated from simple std devs (in DN) multiplied by
-        kgain. This value should be larger than read_noise_gauss and is affected
-        by the fixed pattern noise.
-      ptc (np.array): (KGain HDU extension) array of size N x 2, where N is the
-        number of bins set by the 'signal_bins_N' parameter in the dictionary
-        kgain_params. The first column is the mean (DN) and the second column is
-        standard deviation (DN) corrected for read noise.
+        flight readout sequence should be between 8 and 9 e-/DN
     """
     # cast dataset objects into np arrays for convenience
     cal_list, mean_frame_list = kgain_dataset_2_list(dataset_kgain)
