@@ -185,6 +185,269 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
+def find_source_locations(dataset, threshold=100, sigma=3, mask_rad=1):
+    ''' 
+    Used to find to [pixel, pixel] locations of the sources in an image
+    
+    Args:
+        dataset (corgidrp.data.Dataset): Dataset with at least one image to perform the search
+        threshold (int): Number of stars to find (default 100)
+        sigma (int): Stddev of point source psf (default: 3 pixels)
+        mask_rad (int): Radius of mask for stars (in fwhm, default: 1 == 1fwhm)
+    
+    Returns:
+        sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations
+    
+    '''
+    # create a place to store the location arrays
+    image = np.copy(dataset[0].data)
+    xs = np.empty(threshold) * np.nan
+    ys = np.empty(threshold) * np.nan
+    
+    fwhm = sigma * 2.355 * mask_rad
+        
+    i = 0
+    while i < threshold:
+        ind = np.where(image == np.max(image))
+        if len(ind) > 2:
+            ind = ind[0:2]
+
+        # record the location of the star
+        image_y, image_x = np.shape(image)
+        x = ind[1][0]
+        y = ind[0][0]
+        
+        if i > 2:
+            if (ys[i-1] == y and xs[i-1] == x):
+                break
+            
+        ys[i] = y
+        xs[i] = x
+    
+        # mask out the image at this location
+        if (x - fwhm) < 0:  # left edge
+            startx = 0
+            endx = x + int(fwhm) + 1
+            
+            if (y - fwhm) < 0:  # bottom left corner
+                starty = 0
+                endy = y + int(fwhm) + 1
+                
+            elif (y + fwhm) > (image_y - 1):  # upper left corner
+                starty = y - int(fwhm)
+                endy = image_y - 1
+
+            else:
+                starty = y - int(fwhm)
+                endy = y + int(fwhm) + 1
+        
+        elif (x + fwhm) > (image_x - 1):  # right edge
+            startx = x - int(fwhm)
+            endx = image_x - 1
+            
+            if (y - fwhm) < 0:  # bottom right corner
+                starty = 0
+                endy = y + int(fwhm) + 1
+                
+            elif (y + fwhm) > (image_y - 1):  # upper right corner
+                starty = y - int(fwhm)
+                endy = image_y - 1
+
+            else:
+                starty = y - int(fwhm)
+                endy = y + int(fwhm) + 1
+
+        else:
+            startx = x - int(fwhm)
+            endx = x + int(fwhm) + 1
+            
+            if (y - fwhm) < 0:  # bottom
+                starty = 0
+                endy = y + int(fwhm) + 1
+                
+            elif (y + fwhm) > (image_y - 1):  # upper
+                starty = y - int(fwhm)
+                endy = image_y - 1
+
+            else:
+                starty = y - int(fwhm)
+                endy = y + int(fwhm) + 1
+        
+        stamp =  image[starty: endy, startx: endx]
+
+        image[starty: endy, startx: endx] = np.zeros(np.shape(stamp))
+        
+        i += 1        
+    # record the locations in an astropy.table
+    sources = astropy.table.Table()
+    sources['x'] = xs[~np.isnan(xs)]
+    sources['y'] = ys[~np.isnan(ys)]
+    
+    return sources
+
+def match_sources(dataset, sources, field_path, comparison_threshold=25):
+    ''' 
+    Function to find the corresponding RA/Dec positions to image sources, given a particular field.
+
+    Args:
+        dataset (corgidrp.data.Dataset): Dataset with at least one image to perform the field match
+        sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match
+        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
+        comparison_threshold (int): How many stars in the field to consider for the initial match
+
+    Returns:
+        skycoords (astropy.coordinates.SkyCoord): RA/Dec positions of N sources in our image
+        
+    '''
+    # ensure the search field data has the proper column names
+    field = ascii.read(field_path)
+    if 'RA' and 'DEC' and 'VMAG' not in field.colnames:
+        raise ValueError('field data must have column names [\'RA\',\'DEC\', \'VMAG\']')
+
+    # gather the pixel locations for the (3) brightest sources in the image
+    source1, source2, source3 = sources[0], sources[1], sources[2]
+
+    # define the side length to perimeter ratio for the triangle made from these sources
+    l1, l2, l3 = np.sqrt(np.power(source1['x'] - source2['x'], 2) + np.power(source1['y'] - source2['y'], 2)), np.sqrt(np.power(source2['x'] - source3['x'], 2) + np.power(source2['y'] - source3['y'], 2)), np.sqrt(np.power(source3['x'] - source1['x'], 2) + np.power(source3['y'] - source1['y'], 2))
+    perimeter = l1 + l2 + l3
+
+    # the shortest to longest sides get reordered to l1, l2, l3
+    if l1 < l2:
+        if l2 < l3:
+            l1, l2, l3 = l1, l2, l3
+        elif l3 < l1:
+            l1, l2, l3 = l3, l1, l2
+        else:
+            l1, l2, l3 = l1, l3, l2
+    else: 
+        if l1 < l3:
+            l1, l2, l3 = l2, l1, l3
+        elif l3 < l2:
+            l1, l2, l3  = l3, l2, l1
+        else:
+            l1, l2, l3 = l2, l3, l1
+    
+    a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
+
+    # define a search field and load in RA, DEC, Vmag
+    field = ascii.read(field_path)
+    target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
+    rad = 0.02  # the subfield radius around the target in [deg]
+    subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
+
+    bright_order_subfield = subfield.copy()
+    bright_order_subfield.sort(keys='VMAG')
+    brightest_field = bright_order_subfield[:comparison_threshold]
+
+    # create all combinations of triangles with the brightest field sources
+    combos = list(compute_combinations(range(len(brightest_field)), r=3))
+
+    #a_prime, b_prime, c_prime = np.empty(len(combos)), np.empty(len(combos)), np.empty(len(combos))
+    skycoords = SkyCoord(ra= brightest_field['RA'], dec= brightest_field['DEC'], unit='deg')
+    field_side_lengths = np.empty((len(combos), 3))
+    best_sky_ind = np.nan
+    smallest_lsq = 1e10
+    best_ind = np.nan
+
+    for i, ind in enumerate(combos):
+        j, k, l = ind
+        s1, s2, s3 = skycoords[j], skycoords[k], skycoords[l]
+
+        len1, len2, len3 = s1.separation(s2).value, s2.separation(s3).value, s3.separation(s1).value
+
+        # sort from shortest to longest sides
+        if len1 < len2:
+            if len2 < len3:
+                len1, len2, len3 = len1, len2, len3
+            elif len3 < len1:
+                len1, len2, len3 = len3, len1, len2
+            else:
+                len1, len2, len3 = len1, len3, len2
+        else: 
+            if len1 < len3:
+                len1, len2, len3 = len2, len1, len3
+            elif len3 < len2:
+                len1, len2, len3  = len3, len2, len1
+            else:
+                len1, len2, len3 = len2, len3, len1
+
+        field_side_lengths[i] = np.array([len1, len2, len3])
+        
+        perimeter = len1 + len2 + len3
+        ap, bp, cp = len1/perimeter, len2/perimeter, len3/perimeter
+
+        # find the best fit to the brightest image triangle
+        lstsq = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
+        if lstsq < smallest_lsq:
+            smallest_lsq = lstsq
+            best_ind = i
+            best_sky_ind = ind
+
+
+    # now use the side length to separations with best fit triangle to define a pseudo plate scale
+    best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
+    initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
+
+    # find pseudo north angle from difference in triangle rotations from the target value
+    rot_image = np.array([angle_between((dataset[0].ext_hdr['CRPIX1'], dataset[0].ext_hdr['CRPIX2']), s) for s in [source1, source2, source3]])
+    rot_field = np.array([target_skycoord.position_angle(t).deg for t in skycoords[[best_sky_ind]]])
+
+    initial_northangle = np.abs(np.mean(rot_field - rot_image))
+
+    # make a new image header with the pseudo platescale and north angle to find matchings
+    # allow for some error window and assign the closest star to each source
+    image = dataset[0].data
+    vert_ang = np.radians(initial_northangle)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (initial_platescale)
+
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+    new_hdr['CRPIX1'] = np.shape(image)[1] // 2
+    new_hdr['CRPIX2'] = np.shape(image)[0] // 2
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+    new_hdr['CDELT1'] = (initial_platescale)
+    new_hdr['CDELT2'] = (initial_platescale)
+    new_hdr['CRVAL1'] = target[0]
+    new_hdr['CRVAL2'] = target[1]
+    w = astropy.wcs.WCS(new_hdr)
+
+    # transform the subfield skycoords to pixel locations
+    subfield_skycoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg')
+    x_sky_to_pix, y_sky_to_pix = astropy.wcs.utils.skycoord_to_pixel(subfield_skycoords, wcs=w)
+    # restrict to only the sources that fall within 1024 x 1024 pixels
+    image_inds = ((x_sky_to_pix >= 0) & (x_sky_to_pix <= 1024) & (y_sky_to_pix >= 0) & (y_sky_to_pix <= 1024))
+    x_predict = x_sky_to_pix[image_inds]
+    y_predict = y_sky_to_pix[image_inds]
+    subfield_skycoords_in_image = subfield_skycoords[image_inds]
+
+    # for each source in the image, find the closest x, y predicted position and record the corresponding RA, DEC in the table
+    matched_ra, matched_dec = np.empty(len(sources)), np.empty(len(sources))
+
+    for i, (x, y)in enumerate(zip(sources['x'], sources['y'])):
+        lst = 1e6
+        i_match = np.nan
+        for ii, (xp, yp) in enumerate(zip(x_predict, y_predict)):
+            sq = (x - xp)**2 + (y - yp)**2
+            if sq < lst:
+                lst = sq
+                i_match = ii
+        matched_ra[i] = subfield_skycoords_in_image[i_match].ra.value
+        matched_dec[i] = subfield_skycoords_in_image[i_match].dec.value
+    
+    matched_image_to_field = astropy.table.Table()
+    matched_image_to_field['x'] = sources['x']
+    matched_image_to_field['y'] = sources['y']
+    matched_image_to_field['RA'] = matched_ra
+    matched_image_to_field['DEC'] = matched_dec
+
+    return matched_image_to_field
+
 def compute_platescale_and_northangle(image, source_info, center_coord):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
@@ -385,45 +648,36 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def boresight_calibration(input_dataset, guesses):
+def boresight_calibration(input_dataset, field_path, threshold=100, sigma=3, mask_rad=1, comparison_threshold=25):
     """
     Perform the boresight calibration of a dataset.
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a single image for astrometric calibration
-        guesses (str): Path to file with x,y [pixel] locations of sources AND RA,DEC [deg] true source positions
-    #    target_coordinate (str): Path to file with RA,DEC coordinate of target source 
-        
+        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
+        threshold (int): Number of stars to find (default 25)
+        sigma (int): Stddev of point source psf (default: 3 pixels)
+        mask_rad (int): Radius of mask for stars (in fwhm, default: 1 == 1fwhm)
+        comparison_threshold (int): How many stars in the field to consider for the initial match
+
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
         
     """
-    if type(guesses) is not str:
-        raise TypeError('guesses must be a str')
-    else:
-        guesses = ascii.read(guesses)
-        if 'x' and 'y' and 'RA' and 'DEC' not in guesses.colnames:
-            raise ValueError('guesses must have column names [\'x\',\'y\',\'RA\',\'DEC\']')
-
-    # if type(target_coordinate) is not str:
-    #     raise TypeError('target_coordinate must be a str')
-    # else:
-    #     target = ascii.read(target_coordinate)
-    #     if 'RA' and 'DEC' not in target.colnames:
-    #         raise ValueError('target_coordinate must have column names [\'RA\',\'DEC\']')
-    #     else:
-    #         target_coordinate = (target['RA'][0], target['DEC'][0])
-
     # load in the data
     dataset = input_dataset.copy()
     image = dataset[0].data
 
     # call the target coordinates from the image header
-    target_coordinate = (dataset[0].ext_hdr['CRVAL1'], dataset[0].ext_hdr['CRVAL2'])
+    target_coordinate = (dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC'])
+
+    # find sources in image and match to field 
+    found_sources = find_source_locations(input_dataset, threshold=threshold, sigma=sigma, mask_rad=mask_rad)
+    matched_sources = match_sources(input_dataset, found_sources, field_path, comparison_threshold=comparison_threshold)
 
     # compute the calibration properties
-    cal_properties = compute_platescale_and_northangle(image=image, source_info=guesses, center_coord=target_coordinate)
-    ra, dec = compute_boresight(image=image, source_info=guesses, target_coordinate=target_coordinate, cal_properties=cal_properties)
+    cal_properties = compute_platescale_and_northangle(image=image, source_info=matched_sources, center_coord=target_coordinate)
+    ra, dec = compute_boresight(image=image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
 
     # return a single AstrometricCalibration data file
     astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1]])
