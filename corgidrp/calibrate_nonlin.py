@@ -880,6 +880,7 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     
     means_min_max = np.array(means_min_max)
     
+    breakpoint()
     return (headers, nonlin_arr3, csv_lines, means_min_max)
 
 def nonlin_dataset_2_stack(dataset):

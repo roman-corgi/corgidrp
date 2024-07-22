@@ -313,7 +313,7 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
 def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
                     min_val=800, max_val=3000, binwidth=68, make_plot=True,
                     plot_outdir='figures', show_plot=False,
-                    log_plot1=-1, log_plot2=4, log_plot3=200, verbose=False):
+                    logspace_start=-1, logspace_stop=4, logspace_num=200, verbose=False):
     """
     Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
@@ -368,9 +368,9 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
       plot_outdir (str): (Optional) Output directory to store figues. Default is
         'figures'. The default directory is not tracked by git.
       show_plot (bool): (Optional) display the plots. Default is False.
-      log_plot1 (int): log plot min value in np.logspace.
-      log_plot2 (int): log plot max value in np.logspace.
-      log_plot3 (int): Number of elements in np.logspace.
+      logspace_start (int): log plot min value in np.logspace.
+      logspace_stop (int): log plot max value in np.logspace.
+      logspace_num (int): Number of elements in np.logspace.
       verbose (bool): (Optional) display various diagnostic print messages.
         Default is False. 
     
@@ -436,11 +436,11 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         raise CalKgainException('binwidth must be >= 10.')
     if binwidth > 800:
         raise CalKgainException('binwidth must be < 800.')
-    if not isinstance(log_plot1, (float, int)):
+    if not isinstance(logspace_start, (float, int)):
         raise TypeError('logplot1 is not a number')
-    if not isinstance(log_plot2, (float, int)):
+    if not isinstance(logspace_stop, (float, int)):
         raise TypeError('logplot2 is not a number')
-    if not isinstance(log_plot3, (float, int)):
+    if not isinstance(logspace_num, (float, int)):
         raise TypeError('logplot3 is not a number')
     
     # get relevant constants
@@ -744,7 +744,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     if make_plot:
         fname = 'kgain_ptc'
         # Create log-spaced averages for plotting
-        full_range_averages = np.logspace(log_plot1, log_plot2, log_plot3)
+        full_range_averages = np.logspace(logspace_start, logspace_stop, logspace_num)
         
         plt.figure(num=3, figsize=(20, 10))
         
