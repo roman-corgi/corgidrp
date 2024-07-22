@@ -337,7 +337,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         build a mean frame. All the frames must have the same exposure time,
         such that the net mean counts in the pupil region is a few thousand DN
         (2000 to 4000 DN recommended;
-        note: unity EM gain is recommended when k-gain is the primary desired
+        notice that unity EM gain is recommended when k-gain is the primary desired
         product, since it is known more accurately than non-unity values. This
         mean frame is used to select pixels with similar illumination for
         calculating variances (since the pupil illumination is not perfectly uniform).
@@ -361,7 +361,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         counts. (< 6,000 recommended)
       binwidth (int):
         (Optional) Width of each bin for calculating std devs and means from each 
-        sub-stack in dataset_kgain. Maximum value of binwidth is 800. NOTE: small 
+        sub-stack in dataset_kgain. Maximum value of binwidth is 800. Notice that small 
         values increase computation time.
         (minimum 10; binwidth between 65 and 75 recommended)
       make_plot (bool): (Optional) generate and store plots. Default is True.
