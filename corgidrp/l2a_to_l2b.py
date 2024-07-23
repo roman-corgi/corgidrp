@@ -66,7 +66,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
             full_frame = False
         else:
             raise Exception('Frames in input_dataset do not have valid SCI full-frame or image dimensions.')
-        dark = build_synthesized_dark(dark, input_dataset, detector_regions=detector_regions, full_frame=full_frame)
+        dark = build_synthesized_dark(input_dataset, dark, detector_regions=detector_regions, full_frame=full_frame)
         if outputdir is None:
             outputdir = '.' #current directory
         dark.save(filedir=outputdir)

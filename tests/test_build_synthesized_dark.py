@@ -58,15 +58,15 @@ def main():
 
     def test_success():
         """Good inputs complete as expected"""
-        build_synthesized_dark(noise_maps, dataset)
-        build_synthesized_dark(noise_maps, dataset, detector_areas, full_frame=True)
+        build_synthesized_dark(dataset, noise_maps)
+        build_synthesized_dark(dataset, noise_maps, detector_areas, full_frame=True)
         pass
 
     test_success()
 
     def test_output_size():
         """output is correct size"""
-        M = build_synthesized_dark(noise_maps, dataset)
+        M = build_synthesized_dark(dataset, noise_maps)
         assert(M.data.shape == (im_rows, im_cols))
         pass
 
@@ -100,7 +100,7 @@ def main():
         n_maps = create_noise_maps(Fd, Ferr, Fdq, Cd, Cerr, Cdq, Dd, Derr, Ddq)
         dset = reset_g_t(dataset, g, t)
 
-        M = build_synthesized_dark(n_maps, dset, full_frame=True)
+        M = build_synthesized_dark(dset, n_maps, full_frame=True)
         assert(np.max(np.abs(M.data - target)) < tol)
         assert(np.max(np.abs(M.err - exp_err)) < tol)
         assert(np.max(np.abs(M.dq - exp_dq)) < tol)
@@ -142,10 +142,10 @@ def main():
                                             Cerr, Cdq, Dd, Derr, Ddq)
         dset = reset_g_t(dataset, g, t)
 
-        F0 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, 1, t))
-        M1 = build_synthesized_dark(noise_maps, reset_g_t(dataset, 1, t))
-        M2 = build_synthesized_dark(noise_maps, reset_g_t(dataset, 2, t))
-        M4 = build_synthesized_dark(noise_maps, reset_g_t(dataset, 4, t))
+        F0 = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
+        M1 = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps)
+        M2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps)
+        M4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps)
         dg1 = M1.data-F0.data
         dg2 = M2.data-F0.data
         dg4 = M4.data-F0.data
@@ -160,9 +160,9 @@ def main():
         """change in dark goes as t"""
         tol = 1e-13
 
-        M0 = build_synthesized_dark(noise_maps, reset_g_t(dataset, g, 0))
-        M2 = build_synthesized_dark(noise_maps, reset_g_t(dataset, g, 2))
-        M4 = build_synthesized_dark(noise_maps, reset_g_t(dataset, g, 4))
+        M0 = build_synthesized_dark(reset_g_t(dataset, g, 0), noise_maps)
+        M2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps)
+        M4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps)
         dg2 = M2.data-M0.data
         dg4 = M4.data-M0.data
 
@@ -177,11 +177,11 @@ def main():
         noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, Cd,
                                             Cerr, Cdq, 0*Dd, Derr, Ddq)
 
-        M = build_synthesized_dark(noise_maps0, reset_g_t(dataset, 1, t))
-        G2 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, 2, t))
-        G4 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, 4, t))
-        T2 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, g, 2))
-        T4 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, g, 4))
+        M = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
+        G2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps0)
+        G4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps0)
+        T2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps0)
+        T4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps0)
         dg2 = G2.data-M.data
         dg4 = G4.data-M.data
         dt2 = T2.data-M.data
@@ -200,11 +200,11 @@ def main():
         noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, 0*Cd,
                                             Cerr, Cdq, 0*Dd, Derr, Ddq)
 
-        M = build_synthesized_dark(noise_maps0, reset_g_t(dataset, 1, t))
-        G2 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, 2, t))
-        G4 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, 4, t))
-        T2 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, g, 2))
-        T4 = build_synthesized_dark(noise_maps0, reset_g_t(dataset, g, 4))
+        M = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
+        G2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps0)
+        G4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps0)
+        T2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps0)
+        T4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps0)
 
         assert((M.data == 0).all())
         assert((G2.data == 0).all())
@@ -222,7 +222,7 @@ def main():
             nm = create_noise_maps(Fd, Ferr, Fdq, Cd,
                                             Cerr, Cdq, perr, Derr, Ddq)
             with pytest.raises(TypeError):
-                build_synthesized_dark(nm, dataset)
+                build_synthesized_dark(dataset, nm)
             pass
         pass
 
@@ -234,7 +234,7 @@ def main():
             nm = create_noise_maps(Fd, Ferr, Fdq, perr,
                                             Cerr, Cdq, Dd, Derr, Ddq)
             with pytest.raises(TypeError):
-                build_synthesized_dark(nm, dataset)
+                build_synthesized_dark(dataset, nm)
             pass
         pass
 
@@ -245,11 +245,11 @@ def main():
 
         for perr in [-10, -1, 0, 0.999]:
             with pytest.raises(TypeError):
-                build_synthesized_dark(noise_maps, reset_g_t(dataset, perr, t))
+                build_synthesized_dark(reset_g_t(dataset, perr, t), noise_maps)
             pass
 
         for perr in [1, 1.5, 10]:
-            build_synthesized_dark(noise_maps, reset_g_t(dataset, perr, t))
+            build_synthesized_dark(reset_g_t(dataset, perr, t), noise_maps)
             pass
         pass
 

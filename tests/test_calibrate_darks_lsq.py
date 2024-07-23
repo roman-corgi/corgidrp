@@ -5,7 +5,7 @@ import numpy as np
 
 from corgidrp.darks import (calibrate_darks_lsq,
             CalDarksLSQException)
-from corgidrp.detector import slice_section, imaging_area_geom
+from corgidrp.detector import slice_section, imaging_area_geom, imaging_slice
 from corgidrp.mocks import create_synthesized_master_dark_calib
 from corgidrp.mocks import detector_areas_test as dat
 from corgidrp.data import DetectorNoiseMaps, DetectorParams, Dataset
@@ -50,59 +50,46 @@ warnings.filterwarnings('ignore', category=RuntimeWarning,
 def test_expected_results_sub():
     """Outputs are as expected, for smaller-sized frames."""
 
-    (F_map, C_map, D_map, bias_offset, bias_offset_up, bias_offset_low,
-        F_image_map, C_image_map,
-        D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
-        C_image_mean, D_image_mean, unreliable_pix_map, F_std_map,
-        C_std_map, D_std_map, stacks_err, noise_maps) = \
-            calibrate_darks_lsq(dataset, detector_params, dat)
+    noise_maps = calibrate_darks_lsq(dataset, detector_params, dat)
+    F_image_map = imaging_slice('SCI', noise_maps.FPN_map, dat)
     # F
     assert (np.isclose(np.mean(F_image_map), FPN//eperdn*eperdn,
                                 atol=FPN/5))
-    assert(np.isclose(F_image_mean, FPN//eperdn*eperdn,
-                                atol=FPN/5))
     # No FPN was inserted in non-image areas (so that bias subtraction
     #wouldn't simply remove it), so it should be 0 in prescan
-    F_prescan_map = slice_section(F_map, 'SCI', 'prescan', dat)
+    F_prescan_map = slice_section(noise_maps.FPN_map, 'SCI', 'prescan', dat)
     assert(np.isclose(np.nanmean(F_prescan_map), 0, atol=5))
     # C
-    assert(np.isclose(np.nanmean(C_map), cic, atol=0.01))
-    assert(np.isclose(np.mean(C_image_map), cic, atol=0.01))
-    assert(np.isclose(C_image_mean, cic, atol=0.01))
-    assert(len(C_map[C_map < 0]) == 0)
-    assert(len(C_image_map[C_image_map < 0]) == 0)
+    assert(np.isclose(np.nanmean(noise_maps.CIC_map), cic, atol=0.01))
+    assert(len(noise_maps.CIC_map[noise_maps.CIC_map < 0]) == 0)
     # D
+    D_image_map = imaging_slice('SCI', noise_maps.DC_map, dat)
     assert(np.isclose(np.mean(D_image_map),
                     dark_current, atol=2e-4))
-    assert(len(D_map[D_map < 0]) == 0)
-    assert(len(D_image_map[D_image_map < 0]) == 0)
-    assert(np.isclose(D_image_mean, dark_current, atol=2e-4))
+    assert(len(noise_maps.DC_map[noise_maps.DC_map < 0]) == 0)
     # D_map: 0 everywhere except image area
     im_rows, im_cols, r0c0 = imaging_area_geom('SCI', dat)
     # D_nonimg = D_map[~D_map[r0c0[0]:r0c0[0]+im_rows,
     #             r0c0[1]:r0c0[1]+im_cols]]
+    D_map = noise_maps.DC_map.copy()
     D_map[r0c0[0]:r0c0[0]+im_rows,
                 r0c0[1]:r0c0[1]+im_cols] = 0
     # now whole map should be 0
     assert(np.nanmin(D_map) == 0)
-    # read_noise
-    assert(np.isclose(read_noise, rn, rtol=0.1))
-    # adjusted R^2:  acceptable fit (the higher N is, the better the fit)
     if N == 30:
         # bias_offset (tolerance of 5 for N=30 since I used a small number
         # of frames for that dataset, especially for the high-gain ones)
-        assert(np.isclose(bias_offset, 0, atol=5)) #in DN
-        assert(np.nanmean(R_map) > 0.1)
+        assert(np.isclose(noise_maps.bias_offset, 0, atol=5)) #in DN
     if N == 600:
-        assert(np.isclose(bias_offset, 0, atol=1)) #in DN
-        assert(np.nanmean(R_map) > 0.7)
+        assert(np.isclose(noise_maps.bias_offset, 0, atol=1)) #in DN
     # dark current only in image area
-    D_std_map_im = D_std_map[r0c0[0]:r0c0[0]+im_rows,
+    D_std_map_im = noise_maps.DC_err[r0c0[0]:r0c0[0]+im_rows,
                                 r0c0[1]:r0c0[1]+im_cols]
     # assert that the std dev coming from the fit itself is < noise itself
     assert(np.nanmean(D_std_map_im) < np.nanmean(D_image_map))
-    assert(np.nanmean(C_std_map) < np.nanmean(C_map))
-    assert(np.nanmean(F_std_map) < np.nanmean(F_map))
+    # noise_maps.CIC_err accounts for the err from the input frames and the
+    # statistical error (std dev across frames), so skip the assertion for CIC here
+    assert(np.nanmean(noise_maps.FPN_err) < np.nanmean(noise_maps.FPN_map))
 
     # save noise map
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
@@ -200,11 +187,11 @@ def test_mean_num():
         ds[i].all_dq[:int(1+len(ds[i])/2),10,12] = 2
 
     with pytest.warns(UserWarning):
-        out = calibrate_darks_lsq(data_set, detector_params, dat)
+        nm_out = calibrate_darks_lsq(data_set, detector_params, dat)
     # last of out is the DetectorNoiseMaps instance
     # And dq is really a 3-frame stack, and all 3 are the same.  So pick one of them.
-    assert out[-1].dq[0,7,8] == 1
-    assert out[-1].dq[0,10,12] == 256
+    assert nm_out.dq[0,7,8] == 1
+    assert nm_out.dq[0,10,12] == 256
 
 
 if __name__ == '__main__':

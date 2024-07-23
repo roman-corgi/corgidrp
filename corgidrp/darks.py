@@ -2,7 +2,7 @@ import numpy as np
 import warnings
 from astropy.io import fits
 
-from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom
+from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, detector_areas
 import corgidrp.check as check
 from corgidrp.data import DetectorNoiseMaps, Dark
 
@@ -186,6 +186,9 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         masked for half or more of the frames, making them unreliable, with
         large err values, but possibly still usable.
     """
+    if detector_regions is None:
+            detector_regions = detector_areas
+
     _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
@@ -421,6 +424,8 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         'B_O_ERR': bias offset error
         'B_O_UNIT': DN
     """
+    if detector_regions is None:
+            detector_regions = detector_areas
 
     datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
     if len(datasets) <= 3:
@@ -734,14 +739,10 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
 
-    return (FPN_map, CIC_map, DC_map, bias_offset, bias_offset_up, bias_offset_low,
-            FPN_image_map, CIC_image_map,
-            DC_image_map, FPNvar, CICvar, DCvar, read_noise, R_map, FPN_image_mean,
-            CIC_image_mean, DC_image_mean, unreliable_pix_map, FPN_std_map,
-            CIC_std_map, DC_std_map, stacks_err, noise_maps)
+    return noise_maps
 
 
-def build_synthesized_dark(noisemaps, dataset, detector_regions=None, full_frame=False):
+def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame=False):
         """
         Assemble a master dark SCI frame (full or image)
         from individual noise components.
@@ -763,11 +764,11 @@ def build_synthesized_dark(noisemaps, dataset, detector_regions=None, full_frame
         C = CIC (clock-induced charge) map
 
         Arguments:
-        noisemaps: corgidrp.data.DetectorNoiseMaps instance.  The noise maps used
-            to build the master dark.
         dataset: corgidrp.data.Dataset instance.  The dataset should consist of
             frames all with the same EM gain and exposure time, which are read
             off from the dataset headers.
+        noisemaps: corgidrp.data.DetectorNoiseMaps instance.  The noise maps used
+            to build the master dark.
         detector_regions: dict.  A dictionary of detector geometry properties.
             Keys should be as found in detector_areas in detector.py. Defaults to
             detector_areas in detector.py.
@@ -781,6 +782,9 @@ def build_synthesized_dark(noisemaps, dataset, detector_regions=None, full_frame
             This contains the master dark in detected electrons.
 
         """
+        if detector_regions is None:
+            detector_regions = detector_areas
+
         noise_maps = noisemaps.copy()
         Fd = noise_maps.FPN_map
         Dd = noise_maps.DC_map
