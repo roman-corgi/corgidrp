@@ -87,7 +87,7 @@ time_stack_arr0 = loaded['array2']
 len_list0 = loaded['array3']
 
 # Load the flux map
-hdul =  fits.open(Path(here,'test_data','FluxMap1024.fits'), ignore_missing_simple=True)
+hdul =  fits.open(Path(here,'test_data','FluxMap1024.fits'))#, ignore_missing_simple=True)
 fluxmap_init = hdul[0].data
 hdul.close()
 fluxmap_init[fluxmap_init < 50] = 0 # cleanup flux map a bit
