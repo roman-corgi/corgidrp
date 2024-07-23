@@ -96,7 +96,7 @@ class CalKgainException(Exception):
 def frameProc(frame, offset_colroi, emgain):
     """ 
     simple row-bias subtraction using prescan region 
-    frame is an L1 SCI-size frame, offset_colroi is the 
+    frame of an L1 SCI-size frame, offset_colroi is the 
     column range in the prescan region to use to calculate 
     the median for each row. EM gain is the actual emgain used 
     to collect the frame.
@@ -317,13 +317,13 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     """
     Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
-    exposure time, this function subtracts the prescan bias from each frame. It 
-    also creates a mean pupil array from a separate stack of frames of uniform 
-    exposure time. The mean pupil array is scaled to the mean of each stack and 
-    statistics (mean and std dev) are calculated for bins from the frames in it. 
-    kgain (e-/DN) is calculated from the means and variances within the 
-    defined minimum and maximum mean values. A photon transfer curve is plotted 
-    from the std dev and mean values from the bins. 
+    exposure time, this function subtracts the prescan bias from each frame
+    (frameProc). It also creates a mean pupil array from a separate stack of
+    frames of uniform exposure time. The mean pupil array is scaled to the mean
+    of each stack and statistics (mean and std dev) are calculated for bins from
+    the frames in it. kgain (e-/DN) is calculated from the means and variances
+    within the defined minimum and maximum mean values. A photon transfer curve
+    is plotted from the std dev and mean values from the bins. 
     
     Args:
       dataset_kgain (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
