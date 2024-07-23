@@ -67,6 +67,9 @@ def test_autoreducing():
         hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
         assert json.dumps(hdr_recipe) == json.dumps(recipe)
 
+    # clean up
+    mycaldb.remove_entry(new_nonlinearity)
+
 
 
 if __name__ == "__main__":
