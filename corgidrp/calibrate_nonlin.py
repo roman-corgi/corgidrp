@@ -130,7 +130,7 @@ class CalNonlinException(Exception):
 def frameProc(frame, offset_colroi, emgain):
     """
     simple row-bias subtraction using prescan region
-    frame is an L1 SCI-size frame, offset_colroi is the
+    frame of an L1 SCI-size frame, offset_colroi is the
     column range in the prescan region to use to calculate
     the median for each row. EM gain is the actual emgain used
     to collect the frame.
@@ -202,8 +202,9 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         a set of at least 30 frames used to generate a mean frame. These frames
         have the same exp time, such that the mean signal in the pupil regions
         is a few thousand DN, which helps identify the pixels containing the 
-        pupil image. They also have unity EM gain. These frames are identified
-        with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
+        pupil image. They also have unity EM gain. A simple row-bias subtraction
+        using prescan region is performed by frameProc(), These frames are
+        identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
       actual_gain_arr (np.array): the array of actual EM gain values (as opposed
         to commanded EM gain) corresponding to the number of EM gain values used
         to construct dataset_nl and in the same order. Note: calibrate_nonlin does
