@@ -37,7 +37,6 @@ gain_arr0 = loaded['array4'] # G = 1, 2, 10, 20
 
 # Load the flux map
 hdul =  fits.open(Path(here,'test_data','FluxMap1024.fits'), ignore_missing_simple=True)
-breakpoint()
 fluxmap_init = hdul[0].data
 hdul.close()
 fluxmap_init[fluxmap_init < 50] = 0 # cleanup flux map a bit
@@ -178,15 +177,15 @@ max_write = 10000
 
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(dataset_nl,
-                        actual_gain_arr, actual_gain_mean_frame, norm_val, min_write, max_write)
+    nonlin_out = calibrate_nonlin(dataset_nl, actual_gain_arr,
+        actual_gain_mean_frame, norm_val, min_write, max_write)
         
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
-    diffs0 = nonlin_arr[:,1] - init_nonlins_arr[:,0] # G = 1
-    diffs1 = nonlin_arr[:,2] - init_nonlins_arr[:,1] # G = 2
-    diffs2 = nonlin_arr[:,3] - init_nonlins_arr[:,2] # G = 10
-    diffs3 = nonlin_arr[:,4] - init_nonlins_arr[:,3] # G = 20
+    diffs0 = nonlin_out.data[1:,1] - init_nonlins_arr[:,0] # G = 1
+    diffs1 = nonlin_out.data[1:,2] - init_nonlins_arr[:,1] # G = 2
+    diffs2 = nonlin_out.data[1:,3] - init_nonlins_arr[:,2] # G = 10
+    diffs3 = nonlin_out.data[1:,4] - init_nonlins_arr[:,3] # G = 20
     # Calculate rms
     rms1 = np.sqrt(np.mean(diffs0**2))
     rms2 = np.sqrt(np.mean(diffs1**2))
@@ -199,31 +198,28 @@ def test_expected_results_nom_sub():
     assert np.less(rms3,0.0035)
     assert np.less(rms4,0.0035)
     # check that the first element in the first column is equal to min_write
-    assert np.equal(nonlin_arr[0,0], min_write)
+    assert np.equal(nonlin_out.data[1,0], min_write)
     # check that the last element in the first column is equal to max_write
-    assert np.equal(nonlin_arr[-1,0], max_write)
+    assert np.equal(nonlin_out.data[-1,0], max_write)
     # check that the unity value is in the correct row
-    norm_ind = np.where(nonlin_arr[:, 1] == 1)[0]
-    assert np.equal(nonlin_arr[norm_ind,1], 1)
-    assert np.equal(nonlin_arr[norm_ind,-1], 1)
+    norm_ind = np.where(nonlin_out.data[1:, 1] == 1)[0]
+    assert np.equal(nonlin_out.data[norm_ind+1,1], 1)
+    assert np.equal(nonlin_out.data[norm_ind+1,-1], 1)
     # check that norm_val is correct
-    assert np.equal(nonlin_arr[norm_ind,0], norm_val)
-    # check one of the header values
-    assert np.equal(headers[1].astype(float), 1)
-    assert np.equal(len(means_min_max),len(actual_gain_arr))
+    assert np.equal(nonlin_out.data[norm_ind+1,0], norm_val)
        
 def test_expected_results_time_sub():
     """Outputs are as expected for the provided frames with 
     datetime values for one EM gain group taken 1 day later."""
-    (headers, nonlin_arr, csv_lines, means_min_max) = calibrate_nonlin(dataset_nl, 
+    nonlin_out = calibrate_nonlin(dataset_nl, 
                         actual_gain_arr, actual_gain_mean_frame, norm_val, min_write, max_write)
      
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
-    diffs0 = nonlin_arr[:,1] - init_nonlins_1_arr[:,0] # G = 1
-    diffs1 = nonlin_arr[:,2] - init_nonlins_1_arr[:,1] # G = 2
-    diffs2 = nonlin_arr[:,3] - init_nonlins_1_arr[:,2] # G = 10
-    diffs3 = nonlin_arr[:,4] - init_nonlins_1_arr[:,3] # G = 20
+    diffs0 = nonlin_out.data[1:,1] - init_nonlins_1_arr[:,0] # G = 1
+    diffs1 = nonlin_out.data[1:,2] - init_nonlins_1_arr[:,1] # G = 2
+    diffs2 = nonlin_out.data[1:,3] - init_nonlins_1_arr[:,2] # G = 10
+    diffs3 = nonlin_out.data[1:,4] - init_nonlins_1_arr[:,3] # G = 20
     # Calculte rms and peak-to-peak differences
     rms1 = np.sqrt(np.mean(diffs0**2))
     rms2 = np.sqrt(np.mean(diffs1**2))

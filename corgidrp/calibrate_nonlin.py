@@ -9,9 +9,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
-from corgidrp.calibrate_kgain import CalKgainException
 
 from corgidrp import check
+import corgidrp.data as data
+from corgidrp.mocks import create_default_headers
+from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params = {
@@ -862,25 +864,22 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     # select rows that satisfy min/max limits
     nonlin_arr2 = nonlin_arr1[nonlin_arr1[:, 0] >= min_write]
     nonlin_arr3 = nonlin_arr2[nonlin_arr2[:, 0] <= max_write]
-    headers_temp = np.array([f"{f:.3e}" for f in actual_gain_arr])
-    first_col_head = 'nan'
-    # insert new header at start of array
-    headers = np.insert(headers_temp, 0, first_col_head)
+    # See data.NonLinearityCalibration doc string for more details:
+    # [0, 1:]: Gain axis values
+    # [1:, 0]: "count" axis value
+    actual_gain_arr = np.insert(actual_gain_arr, 0, np.nan)
+    n_col = len(nonlin_arr3) + 1
+    n_row = len(actual_gain_arr)
+    nonlin_data=np.insert(nonlin_arr3, 0, actual_gain_arr).reshape(n_col,n_row)
     
-    # Create a string buffer
-    output_buffer = io.StringIO()
-    # Write the header
-    output_buffer.write(','.join(headers) + '\n')
-    # Use savetxt to write the data to the buffer
-    np.savetxt(output_buffer, nonlin_arr3, delimiter=',', fmt='%s')
-    # Get the content of the buffer as a string
-    csv_content = output_buffer.getvalue()
-    # Convert the string to a list of strings (one per line)
-    csv_lines = csv_content.split('\n')
+    # Return NonLinearity instance
+    prhd, exthd = create_default_headers()
+    # Just for the purpose of getting the instance created. NEED to clarify the
+    # role of nonlin_arr3 and headers compared to data.NonLinearityCalibration.data
+    nonlin = data.NonLinearityCalibration(nonlin_data,
+        pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_nl)
     
-    means_min_max = np.array(means_min_max)
-    
-    return (headers, nonlin_arr3, csv_lines, means_min_max)
+    return nonlin
 
 def nonlin_dataset_2_stack(dataset):
     """
