@@ -296,7 +296,7 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25):
         comparison_threshold (int): How many stars in the field to consider for the initial match
 
     Returns:
-        skycoords (astropy.coordinates.SkyCoord): RA/Dec positions of N sources in our image
+        matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
         
     '''
     # ensure the search field data has the proper column names
@@ -445,6 +445,18 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25):
     matched_image_to_field['y'] = sources['y']
     matched_image_to_field['RA'] = matched_ra
     matched_image_to_field['DEC'] = matched_dec
+
+    # append each x,y,RA,DEC string to the fits ext_hdr to save the source matches for reference
+    for source in np.arange(len(matched_image_to_field)):
+        key = 'star' + str(source + 1)
+
+        string = str(matched_image_to_field[source]['x'])
+        for col in ['y','RA','DEC']:
+            string += ',' + str(matched_image_to_field[source][col])
+
+        if key not in dataset[0].ext_hdr:
+            dataset[0].ext_hdr[key] = string
+
 
     return matched_image_to_field
 
