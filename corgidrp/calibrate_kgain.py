@@ -809,7 +809,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     prhd, exthd = create_default_headers()
     gain_value = np.array([[kgain]])
 
-    kgain = data.KGain(gain_value, err = np.array([[mean_rn_gauss_DN]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
+    kgain = data.KGain(gain_value, err = np.array([[np.std(kgain_clipped)]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
     
     return kgain
 
