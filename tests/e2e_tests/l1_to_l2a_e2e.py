@@ -34,7 +34,7 @@ nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
 #nonlinear_cal.data = nonlin_dat # replace the data with the real data from II&T
 pri_hdr, ext_hdr = mocks.create_default_headers()
 ext_hdr["DRPCTIME"] = time.Time.now().isot
-ext_hdr['DRPVERSN'] =  corgidrp.version
+ext_hdr['DRPVERSN'] =  corgidrp.__version__
 mock_input_dataset = data.Dataset(mock_nonlinear_filelist)
 nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                              input_dataset=mock_input_dataset)

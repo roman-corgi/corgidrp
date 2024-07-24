@@ -361,7 +361,7 @@ class Image():
                 self.bias = np.zeros(self.data.shape[0], dtype = np.float32)
 
             # record when this file was created and with which version of the pipeline
-            self.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
+            self.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
 
         # we assume that if the err_hdr and dq_hdr is given as parameter they supersede eventual existing err_hdr and dq_hdr
@@ -473,7 +473,7 @@ class Image():
         new_img.filedir = self.filedir
 
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img
@@ -796,7 +796,7 @@ class KGain(Image):
         new_kg.filedir = self.filedir
 
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_kg
@@ -867,7 +867,7 @@ class BadPixelMap(Image):
         new_bp.filedir = self.filedir
 
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
+        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_bp
@@ -910,7 +910,7 @@ class DetectorParams(Image):
             prihdr = fits.Header()
             exthdr = fits.Header()
             exthdr['SCTSRT'] = date_valid.isot # use this for validity date
-            exthdr['DRPVERSN'] =  corgidrp.version
+            exthdr['DRPVERSN'] =  corgidrp.__version__
             exthdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
