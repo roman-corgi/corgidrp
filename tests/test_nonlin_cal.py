@@ -105,63 +105,6 @@ for iG in range(len(gain_arr0)):
 dataset_nl = Dataset(frame_list) 
 init_nonlins_arr = np.transpose(np.array(init_nonlins))
 
-# prepare a second version of time_stack_arr that has all the frames for the 
-# fourth set (gain_arr0[3]) taken 1 day later
-time_stack_arr1 = np.copy(time_stack_arr0)
-# Convert date-time strings to datetime objects
-index = index - len_list0[3]
-ctime_datetime1 = pd.to_datetime(time_stack_test, errors='coerce')
-# Add one day to each datetime object
-ctime_datetime_plus_one_day1 = ctime_datetime1 + pd.Timedelta(days=1)
-# Convert back to strings
-ctime_strings_plus_one_day1 = ctime_datetime_plus_one_day1.strftime('%Y-%m-%dT%H:%M:%S').tolist()
-time_stack_arr1[index:index+len_list0[3]] = ctime_strings_plus_one_day1
-init_nonlins_1 = []
-frame_list = []
-index = 0
-# make 30 uniform frames with emgain = 1
-for j in range(30):
-    image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
-        nonlin_flag=nonlin_flag)
-    # Datetime cannot be duplicated
-    image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
-    # Temporary keyword value. Mean frame is TBD
-    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
-    frame_list.append(image_sim)
-for iG in range(len(gain_arr0)):
-    g = gain_arr0[iG]
-    exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
-    time_stack_test = time_stack_arr1[index:index+len_list0[iG]]
-    index = index + len_list0[iG]
-    if nonlin_flag:
-        coeffs, _, vals = nonlin_coefs(nonlin_table_path,g,3)
-    else:
-        coeffs = [0.0, 0.0, 0.0, 1.0]
-        vals = np.ones(len(DNs))
-    init_nonlins_1.append(vals)
-    for idx_t, t in enumerate(exp_time_loop):
-        # Simulate full frame
-        if iG == 0:
-            image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        elif iG == 1:
-            image_sim = make_fluxmap_image(fluxMap2,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        elif iG == 2:
-            image_sim = make_fluxmap_image(fluxMap3,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        else:
-            image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
-        frame_list.append(image_sim)
-dataset_nl_1 = Dataset(frame_list)
-init_nonlins_1_arr = np.transpose(np.array(init_nonlins_1))
-
 # set input parameters for calibrate_nonlin
 local_path = os.path.dirname(os.path.realpath(__file__))
 exp_time_stack_arr = exp_time_stack_arr0
@@ -205,19 +148,40 @@ def test_expected_results_nom_sub():
     assert np.equal(nonlin_out.data[norm_ind+1,-1], 1)
     # check that norm_val is correct
     assert np.equal(nonlin_out.data[norm_ind+1,0], norm_val)
-       
+
 def test_expected_results_time_sub():
-    """Outputs are as expected for the provided frames with 
-    datetime values for one EM gain group taken 1 day later."""
+    """Outputs are as expected for the provided frames with datetime values for
+    one EM gain group taken 1 day later. Set (gain_arr0[3]) taken 1 day later
+    avoiding a duplication of the whole dataset."""
+    time_stack_arr1 = np.copy(time_stack_arr0)
+    # Convert date-time strings to datetime objects. First 30 are used to create a mean frame
+    index = len(dataset_nl) - 30 - len_list0[3]
+    ctime_datetime1 = pd.to_datetime(time_stack_arr1[index:], errors='coerce')
+    # Add one day to each datetime object
+    ctime_datetime_plus_one_day1 = ctime_datetime1 + pd.Timedelta(days=1)
+    # Convert back to strings
+    ctime_strings_plus_one_day1 = ctime_datetime_plus_one_day1.strftime('%Y-%m-%dT%H:%M:%S').tolist()
+    time_stack_arr1[index:index+len_list0[3]] = ctime_strings_plus_one_day1
+    index = 0
+    # First 30 are used to create a mean frame
+    idx_frame = 30
+    for iG in range(len(gain_arr0)):
+        exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
+        time_stack_test = time_stack_arr1[index:index+len_list0[iG]]
+        index = index + len_list0[iG]
+        for idx_t, t in enumerate(exp_time_loop):
+            dataset_nl[idx_frame].ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            idx_frame += 1
+
     nonlin_out = calibrate_nonlin(dataset_nl, 
                         actual_gain_arr, actual_gain_mean_frame, norm_val, min_write, max_write)
      
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
-    diffs0 = nonlin_out.data[1:,1] - init_nonlins_1_arr[:,0] # G = 1
-    diffs1 = nonlin_out.data[1:,2] - init_nonlins_1_arr[:,1] # G = 2
-    diffs2 = nonlin_out.data[1:,3] - init_nonlins_1_arr[:,2] # G = 10
-    diffs3 = nonlin_out.data[1:,4] - init_nonlins_1_arr[:,3] # G = 20
+    diffs0 = nonlin_out.data[1:,1] - init_nonlins_arr[:,0] # G = 1
+    diffs1 = nonlin_out.data[1:,2] - init_nonlins_arr[:,1] # G = 2
+    diffs2 = nonlin_out.data[1:,3] - init_nonlins_arr[:,2] # G = 10
+    diffs3 = nonlin_out.data[1:,4] - init_nonlins_arr[:,3] # G = 20
     # Calculte rms and peak-to-peak differences
     rms1 = np.sqrt(np.mean(diffs0**2))
     rms2 = np.sqrt(np.mean(diffs1**2))
