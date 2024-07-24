@@ -4,6 +4,7 @@ import pathlib
 import configparser
 
 __version__ = "0.1"
+version = __version__ # temporary backwards compatability 
 
 #### Create a configuration file for the corgidrp if it doesn't exist. 
 def create_config_dir():
