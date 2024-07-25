@@ -24,7 +24,8 @@ all_l1_dat.sort()
 l1_data_filelist = all_l1_dat[:2] # just grab the first two files
 mock_nonlinear_filelist = all_l1_dat[-2:] # grab the last two real data to mock the nonlinearity file
 
-#### Create necessary calibration files
+###### Setup necessary calibration files
+# Create necessary calibration files
 # we are going to make a new nonlinear calibration file using
 # a combination of the II&T nonlinearty file and the mock headers from
 # our unit test version of the NonLinearityCalibration
@@ -44,7 +45,7 @@ nonlinear_cal.save(filedir=outputdir, filename="mock_nonlinearcal.fits" )
 this_caldb = caldb.CalDB()
 this_caldb.create_entry(nonlinear_cal)
 
-####### run the walker on some test_data
+####### Run the walker on some test_data
 
 walker.walk_corgidrp(l1_data_filelist, "", outputdir)
 
