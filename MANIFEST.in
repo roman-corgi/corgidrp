@@ -1,0 +1,7 @@
+include requirements.txt
+include corgidrp/recipe_templates/*.json
+include tests/test_data/example_L1_input.fits
+include tests/test_data/metadata.yaml
+include tests/test_data/metadata_eng.yaml
+include tests/test_data/nonlin_sample.csv
+include tests/test_data/nonlin_sample.fits

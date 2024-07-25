@@ -45,7 +45,7 @@ def test_autoreducing():
     new_nonlinearity.pri_hdr = prihdr
     new_nonlinearity.ext_hdr = exthdr
     new_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
-    new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
+    new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     mycaldb = caldb.CalDB()
     mycaldb.create_entry(new_nonlinearity)
 
