@@ -311,8 +311,8 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
 ######################### start of main code #############################
 
 def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
-                    min_val=800, max_val=3000, binwidth=68, make_plot=True,
-                    plot_outdir='figures', show_plot=False,
+                    n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
+                    make_plot=True,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200, verbose=False):
     """
     Given an array of frame stacks for various exposure times, each sub-stack
@@ -352,6 +352,12 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
       actual_gain_mean_frame (float):
         The value of the measured/actual EM gain used to collect the frames used
         to build the mean frame in dataset_kgain. note: commanded EM must be unity. 
+      n_cal (int):
+        Minimum number of sub-stacks used to calibrate K-Gain. The default value
+        is 10.
+      n_mean (int):
+        Minimum number of frames used to generate the mean frame. The default value
+        is 30.
       min_val (int): 
         Minimum value (in DN) of mean values from sub-stacks to use in calculating 
         kgain. (> 400 recommended)  
@@ -392,9 +398,9 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     if idx != 3:
         raise CalKgainException('cal_list must be 4-D (i.e., a stack of '
                 '3-D sub-stacks)')
-    if len(cal_list) <= 10:
-        raise CalKgainException('Number of sub-stacks in cal_list must '
-                'be more than 10.')
+    if len(cal_list) < n_cal:
+        raise CalKgainException(f'Number of sub-stacks in cal_list must '
+                'be more than {n_cal}.')
     if len(cal_list) < 20 :
         warnings.warn('Number of sub-stacks in cal_list is less than 20, '
         'which is the recommended minimum number for a good fit ')
@@ -417,9 +423,9 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     if idx != 2:    
         raise CalKgainException('mean_frame_list must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
-    if len(mean_frame_list) < 30:
-        raise CalKgainException('Number of sub-stacks in mean_frame_list must '
-                'be equal to or greater than 30.')
+    if len(mean_frame_list) < n_mean:
+        raise CalKgainException(f'Number of sub-stacks in mean_frame_list must '
+                'be equal to or greater than {n_mean}.')
 
     check.real_positive_scalar(actual_gain, 'actual_gain', TypeError)
     if actual_gain < 1:

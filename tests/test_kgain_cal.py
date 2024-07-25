@@ -85,6 +85,14 @@ loaded = np.load(Path(here,'test_data','nonlin_arrays_ut.npz'))
 exp_time_stack_arr0 = loaded['array1']
 time_stack_arr0 = loaded['array2']
 len_list0 = loaded['array3']
+# Reducing the number of frames used in unit tests (each has 5 substacks)
+n_cal = 3
+iG = 0 # doing only the em gain = 1 case
+
+exp_time_stack_arr0 = np.delete(exp_time_stack_arr0, np.s_[n_cal*5:])
+time_stack_arr0 = np.delete(time_stack_arr0, np.s_[n_cal*5:])
+# Update len_list0
+len_list0[0] = n_cal*5
 
 # Load the flux map
 fluxmap_init =  np.load(Path(here,'test_data','FluxMap1024.npy'))
@@ -93,7 +101,8 @@ fluxMap = 0.8*fluxmap_init # e/s/px, for G = 1
 
 # assumed detector parameters
 kgain_in = 8.7 # e-/DN
-rn_in = 130 # read noise in e-
+# Usual number of frames to deal with real rn values is ~200
+rn_in = 130/np.sqrt(200/n_cal) # read noise in e-
 bias = 2000 # e-
 actual_gain = 1.0
 actual_gain_mean_frame = 1.0
@@ -106,8 +115,9 @@ else:
     _, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
 
 frame_list = []
-# make 30 uniform frames with emgain = 1
-for j in range(30):
+# make some uniform frames with emgain = 1
+n_mean = 3
+for j in range(n_mean):
     image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in,actual_gain,7.0,coeffs_1,
         nonlin_flag=nonlin_flag)
     # Datetime cannot be duplicated
@@ -148,7 +158,7 @@ binwidth = 68
 def test_expected_results_sub():
     """Outputs are as expected, for imported frames."""
     kgain = calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-        min_val, max_val, binwidth)
+        n_cal, n_mean, min_val, max_val, binwidth)
         
     signal_bins_N = kgain_params['signal_bins_N']
     # kgain - should be close to the assumed value
@@ -162,24 +172,24 @@ def test_psi():
     for perr in check_list:
         with pytest.raises(TypeError):
             calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-                perr, max_val, binwidth)
+                n_cal, n_mean, perr, max_val, binwidth)
     # max_val
     for perr in check_list:
         with pytest.raises(TypeError):
             calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-                min_val, perr, binwidth)
+                n_cal, n_mean, min_val, perr, binwidth)
 
     # binwidth
     for perr in check_list:
         with pytest.raises(TypeError):
             calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-                min_val, max_val, perr)
+                n_cal, n_mean, min_val, max_val, perr)
       
 def test_binwidth():
     """binwidth must be >= 10."""
     with pytest.raises(CalKgainException):
         calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-            min_val, max_val, 9)
+            n_cal, n_mean, min_val, max_val, 9)
  
 def test_rps():
     """emgain must be a real positive scalar."""
@@ -188,13 +198,13 @@ def test_rps():
     for rerr in check_list:
         with pytest.raises(TypeError):
             calibrate_kgain(dataset_kg, rerr, actual_gain_mean_frame,
-                min_val, max_val, binwidth)
+                n_cal, n_mean, min_val, max_val, binwidth)
    
 def test_emgain():
     """emgain must be >= 1."""
     with pytest.raises(CalKgainException):
         calibrate_kgain(dataset_kg, 0.5, actual_gain_mean_frame,
-            min_val, max_val, binwidth)
+            n_cal, n_mean, min_val, max_val, binwidth)
 
 if __name__ == '__main__':
     print('Running test_expected_results_sub')
