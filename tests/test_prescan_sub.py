@@ -473,7 +473,7 @@ def test_bias_hvon():
 
         for return_full_frame in [True, False]:
             output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
-            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
+            if np.any(np.abs(output_dataset[0].hdu_list['BIAS'].data - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
 
 def test_bias_uniform_value():
