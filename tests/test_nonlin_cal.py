@@ -40,8 +40,12 @@ idx_0 = 0
 idx_1 = 0
 # Turn into False and the test runs a similar amount of data as with real data in IIT (~40 Gb RAM)
 rms_test = 0.0035 # Value used when using an equivalent dataset as in IIT
+# Usual number of frames to deal with real rn values is ~200
+rn = 130 # read noise in e-
 if True:
     rms_test = 0.04 # Less strict comparison sue to having significantly less frames
+    # Usual number of frames to deal with real rn values is ~200
+    rn = 130/np.sqrt(200/n_cal) # read noise in e-
     for iG in range(len(len_list0)):
         time_stack_arr0[idx_0:idx_0+n_cal*5] = time_stack_arr0[idx_1:idx_1+n_cal*5]
         for i_cal in range(n_cal):
@@ -66,8 +70,6 @@ fluxMap4 = 0.04*fluxmap_init # e/s/px, for G = 20
 
 # detector parameters
 kgain = 8.7 # e-/DN
-# Usual number of frames to deal with real rn values is ~200
-rn = 130/np.sqrt(200/n_cal) # read noise in e-
 bias = 2000 # e-
 
 # cubic function nonlinearity for emgain of 1
