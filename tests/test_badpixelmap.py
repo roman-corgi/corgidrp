@@ -5,6 +5,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
 from corgidrp.bad_pixel_calibration import create_bad_pixel_map
+from corgidrp.darks import build_trad_dark
 
 
 def test_badpixelmap(): 
@@ -31,7 +32,9 @@ def test_badpixelmap():
     dark_dataset = data.Dataset(dark_filenames)
 
     ###### create dark
-    dark_frame = detector.create_dark_calib(dark_dataset)
+    # use default parameters
+    detector_params = data.DetectorParams({})
+    dark_frame = build_trad_dark(dark_dataset,detector_params)
     
     ###### make some hot pixels:
     # Add some hot pixels
