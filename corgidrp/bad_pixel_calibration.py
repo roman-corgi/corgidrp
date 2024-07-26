@@ -5,8 +5,6 @@ def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac 
     """
     Compute a fixed bad pixel map for EXCAM from a master dark and flat.
 
-    Note that the master dark should not be a synthetic dark, since those are
-    (presumably) free of bad pixels. 
 
     Args:
         dataset (corgidrp.data.Dataset): A dataset that is ignored by this class. 
