@@ -148,10 +148,11 @@ Before creating a pull request, review the design Principles below. Use the Gith
 * What python version should I develop in?
   * Python 3.12
     
-* How should I treat hard-coded variables
-  * If a variable value is extremely unlikely to change AND is only required by one module, it can be hard coded inside that module.
-  * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central constants file (name TBD). 
-  * If it is a setting about pipeline behavior that may change, it should be implemented by a config file (examples are location of the calibration database and whether to save individual error terms in the output FITS files).
+* How should I treat different kinds of function parameters:
+  * Constants - things that are highly unlikely to change - can be included in modules, like detector.py
+  * Properties of the system - things we need to measure that might change in time - would go into a calibration file like DetectorParams
+  * Function parameters - choices that we might make and want to have more flexibility that apply to a specific function (e.g. exactly what area of a detector we might use to calculate something) - would be keyword arguments to that function.
+  * If it is a setting about pipeline behavior that may change, it should be implemented in the config file (examples are location of the calibration database and whether to save individual error terms in the output FITS files).
  
 * Where should I store computed variables so they can be referenced later in the pipeline?
   * If possible, in the header of the dataset being processed or in a hew HDU extension
