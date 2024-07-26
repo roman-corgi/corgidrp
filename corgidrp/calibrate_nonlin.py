@@ -152,7 +152,7 @@ def frameProc(frame, offset_colroi, emgain):
     return frame
 
 def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
-                     norm_val = 2500, min_write = 800.0, max_write = 10000.0,
+                     n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0, max_write = 10000.0,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
@@ -214,13 +214,19 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
       actual_gain_mean_frame (float):
         The value of the measured/actual EM gain used to collect the frames used
         to build the mean frame in dataset_kgain. note: commanded EM must be unity.
+      n_cal (int):
+        Minimum number of sub-stacks used to calibrate Non-Linearity. The default
+        value is 20.
+      n_mean (int):
+        Minimum number of frames used to generate the mean frame. The default value
+        is 30.
       norm_val (int): (Optional) Value in DN to normalize the nonlinearity values to.
         Must be greater than 0 and must be divisible by 20 without remainder.
         (1500 to 3000 recommended).
       min_write (float): (Optional) Minimum mean value in DN to output in
-        nonlin_arr and csv_lines. (800.0 recommended)
+        nonlin. (800.0 recommended)
       max_write (float): (Optional) Maximum mean value in DN to output in
-        nonlin_arr and csv_lines. (10000.0 recommended)
+        nonlin. (10000.0 recommended)
       lowess_frac (float): (Optional) factor to use in lowess smoothing function,
         larger is smoother
       rms_low_limit (float): (Optional) rms relative error selection limits for
@@ -247,16 +253,10 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         Default is False.
     
     Returns:
-      headers (np.array): 1-D array of headers used to build csv-lines. The length is equal to 
-        the number of columns in 'nonlin_arr' and is one greater than the 
-        length of 'actual_gain_arr'.
-      nonlin_arr (np.array): 2-D array with nonlinearity values for input signal level (DN) in rows 
-        and EM gain values in columns. The input signal in DN is the first column. 
-        Signal values start with min_write and run through max_write in steps 
-        of 20 DN.
-      csv_lines (list): List of strings containing the contents of 'headers' and 'nonlin_arr'.
-      means_min_max (np.array): minima and maxima of mean values (in DN) used the fit each for EM gain. 
-        The size of means_min_max is N x 2, where N is the length of actual_gain_arr.
+      nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
+        for input signal level (DN) in rows and EM gain values in columns. The
+        input signal in DN is the first column. Signal values start with min_write
+        and run through max_write in steps of 20 DN.
     """
     # dataset_nl.all_data must be 3-D 
     if np.ndim(dataset_nl.all_data) != 3:
@@ -289,8 +289,8 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     if np.ndim(cal_arr) != 3:
         raise CalNonlinException('cal_arr must be 3-D')
     # mean_frame_arr must have at least 30 frames
-    if len(mean_frame_arr) < 30:
-        raise Exception('mean_frame_arr must have at least 30 frames')
+    if len(cal_arr) < n_cal:
+        raise Exception(f'mean_frame_arr must have at least {n_cal} frames')
     if np.sum(len_list) != len(cal_arr):
         raise CalNonlinException('Number of sub-stacks in cal_arr must '
                 'equal the sum of the elements in len_list')
@@ -316,9 +316,9 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     if np.ndim(mean_frame_arr) != 3:
         raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
-    if len(mean_frame_arr) < 30:
-        raise CalNonlinException('Number of frames in mean_frame_arr must '
-                'be at least 30.')
+    if len(mean_frame_arr) < n_mean:
+        raise CalNonlinException(f'Number of frames in mean_frame_arr must '
+                'be at least {n_mean}.')
     
     check.real_array(exp_arr, 'exp_arr', TypeError)
     check.oneD_array(exp_arr, 'exp_arr', TypeError)
@@ -526,7 +526,6 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     
     # initialize arrays for nonlin results table
     nonlin = []
-    means_min_max = []
     
     ######################## loop over em gain values #########################
     for gain_index in range(len(len_list)):
@@ -786,7 +785,6 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         # find the min/max values of corrected measured means and append array
         temp_min = np.min(corr_mean_signal_sorted)
         temp_max = np.max(corr_mean_signal_sorted)
-        means_min_max.append([temp_min,temp_max])
         
         if make_plot:
             # Plotting Signal vs. Relative Gain
@@ -911,7 +909,6 @@ def nonlin_dataset_2_stack(dataset):
     # Mean frame data
     mean_frame_stack = []
     record_exp_time = True
-# Same exposure time, same EM gain (unity??) Docstrings
     # Exposure times
     exp_times = []
     # Datetimes
