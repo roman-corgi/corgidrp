@@ -391,9 +391,6 @@ class Image():
         if not hasattr(self, 'dq_hdr'):
             self.dq_hdr = fits.Header()
         self.dq_hdr["EXTNAME"] = "DQ"
-        if not hasattr(self, 'bias_hdr'):
-            self.bias_hdr = fits.Header()
-        self.bias_hdr["EXTNAME"] = "BIAS"
 
         # discard individual errors if we aren't tracking them but multiple error terms are passed in
         if not corgidrp.track_individual_errors and self.err.shape[0] > 1:
@@ -479,10 +476,8 @@ class Image():
             new_err = self.err
             new_dq = self.dq
             new_hdulist = self.hdu_list
-            new_bias = self.bias
         new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, 
-                        input_hdulist = new_hdulist, bias=new_bias,
-                        err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy(), bias_hdr = self.bias_hdr.copy())
+                        input_hdulist = new_hdulist, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
 
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_img.filename = self.filename
