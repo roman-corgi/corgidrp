@@ -11,6 +11,10 @@ https://doi.org/10.1117/1.JATIS.7.1.016003
     - Removed everything meta and replaced with functions from detector.py
     - Replaced II&T get_relgains function with corgidrp function -> Now 
     requires a NonLinearityCorrection object to work. Defaults to None
+    - Removed image slicing
+    - Removed non-linearity correction
+    - Input dataset is now a Dataset object from corgidrp.data
+    - output is not a corgi.drp.TrapCalibration object
 """
 import os
 from pathlib import Path
