@@ -5,6 +5,14 @@ import corgidrp.data as data
 from scipy import interpolate
 from astropy.time import Time
 from scipy.ndimage import median_filter
+import glob
+import os
+import astropy.io.fits as fits
+import photutils.centroids as centr
+from pathlib import Path
+from scipy.ndimage import gaussian_filter as gauss
+from photutils.aperture import CircularAperture
+from scipy import ndimage
 
 def create_dark_calib(dark_dataset):
     """
@@ -423,3 +431,202 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
     sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
 
     return sat_fwcs
+    
+    
+def residuals(images,planims=None):
+    
+    """
+    Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
+    dividing from matched filters
+
+    Args:
+        images (np.array) : cropped neptune or uranus image frames
+
+    Returns:
+        images (np.array): residual image frames of neptune or uranus divided by matched filter
+    """
+    
+    if planims=='neptune' or planims=='uranus' :
+        raster_images = np.array([image[2] for image in images])
+        masks = np.array([image[3] for image in images]) 
+        images_split = np.array(np.split(np.array(raster_images),3))
+        matched_filters = np.array([np.nanmedian(np.stack(images_split[i],2),2) for i in np.arange(0,len(images_split))])
+        matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
+        matched_residuals=[];
+        for j in range(len(raster_images)):
+        	matched_residuals.append(raster_images[j]/matched_filters_smooth[int(np.floor(j//(len(raster_images)//len(matched_filters_smooth))))])
+    return matched_residuals
+    
+    
+def combine_rasters(residual_images,cent=None,planims=None,band=None):
+    
+    """
+    	combine the dataset of residual image frames of neptune or uranus and create flat field 
+    	and associated error
+
+    	Args:
+        	images (np.array) : residual image frames of neptune and uranus 
+        	cent  (np.array)  : centroid of the image frames
+        	planims (str) :   name of the planet neptune or uranus
+        	band    (str)  :  band of the observation band1 or band4
+        	
+    	Returns:
+        	image (np.array): ideal flat field
+        	image (np.array): flat field from uranus or neptune images
+        	image (np.array): percentage error of the flat field
+    """
+    
+    n = 420
+    full_qe=np.random.normal(1,.03,(n,n))
+    full_residuals = np.zeros((n,n))
+    rad1 = 1.26; rad4 = 1.75
+    aperture1 = CircularAperture((np.ceil(rad1), np.ceil(rad1)), r=rad1)
+    aperture4 = CircularAperture((np.ceil(rad4), np.ceil(rad4)), r=rad4)
+    mask1= aperture1.to_mask().data
+    mask4= aperture4.to_mask().data
+    rad = 50
+    for i in np.arange(len(residual_images)):
+        nx = np.arange(0,residual_images[i].shape[1])
+        ny = np.arange(0,residual_images[i].shape[0])
+        nxx,nyy = np.meshgrid(nx,ny)
+        nrr = np.sqrt((nxx-rad-5)**2 + (nyy-rad-5)**2)
+        nrr_copy = nrr.copy()
+        nrr_copy[nrr<rad] = residual_images[i][nrr<rad] 
+        nrr_copy[nrr>=rad] = None 
+        ymin = int(cent[i][0])
+        ymax = int(cent[i][1])
+        xmin = int(cent[i][2])
+        xmax = int(cent[i][3])
+
+        bool_innotzero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
+        bool_iniszero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]==0)
+        bool_outisnotzero = np.logical_and(nrr>=rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
+        
+        full_residuals[ymin:ymax,xmin:xmax][bool_innotzero] = (nrr_copy[bool_innotzero] + full_residuals[ymin:ymax,xmin:xmax][bool_innotzero])/2
+        full_residuals[ymin:ymax,xmin:xmax][bool_iniszero] = nrr_copy[bool_iniszero]
+        full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero] = full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero]
+
+    if band == 'band4':
+        full_qe_resel = ndimage.convolve(full_qe, mask4)
+        full_residuals_resel = ndimage.convolve(full_residuals,mask4)
+        percens_resel = (((full_qe_resel - full_residuals_resel)/full_qe_resel)*100)
+    
+    elif band== 'band1':
+        full_qe_resel = ndimage.convolve(full_qe, mask1)
+        full_residuals_resel = ndimage.convolve(full_residuals,mask1)
+        percens_resel = (((full_qe_resel - full_residuals_resel)/full_qe_resel)*100)
+    
+    full_residuals[full_residuals==0] = None
+    nx = np.arange(0,percens_resel.shape[1])
+    ny = np.arange(0,percens_resel.shape[0])
+    nxx,nyy = np.meshgrid(ny,nx)
+    nrr = np.sqrt((nxx-n/2)**2 + (nyy-n/2)**2)
+    full_residuals[nrr>165]= None
+    percens_resel[nrr>165] = None
+    full_qe[nrr>165]= None
+    full_qe=np.pad(full_qe, ((302,302),(302,302)), mode='constant',constant_values=(np.nan,))
+    full_residuals=np.pad(full_residuals, ((302,302),(302,302)), mode='constant',constant_values=(np.nan,))
+    percens_resel=np.pad(percens_resel, ((302,302),(302,302)), mode='constant',constant_values=(np.nan,))
+    
+    return (full_qe,full_residuals,percens_resel)
+    
+    
+def create_onsky_flatfield(filedir):
+	
+	"""
+    	Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
+
+    	Args:
+        	datadir (str) :  Full path to directory of images that are raster scanned
+
+    	Returns:
+    		planet_band_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images
+    """
+	
+	smooth_images=[];nept_band1_raster_images_cent=[];nept_band4_raster_images_cent=[];ura_band1_raster_images_cent=[];
+	nept_band1_cent=[];nept_band4_cent=[];ura_band1_cent=[];ura_band4_cent=[];act_cents = [];
+	ura_band4_raster_images_cent=[]; planet_names=[]; nept_band1_dataset=[]; frames=[]; nept_band4_dataset=[]; ura_band1_dataset=[]; ura_band4_dataset=[];
+	
+	image_files=glob.glob(os.path.join(filedir, "*.fits"))
+	raster_scanned_images =np.sort(image_files)
+	for i in range(len(image_files)):
+		planet_im=fits.open(raster_scanned_images[i])
+		planet_image=planet_im[1].data
+		planet=os.path.basename(raster_scanned_images[i]).split('_')[0]
+		planet_names.append(planet)
+		band='band'+os.path.basename(raster_scanned_images[i]).split('_')[2]
+		image_size=np.shape(planet_image)
+		nx = np.arange(0,image_size[0])
+		ny = np.arange(0,image_size[1])
+		qe_prnu_fsm_raster = np.random.normal(1,.03,(image_size[0],image_size[0]))
+		nxx,nyy = np.meshgrid(nx,ny)
+		nrr = np.sqrt((nxx-nx/2)**2 + (nyy-ny/2)**2)
+		centroid = centr.centroid_com(planet_image)
+		centroid[np.isnan(centroid)]=0
+		act_cents.append((centroid[1],centroid[0]))
+		xc =int( centroid[0])
+		yc = int(centroid[1])
+		up_radius=55
+		smooth_images.append(planet_image)
+		if planet =='neptune' and band == 'band1':
+			nept_band1_raster_images_cent.append((planet,band,smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius],qe_prnu_fsm_raster[yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius]))
+			nept_band1_cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
+			prihdr=planet_im[0].header
+			exthdr=planet_im[1].header
+			frame=data.Image(smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
+			frames.append(frame)
+			nept_band1_dataset=data.Dataset(frames)
+		elif planet =='neptune' and band == 'band4':
+			nept_band4_raster_images_cent.append((planet,band,smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius],qe_prnu_fsm_raster[yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius]))
+			nept_band4_cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
+			prihdr=planet_im[0].header
+			exthdr=planet_im[1].header
+			frame=data.Image(smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
+			frames.append(frame)
+			nept_band4_dataset=data.Dataset(frames)
+		elif planet =='uranus' and band == 'band1':
+			ura_band1_raster_images_cent.append((planet,band,smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius],qe_prnu_fsm_raster[yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius]))
+			ura_band1_cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
+			prihdr=planet_im[0].header
+			exthdr=planet_im[1].header
+			frame=data.Image(smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
+			frames.append(frame)
+			ura_band1_dataset=data.Dataset(frames)
+		elif planet =='uranus' and band == 'band4':
+			ura_band4_raster_images_cent.append((planet,band,smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius],qe_prnu_fsm_raster[yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius]))
+			ura_band4_cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
+			prihdr=planet_im[0].header
+			exthdr=planet_im[1].header
+			frame=data.Image(smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
+			frames.append(frame)
+			ura_band4_dataset=data.Dataset(frames)
+	
+	
+	resi_nept_band1=residuals(nept_band1_raster_images_cent,planims='neptune')
+	nept_band1_flat=combine_rasters(resi_nept_band1,planims='neptune',band='band1',cent=nept_band1_cent)[1]
+	nept_band1_flatfield = data.FlatField(nept_band1_flat, pri_hdr=prihdr,ext_hdr=exthdr,input_dataset=nept_band1_dataset)
+	nept_band1_flatfield.err=combine_rasters(resi_nept_band1,planims='neptune',band='band1',cent=nept_band1_cent)[2]
+	nept_band1_flatfield.err=nept_band1_flatfield.err.reshape((1,)+nept_band1_flatfield.err.shape)
+	
+	resi_nept_band4=residuals(nept_band4_raster_images_cent,planims='neptune')
+	nept_band4_flat=combine_rasters(resi_nept_band4,planims='neptune',band='band4',cent=nept_band4_cent)[1]
+	nept_band4_flatfield = data.FlatField(nept_band4_flat, pri_hdr=prihdr,ext_hdr=exthdr,input_dataset=nept_band4_dataset)
+	nept_band4_flatfield.err=combine_rasters(resi_nept_band4,planims='neptune',band='band4',cent=nept_band4_cent)[2]
+	nept_band4_flatfield.err=nept_band4_flatfield.err.reshape((1,)+nept_band4_flatfield.err.shape)
+	
+	resi_ura_band1=residuals(ura_band1_raster_images_cent,planims='uranus')
+	ura_band1_flat=combine_rasters(resi_ura_band1,planims='uranus',band='band1',cent=ura_band1_cent)[1]
+	ura_band1_flatfield = data.FlatField(ura_band1_flat, pri_hdr=prihdr,ext_hdr=exthdr,input_dataset=ura_band1_dataset)
+	ura_band1_flatfield.err=combine_rasters(resi_ura_band1,planims='uranus',band='band1',cent=ura_band1_cent)[2]
+	ura_band1_flatfield.err=ura_band1_flatfield.err.reshape((1,)+ura_band1_flatfield.err.shape)
+	
+	resi_ura_band4=residuals(ura_band4_raster_images_cent,planims='uranus')
+	ura_band4_flat=combine_rasters(resi_ura_band4,planims='uranus',band='band4',cent=ura_band4_cent)[1]
+	ura_band4_flatfield = data.FlatField(ura_band4_flat, pri_hdr=prihdr,ext_hdr=exthdr,input_dataset=ura_band4_dataset)
+	ura_band4_flatfield.err=combine_rasters(resi_ura_band4,planims='uranus',band='band1',cent=ura_band4_cent)[2]
+	ura_band4_flatfield.err=ura_band4_flatfield.err.reshape((1,)+ura_band4_flatfield.err.shape)
+	
+	return(nept_band1_flatfield,nept_band4_flatfield,ura_band1_flatfield,ura_band4_flatfield)
+    
+    
+    
