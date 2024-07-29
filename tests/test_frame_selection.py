@@ -22,9 +22,9 @@ def test_bpfrac_cutoff():
     """
     # use mock darks for now, doesn't really matter right now
     default_dataset = mocks.create_dark_calib_files(numfiles=5)
-    default_dataset[0].dq[0:512] += 1
+    default_dataset[0].dq[0:int(default_dataset.all_data.shape[-2]/2)] += 1
 
-    # at exactly 50%, it should not drop a frame. behavior is > 
+    # at exactly 50%, it should not drop a frame. behavior is >
     pruned_dataset = frame_select(default_dataset, bpix_frac=0.5)
     assert len(pruned_dataset) == len(default_dataset)
     assert len(pruned_dataset) == 5
@@ -36,13 +36,13 @@ def test_bpfrac_cutoff():
     assert len(pruned_dataset) == 4
     assert default_dataset[0].filename in pruned_dataset[0].ext_hdr['HISTORY'][-1] # test history
 
-    # allowing DQ = 1 should make no frames get dropped 
+    # allowing DQ = 1 should make no frames get dropped
     pruned_dataset = frame_select(default_dataset, bpix_frac=0.5, allowed_bpix=1)
     assert len(pruned_dataset) == len(default_dataset)
     assert len(pruned_dataset) == 5
 
-    # allowing DQ = 1 should not affect DQ = 2 
-    default_dataset[0].dq[0:512] = 2
+    # allowing DQ = 1 should not affect DQ = 2
+    default_dataset[0].dq[0:int(default_dataset.all_data.shape[-2]/2)] = 2
     default_dataset[0].dq[-1,-1] = 2
     pruned_dataset = frame_select(default_dataset, bpix_frac=0.5, allowed_bpix=1)
     assert len(pruned_dataset) != len(default_dataset)
@@ -77,8 +77,8 @@ def test_tt_rms():
     for frame in default_dataset:
         frame.ext_hdr['RESZ2RMS'] = tt_rms
         tt_rms += 1
-          
-    # doest nothing
+
+    # does nothing
     pruned_dataset = frame_select(default_dataset)
     assert len(pruned_dataset) == len(default_dataset)
     assert len(pruned_dataset) == 5
@@ -86,17 +86,17 @@ def test_tt_rms():
     # removes 2 frames
     pruned_dataset = frame_select(default_dataset, tt_thres=2.5)
     assert len(pruned_dataset) != len(default_dataset)
-    assert len(pruned_dataset) == 3 
+    assert len(pruned_dataset) == 3
 
 def test_remove_all():
     """
-    Uses multiple methods to remove frames. 
+    Uses multiple methods to remove frames.
     Tests that error is raised if all frames is removed
     """
     # use mock darks for now, doesn't really matter right now
     default_dataset = mocks.create_dark_calib_files(numfiles=5)
     # make the first frame have 50% bad pixels
-    default_dataset[0].dq[0:512] += 1
+    default_dataset[0].dq[0:int(default_dataset.all_data.shape[-2]/2)] += 1
     # add tt rms header
     tt_rms = 0
     for frame in default_dataset:
@@ -118,4 +118,8 @@ def test_remove_all():
 
 
 if __name__ == "__main__":
+    test_no_selection()
     test_bpfrac_cutoff()
+    test_overexp()
+    test_tt_rms()
+    test_remove_all()
