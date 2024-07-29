@@ -5,7 +5,9 @@ import numpy as np
 import corgidrp.data as data
 import corgidrp.detector as detector
 import os
-
+import glob
+import photutils.centroids as centr
+from pathlib import Path
 
 
 def create_dark_calib_files(filedir=None, numfiles=10):
@@ -65,6 +67,143 @@ def create_simflat_dataset(filedir=None, numfiles=10):
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
+
+
+def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=1,mask_size=180,snr=250,planims=None):
+    
+      
+    """
+     Performs raster scan of Neptune or Uranus images
+    
+     Args:
+        mask (int): (Required)  Mask used for the image.
+        data (float):(Required) Data in array npixels*npixels format to be raster scanned
+        dither_sizex (int):(Required) Size of the dither in X axis in pixels
+        dither_sizey (int):(Required) Size of the dither in X axis in pixels
+        row_cent (int): (Required)  X coordinate of the centroid
+        column_cent (int): (Required)  Y coordinate of the centroid
+        n_dith (int): number of dithers required
+        mask_size (int): Size of the mask in pixels
+        planims (str): Planet and band
+        
+	Returns:
+    	rastered images
+    	To create the simulated dataset:
+        
+    """  
+ 
+    cents = []
+    
+    data_display = data.copy()
+    col_max = int(col_cent) + int(mask_size/2)
+    col_min = int(col_cent) - int(mask_size/2)
+    row_max = int(row_cent) + int(mask_size/2)
+    row_min = int(row_cent) - int(mask_size/2)
+    dithers = []
+    
+    if dither_sizey == None:
+        dither_sizey = dither_sizex
+    
+    if planims == 'neptune_band_1' or planims=='neptune_band_4':
+        planrad = 54
+        dith_end = n_dith
+    elif planims == 'uranus_band_1' or planims=='uranus_band_4':
+        dith_end = n_dith+1
+        planrad = 90
+    for i in np.arange(-n_dith,dith_end):
+        for j in np.arange(-n_dith,dith_end):
+            mask_data = data.copy()
+            image_data = mask_data[row_min + (dither_sizey * j):row_max + (dither_sizey * j), col_min + (dither_sizex * i):col_max + (dither_sizex * i)]
+            cents.append(((mask_size/2) + (row_cent - int(row_cent)) - (dither_sizey//2) - (dither_sizey * j), (mask_size/2) + (col_cent - int(col_cent)) - (dither_sizex//2) - (dither_sizex * i)))
+            try:
+                new_image_data = image_data * mask
+                
+                if planims == 'neptune_band_1' or planims == 'uranus_band_1':
+                    snr_ref = 250/np.sqrt(4.95)
+                elif planims == 'neptune_band_4' or planims == 'uranus_band_4':
+                    snr_ref = 250/np.sqrt(9.66)
+
+                u_centroid = centr.centroid_1dg(new_image_data)
+                uxc = int(u_centroid[0])
+                uyc = int(u_centroid[1])
+
+                modified_data = new_image_data
+    
+                nx = np.arange(0,modified_data.shape[1])
+                ny = np.arange(0,modified_data.shape[0])
+                nxx,nyy = np.meshgrid(nx,ny)
+                nrr = np.sqrt((nxx-uxc)**2 + (nyy-uyc)**2)
+
+                planmed = np.median(modified_data[nrr<planrad])
+                modified_data[nrr<=planrad] = np.random.normal(modified_data[nrr<=planrad], (planmed/snr_ref) * np.abs(modified_data[nrr<=planrad]/planmed))
+                
+                new_image_data_snr = modified_data
+            except ValueError:
+                print(image_data.shape)
+                print(mask.shape)
+            dithers.append(new_image_data_snr)
+
+    dither_stack_norm = []
+    for dither in dithers:
+        dither_stack_norm.append(dither) 
+    dither_stack = None 
+    
+    median_dithers = None 
+    final = None 
+    full_mask = mask 
+    
+    return median_dithers,mask,final,data_display,dither_stack_norm,full_mask,cents
+    
+def create_onsky_rasterscans(datadir=None,filedir=None):
+     
+    """
+     Create simulated data to check the flat division
+    
+     Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        datadir (str): (Required) Full path to directory of images to be raster scanned
+
+     Returns:
+    	corgidrp.data.Dataset:
+        The simulated dataset
+    """
+    n = 420
+    qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
+    pred_cents=[]
+    image_files=glob.glob(os.path.join(datadir, "medcombined*.fits"))
+    planet_rot_images=[]
+    for i in range(len(image_files)):
+        image_files=np.sort(image_files)
+        planims=Path(os.path.basename(image_files[i]).split('-')[1]).stem
+        print(planims)
+        planet_image=fits.getdata(image_files[i])
+        centroid = centr.centroid_com(planet_image)
+        xc = centroid[0]
+        yc = centroid[1]
+        
+        if planims == 'neptune_band_1' or planims == 'neptune_band_4':
+            d=50
+            numfiles=36
+            planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=3,mask_size=n,snr=250,planims=planims)
+        elif planims == 'uranus_band_1' or planims == 'uranus_band_4':
+            d=55
+            numfiles=36
+            planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc,col_cent=xc, dither_sizex=d, dither_sizey=d,n_dith=2,mask_size=n,snr=250,planims=planims)
+        for j in np.arange(len(planet_repoint_current[4])):
+            for j in np.arange(len(planet_repoint_current[4])):
+                planet_rot_images.append(planet_repoint_current[4][j])
+                pred_cents.append(planet_repoint_current[6][j])
+        filepattern= planims+"_"+"raster_scan_{0:01d}.fits"
+        frames=[]
+        for i in range(numfiles):
+            prihdr, exthdr = create_default_headers()
+            sim_data=planet_rot_images[i]
+            frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+            if filedir is not None:
+                frame.save(filedir=filedir, filename=filepattern.format(i))
+            frames.append(frame)
+        raster_dataset = data.Dataset(frames)
+    return raster_dataset
 
 def create_flatfield_dummy(filedir=None, numfiles=2):
     
