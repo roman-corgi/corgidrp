@@ -17,34 +17,10 @@ from astropy.io import fits
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import (create_default_headers, make_fluxmap_image)
+from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params)
 
 ######################## function definitions ###############################
-
-def nonlin_coefs(filename,EMgain,order):
-    # filename is the name of the csv text file containing the TVAC nonlin table
-    # EM gain selects the closest column in the table
-    # Load the specified file
-    bigArray = pd.read_csv(filename, header=None).values
-    EMgains = bigArray[0, 1:]
-    DNs = bigArray[1:, 0]
-    
-    # Find the closest EM gain available to what was requested
-    iG = (np.abs(EMgains - EMgain)).argmin()
-    
-    # Fit the nonlinearity numbers to a polynomial
-    vals = bigArray[1:, iG + 1]
-    coeffs = np.polyfit(DNs, vals, order)
-    
-    # shift so that function passes through unity at 3000 DN for these tests
-    fitVals0 = np.polyval(coeffs, DNs)
-    ind = np.where(DNs == 3000)
-    unity_val = fitVals0[ind][0]
-    coeffs[3] = coeffs[3] - (unity_val-1.0)
-    fitVals = np.polyval(coeffs,DNs)
-    
-    return coeffs, DNs, fitVals
 
 def count_contiguous_repeats(arr):
     """
