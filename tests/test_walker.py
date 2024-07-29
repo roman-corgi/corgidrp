@@ -45,7 +45,7 @@ def test_autoreducing():
     new_nonlinearity.pri_hdr = prihdr
     new_nonlinearity.ext_hdr = exthdr
     new_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
-    new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
+    new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     mycaldb = caldb.CalDB()
     mycaldb.create_entry(new_nonlinearity)
 
@@ -66,6 +66,9 @@ def test_autoreducing():
         # do a string comparison, easiest way to check
         hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
         assert json.dumps(hdr_recipe) == json.dumps(recipe)
+
+    # clean up
+    mycaldb.remove_entry(new_nonlinearity)
 
 
 

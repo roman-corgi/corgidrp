@@ -14,10 +14,10 @@ setup(
     description='(Roman Space Telescope) CORonaGraph Instrument Data Reduction Pipeline',
     #long_description="",
     #long_description_content_type="text/markdown",
-    #url='',
+    url='https://github.com/roman-corgi/corgidrp',
     author='Roman Coronagraph Instrument CPP',
     #author_email='',
-    #license='BSD',
+    license='BSD',
     packages=find_packages(),
     classifiers=[
         # Indicate who your project is intended for
