@@ -1,4 +1,10 @@
-"""tests for check.py."""
+"""
+Unit tests for check.py.
+For each check, test with valid and invalid inputs for all three inputs.
+
+Test valid here as well since most other functions rely on these for
+error checking
+"""
 import pytest
 
 import numpy as np
