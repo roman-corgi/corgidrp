@@ -3,7 +3,6 @@
 import numpy as np
 import corgidrp.data as data
 from scipy import interpolate
-from astropy.time import Time
 from scipy.ndimage import median_filter
 import glob
 import os
@@ -14,53 +13,31 @@ from scipy.ndimage import gaussian_filter as gauss
 from photutils.aperture import CircularAperture
 from scipy import ndimage
 
-def create_dark_calib(dark_dataset):
-    """
-    Turn this dataset of image frames that were taken to measure
-    the dark current into a dark calibration frame and determines the corresponding error
-
-    Args:
-        dark_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
-
-    Returns:
-        data.Dark: a dark calibration frame
-    """
-    combined_frame = np.nanmean(dark_dataset.all_data, axis=0)
-
-    new_dark = data.Dark(combined_frame, pri_hdr=dark_dataset[0].pri_hdr.copy(),
-                         ext_hdr=dark_dataset[0].ext_hdr.copy(), input_dataset=dark_dataset)
-
-    # determine the standard error of the mean: stddev/sqrt(n_frames)
-    new_dark.err = np.nanstd(dark_dataset.all_data, axis=0)/np.sqrt(len(dark_dataset))
-    new_dark.err = new_dark.err.reshape((1,)+new_dark.err.shape) #Get it into the right dimensions
-
-    return new_dark
-
 def create_flatfield(flat_dataset):
-    
+
     """
     Turn this dataset of image frames that were taken for performing the flat calibration and
     to make one master flat image
-    this is currently a placeholder, until the final flat fielding calibration package is completed. 
+    this is currently a placeholder, until the final flat fielding calibration package is completed.
 
     Args:
        flat_dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
 
     Returns:
         flat_field (corgidrp.data.FlatField): a master flat for flat calibration
-    """  
-    
-    
+    """
+
+
     combined_frame = np.nanmean(flat_dataset.all_data, axis=0)
- 
+
     flat_field = data.FlatField(combined_frame, pri_hdr=flat_dataset[0].pri_hdr.copy(),
                          ext_hdr=flat_dataset[0].ext_hdr.copy(), input_dataset=flat_dataset)
-    
+
     #determine the standard error of the mean: stddev/sqrt(n_frames)
     flat_field.err = np.nanstd(flat_dataset.all_data, axis=0)/np.sqrt(len(flat_dataset))
     flat_field.err=flat_field.err.reshape((1,)+flat_field.err.shape) # Get it into the right dimension
 
-    
+
     return flat_field
 
 def get_relgains(frame, em_gain, non_lin_correction):
@@ -185,9 +162,97 @@ detector_areas= {
             'r0c0': [0, 2144]
             },
         },
+    'ENG_EM' :{
+        'frame_rows' : 2200,
+        'frame_cols' : 2200,
+        'image' : { # combined lower and upper
+            'rows': 2048,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'lower_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 1088]
+            },
+        'upper_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [1037, 1088]
+            },
+        'prescan' : {
+            'rows': 2200,
+            'cols': 1088,
+            'r0c0': [0, 0]
+            },
+        'prescan_reliable' : {
+            'rows': 2200,
+            'cols': 200,
+            'r0c0': [0, 800]
+            },
+        'parallel_overscan' : {
+            'rows': 130,
+            'cols': 1056,
+            'r0c0': [2070, 1088]
+            },
+        'serial_overscan' : {
+            'rows': 2200,
+            'cols': 56,
+            'r0c0': [0, 2144]
+            },
+        },
+    'ENG_CONV' :{
+        'frame_rows' : 2200,
+        'frame_cols' : 2200,
+        'image' : { # combined lower and upper
+            'rows': 2048,
+            'cols': 1024,
+            'r0c0': [13, 48]
+            },
+        'lower_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [13, 48]
+            },
+        'upper_image' : {
+            'rows': 1024,
+            'cols': 1024,
+            'r0c0': [1037, 48]
+            },
+        # 'prescan' is actually the serial_overscan region, but the code needs to take
+        # the bias from the largest serial non-image region, and the code identifies
+        # this region as the "prescan", so we have the prescan and serial_overscan
+        # names flipped for this reason.
+        'prescan' : {
+            'rows': 2200,
+            'cols': 1128,
+            'r0c0': [0, 1072]
+            },
+        'prescan_reliable' : {
+            # not sure if these are good in the eng_conv case where the geometry is
+            # flipped relative to the other cases, but these cols would where the
+            # good, reliable cols used for getting row-by-row bias
+            # would be
+            'rows': 2200,
+            'cols': 200,
+            'r0c0': [0, 1200]
+            },
+        'parallel_overscan' : {
+            'rows': 130,
+            'cols': 1056,
+            'r0c0': [2070, 16]
+            },
+        'serial_overscan' : {
+            'rows': 2200,
+            'cols': 16,
+            'r0c0': [0, 0]
+            },
+        }
     }
 
-def slice_section(frame, obstype, key):
+
+def slice_section(frame, obstype, key, detector_regions=None):
+
     """
     Slice 2d section out of frame
 
@@ -195,71 +260,107 @@ def slice_section(frame, obstype, key):
         frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
         obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         key (str): Keyword referencing section to be sliced; must exist in detector_areas
+        detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
     Returns:
         np.ndarray: a 2D array of the specified detector area
     """
-    rows = detector_areas[obstype][key]['rows']
-    cols = detector_areas[obstype][key]['cols']
-    r0c0 = detector_areas[obstype][key]['r0c0']
+    if detector_regions is None:
+            detector_regions = detector_areas
+    rows = detector_regions[obstype][key]['rows']
+    cols = detector_regions[obstype][key]['cols']
+    r0c0 = detector_regions[obstype][key]['r0c0']
 
     section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
     if section.size == 0:
         raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
     return section
 
-def plot_detector_areas(detector_areas, areas=('image', 'prescan',
-        'prescan_reliable', 'parallel_overscan', 'serial_overscan')):
-    """
-    Create an image of the detector areas for visualization and debugging
+def unpack_geom(obstype, key, detector_regions=None):
+        """Safely check format of geom sub-dictionary and return values.
 
-    Args:
-        detector_areas (dict): a dictionary of image constants
-        areas (tuple): a tuple of areas to create masks for
+        Args:
+            obstype: str
+            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+            key: str
+            Desired section
+            detector_regions: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
-    Returns:
-        np.ndarray: an image of the detector areas
-    """
-    detector_areas = make_detector_areas(detector_areas, areas=areas)
-    detector_area_image = np.zeros(
-        (detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=int)
-    for i, area in enumerate(areas):
-        detector_area_image[detector_areas[area]] = i + 1
-    return detector_area_image
+        Returns:
+            rows: int
+            Number of rows of frame
+            cols : int
+            Number of columns of frame
+            r0c0: tuple
+            Tuple of (row position, column position) of corner closest to (0,0)
+        """
+        if detector_regions is None:
+            detector_regions = detector_areas
+        coords = detector_regions[obstype][key]
+        rows = coords['rows']
+        cols = coords['cols']
+        r0c0 = coords['r0c0']
 
-def detector_area_mask(detector_areas, area='image'):
-    """
-    Create a mask for the detector area
+        return rows, cols, r0c0
 
-    Args:
-        detector_areas (dict): a dictionary of image constants
-        area (str): the area of the detector to create a mask for
+def imaging_area_geom(obstype, detector_regions=None):
+        """Return geometry of imaging area (including shielded pixels)
+        in reference to full frame.  Different from normal image area.
 
-    Returns:
-        np.ndarray: a mask for the detector area
-    """
-    mask = np.zeros((detector_areas['frame_rows'], detector_areas['frame_cols']), dtype=bool)
-    mask[detector_areas[area]['r0c0'][0]:detector_areas[area]['r0c0'][0] + detector_areas[area]['rows'],
-            detector_areas[area]['r0c0'][1]:detector_areas[area]['r0c0'][1] + detector_areas[area]['cols']] = True
-    return mask
+        Args:
+            obstype: str
+            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+            detector_regions: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
-def make_detector_areas(detector_areas, areas=('image', 'prescan', 'prescan_reliable',
-        'parallel_overscan', 'serial_overscan')):
-    """
-    Create a dictionary of masks for the different detector areas
 
-    Args:
-        detector_areas (dict): a dictionary of image constants
-        areas (tuple): a tuple of areas to create masks for
+        Returns:
+            rows: int
+            Number of rows of imaging area
+            cols : int
+            Number of columns of imaging area
+            r0c0: tuple
+            Tuple of (row position, column position) of corner closest to (0,0)
+        """
+        if detector_regions is None:
+            detector_regions = detector_areas
+        _, cols_pre, _ = unpack_geom(obstype, 'prescan', detector_regions)
+        _, cols_serial_ovr, _ = unpack_geom(obstype, 'serial_overscan', detector_regions)
+        rows_parallel_ovr, _, _ = unpack_geom(obstype, 'parallel_overscan', detector_regions)
+        #_, _, r0c0_image = self._unpack_geom('image')
+        fluxmap_rows, _, r0c0_image = unpack_geom(obstype, 'image', detector_regions)
 
-    Returns:
-        dict: a dictionary of masks for the different detector areas
-    """
-    detector_areas = {}
-    for area in areas:
-        detector_areas[area] = detector_area_mask(detector_areas, area=area)
-    return detector_areas
+        rows_im = detector_regions[obstype]['frame_rows'] - rows_parallel_ovr
+        cols_im = detector_regions[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
+        r0c0_im = r0c0_image.copy()
+        r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
 
+        return rows_im, cols_im, r0c0_im
+
+def imaging_slice(obstype, frame, detector_regions=None):
+        """Select only the real counts from full frame and exclude virtual.
+        Includes shielded pixels.
+
+        Use this to transform mask and embed from acting on the full frame to
+        acting on only the image frame.
+
+        Args:
+            obstype: str
+            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+            frame: array_like
+            Input frame
+            detector_regions: dict
+            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+
+        Returns:
+            sl: array_like
+            Imaging slice
+
+        """
+        rows, cols, r0c0 = imaging_area_geom(obstype, detector_regions)
+        sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+        return sl
 
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
                    cosm_tail, mode='image'):

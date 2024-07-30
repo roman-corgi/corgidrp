@@ -7,13 +7,13 @@ from corgidrp.data import Image, Dataset
 from corgidrp.mocks import create_default_headers
 
 data = np.ones([1024,1024]) * 2
-err = np.zeros([1024,1024]) 
+err = np.zeros([1024,1024])
 err1 = np.ones([1024,1024])
 err2 = err1.copy()
 err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
-dq1[0,0] = 1 
+dq1[0,0] = 1
 prhd, exthd = create_default_headers()
 errhd = fits.Header()
 errhd["CASE"] = "test"
@@ -70,7 +70,7 @@ def test_split_dataset():
 
     image2.pri_hdr['OBSID'] = 1
     image2.ext_hdr['EXPTIME'] = 120.
-    
+
     image3.pri_hdr['OBSID'] = 0
     image3.ext_hdr['EXPTIME'] = 60.0
 
@@ -86,13 +86,13 @@ def test_split_dataset():
     sliced_datasets, unique_combos = orig_dataset.split_dataset(prihdr_keywords=['OBSID',])
     assert len(sliced_datasets) == 2
 
-    ## slice it into 3 
+    ## slice it into 3
     image1.pri_hdr['OBSID'] = 0
     image1.ext_hdr['EXPTIME'] = 60.0
 
     image2.pri_hdr['OBSID'] = 1
     image2.ext_hdr['EXPTIME'] = 60.0
-    
+
     image3.pri_hdr['OBSID'] = 0
     image3.ext_hdr['EXPTIME'] = 60.0
 
@@ -101,7 +101,7 @@ def test_split_dataset():
 
 
     sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',], prihdr_keywords=['OBSID',])
-    assert len(sliced_datasets) == 3 
+    assert len(sliced_datasets) == 3
 
     ## slice it into 4
     image1.pri_hdr['OBSID'] = 0
@@ -109,7 +109,7 @@ def test_split_dataset():
 
     image2.pri_hdr['OBSID'] = 1
     image2.ext_hdr['EXPTIME'] = 60.0
-    
+
     image3.pri_hdr['OBSID'] = 0
     image3.ext_hdr['EXPTIME'] = 120.
 
@@ -123,5 +123,5 @@ def test_split_dataset():
     assert len(sliced_datasets) == 2
 
 if __name__ == "__main__":
-    # test_hashing()
+    test_hashing()
     test_split_dataset()
