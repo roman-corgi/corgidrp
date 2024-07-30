@@ -88,8 +88,14 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
         planims (str): Planet and band
         
 	Returns:
-    	rastered images
-    	To create the simulated dataset:
+    	median dithers (np.array): median dither images
+    	mask (np.array): mask used for the dithers
+    	final (np.array): final image
+    	data_display (np.array): data 
+    	dither_stack_norm (np.array): stacked dithers
+    	full_mask (np.array) : mask used for the dithers
+    	cent (np.array): centroid of images
+    	
         
     """  
  

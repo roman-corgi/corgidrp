@@ -472,9 +472,9 @@ def combine_rasters(residual_images,cent=None,planims=None,band=None):
         	band    (str)  :  band of the observation band1 or band4
         	
     	Returns:
-        	image (np.array): ideal flat field
-        	image (np.array): flat field from uranus or neptune images
-        	image (np.array): percentage error of the flat field
+        	full_qe (np.array): ideal flat field
+        	full_residuals (np.array): flat field from uranus or neptune images
+        	percens_resel (np.array): percentage error of the flat field
     """
     
     n = 420
@@ -541,7 +541,10 @@ def create_onsky_flatfield(filedir):
         	filedir (str) :  Full path to directory of images that are raster scanned
 
     	Returns:
-    		planet_band_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images
+    		nept_band1_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of neptune in band 1
+    		nept_band4_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of neptune in band 4
+    		ura_band1_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of neptune in band 1
+    		ura_band4_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of neptune in band 4
     """
 	
 	smooth_images=[];nept_band1_raster_images_cent=[];nept_band4_raster_images_cent=[];ura_band1_raster_images_cent=[];
