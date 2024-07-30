@@ -440,10 +440,11 @@ def residuals(images,planims=None):
     dividing from matched filters
 
     Args:
-        images (np.array) : cropped neptune or uranus image frames
+        images (np.array) : 2D array of cropped neptune or uranus image frames
+        planims (str)     : name of the planet uranus or neptune
 
     Returns:
-        images (np.array): residual image frames of neptune or uranus divided by matched filter
+        matched_residuals (np.array): residual image frames of neptune or uranus divided by matched filter
     """
     
     if planims=='neptune' or planims=='uranus' :
@@ -465,7 +466,7 @@ def combine_rasters(residual_images,cent=None,planims=None,band=None):
     	and associated error
 
     	Args:
-        	images (np.array) : residual image frames of neptune and uranus 
+        	residual_images (np.array) : residual image frames of neptune and uranus 
         	cent  (np.array)  : centroid of the image frames
         	planims (str) :   name of the planet neptune or uranus
         	band    (str)  :  band of the observation band1 or band4
@@ -537,7 +538,7 @@ def create_onsky_flatfield(filedir):
     	Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
 
     	Args:
-        	datadir (str) :  Full path to directory of images that are raster scanned
+        	filedir (str) :  Full path to directory of images that are raster scanned
 
     	Returns:
     		planet_band_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images
