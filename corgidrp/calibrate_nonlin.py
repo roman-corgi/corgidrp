@@ -951,7 +951,9 @@ def nonlin_dataset_2_stack(dataset):
         raise Exception('Substacks must have at least one element')
     # Every EM gain must be greater than or equal to 1
     if np.any(np.array(split[1]) < 1):
-        raise Exception('EM gains must be greater than or equal to 1') 
+        raise Exception('Commanded EM gains must be greater than or equal to 1') 
+    if np.any(np.array(gains) < 1):
+        raise Exception('Actual EM gains must be greater than or equal to 1')
 
     return (np.vstack(stack), np.stack(mean_frame_stack), np.array(exp_times),
         np.array(datetimes), len_sstack, np.array(gains))
