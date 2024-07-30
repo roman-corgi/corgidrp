@@ -535,9 +535,7 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
     
     
 def residuals(images,planims=None):
-    
-    """
-    Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
+    """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
     dividing from matched filters
 
     Args:
@@ -561,9 +559,7 @@ def residuals(images,planims=None):
     
     
 def combine_rasters(residual_images,cent=None,planims=None,band=None):
-    
-    """
-    	combine the dataset of residual image frames of neptune or uranus and create flat field 
+    """combine the dataset of residual image frames of neptune or uranus and create flat field 
     	and associated error
 
     	Args:
@@ -634,9 +630,7 @@ def combine_rasters(residual_images,cent=None,planims=None,band=None):
     
     
 def create_onsky_flatfield(filedir):
-	
-	"""
-    	Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
+	"""Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
 
     	Args:
         	filedir (str) :  Full path to directory of images that are raster scanned
