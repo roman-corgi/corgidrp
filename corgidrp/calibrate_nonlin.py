@@ -151,7 +151,7 @@ def frameProc(frame, offset_colroi, emgain):
     frame = frame/emgain
     return frame
 
-def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
+def calibrate_nonlin(dataset_nl,
                      n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0, max_write = 10000.0,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
@@ -205,15 +205,6 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
         pupil image. They also have unity EM gain. A simple row-bias subtraction
         using prescan region is performed by frameProc(), These frames are
         identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
-      actual_gain_arr (np.array): the array of actual EM gain values (as opposed
-        to commanded EM gain) corresponding to the number of EM gain values used
-        to construct dataset_nl and in the same order. Note: calibrate_nonlin does
-        not calculate actual EM gain values -- they must be provided in this array. 
-        The length of actual_gain_arr must equal the length of len_list. Values 
-        must be >= 1.0. 
-      actual_gain_mean_frame (float):
-        The value of the measured/actual EM gain used to collect the frames used
-        to build the mean frame in dataset_kgain. note: commanded EM must be unity.
       n_cal (int):
         Minimum number of sub-stacks used to calibrate Non-Linearity. The default
         value is 20.
@@ -262,7 +253,7 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
     # cast dataset objects into np arrays and retrieve aux information
-    cal_arr, mean_frame_arr, exp_arr, datetime_arr, len_list, _ = \
+    cal_arr, mean_frame_arr, exp_arr, datetime_arr, len_list, actual_gain_arr = \
         nonlin_dataset_2_stack(dataset_nl)
     # Get relevant constants
     offset_colroi1 = nonlin_params['offset_colroi1']
@@ -347,9 +338,6 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
             'than or equal to 1.')
     check.real_array(actual_gain_arr, 'actual_gain_arr', TypeError)
     check.oneD_array(actual_gain_arr, 'actual_gain_arr', TypeError)
-    check.real_positive_scalar(actual_gain_mean_frame, 'actual_gain_mean_frame', TypeError)
-    if actual_gain_mean_frame < 1:
-        raise CalKgainException('Actual gain must be >= 1.')
     check.positive_scalar_integer(norm_val, 'norm_val', TypeError)
     if np.mod(norm_val, 20) !=0:
         raise CalNonlinException('norm_val must be divisible by 20.')
@@ -420,7 +408,7 @@ def calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
     for i in range(nFrames):
         frame = mean_frame_arr[i]
         frame = frameProc(frame.astype(np.float64), offset_colroi,
-            actual_gain_mean_frame)
+            1)
     
         # Subtract row-wise medians
         row_meds = np.median(frame[:, offset_colroi], axis=1)
@@ -897,7 +885,7 @@ def nonlin_dataset_2_stack(dataset):
         array of exposure times associated with each frame
         array of datetimes associated with each frame
         list with the number of frames with same EM gain
-        List of (commanded) EM gains
+        List of actual EM gains
 
     """
     # Split Dataset
@@ -915,10 +903,13 @@ def nonlin_dataset_2_stack(dataset):
     datetimes = []
     # Size of each sub stack
     len_sstack = []
+    # Record measured gain of each substack of calibration frames
+    gains = []
     for idx_set, data_set in enumerate(split[0]):
         # Second layer for calibration data (array of different exposure times)
         sub_stack = []
         len_cal_frames = 0
+        record_gain = True 
         for frame in data_set.frames:
             if frame.ext_hdr['OBSTYPE'] == 'MNFRAME':
                 if record_exp_time:
@@ -942,6 +933,12 @@ def nonlin_dataset_2_stack(dataset):
                 if isinstance(datetime, str) is False:
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
+                if record_gain:
+                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                        gains.append(frame.ext_hdr['EMGAIN_M'])
+                    except: # use commanded gain otherwise
+                        gains.append(frame.ext_hdr['CMDGAIN'])
+                    record_gain = False
         # First layer (array of unique EM values)
         stack.append(np.stack(sub_stack))
         len_sstack.append(len_cal_frames)
@@ -957,4 +954,4 @@ def nonlin_dataset_2_stack(dataset):
         raise Exception('EM gains must be greater than or equal to 1') 
 
     return (np.vstack(stack), np.stack(mean_frame_stack), np.array(exp_times),
-        np.array(datetimes), len_sstack, np.array(split[1]))
+        np.array(datetimes), len_sstack, np.array(gains))
