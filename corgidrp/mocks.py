@@ -258,10 +258,7 @@ def create_simflat_dataset(filedir=None, numfiles=10):
 
 
 def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=1,mask_size=180,snr=250,planims=None):
-    
-      
-    """
-     Performs raster scan of Neptune or Uranus images
+    """Performs raster scan of Neptune or Uranus images
     
      Args:
         mask (int): (Required)  Mask used for the image.
@@ -272,7 +269,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
         col_cent (int): (Required)  Y coordinate of the centroid
         n_dith (int): number of dithers required
         mask_size (int): Size of the mask in pixels
-        snr  (int): Required SNR in the planet images
+        snr (int): Required SNR in the planet images
         planims (str): Planet and band
         
 	Returns:
@@ -350,15 +347,14 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     return median_dithers,mask,final,data_display,dither_stack_norm,full_mask,cents
     
 def create_onsky_rasterscans(datadir=None,filedir=None):
-     
     """
-     Create simulated data to check the flat division
+    Create simulated data to check the flat division
     
-     Args:
+    Args:
         filedir (str): (Optional) Full path to directory to save to.
         datadir (str): (Required) Full path to directory of images to be raster scanned
 
-     Returns:
+    Returns:
     	corgidrp.data.Dataset:
         The simulated dataset
     """
