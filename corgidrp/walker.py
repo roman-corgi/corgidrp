@@ -51,7 +51,7 @@ def autogen_recipe(filelist, outputdir, template=None):
     """
     # load the first frame to check what kind of data and identify recipe
     first_frame = data.autoload(filelist[0])
-    
+
     # if user didn't pass in template
     if template is None:
         recipe_filename = guess_template(first_frame)
@@ -66,7 +66,7 @@ def autogen_recipe(filelist, outputdir, template=None):
 
     for filename in filelist:
         recipe["inputs"].append(filename)
-    
+
     recipe["outputdir"] = outputdir
 
     ## Populate calibration files that need to be automatically populated
@@ -75,7 +75,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         if "calibs" in step:
             for calib in step["calibs"]:
                 # order matters, so only one calibration file per dictionary
-                
+
                 if step["calibs"][calib].upper() == "AUTOMATIC":
                     calib_dtype = data.datatypes[calib]
                     best_cal_file = this_caldb.get_calib(first_frame, calib_dtype)
@@ -116,7 +116,7 @@ def run_recipe(recipe, save_recipe_file=True):
     if isinstance(recipe, str):
         # need to load in
         recipe = json.load(open(recipe, "r"))
-    
+
     # configure pipeline as needed
     for setting in recipe['drpconfig']:
         # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
@@ -145,7 +145,7 @@ def run_recipe(recipe, save_recipe_file=True):
 
         else:
             step_func = all_steps[step["name"]]
-            
+
             # TODO: handle calibrations; any other possible required args?
             other_args = ()
             if "calibs" in step:
@@ -153,7 +153,7 @@ def run_recipe(recipe, save_recipe_file=True):
                     calib_dtype = data.datatypes[calib]
                     cal_file = calib_dtype(step["calibs"][calib])
                     other_args += (cal_file,)
-                
+
 
             if "keywords" in step:
                 kwargs = step["keywords"]
