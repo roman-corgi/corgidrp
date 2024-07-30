@@ -81,9 +81,10 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
         dither_sizex (int):(Required) Size of the dither in X axis in pixels
         dither_sizey (int):(Required) Size of the dither in X axis in pixels
         row_cent (int): (Required)  X coordinate of the centroid
-        column_cent (int): (Required)  Y coordinate of the centroid
+        col_cent (int): (Required)  Y coordinate of the centroid
         n_dith (int): number of dithers required
         mask_size (int): Size of the mask in pixels
+        snr  (int): Required SNR in the planet images
         planims (str): Planet and band
         
 	Returns:
