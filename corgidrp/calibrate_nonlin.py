@@ -127,30 +127,6 @@ def check_nonlin_params(
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
 
-def frameProc(frame, offset_colroi, emgain):
-    """
-    simple row-bias subtraction using prescan region
-    frame of an L1 SCI-size frame, offset_colroi is the
-    column range in the prescan region to use to calculate
-    the median for each row. EM gain is the actual emgain used
-    to collect the frame.
-
-    Args:
-      frame (np.array): L1 frame
-      offset_colroi (int): column range
-      emgain (int): EM gain value
-
-    Returns:
-      np.array: bias subtracted frame
-    """
-
-    frame = np.float64(frame)
-    row_meds = np.median(frame[:,offset_colroi], axis=1)
-    row_meds = row_meds[:, np.newaxis]
-    frame -= row_meds
-    frame = frame/emgain
-    return frame
-
 def calibrate_nonlin(dataset_nl,
                      n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0, max_write = 10000.0,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
@@ -202,8 +178,7 @@ def calibrate_nonlin(dataset_nl,
         a set of at least 30 frames used to generate a mean frame. These frames
         have the same exp time, such that the mean signal in the pupil regions
         is a few thousand DN, which helps identify the pixels containing the 
-        pupil image. They also have unity EM gain. A simple row-bias subtraction
-        using prescan region is performed by frameProc(), These frames are
+        pupil image. They also have unity EM gain. These frames are
         identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
       n_cal (int):
         Minimum number of sub-stacks used to calibrate Non-Linearity. The default
@@ -407,8 +382,6 @@ def calibrate_nonlin(dataset_nl,
     # Loop over the mean_frame_arr frames
     for i in range(nFrames):
         frame = mean_frame_arr[i]
-        frame = frameProc(frame.astype(np.float64), offset_colroi,
-            1)
     
         # Subtract row-wise medians
         row_meds = np.median(frame[:, offset_colroi], axis=1)

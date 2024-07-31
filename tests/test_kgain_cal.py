@@ -119,7 +119,8 @@ for j in range(len(exp_repeat_counts)):
         # Simulate full frame
         exp_time = exp_time_loop[t+j*exp_repeat_counts[j]]
         image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in,g,
-                               exp_time,coeffs,nonlin_flag=nonlin_flag)
+                               exp_time,coeffs,nonlin_flag=nonlin_flag,
+                               divide_em=True)
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
         # OBSTYPE has no KGAIN value, but NONLIN
         image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
