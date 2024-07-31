@@ -8,8 +8,8 @@ from scipy.optimize import curve_fit
 from corgidrp import check
 import corgidrp.data as data
 from corgidrp.data import Image
-from corgidrp.detector import slice_section, detector_areas
 from corgidrp.mocks import create_default_headers
+from corgidrp.detector import slice_section, detector_areas
 
 # Dictionary with constant kgain calibration parameters
 kgain_params= {
