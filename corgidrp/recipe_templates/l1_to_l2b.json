@@ -41,6 +41,9 @@
             "name" : "em_gain_division"
         },
         {
+            "name" : "add_photon_noise"
+        },
+        {
             "name" : "dark_subtraction",
             "calibs" : {
                 "DetectorNoiseMaps" : "AUTOMATIC"
@@ -54,6 +57,9 @@
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC"
             }
+        },
+        {
+            "name" : "cti_correction"
         },
         {
             "name" : "flat_division",
