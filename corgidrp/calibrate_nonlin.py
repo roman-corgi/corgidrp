@@ -49,10 +49,6 @@ nonlin_params = {
 def check_nonlin_params(
     ):
     """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
-    if 'offset_colroi1' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_colroi2' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
     if 'rowroi1' not in nonlin_params:
         raise ValueError('Missing parameter in directory pointer YAML file.')
     if 'rowroi2' not in nonlin_params:
@@ -86,10 +82,6 @@ def check_nonlin_params(
     if 'min_mask_factor' not in nonlin_params:
         raise ValueError('Missing parameter in directory pointer YAML file.')
     
-    if not isinstance(nonlin_params['offset_colroi1'], (float, int)):
-        raise TypeError('offset_colroi1 is not a number')
-    if not isinstance(nonlin_params['offset_colroi2'], (float, int)):
-        raise TypeError('offset_colroi2 is not a number')
     if not isinstance(nonlin_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
     if not isinstance(nonlin_params['rowroi2'], (float, int)):
@@ -234,8 +226,6 @@ def calibrate_nonlin(dataset_nl,
     cal_arr, mean_frame_arr, exp_arr, datetime_arr, len_list, actual_gain_arr = \
         nonlin_dataset_2_stack(dataset_nl)
     # Get relevant constants
-    offset_colroi1 = nonlin_params['offset_colroi1']
-    offset_colroi2 = nonlin_params['offset_colroi2']
     rowroi1 = nonlin_params['rowroi1']
     rowroi2 = nonlin_params['rowroi2']
     colroi1 = nonlin_params['colroi1']
@@ -357,9 +347,6 @@ def calibrate_nonlin(dataset_nl,
                 print('Output directory for figures created in ', os.getcwd())
     
     ######################### start of main code #############################
-    
-    # Define offset columns ROI range
-    offset_colroi = slice(offset_colroi1,offset_colroi2)
     
     # Define pixel ROIs
     rowroi = list(range(rowroi1, rowroi2))
