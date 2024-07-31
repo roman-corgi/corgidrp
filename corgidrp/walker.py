@@ -5,17 +5,28 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
+import corgidrp.l2a_to_l2b
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
     "detect_cosmic_rays" : corgidrp.l1_to_l2a.detect_cosmic_rays,
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
-    "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a
+    "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
+    "add_photon_noise" : corgidrp.l2a_to_l2b.add_photon_noise,
+    "dark_subtraction" : corgidrp.l2a_to_l2b.dark_subtraction,
+    "flat_division" : corgidrp.l2a_to_l2b.flat_division,
+    "frame_select" : corgidrp.l2a_to_l2b.frame_select,
+    "convert_to_electrons" : corgidrp.l2a_to_l2b.convert_to_electrons,
+    "em_gain_division" : corgidrp.l2a_to_l2b.em_gain_division,
+    "cti_correction" : corgidrp.l2a_to_l2b.cti_correction,
+    "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
+    "desmear" : corgidrp.l2a_to_l2b.desmear,
+    "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
-def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir):
+def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
     Does both the `autogen_recipe` and `run_recipe` steps.
@@ -24,12 +35,18 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir):
         filelist (list of str): list of filepaths to files
         CPGS_XML_filepath (str): path to CPGS XML file for this set of files in filelist
         outputdir (str): output directory folderpath
+        template (str or json): custom template. either the full json file, or a filename of
+                                a template that's already in the recipe_templates folder
 
     Returns:
         json: the JSON recipe that was used for processing
     """
+    if isinstance(template, str):
+        recipe_filepath = os.path.join(recipe_dir, template)
+        template = json.load(open(recipe_filepath, 'r'))
+
     # generate recipe
-    recipe = autogen_recipe(filelist, outputdir)
+    recipe = autogen_recipe(filelist, outputdir, template=template)
 
     # process_recipe
     run_recipe(recipe)
@@ -69,7 +86,9 @@ def autogen_recipe(filelist, outputdir, template=None):
 
     recipe["outputdir"] = outputdir
 
-    ## Populate calibration files that need to be automatically populated
+    ## Populate default values
+    ## This includes calibration files that need to be automatically determined
+    ## This also includes the dark subtraction outputdir for synthetic darks
     this_caldb = caldb.CalDB()
     for step in recipe["steps"]:
         if "calibs" in step:
@@ -81,6 +100,9 @@ def autogen_recipe(filelist, outputdir, template=None):
                     best_cal_file = this_caldb.get_calib(first_frame, calib_dtype)
                     # set calibration file to this one
                     step["calibs"][calib] = best_cal_file.filepath
+        if step["name"].lower() == "dark_subtraction":
+            if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
+                step["keywords"]["outputdir"] = recipe["outputdir"]
 
     return recipe
 
@@ -99,7 +121,7 @@ def guess_template(image):
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
         else:
-            recipe_filename = "l1_to_l2a_basic.json"
+            recipe_filename = "l1_to_l2b.json"
     else:
         raise NotImplementedError()
 
@@ -137,8 +159,11 @@ def run_recipe(recipe, save_recipe_file=True):
         with open(recipe_filepath, "w") as json_file:
             json.dump(recipe, json_file, indent=4)
 
+    tot_steps = len(recipe["steps"])
+
     # execute each pipeline step
-    for step in recipe["steps"]:
+    for i, step in enumerate(recipe["steps"]):
+        print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
         if step["name"].lower() == "save":
             # special save instruction
             curr_dataset.save(recipe["outputdir"])
@@ -146,7 +171,6 @@ def run_recipe(recipe, save_recipe_file=True):
         else:
             step_func = all_steps[step["name"]]
 
-            # TODO: handle calibrations; any other possible required args?
             other_args = ()
             if "calibs" in step:
                 for calib in step["calibs"]:
