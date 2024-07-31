@@ -772,6 +772,10 @@ def calibrate_kgain(dataset_kgain,
 
     prhd = dataset_kgain.frames[0].pri_hdr
     exthd = dataset_kgain.frames[0].ext_hdr
+    # Read noise and error
+    exthd['RN'] = mean_rn_gauss_e
+    exthd['RN_ERR'] = np.std(rn_gauss) * kgain
+    # Update history
     exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
     gain_value = np.array([[kgain]])
 
