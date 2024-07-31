@@ -17,10 +17,6 @@ from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params = {
-    # offset column ROI range
-    'offset_colroi1': 799,
-    'offset_colroi2': 1000,
-    
     # ROI constants
     'rowroi1': 305,
     'rowroi2': 736,
@@ -373,10 +369,6 @@ def calibrate_nonlin(dataset_nl,
     for i in range(nFrames):
         frame = mean_frame_arr[i]
     
-        # Subtract row-wise medians
-        row_meds = np.median(frame[:, offset_colroi], axis=1)
-        frame -= row_meds[:, np.newaxis]
-    
         # Add this frame to the cumulative good_mean_frame
         good_mean_frame += frame
         mean_frame_index += 1
@@ -547,10 +539,6 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = selected_files[iframe]
                         frame_1 = frame_1.astype(np.float64)
         
-                        # Subtract row-wise medians
-                        row_meds = np.median(frame_1[:, offset_colroi], axis=1)
-                        frame_1 -= row_meds[:, np.newaxis]
-        
                         # Subtract background
                         frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
@@ -582,10 +570,6 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
         
-                        # Subtract row-wise medians
-                        row_meds = np.median(frame_1[:, offset_colroi], axis=1)
-                        frame_1 -= row_meds[:, np.newaxis]
-
                         # Subtract background
                         frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
@@ -616,10 +600,6 @@ def calibrate_nonlin(dataset_nl,
                        
                         frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
-        
-                        # Subtract row-wise medians
-                        row_meds = np.median(frame_1[:, offset_colroi], axis=1)
-                        frame_1 -= row_meds[:, np.newaxis]
         
                         # Subtract background
                         frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, colback1[0]:colback1[-1]+1])
