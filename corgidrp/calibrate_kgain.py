@@ -770,7 +770,9 @@ def calibrate_kgain(dataset_kgain,
              compiled_binned_shot_deviations]
     ptc = np.column_stack(ptc_list)
 
-    prhd, exthd = create_default_headers()
+    prhd = dataset_kgain.frames[0].pri_hdr
+    exthd = dataset_kgain.frames[0].ext_hdr
+    exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
     gain_value = np.array([[kgain]])
 
     kgain = data.KGain(gain_value, err = np.array([[np.std(kgain_clipped)]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
