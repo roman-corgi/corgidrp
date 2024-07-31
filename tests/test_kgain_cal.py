@@ -17,34 +17,10 @@ from astropy.io import fits
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import (create_default_headers, make_fluxmap_image)
+from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params)
 
 ######################## function definitions ###############################
-
-def nonlin_coefs(filename,EMgain,order):
-    # filename is the name of the csv text file containing the TVAC nonlin table
-    # EM gain selects the closest column in the table
-    # Load the specified file
-    bigArray = pd.read_csv(filename, header=None).values
-    EMgains = bigArray[0, 1:]
-    DNs = bigArray[1:, 0]
-    
-    # Find the closest EM gain available to what was requested
-    iG = (np.abs(EMgains - EMgain)).argmin()
-    
-    # Fit the nonlinearity numbers to a polynomial
-    vals = bigArray[1:, iG + 1]
-    coeffs = np.polyfit(DNs, vals, order)
-    
-    # shift so that function passes through unity at 3000 DN for these tests
-    fitVals0 = np.polyval(coeffs, DNs)
-    ind = np.where(DNs == 3000)
-    unity_val = fitVals0[ind][0]
-    coeffs[3] = coeffs[3] - (unity_val-1.0)
-    fitVals = np.polyval(coeffs,DNs)
-    
-    return coeffs, DNs, fitVals
 
 def count_contiguous_repeats(arr):
     """
@@ -106,7 +82,6 @@ fluxMap = 0.8*fluxmap_init # e/s/px, for G = 1
 kgain_in = 8.7 # e-/DN
 bias = 2000 # e-
 actual_gain = 1.0
-actual_gain_mean_frame = 1.0
 
 # cubic function nonlinearity for emgain of 1
 if nonlin_flag:
@@ -116,10 +91,10 @@ else:
     _, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
 
 frame_list = []
-# make some uniform frames with emgain = 1. P.S. IIT would use ~30
+# make some uniform frames with emgain = 1 (must be unity) P.S. IIT would use ~30
 n_mean = 3
 for j in range(n_mean):
-    image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in,actual_gain,7.0,coeffs_1,
+    image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in, 1, 7.0,coeffs_1,
         nonlin_flag=nonlin_flag)
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
@@ -129,7 +104,7 @@ for j in range(n_mean):
 
 index = 0
 iG = 0 # doing only the em gain = 1 case
-g = actual_gain
+g = actual_gain # Note: Same value for all frames used to calibrate K-gain
 exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
 index = index + len_list0[iG]
 if nonlin_flag:
@@ -144,7 +119,8 @@ for j in range(len(exp_repeat_counts)):
         # Simulate full frame
         exp_time = exp_time_loop[t+j*exp_repeat_counts[j]]
         image_sim = make_fluxmap_image(fluxMap,bias,kgain_in,rn_in,g,
-                               exp_time,coeffs,nonlin_flag=nonlin_flag)
+                               exp_time,coeffs,nonlin_flag=nonlin_flag,
+                               divide_em=True)
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
         # OBSTYPE has no KGAIN value, but NONLIN
         image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
@@ -158,8 +134,7 @@ binwidth = 68
 
 def test_expected_results_sub():
     """Outputs are as expected, for imported frames."""
-    kgain = calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-        n_cal, n_mean, min_val, max_val, binwidth)
+    kgain = calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, binwidth)
         
     signal_bins_N = kgain_params['signal_bins_N']
     # kgain - should be close to the assumed value
@@ -172,41 +147,22 @@ def test_psi():
     # min_val
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-                n_cal, n_mean, perr, max_val, binwidth)
+            calibrate_kgain(dataset_kg, n_cal, n_mean, perr, max_val, binwidth)
     # max_val
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-                n_cal, n_mean, min_val, perr, binwidth)
+            calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, perr, binwidth)
 
     # binwidth
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-                n_cal, n_mean, min_val, max_val, perr)
+            calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, perr)
       
 def test_binwidth():
     """binwidth must be >= 10."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kg, actual_gain, actual_gain_mean_frame,
-            n_cal, n_mean, min_val, max_val, 9)
+        calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, 9)
  
-def test_rps():
-    """emgain must be a real positive scalar."""
-    check_list = test_check.rpslist
-    # min_write
-    for rerr in check_list:
-        with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kg, rerr, actual_gain_mean_frame,
-                n_cal, n_mean, min_val, max_val, binwidth)
-   
-def test_emgain():
-    """emgain must be >= 1."""
-    with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kg, 0.5, actual_gain_mean_frame,
-            n_cal, n_mean, min_val, max_val, binwidth)
-
 if __name__ == '__main__':
     print('Running test_expected_results_sub')
     test_expected_results_sub()
@@ -214,7 +170,3 @@ if __name__ == '__main__':
     test_psi()
     print('Running test_binwidth')
     test_binwidth()
-    print('Running test_rps')
-    test_rps()
-    print('Running test_emgain')
-    test_emgain()

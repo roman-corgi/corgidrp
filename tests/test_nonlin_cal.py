@@ -82,7 +82,7 @@ else:
 # commanded EM gain
 emgain = 1.0
 frame_list = []
-# make some uniform frames with emgain = 1
+# make some uniform frames with emgain = 1 (must be unity)
 n_mean = 3
 for j in range(n_mean):
     image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
@@ -143,8 +143,7 @@ max_write = 10000
 
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    nonlin_out = calibrate_nonlin(dataset_nl, actual_gain_arr,
-        actual_gain_mean_frame, n_cal, n_mean, norm_val, min_write, max_write)
+    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
         
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
@@ -199,8 +198,7 @@ def test_expected_results_time_sub():
             dataset_nl[idx_frame].ext_hdr['DATETIME'] = time_stack_test[idx_t]
             idx_frame += 1
 
-    nonlin_out = calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
-        n_cal, n_mean, norm_val, min_write, max_write)
+    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
      
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
@@ -225,8 +223,7 @@ def test_norm_val():
     """norm_val must be divisible by 20."""
     norm_not_div_20 = 2010
     with pytest.raises(CalNonlinException):
-        calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
-                            n_cal, n_mean, norm_not_div_20, min_write, max_write)
+        calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_not_div_20, min_write, max_write)
  
 def test_rps():
     """these two below must be real positive scalars."""
@@ -234,20 +231,17 @@ def test_rps():
     # min_write
     for rerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
-                                n_cal, n_mean, norm_val, rerr, max_write)
+            calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, rerr, max_write)
     # max_write
     for rerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
-                                n_cal, n_mean, norm_val, min_write, rerr)
+            calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, rerr)
    
 def test_max_gt_min():
     """max_write must be greater than min_write."""
     werr = min_write # set the max_write value to the min_write value
     with pytest.raises(CalNonlinException):
-        calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
-                            n_cal, n_mean, norm_val, min_write, werr)
+        calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, werr)
     
 def test_psi():
     """norm_val must be a positive scalar integer."""
@@ -255,8 +249,7 @@ def test_psi():
     # norm_val
     for mmerr in check_list:
         with pytest.raises(TypeError):
-            calibrate_nonlin(dataset_nl, actual_gain_arr, actual_gain_mean_frame,
-                                n_cal, n_mean, mmerr, min_write, max_write)
+            calibrate_nonlin(dataset_nl, n_cal, n_mean, mmerr, min_write, max_write)
  
 if __name__ == '__main__':
     print('Running test_expected_results_nom_sub')
