@@ -641,6 +641,7 @@ def make_fluxmap_image(
         time (float):  exposure time in sec.
         coeffs (np.array): array of cubic polynomial coefficients from nonlin_coefs.
         nonlin_flag (bool): (Optional) if nonlin_flag is True, then nonlinearity is applied.
+        divide_em (bool): if divide_em is True, then the emgain is divided
         
     Returns:
         corgidrp.data.Image
