@@ -93,30 +93,6 @@ class CalKgainException(Exception):
 
 ################### function defs #####################
     
-def frameProc(frame, offset_colroi, emgain):
-    """ 
-    simple row-bias subtraction using prescan region 
-    frame of an L1 SCI-size frame, offset_colroi is the 
-    column range in the prescan region to use to calculate 
-    the median for each row. EM gain is the actual emgain used 
-    to collect the frame.
-        
-    Args:
-      frame (np.array): L1 frame
-      offset_colroi (int): column range
-      emgain (int): EM gain value   
-      
-    Returns:
-      np.array: bias subtracted frame
-    """
-      
-    frame = np.float64(frame)
-    row_meds = np.median(frame[:,offset_colroi], axis=1)
-    row_meds = row_meds[:, np.newaxis]
-    frame -= row_meds
-    frame = frame/emgain
-    return frame
-    
 def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
     """ 
     frame_in is a bias-corrected frame trimmed to the ROI. mean_frame is 
@@ -317,8 +293,9 @@ def calibrate_kgain(dataset_kgain,
     """
     Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
-    exposure time, this function subtracts the prescan bias from each frame
-    (frameProc). It also creates a mean pupil array from a separate stack of
+    exposure time. The frames are bias-subtracted, and in addition, if EM gain
+    is >1 for the input data for calibrate_kgain, EM gain division is also needed.
+    It also creates a mean pupil array from a separate stack of
     frames of uniform exposure time. The mean pupil array is scaled to the mean
     of each stack and statistics (mean and std dev) are calculated for bins from
     the frames in it. kgain (e-/DN) is calculated from the means and variances
@@ -470,9 +447,6 @@ def calibrate_kgain(dataset_kgain,
     rowroi = slice(rowroi1,rowroi2)
     colroi = slice(colroi1,colroi2)
     
-    # ROI for frameProc
-    colroi_fp = slice(offset_colroi1,offset_colroi2)
-    
     averages = []
     deviations = []
     read_noise = []
@@ -490,10 +464,7 @@ def calibrate_kgain(dataset_kgain,
     good_mean_frame = np.zeros((nrow, ncol))
     nFrames2 = len(mean_frame_list)
     for mean_frame_count in range(nFrames2):
-        frame = mean_frame_list[mean_frame_count]
-        frame = frameProc(frame, colroi_fp, actual_gain)
-        
-        good_mean_frame += frame  # Accumulate into good_mean_frame
+        good_mean_frame += mean_frame_list[mean_frame_count]
     
     good_mean_frame = good_mean_frame / nFrames2
     
@@ -537,8 +508,6 @@ def calibrate_kgain(dataset_kgain,
         
         # multi-frame analysis method
         frames = [cal_list[jj][nFrames - offset] for offset in index_offsets]
-        # subtract prescan row medians
-        frames = [frameProc(frames[x], colroi_fp, actual_gain) for x in range(len(frames))]
         # Calculate frame differences
         frames_diff = [frames[j] - frames[k] for j, k in index_pairs]
         # calculate read noise with std from prescan

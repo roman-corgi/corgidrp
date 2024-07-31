@@ -625,9 +625,12 @@ def make_fluxmap_image(
         time,
         coeffs,
         nonlin_flag=False,
+        divide_em=False,
         ):
     """ 
-    This function makes a SCI-sized frame with simulated noise and a fluxmap.
+    This function makes a SCI-sized frame with simulated noise and a fluxmap. It
+    also performs bias-subtraction and division by EM gain if required. It is used
+    in the unit tests test_nonlin.py and test_kgain_cal.py
 
     Args:
         f_map (np.array): fluxmap in e/s/px. Its size is 1024x1024 pixels.
@@ -657,6 +660,18 @@ def make_fluxmap_image(
         frame = np.round((bias + random_array + signal_arr/temp2)/kgain) # DN
     else:
         frame = np.round((bias+temp)/kgain) # DN
+
+    # Subtract bias and divide by EM gain if required. TODO: substitute by
+    # prescan_biassub step function in l1_to_l2a.py and the em_gain_division
+    # step function in l2a_to_l2b.py    
+    offset_colroi1 = 799
+    offset_colroi2 = 1000
+    offset_colroi = slice(offset_colroi1,offset_colroi2)
+    row_meds = np.median(frame[:,offset_colroi], axis=1)
+    row_meds = row_meds[:, np.newaxis]
+    frame -= row_meds
+    if divide_em:
+        frame = frame/emgain
 
     prhd, exthd = create_default_headers()
     # Record actual commanded EM
