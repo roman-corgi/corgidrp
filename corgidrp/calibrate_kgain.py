@@ -8,16 +8,11 @@ from scipy.optimize import curve_fit
 from corgidrp import check
 import corgidrp.data as data
 from corgidrp.data import Image
+from corgidrp.detector import slice_section, detector_areas
 from corgidrp.mocks import create_default_headers
 
 # Dictionary with constant kgain calibration parameters
 kgain_params= {
-# offset ROI constants
-'offset_rowroi1': 99,
-'offset_rowroi2': 1000,
-'offset_colroi1': 799,
-'offset_colroi2': 1000,
-
 # ROI constants
 'rowroi1': 9,
 'rowroi2': 1000,
@@ -38,10 +33,6 @@ kgain_params= {
 def check_kgain_params(
     ):
     """ Checks integrity of kgain parameters in the dictionary kgain_params. """
-    if 'offset_rowroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_rowroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
     if 'offset_colroi1' not in kgain_params:
         raise ValueError('Missing parameter in directory pointer YAML file.')
     if 'offset_colroi2' not in kgain_params:
@@ -63,10 +54,6 @@ def check_kgain_params(
     if 'signal_bins_N' not in kgain_params:
         raise ValueError('Missing parameter in directory pointer YAML file.')
 
-    if not isinstance(kgain_params['offset_rowroi1'], (float, int)):
-        raise TypeError('offset_rowroi1 is not a number')
-    if not isinstance(kgain_params['offset_rowroi2'], (float, int)):
-        raise TypeError('offset_rowroi2 is not a number')
     if not isinstance(kgain_params['offset_colroi1'], (float, int)):
         raise TypeError('offset_colroi1 is not a number')
     if not isinstance(kgain_params['offset_colroi2'], (float, int)):
@@ -147,21 +134,23 @@ def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
         
     return local_mean_array, local_noise_array
 
-def diff2std(diff_frame, offset_rowroi, offset_colroi):
+def diff2std(diff_frame, detector_regions=None):
     """
     calculate the standard deviation of the frame difference, 
     diff_frame within the ROI row and column boundaries.
     
     Args:
       diff_frame (np.array): frame diffference
-      offset_rowroi (int): row of region of interest
-      offset_colroi (int): column of region of interest
+      detector_regions (dict): a dictionary of detector geometry properties.
+        Keys should be as found in detector_areas in detector.py.  Defaults to
+        that dictionary. 
       
     Returns:
       np.array: standard deviation of frame difference
     """
         
-    selected_area = diff_frame[offset_rowroi, offset_colroi]
+    selected_area = slice_section(diff_frame, 'SCI', 'prescan_reliable',
+        detector_regions)
     std_value = np.std(selected_area.reshape(-1), ddof=1)
     # dividing by sqrt(2) since we want std of one frame
     return std_value / np.sqrt(2)
@@ -221,21 +210,23 @@ def Single_peakfit(xdata, ydata):
 
     return sigma
     
-def histc_roi(frame,offset_rowroi,offset_colroi,rn_bins):
+def histc_roi(frame, rn_bins, detector_regions=None):
     """
     Histogram of pixel values of frame within the ROI and bins defined in 
     rn_bins. Returns the counts in each bin.
     
     Args:
       frame (np.array): frame
-      offset_rowroi (int): row of region of interest
-      offset_colroi (int): column of region of interest
       rn_bins (int): histogram bins
+      detector_regions (dict): a dictionary of detector geometry properties.
+        Keys should be as found in detector_areas in detector.py.  Defaults to
+        that dictionary.      
     
     Returns:
       np.array: counts in each bin
     """
-    selected_area = frame[offset_rowroi,offset_colroi]
+    selected_area = slice_section(frame, 'SCI', 'prescan_reliable',
+        detector_regions)
     data_reshaped = selected_area.ravel()
     counts, _ = np.histogram(data_reshaped, bins=rn_bins)
       
@@ -289,7 +280,8 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
 def calibrate_kgain(dataset_kgain, 
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=True,plot_outdir='figures', show_plot=False,
-                    logspace_start=-1, logspace_stop=4, logspace_num=200, verbose=False):
+                    logspace_start=-1, logspace_stop=4, logspace_num=200,
+                    verbose=False, detector_regions=None):
     """
     Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
@@ -348,12 +340,18 @@ def calibrate_kgain(dataset_kgain,
       logspace_num (int): Number of elements in np.logspace.
       verbose (bool): (Optional) display various diagnostic print messages.
         Default is False. 
+      detector_regions (dict): a dictionary of detector geometry properties.
+        Keys should be as found in detector_areas in detector.py.  Defaults to
+        that dictionary.
     
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
         transfer curve (in e-/DN). The expected value of kgain for EXCAM with
         flight readout sequence should be between 8 and 9 e-/DN
     """
+    if detector_regions is None:
+        detector_regions = detector_areas
+
     # cast dataset objects into np arrays for convenience
     cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain)
 
@@ -416,10 +414,6 @@ def calibrate_kgain(dataset_kgain,
         raise TypeError('logplot3 is not a number')
     
     # get relevant constants
-    offset_rowroi1 = kgain_params['offset_rowroi1']
-    offset_rowroi2 = kgain_params['offset_rowroi2']
-    offset_colroi1 = kgain_params['offset_colroi1']
-    offset_colroi2 = kgain_params['offset_colroi2']
     rowroi1 = kgain_params['rowroi1']
     rowroi2 = kgain_params['rowroi2']
     colroi1 = kgain_params['colroi1']
@@ -438,10 +432,6 @@ def calibrate_kgain(dataset_kgain,
             os.mkdir(plot_outdir)
             if verbose:
                 print('Output directory for figures created in ', os.getcwd())
-    
-    # Prescan region
-    offset_rowroi = slice(offset_rowroi1,offset_rowroi2)
-    offset_colroi = slice(offset_colroi1,offset_colroi2)
     
     # NOTE: binwidth must be <= rowroi and colroi
     rowroi = slice(rowroi1,rowroi2)
@@ -511,10 +501,10 @@ def calibrate_kgain(dataset_kgain,
         # Calculate frame differences
         frames_diff = [frames[j] - frames[k] for j, k in index_pairs]
         # calculate read noise with std from prescan
-        rn_std = [diff2std(frames_diff[x], offset_rowroi, offset_colroi) for x 
+        rn_std = [diff2std(frames_diff[x], detector_regions) for x 
             in range(len(frames_diff))]
         
-        counts_diff = [histc_roi(frames_diff[x], offset_rowroi, offset_colroi, rn_bins) for x 
+        counts_diff = [histc_roi(frames_diff[x], rn_bins, detector_regions) for x 
             in range(len(frames_diff))]
         
         # calculate read noise from prescan with Gaussian fit
