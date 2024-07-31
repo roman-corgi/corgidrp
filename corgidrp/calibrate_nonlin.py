@@ -142,6 +142,9 @@ def calibrate_nonlin(dataset_nl,
     separate stack of frames of constant exposure time and used to make a mask; 
     the mask is used to select pixels in each frame in the large array of stacks 
     in order to calculate its mean signal.
+
+    The frames are bias-subtracted
+
     Two sub-stacks/groups of frames at each EM gain value contain noncontiguous 
     frames with the same (repeated) exposure time, taken near the start and end 
     of the frame sequence. Their mean signals are computed and used to correct for 
