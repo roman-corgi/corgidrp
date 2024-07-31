@@ -58,6 +58,8 @@ target/
 
 # aux data
 tests/simdata/*
+tests/walker_output/*
+tests/testcalib/*
 
 # editor files
 .vscode/*

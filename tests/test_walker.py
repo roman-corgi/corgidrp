@@ -30,6 +30,10 @@ def test_autoreducing():
     # fake the emgain
     for image in l1_dataset:
         image.ext_hdr['EMGAIN'] = 1
+    # simulate the expected CGI naming convention
+    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
     l1_dataset.save(datadir)
     filelist = [frame.filepath for frame in l1_dataset]
 
@@ -41,18 +45,18 @@ def test_autoreducing():
     new_nonlinearity.pri_hdr = prihdr
     new_nonlinearity.ext_hdr = exthdr
     new_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
-    new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.version, "corgidrp version that produced this file")
+    new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     mycaldb = caldb.CalDB()
     mycaldb.create_entry(new_nonlinearity)
 
-    # generate recipe
-    recipe = walker.autogen_recipe(filelist, outputdir)
+    CPGS_XML_filepath = "" # not yet implemented
 
-    # process_recipe
-    walker.run_recipe(recipe)
+    # generate recipe and run it
+    recipe = walker.walk_corgidrp(filelist, CPGS_XML_filepath, outputdir)
 
-    # check that the output dataset is saved to the output dir with the same filename as the input filenames
-    output_files = [os.path.join(outputdir, frame.filename) for frame in l1_dataset]
+    # check that the output dataset is saved to the output dir
+    # filenames have been updated to L2a. 
+    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a_")) for frame in l1_dataset]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     # check that the recipe is saved into the header.
@@ -62,6 +66,12 @@ def test_autoreducing():
         # do a string comparison, easiest way to check
         hdr_recipe = json.loads(frame.ext_hdr["RECIPE"])
         assert json.dumps(hdr_recipe) == json.dumps(recipe)
+
+    # clean up
+    mycaldb.remove_entry(new_nonlinearity)
+
+
+
 if __name__ == "__main__":
     test_autoreducing()
 
