@@ -93,30 +93,6 @@ class CalKgainException(Exception):
 
 ################### function defs #####################
     
-def frameProc(frame, offset_colroi, emgain):
-    """ 
-    simple row-bias subtraction using prescan region 
-    frame of an L1 SCI-size frame, offset_colroi is the 
-    column range in the prescan region to use to calculate 
-    the median for each row. EM gain is the actual emgain used 
-    to collect the frame.
-        
-    Args:
-      frame (np.array): L1 frame
-      offset_colroi (int): column range
-      emgain (int): EM gain value   
-      
-    Returns:
-      np.array: bias subtracted frame
-    """
-      
-    frame = np.float64(frame)
-    row_meds = np.median(frame[:,offset_colroi], axis=1)
-    row_meds = row_meds[:, np.newaxis]
-    frame -= row_meds
-    frame = frame/emgain
-    return frame
-    
 def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
     """ 
     frame_in is a bias-corrected frame trimmed to the ROI. mean_frame is 
@@ -310,15 +286,16 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
     
 ######################### start of main code #############################
 
-def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
+def calibrate_kgain(dataset_kgain, 
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=True,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200, verbose=False):
     """
     Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
-    exposure time, this function subtracts the prescan bias from each frame
-    (frameProc). It also creates a mean pupil array from a separate stack of
+    exposure time. The frames are bias-subtracted, and in addition, if EM gain
+    is >1 for the input data for calibrate_kgain, EM gain division is also needed.
+    It also creates a mean pupil array from a separate stack of
     frames of uniform exposure time. The mean pupil array is scaled to the mean
     of each stack and statistics (mean and std dev) are calculated for bins from
     the frames in it. kgain (e-/DN) is calculated from the means and variances
@@ -344,14 +321,6 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         All data must be obtained under the same positioning of the pupil
         relative to the detector. These frames are identified with the kewyord
         'OBSTYPE'='MNFRAME' (TBD). 
-      actual_gain (float):
-        The value of the measured/actual EM gain used to collect the frames used 
-        to build the calibration data in dataset_kgain. Must be >= 1.0. (note: 
-        unity EM gain is recommended when k-gain is the primary desired product, 
-        since it is known more accurately than non-unity values.)
-      actual_gain_mean_frame (float):
-        The value of the measured/actual EM gain used to collect the frames used
-        to build the mean frame in dataset_kgain. note: commanded EM must be unity. 
       n_cal (int):
         Minimum number of sub-stacks used to calibrate K-Gain. The default value
         is 10.
@@ -386,7 +355,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         flight readout sequence should be between 8 and 9 e-/DN
     """
     # cast dataset objects into np arrays for convenience
-    cal_list, mean_frame_list = kgain_dataset_2_list(dataset_kgain)
+    cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain)
 
     # check number of frames, unique EM value, exposure times and datetimes
     tmp = cal_list[0]
@@ -429,9 +398,6 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
 
     check.real_positive_scalar(actual_gain, 'actual_gain', TypeError)
     if actual_gain < 1:
-        raise CalKgainException('Actual gain must be >= 1.')
-    check.real_positive_scalar(actual_gain_mean_frame, 'actual_gain_mean_frame', TypeError)
-    if actual_gain_mean_frame < 1:
         raise CalKgainException('Actual gain must be >= 1.')
     check.positive_scalar_integer(min_val, 'min_val', TypeError)
     check.positive_scalar_integer(max_val, 'max_val', TypeError)
@@ -481,9 +447,6 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     rowroi = slice(rowroi1,rowroi2)
     colroi = slice(colroi1,colroi2)
     
-    # ROI for frameProc
-    colroi_fp = slice(offset_colroi1,offset_colroi2)
-    
     averages = []
     deviations = []
     read_noise = []
@@ -501,10 +464,7 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
     good_mean_frame = np.zeros((nrow, ncol))
     nFrames2 = len(mean_frame_list)
     for mean_frame_count in range(nFrames2):
-        frame = mean_frame_list[mean_frame_count]
-        frame = frameProc(frame, colroi_fp, actual_gain)
-        
-        good_mean_frame += frame  # Accumulate into good_mean_frame
+        good_mean_frame += mean_frame_list[mean_frame_count]
     
     good_mean_frame = good_mean_frame / nFrames2
     
@@ -548,8 +508,6 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
         
         # multi-frame analysis method
         frames = [cal_list[jj][nFrames - offset] for offset in index_offsets]
-        # subtract prescan row medians
-        frames = [frameProc(frames[x], colroi_fp, actual_gain) for x in range(len(frames))]
         # Calculate frame differences
         frames_diff = [frames[j] - frames[k] for j, k in index_pairs]
         # calculate read noise with std from prescan
@@ -812,7 +770,9 @@ def calibrate_kgain(dataset_kgain, actual_gain, actual_gain_mean_frame,
              compiled_binned_shot_deviations]
     ptc = np.column_stack(ptc_list)
 
-    prhd, exthd = create_default_headers()
+    prhd = dataset_kgain.frames[0].pri_hdr
+    exthd = dataset_kgain.frames[0].ext_hdr
+    exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
     gain_value = np.array([[kgain]])
 
     kgain = data.KGain(gain_value, err = np.array([[np.std(kgain_clipped)]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
@@ -855,15 +815,19 @@ def kgain_dataset_2_list(dataset):
     em_gains = []
     # Size of each sub stack
     len_sstack = []
+    # Record measured gain of each substack of calibration frames
+    gains = []    
     for idx_set, data_set in enumerate(split[0]):
         # Second layer (array of different exposure times)
         sub_stack = []
         record_exp_time = True
         record_len = True
+        record_gain = True
         for frame in data_set.frames:
             if record_exp_time:
                 exp_time_mean_frame = frame.ext_hdr['EXPTIME']
                 record_exp_time = False
+
             if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
                 raise Exception('Frames in the same data set must have the same exposure time')
 
@@ -871,7 +835,6 @@ def kgain_dataset_2_list(dataset):
                 if frame.ext_hdr['CMDGAIN'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-
             else:
                 if record_len:
                     len_sstack.append(len(data_set.frames))
@@ -891,6 +854,13 @@ def kgain_dataset_2_list(dataset):
                 if em_gain < 1:
                     raise Exception('Commanded EM gain must be >= 1')
                 em_gains.append(em_gain)
+                if record_gain:
+                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                        gains.append(frame.ext_hdr['EMGAIN_M'])
+                    except: # use commanded gain otherwise
+                        gains.append(frame.ext_hdr['CMDGAIN'])
+                    record_gain = False
+                
         # Calibration data may have different subsets
         if len(sub_stack) != 0:
             stack.append(np.stack(sub_stack))
@@ -914,11 +884,17 @@ def kgain_dataset_2_list(dataset):
                 stack_cp.append(sub[idx_0:idx_0+len_sub])
                 idx_0 += len_sub
     stack = stack_cp        
-    # There can only be an EM gain in the data used to calibrate K-gain
-    if len(set(em_gains)) != 1:
-        raise Exception('There can only be one commanded gain when calibrating K-Gain')
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
         raise Exception('DATETIMEs cannot be duplicated')
+    # There can only be an EM gain in the data used to calibrate K-gain
+    if len(set(em_gains)) != 1:
+        raise Exception('There can only be one commanded gain when calibrating K-Gain')
+    if np.any(np.array(gains) < 1):
+        raise Exception('Actual EM gains must be greater than or equal to 1')
+    # When measuring k_gain, there can only be one gain for all exposure times
+    actual_gain = gains[0]
+    if len(set(gains)) != 1:
+        raise Exception('Actual EM gain for K-gain calibration frames must be the same for all exposure times.')
 
-    return stack, mean_frame_stack
+    return stack, mean_frame_stack, actual_gain
