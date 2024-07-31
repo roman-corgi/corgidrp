@@ -30,7 +30,8 @@ labels = {data.Dark: "Dark",
           data.BadPixelMap: "BadPixelMap",
           data.KGain : "KGain",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
-          data.DetectorParams : "DetectorParams"}
+          data.DetectorParams : "DetectorParams",
+          data.FlatField : "FlatField"}
 
 class CalDB:
     """
@@ -252,6 +253,9 @@ class CalDB:
             ]
         else:
             options = calibdf
+
+        if len(options) == 0:
+            raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
 
         # select the one closest in time
         result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
