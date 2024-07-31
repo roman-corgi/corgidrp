@@ -8,7 +8,6 @@ import corgidrp
 import corgidrp.data as data
 import astropy.time as time
 
-
 column_names = [
     "Filepath",
     "Type",
@@ -26,10 +25,11 @@ column_names = [
     "EXCAMT",
 ]
 
-labels = {data.Dark: "Dark", 
-          data.NonLinearityCalibration: "NonLinearityCalibration", 
-          data.BadPixelMap: "BadPixelMap", 
-          data.KGain : "KGain", 
+labels = {data.Dark: "Dark",
+          data.NonLinearityCalibration: "NonLinearityCalibration",
+          data.BadPixelMap: "BadPixelMap",
+          data.KGain : "KGain",
+          data.DetectorNoiseMaps: "DetectorNoiseMaps",
           data.DetectorParams : "DetectorParams"}
 
 class CalDB:
@@ -114,8 +114,15 @@ class CalDB:
         else:
             files_used = 0
 
-        date_created = time.Time(entry.ext_hdr["DRPCTIME"]).mjd
-        drp_version = entry.ext_hdr["DRPVERSN"]
+        if "DRPCTIME" in entry.ext_hdr:
+            date_created = time.Time(entry.ext_hdr["DRPCTIME"]).mjd
+        else:
+            date_created = -1
+
+        if "DRPVERSN" in entry.ext_hdr:
+            drp_version = entry.ext_hdr["DRPVERSN"]
+        else:
+            drp_version = ""
 
         obsid = entry.pri_hdr["OBSID"]
 
