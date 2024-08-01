@@ -32,6 +32,9 @@
             "name" : "save"
         },
         {
+            "name" : "frame_select"
+        },
+        {
             "name" : "convert_to_electrons",
             "calibs" : {
                 "KGain" : "AUTOMATIC"
