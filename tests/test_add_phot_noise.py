@@ -28,7 +28,13 @@ def test_add_phot_noise():
     assert np.array_equal(all_err1[0,1], np.sqrt(data))
     assert np.allclose(all_err1[0,0], np.sqrt(data + np.square(err)))
     assert "noise" in str(dataset_add.frames[0].ext_hdr["HISTORY"])
-
+    assert "photnoise_error" == dataset_add.frames[0].err_hdr["Layer_2"]
+    #check that excess noise is applied
+    dataset[0].ext_hdr["CMDGAIN"] = 3000
+    dataset_add1 = add_photon_noise(dataset)
+    all_err2 = dataset_add1.all_err
+    assert np.array_equal(all_err2[0,1], np.sqrt(data)*np.sqrt(2))
+    
     corgidrp.track_individual_errors = old_err_tracking
     
 if __name__ == '__main__':
