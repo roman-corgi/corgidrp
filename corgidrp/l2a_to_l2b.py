@@ -6,11 +6,10 @@ from corgidrp.detector import detector_areas
 
 def add_photon_noise(input_dataset):
     """
-    Propagate the photon noise determined from the image signal to the error map.
-    The image values must already be in units of photons
+    Propagate the photon/shot noise determined from the image signal to the error map. 
 
     Args:
-       input_dataset (corgidrp.data.Dataset): a dataset of Images with values in photons (L2a-level)
+       input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
 
     Returns:
         corgidrp.data.Dataset: photon noise propagated to the image error extensions of the input dataset
@@ -19,10 +18,15 @@ def add_photon_noise(input_dataset):
     phot_noise_dataset = input_dataset.copy() # necessary at all?
 
     for i, frame in enumerate(phot_noise_dataset.frames):
-        frame.add_error_term(np.sqrt(frame.data), "photnoise_error")
-
-    new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])
-
+        em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
+        phot_err = np.sqrt(frame.data)
+        #add excess noise in case of em_gain
+        if em_gain > 1:
+            phot_err *= np.sqrt(2)           
+        frame.add_error_term(phot_err, "photnoise_error")
+    
+    new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
+    
     history_msg = "photon noise propagated to error map"
     # update the output dataset
     phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
