@@ -55,7 +55,7 @@ def main():
 
     ####### Run the walker on some test_data
 
-    walker.walk_corgidrp(l1_data_filelist, "", outputdir)
+    walker.walk_corgidrp(l1_data_filelist, "", outputdir, template="l1_to_l2a_basic.json")
 
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
