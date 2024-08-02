@@ -35,22 +35,8 @@ from trap_fitting import trap_fit, trap_fit_const, fit_cs
 class TPumpAnException(Exception):
     """Exception class for tpumpanalysis."""
 
-# does it make sense to have noncontinuous or less-than-2-temps traps,
-# even for this non-EDU camera? Yes, if enough noise is fitted; also, for
-#different temps, the sub-el location may or may not be the same, thus leading
-# to inconsistent traps across temperatures
-
-# TODO, v2.0:  Could make generate_test_data.py more accurate by, instead of
-#choosing a range of phase time frames for length_lim, adding in add_*_dipole()
-# selection of phase times in which amplitude peaks for that particular trap
-# for each temperature.
-# This is really only useful for both-type traps, like (77,90).  Also, I span
-# a wide range of temperatures, and some traps are only really detectable in
-# real life over a small range of temperatures.
-# My unit tests would probably detect even more
-# temperatures in a consistent way if I covered a smaller range of temperature.
-def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head = 'EM_GAIN', 
-                   non_lin_correction = None, mean_field = None, length_lim = 6,
+def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU', 
+                   mean_field = None, length_lim = 6,
     thresh_factor = 3, k_prob = 1, ill_corr = True, tfit_const = True,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
     tauc_max = 1e-5, pc_min = 0, pc_max = 2, offset_min = 10,
@@ -72,282 +58,15 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head =
     save a preliminary output that takes a long time to create (the dictionary
     called 'temps') and an option to load that in and start the function at
     that point.
-    Parameters
-    ----------
-    base_dir : str
-        Full path of base directory containing all trap-pumped FITS files. The
-        metadata assumed to be in PrimaryHDU, and the first extension is
-        assumed to be the ImageHDU, where the array data is located.
-        - This folder should contain sub-folders for each temperature entitled
-        'tempK', where 'temp' is the float or int value of the detctor
-        temperature in K (e.g., 160K).  The function reads everything up to the
-        last character of the filename.  Nothing else should be in this folder.
-        - Each temperature sub-folder should contain sub-folders for each
-        scheme entitled 'Scheme_num', where 'num' is either 1, 2, 3, or 4
-        (e.g., 'Scheme_1').  The function reads the last character from the
-        filename as the scheme.  Nothing else should be in this folder.
-        - Each scheme sub-folder should contain a trap-pumped frame
-        (FITS format) for each phase time.  There may be more than one FITS
-        file for a given phase time.  All FITS files in these folders
-        will be used by the function.  Each file should have headers specifying
-        the phase time in microseconds and the EM gain for that file.  The data
-        is assumed to be a 2-D array of counts with axis 0 going along the rows
-        and axis 1 going along the columns, and the readout direction is
-        assumed to be along axis 0 toward decreasing row number.
 
-        If you are running sample data from Alfresco, you would need to
-        download that data and specify its directory on your computer, and
-        the sample_data parameter needs to be set to True.  (See below for
-        information on sample_data.)
+    The frames in each stack should be SCI full frames that:
+    - have had their bias subtracted (assuming 0 bias offset and full frame;
+    this function calibrates bias offset)
+    - have been corrected for nonlinearity
+    - have been divided by EMGAIN
 
-    time_head : str
-        Keyword corresponding to phase time for each FITS file.  Keyword value
-        assumed to be float (units of microseconds).
-    emgain_head : str
-        Keyword corresponding to EM gain for each FITS file.  Keyword value
-        assumed to be float (unitless).
-    num_pumps : int, > 0
-        Number of cycles of pumping performed for each trap-pumped frame.
-    non_lin_correction: corgi.drp.NonLinearityCorrection
-        A NonLinearityCorrection calibration file (if needed). Default = None
-    mean_field : > 0 or None
-        The mean electron level that was present in each pixel before trap
-        pumping was performed (so doesn't include EM gain). The max charge that
-        can be captured by a trap is limited by the mean number of electrons
-        present in non-trap pixels.
-        Only useful if this mean level is less than
-        2500 e-, the max amplitude a trap adhering to probability function 1
-        can have (used for determining k gain).  If the mean non-trap electron
-        level is relatively low, the capture time constant (tauc) will be
-        relatively big (still less than 1 s), and trap_fit() may provide a
-        more accurate fit for the release time constant (tau)
-        over trap_fit_const(), especially for pixels that contain only one
-        trap (instead of two).  In general, trap_fit_const() gives better
-        fits overall for most cases, and
-        trap-pumped frames are typically made with high charge packets (which
-        is when tauc is a constant to a good approximation; see
-        tfit_const below).  If the level is 2500e- or
-        higher, you can put in the number or None.
-    length_lim : int, > 0, optional
-        Minimum number of frames for which a dipole needs to meet threshold so
-        that it goes forward for consideration as a true trap.  If it is bigger
-        than the number of distinct phase times for frames in a scheme folder,
-        length_lim is set to the latter by the function.  Defaults to 6,
-        which agrees with Nathan Bush et al., 2021.
-    thresh_factor : float, > 0, optional
-        Number of standard deviations from the mean a dipole should stand out
-        in order to be considered for a trap. If this is too high, you get
-        dipoles with amplitude that continually increases with phase time (not
-        characteristic of an actual trap).  If thresh_factor is too low,
-        you get a bad fit because the resulting dipoles have amplitudes that
-        are too noisy and low.  Defaults to 3, which agrees
-        with Nathan Bush et al., 2021.
-    k_prob : 1 or 2, optional
-        The probability function used for finding the e-/DN factor.
-        Probability function 1 (P1) should be tried first, and if the code
-        fails with a TPumpAnException, re-run the code with 2.  Defaults to 1.
-    ill_corr : bool, optional
-        True:  run local illumination correction (via the function
-        illumination_correction()) on each trap-pumped frame to remove
-        any defects (irregularities in the supposed flat field, not considering
-        the traps) by subtracting the local median from every image pixel.
-        The local median for a pixel is the median of a square (containing that
-        pixel) of side length equal to
-        binsize pixels, where binsize is determined in the code as
-        roughly the square root of the smaller dimension of the image area.  If
-        the trap density is too high, the code moves forward as if ill_corr
-        were False.  False:  illumination_correction() subtracts from each
-        pixel the median of the entire image region instead of the local
-        median.  Without
-        illumination correction, the defaults for offset_min and offset_max
-        (further below) may not be accurate and would probably need to be
-        increased.  (See their doc strings for more details.)
-        ill_corr defaults to True, and this is strongly recommended.
-    tfit_const : bool, optional
-        True: run the function trap_fit_const() for curve fitting, which treats
-        the probability function for capture (Pc) as a constant (which is
-        approximately true for the Roman trap-pumped frames, and if k gain is
-        determined with low accuracy, Pc absorbs the factor of k gain and thus
-        acts as a nuisance parameter in that case.)  During testing, it was
-        found tfit_const=True outperformed the case of tfit_const=False.
-        False:  run the function trap_fit() for curve fitting, which treats Pc
-        accurately as the time-dependent function it really is.  (If k gain is
-        determined with low accuracy, there is no fit parameter that can absorb
-         k gain fully.)  Defaults to True.
-    tau_fit_thresh : (0, 1), optional
-        The minimum value required for adjusted coefficient of determination
-        (adjusted R^2) for curve fitting for the release time constant
-        (tau) using data for dipole amplitude vs phase time.  The closer to 1,
-        the better the fit. Must be between 0 and 1.  Defaults to 0.8.
-    tau_min : float, >= 0, optional
-        Lower bound value for tau (release time constant) for curve fitting,
-        in seconds.  Defaults to 0.7e-6, slightly below 1e-6, which is the
-        smallest phase time that would be used for trap pumping. It is slightly
-        below to allow for effective bounds for curve fitting.
-        A trap is only likely to be active when the
-        phase time is close to the release time constant, and release time
-        constants in the literature are not lower that this default value.
-        In theory, the phase time at which a trap is successfully fitted could
-        be far from the trap's actual release time constant,
-        but the chances for fitting a phenomenon unrelated to traps may also
-        be higher if the lower bound is lower than the minimum phase time
-        probed.
-    tau_max : float, > tau_min, optional
-        Upper bound value for tau (release time constant) for curve fitting,
-        in seconds.  Defaults to 1.3e-2, slightly above 1e-2, the largest phase
-        time that would be used for trap pumping. It is slightly
-        above to allow for effective bounds for curve fitting.
-        A trap is only likely to be active when the
-        phase time is close to the release time constant, and release time
-        constants in the literature are not higher that this default value.
-        In theory, the phase time at which a trap is successfully fitted could
-        be far from the trap's actual release time constant,
-        but the chances for fitting a phenomenon unrelated to traps may also
-        be higher if the upper bound is higher than the maximum phase time
-        probed.
-    tauc_min : float, >= 0, optional
-        Lower bound value for tauc (capture time constant) for curve fitting,
-        in seconds.  Only used if tfit_const = False.  Defaults to 0.
-    tauc_max : float, > tauc_min, optional
-        Upper bound value for tauc (capture time constant) for curve fitting,
-        in seconds.  Only used if tfit_const = False.  Defaults to 1e-5,
-        a sufficiently generous maximum value for tauc given that large charge
-        packets used in trap pumping imply small tauc values.  If mean_field
-        is not None, this may indicate that the average charge packet per
-        non-trap pixel is low, which would indicate that tauc could be bigger.
-        In that rare case, tauc is recommended to be set to 1e-2.
-    pc_min : float, >= 0, optional
-        Lower bound value for pc (capture probability) for curve fitting,
-        in e-.  Only used if tfit_const = True.  Defaults to 0.
-    pc_max : float, > pc_min, optional
-        Upper bound value for tauc (capture time constant) for curve fitting,
-        in e-.  Only used if tfit_const = True.  Defaults to 2,
-        which is the maximum probability (1) times a factor of 0 to
-        accommodate a potentially erroneous application of the e-/DN factor.
-    offset_min : float, optional
-        Offset lower bound value for a dipole's trap fit relative to 0
-        for the fitting of data for amplitude vs phase time.
-        Defaults to 10, which
-        means the lower bound for the offset in the curve fit is 10 unless the
-        maximum median subtracted which was
-        determined by illumination_correction() is lower.  The
-        lower of that and offset_min is what is chosen as the lower bound for
-        offset in curve fitting amplitude vs phase time.
-        The offset accommodates any unsubtracted voltage
-        bias, the subtraction that occured in illumination_correction(),
-        and any erroneous estimation of k gain. Ideally, the minimum
-        value in e- is 0, but a non-zero buffer below may help the curve
-        fitting.  It acts as a nuisance parameter in the fit.  Units of e-.
-    offset_max : float, > offset_min, optional
-        Offset upper bound value for a dipole's trap fit relative to 0.
-        Used for the offset in the fitting of data for amplitude vs phase time.
-        Defaults to 10, which
-        means the upper bound for the offset in the curve fit is 10 unless the
-        minimum median subtracted which was
-        determined by illumination_correction() is bigger.  The
-        bigger of that and offset_max is what is chosen as the upper bound for
-        offset in curve fitting amplitude vs phase time.
-        The offset accommodates any unsubtracted voltage
-        bias, the subtraction that occured in illumination_correction(),
-        and any erroneous estimation of k gain. It acts as a nuisance
-        parameter in the fit.  Units of e-.
-    cs_fit_thresh : (0, 1), optional
-        The minimum value required for adjusted coefficient of determination
-        (adjusted R^2) for curve fitting for the capture cross section
-        for holes (cs) using data for tau vs temperature.  The closer to 1,
-        the better the fit. Must be between 0 and 1.  Defaults to 0.8.
-    E_min : float, >= 0, optional
-        Lower bound for E (energy level in release time constant) for curve
-        fitting, in eV.  Defaults to 0.
-    E_max : float, > E_min, optional
-        Upper bound for E (energy level in release time constant) for curve
-        fitting, in eV.  Defaults to 1.
-    cs_min : float, >= 0, optional
-        Lower bound for cs (capture cross section for holes in release time
-        constant) for curve fitting, in 1e-19 m^2.  Defaults to 0.
-    cs_max : float, > cs_min, optional
-        Upper bound for cs (capture cross section for holes in release time
-        constant) for curve fitting, in 1e-19 m^2.  Defaults to 50.
-    bins_E : int, > 0, optional
-        Number of bins used for energy level in categorizing traps into 2-D
-        bins of energy level and cross section.  Defaults to 100 (level of
-        reasonable precision of difference in eV (i.e., each bin increments by
-        1/100 eV = 0.01 eV) between traps from the
-        literature that would likely be detectable).
-    bins_cs : int, > 0, optional
-        Number of bins used for cross section in categorizing traps into 2-D
-        bins of energy level and cross section.  Defaults to 10 (level of
-        reasonable precision of difference in 1e-14 cm^2 (i.e., each bin
-        increments by 1/10 e-14 = 0.1e-14 for each bin) between traps from the
-        literature that would likely be detectable).
-    input_T : float, > 0, optional
-        Temperature of Roman EMCCD at which to calculate the
-        release time constant (in units of Kelvin).  Defaults to 180.
-    sample_data : bool, optional
-        True if you want to run the sample data on Alfresco, located at
-        https://alfresco.jpl.nasa.gov/share/page/site/cgi/documentlibrary#
-        filter=path%7C%2FRoman%2520CGI%2520Collaboration%2520Area%2F05%2520-
-        %2520Project%2520Science%2FSample_trap_pump_data%7C&page=1.
-        That data is not from the EDU camera and doesn't have
-        the correct electric potential shape in the electrodes
-        of the pixels, so the sub-electrode locating
-        that this function performs will not be very meaningful.  However, some
-        traps will still meet the sub-electrode location criteria and provide a
-        reasonable return for the function.  When sample_data is True, the
-        function accounts for the differences in reading this data (since it
-        is MAT and not FITS) and extracting the bias from the non-EDU-sized
-        frames.  It also reads off phase time from the names of each file.
-        If you are running EDU camera data, this should be False.
-        Defaults to False.
-    Returns
-    -------
-    trap_dict : dict
-        Dictionary with a key for each trap for which acceptable fits for
-        the release time constant (tau) for all schemes could be made.  It has
-        the following format, and an example entry for a
-        pixel at location (row, col) on the right-hand side (RHS) of
-        electrode 2 containg 1 of possibly two traps is shown.  The 0 in the
-        key denotes that this is the first trap found at this pixel and
-        sub-electrode location.  If a 2nd trap was found at this same location,
-        another trap with a 1 in the key would be present in trap_dict.
-        trap_dict = {
-            ((row, col), 'RHSel2', 0): {'T': [160, 162, 164, 166, 168],
-            'tau': [1.51e-6, 1.49e-6, 1.53e-6, 1.50e-6, 1.52e-6],
-            'sigma_tau': [2e-7, 1e-7, 1e-7, 2e-7, 1e-7],
-            'cap': [[cap1, cap1_err, max_amp1, cap2, cap2_err, max_amp2], ...],
-            'E': 0.23,
-            'sig_E': 0.02,
-            'cs': 2.6e-15,
-            'sig_cs': 0.3e-15,
-            'Rsq': 0.96,
-            'tau at input T': 1.61e-6,
-            'sig_tau at input T': 2.02e-6},
-            ...}
-        'T': temperatures for which values of tau were successfully fit. In K.
-        'tau': the tau values corresponding to these temperatures in the same
-        order.  In seconds.
-        'sigma_tau': overall uncetainty in tau taken from the errors in the
-        fits from all the schemes that were used to specify trap location
-        (corresponding to the same order as 'T' and 'tau'). In seconds.
-        'cap': cap1 is either the probability of capture
-        (if trap_fit_const() used) or tauc (capture time constant) if
-        trap_fit() used. cap1_err is the error from fitting.  max_amp1 is the
-        maximum amplitude of the dipole from the curve fit for that pixel.
-        Similarly for cap2, cap2_err, and max_amp2, and there can be a 3rd set
-        of parameters if a trap sub-electrode location was determined using
-        3 schemes.  This data may be useful for future analysis.
-        'E': energy level.  In eV.
-        'sig_E': standard deviation error of energy level.  In eV.
-        'cs': cross section for holes.  In cm^2.
-        'sig_cs': standard deviation error of cross section for holes.
-        In cm^2.
-        'Rsq': adjusted R^2 for the tau vs temperature fit that was done to
-        obtain cs.
-        'tau at input T': tau (in seconds) evaluated at desired temperature of
-        Roman EMCCD, input_T.
-        'sig_tau at input T': standard deviation error of tau at desired
-        temperature of Roman EMCCD, input_T.  Found by propagating error by
-        utilizing 'sig_cs' and 'sig_E'.
+    The following parameters from the II&T Trap pumping code are stored in the
+    extension header of the object: 
     trap_densities : list
         A list of lists, where a list is provided for each type of trap.
         The trap density for a trap type is the # of traps in a given 2-D bin
@@ -379,6 +98,37 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head =
     noncontinuous_count : int
         Number of traps that appeared at a noncontinuous series of
         temperatures.
+
+    Args:
+        input_dataset (corgi.drp.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames, sorted according to temperature and pumping scheme.
+        time_head (str): Keyword corresponding to phase time for each FITS file. The keyword value is assumed to be a float (units of microseconds). Defaults to 'TPTAU'.
+        mean_field (float, optional): The mean electron level that was present in each pixel before trap pumping was performed (excluding EM gain). Only useful if the mean level is less than 2500 e-. If 2500 e- or higher, use None.
+        length_lim (int, optional): Minimum number of frames for which a dipole needs to meet the threshold to be considered a true trap. Defaults to 6.
+        thresh_factor (float, optional): Number of standard deviations from the mean a dipole should stand out to be considered for a trap. Defaults to 3.
+        k_prob (int, optional): The probability function used for finding the e-/DN factor. Defaults to 1.
+        ill_corr (bool, optional): Whether to run local illumination correction on each trap-pumped frame. Defaults to True.
+        tfit_const (bool, optional): Whether to use trap_fit_const() for curve fitting, treating the capture probability as constant. Defaults to True.
+        tau_fit_thresh (float, optional): Minimum adjusted R^2 value required for curve fitting for the release time constant (tau). Defaults to 0.8.
+        tau_min (float, optional): Lower bound value for tau (release time constant) for curve fitting, in seconds. Defaults to 0.7e-6.
+        tau_max (float, optional): Upper bound value for tau (release time constant) for curve fitting, in seconds. Defaults to 1.3e-2.
+        tauc_min (float, optional): Lower bound value for tauc (capture time constant) for curve fitting, in seconds. Only used if tfit_const = False. Defaults to 0.
+        tauc_max (float, optional): Upper bound value for tauc (capture time constant) for curve fitting, in seconds. Only used if tfit_const = False. Defaults to 1e-5.
+        pc_min (float, optional): Lower bound value for pc (capture probability) for curve fitting, in e-. Only used if tfit_const = True. Defaults to 0.
+        pc_max (float, optional): Upper bound value for pc (capture probability) for curve fitting, in e-. Only used if tfit_const = True. Defaults to 2.
+        offset_min (float, optional): Lower bound for the offset in the curve fit relative to 0 for fitting amplitude vs phase time. Defaults to 10.
+        offset_max (float, optional): Upper bound for the offset in the curve fit relative to 0 for fitting amplitude vs phase time. Defaults to 10.
+        cs_fit_thresh (float, optional): Minimum adjusted R^2 value required for curve fitting for the capture cross section for holes (cs) using data for tau vs temperature. Defaults to 0.8.
+        E_min (float, optional): Lower bound for E (energy level in release time constant) for curve fitting, in eV. Defaults to 0.
+        E_max (float, optional): Upper bound for E (energy level in release time constant) for curve fitting, in eV. Defaults to 1.
+        cs_min (float, optional): Lower bound for cs (capture cross section for holes in release time constant) for curve fitting, in 1e-19 m^2. Defaults to 0.
+        cs_max (float, optional): Upper bound for cs (capture cross section for holes in release time constant) for curve fitting, in 1e-19 m^2. Defaults to 50.
+        bins_E (int, optional): Number of bins used for energy level in categorizing traps into 2-D bins of energy level and cross section. Defaults to 100.
+        bins_cs (int, optional): Number of bins used for cross section in categorizing traps into 2-D bins of energy level and cross section. Defaults to 10.
+        input_T (float, optional): Temperature of Roman EMCCD at which to calculate the release time constant (in units of Kelvin). Defaults to 180.
+        sample_data (bool, optional): Whether to run the sample data on Alfresco. Defaults to False.
+    
+    Returns:
+        corgi.drp.TrapCalibration: An object containing the results of the trap calibration. The trap densities are appended as an extension HDU, and several other parameters are stored as header keywords in the ext_hdr header.
     """
     
     # Make a copy of the input dataset to operate on
@@ -387,8 +137,6 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head =
     if type(sample_data) != bool:
         raise TypeError('sample_data should be True or False')
     if not sample_data: # don't need these for the Alfresco sample data
-        if type(emgain_head) != str:
-            raise TypeError('emgain_head must be a string')
         if type(time_head) != str:
             raise TypeError('time_head must be a string')
     check.positive_scalar_integer(num_pumps, 'num_pumps', TypeError)
@@ -465,38 +213,35 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head =
         schemes = {}
         # initializing eperdn here; used if scheme is 1
         eperdn = 1
-        # check to make sure no two scheme folders the same (1 per scheme)
-        sch_list = []
 
-        # for scheme in os.listdir(sch_dir_path):
-        #     scheme_path = os.path.abspath(Path(sch_dir_path, scheme))
-        #     if os.path.isfile(scheme_path): # just want directories
-        #         continue
-        #     sch_list.append(scheme[-1])
-        #     try:
-        #         int(scheme[-1])
-        #     except:
-        #         raise TPumpAnException('Last character of the scheme '
-        #         'folder label must be a number')
-            
-        scheme_datasets, sch_list = dataset.split_dataset(exthdr_keywords = ['TPSCHEME'])
-        #Convert the schemes to integers
-        sch_list = [int(scheme) for scheme in sch_list]
+        scheme_header_keywords = ['TPSCHEM1','TPSCHEM2', 'TPSCHEM3','TPSCHEM4']
+        scheme_datasets, sch_list = dataset.split_dataset(exthdr_keywords = scheme_header_keywords)
+        
+        #TODO: Write code to Figure out which SCHEMES are non-zero. 
+        sch_list = []
+        for i in range(len(scheme_datasets)):
+            #Grab the first file's extension header from each dataset
+            header0 = scheme_datasets[i][0].ext_header
+
+            #Find the TPSCHEM keyword that is non-zero
+            this_num_pumps = [header0[x] for x in scheme_header_keywords]
+            this_scheme = np.where(this_num_pumps != 0)[0]
+            sch_list.append(int(this_scheme))
+
+            #Grab the number of pumps from the first dataset. 
+            if i == 0: 
+                num_pumps = this_num_pumps[this_scheme]
 
         #Sort the things so that Scheme 1 is first
         sch_order = np.argsort(sch_list)
         sch_list = np.array(sch_list)[sch_order]
         scheme_datasets = np.array(scheme_datasets)[sch_order]
 
-        #TODO: Make a check to make sure that one of the schemes is Scheme 1   
+        #Make a check to make sure that one of the schemes is Scheme 1
+        if 1 not in sch_list:
+            raise TPumpAnException('Scheme 1 files must run first for'
+                    ' an accurate eperdn estimation')
 
-        
-        # for num in sch_list:
-        #     if sch_list.count(num) > 1:
-        #         raise TPumpAnException('More than one folder for a single '
-        #         'scheme found.  Should only be one folder per scheme.')
-            
-        # for sch_dir in sorted(os.listdir(sch_dir_path)):
         for curr_sch in sch_list: 
             # scheme_path = os.path.abspath(Path(sch_dir_path, sch_dir))
             # if os.path.isfile(scheme_path): # just want directories
@@ -512,64 +257,10 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head =
             
             for frame in scheme_datasets[sch_list == curr_sch]:
 
-                #Get the data and important parameteres
-                # data = frame.data
+                #Get the data and the [hase time]
                 phase_time = float(frame.ext_hdr[time_head])/10**6
-                em_gain = float(frame.ext_hdr[emgain_head])
 
                 timings.append(phase_time)   
-
-                #MMB: I'm comment out all this for now, as it looks to all be the L1 -> L2 processing
-                ## Summary of the steps below: 
-                ## 1. Get the imaging area of the detector
-                ## 2. Subtract the bias from the prescan region
-                ## 3. Apply the non-linearity correction
-                ## 4. Apply the EM gain - Note, if we remove these steps here, then we can completely ignore EMGAIN here. 
-                ## These all have step functions. 
-
-
-                # getting image area (all physical CCD pixels)
-                # d = imaging_slice(data)
-                # # need to subtract bias if we are to extract eperdn
-                # # getting all physical CCD pixels
-
-                # # get the imaging area geometry
-                # prows, pcols, r0c0 = imaging_area_geometry()
-                # if prows > np.shape(data)[0] or \
-                #     pcols > np.shape(data)[1] or \
-                #     r0c0[0] > np.shape(data)[0] or \
-                #     r0c0[1] > np.shape(data)[1]:
-                #     raise TPumpAnException('Assumed geometry from detector.py inconsistent'
-                #     ' with frame')
-                # # Get prescan region
-                # prescan = slice_section(data,'SCI','prescan')
-                # # select the good cols for getting row-by-row bias
-                # # we don't use Process class here to avoid having to
-                # # input fwc params, etc
-                # st = detector_areas['SCI']['col_start']
-                # end = detector_areas['SCI']['col_end']
-                # p_r0 = detector_areas['SCI']['r0c0'][0]
-                # i_r0 = r0c0[0]
-                # # prescan relative to image rows
-                # al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
-                # bias_dn = np.median(al_prescan[:,st:end],
-                #         axis=1)[:, np.newaxis]
-                # d -= bias_dn
-                
-                # #CIC also present in prescan, and signal is mainly
-                # #gained CIC, so in image area, expect to have
-                # # roughly 0 median
-
-                # # nonlinearity correction done assuming
-                # # row-by-row bias subtraction, too, I believe.
-                # # could have non-linearity (flat field, but dipoles),
-                # # incurred at ADU, after frame is read out;
-                # # correct for it if needed (with residual nonlinearity)
-                # if non_lin_correction is not None:
-                #     d *= get_relgains(d, em_gain, non_lin_correction)
-                
-                # d = d/em_gain
-
                 frames.append(frame.data)
 
             # no need for cosmic ray removal since we do ill. correction
@@ -1352,7 +1043,54 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'PHASE_T', emgain_head =
 def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     '''
     A function that converts a trap dictionary into a corgidrp.data.TrapCalibration
-    file
+    file. 
+
+    The trap dictionary is defined as follows: A dictionary with a key for each trap for which acceptable fits for
+    the release time constant (tau) for all schemes could be made.  It has
+    the following format, and an example entry for a
+    pixel at location (row, col) on the right-hand side (RHS) of
+    electrode 2 containg 1 of possibly two traps is shown.  The 0 in the
+    key denotes that this is the first trap found at this pixel and
+    sub-electrode location.  If a 2nd trap was found at this same location,
+    another trap with a 1 in the key would be present in trap_dict.
+    trap_dict = {
+        ((row, col), 'RHSel2', 0): {'T': [160, 162, 164, 166, 168],
+        'tau': [1.51e-6, 1.49e-6, 1.53e-6, 1.50e-6, 1.52e-6],
+        'sigma_tau': [2e-7, 1e-7, 1e-7, 2e-7, 1e-7],
+        'cap': [[cap1, cap1_err, max_amp1, cap2, cap2_err, max_amp2], ...],
+        'E': 0.23,
+        'sig_E': 0.02,
+        'cs': 2.6e-15,
+        'sig_cs': 0.3e-15,
+        'Rsq': 0.96,
+        'tau at input T': 1.61e-6,
+        'sig_tau at input T': 2.02e-6},
+        ...}
+    'T': temperatures for which values of tau were successfully fit. In K.
+        'tau': the tau values corresponding to these temperatures in the same
+        order.  In seconds.
+        'sigma_tau': overall uncetainty in tau taken from the errors in the
+        fits from all the schemes that were used to specify trap location
+        (corresponding to the same order as 'T' and 'tau'). In seconds.
+        'cap': cap1 is either the probability of capture
+        (if trap_fit_const() used) or tauc (capture time constant) if
+        trap_fit() used. cap1_err is the error from fitting.  max_amp1 is the
+        maximum amplitude of the dipole from the curve fit for that pixel.
+        Similarly for cap2, cap2_err, and max_amp2, and there can be a 3rd set
+        of parameters if a trap sub-electrode location was determined using
+        3 schemes.  This data may be useful for future analysis.
+        'E': energy level.  In eV.
+        'sig_E': standard deviation error of energy level.  In eV.
+        'cs': cross section for holes.  In cm^2.
+        'sig_cs': standard deviation error of cross section for holes.
+        In cm^2.
+        'Rsq': adjusted R^2 for the tau vs temperature fit that was done to
+        obtain cs.
+        'tau at input T': tau (in seconds) evaluated at desired temperature of
+        Roman EMCCD, input_T.
+        'sig_tau at input T': standard deviation error of tau at desired
+        temperature of Roman EMCCD, input_T.  Found by propagating error by
+        utilizing 'sig_cs' and 'sig_E'.
 
     We will recode the string parts of that dictionary specifying the 
     sub-electrode location for a given pixel to a number code. An example of such 
@@ -1363,6 +1101,7 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
 
     Args: 
         trap_dict (dict): A dictionary output by tpump_analysis
+    
     Returns: 
         trap_cal (corgidrp.data.TrapCalibration): A trap calibration file. 
     '''
