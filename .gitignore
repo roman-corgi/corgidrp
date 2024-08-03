@@ -60,6 +60,7 @@ target/
 tests/simdata/*
 tests/walker_output/*
 tests/testcalib/*
+tests/e2e_tests/*/*.json
 
 # editor files
 .vscode/*
@@ -74,3 +75,4 @@ tests/testcalib/*
 # data files
 *.fits
 *.FITS
+

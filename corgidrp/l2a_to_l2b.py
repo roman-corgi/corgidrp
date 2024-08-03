@@ -309,7 +309,7 @@ def correct_bad_pixels(input_dataset, bp_mask):
 
     for i in range(data_cube.shape[0]):
         # combine DQ and BP masks
-        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask[0].data.astype(np.uint8))
+        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask.data.astype(np.uint8))
         # mask affected pixels with NaN
         bp = np.where(bp_dq_mask != 0)
         data_cube[i, bp[0], bp[1]] = np.nan
@@ -360,3 +360,36 @@ def desmear(input_dataset, detector_params):
     data.update_after_processing_step(history_msg, new_all_data=data_cube)
 
     return data
+
+def update_to_l2b(input_dataset):
+    """
+    Updates the data level to L2b. Only works on L2a data.
+
+    Currently only checks that data is at the L2a level
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+
+    Returns:
+        corgidrp.data.Dataset: same dataset now at L2b-level
+    """
+    # check that we are running this on L1 data
+    for orig_frame in input_dataset:
+        if orig_frame.ext_hdr['DATA_LEVEL'] != "L2a":
+            err_msg = "{0} needs to be L2a data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+            raise ValueError(err_msg)
+
+    # we aren't altering the data
+    updated_dataset = input_dataset.copy(copy_data=False)
+
+    for frame in updated_dataset:
+        # update header
+        frame.ext_hdr['DATA_LEVEL'] = "L2b"
+        # update filename convention. The file convention should be
+        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
+        frame.filename = frame.filename.replace("_L2a_", "_L2b_", 1)
+
+    history_msg = "Updated Data Level to L2b"
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset
