@@ -1,8 +1,7 @@
-
 import argparse
-import glob
-import numpy as np
 import os
+import pytest
+import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
@@ -11,18 +10,20 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 
-corgidrp_dir = os.path.join(os.path.dirname(corgidrp.__file__), "..") # basedir of entire corgidrp github repo
+thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-# paths (CHANGE THESE!!!) - now optional. Can use arguments to override these
-# rather than edit them.
-nonlin_path = "/home/jwang/Jason/Downloads/20240723_TVAC_data_for_DRP_Testing_LRS/nonlin_table_240322.txt"
-l1_datadir = "/home/jwang/Jason/Downloads/20240723_TVAC_data_for_DRP_Testing_LRS/input_data_TV-36/"
-l2a_datadir = "/home/jwang/Jason/Downloads/20240723_TVAC_data_for_DRP_Testing_LRS/input_data_TV-36/"
-outputdir = "./l1_to_l2a_output/"
 
-def main():
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+@pytest.mark.e2e
+def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
+    # figure out paths, assuming everything is located in the same relative location
+    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
+    l2a_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L2a")
+    nonlin_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
+
+    # make output directory if needed
+    l2a_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_output")
+    if not os.path.exists(l2a_outputdir):
+        os.mkdir(l2a_outputdir)
 
     # define the raw science data to process
 
@@ -36,9 +37,6 @@ def main():
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
-    #test_nonlinear_filename = os.path.join(corgidrp_dir, "tests", "test_data", "nonlin_sample.fits")
-    #nonlinear_cal = data.NonLinearityCalibration(test_nonlinear_filename) # use the same headers
-    #nonlinear_cal.data = nonlin_dat # replace the data with the real data from II&T
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -47,7 +45,7 @@ def main():
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=l2a_outputdir, filename="mock_nonlinearcal.fits" )
 
     # add calibration file to caldb
     this_caldb = caldb.CalDB()
@@ -55,14 +53,14 @@ def main():
 
     ####### Run the walker on some test_data
 
-    walker.walk_corgidrp(l1_data_filelist, "", outputdir, template="l1_to_l2a_basic.json")
+    walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
 
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
 
     
     ##### Check against TVAC data
-    new_l2a_filenames = [os.path.join(outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    new_l2a_filenames = [os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     for new_filename, tvac_filename in zip(new_l2a_filenames, tvac_l2a_filelist):
         img = data.Image(new_filename)
@@ -103,15 +101,15 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
+    tvacdata_dir = "/home/jwang/Jason/Documents/DataCopy/corgi/CGI_TVAC_Data/"
+    outputdir = thisfile_dir
+
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-np", "--nonlin_path", default=nonlin_path,
-                    help="text file containing the non-linear table to use [%(default)s]")
-    ap.add_argument("-l1", "--l1_datadir", default=l1_datadir,
-                    help="directory that contains the L1 data files [%(default)s]")
+    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
-                    help="directory to write results and it will be created if it does not exist [%(default)s]")
+                    help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    nonlin_path = args.nonlin_path
-    l1_datadir = args.l1_datadir
+    tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
-    main()
+    test_l1_to_l2a(tvacdata_dir, outputdir)
