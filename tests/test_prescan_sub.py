@@ -314,10 +314,15 @@ def test_prescan_sub():
             # Check that bias extension has the right size, dtype
             for i, frame in enumerate(output_dataset):
 
-                if frame.bias.shape != (frame.data.shape[0],):
+                try: 
+                    frame_bias = frame.hdu_list['BIAS'].data
+                except KeyError:
+                    raise Exception(f"BIAS extension not found in frame {i}.")
+                
+                if frame_bias.shape != (frame.data.shape[0],):
                     raise Exception(f"Bias of frame {i} has shape {frame.bias.shape} when we expected {(frame.data.shape[0],)}.")
-
-                if frame.bias.dtype != np.float32:
+                
+                if frame_bias.dtype != np.float32:
                     raise Exception(f"Bias of frame {i} does not have datatype np.float32.")
 
             # Check that corgiDRP and II&T pipeline produce the same result
@@ -375,10 +380,15 @@ def test_bias_zeros_frame():
                 raise Exception(f'Operating on all zero frame did not return all zero frame.')
 
             if np.max(np.abs(output_dataset.all_err)) > tol:
-                raise Exception(f'Operating on all zero frame did not return all zero error.')
-
-            for frame in dataset:
-                if np.max(np.abs(frame.bias)) > tol:
+                raise Exception(f'Operating on all zero frame did not return all zero error.')           
+            
+            for i,frame in enumerate(output_dataset):
+                try: 
+                    frame_bias = frame.hdu_list['BIAS'].data
+                except KeyError:
+                    raise Exception(f"BIAS extension not found in frame {i}.".format(i))
+                
+                if np.max(np.abs(frame_bias)) > tol:
                     raise Exception(f'Operating on all zero frame did not return all zero bias.')
 
 def test_bias_hvoff():
@@ -416,7 +426,7 @@ def test_bias_hvoff():
             output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
 
             # Compare bias measurement to expectation
-            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
+            if np.any(np.abs(output_dataset[0].hdu_list['BIAS'].data - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
 
             # Compare error to expected standard error of the median
@@ -463,7 +473,7 @@ def test_bias_hvon():
 
         for return_full_frame in [True, False]:
             output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
-            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
+            if np.any(np.abs(output_dataset[0].hdu_list['BIAS'].data - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
 
 def test_bias_uniform_value():
