@@ -514,10 +514,10 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
         return None
     
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
-    """Calculates the lowest full well capacity saturation threshold for each frame.
+	"""Calculates the lowest full well capacity saturation threshold for each frame.
 
-    Args:
-        emgain_arr (np.array): 1D array of the EM gain value for each frame.
+	Args:
+    	emgain_arr (np.array): 1D array of the EM gain value for each frame.
         fwcpp_arr (np.array): 1D array of the full-well capacity in the image
             frame (before em gain readout) value for each frame.
         fwcem_arr (np.array): 1D array of the full-well capacity in the EM gain
@@ -528,33 +528,34 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
     Returns:
         np.array: lowest full well capacity saturation threshold for frames
     """
-    possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
-    sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
+	possible_sat_fwcs_arr = np.append((emgain_arr * fwcpp_arr)[:,np.newaxis], fwcem_arr[:,np.newaxis],axis=1)
+	sat_fwcs = sat_thresh * np.min(possible_sat_fwcs_arr,axis=1)
 
-    return sat_fwcs
-    
- def residuals(images,planims=None):
-    """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
-    dividing from matched filters
+	return sat_fwcs
 
-    Args:
+def residuals(images,planims=None):
+	"""Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
+     dividing from matched filters
+
+     Args:
     	images (np.array): 2D array of cropped neptune or uranus image frames
-        planims (str): name of the planet uranus or neptune
+    	planims (str): name of the planet uranus or neptune
 
-    Returns:
-        matched_residuals (np.array): residual image frames of neptune or uranus divided by matched filter
-    """
+     Returns:
+    	matched_residuals (np.array): residual image frames of neptune or uranus divided by matched filter
+	"""
     
-    if planims=='neptune' or planims=='uranus' :
-        raster_images = np.array([image[2] for image in images])
-        masks = np.array([image[3] for image in images]) 
-        images_split = np.array(np.split(np.array(raster_images),3))
-        matched_filters = np.array([np.nanmedian(np.stack(images_split[i],2),2) for i in np.arange(0,len(images_split))])
-        matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
-        matched_residuals=[];
-        for j in range(len(raster_images)):
-        	matched_residuals.append(raster_images[j]/matched_filters_smooth[int(np.floor(j//(len(raster_images)//len(matched_filters_smooth))))])
-    return matched_residuals
+	if planims=='neptune' or planims=='uranus':
+		raster_images = np.array([image[2] for image in images])
+		masks = np.array([image[3] for image in images]) 
+		images_split = np.array(np.split(np.array(raster_images),3))
+		matched_filters = np.array([np.nanmedian(np.stack(images_split[i],2),2) for i in np.arange(0,len(images_split))])
+		matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
+		matched_residuals=[];
+		for j in range(len(raster_images)):
+			matched_residuals.append(raster_images[j]/matched_filters_smooth[int(np.floor(j//(len(raster_images)//len(matched_filters_smooth))))])
+		
+	return matched_residuals
     
     
 def combine_rasters(residual_images,cent=None,planims=None,band=None):
@@ -647,6 +648,7 @@ def create_onsky_flatfield(filedir):
 	
 	image_files=glob.glob(os.path.join(filedir, "*.fits"))
 	raster_scanned_images =np.sort(image_files)
+	
 	for i in range(len(image_files)):
 		planet_im=fits.open(raster_scanned_images[i])
 		planet_image=planet_im[1].data
@@ -666,6 +668,7 @@ def create_onsky_flatfield(filedir):
 		yc = int(centroid[1])
 		up_radius=55
 		smooth_images.append(planet_image)
+		
 		if planet =='neptune' and band == 'band1':
 			nept_band1_raster_images_cent.append((planet,band,smooth_images[i][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius],qe_prnu_fsm_raster[yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius]))
 			nept_band1_cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
@@ -723,5 +726,6 @@ def create_onsky_flatfield(filedir):
 	ura_band4_flatfield = data.FlatField(ura_band4_flat, pri_hdr=prihdr,ext_hdr=exthdr,input_dataset=ura_band4_dataset)
 	ura_band4_flatfield.err=combine_rasters(resi_ura_band4,planims='uranus',band='band1',cent=ura_band4_cent)[2]
 	ura_band4_flatfield.err=ura_band4_flatfield.err.reshape((1,)+ura_band4_flatfield.err.shape)
+	
 	
 	return(nept_band1_flatfield,nept_band4_flatfield,ura_band1_flatfield,ura_band4_flatfield)
