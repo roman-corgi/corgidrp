@@ -688,13 +688,14 @@ def make_fluxmap_image(
         dq = dq)
     return image
 
-def create_astrom_data(field_path, filedir=None):
+def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
     """
     Create simulated data for astrometric calibration.
 
     Args:
         field_path (str): Full path to directory with test field data (ra, dec, vmag, etc.)
         filedir (str): (Optional) Full path to directory to save to.
+        subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from
 
     Returns:
         corgidrp.data.Dataset:
