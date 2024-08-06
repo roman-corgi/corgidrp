@@ -650,7 +650,7 @@ def create_onsky_flatfield(filedir):
 	raster_scanned_images =np.sort(image_files)
 	
 	for i in range(len(image_files)):
-		planet_im=fits.open(raster_scanned_images[i])
+		planet_im=fits.open(raster_scanned_images[i],ignore_missing_simple=True)
 		planet_image=planet_im[1].data
 		planet=os.path.basename(raster_scanned_images[i]).split('_')[0]
 		planet_names.append(planet)
