@@ -285,7 +285,7 @@ def find_source_locations(dataset, threshold=100, sigma=3, mask_rad=1):
     
     return sources
 
-def match_sources(dataset, sources, field_path, comparison_threshold=25):
+def match_sources(dataset, sources, field_path, comparison_threshold=25, rad=0.02):
     ''' 
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
@@ -294,6 +294,7 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25):
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match
         field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
         comparison_threshold (int): How many stars in the field to consider for the initial match
+        rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
@@ -333,7 +334,6 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25):
     field = ascii.read(field_path)
     target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
     target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
-    rad = 0.02  # the subfield radius around the target in [deg]
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
 
     bright_order_subfield = subfield.copy()
@@ -383,7 +383,6 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25):
             smallest_lsq = lstsq
             best_ind = i
             best_sky_ind = ind
-
 
     # now use the side length to separations with best fit triangle to define a pseudo plate scale
     best_l1, best_l2, best_l3 = field_side_lengths[best_ind]
