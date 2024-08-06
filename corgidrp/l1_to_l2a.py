@@ -1,26 +1,31 @@
 # A file that holds the functions that transmogrify l1 data to l2a data
 from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc
 import numpy as np
+import corgidrp.data as data
 
-def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
-
+def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, detector_regions=None):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
     optionally returns the full detector frames.
 
-
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
-        bias_offset (float): an offset value to be subtracted from the bias. Defaults to 0.
+        noise_maps (corgidrp.data.DetectorNoiseMaps): the bias offset (an offset value to be subtracted from the bias) is extracted from this calibration class instance.
+        If None, a default value of 0 is used with for the bias offset and its error.
         return_full_frame (bool): flag indicating whether to return the full frame or
             only the bias-subtracted image area. Defaults to False.
+        detector_regions: (dict):  A dictionary of detector geometry properties.
+            Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
 
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
     # Make a copy of the input dataset to operate on
     output_dataset = input_dataset.copy()
+
+    if detector_regions is None:
+        detector_regions = detector_areas
 
     # Initialize list of output frames to be concatenated
     out_frames_data = []
@@ -40,21 +45,21 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
         obstype = frame.pri_hdr['OBSTYPE']
-        if not obstype in ['SCI','ENG'] :
-                raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG'")
+        if not obstype in ['SCI','ENG','ENG_EM','ENG_CONV'] :
+                raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG' or 'ENG_EM' or 'EMG_CONV'")
 
         # Get the reliable prescan area
-        prescan = slice_section(frame_data, obstype, 'prescan_reliable')
+        prescan = slice_section(frame_data, obstype, 'prescan_reliable', detector_regions)
 
         if not return_full_frame:
             # Get the image area
-            image_data = slice_section(frame_data, obstype, 'image')
-            image_dq = slice_section(frame_dq, obstype, 'image')
+            image_data = slice_section(frame_data, obstype, 'image', detector_regions)
+            image_dq = slice_section(frame_dq, obstype, 'image', detector_regions)
 
             # Special treatment for 3D error array
             image_err = []
             for err_slice in frame_err:
-                image_err.append(slice_section(err_slice, obstype, 'image'))
+                image_err.append(slice_section(err_slice, obstype, 'image', detector_regions))
             image_err = np.array(image_err)
 
             # Get the part of the prescan that lines up with the image
@@ -79,8 +84,14 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         # Measure bias and error (standard error of the median for each row, add this to 3D image array)
         medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
         sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan.shape[1])
+        if noise_maps is not None:
+            bias_offset = noise_maps.bias_offset
+            bias_offset_err = noise_maps.bias_offset_err
+        else:
+            bias_offset = 0
+            bias_offset_err = 0
+        sterrbyrow = np.sqrt(sterrbyrow**2 + bias_offset_err**2)
         new_err_list.append(sterrbyrow)
-
 
         bias = medbyrow - bias_offset
         image_bias_corrected = image_data - bias
@@ -108,7 +119,8 @@ def prescan_biassub(input_dataset, bias_offset=0., return_full_frame=False):
         frame.data = out_frames_data_arr[i]
         frame.err = out_frames_err_arr[i]
         frame.dq = out_frames_dq_arr[i]
-        frame.bias = out_frames_bias_arr[i]
+        # frame.bias = out_frames_bias_arr[i]
+        frame.add_extension_hdu("BIAS",data=out_frames_bias_arr[i])
 
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")
@@ -213,7 +225,8 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
                         ) * cr_dqval
 
     # add the two masks to the all_dq mask
-    new_all_dq = crmasked_dataset.all_dq + m1 + m2
+    new_all_dq = np.bitwise_or(crmasked_dataset.all_dq, m1)
+    new_all_dq =  np.bitwise_or(new_all_dq, m2.astype(int))
 
     history_msg = ("Cosmic ray mask created. "
                    "Used detector parameters from {0}"
@@ -277,7 +290,11 @@ def update_to_l2a(input_dataset):
     updated_dataset = input_dataset.copy(copy_data=False)
 
     for frame in updated_dataset:
+        # update header
         frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        # update filename convention. The file convention should be
+        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
+        frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)
 
     history_msg = "Updated Data Level to L2a"
     updated_dataset.update_after_processing_step(history_msg)
