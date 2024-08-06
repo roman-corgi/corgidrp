@@ -13,6 +13,10 @@ Then you can import `corgidrp` like any other python package!
 The installation will create a configuration folder in your home directory called `.corgidrp`. 
 That configuration directory will be used to locate things on your computer such as the location of the calibration database and the pipeline configuration file. The configuration files stores setting such as whether to track each individual error term added to the noise. 
 
+### For Developers
+
+Large binary files (used in tests) are stored in Git LFS. You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
+
 ## How to Contribute
 
 We encourage you to chat with Jason, Max, and Marie (e.g., on Slack) to discuss what to do before you get started. Brainstorming
