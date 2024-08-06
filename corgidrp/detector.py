@@ -512,7 +512,7 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
         return np.unique(i_begs).astype(int)
     else:
         return None
-
+    
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
     """Calculates the lowest full well capacity saturation threshold for each frame.
 
@@ -533,8 +533,7 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
 
     return sat_fwcs
     
-    
-def residuals(images,planims=None):
+ def residuals(images,planims=None):
     """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
     dividing from matched filters
 
@@ -726,6 +725,3 @@ def create_onsky_flatfield(filedir):
 	ura_band4_flatfield.err=ura_band4_flatfield.err.reshape((1,)+ura_band4_flatfield.err.shape)
 	
 	return(nept_band1_flatfield,nept_band4_flatfield,ura_band1_flatfield,ura_band4_flatfield)
-    
-    
-    

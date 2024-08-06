@@ -1,8 +1,12 @@
+import os
+import numpy as np
+import pandas as pd
 import astropy.io.fits as fits
 from astropy.time import Time
 import numpy as np
 import os
 import corgidrp.data as data
+from corgidrp.data import Image
 import corgidrp.detector as detector
 import glob
 import photutils.centroids as centr
@@ -686,3 +690,141 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     badpixelmap = data.Dataset([frame])
 
     return badpixelmap
+
+def nonlin_coefs(filename,EMgain,order):
+    """
+    Reads TVAC nonlinearity table from location specified by ‘filename’.
+    The column in the table closest to the ‘EMgain’ value is selected and fits
+    a polynomial of order ‘order’. The coefficients of the fit are adjusted so
+    that the polynomial function equals unity at 3000 DN. Outputs array polynomial
+    coefficients, array of DN values from the TVAC table, and an array of the
+    polynomial function values for all the DN values.
+
+    Args:
+      filename (string): file name
+      EMgain (int): em gain value
+      order (int): polynomial order
+
+    Returns:
+      np.array: fit coefficients
+      np.array: DN values
+      np.array: fit values
+    """
+    # filename is the name of the csv text file containing the TVAC nonlin table
+    # EM gain selects the closest column in the table
+    # Load the specified file
+    bigArray = pd.read_csv(filename, header=None).values
+    EMgains = bigArray[0, 1:]
+    DNs = bigArray[1:, 0]
+
+    # Find the closest EM gain available to what was requested
+    iG = (np.abs(EMgains - EMgain)).argmin()
+
+    # Fit the nonlinearity numbers to a polynomial
+    vals = bigArray[1:, iG + 1]
+    coeffs = np.polyfit(DNs, vals, order)
+
+    # shift so that function passes through unity at 3000 DN for these tests
+    fitVals0 = np.polyval(coeffs, DNs)
+    ind = np.where(DNs == 3000)
+    unity_val = fitVals0[ind][0]
+    coeffs[3] = coeffs[3] - (unity_val-1.0)
+    fitVals = np.polyval(coeffs,DNs)
+
+    return coeffs, DNs, fitVals
+
+def nonlin_factor(coeffs,DN):
+    """ 
+    Takes array of nonlinearity coefficients (from nonlin_coefs function)
+    and an array of DN values and returns the nonlinearity values array. If the
+    DN value is less 800 DN, then the nonlinearity value at 800 DN is returned.
+    If the DN value is greater than 10000 DN, then the nonlinearity value at
+    10000 DN is returned.
+    
+    Args:
+       coeffs (np.array): nonlinearity coefficients
+       DN (int): DN value
+       
+    Returns:
+       float: nonlinearity value
+    """
+    # input coeffs from nonlin_ceofs and a DN value and return the
+    # nonlinearity factor
+    min_value = 800.0
+    max_value = 10000.0
+    f_nonlin = np.polyval(coeffs, DN)
+    # Control values outside the min/max range
+    f_nonlin = np.where(DN < min_value, np.polyval(coeffs, min_value), f_nonlin)
+    f_nonlin = np.where(DN > max_value, np.polyval(coeffs, max_value), f_nonlin)
+
+    return f_nonlin
+
+def make_fluxmap_image(
+        f_map,
+        bias,
+        kgain,
+        rn,
+        emgain, 
+        time,
+        coeffs,
+        nonlin_flag=False,
+        divide_em=False,
+        ):
+    """ 
+    This function makes a SCI-sized frame with simulated noise and a fluxmap. It
+    also performs bias-subtraction and division by EM gain if required. It is used
+    in the unit tests test_nonlin.py and test_kgain_cal.py
+
+    Args:
+        f_map (np.array): fluxmap in e/s/px. Its size is 1024x1024 pixels.
+        bias (float): bias value in electrons.
+        kgain (float): value of K-Gain in electrons per DN.
+        rn (float): read noise in electrons.
+        emgain (float): calue of EM gain. 
+        time (float):  exposure time in sec.
+        coeffs (np.array): array of cubic polynomial coefficients from nonlin_coefs.
+        nonlin_flag (bool): (Optional) if nonlin_flag is True, then nonlinearity is applied.
+        divide_em (bool): if divide_em is True, then the emgain is divided
+        
+    Returns:
+        corgidrp.data.Image
+    """
+    # Generate random values of rn in elecrons from a Gaussian distribution
+    random_array = np.random.normal(0, rn, (1200, 2200)) # e-
+    # Generate random values from fluxmap from a Poisson distribution
+    Poiss_noise_arr = emgain*np.random.poisson(time*f_map) # e-
+    signal_arr = np.zeros((1200,2200))
+    start_row = 10
+    start_col = 1100
+    signal_arr[start_row:start_row + Poiss_noise_arr.shape[0],
+                start_col:start_col + Poiss_noise_arr.shape[1]] = Poiss_noise_arr
+    temp = random_array + signal_arr # e-
+    if nonlin_flag:
+        temp2 = nonlin_factor(coeffs, signal_arr/kgain)
+        frame = np.round((bias + random_array + signal_arr/temp2)/kgain) # DN
+    else:
+        frame = np.round((bias+temp)/kgain) # DN
+
+    # Subtract bias and divide by EM gain if required. TODO: substitute by
+    # prescan_biassub step function in l1_to_l2a.py and the em_gain_division
+    # step function in l2a_to_l2b.py    
+    offset_colroi1 = 799
+    offset_colroi2 = 1000
+    offset_colroi = slice(offset_colroi1,offset_colroi2)
+    row_meds = np.median(frame[:,offset_colroi], axis=1)
+    row_meds = row_meds[:, np.newaxis]
+    frame -= row_meds
+    if divide_em:
+        frame = frame/emgain
+
+    prhd, exthd = create_default_headers()
+    # Record actual commanded EM
+    exthd['CMDGAIN'] = emgain
+    # Record actual exposure time
+    exthd['EXPTIME'] = time
+    # Mock error maps
+    err = np.ones([1200,2200]) * 0.5
+    dq = np.zeros([1200,2200], dtype = np.uint16)
+    image = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
+        dq = dq)
+    return image
