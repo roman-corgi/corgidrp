@@ -371,7 +371,7 @@ def create_onsky_rasterscans(datadir=None,filedir=None):
         image_files=np.sort(image_files)
         planims=Path(os.path.basename(image_files[i]).split('-')[1]).stem
         print(planims)
-        planet_image=fits.getdata(image_files[i],ignore_missing_simple = True)
+        planet_image=fits.getdata(image_files[i])
         centroid = centr.centroid_com(planet_image)
         xc = centroid[0]
         yc = centroid[1]
