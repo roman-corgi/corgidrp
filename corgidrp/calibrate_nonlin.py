@@ -18,20 +18,20 @@ from corgidrp.calibrate_kgain import CalKgainException
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params = {
     # ROI constants
-    'rowroi1': 305,
-    'rowroi2': 736,
-    'colroi1': 1385,
-    'colroi2': 1846,
+    'rowroi1': 304,
+    'rowroi2': 734,
+    'colroi1': 1384,
+    'colroi2': 1844,
      
     # background ROIs
-    'rowback11': 20,
-    'rowback12': 301,
-    'rowback21': 740,
-    'rowback22': 1001,
-    'colback11': 1200,
-    'colback12': 2001,
-    'colback21': 1200,
-    'colback22': 2001,
+    'rowback11': 19,
+    'rowback12': 299,
+    'rowback21': 739,
+    'rowback22': 999,
+    'colback11': 1199,
+    'colback12': 1999,
+    'colback21': 1199,
+    'colback22': 1999,
      
     # minimum exposure time, s
     'min_exp_time': 0,
@@ -121,7 +121,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=True, plot_outdir='figures', show_plot=False,
-                     verbose=False):
+                     verbose=False, test_iit=False):
     """
     Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
     frames ranging over exposure time, each sub-stack having at least 1 illuminated 
@@ -439,7 +439,11 @@ def calibrate_nonlin(dataset_nl,
     min_count_index_within_range = np.argmin(filtered_counts)
     # Get the corresponding bin edge value and increase by min_mask_factor
     min_mask = min_mask_factor*filtered_bin_edges[min_count_index_within_range]
-    
+    if test_iit:
+        # Hard wired value used by Guillermo Gonzalez (ggonzo@tellus1.com) when
+        # producing nonlin_table_240322.txt
+        min_mask = 1500
+    breakpoint()
     # Create the mask
     mask = np.where(good_mean_frame < min_mask, 0, 1)
     
