@@ -416,6 +416,7 @@ def calibrate_nonlin(dataset_nl,
             plt.show()
         plt.close()
     
+<<<<<<< HEAD
     if test_iit is False:
         # find minimum in histogram
         # 1000-1500 DN recommended when the peak of histogram of  
