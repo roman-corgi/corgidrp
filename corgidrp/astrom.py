@@ -185,15 +185,15 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
-def find_source_locations(dataset, threshold=100, sigma=3, mask_rad=1):
+def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
     ''' 
     Used to find to [pixel, pixel] locations of the sources in an image
     
     Args:
         dataset (corgidrp.data.Dataset): Dataset with at least one image to perform the search
-        threshold (int): Number of stars to find (default 100)
-        sigma (int): Stddev of point source psf (default: 3 pixels)
-        mask_rad (int): Radius of mask for stars (in fwhm, default: 1 == 1fwhm)
+        threshold (int): Number of stars to find (default: 100)
+        fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
+        mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
     
     Returns:
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations
@@ -204,7 +204,7 @@ def find_source_locations(dataset, threshold=100, sigma=3, mask_rad=1):
     xs = np.empty(threshold) * np.nan
     ys = np.empty(threshold) * np.nan
     
-    fwhm = sigma * 2.355 * mask_rad
+    fwhm = fwhm * mask_rad
         
     i = 0
     while i < threshold:
@@ -659,17 +659,17 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def boresight_calibration(input_dataset, field_path, threshold=100, sigma=3, mask_rad=1, comparison_threshold=25):
+def boresight_calibration(input_dataset, field_path, threshold=100, fwhm=7, mask_rad=1, comparison_threshold=25):
     """
     Perform the boresight calibration of a dataset.
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a single image for astrometric calibration
         field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
-        threshold (int): Number of stars to find (default 25)
-        sigma (int): Stddev of point source psf (default: 3 pixels)
-        mask_rad (int): Radius of mask for stars (in fwhm, default: 1 == 1fwhm)
-        comparison_threshold (int): How many stars in the field to consider for the initial match
+        threshold (int): Number of stars to find (default 100)
+        fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
+        mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
+        comparison_threshold (int): How many stars in the field to consider for the initial match (default: 25)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -683,7 +683,7 @@ def boresight_calibration(input_dataset, field_path, threshold=100, sigma=3, mas
     target_coordinate = (dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC'])
 
     # find sources in image and match to field 
-    found_sources = find_source_locations(input_dataset, threshold=threshold, sigma=sigma, mask_rad=mask_rad)
+    found_sources = find_source_locations(input_dataset, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
     matched_sources = match_sources(input_dataset, found_sources, field_path, comparison_threshold=comparison_threshold)
 
     # compute the calibration properties
