@@ -355,9 +355,10 @@ def create_onsky_rasterscans(dataset,filedir=None):
     Create simulated data to check the flat division
     
     Args:
-        corgidrp.data.Dataset:The simulated dataset
+       dataset (corgidrp.data.Dataset): dataset of HST images of neptune and uranus
+       filedir (str): Full path to directory to save to.
         
-    Returns:
+    Returns: 
     	corgidrp.data.Dataset:
         The simulated dataset
     """
