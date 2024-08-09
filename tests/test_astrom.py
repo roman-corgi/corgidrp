@@ -2,6 +2,9 @@ import os
 import numpy as np
 import pytest
 import corgidrp
+import corgidrp.mocks as mocks
+import corgidrp.astrom as astrom
+import corgidrp.data as data
 
 def test_astrom():
     """ 
@@ -16,17 +19,17 @@ def test_astrom():
 
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
 
-    corgidrp.mocks.create_astrom_data(field_path=field_path, filedir=datadir)
+    mocks.create_astrom_data(field_path=field_path, filedir=datadir)
 
     image_path = os.path.join(datadir, 'simcal_astrom.fits')
 
     # open the image
-    dataset = corgidrp.data.Dataset([image_path])
+    dataset = data.Dataset([image_path])
     assert len(dataset) == 1
-    assert type(dataset[0]) == corgidrp.data.Image
+    assert type(dataset[0]) == data.Image
 
     # perform the astrometric calibration
-    astrom_cal = corgidrp.astrom.boresight_calibration(input_dataset=dataset, field_path=field_path)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path)
     assert len(astrom_cal.data) == 4
 
     # the data was generated to have the following image properties
