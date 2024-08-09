@@ -1,12 +1,7 @@
 import os
 import numpy as np
 import pytest
-import sys
-sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp
-from corgidrp import data, mocks, astrom
-import astropy
-import astropy.io.ascii as ascii
 
 def test_astrom():
     """ 
