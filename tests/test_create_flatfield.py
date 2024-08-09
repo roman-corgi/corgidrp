@@ -38,7 +38,9 @@ def test_create_flatfield():
         os.mkdir(file_dir) 
     print(data_dir)
     print(file_dir)
-    mocks.create_onsky_rasterscans(datadir=data_dir,filedir=file_dir)
+    filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
+    data_set = data.Dataset(filenames)
+    mocks.create_onsky_rasterscans(data_set,filedir=file_dir)
     
     ###### create flat field
     flat_filenames = glob.glob(os.path.join(file_dir, "*.fits"))

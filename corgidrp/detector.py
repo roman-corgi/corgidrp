@@ -533,7 +533,7 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
 
 	return sat_fwcs
 
-def residuals(images,planims=None):
+def flatfield_residuals(images,planims=None):
     """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
      dividing from matched filters
 
@@ -693,7 +693,7 @@ def create_onsky_flatfield(dataset):
             frames.append(frame)
             ura_band4_dataset=data.Dataset(frames)
 
-    resi_nept_band1=residuals(nept_band1_raster_images_cent,planims='neptune')
+    resi_nept_band1=flatfield_residuals(nept_band1_raster_images_cent,planims='neptune')
     nept_band1_flat=combine_rasters(resi_nept_band1,planims='neptune',band='band1',cent=nept_band1_cent)[1]
     nept_band1_flatfield = data.FlatField(nept_band1_flat, pri_hdr=prihdr,
                         ext_hdr=exthdr,input_dataset=nept_band1_dataset)
@@ -701,7 +701,7 @@ def create_onsky_flatfield(dataset):
     nept_band1_flatfield.err=nept_band1_flatfield.err.reshape((1,)+nept_band1_flatfield.err.shape)
     
 
-    resi_nept_band4=residuals(nept_band4_raster_images_cent,planims='neptune')
+    resi_nept_band4=flatfield_residuals(nept_band4_raster_images_cent,planims='neptune')
     nept_band4_flat=combine_rasters(resi_nept_band4,planims='neptune',band='band4',cent=nept_band4_cent)[1]
     nept_band4_flatfield = data.FlatField(nept_band4_flat, pri_hdr=prihdr,
                         ext_hdr=exthdr,input_dataset=nept_band4_dataset)
@@ -709,7 +709,7 @@ def create_onsky_flatfield(dataset):
     nept_band4_flatfield.err=nept_band4_flatfield.err.reshape((1,)+nept_band4_flatfield.err.shape)
 
 
-    resi_ura_band1=residuals(ura_band1_raster_images_cent,planims='uranus')
+    resi_ura_band1=flatfield_residuals(ura_band1_raster_images_cent,planims='uranus')
     ura_band1_flat=combine_rasters(resi_ura_band1,planims='uranus',band='band1',cent=ura_band1_cent)[1]
     ura_band1_flatfield = data.FlatField(ura_band1_flat, pri_hdr=prihdr,
                         ext_hdr=exthdr,input_dataset=ura_band1_dataset)
@@ -717,7 +717,7 @@ def create_onsky_flatfield(dataset):
     ura_band1_flatfield.err=ura_band1_flatfield.err.reshape((1,)+ura_band1_flatfield.err.shape)
     
 
-    resi_ura_band4=residuals(ura_band4_raster_images_cent,planims='uranus')
+    resi_ura_band4=flatfield_residuals(ura_band4_raster_images_cent,planims='uranus')
     ura_band4_flat=combine_rasters(resi_ura_band4,planims='uranus',band='band4',cent=ura_band4_cent)[1]
     ura_band4_flatfield = data.FlatField(ura_band4_flat, pri_hdr=prihdr,
                         ext_hdr=exthdr,input_dataset=ura_band4_dataset)
