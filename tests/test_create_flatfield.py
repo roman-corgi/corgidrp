@@ -41,8 +41,9 @@ def test_create_flatfield():
     mocks.create_onsky_rasterscans(datadir=data_dir,filedir=file_dir)
     
     ###### create flat field
-    
-    onskyflat_frame = detector.create_onsky_flatfield(filedir=file_dir)
+    flat_filenames = glob.glob(os.path.join(file_dir, "*.fits"))
+    flat_dataset = data.Dataset(flat_filenames)
+    onskyflat_frame = detector.create_onsky_flatfield(flat_dataset)
     neptune_band1_flatfield=onskyflat_frame[0]
     neptune_band4_flatfield=onskyflat_frame[1]
     uranus_band1_flatfield=onskyflat_frame[2]
