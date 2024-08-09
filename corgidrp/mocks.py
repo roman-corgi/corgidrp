@@ -394,6 +394,10 @@ def create_onsky_rasterscans(datadir=None,filedir=None):
             prihdr, exthdr = create_default_headers()
             sim_data=planet_rot_images[i]
             frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+            pl=planims.split('_')[0]
+            band=planims.split('_')[2]
+            frame.ext_hdr.append(('OBJNAME', pl), end=True)
+            frame.ext_hdr.append(('BAND', band), end=True)
             if filedir is not None:
                 frame.save(filedir=filedir, filename=filepattern.format(i))
             frames.append(frame)
