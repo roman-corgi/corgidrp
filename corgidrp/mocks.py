@@ -350,14 +350,13 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return median_dithers,mask,final,data_display,dither_stack_norm,full_mask,cents
     
-def create_onsky_rasterscans(datadir=None,filedir=None):
+def create_onsky_rasterscans(dataset,filedir=None):
     """
     Create simulated data to check the flat division
     
     Args:
-        filedir (str): (Optional) Full path to directory to save to.
-        datadir (str): (Required) Full path to directory of images to be raster scanned
-
+        corgidrp.data.Dataset:The simulated dataset
+        
     Returns:
     	corgidrp.data.Dataset:
         The simulated dataset
@@ -365,13 +364,13 @@ def create_onsky_rasterscans(datadir=None,filedir=None):
     n = 420
     qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
     pred_cents=[]
-    image_files=glob.glob(os.path.join(datadir, "medcombined*.fits"))
     planet_rot_images=[]
-    for i in range(len(image_files)):
-        image_files=np.sort(image_files)
-        planims=Path(os.path.basename(image_files[i]).split('-')[1]).stem
+    for i in range(len(dataset)):
+        planet=dataset[i].ext_hdr['OBJNAME']
+        band='band'+'_'+dataset[i].ext_hdr['BAND']
+        planims=planet+'_'+band
         print(planims)
-        planet_image=fits.getdata(image_files[i])
+        planet_image=dataset[i].data
         centroid = centr.centroid_com(planet_image)
         xc = centroid[0]
         yc = centroid[1]
