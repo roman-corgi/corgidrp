@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 import corgidrp.data
 
@@ -659,13 +660,13 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def boresight_calibration(input_dataset, field_path, threshold=100, fwhm=7, mask_rad=1, comparison_threshold=25):
+def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', threshold=100, fwhm=7, mask_rad=1, comparison_threshold=25):
     """
     Perform the boresight calibration of a dataset.
     
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a single image for astrometric calibration
-        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
+        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
         threshold (int): Number of stars to find (default 100)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
@@ -682,7 +683,12 @@ def boresight_calibration(input_dataset, field_path, threshold=100, fwhm=7, mask
     # call the target coordinates from the image header
     target_coordinate = (dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC'])
 
-    # find sources in image and match to field 
+    # find sources in image and match to field
+    if field_path == 'JWST_CALFIELD2020.csv':
+        dir_name = os.path.dirname(__file__)
+        full_field_path = os.path.join(dir_name, "tests/test_data", field_path)
+        field_path = full_field_path
+        
     found_sources = find_source_locations(input_dataset, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
     matched_sources = match_sources(input_dataset, found_sources, field_path, comparison_threshold=comparison_threshold)
 
