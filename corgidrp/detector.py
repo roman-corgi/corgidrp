@@ -504,7 +504,7 @@ def find_plateaus(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
         return np.unique(i_begs).astype(int)
     else:
         return None
-
+    
 def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
     """Calculates the lowest full well capacity saturation threshold for each frame.
 

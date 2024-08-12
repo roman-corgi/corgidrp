@@ -1,5 +1,7 @@
-numpy
 astropy
+matplotlib
+numpy
 pandas
 pytest
 scipy
+statsmodels
