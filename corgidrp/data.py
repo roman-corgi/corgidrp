@@ -906,13 +906,13 @@ class KGain(Image):
         return new_kg
 
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
 
         Args:
-            filename (str): filepath to save to. Use self.filename if not specified
             filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
         """
         if filename is not None:
             self.filename = filename
