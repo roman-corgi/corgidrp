@@ -65,6 +65,7 @@ tests/e2e_tests/*/*.json
 # editor files
 .vscode/*
 .*.swp
+.exrc
 
 #jupyter cruft
 .ipynb_checkpoints
@@ -76,3 +77,6 @@ tests/e2e_tests/*/*.json
 *.fits
 *.FITS
 
+# Output figures
+figures/
+tests/figures/
