@@ -7,6 +7,9 @@ import pytest
 def pytest_addoption(parser):
     """
     This adds command line arguments to the pytest command used for end-to-end testing
+
+    Args:
+        parser: argument parser object
     """
     # can add path to TVAC data folder
     parser.addoption("--tvacdata_path", action="store", default="./", help="Filepath to 'CGI TVAC Data' Folder")
@@ -21,6 +24,12 @@ def pytest_addoption(parser):
 def tvacdata_path(request):
     """
     Adds the hook to be able to grab the value passed in with the tvacdata_path argument
+
+    Args:
+        request (FixtureRequest): pytest request of a fixture
+    
+    Returns:
+        str: value from this command line argument
     """
     return request.config.getoption("--tvacdata_path")
 
@@ -28,6 +37,12 @@ def tvacdata_path(request):
 def e2eoutput_path(request):
     """
     Adds the hook to be able to grab the value passed in with the e2eoutput_path argument
+
+    Args:
+        request (FixtureRequest): pytest request of a fixture
+    
+    Returns:
+        str: value from this command line argument
     """
     return request.config.getoption("--e2eoutput_path")
 
@@ -35,6 +50,9 @@ def e2eoutput_path(request):
 def pytest_configure(config):
     """
     Adds e2e marker for specifying e2e tests
+
+    Args:
+        config: pytest configuration object
     """
     config.addinivalue_line("markers", "e2e: mark test as end-to-end")
 
@@ -44,6 +62,10 @@ def pytest_collection_modifyitems(config, items):
     Determines which set of tests to run, based on --which argument
 
     By default, runs only unit tests (those not marked as e2e)
+
+    Args:
+        config: pytest configuration object
+        items: list of tests
     """
     whichtests = config.getoption("--which")
     if whichtests == "all":
