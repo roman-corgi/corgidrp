@@ -141,7 +141,7 @@ def save_data(dataset_or_image, outputdir, suffix=""):
     """
     # convert everything to dataset to make life easier
     if isinstance(dataset_or_image, data.Image):
-        dataset = data.Dataset(dataset_or_image)
+        dataset = data.Dataset([dataset_or_image])
     else:
         dataset = dataset_or_image
 
@@ -152,14 +152,15 @@ def save_data(dataset_or_image, outputdir, suffix=""):
         suffix = suffix.strip("_") # user doesn't need to pass underscores
         for image in dataset:
             # grab everything before .FITS
-            filename_base = image.filename.lower().split(".fits")[0] 
+            fits_index = image.filename.lower().rfind(".fits")
+            filename_base = image.filename[:fits_index]
             new_filename = "{0}_{1}.fits".format(filename_base, suffix)
             filenames.append(new_filename)
     else:
         filenames = None
 
     # save!
-    dataset.save(outputdir=outputdir, filenames=filenames)
+    dataset.save(filedir=outputdir, filenames=filenames)
 
     # add calibration data to caldb as necessary
     for image in dataset:

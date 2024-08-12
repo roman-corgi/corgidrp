@@ -37,7 +37,7 @@ def test_autoreducing():
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(datadir)
+    l1_dataset.save(filedir=datadir)
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -95,7 +95,7 @@ def test_auto_template_identification():
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(datadir)
+    l1_dataset.save(filedir=datadir)
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -166,8 +166,77 @@ def test_auto_template_identification():
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(bp_map)
 
-if __name__ == "__main__":
-    test_autoreducing()
+
+def test_saving():
+    """
+    Tests the special save function including suffix. Tries both calibration image and non-calibration image
+    """
+    ### create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    ### load test recipe
+    testdatadir = os.path.join(os.path.dirname(__file__), "test_data")
+    save_recipe_path = os.path.join(testdatadir, "saving_only.json")
+    save_recipe = json.load(open(save_recipe_path, 'r'))
+    
+    ######################
+    ## Test regular images
+    ######################
+
+    ### Create mock Image data
+    l1_dataset = mocks.create_dark_calib_files(filedir=datadir, numfiles=2)
+    # fake the emgain
+    for image in l1_dataset:
+        image.ext_hdr['EMGAIN'] = 1
+    # simulate the expected CGI naming convention
+    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+    this_recipe = walker.autogen_recipe(filelist, outputdir, template=save_recipe)
+    walker.run_recipe(this_recipe)
+
+    # check that the output dataset is saved to the output dir
+    # filenames have been appended with a suffix
+    output_files = [os.path.join(outputdir, "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}_test.fits".format(i)) for i in range(len(l1_dataset))]
+    output_dataset = data.Dataset(output_files)
+    assert len(output_dataset) == len(l1_dataset) # check the same number of files
+    
+    ##########################
+    ## Test calibration image 
+    ##########################
+    # Fake a nonlinearity dataset
+    fake_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    # fake the headers because this frame doesn't have the proper headers
+    prihdr, exthdr = mocks.create_default_headers("SCI")
+    fake_nonlinearity.pri_hdr = prihdr
+    fake_nonlinearity.ext_hdr = exthdr
+    fake_nonlinearity.ext_hdr['DATATYPE'] = 'NonLinearityCalibration'
+    fake_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
+    fake_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
+    fake_nonlinearity.filename = "CGI_test.fits"
+
+    # tested the run_recipe portion of the code already (nothing different)
+    # test save_data when we only pass in a single calibration file and not a dataset to see how it goes
+    walker.save_data(fake_nonlinearity, outputdir, "nonlin")
+    output_filepath = os.path.join(outputdir, "CGI_test_nonlin.fits")
+    new_nonlinearity = data.NonLinearityCalibration(output_filepath)
+
+    # remove this entry. should only work if it's already in the database
+    # also used for cleanup
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(new_nonlinearity)
+
+
+if __name__ == "__main__":#
+    test_saving()
 
 
 
