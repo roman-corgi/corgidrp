@@ -65,13 +65,13 @@ class Dataset():
     def __len__(self):
         return len(self.frames)
 
-    def save(self, filedir, filenames=None):
+    def save(self, filedir=None, filenames=None):
         """
         Save each file of data in this dataset into directory
 
         Args:
-            filedir (str): directory to save the files
-            filenames (list): a list of output filenames for each file
+            filedir (str): directory to save the files. Default: the existing filedir for each file
+            filenames (list): a list of output filenames for each file. Default: unchanged filenames
 
         """
         # if filenames are not passed, use the default ones
@@ -409,13 +409,13 @@ class Image():
         return os.path.join(self.filedir, self.filename)
 
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
 
         Args:
-            filename (str): filepath to save to. Use self.filename if not specified
             filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
         """
         if filename is not None:
             self.filename = filename
