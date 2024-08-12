@@ -1,4 +1,5 @@
 import os
+import pytest
 import corgidrp
 import corgidrp.caldb as caldb
 import corgidrp.data as data
@@ -119,6 +120,9 @@ def test_get_calib():
     auto_dark = testcaldb.get_calib(dark_dataset[2], data.Dark)
     assert(auto_dark.filepath == master_dark.filepath)
 
+    with pytest.raises(ValueError):
+        _ = testcaldb.get_calib(dark_dataset[2], data.DetectorNoiseMaps)
+        
     # reset everything
     os.remove(testcaldb_filepath)
 
@@ -149,4 +153,4 @@ def test_caldb_scan():
     os.remove(testcaldb_filepath)
 
 if __name__ == "__main__":
-    test_caldb_scan()
+    test_get_calib()
