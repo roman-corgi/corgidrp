@@ -1226,6 +1226,7 @@ class DetectorParams(Image):
         self.params = {}
         # load back in all the values from the header
         for key in self.default_values:
+            print(key)
             if len(key) > 8:
                 # to avoid VerifyWarning from fits
                 self.params[key] = self.ext_hdr['HIERARCH ' + key]
