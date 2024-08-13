@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_l2a_basic",
+    "name" : "saving_test",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
