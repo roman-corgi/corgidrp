@@ -236,7 +236,7 @@ def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
                 
             elif (y + fwhm) > (image_y - 1):  # upper left corner
                 starty = y - int(fwhm)
-                endy = image_y - 1
+                endy = image_y
 
             else:
                 starty = y - int(fwhm)
@@ -244,7 +244,7 @@ def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
         
         elif (x + fwhm) > (image_x - 1):  # right edge
             startx = x - int(fwhm)
-            endx = image_x - 1
+            endx = image_x
             
             if (y - fwhm) < 0:  # bottom right corner
                 starty = 0
@@ -252,7 +252,7 @@ def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
                 
             elif (y + fwhm) > (image_y - 1):  # upper right corner
                 starty = y - int(fwhm)
-                endy = image_y - 1
+                endy = image_y
 
             else:
                 starty = y - int(fwhm)
@@ -268,7 +268,7 @@ def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
                 
             elif (y + fwhm) > (image_y - 1):  # upper
                 starty = y - int(fwhm)
-                endy = image_y - 1
+                endy = image_y
 
             else:
                 starty = y - int(fwhm)
@@ -688,7 +688,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', thr
         dir_name = os.path.dirname(__file__)
         full_field_path = os.path.join(dir_name, "tests/test_data", field_path)
         field_path = full_field_path
-        
+
     found_sources = find_source_locations(input_dataset, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
     matched_sources = match_sources(input_dataset, found_sources, field_path, comparison_threshold=comparison_threshold)
 
