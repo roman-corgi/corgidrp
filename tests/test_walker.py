@@ -30,9 +30,6 @@ def test_autoreducing():
 
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
-    # fake the emgain
-    for image in l1_dataset:
-        image.ext_hdr['EMGAIN'] = 1
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -88,9 +85,6 @@ def test_auto_template_identification():
 
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
-    # fake the emgain
-    for image in l1_dataset:
-        image.ext_hdr['EMGAIN'] = 1
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -190,9 +184,6 @@ def test_saving():
 
     ### Create mock Image data
     l1_dataset = mocks.create_dark_calib_files(filedir=datadir, numfiles=2)
-    # fake the emgain
-    for image in l1_dataset:
-        image.ext_hdr['EMGAIN'] = 1
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
