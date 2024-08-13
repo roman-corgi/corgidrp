@@ -48,7 +48,7 @@ def test_err_dq_creation():
     assert hasattr(image1, "err_hdr")
     assert hasattr(image1, "dq_hdr")
     assert np.mean(image1.dq) == 0
-    image1.save('test_image1.fits')
+    image1.save(filename='test_image1.fits')
 
     image2 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err, dq = dq1, err_hdr = errhd, dq_hdr = dqhd)
     print("data", image2.data)
@@ -60,7 +60,7 @@ def test_err_dq_creation():
     assert image2.err_hdr["CASE"] == errhd["CASE"]
     assert image2.dq_hdr["CASE"] == dqhd["CASE"]
     #check the correct saving and loading of fits files
-    image2.save('test_image2.fits')
+    image2.save(filename='test_image2.fits')
     image3 = Image('test_image2.fits')
     assert np.array_equal(image3.data, image2.data)
     assert np.array_equal(image3.err, image2.err)
@@ -107,7 +107,7 @@ def test_add_error_term():
     image1.add_error_term(err2, "error_nuts")
     assert image1.err.shape == (3,1024,1024)
     assert image1.err[0,0,0] == np.sqrt(err1[0,0]**2 + err2[0,0]**2)
-    image1.save("test_image0.fits")
+    image1.save(filename="test_image0.fits")
 
     image_test = Image('test_image0.fits')
     assert np.array_equal(image_test.dq, dq)
