@@ -4,12 +4,15 @@ Test the walker infrastructure to read and execute recipes
 import os
 import glob
 import json
+import numpy as np
 import astropy.time as time
+import astropy.io.fits as fits
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.caldb as caldb
 import corgidrp.walker as walker
+import corgidrp.detector as detector
 
 
 def test_autoreducing():
@@ -27,14 +30,11 @@ def test_autoreducing():
 
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
-    # fake the emgain
-    for image in l1_dataset:
-        image.ext_hdr['EMGAIN'] = 1
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
-    l1_dataset.save(datadir)
+    l1_dataset.save(filedir=datadir)
     filelist = [frame.filepath for frame in l1_dataset]
 
 
@@ -52,7 +52,8 @@ def test_autoreducing():
     CPGS_XML_filepath = "" # not yet implemented
 
     # generate recipe and run it
-    recipe = walker.walk_corgidrp(filelist, CPGS_XML_filepath, outputdir)
+    # basic l2a recipe to keep things simple
+    recipe = walker.walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template="l1_to_l2a_basic.json")
 
     # check that the output dataset is saved to the output dir
     # filenames have been updated to L2a. 
@@ -70,10 +71,163 @@ def test_autoreducing():
     # clean up
     mycaldb.remove_entry(new_nonlinearity)
 
+def test_auto_template_identification():
+    """
+    Tests the process of coming up with the right template and filling in calibration files
+    """
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    # create simulated data
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    # simulate the expected CGI naming convention
+    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
 
 
-if __name__ == "__main__":
-    test_autoreducing()
+    ###### Setup necessary calibration files
+    # Create necessary calibration files
+    # we are going to make calibration files using
+    # a combination of the II&T nonlinearty file and the mock headers from
+    # our unit test version
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    ext_hdr["DRPCTIME"] = time.Time.now().isot
+    ext_hdr['DRPVERSN'] =  corgidrp.__version__
+    mock_input_dataset = data.Dataset(filelist)
+
+    this_caldb = caldb.CalDB() # connection to cal DB
+
+    # Nonlinearity calibration
+    new_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    # fake the headers because this frame doesn't have the proper headers
+    new_nonlinearity.pri_hdr = pri_hdr
+    new_nonlinearity.ext_hdr = ext_hdr
+    this_caldb.create_entry(new_nonlinearity)
+
+    # KGain
+    kgain_val = 8.7
+    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                    input_dataset=mock_input_dataset)
+    kgain.save(filedir=outputdir, filename="mock_kgain.fits")
+    this_caldb.create_entry(kgain)
+
+    # NoiseMap
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
+    noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
+    noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected EM electrons'
+    ext_hdr['B_O'] = 0
+    ext_hdr['B_O_ERR'] = 0
+    noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                    input_dataset=mock_input_dataset, err=noise_map_noise,
+                                    dq = noise_map_dq, err_hdr=err_hdr)
+    noise_map.save(filedir=outputdir, filename="mock_detnoisemaps.fits")
+    this_caldb.create_entry(noise_map)
+
+    ## Flat field
+    flat_dat = np.ones((1024, 1024))
+    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat.save(filedir=outputdir, filename="mock_flat.fits")
+    this_caldb.create_entry(flat)
+
+    # bad pixel map
+    bp_dat = np.zeros((1024, 1024), dtype=int)
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    bp_map.save(filedir=outputdir, filename="mock_bpmap.fits")
+    this_caldb.create_entry(bp_map)
+
+
+    ### Finally, test the recipe identification
+    recipe = walker.autogen_recipe(filelist, outputdir)
+
+    assert recipe['name'] == 'l1_to_l2b'
+    assert recipe['template'] == False
+
+    # now cleanup
+    this_caldb.remove_entry(new_nonlinearity)
+    this_caldb.remove_entry(kgain)
+    this_caldb.remove_entry(noise_map)
+    this_caldb.remove_entry(flat)
+    this_caldb.remove_entry(bp_map)
+
+
+def test_saving():
+    """
+    Tests the special save function including suffix. Tries both calibration image and non-calibration image
+    """
+    ### create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    ### load test recipe
+    testdatadir = os.path.join(os.path.dirname(__file__), "test_data")
+    save_recipe_path = os.path.join(testdatadir, "saving_only.json")
+    save_recipe = json.load(open(save_recipe_path, 'r'))
+    
+    ######################
+    ## Test regular images
+    ######################
+
+    ### Create mock Image data
+    l1_dataset = mocks.create_dark_calib_files(filedir=datadir, numfiles=2)
+    # simulate the expected CGI naming convention
+    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+    this_recipe = walker.autogen_recipe(filelist, outputdir, template=save_recipe)
+    walker.run_recipe(this_recipe)
+
+    # check that the output dataset is saved to the output dir
+    # filenames have been appended with a suffix
+    output_files = [os.path.join(outputdir, "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}_test.fits".format(i)) for i in range(len(l1_dataset))]
+    output_dataset = data.Dataset(output_files)
+    assert len(output_dataset) == len(l1_dataset) # check the same number of files
+    
+    ##########################
+    ## Test calibration image 
+    ##########################
+    # Fake a nonlinearity dataset
+    fake_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    # fake the headers because this frame doesn't have the proper headers
+    prihdr, exthdr = mocks.create_default_headers("SCI")
+    fake_nonlinearity.pri_hdr = prihdr
+    fake_nonlinearity.ext_hdr = exthdr
+    fake_nonlinearity.ext_hdr['DATATYPE'] = 'NonLinearityCalibration'
+    fake_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
+    fake_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
+    fake_nonlinearity.filename = "CGI_test.fits"
+
+    # tested the run_recipe portion of the code already (nothing different)
+    # test save_data when we only pass in a single calibration file and not a dataset to see how it goes
+    walker.save_data(fake_nonlinearity, outputdir, "nonlin")
+    output_filepath = os.path.join(outputdir, "CGI_test_nonlin.fits")
+    new_nonlinearity = data.NonLinearityCalibration(output_filepath)
+
+    # remove this entry. should only work if it's already in the database
+    # also used for cleanup
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(new_nonlinearity)
+
+
+if __name__ == "__main__":#
+    test_saving()
 
 
 
