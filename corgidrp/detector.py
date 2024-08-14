@@ -639,7 +639,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None):
             band (str): 1 or 4
 
     	Returns:
-    		onsky_flatfield (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
+    		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
     		
 	"""
     smooth_images=[];raster_images_cent=[];cent=[]; act_cents=[];frames=[]; files=[];
