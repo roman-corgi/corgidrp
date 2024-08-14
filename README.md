@@ -125,6 +125,11 @@ End-to-end testing refers to processing data as one would when we get the real d
   6. Document your recipe on the "Corgi-DRP Implementation Document" on Confluence (see the big table in Section 2.0). You should fill out an entire row with your recipe. Under addition notes, note if your recipe took significant run time (> 1 minute) and significant memory (> 1 GB). 
   7. PR! 
 
+To run the existing end-to-end tests, you need to have downloaded all the TVAC data to your computer. In a terminal, go to the base directory of the corgidrp repo and run the following command, substituting paths for paths on your computer as desired:
+
+```
+pytest --which e2e --tvacdata_path /path/to/CGI_TVAC_Data --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
+```
 
 ### Linting
 

@@ -4,7 +4,6 @@ import pandas as pd
 import astropy.io.fits as fits
 from astropy.time import Time
 import numpy as np
-import os
 import corgidrp.data as data
 from corgidrp.data import Image
 import corgidrp.detector as detector
@@ -12,6 +11,11 @@ import glob
 import photutils.centroids as centr
 from pathlib import Path
 from corgidrp.detector import imaging_area_geom, unpack_geom
+
+import astropy.io.ascii as ascii
+from astropy.coordinates import SkyCoord
+import astropy.wcs as wcs
+from astropy.table import Table
 
 detector_areas_test= {
 'SCI' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
@@ -669,8 +673,6 @@ def create_default_headers(obstype="SCI"):
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
-
-
 def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     """
     Create simulated bad pixel map data. Code value is 4.
@@ -842,3 +844,147 @@ def make_fluxmap_image(
     image = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
     return image
+
+def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
+    """
+    Create simulated data for astrometric calibration.
+
+    Args:
+        field_path (str): Full path to directory with test field data (ra, dec, vmag, etc.)
+        filedir (str): (Optional) Full path to directory to save to.
+        subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from
+
+    Returns:
+        corgidrp.data.Dataset:
+            The simulated dataset
+
+    """
+    if type(field_path) != str:
+        raise TypeError('field_path must be a str')
+
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+    
+    # hard coded image properties
+    size = (1024, 1024)
+    sim_data = np.zeros(size)
+    ny, nx = size
+    center = [nx //2, ny //2]
+    target = (80.553428801, -69.514096821)
+    platescale = 21.8   #[mas]
+    rotation = 45       #[deg]
+    fwhm = 3
+    subfield_radius = 0.02 #[deg]
+    
+    # load in the field data and restrict to 0.02 [deg] radius around target
+    cal_field = ascii.read(field_path)
+    subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - subfield_radius) & (cal_field['DEC'] <= target[1] + subfield_radius))]
+
+    cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
+
+    # create the simulated image header
+    vert_ang = np.radians(rotation)
+    pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+    cdmatrix = pc * (platescale * 0.001) / 3600.
+
+    new_hdr = {}
+    new_hdr['CD1_1'] = cdmatrix[0,0]
+    new_hdr['CD1_2'] = cdmatrix[0,1]
+    new_hdr['CD2_1'] = cdmatrix[1,0]
+    new_hdr['CD2_2'] = cdmatrix[1,1]
+
+    new_hdr['CRPIX1'] = center[0]
+    new_hdr['CRPIX2'] = center[1]
+
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+
+    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
+    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+
+    new_hdr['CRVAL1'] = target[0]
+    new_hdr['CRVAL2'] = target[1]
+
+    w = wcs.WCS(new_hdr)
+
+    # create the image data
+    xpix, ypix = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
+    pix_inds = np.where((xpix >= 0) & (xpix <= 1024) & (ypix >= 0) & (ypix <= 1024))[0]
+
+    xpix = xpix[pix_inds]
+    ypix = ypix[pix_inds]
+
+    amplitudes = np.power(10, ((subfield['VMAG'][pix_inds] - 22.5) / (-2.5))) * 10  
+
+    # inject gaussian psf stars
+    for xpos, ypos, amplitude in zip(xpix, ypix, amplitudes):  
+        stampsize = int(np.ceil(3 * fwhm))
+        sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+        
+        # coordinate system
+        y, x = np.indices([stampsize, stampsize])
+        y -= stampsize // 2
+        x -= stampsize // 2
+        
+        # find nearest pixel
+        x_int = int(round(xpos))
+        y_int = int(round(ypos))
+        x += x_int
+        y += y_int
+        
+        xmin = x[0][0]
+        xmax = x[-1][-1]
+        ymin = y[0][0]
+        ymax = y[-1][-1]
+        
+        psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+
+        # crop the edge of the injection at the edge of the image
+        if xmin <= 0:
+            psf = psf[:, -xmin:]
+            xmin = 0
+        if ymin <= 0:
+            psf = psf[-ymin:, :]
+            ymin = 0
+        if xmax >= nx:
+            psf = psf[:, :-(xmax-nx + 1)]
+            xmax = nx - 1
+        if ymax >= ny:
+            psf = psf[:-(ymax-ny + 1), :]
+            ymax = ny - 1
+
+        # inject the stars into the image
+        sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
+
+    # add Gaussian random noise
+    noise_rng = np.random.default_rng(10)
+    gain = 1
+    ref_flux = 10
+    noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
+    sim_data = sim_data + noise
+
+    # load as an image object
+    frames = []
+    prihdr, exthdr = create_default_headers()
+    prihdr['RA'] = target[0]
+    prihdr['DEC'] = target[1]
+
+    newhdr = fits.Header(new_hdr)
+    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+    filename = "simcal_astrom.fits"
+    if filedir is not None:
+        # save source SkyCoord locations and pixel location estimates
+        guess = Table()
+        guess['x'] = [int(x) for x in xpix]
+        guess['y'] = [int(y) for y in ypix]
+        guess['RA'] = cal_SkyCoords[pix_inds].ra
+        guess['DEC'] = cal_SkyCoords[pix_inds].dec
+        ascii.write(guess, filedir+'/guesses.csv', overwrite=True)
+
+        frame.save(filedir=filedir, filename=filename)
+
+    frames.append(frame)
+    dataset = data.Dataset(frames)
+
+    return dataset
