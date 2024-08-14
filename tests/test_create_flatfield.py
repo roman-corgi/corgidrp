@@ -36,71 +36,51 @@ def test_create_flatfield():
     data_dir = os.path.join(os.path.dirname(__file__),"test_data/")
     if not os.path.exists(file_dir):
         os.mkdir(file_dir) 
-    print(data_dir)
-    print(file_dir)
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
-    mocks.create_onsky_rasterscans(data_set,filedir=file_dir)
+    mocks.create_onsky_rasterscans(data_set,filedir=file_dir,planet='neptune',band='1')
     
     ###### create flat field
     flat_filenames = glob.glob(os.path.join(file_dir, "*.fits"))
     flat_dataset = data.Dataset(flat_filenames)
-    onskyflat_frame = detector.create_onsky_flatfield(flat_dataset)
-    neptune_band1_flatfield=onskyflat_frame[0]
-    neptune_band4_flatfield=onskyflat_frame[1]
-    uranus_band1_flatfield=onskyflat_frame[2]
-    uranus_band4_flatfield=onskyflat_frame[3]
-    assert np.nanmean(neptune_band1_flatfield.data) == pytest.approx(1, abs=1e-2)
-    assert np.nanmean(neptune_band4_flatfield.data) == pytest.approx(1, abs=1e-2)
-    assert np.nanmean(uranus_band1_flatfield.data) == pytest.approx(1, abs=1e-2)
-    assert np.nanmean(uranus_band4_flatfield.data) == pytest.approx(1, abs=1e-2)
+    onskyflat_field = detector.create_onsky_flatfield(flat_dataset,planet='neptune',band='1')
+   
+    assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
+    
     
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     
-    flat_filename_1 = "sim_flat_calib_neptune_band1.fits"
-    flat_filename_2 = "sim_flat_calib_neptune_band4.fits"
-    flat_filename_3 = "sim_flat_calib_uranus_band1.fits"
-    flat_filename_4 = "sim_flat_calib_uranus_band4.fits"
+    flat_filename = "sim_onsky_flatfield.fits"
     if not os.path.exists(calibdir):
         os.mkdir(calibdir)
-    neptune_band1_flatfield.save(filedir=calibdir, filename=flat_filename_1)
-    neptune_band4_flatfield.save(filedir=calibdir, filename=flat_filename_2)
-    uranus_band1_flatfield.save(filedir=calibdir, filename=flat_filename_3)
-    uranus_band4_flatfield.save(filedir=calibdir, filename=flat_filename_4)
+    onskyflat_field.save(filedir=calibdir, filename=flat_filename)
     
     ###### perform flat division
     # load in the flatfield
-    flat_filepath = os.path.join(calibdir, flat_filename_1)
-    neptune_band1_flatfield = data.FlatField(flat_filepath)
-    flat_filepath = os.path.join(calibdir, flat_filename_2)
-    neptune_band4_flatfield = data.FlatField(flat_filepath)
-    flat_filepath = os.path.join(calibdir, flat_filename_3)
-    uranus_band1_flatfield = data.FlatField(flat_filepath)
-    flat_filepath = os.path.join(calibdir, flat_filename_4)
-    uranus_band4_flatfield = data.FlatField(flat_filepath)
+    flat_filepath = os.path.join(calibdir, flat_filename)
+    onsky_flatfield = data.FlatField(flat_filepath)
+
     
-    flatdivided_dataset_1 = l2a_to_l2b.flat_division(simflat_dataset, neptune_band1_flatfield)
-    flatdivided_dataset_2 = l2a_to_l2b.flat_division(simflat_dataset, neptune_band4_flatfield)
-    flatdivided_dataset_3 = l2a_to_l2b.flat_division(simflat_dataset, uranus_band1_flatfield)
-    flatdivided_dataset_4 = l2a_to_l2b.flat_division(simflat_dataset, uranus_band4_flatfield)
+    flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset,onsky_flatfield)
+    
     
 	# perform checks after the flat divison for one of the dataset
-    assert(flat_filename_1 in str(flatdivided_dataset_1[0].ext_hdr["HISTORY"]))
+    assert(flat_filename in str(flatdivided_dataset[0].ext_hdr["HISTORY"]))
 	
 	# check the propagated errors for one of the dataset
-    assert flatdivided_dataset_1[0].err_hdr["Layer_2"] == "FlatField_error"
+    assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
     print("mean of all simulated data",np.mean(simflat_dataset.all_data))
     print("mean of all simulated data error",np.nanmean(simflat_dataset.all_err) )
-    print("mean of all flat divided data:", np.nanmean(flatdivided_dataset_1.all_data))
-    print("mean of flatfield:", np.nanmean(neptune_band1_flatfield.data))
-    print("mean of flatfield err:", np.nanmean(neptune_band1_flatfield.err))
+    print("mean of all flat divided data:", np.nanmean(flatdivided_dataset.all_data))
+    print("mean of flatfield:", np.nanmean(onsky_flatfield.data))
+    print("mean of flatfield err:", np.nanmean(onsky_flatfield.err))
     
-    err_flatdiv=np.nanmean(flatdivided_dataset_1.all_err)
-    err_estimated=np.sqrt(((np.nanmean(neptune_band1_flatfield.data))**2)*(np.nanmean(simflat_dataset.all_err))**2+((np.nanmean(simflat_dataset.all_data))**2)*(np.nanmean(neptune_band1_flatfield.err))**2)
+    err_flatdiv=np.nanmean(flatdivided_dataset.all_err)
+    err_estimated=np.sqrt(((np.nanmean(onsky_flatfield.data))**2)*(np.nanmean(simflat_dataset.all_err))**2+((np.nanmean(simflat_dataset.all_data))**2)*(np.nanmean(onsky_flatfield.err))**2)
     print("mean of all flat divided data errors:",err_flatdiv)
     print("Error estimated:",err_estimated)
     
-    print(flatdivided_dataset_1[0].ext_hdr)
+    print(flatdivided_dataset[0].ext_hdr)
     corgidrp.track_individual_errors = old_err_tracking
 
 
