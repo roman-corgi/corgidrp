@@ -350,58 +350,68 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return median_dithers,mask,final,data_display,dither_stack_norm,full_mask,cents
     
-def create_onsky_rasterscans(dataset,filedir=None):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None):
     """
     Create simulated data to check the flat division
     
     Args:
        dataset (corgidrp.data.Dataset): dataset of HST images of neptune and uranus
        filedir (str): Full path to directory to save to.
+       planet (str): neptune or uranus
+       band (str): 1 or 4
         
     Returns: 
     	corgidrp.data.Dataset:
         The simulated dataset
     """
+    planims=planet+'_band_'+band
     n = 420
     qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
     pred_cents=[]
     planet_rot_images=[]
-    for i in range(len(dataset)):
-        planet=dataset[i].ext_hdr['OBJNAME']
-        band='band'+'_'+dataset[i].ext_hdr['BAND']
-        planims=planet+'_'+band
-        print(planims)
-        planet_image=dataset[i].data
-        centroid = centr.centroid_com(planet_image)
-        xc = centroid[0]
-        yc = centroid[1]
+    
+    if planims=='neptune_band_1' or planims=='neptune_band_4':
+        for i in range(len(dataset)):
+            filename=Path(dataset[i].filename).stem.split('-')[1]
+            if filename==planims:
+                planet_image=dataset[i].data
+                centroid=centr.centroid_com(planet_image)
+                xc=centroid[0]
+                yc=centroid[1]
         
-        if planims == 'neptune_band_1' or planims == 'neptune_band_4':
-            d=50
-            numfiles=36
-            planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=3,mask_size=n,snr=250,planims=planims)
-        elif planims == 'uranus_band_1' or planims == 'uranus_band_4':
-            d=55
-            numfiles=36
-            planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc,col_cent=xc, dither_sizex=d, dither_sizey=d,n_dith=2,mask_size=n,snr=250,planims=planims)
+        d=50
+        numfiles=36
+        planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=3,mask_size=n,snr=250,planims=planims)
+    elif planims == 'uranus_band_1' or planims == 'uranus_band_4':
+        for i in range(len(dataset)):
+            filename=Path(dataset[i].filename).stem.split('-')[1]
+            if filename==planims:
+                planet_image=dataset[i].data
+                centroid=centr.centroid_com(planet_image)
+                xc=centroid[0]
+                yc=centroid[1]    
+            
+        d=65
+        numfiles=36
+        planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc,col_cent=xc, dither_sizex=d, dither_sizey=d,n_dith=2,mask_size=n,snr=250,planims=planims)
+    for j in np.arange(len(planet_repoint_current[4])):
         for j in np.arange(len(planet_repoint_current[4])):
-            for j in np.arange(len(planet_repoint_current[4])):
-                planet_rot_images.append(planet_repoint_current[4][j])
-                pred_cents.append(planet_repoint_current[6][j])
-        filepattern= planims+"_"+"raster_scan_{0:01d}.fits"
-        frames=[]
-        for i in range(numfiles):
-            prihdr, exthdr = create_default_headers()
-            sim_data=planet_rot_images[i]
-            frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
-            pl=planims.split('_')[0]
-            band=planims.split('_')[2]
-            frame.ext_hdr.append(('OBJNAME', pl), end=True)
-            frame.ext_hdr.append(('BAND', band), end=True)
-            if filedir is not None:
-                frame.save(filedir=filedir, filename=filepattern.format(i))
-            frames.append(frame)
-        raster_dataset = data.Dataset(frames)
+            planet_rot_images.append(planet_repoint_current[4][j])
+            pred_cents.append(planet_repoint_current[6][j])
+    filepattern= planims+"_"+"raster_scan_{0:01d}.fits"
+    frames=[]
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+        sim_data=planet_rot_images[i]
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        pl=planet
+        band=band
+        frame.pri_hdr.append(('TARGET', pl), end=True)
+        frame.ext_hdr.append(('FILTER', band), end=True)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    raster_dataset = data.Dataset(frames)
     return raster_dataset
 
 def create_flatfield_dummy(filedir=None, numfiles=2):
