@@ -127,6 +127,50 @@ def guess_template(image):
 
     return recipe_filename
 
+
+def save_data(dataset_or_image, outputdir, suffix=""):
+    """
+    Saves the dataset or image that has currently been outputted by the last step function.
+    Records calibration frames into the caldb during the process
+
+    Args:
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): data to save
+        outputdir (str): path to directory where files should be saved
+        suffix (str): optional suffix to tack onto the filename. 
+                      E.g.: `test.fits` with `suffix="dark"` becomes `test_dark.fits`
+    """
+    # convert everything to dataset to make life easier
+    if isinstance(dataset_or_image, data.Image):
+        dataset = data.Dataset([dataset_or_image])
+    else:
+        dataset = dataset_or_image
+
+    # add suffix to ending if necessary
+    if len(suffix) > 0:
+        filenames = []
+
+        suffix = suffix.strip("_") # user doesn't need to pass underscores
+        for image in dataset:
+            # grab everything before .FITS
+            fits_index = image.filename.lower().rfind(".fits")
+            filename_base = image.filename[:fits_index]
+            new_filename = "{0}_{1}.fits".format(filename_base, suffix)
+            filenames.append(new_filename)
+    else:
+        filenames = None
+
+    # save!
+    dataset.save(filedir=outputdir, filenames=filenames)
+
+    # add calibration data to caldb as necessary
+    for image in dataset:
+        if type(image) in caldb.labels:
+            # this is a calibration frame!
+            this_caldb = caldb.CalDB()
+            this_caldb.create_entry(image)
+
+
+
 def run_recipe(recipe, save_recipe_file=True):
     """
     Run the specified recipe
@@ -166,7 +210,14 @@ def run_recipe(recipe, save_recipe_file=True):
         print("Walker step {0}/{1}: {2}".format(i+1, tot_steps, step["name"]))
         if step["name"].lower() == "save":
             # special save instruction
-            curr_dataset.save(recipe["outputdir"])
+            
+            # see if suffix is specified as a keyword
+            if "keywords" in step and "suffix" in step["keywords"]:
+                suffix =  step["keywords"]["suffix"]
+            else:
+                suffix = ''
+                
+            save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
 
         else:
             step_func = all_steps[step["name"]]

@@ -65,13 +65,13 @@ class Dataset():
     def __len__(self):
         return len(self.frames)
 
-    def save(self, filedir, filenames=None):
+    def save(self, filedir=None, filenames=None):
         """
         Save each file of data in this dataset into directory
 
         Args:
-            filedir (str): directory to save the files
-            filenames (list): a list of output filenames for each file
+            filedir (str): directory to save the files. Default: the existing filedir for each file
+            filenames (list): a list of output filenames for each file. Default: unchanged filenames
 
         """
         # if filenames are not passed, use the default ones
@@ -409,13 +409,13 @@ class Image():
         return os.path.join(self.filedir, self.filename)
 
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
 
         Args:
-            filename (str): filepath to save to. Use self.filename if not specified
             filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
         """
         if filename is not None:
             self.filename = filename
@@ -906,13 +906,13 @@ class KGain(Image):
         return new_kg
 
 
-    def save(self, filename=None, filedir=None):
+    def save(self, filedir=None, filename=None):
         """
         Save file to disk with user specified filepath
 
         Args:
-            filename (str): filepath to save to. Use self.filename if not specified
             filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
         """
         if filename is not None:
             self.filename = filename
@@ -1259,7 +1259,53 @@ class DetectorParams(Image):
 
         return str(hash(hashing_str))
 
+class AstrometricCalibration(Image):
+    """
+    Class for astrometric calibration file. 
+    
+    Args:
+        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        
+    Attrs:
+        boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
+        platescale (float): the platescale value in [mas/pixel]
+        northangle (float): the north angle value in [deg]
 
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        # run the image class constructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        # File format checks
+        if self.data.shape != (4,):
+            raise ValueError("The AstrometricCalibration data should be a 1D array of four values")
+        else:
+            self.boresight = self.data[:2]
+            self.platescale = self.data[2]
+            self.northangle = self.data[3]
+            
+        # if this is a new astrometric calibration file, bookkeep it in the header
+        # we need to check if it is new
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("This appears to be a new astrometric calibration file. The dataset of input files needs to be passed in to the input_dataset keyword to record its history.")
+            self.ext_hdr['DATATYPE'] = 'AstrometricCalibration'
+
+            # record all the data that went into making this calibration file
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
+            
+            # give a default filename
+            self.filename = "AstrometricCalibration.fits"
+
+        # check that this is actually an AstrometricCalibration file that was read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
+            raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
+        
 datatypes = { "Image" : Image,
              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -1267,7 +1313,8 @@ datatypes = { "Image" : Image,
               "BadPixelMap" : BadPixelMap,
               "DetectorNoiseMaps": DetectorNoiseMaps,
               "FlatField" : FlatField,
-              "DetectorParams" : DetectorParams }
+              "DetectorParams" : DetectorParams,
+              "AstrometricCalibration" : AstrometricCalibration }
 
 def autoload(filepath):
     """
