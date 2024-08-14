@@ -42,7 +42,7 @@ rms_test = 0.0035 # Value used when using an equivalent dataset as in IIT
 # Usual number of frames to deal with real rn values is ~200
 rn = 130 # read noise in e-
 if True:
-    rms_test = 0.04 # Less strict comparison sue to having significantly less frames
+    rms_test = 0.04 # Less strict comparison due to having significantly less frames
     # Usual number of frames to deal with real rn values is ~200
     rn = 130/np.sqrt(200/n_cal) # read noise in e-
     for iG in range(len(len_list0)):
@@ -140,7 +140,8 @@ max_write = 10000
 
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
+    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
+        max_write)
         
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
@@ -154,6 +155,7 @@ def test_expected_results_nom_sub():
     rms3 = np.sqrt(np.mean(diffs2**2))
     rms4 = np.sqrt(np.mean(diffs3**2))
 
+    breakpoint()
     # check that the four rms values are below some value (real data take
     # several frames and the value in IIT was 0.0035 for all of them)
     assert np.less(rms1,rms_test)

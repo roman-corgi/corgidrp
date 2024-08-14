@@ -416,34 +416,34 @@ def calibrate_nonlin(dataset_nl,
             plt.show()
         plt.close()
     
-    # find minimum in histogram
-    # 1000-1500 DN recommended when the peak of histogram of  
-    # "good_mean_frame" is between 2000 and 4000 DN)
-    roi_values = good_mean_frame[rowroi[:, None], colroi]
-    hst_counts, hist_edges = np.histogram(roi_values.flatten(),bins=num_bins)
-    # range above some value
-    above_range = (hist_edges[:-1] >= min_bin)
-    # Filter the counts and bin_edges arrays
-    filtered_counts_above = hst_counts[above_range]
-    filtered_bin_edges_above = hist_edges[:-1][above_range]
-    # Find the index of the maximum count within the filtered range
-    max_count_index_above_range = np.argmax(filtered_counts_above)
-    # Get the corresponding bin edge
-    max_edge_value = filtered_bin_edges_above[max_count_index_above_range]
-    # Find the indices of the bins that fall within the specified range
-    within_range = (hist_edges[:-1] >= min_bin) & (hist_edges[:-1] <= max_edge_value)
-    # Filter the counts and bin_edges arrays
-    filtered_counts = hst_counts[within_range]
-    filtered_bin_edges = hist_edges[:-1][within_range]
-    # Find the index of the minimum count within the filtered range
-    min_count_index_within_range = np.argmin(filtered_counts)
-    # Get the corresponding bin edge value and increase by min_mask_factor
-    min_mask = min_mask_factor*filtered_bin_edges[min_count_index_within_range]
-    if test_iit:
+    if test_iit is False:
+        # find minimum in histogram
+        # 1000-1500 DN recommended when the peak of histogram of  
+        # "good_mean_frame" is between 2000 and 4000 DN)
+        roi_values = good_mean_frame[rowroi[:, None], colroi]
+        hst_counts, hist_edges = np.histogram(roi_values.flatten(),bins=num_bins)
+        # range above some value
+        above_range = (hist_edges[:-1] >= min_bin)
+        # Filter the counts and bin_edges arrays
+        filtered_counts_above = hst_counts[above_range]
+        filtered_bin_edges_above = hist_edges[:-1][above_range]
+        # Find the index of the maximum count within the filtered range
+        max_count_index_above_range = np.argmax(filtered_counts_above)
+        # Get the corresponding bin edge
+        max_edge_value = filtered_bin_edges_above[max_count_index_above_range]
+        # Find the indices of the bins that fall within the specified range
+        within_range = (hist_edges[:-1] >= min_bin) & (hist_edges[:-1] <= max_edge_value)
+        # Filter the counts and bin_edges arrays
+        filtered_counts = hst_counts[within_range]
+        filtered_bin_edges = hist_edges[:-1][within_range]
+        # Find the index of the minimum count within the filtered range
+        min_count_index_within_range = np.argmin(filtered_counts)
+        # Get the corresponding bin edge value and increase by min_mask_factor
+        min_mask = min_mask_factor*filtered_bin_edges[min_count_index_within_range]
+    else:
         # Hard wired value used by Guillermo Gonzalez (ggonzo@tellus1.com) when
-        # producing nonlin_table_240322.txt
+        # producing nonlin_table_240322.txt [DN]
         min_mask = 1500
-    breakpoint()
     # Create the mask
     mask = np.where(good_mean_frame < min_mask, 0, 1)
     
@@ -680,21 +680,27 @@ def calibrate_nonlin(dataset_nl,
             plt.xlabel('Exposure time (s)')
             plt.ylabel('Signal (DN)')
         
-        # Fit a polynomial to selected points (excluding some points)
-        p0 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
-        y0 = np.polyval(p0, filt_exp_times_sorted)
-        y_rel_err = np.abs((corr_mean_signal_sorted - y0)/corr_mean_signal_sorted)
-        rms_y_rel_err = np.sqrt(np.mean(y_rel_err**2))
-        # NOTE: the following limits were determined with simulated frames
-        if rms_y_rel_err < rms_low_limit:
-            p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
-        elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
-                            corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
+        if test_iit is False:
+            # Fit a polynomial to selected points (excluding some points)
+            p0 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
+            y0 = np.polyval(p0, filt_exp_times_sorted)
+            y_rel_err = np.abs((corr_mean_signal_sorted - y0)/corr_mean_signal_sorted)
+            rms_y_rel_err = np.sqrt(np.mean(y_rel_err**2))
+            # NOTE: the following limits were determined with simulated frames
+            if rms_y_rel_err < rms_low_limit:
+                p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
+            elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
+                p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
+                                corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
+            else:
+                p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
+                                corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
+            y1 = np.polyval(p1, filt_exp_times_sorted)
         else:
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
-                            corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
-        y1 = np.polyval(p1, filt_exp_times_sorted)
+            p1 = np.polyfit(filt_exp_times_sorted[2:-2],
+                corr_mean_signal_sorted[2:-2], 1)
+            y1 = np.polyval(p1, filt_exp_times_sorted)
+            print('WARNING. Testing IIT. Original linear fit used.')
         
         if make_plot:
             fname = 'non_lin_fit'
