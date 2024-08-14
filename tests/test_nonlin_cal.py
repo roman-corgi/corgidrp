@@ -155,6 +155,7 @@ def test_expected_results_nom_sub():
     rms3 = np.sqrt(np.mean(diffs2**2))
     rms4 = np.sqrt(np.mean(diffs3**2))
 
+    breakpoint()
     # check that the four rms values are below some value (real data take
     # several frames and the value in IIT was 0.0035 for all of them)
     assert np.less(rms1,rms_test)
