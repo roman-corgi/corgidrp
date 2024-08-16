@@ -183,7 +183,10 @@ class CalDB:
         # otherwise create new entry
         else:
             new_entry = pd.DataFrame([new_row], columns=self.columns)
-            self._db = pd.concat([self._db, new_entry], ignore_index=True)
+            if len(self._db) == 0:
+                self._db = new_entry
+            else:
+                self._db = pd.concat([self._db, new_entry], ignore_index=True)
 
         # save to disk to update changes
         if to_disk:
