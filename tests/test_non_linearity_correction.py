@@ -127,8 +127,10 @@ def test_non_linearity_correction():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
     
+    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", "nonlin_sample.fits")
+
     emgain = 2000
-    mocks.create_nonlinear_dataset(filedir=datadir,em_gain=emgain)
+    mocks.create_nonlinear_dataset(nonlin_fits_filepath, filedir=datadir,em_gain=emgain)
 
     ####### open up the files
     sim_data_filenames = glob.glob(os.path.join(datadir, "simcal_nonlin*.fits"))
