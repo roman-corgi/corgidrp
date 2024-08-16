@@ -336,11 +336,12 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     dataset = data.Dataset(frames)
     return dataset
 
-def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
+def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
 
     Args:
+        nonlin_filepath (str): path to FITS file containing nonlinear calibration data (e.g., tests/test_data/nonlin_sample.fits)
         filedir (str): (Optional) Full path to directory to save to.
         datetime (astropy.time.Time): (Optional) Date and time of the observations to simulate.
         numfiles (int): Number of files in dataset.  Defaults to 2 (not creating the cal here, just testing the function)
@@ -362,7 +363,7 @@ def create_cr_dataset(filedir=None, datetime=None, numfiles=2, em_gain=500, numC
     fwc_em_dn = detector_params.params['fwc_em'] / kgain
     fwc_pp_dn = detector_params.params['fwc_pp'] / kgain
     fwc = np.min([fwc_em_dn,em_gain*fwc_pp_dn])
-    dataset = create_nonlinear_dataset(filedir=None, numfiles=numfiles,em_gain=em_gain)
+    dataset = create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=numfiles,em_gain=em_gain)
 
     im_width = dataset.all_data.shape[-1]
 
