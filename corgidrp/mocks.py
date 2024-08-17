@@ -514,6 +514,7 @@ def create_default_headers(obstype="SCI"):
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
     exthdr['HIERARCH DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
+    exthdr['UNITS'] = ""
 
     return prihdr, exthdr
 def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
