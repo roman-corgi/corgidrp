@@ -2,6 +2,7 @@ import os
 import json
 import astropy.time as time
 import corgidrp
+import corgidrp.bad_pixel_calibration
 import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
@@ -21,18 +22,21 @@ all_steps = {
     "cti_correction" : corgidrp.l2a_to_l2b.cti_correction,
     "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
     "desmear" : corgidrp.l2a_to_l2b.desmear,
-    "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b
+    "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
+    "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
-def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
+def walk_corgidrp(filelist, master_dark, master_flat, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
     Does both the `autogen_recipe` and `run_recipe` steps.
 
     Args:
         filelist (list of str): list of filepaths to files
+        master_dark (str): filepath to dark image produced from noise maps
+        master_flat (str): filepath to flat image
         CPGS_XML_filepath (str): path to CPGS XML file for this set of files in filelist
         outputdir (str): output directory folderpath
         template (str or json): custom template. either the full json file, or a filename of
@@ -46,7 +50,7 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         template = json.load(open(recipe_filepath, 'r'))
 
     # generate recipe
-    recipe = autogen_recipe(filelist, outputdir, template=template)
+    recipe = autogen_recipe(filelist, master_dark, master_flat, outputdir, template=template)
 
     # process_recipe
     run_recipe(recipe)
@@ -54,20 +58,28 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     return recipe
 
 
-def autogen_recipe(filelist, outputdir, template=None):
+def autogen_recipe(filelist, master_dark, master_flat, outputdir, template=None):
     """
     Automatically creates a recipe by identifyng and populating a template
 
     Args:
         filelist (list of str): list of filepaths to files
+        master_dark (str): filepath to dark image produced from noise maps
+        master_flat (str): filepath to flat image
         outputdir (str): output directory folderpath
         template (json): enables passing in of custom template, if desired
 
     Returns:
         json: the JSON recipe to process the filelist
     """
-    # load the first frame to check what kind of data and identify recipe
-    first_frame = data.autoload(filelist[0])
+    
+    # Handle the case where filelist is empty
+    if not filelist:
+        print("Input filelist is empty, using default handling to create recipe.")
+        first_frame = None
+    else:
+        # load the first frame to check what kind of data and identify recipe
+        first_frame = data.autoload(filelist[0])
 
     # if user didn't pass in template
     if template is None:
@@ -103,7 +115,12 @@ def autogen_recipe(filelist, outputdir, template=None):
         if step["name"].lower() == "dark_subtraction":
             if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
                 step["keywords"]["outputdir"] = recipe["outputdir"]
+        if "master_dark" in step:
+            step["master_dark"] = master_dark
+        if "master_flat" in step:
+            step["master_flat"] = master_flat
 
+    print("im printing the recipe before returning", recipe)
     return recipe
 
 
@@ -117,7 +134,10 @@ def guess_template(image):
     Returns:
         str: the best template filename
     """
-    if image.ext_hdr['DATA_LEVEL'] == "L1":
+
+    if image == None:                                   # May want to change this to do some error checking
+        recipe_filename = "bp_map.json"
+    elif image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
         else:
@@ -188,13 +208,20 @@ def run_recipe(recipe, save_recipe_file=True):
         # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
         setattr(corgidrp, setting, recipe['drpconfig'][setting])
 
-    # read in data
-    filelist = recipe["inputs"]
-    curr_dataset = data.Dataset(filelist)
+    # read in data, if not doing bp map
+    if recipe["inputs"]:
+        filelist = recipe["inputs"]
+        curr_dataset = data.Dataset(filelist)
 
-    # write the recipe into the image extension header
-    for frame in curr_dataset:
-        frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+        # write the recipe into the image extension header
+        for frame in curr_dataset:
+            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+    else:
+        curr_dataset = []
+    
+    # read in noise map and flats
+    #noisemap = recipe["master_dark"]
+    #flat = recipe["master_flat"]
 
     # save recipe before running recipe
     if save_recipe_file:
@@ -229,6 +256,15 @@ def run_recipe(recipe, save_recipe_file=True):
                     cal_file = calib_dtype(step["calibs"][calib])
                     other_args += (cal_file,)
 
+            if "master_dark" in step:
+                dark_name = step['master_dark']
+                dark_file = data.Dark(dark_name)
+                other_args +=(dark_file,)
+            
+            if "master_flat" in step:
+                flat_name = step['master_flat']
+                flat_file = data.Flat(flat_name)
+                other_args =+(flat_file,)
 
             if "keywords" in step:
                 kwargs = step["keywords"]

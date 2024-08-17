@@ -31,7 +31,9 @@ class Dataset():
             # TODO: do some auto detection of the filetype, but for now assume it is an image file
             self.frames = []
             for filepath in frames_or_filepaths:
-                self.frames.append(Image(filepath))
+                 with fits.open(filepath) as hdulist:
+                    dataCheck = hdulist[0].data
+                 self.frames.append(Image(filepath))
         else:
             # list of frames
             self.frames = frames_or_filepaths
@@ -270,6 +272,7 @@ class Image():
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
                 
+                '''
                 #Pop out the primary header
                 self.pri_hdr = hdulist.pop(0).header
                 #Pop out the image extension
@@ -277,6 +280,22 @@ class Image():
                 self.ext_hdr = first_hdu.header
                 self.data = first_hdu.data
 
+                '''
+                # Check if HDU[0] contains image data
+                if hdulist[0].header['NAXIS'] > 0:
+                    print("Image data found in HDU[0]")
+                    self.pri_hdr = hdulist[0].header
+                    self.data = hdulist[0].data
+                    self.ext_hdr = self.pri_hdr  # No separate extension header in this case
+                else:
+                    print("Image data expected in HDU[1]")
+                    # Pop out the primary header (global metadata)
+                    self.pri_hdr = hdulist.pop(0).header
+                    # Pop out the image extension
+                    first_hdu = hdulist.pop(0)
+                    self.ext_hdr = first_hdu.header
+                    self.data = first_hdu.data
+                
                 #A list of extensions
                 self.hdu_names = [hdu.name for hdu in hdulist]
 
@@ -629,6 +648,7 @@ class Dark(Image):
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
+        print(self.ext_hdr)
         if 'DATATYPE' not in self.ext_hdr:
             raise ValueError("File that was loaded was not a Dark file.")
         if self.ext_hdr['DATATYPE'] != 'Dark':
