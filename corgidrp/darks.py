@@ -789,7 +789,41 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         Fd = noise_maps.FPN_map
         Dd = noise_maps.DC_map
         Cd = noise_maps.CIC_map
-        _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+
+        # Initialize lists to hold extracted values
+        exptime_list = []
+        cmdgain_list = []
+
+        # Iterate through the dataset to handle the case where the 2 headers are reversed
+        for frame in dataset:
+            primary_hdr = frame.pri_hdr
+            extension_hdr = frame.ext_hdr
+
+            print(primary_hdr)
+            print(extension_hdr)
+
+            # Check which header contains the necessary keywords
+            if 'EXPTIME' in primary_hdr and 'CMDGAIN' in primary_hdr:
+                exptime = primary_hdr['EXPTIME']
+                cmdgain = primary_hdr['CMDGAIN']
+            elif 'EXPTIME' in extension_hdr and 'CMDGAIN' in extension_hdr:
+                exptime = extension_hdr['EXPTIME']
+                cmdgain = extension_hdr['CMDGAIN']
+            else:
+                raise KeyError("EXPTIME and CMDGAIN not found in the expected headers for frame: {}".format(frame.filename))
+
+            # Append to the lists
+            exptime_list.append(exptime)
+            cmdgain_list.append(cmdgain)
+
+        # Convert the lists to arrays or handle them as needed for your processing
+        exptime_array = np.array(exptime_list)
+        cmdgain_array = np.array(cmdgain_list)
+
+        # Continue processing
+        _, unique_vals = dataset.split_dataset(exthdr_keywords=[exptime_array, cmdgain_array, 'KGAIN'])
+
+
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
         try:
