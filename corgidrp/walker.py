@@ -120,7 +120,6 @@ def autogen_recipe(filelist, master_dark, master_flat, outputdir, template=None)
         if "master_flat" in step:
             step["master_flat"] = master_flat
 
-    print("im printing the recipe before returning", recipe)
     return recipe
 
 
@@ -263,8 +262,8 @@ def run_recipe(recipe, save_recipe_file=True):
             
             if "master_flat" in step:
                 flat_name = step['master_flat']
-                flat_file = data.Flat(flat_name)
-                other_args =+(flat_file,)
+                flat_file = data.FlatField(flat_name)
+                other_args +=(flat_file,)
 
             if "keywords" in step:
                 kwargs = step["keywords"]

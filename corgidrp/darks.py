@@ -790,39 +790,47 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         Dd = noise_maps.DC_map
         Cd = noise_maps.CIC_map
 
+        # Header debug: Before modification
+        #print("Initial prihdr:", noise_maps.pri_hdr)
+        #print("Initial exthdr:", noise_maps.ext_hdr)
+
         # Initialize lists to hold extracted values
         exptime_list = []
         cmdgain_list = []
+        kgain_list = []
 
         # Iterate through the dataset to handle the case where the 2 headers are reversed
         for frame in dataset:
             primary_hdr = frame.pri_hdr
             extension_hdr = frame.ext_hdr
 
-            print(primary_hdr)
-            print(extension_hdr)
-
             # Check which header contains the necessary keywords
-            if 'EXPTIME' in primary_hdr and 'CMDGAIN' in primary_hdr:
+            if 'EXPTIME' in primary_hdr and 'CMDGAIN' in primary_hdr and 'KGAIN' in primary_hdr:
                 exptime = primary_hdr['EXPTIME']
                 cmdgain = primary_hdr['CMDGAIN']
-            elif 'EXPTIME' in extension_hdr and 'CMDGAIN' in extension_hdr:
+                kgain = primary_hdr['KGAIN']
+            elif 'EXPTIME' in extension_hdr and 'CMDGAIN' in extension_hdr and 'KGAIN' in extension_hdr:
                 exptime = extension_hdr['EXPTIME']
                 cmdgain = extension_hdr['CMDGAIN']
+                kgain = extension_hdr['KGAIN']
             else:
-                raise KeyError("EXPTIME and CMDGAIN not found in the expected headers for frame: {}".format(frame.filename))
+                raise KeyError("EXPTIME, CMDGAIN, and/or KGAIN not found in the expected headers for frame: {}".format(frame.filename))
 
             # Append to the lists
             exptime_list.append(exptime)
             cmdgain_list.append(cmdgain)
+            kgain_list.append(kgain)
 
-        # Convert the lists to arrays or handle them as needed for your processing
+        # Convert the lists to arrays
         exptime_array = np.array(exptime_list)
         cmdgain_array = np.array(cmdgain_list)
+        kgain_array = np.array(kgain_list)
 
-        # Continue processing
-        _, unique_vals = dataset.split_dataset(exthdr_keywords=[exptime_array, cmdgain_array, 'KGAIN'])
+        # Combine the three arrays into a single structured array
+        combined_array = np.array(list(zip(exptime_array, cmdgain_array, kgain_array)))
 
+        # Find the unique values (sets of (exptime, cmdgain, kgain))
+        unique_vals = np.unique(combined_array, axis=0)
 
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
@@ -866,11 +874,18 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
             Cdq = noise_maps.dq[1]
 
         # get from one of the noise maps and modify as needed
-        prihdr = noise_maps.pri_hdr
-        exthdr = noise_maps.ext_hdr
+        prihdr = noise_maps.pri_hdr.copy()      # Ensure header is copied
+        exthdr = noise_maps.ext_hdr.copy()
         errhdr = noise_maps.err_hdr
-        exthdr['NAXIS1'] = Fd.shape[0]
-        exthdr['NAXIS2'] = Fd.shape[1]
+
+        # Check and modify NAXIS1 and NAXIS2 in the appropriate header
+        if 'NAXIS1' in prihdr and 'NAXIS2' in prihdr:
+            prihdr['NAXIS1'] = Fd.shape[0]
+            prihdr['NAXIS2'] = Fd.shape[1]
+        else:
+            exthdr['NAXIS1'] = Fd.shape[0]
+            exthdr['NAXIS2'] = Fd.shape[1]
+
         exthdr['DATATYPE'] = 'Dark'
         exthdr['CMDGAIN'] = g
         exthdr['EXPTIME'] = t
@@ -879,6 +894,10 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr.pop('HISTORY')
         # this makes the filename of the dark have "_DetectorNoiseMaps_Dark" in
         # the name so that it is known that this Dark came from noise maps
+
+        # Header debug: After modification
+        #print("Modified exthdr before saving:", exthdr)
+
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd
         md_noise = np.sqrt(Ferr**2/g**2 + t**2*Derr**2 + Cerr**2)
