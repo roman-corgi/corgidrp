@@ -46,30 +46,23 @@ def test_bp_map(tvacdata_path, output_path):
     flats_filelist = [os.path.join(cals_dir, flat_filename)]
     input_image_filelist = []
 
-
-    # Noise map fits files are missing headers for some reason
-    pri_hdr, ext_hdr = mocks.create_default_headers()
-    ext_hdr["DRPCTIME"] = time.Time.now().isot
-    ext_hdr['DRPVERSN'] =  corgidrp.__version__
-
-    # Print the HDU lists of the FITS files
+    ## NEED TO CHANGE THIS, KGAIN is not in headers of TVAC files, and TVAC files have image data in HDU[0]
     for file in noise_maps_filelist:
         print(f"Inspecting file: {file}")
         with fits.open(file, mode='update') as hdulist:
-            # Apply the default headers
-            hdulist[0].header.update(pri_hdr)
-            
-            # Add extension header if there's more than one HDU
-            if len(hdulist) > 1:
-                hdulist[1].header.update(ext_hdr)
+            if hdulist[0].header['NAXIS'] > 0:
+                print("Image data found in HDU[0]")
+                pri_hdr = hdulist[0].header  # Primary header from HDU[0]
+                ext_hdr = hdulist[1].header if len(hdulist) > 1 else None  # Extension header from HDU[1] if it exists
+
+                ext_hdr["KGAIN"] = 0
             else:
-                # If there is no extension, we can add one
-                new_hdu = fits.ImageHDU(header=ext_hdr)
-                hdulist.append(new_hdu)
-            
-            # Save changes to the FITS file
-            hdulist.flush()
-    
+                print("Image data found in HDU[1]")
+                pri_hdr = hdulist[0].header  # Primary header from HDU[0]
+                ext_hdr = hdulist[1].header  # Extension header from HDU[1]
+
+
+    '''     
     for file in noise_maps_filelist:
         with fits.open(file) as hdulist:
             dataCheck = hdulist[0].data
@@ -79,8 +72,7 @@ def test_bp_map(tvacdata_path, output_path):
                 print(f"{file} data shape: {dataCheck.shape}")
             print("time for all checks. hdulist[0]: ", hdulist[0].header)
             print("time for all checks. hdulist[1]: ", hdulist[1].header)
-            #print("time for all checks. hdulist[0]: ", hdulist[2].header)
-    
+    '''
     
     noise_maps_dataset = data.Dataset(noise_maps_filelist)
     flats_dataset = data.Dataset(flats_filelist)
@@ -117,7 +109,13 @@ def test_bp_map(tvacdata_path, output_path):
                                     dq = noise_map_dq, err_hdr=err_hdr)
     noise_map.save(filedir=bp_map_outputdir, filename="tvac_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
-    noise_map_ref = noise_map.filepath
+
+    '''
+    # Simple dark for comparison
+    simple_dark_data = np.zeros_like(noise_map.data)
+    simple_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+    print("Simple Dark Header:", simple_dark.ext_hdr)
+    '''
 
     # Master dark
     master_dark = darks.build_synthesized_dark(noise_maps_dataset, noise_map)
@@ -135,7 +133,6 @@ def test_bp_map(tvacdata_path, output_path):
 
  
     ####### Run the walker on some test_data
-    print(type(noise_map), type(flat))
     walker.walk_corgidrp(input_image_filelist, master_dark_ref, flat_ref, "", bp_map_outputdir)
 
 
