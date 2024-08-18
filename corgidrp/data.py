@@ -283,12 +283,10 @@ class Image():
                 '''
                 # Check if HDU[0] contains image data and handle cases when it is
                 if hdulist[0].header['NAXIS'] > 0:
-                    print("Image data found in HDU[0]")
                     self.pri_hdr = hdulist[0].header
                     self.data = hdulist[0].data
                     self.ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
                 else:
-                    print("Image data found in HDU[1]")
                     self.pri_hdr = hdulist[0].header
                     self.ext_hdr = hdulist[1].header
                     self.data = hdulist[1].data

@@ -11,6 +11,9 @@
             "name" : "create_bad_pixel_map",
             "master_dark" : {},
             "master_flat" : {}
+        },
+        {
+            "name" : "save"
         }
     ]
 }

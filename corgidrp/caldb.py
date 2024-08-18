@@ -77,6 +77,7 @@ class CalDB:
         Load/update db from filepath
         """
         self._db = pd.read_csv(self.filepath)
+        self._db['Hash'] = self._db['Hash'].astype(str)  # Ensure Hash is string and doesn't get cast to int 64
 
     def save(self):
         """
@@ -178,6 +179,7 @@ class CalDB:
                 self._db["Filepath"] == row_dict["Filepath"]
             ].index.values
             self._db.loc[row_index, self.columns] = new_row
+
         # otherwise create new entry
         else:
             new_entry = pd.DataFrame([new_row], columns=self.columns)
