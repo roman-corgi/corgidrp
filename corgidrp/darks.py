@@ -782,6 +782,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
             This contains the master dark in detected electrons.
 
         """
+
         if detector_regions is None:
             detector_regions = detector_areas
 
@@ -789,10 +790,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         Fd = noise_maps.FPN_map
         Dd = noise_maps.DC_map
         Cd = noise_maps.CIC_map
-
-        # Header debug: Before modification
-        #print("Initial prihdr:", noise_maps.pri_hdr)
-        #print("Initial exthdr:", noise_maps.ext_hdr)
 
         # Initialize lists to hold extracted values
         exptime_list = []
@@ -895,8 +892,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         # this makes the filename of the dark have "_DetectorNoiseMaps_Dark" in
         # the name so that it is known that this Dark came from noise maps
 
-        # Header debug: After modification
-        #print("Modified exthdr before saving:", exthdr)
 
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd
