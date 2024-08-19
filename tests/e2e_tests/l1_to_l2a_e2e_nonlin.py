@@ -7,7 +7,6 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
-import corgidrp.caldb as caldb
 
 corgidrp_dir = os.path.join(os.path.dirname(corgidrp.__file__), '..') # basedir of entire corgidrp github repo
 
@@ -19,39 +18,30 @@ def main():
     if not os.path.exists(outputdir):
         os.mkdir(outputdir)
 
-    # define the raw science data to process
+    # Define the raw science data to process
     nonlin_l1_dat = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
     nonlin_l1_dat.sort()
 
-    l1_data_filelist = nonlin_l1_dat
-    mock_nonlinear_filelist = nonlin_l1_dat 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
     nonlin_dat = np.genfromtxt(nonlin_tvac, delimiter=",")
-    #nonlinear_cal.data = nonlin_dat # replace the data with the real data from II&T
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
-    mock_input_dataset = data.Dataset(mock_nonlinear_filelist)
+    mock_input_dataset = data.Dataset(nonlin_l1_dat)
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat,
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
     nonlinear_cal.save(filedir=outputdir, filename="mock_nonlinearcal.fits" )
 
-    # add calibration file to caldb
-    this_caldb = caldb.CalDB()
-    this_caldb.create_entry(nonlinear_cal)
+    # Run the walker on some test_data
+    walker.walk_corgidrp(l1_data_filelist, '', outputdir)
 
     breakpoint()
-    ####### Run the walker on some test_data
-
-    walker.walk_corgidrp(l1_data_filelist, "", outputdir)
-
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
+    # Compare results
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
