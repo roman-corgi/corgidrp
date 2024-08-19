@@ -44,7 +44,7 @@ def test_create_flatfield_neptune():
     ####### create flat field
     flat_filenames = glob.glob(os.path.join(file_dir, "*.fits"))
     flat_dataset = data.Dataset(flat_filenames)
-    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=420,rad_mask1=1.26, rad_mask4=1.75,  planet_rad=50, n_pix=165, n_pad=302)
+    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=420,N=3, rad_mask1=1.26, rad_mask4=1.75,  planet_rad=50, n_pix=165, n_pad=302)
    
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     

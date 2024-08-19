@@ -634,7 +634,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     return (full_qe,full_residuals,std_resel)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=None,im_size=None,rad_mask1=None, rad_mask4=None,  planet_rad=None, n_pix=None, n_pad=None):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=None,im_size=None,rad_mask1=None, rad_mask4=None,  planet_rad=None, n_pix=None, n_pad=None,N=None):
     """Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
     
         Args:
@@ -643,6 +643,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=None,im_size
             band (str): 1 or 4
             up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
             im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
+            N (int): Number of images to be combined for creating a matched filter (defaults to 3, can be changed)
             rad_mask1 (float): radius in pixels used for creating a mask for band1
             rad_mask4 (float): radius in pixels used for creating a mask for band4
             planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
@@ -677,7 +678,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=None,im_size
         frame=data.Image(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
     dataset=data.Dataset(frames)
-    resi=flatfield_residuals(raster_images_cent,planet=planet,N=3)
+    resi=flatfield_residuals(raster_images_cent,planet=planet,N=N)
     raster_com=combine_flatfield_rasters(resi,planet=planet,band=band,cent=cent, im_size=im_size, rad_mask1=rad_mask1,rad_mask4=rad_mask4,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad)
     onskyflat=raster_com[1]
     onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr,input_dataset=dataset)
