@@ -1,0 +1,29 @@
+{
+    "name" : "l1_to_l2a_nonlin",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+            "keywords" : {
+                "return_full_frame" : false
+            }
+        },
+        {
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "calibrate_nonlin",
+            "keywords" : {
+                "norm_val" : 2020
+            }
+        }
+    ]
+}
