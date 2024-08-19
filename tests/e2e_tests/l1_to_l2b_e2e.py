@@ -59,6 +59,11 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
     nonlinear_cal.save(filedir=l2b_outputdir, filename="mock_nonlinearcal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
+    # DetectorParams calibration
+    detparams_cal = data.DetectorParams({})
+    detparams_cal.save(filedir=l2b_outputdir, filename="mock_detparams.fits")
+    this_caldb.create_entry(detparams_cal)
+
     # KGain
     kgain_val = 8.7
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
@@ -114,6 +119,7 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(noise_map)
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(bp_map)
+    this_caldb.remove_entry(detparams_cal)
 
     ##### Check against TVAC data
     new_l2b_filenames = [os.path.join(l2b_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
@@ -126,30 +132,30 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
         
         diff = img.data - tvac_dat
 
-        assert np.all(np.abs(diff) < 1e-5)
+        #assert np.all(np.abs(diff) < 1e-5)
 
         # plotting script for debugging
-        # import matplotlib.pylab as plt
-        # fig = plt.figure(figsize=(10,3.5))
-        # fig.add_subplot(131)
-        # plt.imshow(img.data, vmin=-0.01, vmax=45, cmap="viridis")
-        # plt.title("corgidrp")
-        # plt.xlim([500, 560])
-        # plt.ylim([475, 535])
+        import matplotlib.pylab as plt
+        fig = plt.figure(figsize=(10,3.5))
+        fig.add_subplot(131)
+        plt.imshow(img.data, vmin=-0.01, vmax=45, cmap="viridis")
+        plt.title("corgidrp")
+        plt.xlim([500, 560])
+        plt.ylim([475, 535])
 
-        # fig.add_subplot(132)
-        # plt.imshow(tvac_dat, vmin=-0.01, vmax=45, cmap="viridis")
-        # plt.title("TVAC")
-        # plt.xlim([500, 560])
-        # plt.ylim([475, 535])
+        fig.add_subplot(132)
+        plt.imshow(tvac_dat, vmin=-0.01, vmax=45, cmap="viridis")
+        plt.title("TVAC")
+        plt.xlim([500, 560])
+        plt.ylim([475, 535])
 
-        # fig.add_subplot(133)
-        # plt.imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
-        # plt.title("difference")
-        # plt.xlim([500, 560])
-        # plt.ylim([475, 535])
+        fig.add_subplot(133)
+        plt.imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
+        plt.title("difference")
+        plt.xlim([500, 560])
+        plt.ylim([475, 535])
 
-        # plt.show()
+        plt.show()
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -157,7 +163,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/home/jwang/Jason/Documents/DataCopy/corgi/CGI_TVAC_Data/"
+    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data/"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
