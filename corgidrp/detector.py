@@ -533,29 +533,30 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
 
 	return sat_fwcs
 
-def flatfield_residuals(images,planims=None):
+def flatfield_residuals(images,planet=None, N=None):
     """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
      dividing from matched filters
 
      Args:
     	images (np.array): 2D array of cropped neptune or uranus image frames
-    	planims (str): name of the planet uranus or neptune
+    	planet (str): name of the planet uranus or neptune
+        N (int): number of images to be grouped. defaults to 3 for both Neptune and uranus. (If we use different number of dithers for neptune and uranus, option is provided to change N)
 
      Returns:
     	matched_residuals (np.array): residual image frames of neptune or uranus divided by matched filter
 	"""
-    if planims=='neptune' or planims=='uranus' :
-        raster_images = np.array([image[2] for image in images])
-        masks = np.array([image[3] for image in images]) 
-        images_split = np.array(np.split(np.array(raster_images),3))
-        matched_filters = np.array([np.nanmedian(np.stack(images_split[i],2),2) for i in np.arange(0,len(images_split))])
-        matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
-        matched_residuals=[];
-        for j in range(len(raster_images)):
-            matched_residuals.append(raster_images[j]/matched_filters_smooth[int(np.floor(j//(len(raster_images)//len(matched_filters_smooth))))])
+    
+    raster_images = np.array(images)
+    images_split = np.array(np.split(np.array(raster_images),N))
+    matched_filters = np.array([np.nanmedian(np.stack(images_split[i],2),2) for i in np.arange(0,len(images_split))])
+    matched_filters_smooth = [gauss(matched_filters[i],3) for i in range(len(matched_filters))] 
+    
+    matched_residuals=[];
+    for j in range(len(raster_images)):
+        matched_residuals.append(raster_images[j]/matched_filters_smooth[int(np.floor(j//(len(raster_images)//len(matched_filters_smooth))))])
     return(matched_residuals)
 	    
-def combine_rasters(residual_images,cent=None,planet=None,band=None):
+def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im_size=None,rad_mask1=None, rad_mask4=None,  planet_rad=None, n_pix=None, n_pad=None):
     """combine the dataset of residual image frames of neptune or uranus and create flat field 
     	and associated error
 
@@ -564,26 +565,33 @@ def combine_rasters(residual_images,cent=None,planet=None,band=None):
         	cent (np.array): centroid of the image frames
         	planet (str):   name of the planet neptune or uranus
         	band (str):  band of the observation band1 or band4
+            im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
+            rad_mask1 (float): radius in pixels used for creating a mask for band1
+            rad_mask4 (float): radius in pixels used for creating a mask for band4
+            planet_rad (int): radius of the planet in pixels (planet_rad=54 for neptune, planet_rad=65)
+            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
+            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
+
         	
     	Returns:
         	full_qe (np.array): ideal flat field
         	full_residuals (np.array): flat field from uranus or neptune images
-        	percens_resel (np.array): percentage error of the flat field
+        	std_resel (np.array):  Error of the flat field
     """
     
-    n = 420
+    n = im_size
     full_qe=np.random.normal(1,.03,(n,n))
     full_residuals = np.zeros((n,n))
-    rad1 = 1.26; rad4 = 1.75
+    rad1 = rad_mask1; rad4 = rad_mask4
     aperture1 = CircularAperture((np.ceil(rad1), np.ceil(rad1)), r=rad1)
     aperture4 = CircularAperture((np.ceil(rad4), np.ceil(rad4)), r=rad4)
     mask1= aperture1.to_mask().data
     mask4= aperture4.to_mask().data
-    if planet=='neptune':
-        rad = 50
-    elif planet=='uranus':
-        rad=65
-
+    rad = planet_rad
+    if band == '1':
+        mask=mask1
+    elif band=='4':
+        mask=mask4
     for i in np.arange(len(residual_images)):
         nx = np.arange(0,residual_images[i].shape[1])
         ny = np.arange(0,residual_images[i].shape[0])
@@ -596,7 +604,7 @@ def combine_rasters(residual_images,cent=None,planet=None,band=None):
         ymax = int(cent[i][1])
         xmin = int(cent[i][2])
         xmax = int(cent[i][3])
-
+        
         bool_innotzero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
         bool_iniszero = np.logical_and(nrr<rad,full_residuals[ymin:ymax,xmin:xmax]==0)
         bool_outisnotzero = np.logical_and(nrr>=rad,full_residuals[ymin:ymax,xmin:xmax]!=0)
@@ -604,73 +612,76 @@ def combine_rasters(residual_images,cent=None,planet=None,band=None):
         full_residuals[ymin:ymax,xmin:xmax][bool_innotzero] = (nrr_copy[bool_innotzero] + full_residuals[ymin:ymax,xmin:xmax][bool_innotzero])/2
         full_residuals[ymin:ymax,xmin:xmax][bool_iniszero] = nrr_copy[bool_iniszero]
         full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero] = full_residuals[ymin:ymax,xmin:xmax][bool_outisnotzero]
-
-    if band == '4':
-        full_qe_resel = ndimage.convolve(full_qe, mask4)
-        full_residuals_resel = ndimage.convolve(full_residuals,mask4)
-        percens_resel = (((full_qe_resel - full_residuals_resel)/full_qe_resel)*100)
-    
-    elif band== '1':
-        full_qe_resel = ndimage.convolve(full_qe, mask1)
-        full_residuals_resel = ndimage.convolve(full_residuals,mask1)
-        percens_resel = (((full_qe_resel - full_residuals_resel)/full_qe_resel)*100)
+        
+        
+        
+        full_qe_resel = ndimage.convolve(full_qe, mask)
+        full_residuals_resel = ndimage.convolve(full_residuals,mask)
+        std_resel = (((full_qe_resel - full_residuals_resel)/full_qe_resel))
     
     full_residuals[full_residuals==0] = None
-    nx = np.arange(0,percens_resel.shape[1])
-    ny = np.arange(0,percens_resel.shape[0])
+    nx = np.arange(0,std_resel.shape[1])
+    ny = np.arange(0,std_resel.shape[0])
     nxx,nyy = np.meshgrid(ny,nx)
     nrr = np.sqrt((nxx-n/2)**2 + (nyy-n/2)**2)
-    full_residuals[nrr>165]= 1
-    percens_resel[nrr>165] = 0
-    full_qe[nrr>165]= 1
-    full_qe=np.pad(full_qe, ((302,302),(302,302)), mode='constant',constant_values=(1))
-    full_residuals=np.pad(full_residuals, ((302,302),(302,302)), mode='constant',constant_values=(1))
-    percens_resel=np.pad(percens_resel, ((302,302),(302,302)), mode='constant',constant_values=(1))
+    full_residuals[nrr>n_pix]= 1
+    std_resel[nrr>n_pix] = 0
+    full_qe[nrr>n_pix]= 1
+    full_qe=np.pad(full_qe, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(1))
+    full_residuals=np.pad(full_residuals, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(1))
+    std_resel=np.pad(std_resel, ((n_pad,n_pad),(n_pad,n_pad)), mode='constant',constant_values=(0))
     
-    return (full_qe,full_residuals,percens_resel)
+    return (full_qe,full_residuals,std_resel)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=None,im_size=None,rad_mask1=None, rad_mask4=None,  planet_rad=None, n_pix=None, n_pad=None):
     """Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
     
         Args:
             dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
             planet (str): neptune or uranus
             band (str): 1 or 4
+            up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
+            im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
+            rad_mask1 (float): radius in pixels used for creating a mask for band1
+            rad_mask4 (float): radius in pixels used for creating a mask for band4
+            planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
+            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
+            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
+
 
     	Returns:
     		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
     		
 	"""
     smooth_images=[];raster_images_cent=[];cent=[]; act_cents=[];frames=[]; files=[];
-    planims=planet+'_band_'+band
     for i in range(len(dataset)):
-        filename=Path(dataset[i].filename).stem.split('_')[0]+'_band_'+Path(dataset[i].filename).stem.split('_')[2]
-        if filename==planims:
+        target=dataset[i].pri_hdr['TARGET']
+        filter=dataset[i].pri_hdr['FILTER']
+        if planet==target and band==filter: 
             files.append(dataset[i])
     for j in range(len(files)):
         planet_image=files[j].data
         prihdr=files[j].pri_hdr
         exthdr=files[j].ext_hdr
         image_size=np.shape(planet_image)
-        qe_prnu_fsm_raster = np.random.normal(1,.03,(image_size[0],image_size[0]))
         centroid = centr.centroid_com(planet_image)
         centroid[np.isnan(centroid)]=0
         act_cents.append((centroid[1],centroid[0]))
         xc =int( centroid[0])
         yc = int(centroid[1])
-        up_radius=55
+        up_radius=up_radius
         smooth_images.append(planet_image)
-        raster_images_cent.append((planet,band,smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius],qe_prnu_fsm_raster[yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius]))
+        raster_images_cent.append(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius])
         cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
         frame=data.Image(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
     dataset=data.Dataset(frames)
-    resi=flatfield_residuals(raster_images_cent,planims=planet)
-    onskyflat=combine_rasters(resi,planet=planet,band=band,cent=cent)[1]
+    resi=flatfield_residuals(raster_images_cent,planet=planet,N=3)
+    raster_com=combine_flatfield_rasters(resi,planet=planet,band=band,cent=cent, im_size=im_size, rad_mask1=rad_mask1,rad_mask4=rad_mask4,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad)
+    onskyflat=raster_com[1]
     onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr,input_dataset=dataset)
-    onsky_flatfield.err=combine_rasters(resi,planet=planet,band=band,cent=cent)[2]
-    onsky_flatfield.err=onsky_flatfield.err.reshape((1,)+onsky_flatfield.err.shape)
+    onsky_flatfield.err=raster_com[2]
     
     return(onsky_flatfield)
     

@@ -265,29 +265,27 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     return dataset
 
 
-def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=1,mask_size=180,snr=250,planims=None):
+def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=1,mask_size=180,snr=250,planet=None, band=None, radius=None, snr_constant=None):
     """Performs raster scan of Neptune or Uranus images
     
      Args:
-        mask (int): (Required)  Mask used for the image.
+        mask (int): (Required)  Mask used for the image. (Size of the HST images, 420 X 420 pixels with random values mean=1, std=0.03)
         data (float):(Required) Data in array npixels*npixels format to be raster scanned
-        dither_sizex (int):(Required) Size of the dither in X axis in pixels
-        dither_sizey (int):(Required) Size of the dither in X axis in pixels
+        dither_sizex (int):(Required) Size of the dither in X axis in pixels (number of pixels across the planet (neptune=50 and uranus=65))
+        dither_sizey (int):(Required) Size of the dither in X axis in pixels (number of pixels across the planet (neptune=50 and uranus=65))
         row_cent (int): (Required)  X coordinate of the centroid
         col_cent (int): (Required)  Y coordinate of the centroid
-        n_dith (int): number of dithers required
-        mask_size (int): Size of the mask in pixels
-        snr (int): Required SNR in the planet images
-        planims (str): Planet and band
+        n_dith (int): number of dithers required (n_dith=3 for Neptune and n_dith=2 for uranus)
+        mask_size (int): Size of the mask in pixels  (Size of the HST images, 420 X 420 pixels with random values mean=1, std=0.03)
+        snr (int): Required SNR in the planet images (=250 in the HST images)
+        planet (str): neptune or uranus
+        band (str): 1 or 4
+        radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90)
+        snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
         
 	Returns:
-    	median dithers (np.array): median dither images
-    	mask (np.array): mask used for the dithers
-    	final (np.array): final image
-    	data_display (np.array): data 
-    	dither_stack_norm (np.array): stacked dithers
-    	full_mask (np.array) : mask used for the dithers
-    	cent (np.array): centroid of images
+    	dither_stack_norm (np.array): stacked dithers of the planet images
+    	cent (np.array): centroid of images 
     	
         
     """  
@@ -303,13 +301,11 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     if dither_sizey == None:
         dither_sizey = dither_sizex
-    
-    if planims == 'neptune_band_1' or planims=='neptune_band_4':
-        planrad = 54
+    if planet == 'neptune':
         dith_end = n_dith
-    elif planims == 'uranus_band_1' or planims=='uranus_band_4':
+    elif planet == 'uranus':
         dith_end = n_dith+1
-        planrad = 90
+    
     for i in np.arange(-n_dith,dith_end):
         for j in np.arange(-n_dith,dith_end):
             mask_data = data.copy()
@@ -318,10 +314,10 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
             try:
                 new_image_data = image_data * mask
                 
-                if planims == 'neptune_band_1' or planims == 'uranus_band_1':
-                    snr_ref = 250/np.sqrt(4.95)
-                elif planims == 'neptune_band_4' or planims == 'uranus_band_4':
-                    snr_ref = 250/np.sqrt(9.66)
+                if planet == 'neptune' and band=='1' or planet == 'uranus' and band=='1':
+                    snr_ref = snr/np.sqrt(snr_constant)
+                elif planet == 'neptune' and band=='4' or planet == 'uranus' and band=='4' :
+                    snr_ref = snr/np.sqrt(snr_constant)
 
                 u_centroid = centr.centroid_1dg(new_image_data)
                 uxc = int(u_centroid[0])
@@ -334,8 +330,8 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
                 nxx,nyy = np.meshgrid(nx,ny)
                 nrr = np.sqrt((nxx-uxc)**2 + (nyy-uyc)**2)
 
-                planmed = np.median(modified_data[nrr<planrad])
-                modified_data[nrr<=planrad] = np.random.normal(modified_data[nrr<=planrad], (planmed/snr_ref) * np.abs(modified_data[nrr<=planrad]/planmed))
+                planmed = np.median(modified_data[nrr<radius])
+                modified_data[nrr<=radius] = np.random.normal(modified_data[nrr<=radius], (planmed/snr_ref) * np.abs(modified_data[nrr<=radius]/planmed))
                 
                 new_image_data_snr = modified_data
             except ValueError:
@@ -352,57 +348,54 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     final = None 
     full_mask = mask 
     
-    return median_dithers,mask,final,data_display,dither_stack_norm,full_mask,cents
+    return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=None, d=None, n_dith=None, numfiles=None, radius=None, snr=None, snr_constant=None):
     """
     Create simulated data to check the flat division
     
     Args:
-       dataset (corgidrp.data.Dataset): dataset of HST images of neptune and uranus
-       filedir (str): Full path to directory to save to.
+       dataset (corgidrp.data.Dataset): dataset of HST images of neptune or uranus
+       filedir (str): Full path to directory to save the raster scanned images.
        planet (str): neptune or uranus
        band (str): 1 or 4
+       im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
+       d (int): number of pixels across the planet (neptune=50 and uranus=65)
+       n_dith (int): Number of dithers required (n_dith=3 for neptune and n_dith=2 for Uranus)
+       numfiles (int): total number of raster images (default 36) 
+       radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90 in HST images)
+       snr (int): SNR required for the planet image (default is 250 for the HST images)
+       snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
         
     Returns: 
     	corgidrp.data.Dataset:
-        The simulated dataset
+        The simulated dataset of raster scanned images of planets uranus or neptune
     """
-    planims=planet+'_band_'+band
-    n = 420
+    n = im_size
     qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
     pred_cents=[]
     planet_rot_images=[]
     
-    if planims=='neptune_band_1' or planims=='neptune_band_4':
-        for i in range(len(dataset)):
-            filename=Path(dataset[i].filename).stem.split('-')[1]
-            if filename==planims:
-                planet_image=dataset[i].data
-                centroid=centr.centroid_com(planet_image)
-                xc=centroid[0]
-                yc=centroid[1]
-        
-        d=50
-        numfiles=36
-        planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=3,mask_size=n,snr=250,planims=planims)
-    elif planims == 'uranus_band_1' or planims == 'uranus_band_4':
-        for i in range(len(dataset)):
-            filename=Path(dataset[i].filename).stem.split('-')[1]
-            if filename==planims:
-                planet_image=dataset[i].data
-                centroid=centr.centroid_com(planet_image)
-                xc=centroid[0]
-                yc=centroid[1]    
-            
-        d=65
-        numfiles=36
-        planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc,col_cent=xc, dither_sizex=d, dither_sizey=d,n_dith=2,mask_size=n,snr=250,planims=planims)
-    for j in np.arange(len(planet_repoint_current[4])):
-        for j in np.arange(len(planet_repoint_current[4])):
-            planet_rot_images.append(planet_repoint_current[4][j])
-            pred_cents.append(planet_repoint_current[6][j])
-    filepattern= planims+"_"+"raster_scan_{0:01d}.fits"
+    for i in range(len(dataset)):
+        target=dataset[i].pri_hdr['TARGET']
+        filter=dataset[i].pri_hdr['FILTER']
+        if planet==target and band==filter: 
+            planet_image=dataset[i].data
+            centroid=centr.centroid_com(planet_image)
+            xc=centroid[0]
+            yc=centroid[1]
+            if planet == 'neptune':
+                planetrad=radius; snrcon=snr_constant
+                planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
+            elif planet == 'uranus':
+                planetrad=radius; snrcon=snr_constant     
+                planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc,col_cent=xc, dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
+    
+    for j in np.arange(len(planet_repoint_current[0])):
+        for j in np.arange(len(planet_repoint_current[0])):
+            planet_rot_images.append(planet_repoint_current[0][j])
+            pred_cents.append(planet_repoint_current[1][j])
+    filepattern= planet+'_'+band+"_"+"raster_scan_{0:01d}.fits"
     frames=[]
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
@@ -411,7 +404,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None):
         pl=planet
         band=band
         frame.pri_hdr.append(('TARGET', pl), end=True)
-        frame.ext_hdr.append(('FILTER', band), end=True)
+        frame.pri_hdr.append(('FILTER', band), end=True)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
         frames.append(frame)
