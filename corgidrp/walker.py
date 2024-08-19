@@ -118,6 +118,7 @@ def autogen_recipe(filelist, outputdir, template=None):
                     master_flat = this_caldb._db[this_caldb._db["Type"] == "FlatField"]
                     if not master_flat.empty:
                         step["calibs"]["FlatField"] = master_flat["Filepath"].values[0]
+
         if step["name"].lower() == "dark_subtraction":
             if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
                 step["keywords"]["outputdir"] = recipe["outputdir"]
