@@ -39,6 +39,9 @@ def create_config_dir():
         config["PATH"]["default_calibs"] = default_cal_dir
         config["DATA"] = {}
         config["DATA"]["track_individual_errors"] = "False"
+        config["DRP"] = {}
+        config["DRP"]["skip_missing_cal_steps"] = "False"
+        config["DRP"]["jit_calib_id"] = "False"
         # overwrite with old settings if needed
         if oldconfig is not None:
             config["PATH"]["caldb"] = oldconfig["PATH"]["caldb"]
@@ -58,6 +61,8 @@ config = configparser.ConfigParser()
 config.read(config_filepath)
 
 ## pipeline settings
-caldb_filepath = config.get("PATH", "caldb", fallback=None)
-default_cal_dir = config.get("PATH", "default_calibs", fallback=None)
-track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors").lower()]
+caldb_filepath = config.get("PATH", "caldb", fallback=None) # path to calibration db
+default_cal_dir = config.get("PATH", "default_calibs", fallback=None) # path to default calibrations directory
+track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors", fallback='false').lower()] # save each individual error component separately?
+skip_missing_cal_steps = _bool_map[config.get("DRP", "skip_missing_cal_steps", fallback='false').lower()] # skip steps, instead of crashing, when suitable calibration file cannot be found 
+jit_calib_id = _bool_map[config.get("DRP", "jit_calib_id", fallback='false').lower()] # AUTOMATIC calibration files identified right before the execution of a step, rather than when recipe is first generated
