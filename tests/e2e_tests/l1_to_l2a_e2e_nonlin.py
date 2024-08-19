@@ -6,13 +6,13 @@ import astropy.time as time
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
-#import corgidrp.walker as walker
-#import corgidrp.caldb as caldb
+import corgidrp.walker as walker
+import corgidrp.caldb as caldb
 
 corgidrp_dir = os.path.join(os.path.dirname(corgidrp.__file__), '..') # basedir of entire corgidrp github repo
 
-nonlin_tvac = os.path.join(corgidrp_dir, 'tests/testcalib/nonlin_table_240322.txt')
-nonlin_l1_datadir = os.path.join(corgidrp_dir, 'tests/testcalib/')
+nonlin_tvac = os.path.join(corgidrp_dir, '../e2e_tests_corgidrp/nonlin_table_240322.txt')
+nonlin_l1_datadir = os.path.join(corgidrp_dir, '../e2e_tests_corgidrp/')
 outputdir = './l1_to_l2a_output/'
 
 def main():
@@ -23,15 +23,13 @@ def main():
     nonlin_l1_dat = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
     nonlin_l1_dat.sort()
 
-    breakpoint()
-    ###### Setup necessary calibration files
-    # Create necessary calibration files
-    # we are going to make a new nonlinear calibration file using
+    l1_data_filelist = nonlin_l1_dat
+    mock_nonlinear_filelist = nonlin_l1_dat 
+    # Non-linearity calibration file used to compare the output from CORGIDRP:
+    # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
-    #test_nonlinear_filename = os.path.join(corgidrp_dir, "tests", "test_data", "nonlin_sample.fits")
-    #nonlinear_cal = data.NonLinearityCalibration(test_nonlinear_filename) # use the same headers
+    nonlin_dat = np.genfromtxt(nonlin_tvac, delimiter=",")
     #nonlinear_cal.data = nonlin_dat # replace the data with the real data from II&T
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
@@ -47,6 +45,7 @@ def main():
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(nonlinear_cal)
 
+    breakpoint()
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(l1_data_filelist, "", outputdir)
