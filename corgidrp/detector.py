@@ -4,11 +4,8 @@ import numpy as np
 import corgidrp.data as data
 from scipy import interpolate
 from scipy.ndimage import median_filter
-import glob
-import os
 import astropy.io.fits as fits
 import photutils.centroids as centr
-from pathlib import Path
 from scipy.ndimage import gaussian_filter as gauss
 from photutils.aperture import CircularAperture
 from scipy import ndimage

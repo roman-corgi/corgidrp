@@ -7,9 +7,7 @@ import numpy as np
 import corgidrp.data as data
 from corgidrp.data import Image
 import corgidrp.detector as detector
-import glob
 import photutils.centroids as centr
-from pathlib import Path
 from corgidrp.detector import imaging_area_geom, unpack_geom
 
 import astropy.io.ascii as ascii
