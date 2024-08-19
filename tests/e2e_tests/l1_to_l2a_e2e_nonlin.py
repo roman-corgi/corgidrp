@@ -188,7 +188,6 @@ def main():
         os.mkdir(output_dir)
 
     # Define the raw science data to process
-<<<<<<< HEAD
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
 
     #TODO:
