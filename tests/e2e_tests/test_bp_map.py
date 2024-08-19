@@ -109,8 +109,8 @@ def test_bp_map(tvacdata_path, output_path):
     # Master dark
     master_dark = darks.build_synthesized_dark(noise_maps_dataset, noise_map) # warnings about large and also empty data
     master_dark.save(filedir=bp_map_outputdir, filename="tvac_synthesized_master_dark.fits")
-    this_caldb.create_entry(master_dark)
-    master_dark_ref = master_dark.filepath
+   # this_caldb.create_entry(master_dark)
+   # master_dark_ref = master_dark.filepath
 
     ## Flat field
     with fits.open(flat_path) as hdulist:
@@ -143,13 +143,13 @@ def test_bp_map(tvacdata_path, output_path):
     simple_dark_ref = simple_dark.filepath
  
     ####### Run the walker
-    walker.walk_corgidrp(input_image_filelist, simple_dark_ref, flat_ref, "", bp_map_outputdir)
+    walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir)
 
 
     # clean up by removing entry
     this_caldb.remove_entry(noise_map)
     this_caldb.remove_entry(flat)
-    this_caldb.remove_entry(master_dark)
+    #this_caldb.remove_entry(master_dark)
     this_caldb.remove_entry(simple_dark)
 
     generated_bp_map_file = os.path.join(bp_map_outputdir, "simple_dark_mock_bad_pixel_map.fits")
