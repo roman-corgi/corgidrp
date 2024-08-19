@@ -28,15 +28,13 @@ all_steps = {
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
 
-def walk_corgidrp(filelist, master_dark, master_flat, CPGS_XML_filepath, outputdir, template=None):
+def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     """
     Automatically create a recipe and process the input filelist.
     Does both the `autogen_recipe` and `run_recipe` steps.
 
     Args:
         filelist (list of str): list of filepaths to files
-        master_dark (str): filepath to dark image produced from noise maps
-        master_flat (str): filepath to flat image
         CPGS_XML_filepath (str): path to CPGS XML file for this set of files in filelist
         outputdir (str): output directory folderpath
         template (str or json): custom template. either the full json file, or a filename of
@@ -50,7 +48,7 @@ def walk_corgidrp(filelist, master_dark, master_flat, CPGS_XML_filepath, outputd
         template = json.load(open(recipe_filepath, 'r'))
 
     # generate recipe
-    recipe = autogen_recipe(filelist, master_dark, master_flat, outputdir, template=template)
+    recipe = autogen_recipe(filelist, outputdir, template=template)
 
     # process_recipe
     run_recipe(recipe)
@@ -58,14 +56,12 @@ def walk_corgidrp(filelist, master_dark, master_flat, CPGS_XML_filepath, outputd
     return recipe
 
 
-def autogen_recipe(filelist, master_dark, master_flat, outputdir, template=None):
+def autogen_recipe(filelist, outputdir, template=None):
     """
     Automatically creates a recipe by identifyng and populating a template
 
     Args:
         filelist (list of str): list of filepaths to files
-        master_dark (str): filepath to dark image produced from noise maps
-        master_flat (str): filepath to flat image
         outputdir (str): output directory folderpath
         template (json): enables passing in of custom template, if desired
 
@@ -106,19 +102,25 @@ def autogen_recipe(filelist, master_dark, master_flat, outputdir, template=None)
         if "calibs" in step:
             for calib in step["calibs"]:
                 # order matters, so only one calibration file per dictionary
-
                 if step["calibs"][calib].upper() == "AUTOMATIC":
                     calib_dtype = data.datatypes[calib]
                     best_cal_file = this_caldb.get_calib(first_frame, calib_dtype)
                     # set calibration file to this one
                     step["calibs"][calib] = best_cal_file.filepath
+
+                # changed to handle the master dark and master flat files, but this assumes there is only one of each type 
+                # in the caldb database
+                if calib == "Dark" and step["calibs"][calib].upper() == "MASTER_DARK":
+                    master_dark = this_caldb._db[this_caldb._db["Type"] == "Dark"]
+                    if not master_dark.empty:
+                        step["calibs"]["Dark"] = master_dark["Filepath"].values[0]
+                if calib == "FlatField" and step["calibs"][calib].upper() == "MASTER_FLAT":
+                    master_flat = this_caldb._db[this_caldb._db["Type"] == "FlatField"]
+                    if not master_flat.empty:
+                        step["calibs"]["FlatField"] = master_flat["Filepath"].values[0]
         if step["name"].lower() == "dark_subtraction":
             if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
                 step["keywords"]["outputdir"] = recipe["outputdir"]
-        if "master_dark" in step:
-            step["master_dark"] = master_dark
-        if "master_flat" in step:
-            step["master_flat"] = master_flat
 
     return recipe
 
@@ -254,17 +256,6 @@ def run_recipe(recipe, save_recipe_file=True):
                     calib_dtype = data.datatypes[calib]
                     cal_file = calib_dtype(step["calibs"][calib])
                     other_args += (cal_file,)
-
-            if "master_dark" in step:
-                dark_name = step['master_dark']
-                dark_file = data.Dark(dark_name)
-                other_args +=(dark_file,)
-            
-            if "master_flat" in step:
-                flat_name = step['master_flat']
-                flat_file = data.FlatField(flat_name)
-                other_args +=(flat_file,)
-
             if "keywords" in step:
                 kwargs = step["keywords"]
             else:

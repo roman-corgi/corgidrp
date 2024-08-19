@@ -9,8 +9,10 @@
     "steps" : [
         {
             "name" : "create_bad_pixel_map",
-            "master_dark" : {},
-            "master_flat" : {}
+            "calibs": {
+                "Dark": "master_dark",
+                "FlatField" : "master_flat"
+            }
         },
         {
             "name" : "save"
