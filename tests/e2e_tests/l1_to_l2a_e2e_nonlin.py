@@ -38,7 +38,7 @@ def main():
     nonlinear_cal.save(filedir=outputdir, filename="mock_nonlinearcal.fits" )
 
     # Run the walker on some test_data
-    walker.walk_corgidrp(l1_data_filelist, '', outputdir)
+    walker.walk_corgidrp(nonlin_l1_dat, '', outputdir)
 
     breakpoint()
     # Compare results
