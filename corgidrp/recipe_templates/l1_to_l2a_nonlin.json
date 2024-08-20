@@ -10,7 +10,7 @@
         {
             "name" : "prescan_biassub",
             "keywords" : {
-                "return_full_frame" : false
+                "return_full_frame" : true
             }
         },
         {
@@ -24,6 +24,9 @@
             "keywords" : {
                 "norm_val" : 2020
             }
+        },
+        {
+            "name" : "save"
         }
     ]
 }
