@@ -6,12 +6,12 @@ import corgidrp.l2a_to_l2b
 import astropy.time as time  
 import corgidrp.data as data 
 import corgidrp.caldb as caldb
-import corgidrp.calibrate_nonlin    
+import corgidrp.calibrate_nonlin
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
     "detect_cosmic_rays" : corgidrp.l1_to_l2a.detect_cosmic_rays,
-    "calibrate_nonlin" : corgidrp.calibrate_nonlin, 
+    "calibrate_nonlin" : corgidrp.calibrate_nonlin.calibrate_nonlin, 
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
     "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
     "add_photon_noise" : corgidrp.l2a_to_l2b.add_photon_noise,
@@ -124,7 +124,9 @@ def guess_template(dataset):
     if image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
-        elif  image.pri_hdr['OBSTYPE'] == "NONLIN":
+        elif image.pri_hdr['OBSTYPE'] == "NONLIN":
+            recipe_filename = "l1_to_l2a_nonlin.json"
+        elif image.pri_hdr['OBSTYPE'] == "MNFRAME": 
             recipe_filename = "l1_to_l2a_nonlin.json"
         else:
             recipe_filename = "l1_to_l2b.json"
