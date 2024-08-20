@@ -113,7 +113,7 @@ def set_obstype_for_tvac(
         51731-51840 (110), 51941-51984 (44), 51986-52051 (66), 55122-55187 (66),
         55191-55256 (66)  
 
-        Arguments:
+        Args:
   
         list_of_fits (list): list of FITS files that need to be updated.
 
@@ -156,6 +156,32 @@ def set_obstype_for_tvac(
                 prihdr['OBSTYPE'] = 'NONLIN'
             # Update FITS file    
             fits_file.writeto(nonlin_dir+file_name, overwrite=True)
+
+def get_first_nonlin_file(
+    list_of_fits,
+    ):
+    """ Returns the first FITS file with the NONLIN value on OBSTYPE in a list
+        of FITS files.
+
+        Remember that FITS files used for NL calibration must have DATETIME in
+        ascending order.
+
+        Args:                                                              
+                                                                                
+        list_of_fits (list): list of FITS files that need to be updated.        
+                                                                                
+        Returns:                                                                
+                                                                                
+        First FITS file with OBSTYPE set to NONLIN.
+
+    """
+    first_fits_file = 'NONLIN not found'
+    for file in list_of_fits:
+        fits_file = fits.open(file)                         
+        if fits_file[0].header['OBSTYPE'] == 'NONLIN':
+            first_fits_file = fits_file.filename()
+            break
+    return first_fits_file
 
 def main():
     if not os.path.exists(output_dir):
