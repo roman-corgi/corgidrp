@@ -866,7 +866,7 @@ def nonlin_dataset_2_stack(dataset):
         len_cal_frames = 0
         record_gain = True 
         for frame in data_set.frames:
-            if frame.ext_hdr['OBSTYPE'] == 'MNFRAME':
+            if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
