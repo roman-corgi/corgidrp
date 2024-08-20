@@ -100,6 +100,63 @@ def get_first_nonlin_file(
             break
     return first_fits_file
 
+def set_obstype_for_tvac(
+    list_of_fits,
+    ):
+    """ Adds proper values to OBSTYPE for the non-linearity calibration: NONLIN,
+        (data used to calibrate the non-linearity) or MNFRAME (data used to build
+        a mean frame).
+
+        This function is unnecessary with future data because data will have
+        the proper values in OBSTYPE. The TVAC data used must be the
+        following 382 files with IDs: 51841-51870 (30: mean frame). And NL:
+        51731-51840 (110), 51941-51984 (44), 51986-52051 (66), 55122-55187 (66),
+        55191-55256 (66)  
+
+        Arguments:
+  
+        list_of_fits (list): list of FITS files that need to be updated.
+
+        Returns:
+
+        FITS files with updated value of OBSTYPE.
+
+    """
+    # Folder with files
+    nonlin_dir = list_of_fits[0][0:len(list_of_fits[0]) - list_of_fits[0][::-1].find('/')]
+    # TVAC files                                                                    
+    tvac_file_0 = [
+        'CGI_EXCAM_L1_0000051841.fits',                                                 
+        'CGI_EXCAM_L1_0000051731.fits',                                                 
+        'CGI_EXCAM_L1_0000051941.fits',                                                 
+        'CGI_EXCAM_L1_0000051986.fits',                                                 
+        'CGI_EXCAM_L1_0000055122.fits',                                                 
+        'CGI_EXCAM_L1_0000055191.fits',
+        ]                                                 
+
+    n_files = [30, 110, 44, 66, 66, 66]
+    if len(tvac_file_0) != len(n_files):
+        raise Exception('Inconsistent number of files and stacks')
+
+    for i_group, file in enumerate(tvac_file_0):
+        l1_number = int(file[file.find('L1_')+3:file.find('L1_')+13])
+        print(f'Group of {n_files[i_group]} files starting with {file}')
+        for i_file in range(n_files[i_group]):
+            file_name = f'CGI_EXCAM_L1_00000{l1_number+i_file}.fits'
+            # Additional check
+            if np.any([nonlin_dir+file_name == file for file in list_of_fits]) is False:
+                raise Exception(f'The file {nonlin_dir+file} is not part of the calibration data')
+            fits_file = fits.open(nonlin_dir+file_name)
+            prihdr = fits_file[0].header 
+            exthdr = fits_file[1].header
+            # Adjust OBSTYPE
+            if n_files[i_group] == 30:
+                prihdr['OBSTYPE'] = 'MNFRAME'
+            else:
+                prihdr['OBSTYPE'] = 'NONLIN'
+            # Update FITS file    
+            fits_file.writeto(nonlin_dir+file_name, overwrite=True)
+
 def main():
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
