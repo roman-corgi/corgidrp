@@ -44,7 +44,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, det
         frame_dq = frame.dq
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
-        obstype = frame.pri_hdr['OBSTYPE']
+        obstype = frame.ext_hdr['ARRTYPE']
         if not obstype in ['SCI','ENG','ENG_EM','ENG_CONV'] :
                 raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG' or 'ENG_EM' or 'EMG_CONV'")
 
