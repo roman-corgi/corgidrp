@@ -79,8 +79,20 @@ def main():
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
-    nonlin_l1_list.sort()
 
+    #TODO:
+    # The data used to generate a mean frame can be taken at any time. Either there's
+    # a directive about when to take them: first/last set or the CPGS file has
+    # a tag that identifies which kind of calibration is being used similar to
+    # OBSTYPE and set to NONLIN, meaning that all the collected data are meant to
+    # be part of the non-linearity calibration.
+    # For now, since the frames used to generate the mean frame were the first
+    # ones, and walker opens the first file to identify the type of recipe, the
+    # result may be confused with Kgain calibration. Thus, until there's a decision
+    # on the above, I reverse the order of the files, which does not create any
+    # issues in the calibration functions (they re-order inoput files themselves)
+    nonlin_l1_list.sort(reverse=True)   
+    
     # Set TVAC OBSTYPE to MNFRAME/NONLIN (flight data should have these values)
     set_obstype_for_tvac(nonlin_l1_list)
 
