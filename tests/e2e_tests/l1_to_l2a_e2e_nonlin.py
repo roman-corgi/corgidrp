@@ -4,10 +4,7 @@ import argparse
 import numpy as np
 import astropy.time as time
 from astropy.io import fits  
-<<<<<<< HEAD
 import matplotlib.pyplot as plt
-=======
->>>>>>> 2663686 (Update l1_to_l2a_e2e_nonlin.py)
 
 import corgidrp
 import corgidrp.data as data
@@ -249,7 +246,7 @@ def main():
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
-<<<<<<< HEAD
+
 
     #TODO:
     # The data used to generate a mean frame can be taken at any time. Either there's
@@ -268,12 +265,6 @@ def main():
     set_obstype_for_tvac(nonlin_l1_list)
 
     first_nonlin_file = get_first_nonlin_file(nonlin_l1_list)
-=======
-    nonlin_l1_list.sort()
-
-    # Set TVAC OBSTYPE to MNFRAME/NONLIN (flight data should have these values)
-    set_obstype_for_tvac(nonlin_l1_list)
->>>>>>> 2663686 (Update l1_to_l2a_e2e_nonlin.py)
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
@@ -292,11 +283,7 @@ def main():
 
     # Run the walker on some test_data
     print('Running walker')
-<<<<<<< HEAD
     walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
-=======
-    walker.walk_corgidrp(nonlin_l1_list, '', outputdir)
->>>>>>> 2663686 (Update l1_to_l2a_e2e_nonlin.py)
 
     # Compare results
     print('Comparing the results with TVAC')
