@@ -263,10 +263,10 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     return dataset
 
 
-def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=1,mask_size=180,snr=250,planet=None, band=None, radius=None, snr_constant=None):
+def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=1,mask_size=180,snr=250,planet=None, band=None, radius=54, snr_constant=4.55):
     """Performs raster scan of Neptune or Uranus images
     
-     Args:
+    Args:
         mask (int): (Required)  Mask used for the image. (Size of the HST images, 420 X 420 pixels with random values mean=1, std=0.03)
         data (float):(Required) Data in array npixels*npixels format to be raster scanned
         dither_sizex (int):(Required) Size of the dither in X axis in pixels (number of pixels across the planet (neptune=50 and uranus=65))
@@ -348,7 +348,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=None, d=None, n_dith=None, numfiles=None, radius=None, snr=None, snr_constant=None):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=50, n_dith=3, numfiles=36, radius=54, snr=250, snr_constant=4.95):
     """
     Create simulated data to check the flat division
     
