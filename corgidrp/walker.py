@@ -11,7 +11,7 @@ import corgidrp.calibrate_nonlin
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
     "detect_cosmic_rays" : corgidrp.l1_to_l2a.detect_cosmic_rays,
-    'calibrate_nonlin' : corgidrp.calibrate_nonlin, 
+    "calibrate_nonlin" : corgidrp.calibrate_nonlin, 
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
     "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
     "add_photon_noise" : corgidrp.l2a_to_l2b.add_photon_noise,
