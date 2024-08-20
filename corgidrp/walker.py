@@ -124,6 +124,8 @@ def guess_template(dataset):
     if image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
+        elif  image.pri_hdr['OBSTYPE'] == "NONLIN":
+            recipe_filename = "l1_to_l2a_nonlin.json"
         else:
             recipe_filename = "l1_to_l2b.json"
     else:
@@ -241,7 +243,4 @@ def run_recipe(recipe, save_recipe_file=True):
 
             # run the step!
             curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
-
-
-
 
