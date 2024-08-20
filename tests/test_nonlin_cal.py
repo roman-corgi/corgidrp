@@ -89,7 +89,7 @@ for j in range(n_mean):
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
     # Temporary keyword value. Mean frame is TBD
-    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
+    image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
     frame_list.append(image_sim)
 
 init_nonlins = []
@@ -123,7 +123,7 @@ for iG in range(len(gain_arr0)):
             image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
             image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
+        image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
         frame_list.append(image_sim)
 # Join all frames in a Dataset
 dataset_nl = Dataset(frame_list) 
@@ -155,7 +155,6 @@ def test_expected_results_nom_sub():
     rms3 = np.sqrt(np.mean(diffs2**2))
     rms4 = np.sqrt(np.mean(diffs3**2))
 
-    breakpoint()
     # check that the four rms values are below some value (real data take
     # several frames and the value in IIT was 0.0035 for all of them)
     assert np.less(rms1,rms_test)

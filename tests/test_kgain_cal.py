@@ -98,7 +98,7 @@ for j in range(n_mean):
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
     # Temporary keyword value. Mean frame is TBD
-    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
+    image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
     frame_list.append(image_sim)
 
 index = 0
