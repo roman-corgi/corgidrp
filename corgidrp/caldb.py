@@ -8,29 +8,32 @@ import corgidrp
 import corgidrp.data as data
 import astropy.time as time
 
+column_dtypes = {
+    "Filepath": str,
+    "Type": str,
+    "MJD": float,
+    "EXPTIME": float,
+    "Files Used": int,
+    "Date Created": float,
+    "Hash": str,
+    "DRPVERSN": str,
+    "OBSID": int,
+    "NAXIS1": int,
+    "NAXIS2": int,
+    "OPMODE": str,
+    "CMDGAIN": float,
+    "EXCAMT": float
+}
 
-column_names = [
-    "Filepath",
-    "Type",
-    "MJD",
-    "EXPTIME",
-    "Files Used",
-    "Date Created",
-    "Hash",
-    "DRPVERSN",
-    "OBSID",
-    "NAXIS1",
-    "NAXIS2",
-    "OPMODE",
-    "CMDGAIN",
-    "EXCAMT",
-]
+column_names = list(column_dtypes.keys())
 
-labels = {data.Dark: "Dark", 
-          data.NonLinearityCalibration: "NonLinearityCalibration", 
-          data.BadPixelMap: "BadPixelMap", 
-          data.KGain : "KGain", 
-          data.DetectorParams : "DetectorParams"}
+labels = {data.Dark: "Dark",
+          data.NonLinearityCalibration: "NonLinearityCalibration",
+          data.BadPixelMap: "BadPixelMap",
+          data.KGain : "KGain",
+          data.DetectorNoiseMaps: "DetectorNoiseMaps",
+          data.DetectorParams : "DetectorParams",
+          data.FlatField : "FlatField"}
 
 class CalDB:
     """
@@ -75,7 +78,7 @@ class CalDB:
         """
         Load/update db from filepath
         """
-        self._db = pd.read_csv(self.filepath)
+        self._db = pd.read_csv(self.filepath, dtype=column_dtypes)
 
     def save(self):
         """
@@ -114,8 +117,15 @@ class CalDB:
         else:
             files_used = 0
 
-        date_created = time.Time(entry.ext_hdr["DRPCTIME"]).mjd
-        drp_version = entry.ext_hdr["DRPVERSN"]
+        if "DRPCTIME" in entry.ext_hdr:
+            date_created = time.Time(entry.ext_hdr["DRPCTIME"]).mjd
+        else:
+            date_created = -1
+
+        if "DRPVERSN" in entry.ext_hdr:
+            drp_version = entry.ext_hdr["DRPVERSN"]
+        else:
+            drp_version = ""
 
         obsid = entry.pri_hdr["OBSID"]
 
@@ -173,7 +183,10 @@ class CalDB:
         # otherwise create new entry
         else:
             new_entry = pd.DataFrame([new_row], columns=self.columns)
-            self._db = pd.concat([self._db, new_entry], ignore_index=True)
+            if len(self._db) == 0:
+                self._db = new_entry
+            else:
+                self._db = pd.concat([self._db, new_entry], ignore_index=True)
 
         # save to disk to update changes
         if to_disk:
@@ -245,6 +258,9 @@ class CalDB:
             ]
         else:
             options = calibdf
+
+        if len(options) == 0:
+            raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
 
         # select the one closest in time
         result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()

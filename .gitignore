@@ -58,10 +58,14 @@ target/
 
 # aux data
 tests/simdata/*
+tests/walker_output/*
+tests/testcalib/*
+tests/e2e_tests/*/*.json
 
 # editor files
 .vscode/*
 .*.swp
+.exrc
 
 #jupyter cruft
 .ipynb_checkpoints
@@ -72,3 +76,7 @@ tests/simdata/*
 # data files
 *.fits
 *.FITS
+
+# Output figures
+figures/
+tests/figures/

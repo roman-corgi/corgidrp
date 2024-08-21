@@ -5,7 +5,7 @@ import corgidrp
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
-from corgidrp.detector import detector_areas
+from corgidrp.detector import detector_areas, unpack_geom
 
 import numpy as np
 import yaml
@@ -15,6 +15,24 @@ from pathlib import Path
 from pytest import approx
 
 old_err_tracking = corgidrp.track_individual_errors
+
+# make a mock DetectorNoiseMaps instance (to get the bias offset input)
+im_rows, im_cols, _ = unpack_geom('SCI', 'image', detector_areas)
+rows = detector_areas['SCI']['frame_rows']
+cols = detector_areas['SCI']['frame_cols']
+
+Fd = np.ones((rows, cols))
+Dd = 3/3600*np.ones((rows, cols))
+Cd = 0.02*np.ones((rows, cols))
+
+Ferr = np.zeros((rows, cols))
+Derr = np.zeros((rows, cols))
+Cerr = np.zeros((rows, cols))
+Fdq = Ferr.copy().astype(int)
+Ddq = Derr.copy().astype(int)
+Cdq = Cerr.copy().astype(int)
+noise_maps = mocks.create_noise_maps(Fd, Ferr, Fdq, Cd,
+                                            Cerr, Cdq, Dd, Derr, Ddq)
 
 # Expected output image shapes
 shapes = {
@@ -41,7 +59,7 @@ meta_path = Path(here,'test_data','metadata.yaml')
 
 class Metadata(object):
     """ II&T pipeline class to store metadata.
-    
+
     B Nemati and S Miller - UAH - 03-Aug-2018
 
     Args:
@@ -64,7 +82,7 @@ class Metadata(object):
 
     def get_data(self):
         """Read yaml data into dictionary.
-        
+
         Returns:
             data (dict): Metadata dictionary.
         """
@@ -76,11 +94,11 @@ class Metadata(object):
         """Slice 2d section out of frame.
 
         Args:
-            frame (array_like): 
+            frame (array_like):
                 Full frame consistent with size given in frame_rows, frame_cols.
-            key (str): 
+            key (str):
                 Keyword referencing section to be sliced; must exist in geom.
-        
+
         Returns:
             section (array_like): Section of frame
         """
@@ -93,7 +111,7 @@ class Metadata(object):
 
     def _unpack_geom(self, key):
         """Safely check format of geom sub-dictionary and return values.
-        
+
         Args:
             key (str): Keyword referencing section to be sliced; must exist in geom.
 
@@ -112,7 +130,7 @@ class Metadata(object):
     #added in from MetadataWrapper
     def _imaging_area_geom(self):
         """Return geometry of imaging area in reference to full frame.
-        
+
         Returns:
             rows_im (int): Number of rows corresponding to image frame.
             cols_im (int): Number of columns in section.
@@ -139,11 +157,11 @@ class Metadata(object):
         acting on only the image frame.
 
         Args:
-            frame (array_like): 
+            frame (array_like):
                 Full frame consistent with size given in frame_rows, frame_cols.
-            
+
         Returns:
-            slice (array_like): 
+            slice (array_like):
                 Science image area of full frame.
         """
         rows, cols, r0c0 = self._imaging_area_geom()
@@ -151,7 +169,7 @@ class Metadata(object):
         slice = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
 
         return slice
-    
+
 # EMCCDFrame code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_emccd_frame.py#L9
 
 class EMCCDFrameException(Exception):
@@ -163,17 +181,17 @@ class EMCCDFrame:
     S Miller - UAH - 16-April-2019
 
     Args:
-        frame_dn (array_like): 
+        frame_dn (array_like):
             Raw EMCCD full frame (DN).
-        meta (instance): 
+        meta (instance):
             Instance of Metadata class containing detector metadata.
-        fwc_em (float): 
+        fwc_em (float):
             Detector EM gain register full well capacity (DN).
-        fwc_pp (float): 
+        fwc_pp (float):
             Detector image area per-pixel full well capacity (DN).
-        em_gain (float): 
+        em_gain (float):
             Gain from EM gain register, >= 1 (unitless).
-        bias_offset (float): 
+        bias_offset (float):
             Median number of counts in the bias region due to fixed non-bias noise
             not in common with the image region.  Basically we compute the bias
             for the image region based on the prescan from each frame, and the
@@ -241,7 +259,7 @@ class EMCCDFrame:
 
 def test_prescan_sub():
     """
-    Generate mock raw data ('SCI' & 'ENG') and pass into prescan processing function. 
+    Generate mock raw data ('SCI' & 'ENG') and pass into prescan processing function.
     Check output dataset shapes, maintain pointers in the Dataset and Image class,
     and check that output is consistent with results II&T code.
     """
@@ -250,7 +268,7 @@ def test_prescan_sub():
 
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    
+
     for obstype in ['SCI', 'ENG']:
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype)
@@ -265,7 +283,7 @@ def test_prescan_sub():
 
         # II&T version
         for fname in filenames:
-            
+
             l1_data = fits.getdata(fname)
 
             # Read in data
@@ -281,27 +299,32 @@ def test_prescan_sub():
             # Subtract bias and bias offset and get cosmic mask
             iit_images.append(frameobj.image_bias0) # Science area
             iit_frames.append(frameobj.frame_bias0) # Full frame
-            
+
         if len(dataset) != 2:
             raise Exception(f"Mock dataset is an unexpected length ({len(dataset)}).")
-        
+
         for return_full_frame in [True, False]:
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+            output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
 
             # Check that output shape is as expected
             output_shape = output_dataset[0].data.shape
             if output_shape != shapes[obstype][return_full_frame]:
                 raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
-            
+
             # Check that bias extension has the right size, dtype
             for i, frame in enumerate(output_dataset):
+
+                try: 
+                    frame_bias = frame.hdu_list['BIAS'].data
+                except KeyError:
+                    raise Exception(f"BIAS extension not found in frame {i}.")
                 
-                if frame.bias.shape != (frame.data.shape[0],):
+                if frame_bias.shape != (frame.data.shape[0],):
                     raise Exception(f"Bias of frame {i} has shape {frame.bias.shape} when we expected {(frame.data.shape[0],)}.")
                 
-                if frame.bias.dtype != np.float32:
+                if frame_bias.dtype != np.float32:
                     raise Exception(f"Bias of frame {i} does not have datatype np.float32.")
-            
+
             # Check that corgiDRP and II&T pipeline produce the same result
             corgidrp_result = output_dataset[0].data
             iit_result = iit_frames[0] if return_full_frame else iit_images[0]
@@ -331,17 +354,17 @@ def test_prescan_sub():
 
             output_dataset[0].dq[0,0] = 1.
             if output_dataset.all_dq[0,0,0] != 1. :
-                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")           
+                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
 
 def test_bias_zeros_frame():
-    """Verify prescan_biassub does not break for a frame of all zeros 
+    """Verify prescan_biassub does not break for a frame of all zeros
     (should return all zeros)."""
-    
+
     tol = 1e-13
 
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    
+
     for obstype in ['SCI', 'ENG']:
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
@@ -350,25 +373,30 @@ def test_bias_zeros_frame():
         dataset.all_data[:,:,:] = 0.
 
         for return_full_frame in [True, False]:
-            
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+
+            output_dataset = prescan_biassub(dataset, noise_maps=None, return_full_frame=return_full_frame)
 
             if np.max(np.abs(output_dataset.all_data)) > tol:
                 raise Exception(f'Operating on all zero frame did not return all zero frame.')
-            
+
             if np.max(np.abs(output_dataset.all_err)) > tol:
                 raise Exception(f'Operating on all zero frame did not return all zero error.')           
             
-            for frame in dataset:
-                if np.max(np.abs(frame.bias)) > tol:
+            for i,frame in enumerate(output_dataset):
+                try: 
+                    frame_bias = frame.hdu_list['BIAS'].data
+                except KeyError:
+                    raise Exception(f"BIAS extension not found in frame {i}.".format(i))
+                
+                if np.max(np.abs(frame_bias)) > tol:
                     raise Exception(f'Operating on all zero frame did not return all zero bias.')
 
 def test_bias_hvoff():
     """
-    Verify that the function finds bias for gaussian distribution, with no 
-    contribution from the effect of gain ("hv" is the voltage applied in 
+    Verify that the function finds bias for gaussian distribution, with no
+    contribution from the effect of gain ("hv" is the voltage applied in
     the EM gain register).
-    The error tolerance is set by the standard error on the median of 
+    The error tolerance is set by the standard error on the median of
     the Gaussian noise, not the mean.
     """
     corgidrp.track_individual_errors = True # needs to run with error tracking on
@@ -382,7 +410,7 @@ def test_bias_hvoff():
 
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    
+
     for obstype in ['SCI', 'ENG']:
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,
@@ -394,13 +422,13 @@ def test_bias_hvoff():
                                              size=dataset.all_data.shape)
 
         for return_full_frame in [True, False]:
-            
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+
+            output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
 
             # Compare bias measurement to expectation
-            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
+            if np.any(np.abs(output_dataset[0].hdu_list['BIAS'].data - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvoff distribution.')
-            
+
             # Compare error to expected standard error of the median
             std_err = sig / np.sqrt(detector_areas[obstype]['prescan_reliable']['cols']) * np.sqrt(np.pi / 2.)
             if np.max(np.abs(output_dataset[0].err[1]) - std_err) > err_tol:
@@ -411,13 +439,13 @@ def test_bias_hvoff():
 def test_bias_hvon():
     """
     Verify that the function finds bias for a gaussian distribution, plus
-    additional contributions from the effect of gain ("hv" is the voltage 
-    applied in the EM gain register), approximated as an exponential distribution 
-    + inflated values for the "unreliable" prescan region, minus the mean of the 
-    exponential distribution to keep the DC contribution 0.  
+    additional contributions from the effect of gain ("hv" is the voltage
+    applied in the EM gain register), approximated as an exponential distribution
+    + inflated values for the "unreliable" prescan region, minus the mean of the
+    exponential distribution to keep the DC contribution 0.
     Also tests that only the good columns are used for the bias.
     """
-    
+
     # Set tolerance
     tol = 6.
     bval = 100.
@@ -426,7 +454,7 @@ def test_bias_hvon():
 
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    
+
     for obstype in ['SCI', 'ENG']:
         # create simulated dataset
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
@@ -443,20 +471,20 @@ def test_bias_hvon():
                                    - expmean # to keep DC contribution 0
                                    + bias)
 
-        for return_full_frame in [True, False]:            
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
-            if np.any(np.abs(output_dataset[0].bias - bval) > tol):
+        for return_full_frame in [True, False]:
+            output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
+            if np.any(np.abs(output_dataset[0].hdu_list['BIAS'].data - bval) > tol):
                 raise Exception(f'Higher than expected error in bias measurement for hvon distribution.')
 
 def test_bias_uniform_value():
     """Verify that function finds bias for uniform value."""
-    
+
     tol = 1e-13
     bval = 1.
-    
+
     ###### create simulated dataset
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    
+
     for obstype in ['SCI', 'ENG']:
         # create simulated dataset
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
@@ -464,27 +492,27 @@ def test_bias_uniform_value():
         # Overwrite dataset with normal + exponential + bias
         dataset.all_data[:,:,:] = bval
 
-        for return_full_frame in [True, False]:            
-            output_dataset = prescan_biassub(dataset, return_full_frame=return_full_frame)
+        for return_full_frame in [True, False]:
+            output_dataset = prescan_biassub(dataset, noise_maps=None, return_full_frame=return_full_frame)
             if np.max(np.abs(output_dataset.all_data)) > tol:
                 raise Exception(f'Higher than expected error in bias measurement for uniform value.')
-            
+
             if np.max(np.abs(output_dataset.all_err)) > tol:
                 raise Exception(f'Higher than expected std. error in bias measurement for uniform value.')
-            
+
 def test_bias_offset():
     """Verify bias offset incorporated as expected"""
-    
+
     # 10 counts higher than the bias in the image region.
     bias_offset = 10
     tol = 1e-13
-    
+
     ###### create simulated dataset
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
-    
+
     for obstype in ['SCI', 'ENG']:
         # create simulated dataset with 0 bias offset
-        dataset_0 = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)    
+        dataset_0 = mocks.create_prescan_files(filedir=datadir, obstype=obstype,numfiles=1)
         dataset_0.all_data[:,:,:] = 0.
 
         # create simulated dataset with 10 bias offset
@@ -495,10 +523,14 @@ def test_bias_offset():
         rows = detector_areas[obstype]['prescan']['rows']
         cols = detector_areas[obstype]['prescan']['cols']
         dataset_10.all_data[:,r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += bias_offset
-    
+
+        noise_maps0 = noise_maps.copy()
+        noise_maps0.bias_offset = 0
+        noise_maps10 = noise_maps.copy()
+        noise_maps10.bias_offset = 10
         for return_full_frame in [True,False]:
-            output_dataset_0 = prescan_biassub(dataset_0, return_full_frame=return_full_frame,bias_offset=0)
-            output_dataset_10 = prescan_biassub(dataset_10, return_full_frame=return_full_frame,bias_offset=bias_offset)
+            output_dataset_0 = prescan_biassub(dataset_0, noise_maps0, return_full_frame=return_full_frame)
+            output_dataset_10 = prescan_biassub(dataset_10, noise_maps10, return_full_frame=return_full_frame)
 
             # Compare science image region only
             if return_full_frame:

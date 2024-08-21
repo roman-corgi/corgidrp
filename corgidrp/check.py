@@ -19,6 +19,10 @@ int_types = (int, np.integer)
 def _checkname(vname):
     """
     Internal check that we can use vname as a string for printing
+
+    Args:
+    vname: str
+        variable name
     """
     if not isinstance(vname, string_types):
         raise CheckException('vname must be a string when fed to check ' + \
@@ -29,6 +33,10 @@ def _checkname(vname):
 def _checkexc(vexc):
     """
     Internal check that we can raise from the vexc object
+
+    Args:
+    vexc: str
+        exception name
     """
     if not isinstance(vexc, type): # pre-check it is class-like
         raise CheckException('vexc must be a Exception, or an object ' + \
@@ -80,7 +88,7 @@ def real_array(var, vname, vexc):
     _checkname(vname)
     _checkexc(vexc)
 
-    var = np.array(var, copy=False)  # cast to array
+    var = np.asarray(var) # cast to array
     if len(var.shape) == 0:
         raise vexc(vname + ' must have length > 0')
     if not np.isrealobj(var):
@@ -107,7 +115,7 @@ def oneD_array(var, vname, vexc):
     _checkname(vname)
     _checkexc(vexc)
 
-    var = np.array(var, copy=False) # cast to array
+    var = np.asarray(var) # cast to array
     if len(var.shape) != 1:
         raise vexc(vname + ' must be a 1D array')
     if (not np.isrealobj(var)) and (not np.iscomplexobj(var)):
@@ -131,7 +139,7 @@ def twoD_array(var, vname, vexc):
     _checkname(vname)
     _checkexc(vexc)
 
-    var = np.array(var, copy=False) # cast to array
+    var = np.asarray(var) # cast to array
     if len(var.shape) != 2:
         raise vexc(vname + ' must be a 2D array')
     if (not np.isrealobj(var)) and (not np.iscomplexobj(var)):
@@ -155,7 +163,7 @@ def twoD_square_array(var, vname, vexc):
     _checkname(vname)
     _checkexc(vexc)
 
-    var = np.array(var, copy=False) # cast to array
+    var = np.asarray(var) # cast to array
     if len(var.shape) != 2:
         raise vexc(vname + ' must be a 2D array')
     else: # is 2-D
@@ -182,7 +190,7 @@ def threeD_array(var, vname, vexc):
     _checkname(vname)
     _checkexc(vexc)
 
-    var = np.array(var, copy=False) # cast to array
+    var = np.asarray(var) # cast to array
     if len(var.shape) != 3:
         raise vexc(vname + ' must be a 3D array')
     if (not np.isrealobj(var)) and (not np.iscomplexobj(var)):

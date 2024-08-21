@@ -1,67 +1,112 @@
-# A file that holds the functions that transmogrify l2a data to l2b data 
+# A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
 import corgidrp.data as data
+from corgidrp.darks import build_synthesized_dark
+from corgidrp.detector import detector_areas
 
 def add_photon_noise(input_dataset):
     """
-    Propagate the photon noise determined from the image signal to the error map.
-    The image values must already be in units of photons 
+    Propagate the photon/shot noise determined from the image signal to the error map. 
 
     Args:
-       input_dataset (corgidrp.data.Dataset): a dataset of Images with values in photons (L2a-level)
-    
+       input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+
     Returns:
         corgidrp.data.Dataset: photon noise propagated to the image error extensions of the input dataset
     """
     # you should make a copy the dataset to start
     phot_noise_dataset = input_dataset.copy() # necessary at all?
-    
+
     for i, frame in enumerate(phot_noise_dataset.frames):
-        frame.add_error_term(np.sqrt(frame.data), "photnoise_error")
+        em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
+        phot_err = np.sqrt(frame.data)
+        #add excess noise in case of em_gain
+        if em_gain > 1:
+            phot_err *= np.sqrt(2)           
+        frame.add_error_term(phot_err, "photnoise_error")
     
     new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
+    
     history_msg = "photon noise propagated to error map"
     # update the output dataset
     phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
-    
+
     return phot_noise_dataset
 
 
-def dark_subtraction(input_dataset, dark_frame):
+def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None):
     """
-    
-    Perform dark current subtraction of a dataset using the corresponding dark frame
+
+    Perform dark subtraction of a dataset using the corresponding dark frame.  The dark frame can be either a synthesized master dark (made for any given EM gain and exposure time)
+    or for a traditional master dark (average of darks taken at the EM gain and exposure time of the corresponding observation).  The master dark is also saved if it is of the synthesized type after it is built.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need dark subtraction (L2a-level)
-        dark_frame (corgidrp.data.Dark): a Dark frame to model the dark current
+        dark (corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps): If dark is of the corgidrp.data.Dark type, dark subtraction will be done immediately.
+            If dark is of the corgidrp.data.DetectorNoiseMaps type, a synthesized master is created using calibrated noise maps for the EM gain and exposure time used in the frames in input_dataset.
+        detector_regions: (dict):  A dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        outputdir (string): Filepath for output directory where to save the master dark if it is a synthesized master dark.  Defaults to current directory.
 
     Returns:
-        corgidrp.data.Dataset: a dark subtracted version of the input dataset including error propagation
+        corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
+    _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    if len(unique_vals) > 1:
+        raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
+
+    if detector_regions is None:
+        detector_regions = detector_areas
     # you should make a copy the dataset to start
     darksub_dataset = input_dataset.copy()
+    rows = detector_regions['SCI']['frame_rows']
+    cols = detector_regions['SCI']['frame_cols']
+    im_rows = detector_regions['SCI']['image']['rows']
+    im_cols = detector_regions['SCI']['image']['cols']
 
-    darksub_cube = darksub_dataset.all_data - dark_frame.data
-    
+    if type(dark) is data.DetectorNoiseMaps:
+        if input_dataset.frames[0].data.shape == (rows, cols):
+            full_frame = True
+        elif input_dataset.frames[0].data.shape == (im_rows, im_cols):
+            full_frame = False
+        else:
+            raise Exception('Frames in input_dataset do not have valid SCI full-frame or image dimensions.')
+        dark = build_synthesized_dark(input_dataset, dark, detector_regions=detector_regions, full_frame=full_frame)
+        if outputdir is None:
+            outputdir = '.' #current directory
+        dark.save(filedir=outputdir)
+    elif type(dark) is data.Dark:
+       # In this case, the Dark loaded in should already match the arry dimensions
+       # of input_dataset, specified by full_frame argument of build_trad_dark
+       # when this Dark was built
+       pass
+    else:
+        raise Exception('dark type should be either corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps.')
+
+    darksub_cube = darksub_dataset.all_data - dark.data
+
     # propagate the error of the dark frame
-    if hasattr(dark_frame, "err"):
-        darksub_dataset.add_error_term(dark_frame.err[0], "dark_error")   
+    if hasattr(dark, "err"):
+        darksub_dataset.add_error_term(dark.err[0], "dark_error")
     else:
         raise Warning("no error attribute in the dark frame")
-    
+
+    if hasattr(dark, "dq"):
+        new_all_dq = np.bitwise_or(darksub_dataset.all_dq, dark.dq)
+    else:
+        new_all_dq = None
+
     #darksub_dataset.all_err = np.array([frame.err for frame in darksub_dataset.frames])
-    history_msg = "Dark current subtracted using dark {0}".format(dark_frame.filename)
+    history_msg = "Dark subtracted using dark {0}.  Units changed from detected electrons to photoelectrons.".format(dark.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, header_entries = {"BUNIT":"photoelectrons"})
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"photoelectrons"})
 
     return darksub_dataset
-  
+
 def flat_division(input_dataset, flat_field):
     """
-    
-    Divide the dataset by the master flat field. 
+
+    Divide the dataset by the master flat field.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
@@ -70,20 +115,20 @@ def flat_division(input_dataset, flat_field):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the flat field divided out
     """
-    
+
      # copy of the dataset
     flatdiv_dataset = input_dataset.copy()
-    
+
     #Divide by the master flat
     flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
-    
-    # propagate the error of the master flat frame  
+
+    # propagate the error of the master flat frame
     if hasattr(flat_field, "err"):
-        flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField") 
+        flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
         flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
     else:
         raise Warning("no error attribute in the FlatField")
-    
+
     history_msg = "Flat calibration done using Flat field {0}".format(flat_field.filename)
 
     # update the output dataset with this new flat calibrated data and update the history
@@ -93,17 +138,17 @@ def flat_division(input_dataset, flat_field):
 
 def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_thres=None):
     """
-    
+
     Selects the frames that we want to use for further processing.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
         bpix_frac (float): greater than fraction of the image needs to be bad to discard. Default: 1.0 (not used)
-        allowed_bpix (int): sum of DQ values that are allowed and not counted towards to bpix fraction 
-                            (e.g., 6 means 2 and 4 are not considered bad). 
+        allowed_bpix (int): sum of DQ values that are allowed and not counted towards to bpix fraction
+                            (e.g., 6 means 2 and 4 are not considered bad).
                             Default is 0 (all nonzero DQ flags are considered bad)
         overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
-        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used) 
+        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used)
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
@@ -134,7 +179,7 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                 reject_flags[i] += 4 # use distinct bits in case it's useful
                 reject_reasons[i].append("tt rms {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['RESZ2RMS'], tt_thres))
-    
+
     good_frames = np.where(reject_flags == 0)
     bad_frames = np.where(reject_flags > 0)
     # check that we didn't remove all of the good frames
@@ -156,11 +201,11 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
 
     return pruned_dataset
 
-def convert_to_electrons(input_dataset, k_gain): 
+def convert_to_electrons(input_dataset, k_gain):
     """
-    
-    Convert the data from ADU to electrons. 
-    TODO: Establish the interaction with the CalDB for obtaining gain calibration 
+
+    Convert the data from ADU to electrons.
+    TODO: Establish the interaction with the CalDB for obtaining gain calibration
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
@@ -173,11 +218,11 @@ def convert_to_electrons(input_dataset, k_gain):
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
     kgain_error = kgain_dataset.all_err
-    
+
     kgain = k_gain.value #extract from caldb
     kgain_cube *= kgain
     kgain_error *= kgain
-    
+
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
@@ -186,8 +231,8 @@ def convert_to_electrons(input_dataset, k_gain):
 
 def em_gain_division(input_dataset):
     """
-    
-    Convert the data from detected EM electrons to detected electrons by dividing the commanded em_gain. 
+
+    Convert the data from detected EM electrons to detected electrons by dividing the commanded em_gain.
     Update the change in units in the header [detected electrons].
 
     Args:
@@ -196,21 +241,21 @@ def em_gain_division(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in units "detected electrons"
     """
-    
+
     # you should make a copy the dataset to start
     emgain_dataset = input_dataset.copy()
     emgain_cube = emgain_dataset.all_data
     emgain_error = emgain_dataset.all_err
-    
+
     unique = True
     emgain = emgain_dataset[0].ext_hdr["CMDGAIN"]
-    for i in range(len(emgain_dataset)): 
+    for i in range(len(emgain_dataset)):
         if emgain != emgain_dataset[i].ext_hdr["CMDGAIN"]:
             unique = False
-            emgain = emgain_dataset[i].ext_hdr["CMDGAIN"] 
+            emgain = emgain_dataset[i].ext_hdr["CMDGAIN"]
         emgain_cube[i] /= emgain
         emgain_error[i] /= emgain
-    
+
     if unique:
         history_msg = "data divided by em_gain {0}".format(str(emgain))
     else:
@@ -223,13 +268,13 @@ def em_gain_division(input_dataset):
 
 def cti_correction(input_dataset):
     """
-    
+
     Apply the CTI correction to the dataset.
     TODO: Establish the interaction with the CalDB for obtaining CTI correction calibrations
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
-        
+
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
     """
@@ -240,7 +285,7 @@ def cti_correction(input_dataset):
 def correct_bad_pixels(input_dataset, bp_mask):
 
     """
-    
+
     Correct for bad pixels: Bad pixels are identified as part of the data
         calibration. This function replaces bad pixels by NaN values. It also
         updates its DQ storing the type of bad pixel at each bad pixel location,
@@ -255,7 +300,7 @@ def correct_bad_pixels(input_dataset, bp_mask):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with bad detector
         pixels and cosmic rays replaced by NaNs
- 
+
     """
 
     data = input_dataset.copy()
@@ -264,7 +309,7 @@ def correct_bad_pixels(input_dataset, bp_mask):
 
     for i in range(data_cube.shape[0]):
         # combine DQ and BP masks
-        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask[0].data.astype(np.uint8))
+        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask.data.astype(np.uint8))
         # mask affected pixels with NaN
         bp = np.where(bp_dq_mask != 0)
         data_cube[i, bp[0], bp[1]] = np.nan
@@ -313,5 +358,38 @@ def desmear(input_dataset, detector_params):
 
     history_msg = "Desmear applied to data"
     data.update_after_processing_step(history_msg, new_all_data=data_cube)
-    
+
     return data
+
+def update_to_l2b(input_dataset):
+    """
+    Updates the data level to L2b. Only works on L2a data.
+
+    Currently only checks that data is at the L2a level
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+
+    Returns:
+        corgidrp.data.Dataset: same dataset now at L2b-level
+    """
+    # check that we are running this on L1 data
+    for orig_frame in input_dataset:
+        if orig_frame.ext_hdr['DATA_LEVEL'] != "L2a":
+            err_msg = "{0} needs to be L2a data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+            raise ValueError(err_msg)
+
+    # we aren't altering the data
+    updated_dataset = input_dataset.copy(copy_data=False)
+
+    for frame in updated_dataset:
+        # update header
+        frame.ext_hdr['DATA_LEVEL'] = "L2b"
+        # update filename convention. The file convention should be
+        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
+        frame.filename = frame.filename.replace("_L2a_", "_L2b_", 1)
+
+    history_msg = "Updated Data Level to L2b"
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset

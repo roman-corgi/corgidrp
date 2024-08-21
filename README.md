@@ -13,6 +13,10 @@ Then you can import `corgidrp` like any other python package!
 The installation will create a configuration folder in your home directory called `.corgidrp`. 
 That configuration directory will be used to locate things on your computer such as the location of the calibration database and the pipeline configuration file. The configuration files stores setting such as whether to track each individual error term added to the noise. 
 
+### For Developers
+
+Large binary files (used in tests) are stored in Git LFS. You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
+
 ## How to Contribute
 
 We encourage you to chat with Jason, Max, and Marie (e.g., on Slack) to discuss what to do before you get started. Brainstorming
@@ -105,6 +109,28 @@ To run an individual test, call the test function you want to test at the bottom
 
 To run all the tests in the test suite, go to the base corgidrp folder in a terminal and run the `pytest` command. 
 
+### End-to-End Testing
+
+End-to-end testing refers to processing data as one would when we get the real data (i.e., starting from L1 data). If applicable, write an end-to-end test following the `l1_to_l2a_e2e.py` and `l1_to_l2b_e2e.py` examples in the `tests/e2e_tests` folder. For example, if you wrote a step that generates a calibration function, write an end-to-end test that produces the calibration file from L1 data. The steps are as follows:
+ 
+  1. Write a recipe that produces the desired processed data product starting from L1 data. You will need to determine the series of step functions that need to be run, and what kind of arguments should be modified (e.g., whether prescan columns pixels should be cropped). Refer to the existing recipes in `corgidrp/recipe_templates` as examples and double check all the necessary steps in the FDD. 
+  2. Obtain TVAC L1 data from our Box folder (ask Alex Greenbaum or Jason if you don't have access). For some situations (e.g., boresight), there may not be appropriate TVAC data. In those cases, write a piece of code that uses the images from TVAC to provide realistic noise and add it to mock data (i.e., the ones generated for the unit testing) to create mock L1 data.
+  3. Write an end-to-end test that processes the L1 data through the new recipe you created using the corgidrp.walker framework
+      - You will probably need to modify the `corgidrp.walker.guess_template()` function to add logic for determining when to use your recipe based on header keywords (e.g., OBSTYPE). Ask Jason, who developed this framework, if it is not clear what should be done. 
+      - Your recipe may require other calibratio files. For now, create them as part of the setup process during the script (see `tests/e2e_tests/l1_to_l2b_e2e.py` for examples of how to do this for each type of calibration)
+      - if you need to create mock L1 data, please do it in the script as well. 
+      - See the existing tests in `tests/e2e_tests/` for how to structure this script. You should only need to write a single script.
+  4. Test that the script runs successfully on your local machine and produces the expected output. Debug as necessary. When appropriate, test your results against those obtained from the II&T/TVAC pipeline using the same input data. 
+  5. Determine how resource intensive your recipe is. There are many ways to do this, but Linux users can run `/usr/bin/time -v python your_e2e_test.py` and Mac userse can run `/usr/bin/time -l -h -p python <your_e2e_test.py>`. Record elapsed (wall clock) time, the percent of CPU this job got (only if parallelization was used), and total memory used (labelled "Maximum resident set size"). 
+  6. Document your recipe on the "Corgi-DRP Implementation Document" on Confluence (see the big table in Section 2.0). You should fill out an entire row with your recipe. Under addition notes, note if your recipe took significant run time (> 1 minute) and significant memory (> 1 GB). 
+  7. PR! 
+
+To run the existing end-to-end tests, you need to have downloaded all the TVAC data to your computer. In a terminal, go to the base directory of the corgidrp repo and run the following command, substituting paths for paths on your computer as desired:
+
+```
+pytest --which e2e --tvacdata_path /path/to/CGI_TVAC_Data --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
+```
+
 ### Linting
 
 In addition to unit tests, your code will need to pass a static analysis before being merged.  `corgidrp` currently runs a subset of flake8 tests, which you can replicate on your local system by running:
@@ -133,6 +159,7 @@ Before creating a pull request, review the design Principles below. Use the Gith
 * Keep things simple
 * Use _descriptive_ variable names **always**.
 * Comments should be used to describe a section of the code where it's not immediately obvious what the code is doing. Using descriptive variable names will minimize the amount of comments required.
+* Make pull requests as small as possible. It makes code easier to review, when only a small fraction of the code is being modified. You can do multiple PRs on the same task (e.g., a first very simplistic implementation, followed by a separate PR adding some new features and options.)
 
 ## FAQ
 
@@ -144,10 +171,11 @@ Before creating a pull request, review the design Principles below. Use the Gith
 * What python version should I develop in?
   * Python 3.12
     
-* How should I treat hard-coded variables
-  * If a variable value is extremely unlikely to change AND is only required by one module, it can be hard coded inside that module.
-  * If it is unlikely to change but will need to be referenced by multiple modules, it should be added to the central constants file (name TBD). 
-  * If it is a setting about pipeline behavior that may change, it should be implemented by a config file (examples are location of the calibration database and whether to save individual error terms in the output FITS files).
+* How should I treat different kinds of function parameters:
+  * Constants - things that are highly unlikely to change - can be included in modules, like detector.py
+  * Properties of the system - things we need to measure that might change in time - would go into a calibration file like DetectorParams
+  * Function parameters - choices that we might make and want to have more flexibility that apply to a specific function (e.g. exactly what area of a detector we might use to calculate something) - would be keyword arguments to that function.
+  * If it is a setting about pipeline behavior that may change, it should be implemented in the config file (examples are location of the calibration database and whether to save individual error terms in the output FITS files).
  
 * Where should I store computed variables so they can be referenced later in the pipeline?
   * If possible, in the header of the dataset being processed or in a hew HDU extension
