@@ -31,10 +31,6 @@ def set_obstype_for_tvac(
     Args:
     list_of_fits (list): list of FITS files that need to be updated.
 
-    Returns:
-
-    FITS files with updated value of OBSTYPE.
-
     """
     # Folder with files
     nonlin_dir = list_of_fits[0][0:len(list_of_fits[0]) - list_of_fits[0][::-1].find('/')]
@@ -85,7 +81,7 @@ def get_first_nonlin_file(
 
         Returns:
 
-        First FITS file with OBSTYPE set to NONLIN.
+        first_fits_file (str): First FITS file with OBSTYPE set to NONLIN.
 
     """
     first_fits_file = 'NONLIN not found'
