@@ -80,3 +80,4 @@ tests/e2e_tests/*/*.json
 # Output figures
 figures/
 tests/figures/
+tests/e2e_tests/*/*.png
