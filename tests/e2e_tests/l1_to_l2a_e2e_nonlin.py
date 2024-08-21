@@ -112,9 +112,6 @@ def test_nonlin_cal_e2e(tvacdata_dir, output_dir):
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
 
-        Returns:
-
-            None
     """
 
     # figure out paths, assuming everything is located in the same relative location

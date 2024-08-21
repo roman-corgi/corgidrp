@@ -208,6 +208,9 @@ def calibrate_nonlin(dataset_nl,
       show_plot (bool): (Optional) display the plots. Default is False.
       verbose (bool): (Optional) display various diagnostic print messages.
         Default is False.
+      test_iit (bool) (Optional): If set to True, some structural changes are
+      made to get the derivation of the non-linearity coeffcients closer to
+      the methos used during TVAC with a Matlab script. 
     
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
