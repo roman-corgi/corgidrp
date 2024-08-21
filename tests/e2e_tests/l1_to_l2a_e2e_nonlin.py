@@ -1,5 +1,6 @@
 import os  
 import glob  
+import pytest
 import argparse
 import numpy as np
 import astropy.time as time
@@ -11,11 +12,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 
-corgidrp_dir = os.path.join(os.path.dirname(corgidrp.__file__), '..') # basedir of entire corgidrp github repo
-
-nonlin_tvac = os.path.join(corgidrp_dir, '../e2e_tests_corgidrp/nonlin_table_240322.txt')
-nonlin_l1_datadir = os.path.join(corgidrp_dir, '../e2e_tests_corgidrp/')
-output_dir = './l1_to_l2a_output/'
+thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 def set_obstype_for_tvac(
     list_of_fits,
@@ -266,7 +263,20 @@ def get_first_nonlin_file(
             break
     return first_fits_file
 
-def main():
+@pytest.mark.e2e
+def test_nonlin_cal_e2e(tvacdata_dir, output_dir):
+
+    # figure out paths, assuming everything is located in the same relative location
+    nonlin_l1_datadir = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization/nonlin/')
+    tvac_caldir = os.path.join(tvacdata_dir, 'TV-36_Coronagraphic_Data/Cals/')
+    output_dir = os.path.join(output_dir, 'l1_to_l2a_output/')
+
+    if not os.path.exists(nonlin_l1_datadir):
+        raise Exception(f'Please store L1 data used to calibrate non-linearity in {nonlin_l1_datadir}')
+
+    if not os.path.exists(tvac_caldir):
+        raise Exception(f'Please store L1 calibration data in {tvac_caldir}')                      
+
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
@@ -283,7 +293,7 @@ def main():
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_dat = np.genfromtxt(output_dir+'nonlin_table_240322.txt', delimiter=",")
+    nonlin_dat = np.genfromtxt(tvac_caldir+'nonlin_table_240322.txt', delimiter=",")
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -338,15 +348,16 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-np", "--nonlin_tvac", default=nonlin_tvac,
-                    help="text file containing the non-linear table from TVAC [%(default)s]")
-    ap.add_argument("-l1", "--nonlin_l1_datadir", default=nonlin_l1_datadir,
-                    help="directory that contains the L1 data files used for nonlinearity calibration [%(default)s]")
+
+    tvacdata_dir = "/Users/srhildeb/Documents/GitHub/CGI_TVAC_Data/"
+    output_dir = thisfile_dir
+
+    ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
+    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--output_dir", default=output_dir,
-                    help="directory to write results and it will be created if it does not exist [%(default)s]")
+                    help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    nonlin_path = args.nonlin_tvac
-    l1_datadir = args.nonlin_l1_datadir
+    tvacdata_dir = args.tvacdata_dir
     output_dir = args.output_dir
-    main()
+    test_nonlin_cal_e2e(tvacdata_dir, output_dir)
