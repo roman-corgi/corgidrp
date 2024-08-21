@@ -30,7 +30,7 @@ def set_obstype_for_tvac(
 
         Args:
   
-        list_of_fits (list): list of FITS files that need to be updated.
+            list_of_fits (list): list of FITS files that need to be updated.
 
         Returns:
 
