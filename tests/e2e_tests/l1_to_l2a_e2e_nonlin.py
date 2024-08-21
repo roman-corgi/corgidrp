@@ -108,7 +108,6 @@ def test_nonlin_cal_e2e(
         Args:
         tvacdata_dir (str): Location of L1 data used to generate the non-linearity
             calibration.
-
         output_dir (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
