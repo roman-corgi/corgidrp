@@ -4,6 +4,7 @@ import argparse
 import numpy as np
 import astropy.time as time
 from astropy.io import fits  
+import matplotlib.pyplot as plt
 
 import corgidrp
 import corgidrp.data as data
@@ -14,7 +15,7 @@ corgidrp_dir = os.path.join(os.path.dirname(corgidrp.__file__), '..') # basedir 
 
 nonlin_tvac = os.path.join(corgidrp_dir, '../e2e_tests_corgidrp/nonlin_table_240322.txt')
 nonlin_l1_datadir = os.path.join(corgidrp_dir, '../e2e_tests_corgidrp/')
-outputdir = './l1_to_l2a_output/'
+output_dir = './l1_to_l2a_output/'
 
 def set_obstype_for_tvac(
     list_of_fits,
@@ -100,8 +101,8 @@ def get_first_nonlin_file(
     return first_fits_file
 
 def main():
-    if not os.path.exists(outputdir):
-        os.mkdir(outputdir)
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
@@ -128,7 +129,7 @@ def main():
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_dat = np.genfromtxt(nonlin_tvac, delimiter=",")
+    nonlin_dat = np.genfromtxt(output_dir+'nonlin_table_240322.txt', delimiter=",")
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -137,17 +138,44 @@ def main():
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=output_dir, filename="nonlin_tvac.fits" )
 
     # Run the walker on some test_data
     print('Running walker')
-    walker.walk_corgidrp(nonlin_l1_list, '', outputdir)
+    walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
 
     # Compare results
+    print('Comparing the results with TVAC')
     ## NL from CORGIDRP
-    CGI_EXCAM_L1_0000051731_NonLinearityCalibration
-    breakpoint()
+    nonlin_out_filename = first_nonlin_file[len(first_nonlin_file)-first_nonlin_file[::-1].find('/'):]
+    if nonlin_out_filename.find('fits') == -1:
+        raise Exception('Data files must be FITS files')
+    nonlin_out_filename = nonlin_out_filename[0:nonlin_out_filename.find('fits')-1]
+    nonlin_out_filename += '_NonLinearityCalibration.fits'
+    nonlin_out = fits.open(output_dir+nonlin_out_filename)
+    if nonlin_out[0].header['OBSTYPE'] != 'NONLIN':
+        raise Exception('Calibration type is not NL')
+    nonlin_out_table = nonlin_out[1].data
+    
     ## NL from TVAC
+    nonlin_tvac = fits.open(output_dir+'nonlin_tvac.fits')
+    nonlin_tvac_table = nonlin_tvac[1].data
+
+    # Check
+    if nonlin_out_table.shape[0] != nonlin_tvac_table[0] or nonlin_out_table.shape[1] != nonlin_tvac_table[1]:
+        raise Exception('Non-linearity table from CORGI DRP has a different format than the one from TVAC')   
+    
+    rel_out_tvac_perc = 100*(nonlin_out_table[1:]/nonlin_tvac_table[1:]-1)
+    plt.figure(figsize=(10,6))
+    em_list = nonlin_out_table[0,1:]
+    for i_em, em in enumerate(em_list):
+        plt.plot(nonlin_out_table[1:,0], rel_out_tvac_perc[:,i_em], label=f'EM={em:.1f}')
+    plt.xlabel('DN value', fontsize=16)
+    plt.ylabel('Percentage (%)', fontsize=16)
+    plt.title('Relative difference for NL coefficient for a given DN and EM value', fontsize=16)
+    plt.legend()
+    plt.savefig(output_dir+nonlin_out_filename[:-5])
+    print(f'Figure saved: {output_dir+nonlin_out_filename[:-5]}.png')
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -160,10 +188,10 @@ if __name__ == "__main__":
                     help="text file containing the non-linear table from TVAC [%(default)s]")
     ap.add_argument("-l1", "--nonlin_l1_datadir", default=nonlin_l1_datadir,
                     help="directory that contains the L1 data files used for nonlinearity calibration [%(default)s]")
-    ap.add_argument("-o", "--outputdir", default=outputdir,
+    ap.add_argument("-o", "--output_dir", default=output_dir,
                     help="directory to write results and it will be created if it does not exist [%(default)s]")
     args = ap.parse_args()
     nonlin_path = args.nonlin_tvac
     l1_datadir = args.nonlin_l1_datadir
-    outputdir = args.outputdir
+    output_dir = args.output_dir
     main()
