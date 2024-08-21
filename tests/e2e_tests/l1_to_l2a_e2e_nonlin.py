@@ -245,7 +245,7 @@ def main():
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check
-    if nonlin_out_table.shape[0] != nonlin_tvac_table[0] or nonlin_out_table.shape[1] != nonlin_tvac_table[1]:
+    if nonlin_out_table.shape[0] != nonlin_tvac_table.shape[0] or nonlin_out_table.shape[1] != nonlin_tvac_table.shape[1]:
         raise Exception('Non-linearity table from CORGI DRP has a different format than the one from TVAC')   
     
     rel_out_tvac_perc = 100*(nonlin_out_table[1:]/nonlin_tvac_table[1:]-1)
