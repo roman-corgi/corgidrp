@@ -22,7 +22,9 @@
         {
             "name" : "calibrate_nonlin",
             "keywords" : {
-                "norm_val" : 2020
+                "norm_val" : 2020,
+                "min_write": 800,
+                "max_write": 9000
             }
         },
         {
