@@ -80,7 +80,6 @@ def get_first_nonlin_file(
         list_of_fits (list): list of FITS files that need to be updated.
 
         Returns:
-
         first_fits_file (str): First FITS file with OBSTYPE set to NONLIN.
 
     """
