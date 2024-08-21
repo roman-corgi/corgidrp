@@ -2,7 +2,6 @@
 import os
 import glob
 import argparse
-import pytest
 import numpy as np
 from astropy import time
 from astropy.io import fits
@@ -13,28 +12,29 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 
-thisfile_dir = os.path.dirname(__file__) # this file's folder
+thisfile_dir = os.path.dirname(__file__)  # this file's folder
+
 
 def set_obstype_for_tvac(
     list_of_fits,
     ):
     """ Adds proper values to OBSTYPE for the non-linearity calibration: NONLIN,
-        (data used to calibrate the non-linearity) or MNFRAME (data used to build
-        a mean frame).
+    (data used to calibrate the non-linearity) or MNFRAME (data used to build
+    a mean frame).
 
-        This function is unnecessary with future data because data will have
-        the proper values in OBSTYPE. The TVAC data used must be the
-        following 382 files with IDs: 51841-51870 (30: mean frame). And NL:
-        51731-51840 (110), 51941-51984 (44), 51986-52051 (66), 55122-55187 (66),
-        55191-55256 (66)  
+    This function is unnecessary with future data because data will have
+    the proper values in OBSTYPE. The TVAC data used must be the
+    following 382 files with IDs: 51841-51870 (30: mean frame). And NL:
+    51731-51840 (110), 51941-51984 (44), 51986-52051 (66), 55122-55187 (66),
+    55191-55256 (66)  
 
-        Args:
-  
-            list_of_fits (list): list of FITS files that need to be updated.
+    Args:
+ 
+    list_of_fits (list): list of FITS files that need to be updated.
 
-        Returns:
+    Returns:
 
-        FITS files with updated value of OBSTYPE.
+    FITS files with updated value of OBSTYPE.
 
     """
     # Folder with files
@@ -71,6 +71,7 @@ def set_obstype_for_tvac(
             # Update FITS file
             fits_file.writeto(nonlin_dir+file_name, overwrite=True)
 
+
 def get_first_nonlin_file(
     list_of_fits,
     ):
@@ -80,12 +81,12 @@ def get_first_nonlin_file(
         Remember that FITS files used for NL calibration must have DATETIME in
         ascending order.
 
-        Args:                                                              
-                                                                                
-        list_of_fits (list): list of FITS files that need to be updated.        
-                                                                                
-        Returns:                                                                
-                                                                                
+        Args:
+
+        list_of_fits (list): list of FITS files that need to be updated.
+
+        Returns:
+
         First FITS file with OBSTYPE set to NONLIN.
 
     """
@@ -97,7 +98,11 @@ def get_first_nonlin_file(
             break
     return first_fits_file
 
-def test_nonlin_cal_e2e(tvacdata_dir, output_dir):
+
+def test_nonlin_cal_e2e(
+    tvacdata_dir,
+    output_dir,
+    ):
     """ Performs the e2e test to generate a non-linearity calibration object
         from raw L1 data and compares with the existing TVAC correction for the
         same data.
@@ -159,7 +164,7 @@ def test_nonlin_cal_e2e(tvacdata_dir, output_dir):
 
     # Compare results
     print('Comparing the results with TVAC')
-    ## NL from CORGIDRP
+    # NL from CORGIDRP
     nonlin_out_filename = first_nonlin_file[len(first_nonlin_file) -
         first_nonlin_file[::-1].find('/'):]
     if nonlin_out_filename.find('fits') == -1:
@@ -171,7 +176,7 @@ def test_nonlin_cal_e2e(tvacdata_dir, output_dir):
         raise ValueError('Calibration type is not NL')
     nonlin_out_table = nonlin_out[1].data
 
-    ## NL from TVAC
+    # NL from TVAC
     nonlin_tvac = fits.open(output_dir+'nonlin_tvac.fits')
     nonlin_tvac_table = nonlin_tvac[1].data
 
@@ -195,6 +200,7 @@ def test_nonlin_cal_e2e(tvacdata_dir, output_dir):
     print(f'Figure saved: {output_dir+nonlin_out_filename[:-5]}.png')
 
 if __name__ == "__main__":
+
     # Use arguments to run the test. Users can then write their own scripts
     # that call this script with the correct arguments and they do not need
     # to edit the file. The arguments use the variables in this file as their
