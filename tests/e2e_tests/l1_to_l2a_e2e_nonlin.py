@@ -29,7 +29,6 @@ def set_obstype_for_tvac(
     55191-55256 (66)  
 
     Args:
- 
     list_of_fits (list): list of FITS files that need to be updated.
 
     Returns:
@@ -82,7 +81,6 @@ def get_first_nonlin_file(
         ascending order.
 
         Args:
-
         list_of_fits (list): list of FITS files that need to be updated.
 
         Returns:
@@ -108,7 +106,6 @@ def test_nonlin_cal_e2e(
         same data.
 
         Args:
-
         tvacdata_dir (str): Location of L1 data used to generate the non-linearity
             calibration.
 
