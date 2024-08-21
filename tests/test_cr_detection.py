@@ -11,6 +11,9 @@ from astropy.time import Time
 from scipy.ndimage import median_filter
 from pytest import approx
 
+nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", "nonlin_sample.fits")
+
+
 ## Copy-pasted II&T code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_remove_cosmics.py ##
 
 def find_plateaus_iit(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
@@ -196,7 +199,7 @@ def test_iit_vs_corgidrp():
     mode = 'image'
 
     # create simulated data
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,em_gain=em_gain, numCRs=5, plateau_length=10)
+    dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=2,em_gain=em_gain, numCRs=5, plateau_length=10)
 
     iit_masks = []
 
@@ -232,7 +235,7 @@ def test_crs_zeros_frame():
     tol = 1e-13
 
     # create simulated data
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
+    dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
 
     # Overwrite data with zeros
     dataset.all_data[:,:,:] = 0.
@@ -247,7 +250,7 @@ def test_correct_headers():
     Asserts "FWC_EM_E", "FWC_PP_E", and "SAT_DN" are tracked in the frame headers.
     """
     # create simulated data
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
+    dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
     output_dataset = detect_cosmic_rays(dataset, detector_params)
 
     for frame in output_dataset:
@@ -331,7 +334,7 @@ tail = np.exp(np.linspace(0, -10, 50)) * 0.1*fwc
 
 # Create bias subtracted image
 
-bs_dataset = mocks.create_cr_dataset(datadir,numfiles=1,numCRs=0)
+bs_dataset = mocks.create_cr_dataset(nonlin_fits_filepath, datadir,numfiles=1,numCRs=0)
 bs_dataset.all_data[:,:,:] = 1.
 im_width = bs_dataset.all_data.shape[-1]
 i_streak_rows_t = np.array([0, im_width//2-1, im_width//2, im_width-1])
@@ -355,7 +358,7 @@ bs_dataset_single_pix.all_data[0,im_width//2, im_width//2] = fwc
 
 def test_mask():
     """Assert correct elements are masked."""
-    dataset = mocks.create_cr_dataset(filedir=datadir, numfiles=1,numCRs=0, plateau_length=10)
+    dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=1,numCRs=0, plateau_length=10)
     dataset.all_data[:,:,:] = 1.
     dataset.all_data[0,1, 2:2+len(cosm_bs)] = cosm_bs
     check_mask = np.zeros_like(dataset.all_dq, dtype=int)
