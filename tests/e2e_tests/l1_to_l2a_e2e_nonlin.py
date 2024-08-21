@@ -312,7 +312,6 @@ def main():
     walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
 
     # Compare results
-<<<<<<< HEAD
     print('Comparing the results with TVAC')
     ## NL from CORGIDRP
     nonlin_out_filename = first_nonlin_file[len(first_nonlin_file)-first_nonlin_file[::-1].find('/'):]
@@ -344,12 +343,6 @@ def main():
     plt.legend()
     plt.savefig(output_dir+nonlin_out_filename[:-5])
     print(f'Figure saved: {output_dir+nonlin_out_filename[:-5]}.png')
-=======
-    ## NL from CORGIDRP
-    CGI_EXCAM_L1_0000051731_NonLinearityCalibration
-    breakpoint()
-    ## NL from TVAC
->>>>>>> aa805fb (walker working)
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
