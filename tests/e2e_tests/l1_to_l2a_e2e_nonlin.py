@@ -97,7 +97,6 @@ def get_first_nonlin_file(
             break
     return first_fits_file
 
-@pytest.mark.e2e
 def test_nonlin_cal_e2e(tvacdata_dir, output_dir):
     """ Performs the e2e test to generate a non-linearity calibration object
         from raw L1 data and compares with the existing TVAC correction for the
