@@ -1,39 +1,34 @@
 import argparse
 import os
-import pytest
 import numpy as np
-import astropy.time as time
 import astropy.io.fits as fits
-import corgidrp
 import corgidrp.data as data
-import corgidrp.mocks as mocks
-import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 import corgidrp.darks as darks
-import corgidrp.bad_pixel_calibration
+import corgidrp.walker as walker
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 
-thisfile_dir = os.path.dirname(__file__) # this file's folder
+thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
-def test_bp_map(tvacdata_path, output_path):
-    # figure out paths, assuming everything is located in the same relative location
-    inputs_dir = os.path.join(tvacdata_path, "Inputs")
+def test_bp_map(tvacdata_path, output_path, use_master_dark):
+    # Figure out paths, assuming everything is located in the same relative location
     cals_dir = os.path.join(tvacdata_path, "Cals")
 
-    # make output directory if needed
+    # Make output directory if needed
     bp_map_outputdir = os.path.join(output_path, "bp_map_output")
     if not os.path.exists(bp_map_outputdir):
         os.mkdir(bp_map_outputdir)
     
-    dark_filename = "dark_current_20240322.fits"
+    dark_current_filename = "dark_current_20240322.fits"
     fpn_filename = "fpn_20240322.fits"
     cic_filename = "cic_20240322.fits"
     flat_filename = "flat_ones.fits"
-    bp_map_ref_filename = "bad_pix.fits"
 
     # Construct the full paths to the noise map files
     noise_maps_filelist = [
-        os.path.join(cals_dir, dark_filename),
+        os.path.join(cals_dir, dark_current_filename),
         os.path.join(cals_dir, fpn_filename),
         os.path.join(cals_dir, cic_filename)
     ]
@@ -41,55 +36,34 @@ def test_bp_map(tvacdata_path, output_path):
     flats_filelist = [os.path.join(cals_dir, flat_filename)]
     input_image_filelist = []
 
-    ## NEED TO CHANGE THIS, KGAIN is not in headers of TVAC files, and TVAC files have image data in HDU[0]
+    ## Handle header issues with TVAC files
+    # Need to change this to use appropriate values for KGAIN, for now setting them all the same. The master dark calculation checks 
+    # to make sure KGAIN is the the same for every input noise map.
     for file in noise_maps_filelist:
-        print(f"Inspecting file: {file}")
         with fits.open(file, mode='update') as hdulist:
-            if hdulist[0].header['NAXIS'] > 0:
-                print("Image data found in HDU[0]")
-                pri_hdr = hdulist[0].header  # Primary header from HDU[0]
-                ext_hdr = hdulist[1].header if len(hdulist) > 1 else None  # Extension header from HDU[1] if it exists
+            pri_hdr = hdulist[0].header  # Primary header from HDU[0]
+            ext_hdr = hdulist[1].header if len(hdulist) > 1 else None  # Extension header from HDU[1] if it exists
+            ext_hdr["KGAIN"] = 0
 
-                ext_hdr["KGAIN"] = 0
-            else:
-                print("Image data found in HDU[1]")
-                pri_hdr = hdulist[0].header  # Primary header from HDU[0]
-                ext_hdr = hdulist[1].header  # Extension header from HDU[1]
-
-
-    '''     
-    for file in noise_maps_filelist:
-        with fits.open(file) as hdulist:
-            dataCheck = hdulist[0].data
-            if dataCheck is None:
-                print(f"Warning: {file} contains no data in the primary HDU.")
-            else:
-                print(f"{file} data shape: {dataCheck.shape}")
-            print("time for all checks. hdulist[0]: ", hdulist[0].header)
-            print("time for all checks. hdulist[1]: ", hdulist[1].header)
-    '''
-    
     noise_maps_dataset = data.Dataset(noise_maps_filelist)
     flats_dataset = data.Dataset(flats_filelist)
 
-    this_caldb = caldb.CalDB() # connection to cal DB
-    
+    this_caldb = caldb.CalDB()  # Connection to cal DB
 
     # assume all cals are in the same directory
-    dark_path = os.path.join(cals_dir, dark_filename)
+    dark_current_path = os.path.join(cals_dir, dark_current_filename)
     flat_path = os.path.join(cals_dir, flat_filename)
     fpn_path = os.path.join(cals_dir, fpn_filename)
     cic_path = os.path.join(cals_dir, cic_filename)
-    bp_map_ref_path = os.path.join(cals_dir, bp_map_ref_filename)
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
         fpn_dat = hdulist[0].data
     with fits.open(cic_path) as hdulist:
         cic_dat = hdulist[0].data
-    with fits.open(dark_path) as hdulist:
-        dark_dat = hdulist[0].data
-    noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_dat])
+    with fits.open(dark_current_path) as hdulist:
+        dark_current_dat = hdulist[0].data
+    noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_current_dat])
     noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
@@ -105,104 +79,166 @@ def test_bp_map(tvacdata_path, output_path):
     noise_map.save(filedir=bp_map_outputdir, filename="tvac_detnoisemaps.fits")         # card is too long, comment will be truncated warning
     this_caldb.create_entry(noise_map)
 
-
-    # Master dark
-    master_dark = darks.build_synthesized_dark(noise_maps_dataset, noise_map) # warnings about large and also empty data
-    master_dark.save(filedir=bp_map_outputdir, filename="tvac_synthesized_master_dark.fits")
-   # this_caldb.create_entry(master_dark)
-   # master_dark_ref = master_dark.filepath
-
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=flats_dataset)
     flat.save(filedir=bp_map_outputdir, filename="tvac_ones_flat.fits")
     this_caldb.create_entry(flat)
-    flat_ref = flat.filepath
+    
+    with fits.open(dark_current_path) as hdulist:
+        naxis1 = hdulist[0].header['NAXIS1']  # X-axis size
+        naxis2 = hdulist[0].header['NAXIS2']  # Y-axis size
 
-    # Simple dark for comparison
-    simple_dark_data = np.zeros_like(flat.data)
-    # Define the cluster center and size
-    cluster_center = (512, 512)  # Center of the array
-    cluster_size = 10  # Number of hot pixels
-    hot_pixel_value = 1e6  # Value to assign to hot pixels
+    # Master dark
+    if use_master_dark:
+        master_dark = darks.build_synthesized_dark(noise_maps_dataset, noise_map) 
+        master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
+        this_caldb.create_entry(master_dark)
+        master_dark_ref = master_dark.filepath
+    else:
+        # Simple dark for comparison
+        simple_dark_data = np.zeros_like(flat.data)
+        cluster_center = (naxis2 // 2, naxis1 // 2)
+        cluster_size = 10
+        hot_pixel_value = 8
 
-    # Generate 10 hot pixels around the cluster center
-    for i in range(cluster_size):
-        # Randomly offset the position from the cluster center
-        offset_x = np.random.randint(-2, 3)
-        offset_y = np.random.randint(-2, 3)
+        for _ in range(10):
+            # Randomly choose a center for each cluster
+            cluster_center = (np.random.randint(0, naxis2), np.random.randint(0, naxis1))
+
+            for _ in range(cluster_size):
+                # Randomly offset the position from the cluster center
+                offset_x = np.random.randint(-5, 6)
+                offset_y = np.random.randint(-5, 6)
+                x = cluster_center[0] + offset_x
+                y = cluster_center[1] + offset_y
+
+                # Ensure the pixel is within image bounds
+                if 0 <= x < naxis2 and 0 <= y < naxis1:
+                    simple_dark_data[x, y] = hot_pixel_value
         
-        # Set the pixel to be hot
-        x = cluster_center[0] + offset_x
-        y = cluster_center[1] + offset_y
-        simple_dark_data[x, y] = hot_pixel_value
-    simple_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-    simple_dark.save(filedir=bp_map_outputdir, filename = "simple_dark_mock.fits")
-    this_caldb.create_entry(simple_dark)
-    simple_dark_ref = simple_dark.filepath
- 
+        simple_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        simple_dark.save(filedir=bp_map_outputdir, filename = "dark_mock.fits")
+        this_caldb.create_entry(simple_dark)
+        master_dark_ref = simple_dark.filepath
+
     ####### Run the walker
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir)
 
-
-    # clean up by removing entry
+    # Clean up by removing entry
     this_caldb.remove_entry(noise_map)
     this_caldb.remove_entry(flat)
-    #this_caldb.remove_entry(master_dark)
-    this_caldb.remove_entry(simple_dark)
+    this_caldb.remove_entry(master_dark)
 
-    generated_bp_map_file = os.path.join(bp_map_outputdir, "simple_dark_mock_bad_pixel_map.fits")
+    generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
 
-    # Test generated BP map against TVAC data
+    # Test generated BP map against TVAC data or simple dark
     generated_bp_map_img = data.Image(generated_bp_map_file)
 
-    with fits.open(simple_dark_ref) as hdulist:
-        bp_map_ref_dat = hdulist[1].data
-        
-        diff = generated_bp_map_img.data - bp_map_ref_dat.data
+    if use_master_dark:
+        with fits.open(master_dark_ref) as hdulist:
+            dark_ref_dat = hdulist[1].data
 
-        #assert np.all(np.abs(diff) < 1e-5)
+            # Check for bad pixels
+            bad_pixels = generated_bp_map_img.data[generated_bp_map_img.data > 0]
+            
+            if bad_pixels.size > 0:
+                print(f"Bad pixel values identified: {bad_pixels}")
+            else:
+                print("No bad pixels identified")
+            
+            fig, axes = plt.subplots(2, 3, figsize=(15, 10))  # Create a 2x3 grid of subplots
+            
+            # Flatten the axes array for easier indexing
+            axes = axes.flatten()
 
-        # plotting script for debugging
-        import matplotlib.pylab as plt
-        fig = plt.figure(figsize=(10,3.5))
-        fig.add_subplot(131)
-        plt.imshow(generated_bp_map_img.data, vmin=-0.01, vmax=45, cmap="viridis")
-        plt.title("corgidrp generated")
-        plt.xlim([500, 560])
-        plt.ylim([475, 535])
+            # First subplot
+            im1 = axes[0].imshow(fpn_dat, vmin=-240, vmax=240, cmap="gray")
+            axes[0].set_title("FPN noise map")
+            axes[0].set_xlim([0, naxis1])
+            axes[0].set_ylim([0, naxis2])
+            fig.colorbar(im1, ax=axes[0])
 
-        fig.add_subplot(132)
-        plt.imshow(bp_map_ref_dat, vmin=-0.01, vmax=45, cmap="viridis")
-        plt.title("referenced (TVAC)")
-        plt.xlim([500, 560])
-        plt.ylim([475, 535])
+            # Second subplot
+            im2 = axes[1].imshow(cic_dat, vmin=0, vmax=0.02, cmap="gray")
+            axes[1].set_title("CIC noise map")
+            axes[1].set_xlim([0, naxis1])
+            axes[1].set_ylim([0, naxis2])
+            fig.colorbar(im2, ax=axes[1])
 
-        fig.add_subplot(133)
-        plt.imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
-        plt.title("difference")
-        plt.xlim([500, 560])
-        plt.ylim([475, 535])
+            # Third subplot
+            im3 = axes[2].imshow(dark_current_dat, vmin=0, vmax=0.003, cmap="gray")
+            axes[2].set_title("Dark current noise map")
+            axes[2].set_xlim([0, naxis1])
+            axes[2].set_ylim([0, naxis2])
+            fig.colorbar(im3, ax=axes[2])
 
-        plt.show()
+            # Fourth subplot (on the second row, left)
+            im4 = axes[3].imshow(dark_ref_dat, vmin=-240, vmax=240, cmap="gray")
+            axes[3].set_title("DRP-produced master dark")
+            axes[3].set_xlim([0, naxis1])
+            axes[3].set_ylim([0, naxis2])
+            fig.colorbar(im4, ax=axes[3])
 
+            # Fifth subplot (on the second row, right)
+            im5 = axes[4].imshow(generated_bp_map_img.data, vmin=0, vmax=8, cmap="gray")
+            axes[4].set_title("DRP-produced BP map")
+            axes[4].set_xlim([0, naxis1])
+            axes[4].set_ylim([0, naxis2])
+            fig.colorbar(im5, ax=axes[4])
+
+            # Hide the unused subplot (bottom-right corner)
+            axes[5].axis('off')
+
+            plt.tight_layout()
+            plt.show()
+    else:
+        with fits.open(dark_ref) as hdulist:
+            dark_ref_dat = hdulist[1].data
+            
+            diff = generated_bp_map_img.data - dark_ref_dat.data
+
+            assert np.all(np.abs(diff) < 1e-5)
+
+            fig, axes = plt.subplots(1, 3, figsize=(15, 5))  # Create a 1x3 grid of subplots
+
+            # First subplot
+            im1 = axes[0].imshow(generated_bp_map_img.data, cmap="viridis", norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=8))
+            axes[0].set_title("CorGI DRP generated bad pixel map")
+            axes[0].set_xlim([0, naxis1])
+            axes[0].set_ylim([0, naxis2])
+            fig.colorbar(im1, ax=axes[0])
+
+            # Second subplot
+            im2 = axes[1].imshow(dark_ref_dat, cmap="viridis", norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=8))
+            axes[1].set_title("Referenced dark file")
+            axes[1].set_xlim([0, naxis1])
+            axes[1].set_ylim([0, naxis2])
+            fig.colorbar(im2, ax=axes[1])
+
+            # Third subplot
+            im3 = axes[2].imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
+            axes[2].set_title("Difference")
+            axes[2].set_xlim([0, naxis1])
+            axes[2].set_ylim([0, naxis2])
+            fig.colorbar(im3, ax=axes[2])
+
+            plt.tight_layout()
+            plt.show()
 
 if __name__ == "__main__":
-    # Use arguments to run the test. Users can then write their own scripts
-    # that call this script with the correct arguments and they do not need
-    # to edit the file. The arguments use the variables in this file as their
-    # defaults allowing the use to edit the file if that is their preferred
-    # workflow.
+    # Use arguments to run the test.
     tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_Data"
     outputdir = thisfile_dir
 
-    ap = argparse.ArgumentParser(description="run the bad pixel map test")
+    ap = argparse.ArgumentParser(description="Run the bad pixel map test")
     ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
-                    help="directory to write results to [%(default)s]")
+                    help="Directory to write results to [%(default)s]")
+    ap.add_argument("-m", "--use_master_dark", action='store_true',
+                    help="Use master dark instead of simple dark")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
-    outputdir = args.outputdir
-    test_bp_map(tvacdata_dir, outputdir)
+
+    test_bp_map(args.tvacdata_dir, args.outputdir, args.use_master_dark)
