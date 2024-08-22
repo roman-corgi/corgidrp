@@ -12,8 +12,7 @@ import photutils.centroids as centr
 
 old_err_tracking = corgidrp.track_individual_errors
 
-
-def test_create_flatfield():
+def test_create_flatfield_neptune():
     """
     Generate mock input data and pass into flat division function
     """
@@ -52,7 +51,7 @@ def test_create_flatfield():
         if planet==target and band==filter: 
             flat_dataset.append(flat_dataset_all[i])
     onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=420, N=3, rad_mask=1.26,  planet_rad=50, n_pix=165, n_pad=302)
-   
+
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     
     
@@ -73,12 +72,12 @@ def test_create_flatfield():
     print(flatdivided_dataset[0].ext_hdr["HISTORY"])
     
     
-	# perform checks after the flat divison for one of the dataset
+    # perform checks after the flat divison for one of the dataset
     assert(flat_filename in str(flatdivided_dataset[0].ext_hdr["HISTORY"]))
 
 
-	
-	# check the propagated errors for one of the dataset
+    
+    # check the propagated errors for one of the dataset
     assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
     print("mean of all simulated data",np.mean(simflat_dataset.all_data))
     print("mean of all simulated data error",np.nanmean(simflat_dataset.all_err) )
@@ -93,9 +92,12 @@ def test_create_flatfield():
     assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-2))
     
     print(flatdivided_dataset[0].ext_hdr)
-    
-    #creating flatfield using uranus for band4 
 
+    return
+    
+     #creating flatfield using uranus for band4 
+    
+def test_create_flatfield_uranus():
     ###### create simulated data
     # check that simulated data folder exists, and create if not
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
@@ -128,7 +130,7 @@ def test_create_flatfield():
         if planet==target and band==filter: 
             flat_dataset.append(flat_dataset_all[i])
     onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=420, N=3, rad_mask=1.75,  planet_rad=65, n_pix=165, n_pad=302)
-   
+
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     
     
@@ -149,10 +151,10 @@ def test_create_flatfield():
     print(flatdivided_dataset[0].ext_hdr["HISTORY"])
     
     
-	# perform checks after the flat divison for one of the dataset
+    # perform checks after the flat divison for one of the dataset
     assert(flat_filename in str(flatdivided_dataset[0].ext_hdr["HISTORY"]))
-	
-	# check the propagated errors for one of the dataset
+    
+    # check the propagated errors for one of the dataset
     assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
     print("mean of all simulated data",np.mean(simflat_dataset.all_data))
     print("mean of all simulated data error",np.nanmean(simflat_dataset.all_err) )
@@ -169,6 +171,8 @@ def test_create_flatfield():
     print(flatdivided_dataset[0].ext_hdr)
     corgidrp.track_individual_errors = old_err_tracking
 
+    return
 
 if __name__ == "__main__":
-    test_create_flatfield()
+    test_create_flatfield_neptune()
+    test_create_flatfield_uranus()

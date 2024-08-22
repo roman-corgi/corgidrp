@@ -263,7 +263,7 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     return dataset
 
 
-def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=1,mask_size=180,snr=250,planet=None, band=None, radius=54, snr_constant=4.55):
+def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=None,mask_size=420,snr=250,planet=None, band=None, radius=None, snr_constant=None):
     """Performs raster scan of Neptune or Uranus images
     
     Args:
@@ -348,12 +348,12 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=50, n_dith=3, numfiles=36, radius=54, snr=250, snr_constant=4.95):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, numfiles=36, radius=None, snr=250, snr_constant=None):
     """
     Create simulated data to check the flat division
     
     Args:
-       dataset (corgidrp.data.Dataset): dataset of HST images of neptune or uranus
+       dataset (corgidrp.data.Dataset): dataset of HST images of neptune and uranus
        filedir (str): Full path to directory to save the raster scanned images.
        planet (str): neptune or uranus
        band (str): 1 or 4
