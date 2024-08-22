@@ -74,12 +74,13 @@ def autogen_recipe(filelist, outputdir, template=None):
         print("Input filelist is empty, using default handling to create recipe.")
         first_frame = None
     else:
-        # load the first frame to check what kind of data and identify recipe
-        first_frame = data.autoload(filelist[0])
+        # load the data to check what kind of recipe it is
+        dataset = data.Dataset(filelist)
+        first_frame = dataset[0]
 
     # if user didn't pass in template
     if template is None:
-        recipe_filename = guess_template(first_frame)
+        recipe_filename = guess_template(dataset)
 
         # load the template recipe
         recipe_filepath = os.path.join(recipe_dir, recipe_filename)
@@ -126,16 +127,17 @@ def autogen_recipe(filelist, outputdir, template=None):
     return recipe
 
 
-def guess_template(image):
+def guess_template(dataset):
     """
     Guesses what template should be used to process a specific image
 
     Args:
-        image (corgidrp.data.Image): an Image file to process
+        dataset (corgidrp.data.Dataset): a Dataset to process
 
     Returns:
         str: the best template filename
     """
+    image = dataset[0] # first image for convenience
 
     if image == None:                                   # May want to change this to do some error checking
         recipe_filename = "bp_map.json"

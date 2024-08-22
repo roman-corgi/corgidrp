@@ -121,7 +121,7 @@ End-to-end testing refers to processing data as one would when we get the real d
       - if you need to create mock L1 data, please do it in the script as well. 
       - See the existing tests in `tests/e2e_tests/` for how to structure this script. You should only need to write a single script.
   4. Test that the script runs successfully on your local machine and produces the expected output. Debug as necessary. When appropriate, test your results against those obtained from the II&T/TVAC pipeline using the same input data. 
-  5. Determine how resource intensive your recipe is. There are many ways to do this, but Mac/Linux users can run `/usr/bin/time -v python your_e2e_test.py`. Record "the percent of CPU this job got", "Elapsed (wall clock) time", and "Maximum resident set size (kbytes)". 
+  5. Determine how resource intensive your recipe is. There are many ways to do this, but Linux users can run `/usr/bin/time -v python your_e2e_test.py` and Mac userse can run `/usr/bin/time -l -h -p python <your_e2e_test.py>`. Record elapsed (wall clock) time, the percent of CPU this job got (only if parallelization was used), and total memory used (labelled "Maximum resident set size"). 
   6. Document your recipe on the "Corgi-DRP Implementation Document" on Confluence (see the big table in Section 2.0). You should fill out an entire row with your recipe. Under addition notes, note if your recipe took significant run time (> 1 minute) and significant memory (> 1 GB). 
   7. PR! 
 

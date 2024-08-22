@@ -8,22 +8,24 @@ import corgidrp
 import corgidrp.data as data
 import astropy.time as time
 
-column_names = [
-    "Filepath",
-    "Type",
-    "MJD",
-    "EXPTIME",
-    "Files Used",
-    "Date Created",
-    "Hash",
-    "DRPVERSN",
-    "OBSID",
-    "NAXIS1",
-    "NAXIS2",
-    "OPMODE",
-    "CMDGAIN",
-    "EXCAMT",
-]
+column_dtypes = {
+    "Filepath": str,
+    "Type": str,
+    "MJD": float,
+    "EXPTIME": float,
+    "Files Used": int,
+    "Date Created": float,
+    "Hash": str,
+    "DRPVERSN": str,
+    "OBSID": int,
+    "NAXIS1": int,
+    "NAXIS2": int,
+    "OPMODE": str,
+    "CMDGAIN": float,
+    "EXCAMT": float
+}
+
+column_names = list(column_dtypes.keys())
 
 labels = {data.Dark: "Dark",
           data.NonLinearityCalibration: "NonLinearityCalibration",
@@ -76,7 +78,7 @@ class CalDB:
         """
         Load/update db from filepath
         """
-        self._db = pd.read_csv(self.filepath)
+        self._db = pd.read_csv(self.filepath, dtype=column_dtypes)
         self._db['Hash'] = self._db['Hash'].astype(str)  # Ensure Hash is string and doesn't get cast to int 64
 
     def save(self):
@@ -183,7 +185,10 @@ class CalDB:
         # otherwise create new entry
         else:
             new_entry = pd.DataFrame([new_row], columns=self.columns)
-            self._db = pd.concat([self._db, new_entry], ignore_index=True)
+            if len(self._db) == 0:
+                self._db = new_entry
+            else:
+                self._db = pd.concat([self._db, new_entry], ignore_index=True)
 
         # save to disk to update changes
         if to_disk:
