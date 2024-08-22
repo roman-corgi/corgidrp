@@ -108,7 +108,7 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
             cluster_center = (np.random.randint(0, naxis2), np.random.randint(0, naxis1))
 
             for _ in range(cluster_size):
-                # Randomly offset the position from the cluster center
+                # Offset the position from the cluster center
                 offset_x = np.random.randint(-5, 6)
                 offset_y = np.random.randint(-5, 6)
                 x = cluster_center[0] + offset_x
@@ -118,13 +118,13 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
                 if 0 <= x < naxis2 and 0 <= y < naxis1:
                     simple_dark_data[x, y] = hot_pixel_value
         
-        simple_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-        simple_dark.save(filedir=bp_map_outputdir, filename = "dark_mock.fits")
-        this_caldb.create_entry(simple_dark)
-        master_dark_ref = simple_dark.filepath
+        master_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        master_dark.save(filedir=bp_map_outputdir, filename = "dark_mock.fits")
+        this_caldb.create_entry(master_dark)
+        master_dark_ref = master_dark.filepath
 
     ####### Run the walker
-    walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir)
+    walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
     # Clean up by removing entry
     this_caldb.remove_entry(noise_map)
@@ -148,7 +148,7 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
             else:
                 print("No bad pixels identified")
             
-            fig, axes = plt.subplots(2, 3, figsize=(15, 10))  # Create a 2x3 grid of subplots
+            fig, axes = plt.subplots(2, 3, figsize=(15, 10))  
             
             # Flatten the axes array for easier indexing
             axes = axes.flatten()
@@ -194,7 +194,7 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
             plt.tight_layout()
             plt.show()
     else:
-        with fits.open(dark_ref) as hdulist:
+        with fits.open(master_dark_ref) as hdulist:
             dark_ref_dat = hdulist[1].data
             
             diff = generated_bp_map_img.data - dark_ref_dat.data
