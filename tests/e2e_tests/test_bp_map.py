@@ -238,11 +238,11 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
 
 if __name__ == "__main__":
     # Use arguments to run the test.
-    TVACDATA_DIR = "/Users/jmilton/Documents/CGI/CGI_Data"
+    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_Data"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="Run the bad pixel map test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=TVACDATA_DIR,
+    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="Directory to write results to [%(default)s]")
@@ -250,4 +250,4 @@ if __name__ == "__main__":
                     help="Use master dark instead of simple dark")
     args = ap.parse_args()
 
-    test_bp_map(args.TVACDATA_DIR, args.outputdir, args.use_master_dark)
+    test_bp_map(args.tvacdata_dir, args.outputdir, args.use_master_dark)
