@@ -1,5 +1,6 @@
 import argparse
 import os
+import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
@@ -12,6 +13,7 @@ from corgidrp import walker
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
+@pytest.mark.parametrize("use_master_dark", [True, False])
 def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
     """
     Generate and test the bad pixel map using TVAC data.
