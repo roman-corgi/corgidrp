@@ -35,6 +35,9 @@ def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac 
     #Combined the two maps 
     combined_badpixels = np.bitwise_or(hot_warm_pixels,dead_pixels)
 
+    # Convert all values in the bad pixel map to either 0 or 1, per the FDD
+    combined_badpixels = np.where(combined_badpixels > 0, 1, 0)
+
     dark_hdr = master_dark.pri_hdr.copy()
     dark_ext_hdr = master_dark.ext_hdr.copy()
 
