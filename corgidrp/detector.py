@@ -535,12 +535,12 @@ def flatfield_residuals(images,planet=None, N=3):
      dividing from matched filters
 
      Args:
-    	images (np.array): 3D Array of cropped neptune or uranus image frames
+    	images (np.array): 3D Array of cropped neptune or uranus image frames to be used to make matched filter
     	planet (str): name of the planet uranus or neptune
-        N (int): number of images to be grouped. defaults to 3 for both Neptune and uranus. (If we use different number of dithers for neptune and uranus, option is provided to change N)
+        N (int): number of images to be grouped. defaults to 3 for both Neptune and uranus. (If we use different number of dithers for neptune and uranus, N could be changesd
 
      Returns:
-    	matched_residuals (np.array): residual image frames of neptune or uranus divided by matched filter
+    	matched_residuals (np.array): Residual image frames of neptune or uranus divided by matched filter
 	"""
     
     raster_images = np.array(images)
@@ -558,7 +558,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     	and associated error
 
     	Args:
-        	residual_images (np.array): residual image frames of neptune and uranus 
+        	residual_images (np.array): Residual images frames divided by the mnatched filter of neptune and uranus 
         	cent (np.array): centroid of the image frames
         	planet (str):   name of the planet neptune or uranus
         	band (str):  band of the observation band1 or band4
@@ -570,15 +570,18 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
 
         	
     	Returns:
-        	full_qe (np.array): ideal flat field
+        	full_qe (np.array): ideal flat field with mean of mean=1 and std=0.03
         	full_residuals (np.array): flat field created from uranus or neptune images
-        	std_resel (np.array):  Error of the flat field
+        	std_resel (np.array):  Error in the flatfield estimated using the ideal flat field
     """
     n = im_size
     full_qe=np.random.normal(1,.03,(n,n))
     full_residuals = np.zeros((n,n))
     if planet_rad==None:
-         planet_rad=54
+        if planet=='neptune':
+             planet_rad=54
+        elif planet=='uranus':
+             planet_rad=65
     
     if rad_mask==None:
          if band==1:
@@ -631,11 +634,11 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     return (full_qe,full_residuals,std_resel)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=420,N=3,rad_mask=1.25,  planet_rad=54, n_pix=165, n_pad=302):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=420,N=3,rad_mask=None,  planet_rad=None, n_pix=165, n_pad=302):
     """Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
     
         Args:
-            dataset (corgidrp.data.Dataset): a dataset of Image frames (L2a-level)
+            dataset (corgidrp.data.Dataset): a dataset of image frames that are raster scanned (L2a-level)
             planet (str): neptune or uranus
             band (str): 1 or 4
             up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
@@ -651,6 +654,24 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=4
     		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
     		
 	"""
+    if planet==None:
+         planet=dataset[0].pri_hdr['TARGET']
+    if band==None:
+         band=dataset[0].pri_hdr['FILTER']
+    
+    if planet_rad==None:
+        if planet=='neptune':
+             planet_rad=50
+        elif planet=='uranus':
+             planet_rad=65
+    
+    if rad_mask==None:
+         if band==1:
+              rad_mask==1.25
+         elif band==4:
+            rad_mask=1.75
+    
+    
     smooth_images=[];raster_images_cent=[];cent=[]; act_cents=[];frames=[];
     for j in range(len(dataset)):
         planet_image=dataset[j].data
@@ -664,7 +685,9 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=4
         yc = int(centroid[1])
         up_radius=up_radius
         smooth_images.append(planet_image)
+        # cropping the raster scanned images
         raster_images_cent.append(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius])
+        #centroid of the cropped images
         cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
         frame=data.Image(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
