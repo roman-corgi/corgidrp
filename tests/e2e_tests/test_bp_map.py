@@ -1,26 +1,35 @@
 import argparse
 import os
 import numpy as np
-import astropy.io.fits as fits
-import corgidrp.data as data
-import corgidrp.caldb as caldb
-import corgidrp.detector as detector
-import corgidrp.darks as darks
-import corgidrp.walker as walker
 import matplotlib.pyplot as plt
-import matplotlib.colors as colors
+from matplotlib import colors
+from astropy.io import fits
+from corgidrp import data
+from corgidrp import caldb
+from corgidrp import detector
+from corgidrp import darks
+from corgidrp import walker
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
 def test_bp_map(tvacdata_path, output_path, use_master_dark):
+    """
+    Generate and test the bad pixel map using TVAC data.
 
+    Args:
+        tvacdata_path (str): Path to the TVAC data directory.
+        output_path (str): Directory to save the output files.
+        use_master_dark (bool): Whether to use a master dark or a simple dark.
+
+    Returns:
+        None
+    """
     cals_dir = os.path.join(tvacdata_path, "Cals")
 
     # Make output directory if needed
     bp_map_outputdir = os.path.join(output_path, "bp_map_output")
     if not os.path.exists(bp_map_outputdir):
         os.mkdir(bp_map_outputdir)
-    
     dark_current_filename = "dark_current_20240322.fits"
     fpn_filename = "fpn_20240322.fits"
     cic_filename = "cic_20240322.fits"
@@ -37,12 +46,14 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
     input_image_filelist = []
 
     ## Handle header issues with TVAC files
-    # Need to change this to use appropriate values for KGAIN, for now setting them all the same. The master dark calculation checks 
-    # to make sure KGAIN is the the same for every input noise map.
+    # Need to change this to use appropriate values for KGAIN, for now setting them all the same.
+    # Master dark calculation checks to make sure KGAIN is the the same for every input noise map.
     for file in noise_maps_filelist:
         with fits.open(file, mode='update') as hdulist:
-            pri_hdr = hdulist[0].header  # Primary header from HDU[0]
-            ext_hdr = hdulist[1].header if len(hdulist) > 1 else None  # Extension header from HDU[1] if it exists
+            # Primary header from HDU[0]
+            pri_hdr = hdulist[0].header
+            # Extension header from HDU[1] if it exists
+            ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
             ext_hdr["KGAIN"] = 0
 
     noise_maps_dataset = data.Dataset(noise_maps_filelist)
@@ -64,7 +75,8 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
     with fits.open(dark_current_path) as hdulist:
         dark_current_dat = hdulist[0].data
     noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_current_dat])
-    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'],
+                              detector.detector_areas['SCI']['frame_cols']))
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
@@ -76,7 +88,8 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=noise_maps_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=bp_map_outputdir, filename="tvac_detnoisemaps.fits")         # card is too long, comment will be truncated warning
+    # card is too long, comment will be truncated warning
+    noise_map.save(filedir=bp_map_outputdir, filename="tvac_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
     ## Flat field
@@ -85,14 +98,13 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=flats_dataset)
     flat.save(filedir=bp_map_outputdir, filename="tvac_ones_flat.fits")
     this_caldb.create_entry(flat)
-    
     with fits.open(dark_current_path) as hdulist:
         naxis1 = hdulist[0].header['NAXIS1']  # X-axis size
         naxis2 = hdulist[0].header['NAXIS2']  # Y-axis size
 
     # Master dark
     if use_master_dark:
-        master_dark = darks.build_synthesized_dark(noise_maps_dataset, noise_map) 
+        master_dark = darks.build_synthesized_dark(noise_maps_dataset, noise_map)
         master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
         this_caldb.create_entry(master_dark)
         master_dark_ref = master_dark.filepath
@@ -117,7 +129,6 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
                 # Ensure the pixel is within image bounds
                 if 0 <= x < naxis2 and 0 <= y < naxis1:
                     simple_dark_data[x, y] = hot_pixel_value
-        
         master_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
         master_dark.save(filedir=bp_map_outputdir, filename = "dark_mock.fits")
         this_caldb.create_entry(master_dark)
@@ -142,14 +153,11 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
 
             # Check for bad pixels
             bad_pixels = generated_bp_map_img.data[generated_bp_map_img.data > 0]
-            
             if bad_pixels.size > 0:
                 print(f"Bad pixel values identified: {bad_pixels}")
             else:
                 print("No bad pixels identified")
-            
-            fig, axes = plt.subplots(2, 3, figsize=(15, 10))  
-            
+            fig, axes = plt.subplots(2, 3, figsize=(15, 10))
             # Flatten the axes array for easier indexing
             axes = axes.flatten()
 
@@ -196,7 +204,6 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
     else:
         with fits.open(master_dark_ref) as hdulist:
             dark_ref_dat = hdulist[1].data
-            
             diff = generated_bp_map_img.data - dark_ref_dat.data
 
             #assert np.all(np.abs(diff) < 1e-5)
@@ -204,14 +211,16 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
             fig, axes = plt.subplots(1, 3, figsize=(15, 5))  # Create a 1x3 grid of subplots
 
             # First subplot
-            im1 = axes[0].imshow(generated_bp_map_img.data, cmap="viridis", norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=1))
+            im1 = axes[0].imshow(generated_bp_map_img.data, cmap="viridis",
+                                 norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=1))
             axes[0].set_title("CorGI DRP generated bad pixel map")
             axes[0].set_xlim([0, naxis1])
             axes[0].set_ylim([0, naxis2])
             fig.colorbar(im1, ax=axes[0])
 
             # Second subplot
-            im2 = axes[1].imshow(dark_ref_dat, cmap="viridis", norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=1))
+            im2 = axes[1].imshow(dark_ref_dat, cmap="viridis",
+                                 norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=1))
             axes[1].set_title("Referenced dark file")
             axes[1].set_xlim([0, naxis1])
             axes[1].set_ylim([0, naxis2])
@@ -229,11 +238,11 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
 
 if __name__ == "__main__":
     # Use arguments to run the test.
-    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_Data"
+    TVACDATA_DIR = "/Users/jmilton/Documents/CGI/CGI_Data"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="Run the bad pixel map test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--tvacdata_dir", default=TVACDATA_DIR,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="Directory to write results to [%(default)s]")
@@ -241,4 +250,4 @@ if __name__ == "__main__":
                     help="Use master dark instead of simple dark")
     args = ap.parse_args()
 
-    test_bp_map(args.tvacdata_dir, args.outputdir, args.use_master_dark)
+    test_bp_map(args.TVACDATA_DIR, args.outputdir, args.use_master_dark)
