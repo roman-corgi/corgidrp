@@ -12,7 +12,7 @@ from corgidrp import walker
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
-def test_bp_map(tvacdata_path, output_path, use_master_dark):
+def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
     """
     Generate and test the bad pixel map using TVAC data.
 
@@ -27,7 +27,7 @@ def test_bp_map(tvacdata_path, output_path, use_master_dark):
     cals_dir = os.path.join(tvacdata_path, "Cals")
 
     # Make output directory if needed
-    bp_map_outputdir = os.path.join(output_path, "bp_map_output")
+    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
     if not os.path.exists(bp_map_outputdir):
         os.mkdir(bp_map_outputdir)
     dark_current_filename = "dark_current_20240322.fits"
