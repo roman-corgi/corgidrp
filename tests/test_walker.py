@@ -287,8 +287,72 @@ def test_skip_missing_calib():
     corgidrp.skip_missing_cal_steps = old_setting
     corgidrp.caldb_filepath = old_caldb_filepath
 
+def test_jit_calibs():
+    """
+    Tests defining calibrations just in time
+    """
+    old_setting = corgidrp.jit_calib_id
+    corgidrp.jit_calib_id = True
+
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+
+    # create simulated data
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    # simulate the expected CGI naming convention
+    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+
+    # index the sample nonlinearity correction that we need for processing
+    new_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    # fake the headers because this frame doesn't have the proper headers
+    prihdr, exthdr = mocks.create_default_headers("SCI")
+    new_nonlinearity.pri_hdr = prihdr
+    new_nonlinearity.ext_hdr = exthdr
+    new_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
+    new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
+    mycaldb = caldb.CalDB()
+    mycaldb.create_entry(new_nonlinearity)
+
+    CPGS_XML_filepath = "" # not yet implemented
+
+    # generate recipe and check we haven't defined anyhting yet
+    template_filepath = os.path.join(os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2a_basic.json")
+    template_recipe = json.load(open(template_filepath, "r"))
+    recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
+
+    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] == 'AUTOMATIC' 
+
+    walker.run_recipe(recipe)
+
+    # check that the output dataset is saved to the output dir
+    # filenames have been updated to L2a. 
+    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a_")) for frame in l1_dataset]
+    output_dataset = data.Dataset(output_files)
+    assert len(output_dataset) == len(l1_dataset) # check the same number of files
+    
+    # check that the recipe is saved into the header with specified calibrations
+    new_recipe = json.loads(output_dataset[0].ext_hdr['RECIPE'])
+    assert recipe['steps'][2]['calibs']['NonLinearityCalibration'] != 'AUTOMATIC' 
+
+    # clean up
+    mycaldb.remove_entry(new_nonlinearity)
+
+    corgidrp.jit_calib_id = old_setting
+
+
 if __name__ == "__main__":#
-    test_skip_missing_calib()
+    test_jit_calibs()
 
 
 
