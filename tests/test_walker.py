@@ -226,8 +226,69 @@ def test_saving():
     this_caldb.remove_entry(new_nonlinearity)
 
 
+
+def test_skip_missing_calib():
+    """
+    Tests the option of skipping steps with missing calibrations
+    """
+    # turn on skipping
+    old_setting = corgidrp.skip_missing_cal_steps
+    corgidrp.skip_missing_cal_steps = True
+
+    # use an empty test caldb
+    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    if not os.path.exists(calibdir):
+        os.mkdir(calibdir)
+    testcaldb_filepath = os.path.join(calibdir, "empty_caldb.csv")
+    old_caldb_filepath = corgidrp.caldb_filepath
+    corgidrp.caldb_filepath = testcaldb_filepath
+
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+
+    # create simulated data
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    # simulate the expected CGI naming convention
+    fname_template = "CGI_L1_200_0200001001001100001_20270101T120000_{0:03d}.fits"
+    for i, image in enumerate(l1_dataset):
+        image.filename = fname_template.format(i)
+    l1_dataset.save(filedir=datadir)
+    filelist = [frame.filepath for frame in l1_dataset]
+
+
+    ### Test that we are skipping the steps without calibrations
+    recipe = walker.autogen_recipe(filelist, outputdir)
+
+    assert recipe['name'] == 'l1_to_l2b'
+    assert recipe['template'] == False
+
+    assert recipe['steps'][2]['skip'] # nonlinearity
+    assert recipe['steps'][6]['skip'] # kgain
+    
+    # cut down to recipe to just the first 5 steps (to the first save)
+    recipe['steps'] = recipe['steps'][:5]
+
+    # run with all the ksips
+    walker.run_recipe(recipe, save_recipe_file=False)
+
+    # check that the output dataset is saved to the output dir
+    # filenames have been appended with a suffix
+    output_files = [os.path.join(outputdir, "CGI_L2a_200_0200001001001100001_20270101T120000_{0:03d}.fits".format(i)) for i in range(len(l1_dataset))]
+    output_dataset = data.Dataset(output_files)
+    assert len(output_dataset) == len(l1_dataset) # check the same number of files
+
+    assert 'non-linearity' not in output_dataset[0].ext_hdr['HISTORY'][-2].lower()
+
+    corgidrp.skip_missing_cal_steps = old_setting
+    corgidrp.caldb_filepath = old_caldb_filepath
+
 if __name__ == "__main__":#
-    test_saving()
+    test_skip_missing_calib()
 
 
 
