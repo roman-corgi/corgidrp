@@ -115,7 +115,7 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
         caldb (corgidrp.CalDB): calibration database conection
         ref_frame (corgidrp.Image): a reference frame to use to determine the optimal calibration
     
-    Retuns:
+    Returns:
         dict: the step, but with calibration files filled in
     """
     if "calibs" not in step:
