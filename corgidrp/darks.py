@@ -461,8 +461,11 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
                             'same number of frames and frame shape.')
         try: # if EM gain measured directly from frame TODO change hdr name if necessary
             EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
-        except: # use commanded gain otherwise TODO change hdr name if necessary
-            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['CMDGAIN'])
+        except:
+            try: # use applied EM gain if available
+                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
+            except: # use commanded gain otherwise
+                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['CMDGAIN'])
         exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
         cmdgain = datasets[i].frames[0].ext_hdr['CMDGAIN']
         kgain = datasets[i].frames[0].ext_hdr['KGAIN']
@@ -792,10 +795,13 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
-        try:
+        try:  # use measured EM gain if available TODO change hdr name if necessary
             g = dataset.frames[0].ext_hdr['EMGAIN_M']
         except:
-            g = dataset.frames[0].ext_hdr['CMDGAIN']
+            try: # use applied EM gain if available
+                g = dataset.frames[0].ext_hdr['EMGAIN_A']
+            except: # otherwise, use commanded EM gain
+                g = dataset.frames[0].ext_hdr['CMDGAIN']
         t = dataset.frames[0].ext_hdr['EXPTIME']
 
         rows = detector_regions['SCI']['frame_rows']
@@ -838,7 +844,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr['NAXIS1'] = Fd.shape[0]
         exthdr['NAXIS2'] = Fd.shape[1]
         exthdr['DATATYPE'] = 'Dark'
-        exthdr['CMDGAIN'] = g
+        exthdr['CMDGAIN'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
         # wipe clean so that the proper documenting occurs for dark
         exthdr.pop('DRPNFILE')

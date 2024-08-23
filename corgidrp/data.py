@@ -250,7 +250,7 @@ class Image():
         dq (np.array): 2-D data quality, 0: good. Other values track different causes for bad pixels and other pixel-level effects in accordance with the DRP implementation document.x
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
-        hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that contains any other extension types. 
+        hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that contains any other extension types.
 
     Attributes:
         data (np.array): 2-D data for this Image
@@ -269,7 +269,7 @@ class Image():
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
-                
+
                 #Pop out the primary header
                 self.pri_hdr = hdulist.pop(0).header
                 #Pop out the image extension
@@ -302,7 +302,7 @@ class Image():
                     if np.shape(self.data) != np.shape(dq):
                         raise ValueError("The shape of dq is {0} while we are expecting shape {1}".format(dq.shape, self.data.shape))
                     self.dq = dq
-                
+
                 elif "DQ" in self.hdu_names:
                     dq_hdu = hdulist.pop("DQ")
                     self.dq = dq_hdu.data
@@ -313,7 +313,7 @@ class Image():
 
                 if input_hdulist is not None:
                     self.hdu_list = input_hdulist
-                else: 
+                else:
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
                     self.hdu_list = hdulist
 
@@ -361,25 +361,25 @@ class Image():
             #The default hdu extensions
             self.hdu_names = ["ERR", "DQ"]
 
-            #Take the input hdulist or make a blank one. 
+            #Take the input hdulist or make a blank one.
             if input_hdulist is not None:
                 self.hdu_list = input_hdulist
-                #Keep track of the names 
+                #Keep track of the names
                 for hdu in input_hdulist:
                     self.hdu_names.append(hdu.name)
-            else: 
+            else:
                 self.hdu_list = fits.HDUList()
 
-            
-            
+
+
             #A list of extensions
-            
+
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
             self.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
 
-        
+
         # we assume that if the err_hdr and dq_hdr is given as parameter they supersede eventual existing err_hdr and dq_hdr
         if err_hdr is not None:
             self.err_hdr = err_hdr
@@ -476,7 +476,7 @@ class Image():
             new_err = self.err
             new_dq = self.dq
             new_hdulist = self.hdu_list
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, 
+        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq,
                         input_hdulist = new_hdulist, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
 
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
@@ -582,7 +582,7 @@ class Image():
 
         if name in self.hdu_names:
             raise ValueError("Extension name already exists in HDU list")
-        else: 
+        else:
             self.hdu_list.append(new_hdu)
 
 
@@ -617,7 +617,7 @@ class Dark(Image):
                 self._record_parent_filenames(input_dataset)
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
+            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
@@ -813,16 +813,16 @@ class KGain(Image):
         if self.data.shape != (1,1):
             raise ValueError('The KGain calibration data should be just one float value')
 
-        self._kgain = self.data[0,0] 
+        self._kgain = self.data[0,0]
         self._kgain_error = self.err[0,0]
-        
+
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
                 self.ptc_hdr = hdulist[3].header
                 # ptc data is in FITS extension
                 self.ptc = hdulist[3].data
-        
+
         else:
             if ptc is not None:
                 self.ptc = ptc
@@ -832,7 +832,7 @@ class KGain(Image):
                 self.ptc_hdr = ptc_hdr
             else:
                 self.ptc_hdr = fits.Header()
-        
+
         self.ptc_hdr["EXTNAME"] = "PTC"
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
@@ -867,11 +867,11 @@ class KGain(Image):
     @property
     def value(self):
         return self._kgain
-    
+
     @property
     def error(self):
         return self._kgain_error
-    
+
     def copy(self, copy_data = True):
         """
         Make a copy of this KGain file. including data and headers.
@@ -892,9 +892,9 @@ class KGain(Image):
             new_data = self.data # this is just pointer referencing
             new_ptc = self.ptc
             new_err = np.copy(self.err)
-        
+
         new_kg = KGain(new_data, err = new_err, ptc = new_ptc, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err_hdr = self.err_hdr.copy(), ptc_hdr = self.ptc_hdr.copy())
-        
+
         # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
         new_kg.filename = self.filename
         new_kg.filedir = self.filedir
@@ -902,7 +902,7 @@ class KGain(Image):
         # update DRP version tracking
         self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-        
+
         return new_kg
 
 
@@ -1260,13 +1260,13 @@ class DetectorParams(Image):
 
 class AstrometricCalibration(Image):
     """
-    Class for astrometric calibration file. 
-    
+    Class for astrometric calibration file.
+
     Args:
         data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        
+
     Attrs:
         boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
         platescale (float): the platescale value in [mas/pixel]
@@ -1284,7 +1284,7 @@ class AstrometricCalibration(Image):
             self.boresight = self.data[:2]
             self.platescale = self.data[2]
             self.northangle = self.data[3]
-            
+
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
         if ext_hdr is not None:
@@ -1297,14 +1297,14 @@ class AstrometricCalibration(Image):
 
             # add to history
             self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
-            
+
             # give a default filename
             self.filename = "AstrometricCalibration.fits"
 
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
-            raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
-        
+            raise ValueError("File that was loaded was not an AstrometricCalibration file.")
+
 datatypes = { "Image" : Image,
              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,

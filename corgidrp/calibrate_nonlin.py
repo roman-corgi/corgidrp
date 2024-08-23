@@ -22,7 +22,7 @@ nonlin_params = {
     'rowroi2': 736,
     'colroi1': 1385,
     'colroi2': 1846,
-     
+
     # background ROIs
     'rowback11': 20,
     'rowback12': 301,
@@ -32,16 +32,16 @@ nonlin_params = {
     'colback12': 2001,
     'colback21': 1200,
     'colback22': 2001,
-     
+
     # minimum exposure time, s
     'min_exp_time': 0,
     'num_bins': 50,
     'min_bin': 200,
-     
+
     # factor to mutiply bin_edge values when making mask
     'min_mask_factor': 1.1,
     }
- 
+
 def check_nonlin_params(
     ):
     """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
@@ -77,7 +77,7 @@ def check_nonlin_params(
         raise ValueError('Missing parameter in directory pointer YAML file.')
     if 'min_mask_factor' not in nonlin_params:
         raise ValueError('Missing parameter in directory pointer YAML file.')
-    
+
     if not isinstance(nonlin_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
     if not isinstance(nonlin_params['rowroi2'], (float, int)):
@@ -110,7 +110,7 @@ def check_nonlin_params(
         raise TypeError('min_bin is not a number')
     if not isinstance(nonlin_params['min_mask_factor'], (float, int)):
         raise TypeError('min_mask_factor is not a number')
-    
+
 
 class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
@@ -123,52 +123,52 @@ def calibrate_nonlin(dataset_nl,
                      make_plot=True, plot_outdir='figures', show_plot=False,
                      verbose=False):
     """
-    Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
-    frames ranging over exposure time, each sub-stack having at least 1 illuminated 
-    pupil SCI-sized L1 frame for each exposure time, this function processes the 
-    frames to create a nonlinearity table. A mean pupil array is created from a 
-    separate stack of frames of constant exposure time and used to make a mask; 
-    the mask is used to select pixels in each frame in the large array of stacks 
+    Given a large array of stacks with 1 or more EM gains, and sub-stacks of
+    frames ranging over exposure time, each sub-stack having at least 1 illuminated
+    pupil SCI-sized L1 frame for each exposure time, this function processes the
+    frames to create a nonlinearity table. A mean pupil array is created from a
+    separate stack of frames of constant exposure time and used to make a mask;
+    the mask is used to select pixels in each frame in the large array of stacks
     in order to calculate its mean signal.
 
     The frames are bias-subtracted.
 
-    Two sub-stacks/groups of frames at each EM gain value contain noncontiguous 
-    frames with the same (repeated) exposure time, taken near the start and end 
-    of the frame sequence. Their mean signals are computed and used to correct for 
-    illumination brightness/sensor sensitivity drifts for all the frames for a 
-    given EM gain, depending on when the frames were taken. The repeated exposure 
-    time frames should only be repeated once (as opposed to 3 times, etc) and 
+    Two sub-stacks/groups of frames at each EM gain value contain noncontiguous
+    frames with the same (repeated) exposure time, taken near the start and end
+    of the frame sequence. Their mean signals are computed and used to correct for
+    illumination brightness/sensor sensitivity drifts for all the frames for a
+    given EM gain, depending on when the frames were taken. The repeated exposure
+    time frames should only be repeated once (as opposed to 3 times, etc) and
     other sets of exposure times for each EM gain should not be repeated.
-    Note, it is assumed that the frames for the large array of stacks are 
-    collected in a systematic way, such that frames having the same exposure 
-    time for a given EM gain are collected contiguously (with the exception of 
-    the repeated group of frames noted above). The frames within each EM gain 
-    group must also be time ordered. For best results, the mean signal in the 
-    pupil region for the longest exposure time at each EM gain setting should 
+    Note, it is assumed that the frames for the large array of stacks are
+    collected in a systematic way, such that frames having the same exposure
+    time for a given EM gain are collected contiguously (with the exception of
+    the repeated group of frames noted above). The frames within each EM gain
+    group must also be time ordered. For best results, the mean signal in the
+    pupil region for the longest exposure time at each EM gain setting should
     be between 8000 and 10000 DN.
-    A linear fit is applied to the corrected mean signals versus exposure time. 
-    Relative gain values are calculated from the ratio of the mean signals 
+    A linear fit is applied to the corrected mean signals versus exposure time.
+    Relative gain values are calculated from the ratio of the mean signals
     to the linear fit. Nonlinearity is then calculated from the inverse of
-    the relative gain and output as an array. The nonlinearity values, along with 
-    the actual EM gain for each column and mean counts in DN for each row, are 
-    returned as two arrays. One array contains the column headers with 
-    actual/measured EM gain, and the other array contains the means in DN and the 
-    nonlinearity values. The mean values start with min_write and run through 
+    the relative gain and output as an array. The nonlinearity values, along with
+    the actual EM gain for each column and mean counts in DN for each row, are
+    returned as two arrays. One array contains the column headers with
+    actual/measured EM gain, and the other array contains the means in DN and the
+    nonlinearity values. The mean values start with min_write and run through
     max_write.
-    
+
     Args:
-      dataset_nl (corgidrp.Dataset): dataset, which is implicitly 
-        subdivided into smaller ranges of grouped frames. The frames are EXCAM 
-        illuminated pupil L1 SCI frames. There must be one or more unique EM 
-        gain values and at least 20 unique exposure times for each EM gain. The 
-        number of frames for each EM gain can vary. The size of dataset_cal is: 
-        Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having 
+      dataset_nl (corgidrp.Dataset): dataset, which is implicitly
+        subdivided into smaller ranges of grouped frames. The frames are EXCAM
+        illuminated pupil L1 SCI frames. There must be one or more unique EM
+        gain values and at least 20 unique exposure times for each EM gain. The
+        number of frames for each EM gain can vary. The size of dataset_cal is:
+        Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having
         EM gain value g, and the sum is over g. Each substack of dataset_cal must
         have a group of frames with a repeated exposure time. In addition, there's
         a set of at least 30 frames used to generate a mean frame. These frames
         have the same exp time, such that the mean signal in the pupil regions
-        is a few thousand DN, which helps identify the pixels containing the 
+        is a few thousand DN, which helps identify the pixels containing the
         pupil image. They also have unity EM gain. These frames are
         identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
       n_cal (int):
@@ -208,14 +208,14 @@ def calibrate_nonlin(dataset_nl,
       show_plot (bool): (Optional) display the plots. Default is False.
       verbose (bool): (Optional) display various diagnostic print messages.
         Default is False.
-    
+
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
         for input signal level (DN) in rows and EM gain values in columns. The
         input signal in DN is the first column. Signal values start with min_write
         and run through max_write in steps of 20 DN.
     """
-    # dataset_nl.all_data must be 3-D 
+    # dataset_nl.all_data must be 3-D
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
     # cast dataset objects into np arrays and retrieve aux information
@@ -274,7 +274,7 @@ def calibrate_nonlin(dataset_nl,
     if len(mean_frame_arr) < n_mean:
         raise CalNonlinException(f'Number of frames in mean_frame_arr must '
                 'be at least {n_mean}.')
-    
+
     check.real_array(exp_arr, 'exp_arr', TypeError)
     check.oneD_array(exp_arr, 'exp_arr', TypeError)
     if (exp_arr <= min_exp_time).any():
@@ -293,7 +293,7 @@ def calibrate_nonlin(dataset_nl,
         index = index + len_list[x]
     if not r_flag:
         raise CalNonlinException('each substack of cal_arr must have a '
-            'group of frames with a repeated exposure time.')   
+            'group of frames with a repeated exposure time.')
     if len(len_list) != len(actual_gain_arr):
         raise CalNonlinException('Length of actual_gain_arr be the same as the '
                                  'length of len_list.')
@@ -341,42 +341,42 @@ def calibrate_nonlin(dataset_nl,
             os.mkdir(plot_outdir)
             if verbose:
                 print('Output directory for figures created in ', os.getcwd())
-    
+
     ######################### start of main code #############################
-    
+
     # Define pixel ROIs
     rowroi = list(range(rowroi1, rowroi2))
     colroi = list(range(colroi1, colroi2))
-    
+
     # Background subtraction regions
     rowback1 = list(range(rowback11, rowback12))
     rowback2 = list(range(rowback21, rowback22))
     colback1 = list(range(colback11, colback12))
     colback2 = list(range(colback21, colback22))
-    
+
     ####################### create good_mean_frame ###################
-    
+
     nrow = len(mean_frame_arr[0])
     ncol = len(mean_frame_arr[0][0])
-    
+
     good_mean_frame = np.zeros((nrow, ncol))
     nFrames = len(mean_frame_arr)
 
     good_mean_frame = good_mean_frame / nFrames
-    
+
     mean_frame_index = 0
     # Loop over the mean_frame_arr frames
     for i in range(nFrames):
         frame = mean_frame_arr[i]
-    
+
         # Add this frame to the cumulative good_mean_frame
         good_mean_frame += frame
         mean_frame_index += 1
 
     # Calculate the average of the frames if required
     if mean_frame_index > 0:
-        good_mean_frame /= mean_frame_index 
-    
+        good_mean_frame /= mean_frame_index
+
     # plot, if requested
     if make_plot:
         fname = 'non_lin_good_frame'
@@ -394,11 +394,11 @@ def calibrate_nonlin(dataset_nl,
         if show_plot:
             plt.show()
         plt.close()
-    
+
     # Convert to numpy arrays if they are not already
     rowroi = np.array(rowroi)
     colroi = np.array(colroi)
-    
+
     if make_plot:
         fname = 'non_lin_mean_frame_histogram'
         # Plot a histogram of the values within the specified ROI
@@ -415,9 +415,9 @@ def calibrate_nonlin(dataset_nl,
         if show_plot:
             plt.show()
         plt.close()
-    
+
     # find minimum in histogram
-    # 1000-1500 DN recommended when the peak of histogram of  
+    # 1000-1500 DN recommended when the peak of histogram of
     # "good_mean_frame" is between 2000 and 4000 DN)
     roi_values = good_mean_frame[rowroi[:, None], colroi]
     hst_counts, hist_edges = np.histogram(roi_values.flatten(),bins=num_bins)
@@ -439,10 +439,10 @@ def calibrate_nonlin(dataset_nl,
     min_count_index_within_range = np.argmin(filtered_counts)
     # Get the corresponding bin edge value and increase by min_mask_factor
     min_mask = min_mask_factor*filtered_bin_edges[min_count_index_within_range]
-    
+
     # Create the mask
     mask = np.where(good_mean_frame < min_mask, 0, 1)
-    
+
     # plot, if requested
     if make_plot:
         fname = 'non_lin_mask'
@@ -457,7 +457,7 @@ def calibrate_nonlin(dataset_nl,
         if show_plot:
             plt.show()
         plt.close()
-        
+
         fname = 'non_lin_mean_frame'
         # Plot the mean frame
         plt.figure()
@@ -466,36 +466,36 @@ def calibrate_nonlin(dataset_nl,
         plt.title('Mean Frame')
         plt.colorbar()
         plt.close()
-    
+
     # initialize arrays for nonlin results table
     nonlin = []
-    
+
     ######################## loop over em gain values #########################
     for gain_index in range(len(len_list)):
-        
+
         start_index = int(np.sum(len_list[0:gain_index]))
         stop_index = start_index + len_list[gain_index]
         # Convert camera times to datetime objects
         ctime_strings = datetime_arr[start_index:stop_index]
         ctime_datetime = pd.to_datetime(ctime_strings, errors='coerce')
-        
+
         # Select exp times for this em gain
         exp_em = exp_arr[start_index:stop_index]
-        
+
         # select frames for this em gain
         full_flst = cal_arr[start_index:stop_index]
-        
+
         # Unique exposure times and their counts
         exposure_strings_list, counts = np.unique(exp_em, return_counts=True)
-        
+
         # Grouping exposures and finding the max count
         max_count_index = np.argmax(counts)
         repeat_exp = exposure_strings_list[max_count_index]  # Exposure time of repeated frames
-        
+
         # Calculate mean time differences as aid in illumination drift corrections
         group_mean_time = []
         first_flag = False
-        
+
         for t0 in exposure_strings_list:
             idx = np.where(exp_em == t0)[0]
             if t0 != repeat_exp:
@@ -506,59 +506,59 @@ def calibrate_nonlin(dataset_nl,
                 del_s = (ctime_datetime[idx[:idx_2]] - ctime_datetime[0]).total_seconds()
                 group_mean_time.append(np.mean(del_s))
                 first_flag = True
-        
+
         if verbose is True:
             print(group_mean_time)
-        
+
         # Additional setup
         mean_signal = []
         repeat_flag = 0
         filtered_exposure_times = []
-        
+
         for jj in range(len(exposure_strings_list)):
             current_exposure_time = exposure_strings_list[jj]
-        
+
             if current_exposure_time >= min_exp_time:
                 if current_exposure_time == repeat_exp:
                     repeat_flag = 1
-        
+
                 # Filtering frames based on the current exposure time
                 selected_files = [
                     full_flst[idx] for idx, exp_time in enumerate(exp_em) if exp_time == current_exposure_time
                 ]
 
                 filtered_exposure_times.append(current_exposure_time)
-        
+
                 # Initialize for processing of files
                 mean_frame_index = 0
                 frame_count = []
                 frame_mean = []
                 if not repeat_flag:
                     for iframe in range(len(selected_files)):
-                        
+
                         frame_1 = selected_files[iframe]
                         frame_1 = frame_1.astype(np.float64)
-        
+
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
+                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1,
                                                         colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, 
+                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1,
                                                         colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
-        
+
                         # Calculate counts and mean in the ROI after background subtraction
                         roi_frame = frame_1[rowroi[0]:rowroi[-1]+1, colroi[0]:colroi[-1]+1] - frame_back
                         frame_count0 = np.sum(roi_frame)
                         frame_mean0 = frame_1 - frame_back
-        
+
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
-        
+
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
-                        
+
                         mean_frame_index += 1
                     mean_signal.append(np.mean(frame_mean))
                 elif repeat_flag:
@@ -569,43 +569,43 @@ def calibrate_nonlin(dataset_nl,
 
                         frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
-        
+
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
+                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1,
                                                         colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, 
+                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1,
                                                         colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
-        
+
                         # Calculate counts and mean in the ROI after background subtraction
-                        roi_frame = frame_1[rowroi[0]:rowroi[-1]+1, 
+                        roi_frame = frame_1[rowroi[0]:rowroi[-1]+1,
                                             colroi[0]:colroi[-1]+1] - frame_back
                         frame_count0 = np.sum(roi_frame)
                         frame_mean0 = frame_1 - frame_back
-        
+
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
-                        
+
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
-                        
+
                         mean_frame_index += 1
                     mean_signal.append(np.nanmean(frame_mean))
                     repeat1_mean_signal = np.nanmean(frame_mean)
-                    
+
                     second_half = len(selected_files)
                     for i in range(first_half + 1, second_half):
-                       
+
                         frame_1 = selected_files[i]
                         frame_1 = frame_1.astype(np.float64)
-        
+
                         # Subtract background
                         frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, colback1[0]:colback1[-1]+1])
                         frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
-        
+
                         # Calculate counts and mean
                         roi_frame = frame_1[rowroi[0]:rowroi[-1]+1, colroi[0]:colroi[-1]+1] - frame_back
                         frame_count0 = np.sum(roi_frame)
@@ -613,10 +613,10 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
                         frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
-        
+
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
-        
+
                         mean_frame_index += 1
                     # Calculate the mean signal from the second half of the processing
                     repeat2_mean_signal = np.nanmean(frame_mean)
@@ -624,49 +624,49 @@ def calibrate_nonlin(dataset_nl,
 
         # Calculate the time deltas in seconds from the first frame
         delta_ctimes_s = (ctime_datetime - ctime_datetime[0]).total_seconds()
-        
+
         # Make sure delta_ctimes_s is a pandas Series with numeric values
         delta_ctimes_s = pd.Series(delta_ctimes_s, index=ctime_datetime)
-        
+
         # Calculate the difference in signals
         delta_signal = repeat2_mean_signal - repeat1_mean_signal
-        
+
         # Assuming all_exposure_strings and repeat_exp are already defined
-        
+
         # Find indices of the frames where the exposure time matches repeat_exp
         repeat_times_idx = np.where(exp_em == repeat_exp)[0]  # np.where returns a tuple, extract first element
-        
+
         # Calculate the mean times for the first and second halves of these indices
         first_half = len(repeat_times_idx) // 2
         first_half_mean_time = delta_ctimes_s.iloc[repeat_times_idx[:first_half]].mean()
-        
+
         second_half = len(repeat_times_idx)
         second_half_mean_time = delta_ctimes_s.iloc[repeat_times_idx[first_half:second_half]].mean()
-        
+
         if verbose is True:
             print("First half mean time:", first_half_mean_time)
             print("Second half mean time:", second_half_mean_time)
-        
+
         # Calculate DN/s
         illum_slope = delta_signal / (second_half_mean_time - first_half_mean_time)
-        
+
         # Calculate DN
         illum_inter = repeat1_mean_signal - illum_slope * first_half_mean_time
-        
+
         # Adjust observations based on calculated slope and intercept
         illum_obs = (group_mean_time - group_mean_time[0]) * illum_slope + illum_inter
-        
+
         # Correct the illumination observations
         illum_corr = illum_obs / illum_obs[0]
-        
+
         # Correct the mean signal
         #illum_cor = np.ones(len(illum_corr))
         corr_mean_signal = mean_signal / illum_corr
-        
+
         # Sort arrays by exposure time
         filt_exp_times_sorted, I = np.sort(filtered_exposure_times), np.argsort(filtered_exposure_times)
         corr_mean_signal_sorted = np.array(corr_mean_signal)[I]
-        
+
         if make_plot:
             fname = 'non_lin_signal_vs_exp'
             # Plotting the corrected mean signal against sorted exposure times
@@ -675,7 +675,7 @@ def calibrate_nonlin(dataset_nl,
             plt.title('Signal versus exposure time')
             plt.xlabel('Exposure time (s)')
             plt.ylabel('Signal (DN)')
-        
+
         # Fit a polynomial to selected points (excluding some points)
         p0 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
         y0 = np.polyval(p0, filt_exp_times_sorted)
@@ -685,18 +685,18 @@ def calibrate_nonlin(dataset_nl,
         if rms_y_rel_err < rms_low_limit:
             p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
         elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
+            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1],
                             corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
         else:
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
+            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2],
                             corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
         y1 = np.polyval(p1, filt_exp_times_sorted)
-        
+
         if make_plot:
             fname = 'non_lin_fit'
             # Plot the fitted line
             plt.plot(filt_exp_times_sorted, y1, label='Fitted Line')
-            
+
             # Show the plot with legend
             plt.legend()
             plt.savefig(f'{plot_outdir}/{fname}')
@@ -705,18 +705,18 @@ def calibrate_nonlin(dataset_nl,
             if show_plot:
                 plt.show()
             plt.close()
-        
+
         # Calculating relative gain
         rel_gain = corr_mean_signal_sorted / y1
-        
+
         # Smoothing the relative gain data; larger 'lowess_frac' gives smoother curve
-        rel_gain_smoothed = lowess(rel_gain, 
+        rel_gain_smoothed = lowess(rel_gain,
                             corr_mean_signal_sorted, frac=lowess_frac)[:, 1]
-        
+
         # find the min/max values of corrected measured means and append array
         temp_min = np.min(corr_mean_signal_sorted)
         temp_max = np.max(corr_mean_signal_sorted)
-        
+
         if make_plot:
             # Plotting Signal vs. Relative Gain
             plt.figure()
@@ -724,14 +724,14 @@ def calibrate_nonlin(dataset_nl,
             plt.ylim([0.95, 1.05])
             plt.xlim([1, 14000])
             plt.axhline(1.0, linestyle='--', color='k', linewidth=1)  # horizontal line at 1.0
-            
+
             plt.title('Signal/fit versus Signal')
             plt.xlabel('Signal (DN)')
             plt.ylabel('Relative gain')
-            
+
             # Plot the smoothed data
             plt.plot(corr_mean_signal_sorted, rel_gain_smoothed, 'r-', label='Smoothed Data')
-            
+
             # Show legend and plot
             plt.legend()
             plt.savefig(f'{plot_outdir}/{fname}')
@@ -740,15 +740,15 @@ def calibrate_nonlin(dataset_nl,
             if show_plot:
                 plt.show()
             plt.close()
-        
+
         # Generate evenly spaced values between 20 and 14000
         mean_linspace = np.linspace(20, 14000, 1+int((14000-20)/20))
-        
+
         # Interpolate/extrapolate the relative gain values
-        interp_func = interp1d(corr_mean_signal_sorted, 
+        interp_func = interp1d(corr_mean_signal_sorted,
                         rel_gain_smoothed, kind='linear', fill_value='extrapolate')
         rel_gain_interp = interp_func(mean_linspace)
-        
+
         # Normalize the relative gain to the value at norm_val DN
         # First, find the index for norm_val DN in mean_linspace
         idxnorm = np.where(mean_linspace == norm_val)[0][0]
@@ -758,7 +758,7 @@ def calibrate_nonlin(dataset_nl,
             warnings.warn('norm_val is not between the minimum and maximum values '
                           'of the means for the current EM gain. Extrapolation '
                           'will be used for norm_val.')
-        
+
         if make_plot:
             fname = 'non_lin_fit_norm_dn'
             # Plotting Signal vs. Relative Gain normalized at norm_val DN
@@ -767,11 +767,11 @@ def calibrate_nonlin(dataset_nl,
             plt.ylim([0.95, 1.05])
             plt.xlim([1, 14000])
             plt.axhline(1.0, linestyle='--', color='k', linewidth=1)  # horizontal line at 1.0
-            
+
             plt.title(f'Signal/fit versus Signal (norm @ {norm_val} DN)')
             plt.xlabel('Signal (DN)')
             plt.ylabel('Relative gain')
-            
+
             # Plot the interpolated data
             plt.plot(mean_linspace, rel_gain_interp, 'r-', label='Interpolated Data')
             plt.legend()
@@ -781,12 +781,12 @@ def calibrate_nonlin(dataset_nl,
             if show_plot:
                 plt.show()
             plt.close()
-        
+
         # NOTE: nonlinearity is equal to 1/rel_gain
         # multiply raw data by 1/rel_gain to correct for nonlinearity
         temp = 1/rel_gain_interp
         nonlin.append(temp)
-    
+
     # prepare nonlin array
     nonlin_arr0 = np.transpose(np.array(nonlin))
     # insert new column at the start of nonlin_arr
@@ -801,7 +801,7 @@ def calibrate_nonlin(dataset_nl,
     n_col = len(nonlin_arr3) + 1
     n_row = len(actual_gain_arr)
     nonlin_data=np.insert(nonlin_arr3, 0, actual_gain_arr).reshape(n_col,n_row)
-    
+
     # Return NonLinearity instance
     prhd = dataset_nl.frames[0].pri_hdr
     exthd = dataset_nl.frames[0].ext_hdr
@@ -810,7 +810,7 @@ def calibrate_nonlin(dataset_nl,
     # role of nonlin_arr3 and headers compared to data.NonLinearityCalibration.data
     nonlin = data.NonLinearityCalibration(nonlin_data,
         pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_nl)
-    
+
     return nonlin
 
 def nonlin_dataset_2_stack(dataset):
@@ -836,7 +836,7 @@ def nonlin_dataset_2_stack(dataset):
     # Split Dataset
     dataset_cp = dataset.copy()
     split = dataset_cp.split_dataset(exthdr_keywords=['CMDGAIN'])
-    
+
     # Calibration data
     stack = []
     # Mean frame data
@@ -854,11 +854,11 @@ def nonlin_dataset_2_stack(dataset):
         # Second layer for calibration data (array of different exposure times)
         sub_stack = []
         len_cal_frames = 0
-        record_gain = True 
+        record_gain = True
         for frame in data_set.frames:
             if frame.ext_hdr['OBSTYPE'] == 'MNFRAME':
                 if record_exp_time:
-                    exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
+                    exp_time_mean_frame = frame.ext_hdr['EXPTIME']
                     record_exp_time = False
                 if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
                     raise Exception('Frames used to build the mean frame must have the same exposure time')
@@ -881,8 +881,11 @@ def nonlin_dataset_2_stack(dataset):
                 if record_gain:
                     try: # if EM gain measured directly from frame TODO change hdr name if necessary
                         gains.append(frame.ext_hdr['EMGAIN_M'])
-                    except: # use commanded gain otherwise
-                        gains.append(frame.ext_hdr['CMDGAIN'])
+                    except:
+                        try: # use applied EM gain if available
+                            gains.append(frame.ext_hdr['EMGAIN_A'])
+                        except: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['CMDGAIN'])
                     record_gain = False
         # First layer (array of unique EM values)
         stack.append(np.stack(sub_stack))
@@ -896,7 +899,7 @@ def nonlin_dataset_2_stack(dataset):
         raise Exception('Substacks must have at least one element')
     # Every EM gain must be greater than or equal to 1
     if np.any(np.array(split[1]) < 1):
-        raise Exception('Commanded EM gains must be greater than or equal to 1') 
+        raise Exception('Each set of frames categorized by commanded EM gains must be have 1 or more frames')
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
 
