@@ -577,13 +577,13 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     n = im_size
     full_qe=np.random.normal(1,.03,(n,n))
     full_residuals = np.zeros((n,n))
-    if planet_rad==None:
+    if planet_rad is None:
         if planet=='neptune':
              planet_rad=54
         elif planet=='uranus':
              planet_rad=65
     
-    if rad_mask==None:
+    if rad_mask is None:
          if band==1:
               rad_mask==1.25
          elif band==4:
@@ -654,18 +654,18 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=4
     		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
     		
 	"""
-    if planet==None:
+    if planet is None:
          planet=dataset[0].pri_hdr['TARGET']
-    if band==None:
+    if band is None:
          band=dataset[0].pri_hdr['FILTER']
     
-    if planet_rad==None:
+    if planet_rad is None:
         if planet=='neptune':
              planet_rad=50
         elif planet=='uranus':
              planet_rad=65
     
-    if rad_mask==None:
+    if rad_mask is None:
          if band==1:
               rad_mask==1.25
          elif band==4:
