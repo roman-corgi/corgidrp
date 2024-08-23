@@ -9,6 +9,7 @@ import photutils.centroids as centr
 from scipy.ndimage import gaussian_filter as gauss
 from photutils.aperture import CircularAperture
 from scipy import ndimage
+from scipy.signal import convolve2d
 
 def create_flatfield(flat_dataset):
 
@@ -575,7 +576,45 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
         	std_resel (np.array):  Error in the flatfield estimated using the ideal flat field
     """
     n = im_size
-    full_qe=np.random.normal(1,.03,(n,n))
+    
+
+    # adding fringing to the ideal noise image
+    
+    dcirc = 75 # size of the fringe pattern in pixels
+    (xx, yy) = np.meshgrid(np.arange(-dcirc/2,dcirc/2-1),np.arange(-dcirc/2,dcirc/2-1))
+    circ = 1. * ( (xx**2.+yy**2.)/(dcirc/2.)**2. < 1.)
+    circ = circ * (1.-np.sqrt((xx**2.+yy**2.)/(dcirc/2.)**2.))
+    # Random Gaussian field
+    zz = np.random.normal(0,1,size=(1024+dcirc-1,1024+dcirc-1))
+    # convolve and normalize
+    cc = convolve2d(zz,circ,'valid')
+    cc = cc * 2*np.pi/(np.nanmax(np.nanmax(cc))-np.nanmin(np.nanmin(cc)))
+    # now fringing
+    fa = 0.003 #  %+/- 0.3% from model
+    cc = fa* np.sin(cc) + 1 
+
+    # adding measles to the ideal noise image
+    total_measle_mask = np.ones((n,n))
+    nx = np.arange(0,n)
+    ny = np.arange(0,n)
+    nxx,nyy = np.meshgrid(nx,ny)
+    num=8000
+    sizes = np.random.normal(4,2,num)
+    qes = np.random.normal(.011,.013,num)
+    xs = np.random.uniform(0,n,num)
+    ys = np.random.uniform(0,n,num)
+
+    for i in np.arange(num):
+        nrr = np.sqrt((nxx-xs[i])**2 + (nyy-ys[i])**2)
+        nrr_copy = nrr.copy()
+        my_bool = np.logical_and(nrr<=sizes[i],total_measle_mask != 1.0)
+        nrr_copy[nrr<=sizes[i]] = 1 + qes[i]
+        nrr_copy[my_bool] = 1 
+        nrr_copy[nrr>sizes[i]] = 1
+        total_measle_mask *= nrr_copy
+    
+    
+    full_qe=np.random.normal(1,.03,(n,n))*total_measle_mask*cc[0:n,0:n]
     full_residuals = np.zeros((n,n))
     if planet_rad is None:
         if planet=='neptune':
@@ -635,7 +674,9 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     
     
 def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=420,N=3,rad_mask=None,  planet_rad=None, n_pix=165, n_pad=302):
-    """Turn this dataset of raster scanned image frames of neptune or uranus into on-sky calibrated flat field 
+    """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
+    The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
+
     
         Args:
             dataset (corgidrp.data.Dataset): a dataset of image frames that are raster scanned (L2a-level)

@@ -89,7 +89,7 @@ def test_create_flatfield_neptune():
     err_estimated=np.sqrt(((np.nanmean(onsky_flatfield.data))**2)*(np.nanmean(simflat_dataset.all_err))**2+((np.nanmean(simflat_dataset.all_data))**2)*(np.nanmean(onsky_flatfield.err))**2)
     print("mean of all flat divided data errors:",err_flatdiv)
     print("Error estimated:",err_estimated)
-    assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-2))
+    assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-1))
     
     print(flatdivided_dataset[0].ext_hdr)
 
