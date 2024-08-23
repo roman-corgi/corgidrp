@@ -112,7 +112,7 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
 
     Args:
         step (dict): the portion of a recipe for this step
-        caldb (corgidrp.CalDB): calibration database conection
+        this_caldb (corgidrp.CalDB): calibration database conection
         ref_frame (corgidrp.Image): a reference frame to use to determine the optimal calibration
     
     Returns:
