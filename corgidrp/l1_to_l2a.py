@@ -196,7 +196,7 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
             except: # otherwise use commanded EM gain
                 emgain = frame.ext_hdr['CMDGAIN']
         emgain_list.append(emgain)
-    emgain_arr = np.array(emgain_arr)
+    emgain_arr = np.array(emgain_list)
     fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
     fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
 

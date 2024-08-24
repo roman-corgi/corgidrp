@@ -266,9 +266,9 @@ def em_gain_division(input_dataset):
 
     dataset_list, _ = emgain_dataset.split_dataset(exthdr_keywords=['CMDGAIN'])
     if len(dataset_list) > 1:
-        history_msg = "data divided by non-unique EM gain"
+        history_msg = "data divided by EM gain for dataset with frames with different commanded EM gains"
     else:
-        history_msg = "data divided by EM gain {0}".format(str(emgain))
+        history_msg = "data divided by EM gain for dataset with frames with the same commanded EM gain"
 
     # update the output dataset with this EM gain divided data and update the history
     emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
