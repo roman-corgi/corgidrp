@@ -136,7 +136,7 @@ def flat_division(input_dataset, flat_field):
 
     return flatdiv_dataset
 
-def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_thres=None, discard_bad=True):
+def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_rms_thres=None, tt_bias_thres=None, discard_bad=True):
     """
 
     Selects the frames that we want to use for further processing.
@@ -148,7 +148,8 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                             (e.g., 6 means 2 and 4 are not considered bad).
                             Default is 0 (all nonzero DQ flags are considered bad)
         overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
-        tt_thres (float): maximum allowed tip or tilt in image to be considered good. Default: None (not used)
+        tt_rms_thres (float): maximum allowed RMS tip or tilt in image to be considered good. Default: None (not used)
+        tt_bias_thres (float): maximum allowed bias in tip/tilt over the course of an image to be consdiered good. Default: None (not used)
         discard_bad (bool): if True, drops the bad frames rather than keeping them through processing
         
     Returns:
@@ -160,7 +161,7 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
 
     disallowed_bits = np.invert(allowed_bpix) # invert the mask
 
-    for i, frame in enumerate(input_dataset.frames):
+    for i, frame in enumerate(pruned_dataset.frames):
         reject_reasons[i] = [] # list of rejection reasons
         if bpix_frac < 1:
             masked_dq = np.bitwise_and(frame.dq, disallowed_bits) # handle allowed_bpix values
@@ -175,27 +176,46 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
             if frame.ext_hdr['OVEREXP']:
                 reject_flags[i] += 2 # use distinct bits in case it's useful
                 reject_reasons[i].append("OVEREXP = T")
-        if tt_thres is not None:
-            if frame.ext_hdr['RESZ2RMS'] > tt_thres:
+        if tt_rms_thres is not None:
+            if frame.ext_hdr['RESZ2RMS'] > tt_rms_thres:
                 reject_flags[i] += 4 # use distinct bits in case it's useful
                 reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
-                                         .format(frame.ext_hdr['RESZ2RMS'], tt_thres))
-            if frame.ext_hdr['RESZ3RMS'] > tt_thres:
+                                         .format(frame.ext_hdr['RESZ2RMS'], tt_rms_thres))
+            if frame.ext_hdr['RESZ3RMS'] > tt_rms_thres:
                 reject_flags[i] += 8 # use distinct bits in case it's useful
                 reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
-                                         .format(frame.ext_hdr['RESZ3RMS'], tt_thres))
+                                         .format(frame.ext_hdr['RESZ3RMS'], tt_rms_thres))
+        if tt_bias_thres is not None:
+            if frame.ext_hdr['RESZ2'] > tt_bias_thres:
+                reject_flags[i] += 16 # use distinct bits in case it's useful
+                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ2'], tt_bias_thres))
+            if frame.ext_hdr['RESZ3'] > tt_bias_thres:
+                reject_flags[i] += 32 # use distinct bits in case it's useful
+                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ3'], tt_bias_thres))
                 
+        # if rejected, mark as bad in the header
+        if reject_flags[i] > 0:
+            frame.ext_hdr['IS_BAD'] = True
+                                
     good_frames = np.where(reject_flags == 0)
     bad_frames = np.where(reject_flags > 0)
     # check that we didn't remove all of the good frames
     if np.size(good_frames) == 0:
         raise ValueError("No good frames were selected. Unable to continue")
 
-    pruned_frames = pruned_dataset.frames[good_frames]
-    pruned_dataset = data.Dataset(pruned_frames)
+    # if we need to discard bad, do that here. 
+    if discard_bad:
+        pruned_frames = pruned_dataset.frames[good_frames]
+        pruned_dataset = data.Dataset(pruned_frames)
+        
+        # history message of which frames were removed and why
+        history_msg = "Removed {0} frames as bad:".format(np.size(bad_frames))
+    else:
+        # history message of which frames were marked and why
+        history_msg = "Marked {0} frames as bad:".format(np.size(bad_frames))
 
-    # history message of which frames were removed and why
-    history_msg = "Removed {0} frames:".format(np.size(bad_frames))
     for bad_index in bad_frames[0]:
         bad_frame = input_dataset.frames[bad_index]
         bad_reasons = "; ".join(reject_reasons[bad_index])
