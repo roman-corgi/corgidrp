@@ -11,11 +11,15 @@ import corgidrp.data
 import astropy
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
+from astropy.modeling.models import Const2D, Gaussian2D
+
+import pyklip.fakes as fakes
 
 #import pyklip.fakes as fakes
 
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
+from scipy.ndimage import center_of_mass
 
 
 def centroid(frame):
@@ -87,10 +91,20 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
     # Use a guess first?  - take tools from photutils
     # Make a guess of the centroid of the psf template, then follow this script
 
+    # Subtract the minimum of the data as a rough background estimate.
+    # This will also make the data values positive, preventing issues with
+    # the moment estimation in data_properties. Moments from negative data
+    # values can yield undefined Gaussian parameters, e.g., x/y_stddev.
 
+    # Get a rough estimate of the psf_template center of mass (x and y coord)
+    y_com, x_com = center_of_mass(psf_template)
+    pf, fw, x_centroid, y_centroid = fakes.gaussfit2d(frame=psf_template, xguess=x_com, yguess=y_com)
 
-    yind = int(ystar_guess)
-    xind = int(xstar_guess)
+    # replace frame with psf_template
+    frame = psf_template
+
+    yind = int(y_centroid)
+    xind = int(x_centroid)
         
     ymin = yind - rad
     ymax = yind + rad + 1
@@ -112,7 +126,7 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
         
     cutout = frame[ymin:ymax, xmin:xmax]
     
-    xstar, ystar = centroid(cutout)
+    xstar, ystar = centroid(cutout)  # 
     xstar += xmin
     ystar += ymin
     
@@ -125,15 +139,25 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
     
     stamp = ndi.map_coordinates(frame, [ystamp, xstamp])
     
-    ### Create a data stamp ###
+    ### Create a data stamp ###  - this is from psf_data (in a file test_spectroscopy.py we will open this fits file)
+    # I am not sure how else to estimate the offset? Unless I assume it is 0 (which is true in our example case)
+    y_com_data, x_com_data = center_of_mass(psf_template)
+    pf, fw, x_centroid_data, y_centroid_data = fakes.gaussfit2d(frame=psf_data, xguess=x_com_data, yguess=y_com_data)
+    xoffset_guess = x_centroid - x_centroid_data
+    yoffset_guess = y_centroid - y_centroid_data
+
     fitsize = stampsize
     ydata,xdata = np.indices([fitsize, fitsize], dtype=float)
     xdata -= fitsize//2
     ydata -= fitsize//2
-    xdata += xstar + xoffset_guess
+    xdata += xstar + xoffset_guess  # not sure what to do for guesses? Or if I should get coords from this image as well?
     ydata += ystar + yoffset_guess
     
-    data = ndi.map_coordinates(frame, [ydata, xdata])
+    #Pull data from psf_data
+    data = ndi.map_coordinates(psf_data, [ydata, xdata])
+
+    #somewhere here we need to use the psf_data
+
     
     ### Fit the PSF to the data ###
     popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux))
