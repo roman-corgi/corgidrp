@@ -136,7 +136,7 @@ def flat_division(input_dataset, flat_field):
 
     return flatdiv_dataset
 
-def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_thres=None):
+def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_thres=None, discard_bad=True):
     """
 
     Selects the frames that we want to use for further processing.
@@ -148,8 +148,9 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                             (e.g., 6 means 2 and 4 are not considered bad).
                             Default is 0 (all nonzero DQ flags are considered bad)
         overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
-        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used)
-
+        tt_thres (float): maximum allowed tip or tilt in image to be considered good. Default: None (not used)
+        discard_bad (bool): if True, drops the bad frames rather than keeping them through processing
+        
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
     """
@@ -177,9 +178,13 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
         if tt_thres is not None:
             if frame.ext_hdr['RESZ2RMS'] > tt_thres:
                 reject_flags[i] += 4 # use distinct bits in case it's useful
-                reject_reasons[i].append("tt rms {0:.1f} > {1:.1f}"
+                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['RESZ2RMS'], tt_thres))
-
+            if frame.ext_hdr['RESZ3RMS'] > tt_thres:
+                reject_flags[i] += 8 # use distinct bits in case it's useful
+                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ3RMS'], tt_thres))
+                
     good_frames = np.where(reject_flags == 0)
     bad_frames = np.where(reject_flags > 0)
     # check that we didn't remove all of the good frames
@@ -278,7 +283,7 @@ def cti_correction(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
     """
-
+    # also remember to update CTI_CORR ext header keyword
     return input_dataset.copy()
 
 
@@ -357,7 +362,8 @@ def desmear(input_dataset, detector_params):
         data_cube[i] -= smear
 
     history_msg = "Desmear applied to data"
-    data.update_after_processing_step(history_msg, new_all_data=data_cube)
+    header_update = {'DESMEAR' : True}
+    data.update_after_processing_step(history_msg, new_all_data=data_cube, header_entries=header_update)
 
     return data
 
