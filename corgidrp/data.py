@@ -31,7 +31,7 @@ class Dataset():
             # TODO: do some auto detection of the filetype, but for now assume it is an image file
             self.frames = []
             for filepath in frames_or_filepaths:
-                 self.frames.append(Image(filepath))
+                self.frames.append(Image(filepath))
         else:
             # list of frames
             self.frames = frames_or_filepaths
@@ -269,16 +269,6 @@ class Image():
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
-                
-                '''
-                #Pop out the primary header
-                self.pri_hdr = hdulist.pop(0).header
-                #Pop out the image extension
-                first_hdu = hdulist.pop(0)
-                self.ext_hdr = first_hdu.header
-                self.data = first_hdu.data
-
-                '''
                 # Check if HDU[0] contains image data and handle cases when it is
                 if hdulist[0].header['NAXIS'] > 0:
                     self.pri_hdr = hdulist[0].header
@@ -452,7 +442,6 @@ class Image():
 
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
-
 
     def _record_parent_filenames(self, input_dataset):
         """

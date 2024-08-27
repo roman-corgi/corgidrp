@@ -790,9 +790,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         Fd = noise_maps.FPN_map
         Dd = noise_maps.DC_map
         Cd = noise_maps.CIC_map
-
         _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
-
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
         try:
@@ -855,8 +853,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr.pop('HISTORY')
         # this makes the filename of the dark have "_DetectorNoiseMaps_Dark" in
         # the name so that it is known that this Dark came from noise maps
-
-
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd
         md_noise = np.sqrt(Ferr**2/g**2 + t**2*Derr**2 + Cerr**2)
