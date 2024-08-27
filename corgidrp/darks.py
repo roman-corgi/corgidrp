@@ -782,7 +782,6 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
             This contains the master dark in detected electrons.
 
         """
-
         if detector_regions is None:
             detector_regions = detector_areas
 
@@ -833,18 +832,11 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
             Cdq = noise_maps.dq[1]
 
         # get from one of the noise maps and modify as needed
-        prihdr = noise_maps.pri_hdr.copy()      # Ensure header is copied
-        exthdr = noise_maps.ext_hdr.copy()
+        prihdr = noise_maps.pri_hdr
+        exthdr = noise_maps.ext_hdr
         errhdr = noise_maps.err_hdr
-
-        # Check and modify NAXIS1 and NAXIS2 in the appropriate header
-        if 'NAXIS1' in prihdr and 'NAXIS2' in prihdr:
-            prihdr['NAXIS1'] = Fd.shape[0]
-            prihdr['NAXIS2'] = Fd.shape[1]
-        else:
-            exthdr['NAXIS1'] = Fd.shape[0]
-            exthdr['NAXIS2'] = Fd.shape[1]
-
+        exthdr['NAXIS1'] = Fd.shape[0]
+        exthdr['NAXIS2'] = Fd.shape[1]
         exthdr['DATATYPE'] = 'Dark'
         exthdr['CMDGAIN'] = g
         exthdr['EXPTIME'] = t

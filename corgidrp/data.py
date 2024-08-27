@@ -269,16 +269,14 @@ class Image():
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
-                # Check if HDU[0] contains image data and handle cases when it is
-                if hdulist[0].header['NAXIS'] > 0:
-                    self.pri_hdr = hdulist[0].header
-                    self.data = hdulist[0].data
-                    self.ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-                else:
-                    self.pri_hdr = hdulist[0].header
-                    self.ext_hdr = hdulist[1].header
-                    self.data = hdulist[1].data
                 
+                #Pop out the primary header
+                self.pri_hdr = hdulist.pop(0).header
+                #Pop out the image extension
+                first_hdu = hdulist.pop(0)
+                self.ext_hdr = first_hdu.header
+                self.data = first_hdu.data
+
                 #A list of extensions
                 self.hdu_names = [hdu.name for hdu in hdulist]
 
@@ -427,17 +425,19 @@ class Image():
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
-        # Make sure primary and extension header have the correct structure
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
 
-        # Make sure err and dq headers are correctly passed
         errhdu = fits.ImageHDU(data=self.err, header = self.err_hdr)
+        hdulist.append(errhdu)
+
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
+        hdulist.append(dqhdu)
 
-        hdulist = fits.HDUList([prihdu, exthdu, errhdu, dqhdu])
+        for hdu in self.hdu_list:
+            hdulist.append(hdu)
 
-        # Write HDU list to file
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
