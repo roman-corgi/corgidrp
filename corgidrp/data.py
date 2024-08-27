@@ -583,6 +583,7 @@ class Image():
         if name in self.hdu_names:
             raise ValueError("Extension name already exists in HDU list")
         else: 
+            self.hdu_names.append(name)
             self.hdu_list.append(new_hdu)
 
 
