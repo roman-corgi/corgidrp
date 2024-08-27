@@ -273,7 +273,7 @@ def slice_section(frame, obstype, key, detector_regions=None):
     return section
 
 
-def imaging_area_geometry(obstype='SCI'):
+def imaging_area_geometry(obstype='SCI',detector_regions=None):
     """
     
     Return geometry of imaging area in reference to full frame.
@@ -287,10 +287,13 @@ def imaging_area_geometry(obstype='SCI'):
 
     """
 
-    _, cols_pre, _ = unpack_geometry(obstype,'prescan')
-    _, cols_serial_ovr, _ = unpack_geometry(obstype,'serial_overscan')
-    rows_parallel_ovr, _, _ = unpack_geometry(obstype,'parallel_overscan')
-    fluxmap_rows, _, r0c0_image = unpack_geometry(obstype,'image')
+    if detector_regions is None:
+            detector_regions = detector_areas
+
+    _, cols_pre, _ = unpack_geom(obstype,'prescan', detector_regions = detector_regions)
+    _, cols_serial_ovr, _ = unpack_geom(obstype,'serial_overscan', detector_regions = detector_regions)
+    rows_parallel_ovr, _, _ = unpack_geom(obstype,'parallel_overscan', detector_regions = detector_regions)
+    fluxmap_rows, _, r0c0_image = unpack_geom(obstype,'image', detector_regions = detector_regions)
 
     rows_im = detector_areas[obstype]['frame_rows'] - rows_parallel_ovr
     cols_im = detector_areas[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
@@ -300,7 +303,7 @@ def imaging_area_geometry(obstype='SCI'):
     return rows_im, cols_im, r0c0_im
 
 
-def imaging_slice(frame,obstype='SCI'): 
+def imaging_slice(frame,obstype='SCI',detector_regions=None): 
     """
 
     Select only the real counts from full frame and exclude virtual.
@@ -312,9 +315,12 @@ def imaging_slice(frame,obstype='SCI'):
 
     """
 
+    if detector_regions is None:
+            detector_regions = detector_areas
+
     # Return geometry of imaging area in reference to full frame.
 
-    rows, cols, r0c0 = self._imaging_area_geom()
+    rows, cols, r0c0 = imaging_area_geometry(obstype=obstype, detector_regions = detector_regions)
 
     return frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
 
