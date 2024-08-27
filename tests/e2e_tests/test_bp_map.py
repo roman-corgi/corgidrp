@@ -36,6 +36,7 @@ def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
     fpn_filename = "fpn_20240322.fits"
     cic_filename = "cic_20240322.fits"
     flat_filename = "flat_ones.fits"
+    bp_ref_filename = "fixed_bp_zeros.fits"
 
     # Construct the full paths to the noise map files
     noise_maps_filelist = [
@@ -68,6 +69,7 @@ def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
     flat_path = os.path.join(cals_dir, flat_filename)
     fpn_path = os.path.join(cals_dir, fpn_filename)
     cic_path = os.path.join(cals_dir, cic_filename)
+    bp_ref_filepath = os.path.join(cals_dir, bp_ref_filename)
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
@@ -115,7 +117,7 @@ def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
         simple_dark_data = np.zeros_like(flat.data)
         cluster_center = (naxis2 // 2, naxis1 // 2)
         cluster_size = 10
-        hot_pixel_value = 1
+        hot_pixel_value = 8
 
         for _ in range(10):
             # Randomly choose a center for each cluster
@@ -149,9 +151,17 @@ def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
     # Test generated BP map against TVAC data or simple dark
     generated_bp_map_img = data.Image(generated_bp_map_file)
 
+    with fits.open(master_dark_ref) as hdulist:
+        dark_ref_dat = hdulist[1].data
+
     if use_master_dark:
-        with fits.open(master_dark_ref) as hdulist:
-            dark_ref_dat = hdulist[1].data
+        with fits.open(bp_ref_filepath) as hdulist:
+            bp_ref_dat = hdulist[0].data
+
+            diff = generated_bp_map_img.data - bp_ref_dat.data
+
+            # Assert for values greater than 1e-5
+            assert np.all(np.abs(diff) < 1e-5)
 
             # Check for bad pixels
             bad_pixels = generated_bp_map_img.data[generated_bp_map_img.data > 0]
@@ -159,6 +169,9 @@ def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
                 print(f"Bad pixel values identified: {bad_pixels}")
             else:
                 print("No bad pixels identified")
+            
+            # Plotting
+            '''
             fig, axes = plt.subplots(2, 3, figsize=(15, 10))
             # Flatten the axes array for easier indexing
             axes = axes.flatten()
@@ -198,18 +211,25 @@ def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
             axes[4].set_ylim([0, naxis2])
             fig.colorbar(im5, ax=axes[4])
 
-            # Hide the unused subplot (bottom-right corner)
-            axes[5].axis('off')
+            # Sixth subplot (bottom-right corner)
+            im5 = axes[5].imshow(bp_ref_dat, vmin=0, vmax=8, cmap="gray")
+            axes[5].set_title("Reference BP map")
+            axes[5].set_xlim([0, naxis1])
+            axes[5].set_ylim([0, naxis2])
+            fig.colorbar(im5, ax=axes[5])
 
             plt.tight_layout()
-            plt.show()
+            '''
+            #plt.show()
     else:
         with fits.open(master_dark_ref) as hdulist:
             dark_ref_dat = hdulist[1].data
             diff = generated_bp_map_img.data - dark_ref_dat.data
 
-            #assert np.all(np.abs(diff) < 1e-5)
+            assert np.all(np.abs(diff) < 1e-5)
 
+            # Plotting 
+            '''
             fig, axes = plt.subplots(1, 3, figsize=(15, 5))  # Create a 1x3 grid of subplots
 
             # First subplot
@@ -236,7 +256,8 @@ def test_bp_map(tvacdata_path, e2eoutput_path, use_master_dark):
             fig.colorbar(im3, ax=axes[2])
 
             plt.tight_layout()
-            plt.show()
+            '''
+            #plt.show()
 
 if __name__ == "__main__":
     # Use arguments to run the test.

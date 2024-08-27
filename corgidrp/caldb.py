@@ -79,7 +79,6 @@ class CalDB:
         Load/update db from filepath
         """
         self._db = pd.read_csv(self.filepath, dtype=column_dtypes)
-        self._db['Hash'] = self._db['Hash'].astype(str)  # Ensure Hash is string and doesn't get cast to int 64
 
     def save(self):
         """

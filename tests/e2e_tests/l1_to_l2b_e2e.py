@@ -132,9 +132,10 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
         
         diff = img.data - tvac_dat
 
-        #assert np.all(np.abs(diff) < 1e-5)
+        assert np.all(np.abs(diff) < 1e-5)
 
         # plotting script for debugging
+        '''
         import matplotlib.pylab as plt
         fig = plt.figure(figsize=(10,3.5))
         fig.add_subplot(131)
@@ -156,6 +157,7 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
         plt.ylim([475, 535])
 
         plt.show()
+        '''
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
