@@ -427,19 +427,17 @@ class Image():
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # Make sure primary and extension header have the correct structure
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
-        hdulist = fits.HDUList([prihdu, exthdu])
 
+        # Make sure err and dq headers are correctly passed
         errhdu = fits.ImageHDU(data=self.err, header = self.err_hdr)
-        hdulist.append(errhdu)
-
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
-        hdulist.append(dqhdu)
 
-        for hdu in self.hdu_list:
-            hdulist.append(hdu)
+        hdulist = fits.HDUList([prihdu, exthdu, errhdu, dqhdu])
 
+        # Write HDU list to file
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
