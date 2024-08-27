@@ -16,26 +16,1931 @@ https://doi.org/10.1117/1.JATIS.7.1.016003
     - Input dataset is now a Dataset object from corgidrp.data
     - output is not a corgi.drp.TrapCalibration object
 """
-import os
-from pathlib import Path
 import warnings
 import numpy as np
-import glob
 
-from astropy.io import fits
 from corgidrp.detector import *
-# from pymatreader import read_mat
+from scipy.optimize import curve_fit
 
 import corgidrp.check as check
-from corgidrp.data import TrapCalibration, Dataset
-
-from trap_id import illumination_correction, trap_id
-from trap_fitting import trap_fit, trap_fit_const, fit_cs
+from corgidrp.data import TrapCalibration
 
 class TPumpAnException(Exception):
     """Exception class for tpumpanalysis."""
 
-def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU', 
+def illumination_correction(img, binsize, ill_corr):
+    """Performs non-uniform illumination correction by taking sections of the
+    image and performing local illumination subtraction.
+
+    This function was copied and pasted from trip_id.py in the II&T pipeline. 
+    
+    Args:
+        img (2-D array): Image to be corrected.
+        binsize (int): Number of pixels over which to average for subtraction. If None, 
+            acts as if ill_corr is False.
+        ill_corr (bool): If True, subtracts the local median of the square region of 
+            side length equal to binsize from each pixel. If False, simply subtracts 
+            from each pixel the median of the whole image region.
+    
+    Returns:
+        tuple: A tuple containing:
+            corrected_img (2-D array): Corrected image.
+            local_ill (2-D array): Frame with pixel values equal to the amount 
+            that was subtracted from each.
+    """
+
+    # TODO v2:  use a sliding bin to correct (takes care of linear differences
+    # b/w bins)
+
+    # check inputs
+    try:
+        img = np.array(img).astype(float)
+    except:
+        raise TypeError("img elements should be real numbers")
+    check.twoD_array(img, 'img', TypeError)
+    if binsize is not None:
+        check.positive_scalar_integer(binsize, 'binsize', TypeError)
+    if type(ill_corr) != bool:
+        raise TypeError('ill_corr must be True or False')
+
+    if (not ill_corr) or (binsize is None):
+        loc_ill = np.median(img)*np.ones_like(img).astype(float)
+        corrected_img = img - loc_ill
+
+    if ill_corr and (binsize is not None):
+        # ensures there is a bin that runs all the way to the end
+        if np.mod(len(img), binsize) == 0:
+            row_bins = np.arange(0, len(img)+1, binsize)
+        else:
+            row_bins = np.arange(0, len(img), binsize)
+        # If len(img) not divisible by binsize, this makes last bin of size
+        # binsize + the remainder
+        row_bins[-1] = len(img)
+
+        # same thing for columns now
+        if np.mod(len(img[0]), binsize) == 0:
+            col_bins = np.arange(0, len(img[0])+1, binsize)
+        else:
+            col_bins = np.arange(0, len(img[0]), binsize)
+        col_bins[-1] = len(img[0])
+
+        # initializing
+        loc_ill = (np.zeros([len(row_bins)-1, len(col_bins)-1])).astype(float)
+
+        corrected_img = (np.zeros([len(img), len(img[0])])).astype(float)
+
+        for i in range(len(row_bins)-1):
+            for j in range(len(col_bins)-1):
+                loc_ill[i,j]=np.median(img[int(row_bins[i]):int(row_bins[i+1]),
+                                    int(col_bins[j]):int(col_bins[j+1])])
+                corrected_img[int(row_bins[i]):int(row_bins[i+1]),
+                    int(col_bins[j]):int(col_bins[j+1])] = \
+                    img[int(row_bins[i]):int(row_bins[i+1]),
+                    int(col_bins[j]):int(col_bins[j+1])] - loc_ill[i,j]
+
+    #getting per pixel local_ill:
+    local_ill = img - corrected_img
+
+    return corrected_img, local_ill
+
+def tau_temp(temp_data, E, cs):
+    """Calculates the release time constant (tau) based on the input temperature, 
+    energy level, and capture cross section for holes.
+
+    This function was copied and pasted from the trip_fitting.py in the II&T pipeline.
+    
+    This function computes the release time constant (tau, in seconds) using the 
+    input temperature data, energy level, and capture cross section for holes. 
+    For more details, refer to the Appendix in "2020 Bush et al.pdf".
+    
+    Args:
+        temp_data (float): Temperature in Kelvin.
+        E (float): Energy level in electron volts (eV).
+        cs (float): Capture cross section for holes, either in units of 
+            1e-19 m^2 or 1e-15 cm^2.
+    
+    Returns:
+        float: The release time constant (tau) in seconds.
+    """
+
+    k = 8.6173e-5 # eV/K
+    kb = 1.381e-23 # mks units
+    hconst = 6.626e-34 # mks units
+    Eg = 1.1692 - (4.9e-4)*temp_data**2/(temp_data+655) #eV
+    me = 9.109e-31 # kg, rest mass of electron
+    mlstar = 0.1963 * me #kg
+    mtstar = 0.1905 * 1.1692 * me / Eg #kg
+    mstardc = 6**(2/3) * (mtstar**2*mlstar)**(1/3) #kg
+    vth = np.sqrt(3*kb*temp_data/mstardc) # m/s
+    Nc = 2*(2*np.pi*mstardc*kb*temp_data/(hconst**2))**1.5 # 1/m^3
+    # added a factor of 1e-19 so that curve_fit step size reasonable
+    return np.e**(E/(k*temp_data))/(cs*Nc*vth*1e-19)
+
+def sig_tau_temp(temp_data, E, cs, sig_E, sig_cs):
+    """Calculates the standard deviation of the release time constant via error propagation.
+    
+    This function computes the standard deviation of the release time constant (sig_tau, in seconds) 
+    through error propagation, based on the input temperature, energy level, capture cross section 
+    for holes, and their respective standard deviations. For more details, refer to the Appendix in 
+    "2020 Bush et al.pdf".
+
+    This function was copied and pasted from the trip_fitting.py in the II&T pipeline.
+    
+    Args:
+        temp_data (float): Temperature in Kelvin.
+        E (float): Energy level in electron volts (eV).
+        cs (float): Capture cross section for holes, either in units of 
+            1e-19 m^2 or 1e-15 cm^2.
+        sig_E (float): Standard deviation of the energy level (eV).
+        sig_cs (float): Standard deviation of the capture cross section for holes.
+    
+    Returns:
+        float: The standard deviation of the release time constant (sig_tau) in seconds.
+    """
+
+    k = 8.6173e-5 # eV/K
+    kb = 1.381e-23 # mks units
+    hconst = 6.626e-34 # mks units
+    Eg = 1.1692 - (4.9e-4)*temp_data**2/(temp_data+655)
+    me = 9.109e-31 # kg, rest mass of electron
+    mlstar = 0.1963 * me #kg
+    mtstar = 0.1905 * 1.1692 * me / Eg #kg
+    mstardc = 6**(2/3) * (mtstar**2*mlstar)**(1/3) #kg
+    vth = np.sqrt(3*kb*temp_data/mstardc) # m/s
+    Nc = 2*(2*np.pi*mstardc*kb*temp_data/(hconst**2))**1.5 # 1/m^3
+    # added a factor of 1e-19 so that curve_fit step size reasonable
+    tau = np.e**(E/(k*temp_data))/(cs*Nc*vth*1e-19)
+    dtau_dcs = - tau/(cs*1e-19)
+    dtau_dE = tau/(k*temp_data)
+    sig_tau = np.sqrt((dtau_dcs*sig_cs*1e-19)**2 + (dtau_dE*sig_E)**2)
+    return sig_tau
+
+def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
+            length_limit):
+    """
+    Identifies dipoles in an image stack based on threshold amplitude and categorizes them.
+    
+    This function analyzes a stack of trap-pumped images taken at different phase times 
+    to identify dipoles by detecting adjacent pixels that exceed a threshold amplitude 
+    above and below the mean. The threshold must be met at a sufficient number of phase 
+    times. The function then categorizes the bright pixel of each dipole into one of three 
+    categories: 'above', 'below', or 'both'.
+
+    The function was copied and pasted from trap_id.py in the II&T pipeline.
+    
+    Args:
+        cor_img_stack (3-D array): Stack of trap-pumped images taken at different phase 
+            times. Each frame should have the same dimensions. Units can be in electrons 
+            (e-) or digital numbers (DN), but they are input as electrons when this function 
+            is called in `tpump_analysis()`.
+        ill_corr_min (2-D array): Frame with pixel values equal to the minimum median 
+            taken over phase times that was subtracted during `illumination_correction()`. 
+            If `ill_corr` was False, the median was global over the whole image region. 
+            If `ill_corr` was True, the median was over a local square of side length 
+            `binsize` pixels in `illumination_correction()`.
+        ill_corr_max (2-D array): Frame with pixel values equal to the maximum median 
+            taken over phase times that was subtracted during `illumination_correction()`. 
+            The conditions are the same as described for `ill_corr_min`.
+        timings (array-like): Array of the phase times corresponding to the ordering of 
+            the frames in `cor_img_stack`. Units are in seconds.
+        thresh_factor (float): Number of standard deviations from the mean that a dipole 
+            must exceed to be considered for a trap. If too high, dipoles with increasing 
+            amplitude over time are identified, which is not characteristic of an actual trap. 
+            If too low, the resulting dipoles may have amplitudes that are too noisy or low.
+        length_limit (int): Minimum number of frames in which a dipole must meet the 
+            threshold to be considered a true trap.
+    
+    Returns:
+        rc_above (dict): A dictionary with keys for each bright pixel of an 'above' dipole, 
+            formatted as:
+            {
+                (row, col): {
+                    'amps_above': array([amp1, amp2, ...]),
+                    'loc_med_min': float,
+                    'loc_med_max': float
+                },
+                ...
+            }
+            'amps_above' is an array of amplitudes in the same order as the phase time 
+            order in `timings`. 'loc_med_min' and 'loc_med_max' are the minimum and maximum 
+            bias values over all phase times, respectively.
+        
+        rc_below (dict): A dictionary with keys for each bright pixel of a 'below' dipole, 
+            formatted similarly to `rc_above`.
+        
+        rc_both (dict): A dictionary with keys for each bright pixel that is both an 'above' 
+            and 'below' dipole, formatted as:
+            {
+                (row, col): {
+                    'amps_both': array([amp1, amp2, ...]),
+                    'loc_med_min': float,
+                    'loc_med_max': float,
+                    'above': {
+                        'amp': array([amp1a, amp2a, ...]),
+                        't': array([t1a, t2a, ...])
+                    },
+                    'below': {
+                        'amp': array([amp1b, amp2b, ...]),
+                        't': array([t1b, t2b, ...])
+                    }
+                },
+                ...
+            }
+            'amps' and 't' under 'above' and 'below' are arrays identified specifically with 
+            their respective dipoles. 'amps_both' contains all amplitudes for that pixel 
+            in the same order as `timings`.
+    """
+
+    # Check inputs
+    try:
+        #checks whether elements are good and whether each frame has same dims
+        cor_img_stack = np.stack(cor_img_stack).astype(float)
+    except:
+        raise TypeError("cor_img_stack elements should be real numbers, and "
+        "each frame should have the same dimensions.")
+        # and complex numbers can't be cast as float
+    check.threeD_array(cor_img_stack, 'cor_img_stack', TypeError)
+    try:
+        ill_corr_min = np.array(ill_corr_min).astype(float)
+    except:
+        raise TypeError("ill_corr_min elements should be real numbers")
+        # and complex numbers can't be cast as float
+    check.twoD_array(ill_corr_min, 'ill_corr_min', TypeError)
+    if np.shape(ill_corr_min) != np.shape(cor_img_stack[0]):
+        raise ValueError('The dimensions of ill_corr_min should match '
+        'those of each frame in cor_img_stack.')
+    try:
+        ill_corr_max = np.array(ill_corr_max).astype(float)
+    except:
+        raise TypeError("ill_corr_max elements should be real numbers")
+        # and complex numbers can't be cast as float
+    check.twoD_array(ill_corr_max, 'ill_corr_max', TypeError)
+    if np.shape(ill_corr_max) != np.shape(cor_img_stack[0]):
+        raise ValueError('The dimensions of ill_corr_max should match '
+        'those of each frame in cor_img_stack.')
+    try:
+        timings = np.array(timings).astype(float)
+    except:
+        raise TypeError("timings elements should be real numbers")
+    check.oneD_array(timings, 'timings', TypeError)
+    if len(timings) != len(cor_img_stack):
+        raise ValueError('timings must have length equal to number of frames '
+        'in cor_img_stack')
+    check.real_positive_scalar(thresh_factor, 'thresh_factor', TypeError)
+    check.positive_scalar_integer(length_limit, 'length_limit', TypeError)
+    if length_limit > len(cor_img_stack):
+        raise ValueError('length_limit cannot be longer than the number of '
+        'frames in cor_img_stack')
+    # This also ensures that cor_img_stack is not 0 frames
+
+    IS_DIPOLE_UPPER = []
+    IS_DIPOLE_LOWER = []
+    for frame in cor_img_stack:
+        IS_DIPOLE_UPPER.append((frame > (np.median(frame) +
+                np.std(frame)*thresh_factor)).astype(int))
+        IS_DIPOLE_LOWER.append((frame < (np.median(frame) -
+                np.std(frame)*thresh_factor)).astype(int))
+    IS_DIPOLE_UPPER = np.stack(IS_DIPOLE_UPPER)
+    IS_DIPOLE_LOWER = np.stack(IS_DIPOLE_LOWER)
+
+    # Dipole_above means the mean bright pixel of dipole is above
+    Dipole_above = IS_DIPOLE_UPPER + np.roll(IS_DIPOLE_LOWER, -1, axis=1)
+    Dipole_below = IS_DIPOLE_UPPER + np.roll(IS_DIPOLE_LOWER, 1, axis=1)
+    # assign edge rows as 0 to eliminate false positive from "rolling"
+    Dipole_above[:,-1,:] = 0
+    Dipole_below[:,0,:] = 0
+
+    # will have a 2 if both criteria met.  Turn that into a 1 for every dipole.
+    # must be float to allow for fractional values in next step
+    dipoles_above_count = (Dipole_above > 1).astype(float)
+    dipoles_below_count = (Dipole_below > 1).astype(float)
+
+    for t in range(len(timings)):
+        #count how many frames there are for a given phase time
+        # timings and dipoles_*_count have same length
+        # divide by number of counts for each non-unique phase time
+        pt_count = list(timings).count(list(timings)[t])
+        dipoles_above_count[t] = dipoles_above_count[t]/pt_count
+        dipoles_below_count[t] = dipoles_below_count[t]/pt_count
+
+    # if at least one of the phase times with multiple frames has a dipole
+    # in a given pixel, then ceil will count that phase time as a '1' in sum
+    ALL_DIPOLES_sum_above = np.ceil(np.sum(dipoles_above_count, axis = 0))
+    ALL_DIPOLES_sum_below = np.ceil(np.sum(dipoles_below_count, axis = 0))
+
+    # there should be dipoles present in the locations for enough phase times
+    dipoles_above_thresh = (ALL_DIPOLES_sum_above >= length_limit).astype(int)
+    dipoles_below_thresh = (ALL_DIPOLES_sum_below >= length_limit).astype(int)
+    [row_coords_above, col_coords_above] = np.where(dipoles_above_thresh)
+    [row_coords_below, col_coords_below] = np.where(dipoles_below_thresh)
+    above_rc = list(zip(row_coords_above, col_coords_above))
+    below_rc = list(zip(row_coords_below, col_coords_below))
+    # now remove the coordinates shared between both, and collect common
+    # coordinates into both_rc
+    set_above_rc = set(above_rc) - set(below_rc)
+    set_below_rc = set(below_rc) - set(above_rc)
+    both_rc = list(set(above_rc) - set_above_rc)
+    above_rc = list(set_above_rc)
+    below_rc = list(set_below_rc)
+    rc_both = {}
+    amps_both = np.zeros([len(both_rc), len(cor_img_stack)])
+
+    for i in range(len(both_rc)):
+        amps_both[i] = cor_img_stack[:, both_rc[i][0], both_rc[i][1]].copy()
+        rc_both[both_rc[i]] = {'amps_both': amps_both[i],
+            'loc_med_min': ill_corr_min[both_rc[i][0], both_rc[i][1]].copy(),
+            'loc_med_max': ill_corr_max[both_rc[i][0], both_rc[i][1]].copy()}
+        # getting times that corresponded to above and below dipoles
+        rc_both[both_rc[i]]['above'] = {'amp': [], 't': []}
+        rc_both[both_rc[i]]['below'] = {'amp': [], 't': []}
+        for z in range(len(dipoles_above_count)):
+            if dipoles_above_count[z][both_rc[i]] > 0:
+                rc_both[both_rc[i]]['above']['amp'].append(
+                            cor_img_stack[z][both_rc[i]])
+                rc_both[both_rc[i]]['above']['t'].append(timings[z])
+        for z in range(len(dipoles_below_count)):
+            if dipoles_below_count[z][both_rc[i]] > 0:
+                rc_both[both_rc[i]]['below']['amp'].append(
+                        cor_img_stack[z][both_rc[i]])
+                rc_both[both_rc[i]]['below']['t'].append(timings[z])
+        rc_both[both_rc[i]]['above']['amp'] = np.array(
+                        rc_both[both_rc[i]]['above']['amp'])
+        rc_both[both_rc[i]]['above']['t'] = np.array(
+                        rc_both[both_rc[i]]['above']['t'])
+        rc_both[both_rc[i]]['below']['amp'] = np.array(
+                        rc_both[both_rc[i]]['below']['amp'])
+        rc_both[both_rc[i]]['below']['t'] = np.array(
+                        rc_both[both_rc[i]]['below']['t'])
+
+    rc_above = {}
+    amps_above = np.zeros([len(above_rc),len(cor_img_stack)])
+    for i in range(len(above_rc)):
+        amps_above[i] = cor_img_stack[:, above_rc[i][0], above_rc[i][1]].copy()
+        rc_above[above_rc[i]] = {'amps_above': amps_above[i],
+            'loc_med_min': ill_corr_min[above_rc[i][0], above_rc[i][1]].copy(),
+            'loc_med_max': ill_corr_max[above_rc[i][0], above_rc[i][1]].copy()}
+
+    # same thing as above, but now for the "below" dipoles
+    rc_below = {}
+    amps_below = np.zeros([len(below_rc),len(cor_img_stack)])
+    for i in range(len(below_rc)):
+        amps_below[i] = cor_img_stack[:, below_rc[i][0], below_rc[i][1]].copy()
+        rc_below[below_rc[i]] = {'amps_below': amps_below[i],
+            'loc_med_min': ill_corr_min[below_rc[i][0], below_rc[i][1]].copy(),
+            'loc_med_max': ill_corr_max[below_rc[i][0], below_rc[i][1]].copy()}
+
+    return rc_above, rc_below, rc_both
+
+def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
+             tauc_min, tauc_max, offset_min, offset_max, both_a=None):
+    """
+    For a given temperature, scheme, and pixel, this function examines data
+    for amplitude vs phase time and fits for release time constant (tau) and
+    the probability for capture (pc). It tries fitting for a single trap in
+    the pixel, and if the goodness of fit is not high enough (if less than
+    fit_thresh), then the function attempts to fit for two traps in the pixel.
+    The exception is the case where a 'both' type pixel is input; then only a
+    two-trap fit is attempted. The function assumes the full time-dependent
+    form for capture probability.
+
+    The function was copied and pasted from trap_fitting.py in the II&T pipeline.
+
+    Args:
+        scheme (int): The scheme under consideration. Only certain probability 
+            functions are valid for different schemes. Values: {1, 2, 3, 4}.
+        amps (array): Amplitudes of bright pixel of the dipole. Units: e-.
+        times (array): Phase times in the same order as amps. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
+        fit_thresh (float): Minimum value required for adjusted coefficient of 
+            determination (adjusted R^2) for curve fitting for the release time 
+            constant (tau) using data for dipole amplitude vs phase time. The closer 
+            to 1, the better the fit. Must be between 0 and 1.
+        tau_min (float): Lower bound value for tau (release time constant) for 
+            curve fitting. Units: seconds. Must be greater than or equal to 0.
+        tau_max (float): Upper bound value for tau (release time constant) for 
+            curve fitting. Units: seconds. Must be greater than tau_min.
+        tauc_min (float): Lower bound value for tauc (capture time constant) for 
+            curve fitting. Units: e-. Must be greater than or equal to 0.
+        tauc_max (float): Upper bound value for tauc (capture time constant) for 
+            curve fitting. Units: e-. Must be greater than tauc_min.
+        offset_min (float): Lower bound value for the offset in the fitting of data 
+            for amplitude vs phase time. Acts as a nuisance parameter. Units: e-.
+        offset_max (float): Upper bound value for the offset in the fitting of data 
+            for amplitude vs phase time. Acts as a nuisance parameter. Units: e-. 
+            Must be greater than offset_min.
+        both_a (dict, optional): Use None if fitting for a dipole that is of the 
+            'above' or 'below' kind. Use the dictionary corresponding to 
+            rc_both[(row,col)]['above'] if fitting for a dipole that is of the 
+            'both' kind. Defaults to None.
+
+    Returns:
+        dict: Dictionary of fit data. Contains:
+            - prob: {1, 2, 3}; denotes probability function that gave the best fit
+            - pc: Constant capture probability, best-fit value
+            - pc_err: Standard deviation of pc
+            - tau: Release time constant, best-fit value
+            - tau_err: Standard deviation of tau
+
+        The structure of the returned dictionary varies based on `both_a`:
+        - If `both_a` is None and one trap is the best fit:
+            {prob: [[pc, pc_err, tau, tau_err]]}
+        - If `both_a` is None and two traps are the best fit:
+            {prob1: [[pc, pc_err, tau, tau_err]],
+             prob2: [[pc2, pc2_err, tau2, tau2_err]]}
+        - If both traps are of prob1 type:
+            {prob1: [[pc, pc_err, tau, tau_err], [pc2, pc2_err, tau2, tau2_err]]}
+        - If `both_a` is not None:
+            {type1: {1: [[pc, pc_err, tau, tau_err]]},
+             type2: {2: [[pc2, pc2_err, tau2, tau2_err]]}}
+            where type1 is either 'a' for above or 'b' for below, and type2 is
+            whichever of those type1 is not.
+    """
+
+
+    # TODO time-dep pc and pc2:  assume constant charge packet throughout the
+    # different phase times across all num_pumps, when in reality, the charge
+    # packet changes a little with each pump (a la 'express=num_pumps' in
+    # arcticpy).  The fit function would technically be a sum of num_pumps
+    # terms in which tauc is a slightly different value in each.  So the value
+    # of tauc may not be that useful; could compare its uncertainty to that of
+    # the values in the literature.  But it's generally good for large charge
+    # packet values (perhaps it nominally corresponds to the average between
+    # the starting charge packet value for trap pumping and the ending value
+    # read off the highest-amp phase time frame.
+
+    # check inputs
+    if scheme != 1 and scheme != 2 and scheme != 3 and scheme != 4:
+        raise TypeError('scheme must be 1, 2, 3, or 4.')
+    try:
+        amps = np.array(amps).astype(float)
+    except:
+        raise TypeError("amps elements should be real numbers")
+    check.oneD_array(amps, 'amps', TypeError)
+    try:
+        times = np.array(times).astype(float)
+    except:
+        raise TypeError("times elements should be real numbers")
+    check.oneD_array(times, 'times', TypeError)
+    if len(np.unique(times)) < 6:
+        raise IndexError('times must have a number of unique phase times '
+        'longer than the number of fitted parameters.')
+    if len(amps) != len(times):
+        raise ValueError("times and amps should have same number of elements")
+    check.positive_scalar_integer(num_pumps, 'num_pumps', TypeError)
+    check.real_nonnegative_scalar(fit_thresh, 'fit_thresh', TypeError)
+    if fit_thresh > 1:
+        raise ValueError('fit_thresh should fall in (0,1).')
+    check.real_nonnegative_scalar(tau_min, 'tau_min', TypeError)
+    check.real_nonnegative_scalar(tau_max, 'tau_max', TypeError)
+    if tau_max <= tau_min:
+        raise ValueError('tau_max must be > tau_min')
+    check.real_nonnegative_scalar(tauc_min, 'tauc_min', TypeError)
+    check.real_nonnegative_scalar(tauc_max, 'tauc_max', TypeError)
+    if tauc_max <= tauc_min:
+        raise ValueError('tauc_max must be > tauc_min')
+    check.real_scalar(offset_min, 'offset_min', TypeError)
+    check.real_scalar(offset_max, 'offset_max', TypeError)
+    if offset_max <= offset_min:
+        raise ValueError('offset_max must be > offset_min')
+    if (type(both_a) is not dict) and (both_a is not None):
+        raise TypeError('both_a must be a rc_both[(row,col)][\'above\'] '
+        'dictionary or None.  See trap_id() doc string for more details.')
+    if both_a is not None:
+        try:
+            x = len(both_a['amp'])
+            y = len(both_a['t'])
+        except:
+            raise KeyError('both_a must contain \'amp\' and \'t\' keys.')
+        if x != y:
+            raise ValueError('both_a[\'amp\'] and both_a[\'t\'] must have the '
+            'same number of elements')
+    # if input for both_a doesn't conform to expected dictionary structure,
+    # exceptions will be raised
+
+    # define all these inside this function because they depend also on
+    # num_pumps, and I can't specify an unfitted parameter in the function
+    # definition if I want to use curve_fit
+    def P1(time_data, offset, tauc, tau):
+        """Probability function 1, one trap.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-2*time_data/tau)))
+
+    def P1_P1(time_data, offset, tauc, tau, tauc2, tau2):
+        """Probability function 1, two traps.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        pc2 = 1 - np.exp(-time_data/tauc2)
+        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-2*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-2*time_data/tau2))
+
+    def P2(time_data, offset, tauc, tau):
+        """Probability function 2, one trap.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        return offset+(num_pumps*pc*(np.exp(-2*time_data/tau)-
+            np.exp(-3*time_data/tau)))
+
+    def P1_P2(time_data, offset, tauc, tau, tauc2, tau2):
+        """One trap for probability function 1, one for probability function 2.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        pc2 = 1 - np.exp(-time_data/tauc2)
+        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-2*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
+
+    def P2_P2(time_data, offset, tauc, tau, tauc2, tau2):
+        """Probability function 2, two traps.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        pc2 = 1 - np.exp(-time_data/tauc2)
+        return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
+            np.exp(-3*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
+
+    def P3(time_data, offset, tauc, tau):
+        """Probability function 3, one trap.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-4*time_data/tau)))
+
+    def P3_P3(time_data, offset, tauc, tau, tauc2, tau2):
+        """Probability function 3, two traps.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        pc2 = 1 - np.exp(-time_data/tauc2)
+        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-4*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
+
+    def P2_P3(time_data, offset, tauc, tau, tauc2, tau2):
+        """One trap for probability function 2, one for probability function 3.
+        """
+        pc = 1 - np.exp(-time_data/tauc)
+        pc2 = 1 - np.exp(-time_data/tauc2)
+        return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
+            np.exp(-3*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
+
+    #upper bound for tauc: 1*eperdn, but our knowledge of eperdn may have
+    # error.
+
+    # Makes sense that you wouldn't find traps at times far away from time
+    # constant, so to avoid false good fits, restrict bounds between 10^-6 and
+    # 10^-2
+    # in order, for one trap:  offset, tauc, tau
+    l_bounds_one = [offset_min, tauc_min, tau_min]
+    u_bounds_one = [offset_max, tauc_max, tau_max]
+    # avoid initial guess of 0
+    offset0 = (offset_min+offset_max)/2
+    if offset0 == 0:
+        offset0 = min(1 + (offset_min+offset_max)/2, offset_max)
+    offset0l = offset_min
+    if offset0l == 0:
+        offset0l = min(offset0l+1, offset_max)
+    offset0u = offset_max
+    if offset0u == 0:
+        offset0u = max(offset0u-1, offset_min)
+    # tauc0 = 1e-9
+    # if tauc0 < tauc_min or tauc0 > tauc_max:
+    tauc0 = (tauc_min+tauc_max)/2
+    tauc0l = tauc_min
+    if tauc0l == 0:
+        tauc0l = min(tauc0l+1e-12, tauc_max)
+    tauc0u = tauc_max
+    tau0 = (tau_min + tau_max)/2
+    tau0l = tau_min
+    if tau0l == 0:
+        tau0l = min(tau0l+1e-7, tau_max)
+    tau0u = tau_max
+    # tau0 = np.median(times)
+    # if tau_min > tau0 or tau_max < tau0:
+    #     tau0 = (tau_min+tau_max)/2
+    # start search from biggest time since these data points more
+    # spread out if phase times are taken evenly spaced in log space; don't
+    # want to give too much weight to the bunched-up early times and lock in
+    # an answer too early in the curve search, so start at other end.
+    # Try search from earliest time and biggest time, and see which gives a
+    # bigger adj R^2 value
+    p01l = [offset0, tauc0, tau0l]
+    p01u = [offset0, tauc0, tau0u]
+    #l_bounds_one = [-100000, 0, 0]
+    #u_bounds_one = [100000, 1, 1]
+    bounds_one = (l_bounds_one, u_bounds_one)
+    # in order, for two traps:  offset, tauc, tau, tauc2, tau2
+    l_bounds_two = [offset_min, tauc_min, tau_min, tauc_min, tau_min]
+    u_bounds_two = [offset_max, tauc_max, tau_max, tauc_max, tau_max]
+    # p02l = [offset0l, k_min, tauc_min, tau0l, tauc_min, tau0l]
+    # p02u = [offset0u, k_max, tauc_max, tau0u, tauc_max, tau0u]
+    p02l = [offset0, tauc0u, tau0l, tauc0l, tau0u]
+    p02u = [offset0, tauc0l, tau0u, tauc0u, tau0l]
+    # p02l = [offset0, tauc0, tau0l, tauc0, tau0u]
+    # p02u = [offset0, tauc0, tau0u, tauc0, tau0l]
+    #l_bounds_two = [-100000, 0, 0, 0, 0]
+    #u_bounds_two = [100000, 1, 1, 1, 1]
+    bounds_two = (l_bounds_two, u_bounds_two)
+
+    # same for every curve fit (sum of the squared difference total)
+    sstot = np.sum((amps - np.mean(amps))**2)
+
+    if scheme == 1 or scheme == 2:
+
+        if both_a == None:
+            # attempt all possible probability functions
+            try:
+                popt1l, pcov1l = curve_fit(P1, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt1u, pcov1u = curve_fit(P1, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit1l = P1(times, popt1l[0], popt1l[1], popt1l[2])
+            fit1u = P1(times, popt1u[0], popt1u[1], popt1u[2])
+            ssres1l = np.sum((fit1l - amps)**2)
+            ssres1u = np.sum((fit1u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value1l = 1 - (ssres1l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt1l))
+            R_value1u = 1 - (ssres1u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt1u))
+            R_value1 = max(R_value1l, R_value1u)
+            if R_value1 == R_value1l:
+                popt1 = popt1l; pcov1 = pcov1l
+            if R_value1 == R_value1u:
+                popt1 = popt1u; pcov1 = pcov1u
+
+            try:
+                popt2l, pcov2l = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt2u, pcov2u = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2])
+            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2])
+            ssres2l = np.sum((fit2l - amps)**2)
+            ssres2u = np.sum((fit2u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value2l = 1 - (ssres2l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2l))
+            R_value2u = 1 - (ssres2u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2u))
+            R_value2 = max(R_value2l, R_value2u)
+            if R_value2 == R_value2l:
+                popt2 = popt2l; pcov2 = pcov2l
+            if R_value2 == R_value2u:
+                popt2 = popt2u; pcov2 = pcov2u
+
+            # accept the best fit and require threshold met
+            maxR1 = max(R_value1, R_value2)
+
+            if maxR1 >= fit_thresh and maxR1 == R_value1:
+                tauc = popt1[1]
+                tau = popt1[2]
+                _, tauc_err, tau_err  = np.sqrt(np.diag(pcov1))
+                return {1: [[tauc, tauc_err, tau, tau_err]]}
+            if maxR1 >= fit_thresh and maxR1 == R_value2:
+                tauc = popt2[1]
+                tau = popt2[2]
+                _, tauc_err, tau_err  = np.sqrt(np.diag(pcov2))
+                return {2: [[tauc, tauc_err, tau, tau_err]]}
+
+        # maxR1 must have been below fit_thresh.  Now try 2 traps
+
+        try:
+            popt11l, pcov11l = curve_fit(P1_P1, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt11u, pcov11u = curve_fit(P1_P1, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit11l = P1_P1(times, popt11l[0], popt11l[1], popt11l[2], popt11l[3],
+        popt11l[4])
+        fit11u = P1_P1(times, popt11u[0], popt11u[1], popt11u[2], popt11u[3],
+        popt11u[4])
+        ssres11l = np.sum((fit11l - amps)**2)
+        ssres11u = np.sum((fit11u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value11l = 1 - (ssres11l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt11l))
+        R_value11u = 1 - (ssres11u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt11u))
+        R_value11 = max(R_value11l, R_value11u)
+        if R_value11 == R_value11l:
+            popt11 = popt11l; pcov11 = pcov11l
+        if R_value11 == R_value11u:
+            popt11 = popt11u; pcov11 = pcov11u
+
+        try:
+            popt12l, pcov12l = curve_fit(P1_P2, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt12u, pcov12u = curve_fit(P1_P2, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit12l = P1_P2(times, popt12l[0], popt12l[1], popt12l[2], popt12l[3],
+        popt12l[4])
+        fit12u = P1_P2(times, popt12u[0], popt12u[1], popt12u[2], popt12u[3],
+        popt12u[4])
+        ssres12l = np.sum((fit12l - amps)**2)
+        ssres12u = np.sum((fit12u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value12l = 1 - (ssres12l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt12l))
+        R_value12u = 1 - (ssres12u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt12u))
+        R_value12 = max(R_value12l, R_value12u)
+        if R_value12 == R_value12l:
+            popt12 = popt12l; pcov12 = pcov12l
+        if R_value12 == R_value12u:
+            popt12 = popt12u; pcov12 = pcov12u
+
+        try:
+            popt22l, pcov22l = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt22u, pcov22u = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit22l = P2_P2(times, popt22l[0], popt22l[1], popt22l[2], popt22l[3],
+        popt22l[4])
+        fit22u = P2_P2(times, popt22u[0], popt22u[1], popt22u[2], popt22u[3],
+        popt22u[4])
+        ssres22l = np.sum((fit22l - amps)**2)
+        ssres22u = np.sum((fit22u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value22l = 1 - (ssres22l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22l))
+        R_value22u = 1 - (ssres22u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22u))
+        R_value22 = max(R_value22l, R_value22u)
+        if R_value22 == R_value22l:
+            popt22 = popt22l; pcov22 = pcov22l
+        if R_value22 == R_value22u:
+            popt22 = popt22u; pcov22 = pcov22u
+
+        maxR2 = max(R_value11, R_value12, R_value22)
+        if maxR2 < fit_thresh:
+            warnings.warn('No curve fit gave adjusted R^2 value above '
+            'fit_thresh')
+            return None
+
+        if maxR2 == R_value11:
+            off = popt11[0]
+            tauc = popt11[1]
+            tau = popt11[2]
+            tauc2 = popt11[3]
+            tau2 = popt11[4]
+            _, tauc_err, tau_err, tauc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov11))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                # TODO v2, for trap_fit and trap_fit_const:
+                # if 'amp' list for 'above' is identical to 'amp'
+                #list for 'below', then earmark for assignment whenever
+                # finding optimal matchings of schemes for sub-el loc; if
+                #no particular assignment is better at that point, then the
+                #assignment doesn't matter
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P1 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(2)
+                #P1 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{1: [[tauc, tauc_err, tau, tau_err]]},
+                        'b':{1: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{1: [[tauc, tauc_err, tau, tau_err]]},
+                        'a':{1: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+            return {1: [[tauc, tauc_err, tau, tau_err],
+                [tauc2, tauc2_err, tau2, tau2_err]]}
+
+        if maxR2 == R_value12:
+            off = popt12[0]
+            tauc = popt12[1]
+            tau = popt12[2]
+            tauc2 = popt12[3]
+            tau2 = popt12[4]
+            _, tauc_err, tau_err, tauc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov12))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P1 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(2)
+                #P2 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(3/2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{1: [[tauc, tauc_err, tau, tau_err]]},
+                        'b':{2: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{1: [[tauc, tauc_err, tau, tau_err]]},
+                        'a':{2: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+            return {1: [[tauc, tauc_err, tau, tau_err]],
+                2: [[tauc2, tauc2_err, tau2, tau2_err]]}
+
+        if maxR2 == R_value22:
+            off = popt22[0]
+            tauc = popt22[1]
+            tau = popt22[2]
+            tauc2 = popt22[3]
+            tau2 = popt22[4]
+            _, tauc_err, tau_err, tauc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov22))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P2 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(3/2)
+                #P2 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(3/2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{2: [[tauc, tauc_err, tau, tau_err]]},
+                        'b':{2: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{2: [[tauc, tauc_err, tau, tau_err]]},
+                        'a':{2: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+            return {2: [[tauc, tauc_err, tau, tau_err],
+                [tauc2, tauc2_err, tau2, tau2_err]]}
+
+    if scheme == 3 or scheme == 4:
+
+        if both_a == None:
+            #attempt both probability functions
+            try:
+                popt3l, pcov3l = curve_fit(P3, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt3u, pcov3u = curve_fit(P3, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit3l = P3(times, popt3l[0], popt3l[1], popt3l[2])
+            fit3u = P3(times, popt3u[0], popt3u[1], popt3u[2])
+            ssres3l = np.sum((fit3l - amps)**2)
+            ssres3u = np.sum((fit3u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value3l = 1 - (ssres3l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt3l))
+            R_value3u = 1 - (ssres3u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt3u))
+            R_value3 = max(R_value3l, R_value3u)
+            if R_value3 == R_value3l:
+                popt3 = popt3l; pcov3 = pcov3l
+            if R_value3 == R_value3u:
+                popt3 = popt3u; pcov3 = pcov3u
+
+            try:
+                popt2l, pcov2l = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt2u, pcov2u = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2])
+            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2])
+            ssres2l = np.sum((fit2l - amps)**2)
+            ssres2u = np.sum((fit2u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value2l = 1 - (ssres2l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2l))
+            R_value2u = 1 - (ssres2u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2u))
+            R_value2 = max(R_value2l, R_value2u)
+            if R_value2 == R_value2l:
+                popt2 = popt2l; pcov2 = pcov2l
+            if R_value2 == R_value2u:
+                popt2 = popt2u; pcov2 = pcov2u
+
+            # accept the best fit and require threshold met
+            maxR1 = max(R_value3, R_value2)
+
+            if maxR1 >= fit_thresh and maxR1 == R_value3:
+                tauc = popt3[1]
+                tau = popt3[2]
+                _, tauc_err, tau_err  = np.sqrt(np.diag(pcov3))
+                return {3: [[tauc, tauc_err, tau, tau_err]]}
+            if maxR1 >= fit_thresh and maxR1 == R_value2:
+                tauc = popt2[1]
+                tau = popt2[2]
+                _, tauc_err, tau_err  = np.sqrt(np.diag(pcov2))
+                return {2: [[tauc, tauc_err, tau, tau_err]]}
+
+        # maxR1 must have been below fit_thresh.  Now try 2 traps
+
+        try:
+            popt33l, pcov33l = curve_fit(P3_P3, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt33u, pcov33u = curve_fit(P3_P3, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit33l = P3_P3(times, popt33l[0], popt33l[1], popt33l[2], popt33l[3],
+        popt33l[4])
+        fit33u = P3_P3(times, popt33u[0], popt33u[1], popt33u[2], popt33u[3],
+        popt33u[4])
+        ssres33l = np.sum((fit33l - amps)**2)
+        ssres33u = np.sum((fit33u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value33l = 1 - (ssres33l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt33l))
+        R_value33u = 1 - (ssres33u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt33u))
+        R_value33 = max(R_value33l, R_value33u)
+        if R_value33 == R_value33l:
+            popt33 = popt33l; pcov33 = pcov33l
+        if R_value33 == R_value33u:
+            popt33 = popt33u; pcov33 = pcov33u
+
+        try:
+            popt23l, pcov23l = curve_fit(P2_P3, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt23u, pcov23u = curve_fit(P2_P3, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit23l = P2_P3(times, popt23l[0], popt23l[1], popt23l[2], popt23l[3],
+        popt23l[4])
+        fit23u = P2_P3(times, popt23u[0], popt23u[1], popt23u[2], popt23u[3],
+        popt23u[4])
+        ssres23l = np.sum((fit23l - amps)**2)
+        ssres23u = np.sum((fit23u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value23l = 1 - (ssres23l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt23l))
+        R_value23u = 1 - (ssres23u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt23u))
+        R_value23 = max(R_value23l, R_value23u)
+        if R_value23 == R_value23l:
+            popt23 = popt23l; pcov23 = pcov23l
+        if R_value23 == R_value23u:
+            popt23 = popt23u; pcov23 = pcov23u
+
+        try:
+            popt22l, pcov22l = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt22u, pcov22u = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit22l = P2_P2(times, popt22l[0], popt22l[1], popt22l[2], popt22l[3],
+        popt22l[4])
+        fit22u = P2_P2(times, popt22u[0], popt22u[1], popt22u[2], popt22u[3],
+        popt22u[4])
+        ssres22l = np.sum((fit22l - amps)**2)
+        ssres22u = np.sum((fit22u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value22l = 1 - (ssres22l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22l))
+        R_value22u = 1 - (ssres22u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22u))
+        R_value22 = max(R_value22l, R_value22u)
+        if R_value22 == R_value22l:
+            popt22 = popt22l; pcov22 = pcov22l
+        if R_value22 == R_value22u:
+            popt22 = popt22u; pcov22 = pcov22u
+
+        maxR2 = max(R_value33, R_value23, R_value22)
+
+        if maxR2 < fit_thresh:
+            warnings.warn('No curve fit gave adjusted R^2 value above '
+            'fit_thresh')
+            return None
+
+        if maxR2 == R_value33:
+            off = popt33[0]
+            tauc = popt33[1]
+            tau = popt33[2]
+            tauc2 = popt33[3]
+            tau2 = popt33[4]
+            _, tauc_err, tau_err, tauc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov33))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P3 for tau
+                a_tau = t_a[max_a_ind[0]]/(2*np.log(2)/3)
+                #P3 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/(2*np.log(2)/3)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{3: [[tauc, tauc_err, tau, tau_err]]},
+                        'b':{3: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{3: [[tauc, tauc_err, tau, tau_err]]},
+                        'a':{3: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+            return {3: [[tauc, tauc_err, tau, tau_err], [tauc2, tauc2_err,
+                tau2, tau2_err]]}
+
+        if maxR2 == R_value23:
+            off = popt23[0]
+            tauc = popt23[1]
+            tau = popt23[2]
+            tauc2 = popt23[3]
+            tau2 = popt23[4]
+            _, tauc_err, tau_err, tauc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov23))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P2 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(3/2)
+                #P3 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/(2*np.log(2)/3)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{2: [[tauc, tauc_err, tau, tau_err]]},
+                        'b':{3: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{2: [[tauc, tauc_err, tau, tau_err]]},
+                        'a':{3: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+            return {2: [[tauc, tauc_err, tau, tau_err]],
+                3: [[tauc2, tauc2_err, tau2, tau2_err]]}
+
+        if maxR2 == R_value22:
+            off = popt22[0]
+            tauc = popt22[1]
+            tau = popt22[2]
+            tauc2 = popt22[3]
+            tau2 = popt22[4]
+            _, tauc_err, tau_err, tauc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov22))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P2 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(3/2)
+                #P2 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(3/2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{2: [[tauc, tauc_err, tau, tau_err]]},
+                        'b':{2: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{2: [[tauc, tauc_err, tau, tau_err]]},
+                        'a':{2: [[tauc2, tauc2_err, tau2, tau2_err]]}}
+            return {2: [[tauc, tauc_err, tau, tau_err],
+                [tauc2, tauc2_err, tau2, tau2_err]]}
+
+def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
+                   tau_max, pc_min, pc_max, offset_min, offset_max, both_a=None):
+    """
+    For a given temperature, scheme, and pixel, this function examines data
+    for amplitude vs phase time and fits for release time constant (tau) and
+    the probability for capture (pc). It tries fitting for a single trap in
+    the pixel, and if the goodness of fit is not high enough (if less than
+    fit_thresh), then the function attempts to fit for two traps in the pixel.
+    The exception is the case where a 'both' type pixel is input; then only a
+    two-trap fit is attempted. The function assumes a constant for pc rather
+    than its actual time-dependent form.
+
+    The function was copied and pasted from trap_fitting.py in the II&T pipeline.
+
+    Args:
+        scheme (int): The scheme under consideration. Only certain probability 
+            functions are valid for different schemes. Values: {1, 2, 3, 4}.
+        amps (array): Amplitudes of bright pixel of the dipole. Units: e-.
+        times (array): Phase times in the same order as amps. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
+        fit_thresh (float): Minimum value required for adjusted coefficient of 
+            determination (adjusted R^2) for curve fitting for the release time 
+            constant (tau) using data for dipole amplitude vs phase time. The closer 
+            to 1, the better the fit. Must be between 0 and 1.
+        tau_min (float): Lower bound value for tau (release time constant) for 
+            curve fitting. Units: seconds. Must be greater than or equal to 0.
+        tau_max (float): Upper bound value for tau (release time constant) for 
+            curve fitting. Units: seconds. Must be greater than tau_min.
+        pc_min (float): Lower bound value for pc (capture probability) for 
+            curve fitting. Units: e-. Must be greater than or equal to 0.
+        pc_max (float): Upper bound value for pc (capture probability) for 
+            curve fitting. Units: e-. Must be greater than pc_min.
+        offset_min (float): Lower bound value for the offset in the fitting of 
+            data for amplitude vs phase time. Acts as a nuisance parameter. Units: e-.
+        offset_max (float): Upper bound value for the offset in the fitting of 
+            data for amplitude vs phase time. Acts as a nuisance parameter. Units: e-. 
+            Must be greater than offset_min.
+        both_a (dict, optional): Use None if fitting for a dipole that is of the 
+            'above' or 'below' kind. Use the dictionary corresponding to 
+            rc_both[(row,col)]['above'] if fitting for a dipole that is of the 
+            'both' kind. Defaults to None.
+
+    Returns:
+        dict: Dictionary of fit data. Contains:
+            - prob: {1, 2, 3}; denotes probability function that gave the best fit
+            - pc: Constant capture probability, best-fit value
+            - pc_err: Standard deviation of pc
+            - tau: Release time constant, best-fit value
+            - tau_err: Standard deviation of tau
+
+        The structure of the returned dictionary varies based on `both_a`:
+        - If `both_a` is None and one trap is the best fit:
+            {prob: [[pc, pc_err, tau, tau_err]]}
+        - If `both_a` is None and two traps are the best fit:
+            {prob1: [[pc, pc_err, tau, tau_err]],
+             prob2: [[pc2, pc2_err, tau2, tau2_err]]}
+        - If both traps are of prob1 type:
+            {prob1: [[pc, pc_err, tau, tau_err], [pc2, pc2_err, tau2, tau2_err]]}
+        - If `both_a` is not None:
+            {type1: {1: [[pc, pc_err, tau, tau_err]]},
+             type2: {2: [[pc2, pc2_err, tau2, tau2_err]]}}
+            where type1 is either 'a' for above or 'b' for below, and type2 is
+            whichever of those type1 is not.
+    """
+
+    # TODO time-dep pc and pc2:  assume constant charge packet throughout the
+    # different phase times across all num_pumps, when in reality, the charge
+    # packet changes a little with each pump (a la 'express=num_pumps' in
+    # arcticpy).  The fit function would technically be a sum of num_pumps
+    # terms in which tauc is a slightly different value in each.  So the value
+    # of tauc may not be that useful; could compare its uncertainty to that of
+    # the values in the literature.  But it's generally good for large charge
+    # packet values (perhaps it nominally corresponds to the average between
+    # the starting charge packet value for trap pumping and the ending value
+    # read off the highest-amp phase time frame.
+
+    # check inputs
+    if scheme != 1 and scheme != 2 and scheme != 3 and scheme != 4:
+        raise TypeError('scheme must be 1, 2, 3, or 4.')
+    try:
+        amps = np.array(amps).astype(float)
+    except:
+        raise TypeError("amps elements should be real numbers")
+    check.oneD_array(amps, 'amps', TypeError)
+    try:
+        times = np.array(times).astype(float)
+    except:
+        raise TypeError("times elements should be real numbers")
+    check.oneD_array(times, 'times', TypeError)
+    if len(np.unique(times)) < 6:
+        raise IndexError('times must have a number of unique phase times '
+        'longer than the number of fitted parameters.')
+    if len(amps) != len(times):
+        raise ValueError("times and amps should have same number of elements")
+    check.positive_scalar_integer(num_pumps, 'num_pumps', TypeError)
+    check.real_nonnegative_scalar(fit_thresh, 'fit_thresh', TypeError)
+    if fit_thresh > 1:
+        raise ValueError('fit_thresh should fall in (0,1).')
+    check.real_nonnegative_scalar(tau_min, 'tau_min', TypeError)
+    check.real_nonnegative_scalar(tau_max, 'tau_max', TypeError)
+    if tau_max <= tau_min:
+        raise ValueError('tau_max must be > tau_min')
+    check.real_nonnegative_scalar(pc_min, 'pc_min', TypeError)
+    check.real_nonnegative_scalar(pc_max, 'pc_max', TypeError)
+    if pc_max <= pc_min:
+        raise ValueError('pc_max must be > pc_min')
+    check.real_scalar(offset_min, 'offset_min', TypeError)
+    check.real_scalar(offset_max, 'offset_max', TypeError)
+    if offset_max <= offset_min:
+        raise ValueError('offset_max must be > offset_min')
+    if (type(both_a) is not dict) and (both_a is not None):
+        raise TypeError('both_a must be a rc_both[(row,col)][\'above\'] '
+        'dictionary.  See trap_id() doc string for more details.')
+    if both_a is not None:
+        try:
+            x = len(both_a['amp'])
+            y = len(both_a['t'])
+        except:
+            raise KeyError('both_a must contain \'amp\' and \'t\' keys.')
+        if x != y:
+            raise ValueError('both_a[\'amp\'] and both_a[\'t\'] must have the '
+            'same number of elements')
+    # if both_a doesn't have expected keys, exceptions will be raised
+
+    # define all these inside this function because they depend also on
+    # num_pumps, and I can't specify an unfitted parameter in the function
+    # definition if I want to use curve_fit
+    def P1(time_data, offset, pc, tau):
+        """Probability function 1, one trap.
+        """
+        return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-2*time_data/tau)))
+
+    def P1_P1(time_data, offset, pc, tau, pc2, tau2):
+        """Probability function 1, two traps.
+        """
+        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-2*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-2*time_data/tau2))
+
+    def P2(time_data, offset, pc, tau):
+        """Probability function 2, one trap.
+        """
+        return offset+(num_pumps*pc*(np.exp(-2*time_data/tau)-
+            np.exp(-3*time_data/tau)))
+
+    def P1_P2(time_data, offset, pc, tau, pc2, tau2):
+        """One trap for probability function 1, one for probability function 2.
+        """
+        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-2*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
+
+    def P2_P2(time_data, offset, pc, tau, pc2, tau2):
+        """Probability function 2, two traps.
+        """
+        return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
+            np.exp(-3*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
+
+    def P3(time_data, offset, pc, tau):
+        """Probability function 3, one trap.
+        """
+        return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-4*time_data/tau)))
+
+    def P3_P3(time_data, offset, pc, tau, pc2, tau2):
+        """Probability function 3, two traps.
+        """
+        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+            np.exp(-4*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
+
+    def P2_P3(time_data, offset, pc, tau, pc2, tau2):
+        """One trap for probability function 2, one for probability function 3.
+        """
+        return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
+            np.exp(-3*time_data/tau))+ \
+            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
+
+    #upper bound for pc: 1*eperdn, but our knowledge of eperdn may have error.
+
+    # Makes sense that you wouldn't find traps at times far away from time
+    # constant, so to avoid false good fits, restrict bounds between 10^-6 and
+    # 10^-2
+    # in order, for one trap:  offset, pc, tau
+    l_bounds_one = [offset_min, pc_min, tau_min]
+    u_bounds_one = [offset_max, pc_max, tau_max]
+    # avoid initial guess of 0
+    offset0 = (offset_min+offset_max)/2
+    if (offset_min+offset_max)/2 == 0:
+        offset0 = min(1 + (offset_min+offset_max)/2, offset_max)
+    offset0l = offset_min
+    if offset0l == 0:
+        offset0l = min(offset0l+1, offset_max)
+    offset0u = offset_max
+    if offset0u == 0:
+        offset0u = max(offset0u-1, offset_min)
+    pc0 = 1
+    if 1 < pc_min or 1 > pc_max:
+        pc0 = pc_min
+    tau0 = (tau_min + tau_max)/2
+    tau0l = tau_min
+    if tau0l == 0:
+        tau0l = min(tau0l+1e-7, tau_max)
+    tau0u = tau_max
+    # tau0 = np.median(times)
+    # if tau_min > tau0 or tau_max < tau0:
+    #     tau0 = (tau_min+tau_max)/2
+    # start search from biggest time since these data points more
+    # spread out if phase times are taken evenly spaced in log space; don't
+    # want to give too much weight to the bunched-up early times and lock in
+    # an answer too early in the curve search, so start at other end.
+    # Try search from earliest time and biggest time, and see which gives a
+    # bigger adj R^2 value
+    p01l = [offset0, pc0, tau0l]
+    p01u = [offset0, pc0, tau0u]
+    #l_bounds_one = [-100000, 0, 0]
+    #u_bounds_one = [100000, 1, 1]
+    bounds_one = (l_bounds_one, u_bounds_one)
+    # in order, for two traps:  offset, tauc, tau, tauc2, tau2
+    l_bounds_two = [offset_min, pc_min, tau_min, pc_min, tau_min]
+    u_bounds_two = [offset_max, pc_max, tau_max, pc_max, tau_max]
+    # p02l = [offset0l, k_min, tauc_min, tau0l, tauc_min, tau0l]
+    # p02u = [offset0u, k_max, tauc_max, tau0u, tauc_max, tau0u]
+    p02l = [offset0, pc0, tau0l, pc0, tau0u]
+    p02u = [offset0, pc0, tau0u, pc0, tau0l]
+    #l_bounds_two = [-100000, 0, 0, 0, 0]
+    #u_bounds_two = [100000, 1, 1, 1, 1]
+    bounds_two = (l_bounds_two, u_bounds_two)
+
+    # same for every curve fit (sum of the squared difference total)
+    sstot = np.sum((amps - np.mean(amps))**2)
+
+    if scheme == 1 or scheme == 2:
+
+        if both_a == None:
+            # attempt all possible probability functions
+            try:
+                popt1l, pcov1l = curve_fit(P1, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt1u, pcov1u = curve_fit(P1, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit1l = P1(times, popt1l[0], popt1l[1], popt1l[2])
+            fit1u = P1(times, popt1u[0], popt1u[1], popt1u[2])
+            ssres1l = np.sum((fit1l - amps)**2)
+            ssres1u = np.sum((fit1u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value1l = 1 - (ssres1l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt1l))
+            R_value1u = 1 - (ssres1u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt1u))
+            R_value1 = max(R_value1l, R_value1u)
+            if R_value1 == R_value1l:
+                popt1 = popt1l; pcov1 = pcov1l
+            if R_value1 == R_value1u:
+                popt1 = popt1u; pcov1 = pcov1u
+
+            try:
+                popt2l, pcov2l = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt2u, pcov2u = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2])
+            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2])
+            ssres2l = np.sum((fit2l - amps)**2)
+            ssres2u = np.sum((fit2u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value2l = 1 - (ssres2l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2l))
+            R_value2u = 1 - (ssres2u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2u))
+            R_value2 = max(R_value2l, R_value2u)
+            if R_value2 == R_value2l:
+                popt2 = popt2l; pcov2 = pcov2l
+            if R_value2 == R_value2u:
+                popt2 = popt2u; pcov2 = pcov2u
+
+            # accept the best fit and require threshold met
+            maxR1 = max(R_value1, R_value2)
+
+            if maxR1 >= fit_thresh and maxR1 == R_value1:
+                pc = popt1[1]
+                tau = popt1[2]
+                _, pc_err, tau_err  = np.sqrt(np.diag(pcov1))
+                return {1: [[pc, pc_err, tau, tau_err]]}
+            if maxR1 >= fit_thresh and maxR1 == R_value2:
+                pc = popt2[1]
+                tau = popt2[2]
+                _, pc_err, tau_err  = np.sqrt(np.diag(pcov2))
+                return {2: [[pc, pc_err, tau, tau_err]]}
+
+        # maxR1 must have been below fit_thresh.  Now try 2 traps
+
+        try:
+            popt11l, pcov11l = curve_fit(P1_P1, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt11u, pcov11u = curve_fit(P1_P1, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit11l = P1_P1(times, popt11l[0], popt11l[1], popt11l[2], popt11l[3],
+        popt11l[4])
+        fit11u = P1_P1(times, popt11u[0], popt11u[1], popt11u[2], popt11u[3],
+        popt11u[4])
+        ssres11l = np.sum((fit11l - amps)**2)
+        ssres11u = np.sum((fit11u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value11l = 1 - (ssres11l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt11l))
+        R_value11u = 1 - (ssres11u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt11u))
+        R_value11 = max(R_value11l, R_value11u)
+        if R_value11 == R_value11l:
+            popt11 = popt11l; pcov11 = pcov11l
+        if R_value11 == R_value11u:
+            popt11 = popt11u; pcov11 = pcov11u
+
+        try:
+            popt12l, pcov12l = curve_fit(P1_P2, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt12u, pcov12u = curve_fit(P1_P2, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit12l = P1_P2(times, popt12l[0], popt12l[1], popt12l[2], popt12l[3],
+        popt12l[4])
+        fit12u = P1_P2(times, popt12u[0], popt12u[1], popt12u[2], popt12u[3],
+        popt12u[4])
+        ssres12l = np.sum((fit12l - amps)**2)
+        ssres12u = np.sum((fit12u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value12l = 1 - (ssres12l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt12l))
+        R_value12u = 1 - (ssres12u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt12u))
+        R_value12 = max(R_value12l, R_value12u)
+        if R_value12 == R_value12l:
+            popt12 = popt12l; pcov12 = pcov12l
+        if R_value12 == R_value12u:
+            popt12 = popt12u; pcov12 = pcov12u
+
+        try:
+            popt22l, pcov22l = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt22u, pcov22u = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit22l = P2_P2(times, popt22l[0], popt22l[1], popt22l[2], popt22l[3],
+        popt22l[4])
+        fit22u = P2_P2(times, popt22u[0], popt22u[1], popt22u[2], popt22u[3],
+        popt22u[4])
+        ssres22l = np.sum((fit22l - amps)**2)
+        ssres22u = np.sum((fit22u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value22l = 1 - (ssres22l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22l))
+        R_value22u = 1 - (ssres22u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22u))
+        R_value22 = max(R_value22l, R_value22u)
+        if R_value22 == R_value22l:
+            popt22 = popt22l; pcov22 = pcov22l
+        if R_value22 == R_value22u:
+            popt22 = popt22u; pcov22 = pcov22u
+
+        maxR2 = max(R_value11, R_value12, R_value22)
+        if maxR2 < fit_thresh:
+            warnings.warn('No curve fit gave adjusted R^2 value above '
+            'fit_thresh')
+            return None
+
+        if maxR2 == R_value11:
+            off = popt11[0]
+            pc = popt11[1]
+            tau = popt11[2]
+            pc2 = popt11[3]
+            tau2 = popt11[4]
+            _, pc_err, tau_err, pc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov11))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                # TODO v2, for trap_fit and trap_fit_const:
+                # if 'amp' list for 'above' is identical to 'amp'
+                #list for 'below', then earmark for assignment whenever
+                # finding optimal matchings of schemes for sub-el loc; if
+                #no particular assignment is better at that point, then the
+                #assignment doesn't matter
+                #TODO v2, for trap_fit and trap_fit_const:
+                # if picking peak amp phase time to match with the closer tau
+                # value isn't good enough (not decipherable if not enough data
+                # points to make it out), then I could look at the
+                # complementary probability functions in the corresponding
+                #deficit pixels and curve fit those
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P1 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(2)
+                #P1 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{1: [[pc, pc_err, tau, tau_err]]},
+                        'b':{1: [[pc2, pc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{1: [[pc, pc_err, tau, tau_err]]},
+                        'a':{1: [[pc2, pc2_err, tau2, tau2_err]]}}
+            return {1: [[pc, pc_err, tau, tau_err],
+                [pc2, pc2_err, tau2, tau2_err]]}
+
+        if maxR2 == R_value12:
+            off = popt12[0]
+            pc = popt12[1]
+            tau = popt12[2]
+            pc2 = popt12[3]
+            tau2 = popt12[4]
+            _, pc_err, tau_err, pc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov12))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P1 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(2)
+                #P2 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(3/2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{1: [[pc, pc_err, tau, tau_err]]},
+                        'b':{2: [[pc2, pc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{1: [[pc, pc_err, tau, tau_err]]},
+                        'a':{2: [[pc2, pc2_err, tau2, tau2_err]]}}
+            return {1: [[pc, pc_err, tau, tau_err]],
+                2: [[pc2, pc2_err, tau2, tau2_err]]}
+
+        if maxR2 == R_value22:
+            off = popt22[0]
+            pc = popt22[1]
+            tau = popt22[2]
+            pc2 = popt22[3]
+            tau2 = popt22[4]
+            _, pc_err, tau_err, pc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov22))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P2 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(3/2)
+                #P2 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(3/2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{2: [[pc, pc_err, tau, tau_err]]},
+                        'b':{2: [[pc2, pc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{2: [[pc, pc_err, tau, tau_err]]},
+                        'a':{2: [[pc2, pc2_err, tau2, tau2_err]]}}
+            return {2: [[pc, pc_err, tau, tau_err],
+                [pc2, pc2_err, tau2, tau2_err]]}
+
+    if scheme == 3 or scheme == 4:
+
+        if both_a == None:
+            #attempt both probability functions
+            try:
+                popt3l, pcov3l = curve_fit(P3, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt3u, pcov3u = curve_fit(P3, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit3l = P3(times, popt3l[0], popt3l[1], popt3l[2])
+            fit3u = P3(times, popt3u[0], popt3u[1], popt3u[2])
+            ssres3l = np.sum((fit3l - amps)**2)
+            ssres3u = np.sum((fit3u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value3l = 1 - (ssres3l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt3l))
+            R_value3u = 1 - (ssres3u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt3u))
+            R_value3 = max(R_value3l, R_value3u)
+            if R_value3 == R_value3l:
+                popt3 = popt3l; pcov3 = pcov3l
+            if R_value3 == R_value3u:
+                popt3 = popt3u; pcov3 = pcov3u
+
+            try:
+                popt2l, pcov2l = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                popt2u, pcov2u = curve_fit(P2, times, amps, bounds=bounds_one,
+                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+            except:
+                warnings.warn('curve_fit failed')
+                return None
+            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2])
+            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2])
+            ssres2l = np.sum((fit2l - amps)**2)
+            ssres2u = np.sum((fit2u - amps)**2)
+            # coefficient of determination, adjusted R^2:
+            # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+            R_value2l = 1 - (ssres2l/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2l))
+            R_value2u = 1 - (ssres2u/sstot)*(len(times) - 1)/(len(times) -
+                len(popt2u))
+            R_value2 = max(R_value2l, R_value2u)
+            if R_value2 == R_value2l:
+                popt2 = popt2l; pcov2 = pcov2l
+            if R_value2 == R_value2u:
+                popt2 = popt2u; pcov2 = pcov2u
+
+            # accept the best fit and require threshold met
+            maxR1 = max(R_value3, R_value2)
+
+            if maxR1 >= fit_thresh and maxR1 == R_value3:
+                pc = popt3[1]
+                tau = popt3[2]
+                _, pc_err, tau_err  = np.sqrt(np.diag(pcov3))
+                return {3: [[pc, pc_err, tau, tau_err]]}
+            if maxR1 >= fit_thresh and maxR1 == R_value2:
+                pc = popt2[1]
+                tau = popt2[2]
+                _, pc_err, tau_err  = np.sqrt(np.diag(pcov2))
+                return {2: [[pc, pc_err, tau, tau_err]]}
+
+        # maxR1 must have been below fit_thresh.  Now try 2 traps
+
+        try:
+            popt33l, pcov33l = curve_fit(P3_P3, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt33u, pcov33u = curve_fit(P3_P3, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit33l = P3_P3(times, popt33l[0], popt33l[1], popt33l[2], popt33l[3],
+        popt33l[4])
+        fit33u = P3_P3(times, popt33u[0], popt33u[1], popt33u[2], popt33u[3],
+        popt33u[4])
+        ssres33l = np.sum((fit33l - amps)**2)
+        ssres33u = np.sum((fit33u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value33l = 1 - (ssres33l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt33l))
+        R_value33u = 1 - (ssres33u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt33u))
+        R_value33 = max(R_value33l, R_value33u)
+        if R_value33 == R_value33l:
+            popt33 = popt33l; pcov33 = pcov33l
+        if R_value33 == R_value33u:
+            popt33 = popt33u; pcov33 = pcov33u
+
+        try:
+            popt23l, pcov23l = curve_fit(P2_P3, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt23u, pcov23u = curve_fit(P2_P3, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit23l = P2_P3(times, popt23l[0], popt23l[1], popt23l[2], popt23l[3],
+        popt23l[4])
+        fit23u = P2_P3(times, popt23u[0], popt23u[1], popt23u[2], popt23u[3],
+        popt23u[4])
+        ssres23l = np.sum((fit23l - amps)**2)
+        ssres23u = np.sum((fit23u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value23l = 1 - (ssres23l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt23l))
+        R_value23u = 1 - (ssres23u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt23u))
+        R_value23 = max(R_value23l, R_value23u)
+        if R_value23 == R_value23l:
+            popt23 = popt23l; pcov23 = pcov23l
+        if R_value23 == R_value23u:
+            popt23 = popt23u; pcov23 = pcov23u
+
+        try:
+            popt22l, pcov22l = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            popt22u, pcov22u = curve_fit(P2_P2, times, amps, bounds=bounds_two,
+            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+        except:
+            warnings.warn('curve_fit failed')
+            return None
+        fit22l = P2_P2(times, popt22l[0], popt22l[1], popt22l[2], popt22l[3],
+        popt22l[4])
+        fit22u = P2_P2(times, popt22u[0], popt22u[1], popt22u[2], popt22u[3],
+        popt22u[4])
+        ssres22l = np.sum((fit22l - amps)**2)
+        ssres22u = np.sum((fit22u - amps)**2)
+        # coefficient of determination, adjusted R^2:
+        # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+        R_value22l = 1 - (ssres22l/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22l))
+        R_value22u = 1 - (ssres22u/sstot)*(len(times) - 1)/(len(times) -
+            len(popt22u))
+        R_value22 = max(R_value22l, R_value22u)
+        if R_value22 == R_value22l:
+            popt22 = popt22l; pcov22 = pcov22l
+        if R_value22 == R_value22u:
+            popt22 = popt22u; pcov22 = pcov22u
+
+        maxR2 = max(R_value33, R_value23, R_value22)
+
+        if maxR2 < fit_thresh:
+            warnings.warn('No curve fit gave adjusted R^2 value above '
+            'fit_thresh')
+            return None
+
+        if maxR2 == R_value33:
+            off = popt33[0]
+            pc = popt33[1]
+            tau = popt33[2]
+            pc2 = popt33[3]
+            tau2 = popt33[4]
+            _, pc_err, tau_err, pc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov33))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P3 for tau
+                a_tau = t_a[max_a_ind[0]]/(2*np.log(2)/3)
+                #P3 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/(2*np.log(2)/3)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{3: [[pc, pc_err, tau, tau_err]]},
+                        'b':{3: [[pc2, pc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{3: [[pc, pc_err, tau, tau_err]]},
+                        'a':{3: [[pc2, pc2_err, tau2, tau2_err]]}}
+            return {3: [[pc, pc_err, tau, tau_err], [pc2, pc2_err,
+                tau2, tau2_err]]}
+
+        if maxR2 == R_value23:
+            off = popt23[0]
+            pc = popt23[1]
+            tau = popt23[2]
+            pc2 = popt23[3]
+            tau2 = popt23[4]
+            _, pc_err, tau_err, pc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov23))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P2 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(3/2)
+                #P3 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/(2*np.log(2)/3)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{2: [[pc, pc_err, tau, tau_err]]},
+                        'b':{3: [[pc2, pc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{2: [[pc, pc_err, tau, tau_err]]},
+                        'a':{3: [[pc2, pc2_err, tau2, tau2_err]]}}
+            return {2: [[pc, pc_err, tau, tau_err]],
+                3: [[pc2, pc2_err, tau2, tau2_err]]}
+
+        if maxR2 == R_value22:
+            off = popt22[0]
+            pc = popt22[1]
+            tau = popt22[2]
+            pc2 = popt22[3]
+            tau2 = popt22[4]
+            _, pc_err, tau_err, pc2_err, tau2_err  = \
+                np.sqrt(np.diag(pcov22))
+            if both_a != None:
+                amp_a = both_a['amp']
+                t_a = both_a['t']
+                max_a_ind = np.where(amp_a == np.max(amp_a))
+                #P2 for tau
+                a_tau = t_a[max_a_ind[0]]/np.log(3/2)
+                #P2 for tau2
+                a_tau2 = t_a[max_a_ind[0]]/np.log(3/2)
+                if np.abs(a_tau - tau) <= np.abs(a_tau2 - tau2):
+                    return {'a':{2: [[pc, pc_err, tau, tau_err]]},
+                        'b':{2: [[pc2, pc2_err, tau2, tau2_err]]}}
+                else:
+                    return {'b':{2: [[pc, pc_err, tau, tau_err]]},
+                        'a':{2: [[pc2, pc2_err, tau2, tau2_err]]}}
+            return {2: [[pc, pc_err, tau, tau_err],
+                [pc2, pc2_err, tau2, tau2_err]]}
+
+def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
+           input_T):
+    """
+    This function fits the cross section for holes (cs) for a given trap
+    by curve-fitting release time constant (tau) vs temperature. Returns fit
+    parameters and the release time constant at the desired input temperature.
+
+    Args:
+        taus (array): Array of tau values (in seconds).
+        tau_errs (array): Array of tau uncertainty values (in seconds), with elements 
+            in the same order as that of taus.
+        temps (array): Array of temperatures (in Kelvin), with elements in the same 
+            order as that of taus.
+        cs_fit_thresh (float): The minimum value required for adjusted coefficient of 
+            determination (adjusted R^2) for curve fitting for the capture cross section 
+            for holes (cs) using data for tau vs temperature. The closer to 1, the better 
+            the fit. Must be between 0 and 1.
+        E_min (float): Lower bound for E (energy level in release time constant) for curve 
+            fitting, in eV. Must be greater than or equal to 0.
+        E_max (float): Upper bound for E (energy level in release time constant) for curve 
+            fitting, in eV. Must be greater than E_min.
+        cs_min (float): Lower bound for cs (capture cross section for holes in release time 
+            constant) for curve fitting, in 1e-19 m^2. Must be greater than or equal to 0.
+        cs_max (float): Upper bound for cs (capture cross section for holes in release time 
+            constant) for curve fitting, in 1e-19 m^2. Must be greater than cs_min.
+        input_T (float): Temperature of Roman EMCCD at which to calculate the release time 
+            constant (in units of Kelvin). Must be greater than 0.
+
+    Returns:
+        E (float): Energy level (in eV).
+        sig_E (float): Standard deviation error of energy level, in eV.
+        cs (float): Cross section for holes, in cm^2.
+        sig_cs (float): Standard deviation error of cross section for holes, in cm^2.
+        Rsq (float): Adjusted R^2 for the tau vs temperature fit that was done to obtain cs.
+        tau_input_T (float): Tau evaluated at desired temperature of Roman EMCCD, input_T, 
+            in seconds.
+        sig_tau_input_T (float): Standard deviation error of tau at desired temperature of 
+            Roman EMCCD, input_T. Found by propagating error by utilizing sig_cs and sig_E, 
+            in seconds.
+    """
+
+    # input checks
+    try:
+        taus = np.array(taus).astype(float)
+    except:
+        raise TypeError("taus elements should be real numbers")
+    check.oneD_array(taus, 'taus', TypeError)
+    try:
+        temps = np.array(temps).astype(float)
+    except:
+        raise TypeError("temps elements should be real numbers")
+    check.oneD_array(temps, 'temps', TypeError)
+    if len(temps) != len(taus):
+        raise ValueError('temps and taus must have the same length')
+    try:
+        tau_errs = np.array(tau_errs).astype(float)
+    except:
+        raise TypeError("tau_errs elements should be real numbers")
+    check.oneD_array(tau_errs, 'tau_errs', TypeError)
+    if len(tau_errs) != len(taus):
+        raise ValueError('tau_errs and taus must have the same length')
+    check.real_nonnegative_scalar(cs_fit_thresh, 'cs_fit_thresh', TypeError)
+    if cs_fit_thresh > 1:
+        raise ValueError('cs_fit_thresh should fall in (0,1).')
+    check.real_nonnegative_scalar(E_min, 'E_min', TypeError)
+    check.real_nonnegative_scalar(E_max, 'E_max', TypeError)
+    if E_max <= E_min:
+        raise ValueError('E_max must be > E_min')
+    check.real_nonnegative_scalar(cs_min, 'cs_min', TypeError)
+    check.real_nonnegative_scalar(cs_max, 'cs_max', TypeError)
+    if cs_max <= cs_min:
+        raise ValueError('cs_max must be > cs_min')
+    check.real_positive_scalar(input_T, 'input_T', TypeError)
+    if len(np.unique(temps)) < 3:
+        warnings.warn('temps did not have a unique number of temperatures '
+        'longer than the number of fitted parameters.')
+        return None, None, None, None, None, None, None
+
+    l_bounds = [E_min, cs_min]
+    # typically, E is no more than 0.5 eV, and eV = 1.6e-19 J
+    # cs usually 1e-15 to 1e-14 cm^2, or 1e-19 to 1e-18 m^2
+    u_bounds = [E_max, cs_max]  # E in eV, cs in 1e-19 m^2
+    bounds = (l_bounds, u_bounds)
+    p0 = [(E_min + E_max)/2, (cs_min + cs_max)/2]
+    # in case you have a perfect tau_err of 0 (highly unlikely), set it equal
+    # to machine precision eps to prevent the curve_fit from crashing
+    tau_errs[tau_errs==0] = np.finfo(float).eps
+
+    try:
+        # We consider absolute_sigma=True since we likely won't have many data
+        # points, so sample variance of residuals may be low.  When it's False,
+        # the tau_errs are scaled to match sample variance of residuals after
+        # the fit, which would  most likely be a scaling down.  So when it's
+        # True, the resulting std dev from pcov would likely be bigger and
+        # maybe more accurate.  If we do have enough data points, the opposite
+        # would be true.  So best thing to do is to take the case where the
+        # error is bigger:
+        poptt, pcovt = curve_fit(tau_temp, temps, taus, bounds = bounds, p0=p0,
+                sigma = tau_errs, absolute_sigma=True, maxfev = np.inf)
+        poptf, pcovf = curve_fit(tau_temp, temps, taus, bounds = bounds, p0=p0,
+                sigma = tau_errs, absolute_sigma=False, maxfev = np.inf)
+        if np.sum(np.sqrt(np.diag(pcovt))) >= np.sum(np.sqrt(np.diag(pcovf))):
+            popt = poptt
+            pcov = pcovt
+        else:
+            popt = poptf
+            pcov = pcovf
+    except:
+            warnings.warn('curve_fit failed')
+            return None, None, None, None, None, None, None
+    E = popt[0] # in eV
+    sig_E = np.sqrt(np.diag(pcov))[0]
+    cs = popt[1]*1e-15 # in cm^2
+    sig_cs = np.sqrt(np.diag(pcov))[1]*1e-15 # in cm^2
+    tau_input_T = tau_temp(input_T, E, cs*1e15) # in s
+    sig_tau_input_T = sig_tau_temp(input_T, E, cs*1e15, sig_E, sig_cs*1e15) #s
+
+    fit = tau_temp(temps, popt[0], popt[1])
+    ssres = np.sum((fit - taus)**2)
+    sstot = np.sum((taus - np.mean(taus))**2)
+    # coefficient of determination, adjusted R^2:
+    # R^2adj = 1 - (1-R^2)*(n-1)/(n-p), p: # of fitted params
+    Rsq = 1 - (ssres/sstot)*(len(temps) - 1)/(len(temps) - len(popt))
+
+    if Rsq < cs_fit_thresh:
+        warnings.warn('Fitting of tau vs temperature has an adjusted R^2 '
+        'value < cs_fit_thresh')
+
+    return (E, sig_E, cs, sig_cs, Rsq, tau_input_T, sig_tau_input_T)
+
+
+def tpump_analysis(input_dataset,time_head = 'TPTAU', 
                    mean_field = None, length_lim = 6,
     thresh_factor = 3, k_prob = 1, ill_corr = True, tfit_const = True,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
@@ -59,14 +1964,13 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU',
     called 'temps') and an option to load that in and start the function at
     that point.
 
-    The frames in each stack should be SCI full frames that:
-    - have had their bias subtracted (assuming 0 bias offset and full frame;
-    this function calibrates bias offset)
+    The frames in the input_dataset should be SCI full frames that:
+    - have had their bias subtracted 
     - have been corrected for nonlinearity
     - have been divided by EMGAIN
 
     The following parameters from the II&T Trap pumping code are stored in the
-    extension header of the object: 
+    object calibration file: 
     trap_densities : list
         A list of lists, where a list is provided for each type of trap.
         The trap density for a trap type is the # of traps in a given 2-D bin
@@ -76,7 +1980,7 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU',
         are returned here.  Each trap-type list is of the following format:
         [trap density, E, cs].
         E is the central value of the E bin, and cs is the central value of the
-        cs bin.
+        cs bin. Stored in a hdu extention named 'trap_densities'
     bad_fit_counter : int
         Number of times trap_fit() provided fits of amplitude vs phase time
         that were below fit_thresh over all schemes and temperature (which
@@ -139,7 +2043,6 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU',
     if not sample_data: # don't need these for the Alfresco sample data
         if type(time_head) != str:
             raise TypeError('time_head must be a string')
-    check.positive_scalar_integer(num_pumps, 'num_pumps', TypeError)
     check.real_positive_scalar(thresh_factor, 'thresh_factor', TypeError)
     if mean_field is not None:
         check.real_positive_scalar(mean_field, 'mean_field', TypeError)
@@ -202,12 +2105,9 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU',
 
     #First we'll sort the input dataset by temperature
     dataset_list, dataset_temperatures = working_dataset.split_dataset(exthdr_keywords = ['EXCAMT'])
-
-
+    
     # for dir in os.listdir(base_dir):
     for i,dataset in enumerate(dataset_list):
-
-        sch_dir_path = os.path.abspath(Path(base_dir, dir))
   
         curr_temp = dataset_temperatures[i]
         schemes = {}
@@ -215,22 +2115,22 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU',
         eperdn = 1
 
         scheme_header_keywords = ['TPSCHEM1','TPSCHEM2', 'TPSCHEM3','TPSCHEM4']
-        scheme_datasets, sch_list = dataset.split_dataset(exthdr_keywords = scheme_header_keywords)
+        scheme_datasets, scheme_list = dataset.split_dataset(exthdr_keywords = scheme_header_keywords)
         
-        #TODO: Write code to Figure out which SCHEMES are non-zero. 
         sch_list = []
         for i in range(len(scheme_datasets)):
             #Grab the first file's extension header from each dataset
-            header0 = scheme_datasets[i][0].ext_header
+            header0 = scheme_datasets[i][0].ext_hdr
 
             #Find the TPSCHEM keyword that is non-zero
             this_num_pumps = [header0[x] for x in scheme_header_keywords]
-            this_scheme = np.where(this_num_pumps != 0)[0]
-            sch_list.append(int(this_scheme))
+            this_num_pumps = np.array(scheme_list[i] )
+            this_scheme = int(np.where(this_num_pumps != 0)[0]) + 1
+            sch_list.append(this_scheme)
 
             #Grab the number of pumps from the first dataset. 
             if i == 0: 
-                num_pumps = this_num_pumps[this_scheme]
+                num_pumps = this_num_pumps[this_scheme-1]
 
         #Sort the things so that Scheme 1 is first
         sch_order = np.argsort(sch_list)
@@ -255,9 +2155,9 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU',
             cor_frames = []
             timings = []
             
-            for frame in scheme_datasets[sch_list == curr_sch]:
+            for frame in scheme_datasets[(sch_list == curr_sch),:][0]:
 
-                #Get the data and the [hase time]
+                #Get the data and the phase time - convert from us to seconds
                 phase_time = float(frame.ext_hdr[time_head])/10**6
 
                 timings.append(phase_time)   
@@ -1023,9 +2923,8 @@ def tpump_analysis(input_dataset,num_pumps, time_head = 'TPTAU',
     
     trapcal = create_TrapCalibration_from_trap_dict(trap_dict, input_dataset)
 
-
     #Add all of the old default outputs as header keywords or extensions
-    trapcal.add_extension_hdu(np.array(trap_densities), name='trap_densities')
+    trapcal.add_extension_hdu('trap_densities', data = np.array(trap_densities))
     trapcal.ext_hdr['badfitct'] = (bad_fit_counter , 'bad_fit_counter')
     trapcal.ext_hdr['prsbelct'] = (pre_sub_el_count, 'pre_sub_el_count')
     trapcal.ext_hdr['unfitdat'] = (unused_fit_data, 'unused_fit_data')
@@ -1152,99 +3051,12 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
         #Release time constant at desired Temperature
         trap_cal_array[i,9] = dict_entry['tau at input T']
 
-    #Great the header from the fist file
-    first_file_pri_hdr = input_dataset[0].header
-    first_file_ext_hdr = input_dataset[1].header
+    #Great the header from the first file
+    first_file_pri_hdr = input_dataset[0].pri_hdr
+    first_file_ext_hdr = input_dataset[0].ext_hdr
 
     trapcal = TrapCalibration(trap_cal_array,pri_hdr = first_file_pri_hdr, 
                     ext_hdr = first_file_ext_hdr, 
                     input_dataset=input_dataset)
     
     return trapcal
-                    
-# trap_dict = {
-# ((row, col), 'RHSel2', 0): {'T': [160, 162, 164, 166, 168],
-# 'tau': [1.51e-6, 1.49e-6, 1.53e-6, 1.50e-6, 1.52e-6],
-# 'sigma_tau': [2e-7, 1e-7, 1e-7, 2e-7, 1e-7],
-# 'cap': [[cap1, cap1_err, max_amp1, cap2, cap2_err, max_amp2], ...],
-# 'E': 0.23,
-# 'sig_E': 0.02,
-# 'cs': 2.6e-15,
-# 'sig_cs': 0.3e-15,
-# 'Rsq': 0.96,
-# 'tau at input T': 1.61e-6,
-# 'sig_tau at input T': 2.02e-6},
-# ...}
-
-
-if __name__ == "__main__":
-    fake_dict = {
-        ((150, 25), 'RHSel2', 0): {'T': [160, 162, 164, 166, 168],
-        'tau': [1.51e-6, 1.49e-6, 1.53e-6, 1.50e-6, 1.52e-6],
-        'sigma_tau': [2e-7, 1e-7, 1e-7, 2e-7, 1e-7],
-        # 'cap': [[cap1, cap1_err, max_amp1, cap2, cap2_err, max_amp2], ...],
-        'cap': [[4, 5, 6, 4, 5, 6],],
-        'E': 0.23,
-        'sig_E': 0.02,
-        'cs': 2.6e-15,
-        'sig_cs': 0.3e-15,
-        'Rsq': 0.96,
-        'tau at input T': 1.61e-6,
-        'sig_tau at input T': 2.02e-6},
-        }
-    
-    base_dir = "/Users/maxwellmb/Data/GPI/Reduced/CE Ant/20180405_H_Pol/"
-    
-    test = create_TrapCalibration_from_trap_dict(fake_dict,base_dir)
-
-
-
-
-# if __name__ == '__main__':
-#     here = os.path.abspath(os.path.dirname(__file__))
-#     base_dir = Path(here, 'test_data')
-#     sub_no_noise_dir = Path(here, 'test_data_sub_frame_no_noise')
-#     sub_noise_dir = Path(here, 'test_data_sub_frame_noise')
-#     sub_noise_one_temp_dir = Path(here, 'test_data_sub_frame_noise_one_temp')
-#     sub_noise_kprob2_dir = Path(here, 'test_data_sub_frame_noise_no_prob1')
-#     sub_noise_mean_field = Path(here, 'test_data_sub_frame_noise_mean_field')
-#     test_data_sample_data = Path(here, 'test_data_sample_data')
-#     test_data_bad_sch = Path(here, 'test_data_bad_sch_label')
-#     empty_base_dir = Path(here, 'test_data_empty_base_dir')
-#     time_head = 'PHASE_T'
-#     emgain_head = 'EM_GAIN'
-#     #MMB: If we want to use this, then we need to pass in a corgi.drp.NonLinearityCorrection object
-#     # Setting to None for now
-#     non_lin_correction = None 
-#     num_pumps = 10000
-#     tau_fit_thresh = 0.8#0.9#0.9#0.8
-#     cs_fit_thresh = 0.8
-#     thresh_factor = 1.5#1.5 #3
-#     length_lim = 5
-#     ill_corr = True
-#     tfit_const = True
-#     offset_min = 10
-#     offset_max = 10
-#     pc_min = 0
-#     pc_max = 2
-#     mean_field = None#2090 #250 #e- #None
-#     tauc_min = 0
-#     tauc_max = 1e-5 #1e-2
-#     k_prob = 1
-#     bins_E = 70#100#80 # at 80% for noisy, with inj charge
-#     bins_cs = 7#10#8 # at 80%
-#     sample_data = False #True
-
-
-#     (trap_dict, trap_densities, bad_fit_counter, pre_sub_el_count,
-#     unused_fit_data, unused_temp_fit_data, two_or_less_count,
-#     noncontinuous_count) = tpump_analysis(sub_noise_dir, time_head,
-#     emgain_head, num_pumps, non_lin_correction = non_lin_correction,
-#     length_lim = length_lim, thresh_factor = thresh_factor,
-#     ill_corr = ill_corr, tfit_const = tfit_const, save_temps = None,
-#     tau_min = 0.7e-6, tau_max = 1.3e-2, tau_fit_thresh = tau_fit_thresh,
-#     tauc_min = tauc_min, tauc_max = tauc_max, offset_min = offset_min,
-#     offset_max = offset_max,s
-#     pc_min=pc_min, pc_max=pc_max, k_prob = k_prob, mean_field = mean_field,
-#     cs_fit_thresh = cs_fit_thresh, bins_E = bins_E, bins_cs = bins_cs,
-#     sample_data = sample_data)
