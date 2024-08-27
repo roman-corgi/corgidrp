@@ -791,43 +791,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         Dd = noise_maps.DC_map
         Cd = noise_maps.CIC_map
 
-        # Initialize lists to hold extracted values
-        exptime_list = []
-        cmdgain_list = []
-        kgain_list = []
-
-        # Iterate through the dataset to handle the case where the 2 headers are reversed
-        for frame in dataset:
-            primary_hdr = frame.pri_hdr
-            extension_hdr = frame.ext_hdr
-
-            # Check which header contains the necessary keywords
-            if 'EXPTIME' in primary_hdr and 'CMDGAIN' in primary_hdr and 'KGAIN' in primary_hdr:
-                exptime = primary_hdr['EXPTIME']
-                cmdgain = primary_hdr['CMDGAIN']
-                kgain = primary_hdr['KGAIN']
-            elif 'EXPTIME' in extension_hdr and 'CMDGAIN' in extension_hdr and 'KGAIN' in extension_hdr:
-                exptime = extension_hdr['EXPTIME']
-                cmdgain = extension_hdr['CMDGAIN']
-                kgain = extension_hdr['KGAIN']
-            else:
-                raise KeyError("EXPTIME, CMDGAIN, and/or KGAIN not found in the expected headers for frame: {}".format(frame.filename))
-
-            # Append to the lists
-            exptime_list.append(exptime)
-            cmdgain_list.append(cmdgain)
-            kgain_list.append(kgain)
-
-        # Convert the lists to arrays
-        exptime_array = np.array(exptime_list)
-        cmdgain_array = np.array(cmdgain_list)
-        kgain_array = np.array(kgain_list)
-
-        # Combine the three arrays into a single structured array
-        combined_array = np.array(list(zip(exptime_array, cmdgain_array, kgain_array)))
-
-        # Find the unique values (sets of (exptime, cmdgain, kgain))
-        unique_vals = np.unique(combined_array, axis=0)
+        _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
 
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
