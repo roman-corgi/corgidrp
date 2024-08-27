@@ -105,7 +105,6 @@ def autogen_recipe(filelist, outputdir, template=None):
                 # order matters, so only one calibration file per dictionary
                 if step["calibs"][calib].upper() == "AUTOMATIC":
                     calib_dtype = data.datatypes[calib]
-                    print("this doesn't really make sense", calib_dtype)
                     best_cal_file = this_caldb.get_calib(first_frame, calib_dtype)
                     # set calibration file to this one
                     step["calibs"][calib] = best_cal_file.filepath
