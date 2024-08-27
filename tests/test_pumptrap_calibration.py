@@ -51,6 +51,10 @@ def rebuild_dict(trap_pump_array):
         return trap_dict
 
 def test_tpump_analysis():
+    '''
+    After reading in the data and some setup, then run the subset of appropriate tests from
+    test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
+    '''
 
     #Read in all the data. 
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data")
@@ -171,7 +175,8 @@ def test_tpump_analysis():
     pre_sub_el_count = tpump_calibration.ext_hdr['prsbelct']
     trap_densities = tpump_calibration.hdu_list[tpump_calibration.hdu_names.index('trap_densities')-2].data
 
-    #Run the tests from test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
+    #####
+    # Run many of the tests from test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
     
     
     assert(unused_fit_data > 0)
@@ -252,17 +257,6 @@ def test_tpump_analysis():
         if tr[0] == 4/(nrows*ncols):
             assert(np.isclose(tr[1], 0.28, atol=0.05))
             assert(np.isclose(tr[2], 12e-15, rtol=0.1))
-
-    # trap_dict_keys_no_ill = [((26, 28), 'CENel1', 0),
-    #             ((50, 50), 'RHSel1', 0), ((60, 80), 'LHSel2', 0),
-    #             ((68, 67), 'CENel2', 0), ((98, 33), 'LHSel3', 0),
-    #             ((98, 33), 'RHSel2', 0), ((41, 15), 'CENel3', 0),
-    #             ((89, 2), 'RHSel3', 0), ((89, 2), 'LHSel4', 0),
-    #             [((10, 10), 'LHSel4', 0), ((10, 10), 'LHSel4', 1)],
-    #             ((56, 56), 'CENel4', 0), ((77, 90), 'RHSel4', 0),
-    #             ((77, 90), 'CENel2', 0)]
-
-    # input_calibration = create_TrapCalibration_from_trap_dict(trap_dict_keys_no_ill, emgain_divided_dataset)
 
 if __name__ == "__main__":
     test_tpump_analysis()
