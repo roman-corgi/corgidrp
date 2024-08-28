@@ -8,7 +8,6 @@ from astropy.io import fits
 from corgidrp import data
 from corgidrp import caldb
 from corgidrp import detector
-from corgidrp import darks
 from corgidrp import walker
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
@@ -16,7 +15,6 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 @pytest.mark.e2e
 def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
-        # figure out paths, assuming everything is located in the same relative location
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
 
@@ -31,11 +29,10 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_ref_path = os.path.join(processed_cal_path, "fixed_bp_zeros.fits")
-    noise_maps_filelist = [dark_current_path, fpn_path, cic_path]
 
     # define the raw science data to use as mock frames where necessary
     input_image_filelist = []
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
+    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     ###### Setup necessary calibration files
     # Need to change this to use appropriate values for KGAIN, for now setting them all the same.
@@ -59,7 +56,8 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     with fits.open(dark_current_path) as hdulist:
         dark_current_dat = hdulist[0].data
     noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_current_dat])
-    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'],
+                              detector.detector_areas['SCI']['frame_cols']))
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
@@ -77,14 +75,16 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
-    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                          input_dataset=mock_input_dataset)
     flat.save(filedir=bp_map_outputdir, filename="mock_flat.fits")
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_ref_path) as hdulist:
         bp_dat = hdulist[0].data
-    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                              input_dataset=mock_input_dataset)
     bp_map.save(filedir=bp_map_outputdir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
@@ -136,8 +136,7 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
         assert np.all(np.abs(diff) < 1e-5)
 
-        # Plotting 
-
+        # Plotting
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))  # Create a 1x3 grid of subplots
 
         # First subplot
@@ -164,8 +163,8 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
         fig.colorbar(im3, ax=axes[2])
 
         plt.tight_layout()
-    
-        plt.show()
+        output_path = os.path.join(bp_map_outputdir, "bp_map_simulated_dark_test.png")
+        plt.savefig(output_path)
 
 if __name__ == "__main__":
     # Use arguments to run the test.
@@ -181,3 +180,4 @@ if __name__ == "__main__":
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
     bp_map_simulated_dark_e2e(tvacdata_dir, outputdir)
+    
