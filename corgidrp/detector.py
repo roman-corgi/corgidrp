@@ -275,90 +275,90 @@ def slice_section(frame, obstype, key, detector_regions=None):
     return section
 
 def unpack_geom(obstype, key, detector_regions=None):
-        """Safely check format of geom sub-dictionary and return values.
+    """Safely check format of geom sub-dictionary and return values.
 
-        Args:
-            obstype: str
-            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-            key: str
-            Desired section
-            detector_regions: dict
-            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+    Args:
+        obstype: str
+        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        key: str
+        Desired section
+        detector_regions: dict
+        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
-        Returns:
-            rows: int
-            Number of rows of frame
-            cols : int
-            Number of columns of frame
-            r0c0: tuple
-            Tuple of (row position, column position) of corner closest to (0,0)
-        """
-        if detector_regions is None:
-            detector_regions = detector_areas
-        coords = detector_regions[obstype][key]
-        rows = coords['rows']
-        cols = coords['cols']
-        r0c0 = coords['r0c0']
+    Returns:
+        rows: int
+        Number of rows of frame
+        cols : int
+        Number of columns of frame
+        r0c0: tuple
+        Tuple of (row position, column position) of corner closest to (0,0)
+    """
+    if detector_regions is None:
+        detector_regions = detector_areas
+    coords = detector_regions[obstype][key]
+    rows = coords['rows']
+    cols = coords['cols']
+    r0c0 = coords['r0c0']
 
-        return rows, cols, r0c0
+    return rows, cols, r0c0
 
 def imaging_area_geom(obstype, detector_regions=None):
-        """Return geometry of imaging area (including shielded pixels)
-        in reference to full frame.  Different from normal image area.
+    """Return geometry of imaging area (including shielded pixels)
+    in reference to full frame.  Different from normal image area.
 
-        Args:
-            obstype: str
-            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-            detector_regions: dict
-            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+    Args:
+        obstype: str
+        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        detector_regions: dict
+        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
 
-        Returns:
-            rows: int
-            Number of rows of imaging area
-            cols : int
-            Number of columns of imaging area
-            r0c0: tuple
-            Tuple of (row position, column position) of corner closest to (0,0)
-        """
-        if detector_regions is None:
-            detector_regions = detector_areas
-        _, cols_pre, _ = unpack_geom(obstype, 'prescan', detector_regions)
-        _, cols_serial_ovr, _ = unpack_geom(obstype, 'serial_overscan', detector_regions)
-        rows_parallel_ovr, _, _ = unpack_geom(obstype, 'parallel_overscan', detector_regions)
-        #_, _, r0c0_image = self._unpack_geom('image')
-        fluxmap_rows, _, r0c0_image = unpack_geom(obstype, 'image', detector_regions)
+    Returns:
+        rows: int
+        Number of rows of imaging area
+        cols : int
+        Number of columns of imaging area
+        r0c0: tuple
+        Tuple of (row position, column position) of corner closest to (0,0)
+    """
+    if detector_regions is None:
+        detector_regions = detector_areas
+    _, cols_pre, _ = unpack_geom(obstype, 'prescan', detector_regions)
+    _, cols_serial_ovr, _ = unpack_geom(obstype, 'serial_overscan', detector_regions)
+    rows_parallel_ovr, _, _ = unpack_geom(obstype, 'parallel_overscan', detector_regions)
+    #_, _, r0c0_image = self._unpack_geom('image')
+    fluxmap_rows, _, r0c0_image = unpack_geom(obstype, 'image', detector_regions)
 
-        rows_im = detector_regions[obstype]['frame_rows'] - rows_parallel_ovr
-        cols_im = detector_regions[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
-        r0c0_im = r0c0_image.copy()
-        r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
+    rows_im = detector_regions[obstype]['frame_rows'] - rows_parallel_ovr
+    cols_im = detector_regions[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
+    r0c0_im = r0c0_image.copy()
+    r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
 
-        return rows_im, cols_im, r0c0_im
+    return rows_im, cols_im, r0c0_im
 
 def imaging_slice(obstype, frame, detector_regions=None):
-        """Select only the real counts from full frame and exclude virtual.
-        Includes shielded pixels.
+    """Select only the real counts from full frame and exclude virtual.
+    Includes shielded pixels.
 
-        Use this to transform mask and embed from acting on the full frame to
-        acting on only the image frame.
+    Use this to transform mask and embed from acting on the full frame to
+    acting on only the image frame.
 
-        Args:
-            obstype: str
-            Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-            frame: array_like
-            Input frame
-            detector_regions: dict
-            a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
+    Args:
+        obstype: str
+        Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        frame: array_like
+        Input frame
+        detector_regions: dict
+        a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
-        Returns:
-            sl: array_like
-            Imaging slice
+    Returns:
+        sl: array_like
+        Imaging slice
 
-        """
-        rows, cols, r0c0 = imaging_area_geom(obstype, detector_regions)
-        sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
-        return sl
+    """
+    rows, cols, r0c0 = imaging_area_geom(obstype, detector_regions)
+    sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
+    return sl
 
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
                    cosm_tail, mode='image'):
