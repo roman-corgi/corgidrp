@@ -138,7 +138,9 @@ detector_areas= {
         'prescan' : {
             'rows': 2200,
             'cols': 1088,
-            'r0c0': [0, 0]
+            'r0c0': [0, 0],
+            'col_start': 800,
+            'col_end': 1000,
             },
         'prescan_reliable' : {
             'rows': 2200,
