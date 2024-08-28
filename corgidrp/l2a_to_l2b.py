@@ -18,7 +18,13 @@ def add_photon_noise(input_dataset):
     phot_noise_dataset = input_dataset.copy() # necessary at all?
 
     for i, frame in enumerate(phot_noise_dataset.frames):
-        em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
+        try: # use measured gain if available TODO change hdr name if necessary
+            em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
+            try: # use EM applied EM gain if available
+                em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_A"]
+            except: # otherwise use commanded EM gain
+                em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
         phot_err = np.sqrt(frame.data)
         #add excess noise in case of em_gain
         if em_gain > 1:
@@ -257,7 +263,7 @@ def convert_to_electrons(input_dataset, k_gain):
 def em_gain_division(input_dataset):
     """
 
-    Convert the data from detected EM electrons to detected electrons by dividing the commanded em_gain.
+    Convert the data from detected EM electrons to detected electrons by dividing by the EM gain.
     Update the change in units in the header [detected electrons].
 
     Args:
@@ -272,21 +278,24 @@ def em_gain_division(input_dataset):
     emgain_cube = emgain_dataset.all_data
     emgain_error = emgain_dataset.all_err
 
-    unique = True
-    emgain = emgain_dataset[0].ext_hdr["CMDGAIN"]
     for i in range(len(emgain_dataset)):
-        if emgain != emgain_dataset[i].ext_hdr["CMDGAIN"]:
-            unique = False
-            emgain = emgain_dataset[i].ext_hdr["CMDGAIN"]
+        try: # use measured gain if available TODO change hdr name if necessary
+            emgain = emgain_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
+            try: # use EM applied EM gain if available
+                emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
+            except: # otherwise use commanded EM gain
+                emgain = emgain_dataset[i].ext_hdr["CMDGAIN"]
         emgain_cube[i] /= emgain
         emgain_error[i] /= emgain
 
-    if unique:
-        history_msg = "data divided by em_gain {0}".format(str(emgain))
+    dataset_list, _ = emgain_dataset.split_dataset(exthdr_keywords=['CMDGAIN'])
+    if len(dataset_list) > 1:
+        history_msg = "data divided by EM gain for dataset with frames with different commanded EM gains"
     else:
-        history_msg = "data divided by non-unique em_gain"
+        history_msg = "data divided by EM gain for dataset with frames with the same commanded EM gain"
 
-    # update the output dataset with this em_gain divided data and update the history
+    # update the output dataset with this EM gain divided data and update the history
     emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
 
     return emgain_dataset
