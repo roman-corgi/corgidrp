@@ -15,18 +15,6 @@ thisfile_dir = os.path.dirname(__file__)
 
 @pytest.mark.e2e
 def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
-    """
-    Performs an end-to-end test to generate a bad pixel map using calibration files.
-    
-    This function sets up calibration data, modifies mock input datasets, and uses TVAC noise maps
-    and flat field to create a master dark frame. It then generates a bad pixel map, compares it 
-    against a reference map, checks for discrepancies, and visualizes the results. 
-    The generated figures are saved to the specified output directory.
-
-    Arguments:
-    tvacdata_path -- str: The path to the TVAC data directory containing raw data files.
-    e2eoutput_path -- str: The path to the output directory where results and figures will be saved.
-    """
     # Define paths for input L1 data and calibration files
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
