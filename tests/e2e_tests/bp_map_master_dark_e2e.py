@@ -3,26 +3,30 @@ import os
 import pytest
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib import colors
 from astropy.io import fits
 from corgidrp import data
 from corgidrp import caldb
+from corgidrp import detector
+from corgidrp import darks
 from corgidrp import walker
 
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
 
 @pytest.mark.e2e
-def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
+def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     """
-    Performs an end-to-end test to generate a bad pixel map using simulated dark data.
+    Performs an end-to-end test to generate a bad pixel map using calibration files.
     
-    This function sets up a simulated master dark frame with random hot pixels. 
-    It then generates a bad pixel map and compares it against the simulated dark data, 
-    checks for discrepancies, and visualizes the results. 
+    This function sets up calibration data, modifies mock input datasets, and uses TVAC noise maps
+    and flat field to create a master dark frame. It then generates a bad pixel map, compares it 
+    against a reference map, checks for discrepancies, and visualizes the results. 
     The generated figures are saved to the specified output directory.
-    """
 
+    Arguments:
+    tvacdata_path -- str: The path to the TVAC data directory containing raw data files.
+    e2eoutput_path -- str: The path to the output directory where results and figures will be saved.
+    """
     # Define paths for input L1 data and calibration files
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
@@ -35,6 +39,9 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
     flat_path = os.path.join(processed_cal_path, "flat_ones.fits")
+    fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
+    cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
+    bp_ref_path = os.path.join(processed_cal_path, "fixed_bp_zeros.fits")
 
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
@@ -55,6 +62,36 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     # Initialize a connection to the calibration database
     this_caldb = caldb.CalDB()
 
+    # Load and combine noise maps from various calibration files into a single array
+    with fits.open(fpn_path) as hdulist:
+        fpn_dat = hdulist[0].data
+    with fits.open(cic_path) as hdulist:
+        cic_dat = hdulist[0].data
+    with fits.open(dark_current_path) as hdulist:
+        dark_current_dat = hdulist[0].data
+
+    # Combine all noise data into one 3D array
+    noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_current_dat])
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'],
+                              detector.detector_areas['SCI']['frame_cols']))
+    rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
+    noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
+
+    # Initialize additional noise map parameters
+    noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
+    noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected EM electrons'
+    ext_hdr['B_O'] = 0
+    ext_hdr['B_O_ERR'] = 0
+
+    # Create a DetectorNoiseMaps object and save it
+    noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                        input_dataset=mock_input_dataset, err=noise_map_noise,
+                                        dq=noise_map_dq, err_hdr=err_hdr)
+    noise_maps.save(filedir=bp_map_outputdir, filename="mock_detnoisemaps.fits")
+    this_caldb.create_entry(noise_maps)
+
     ## Load and save flat field calibration data
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
@@ -63,30 +100,16 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     flat.save(filedir=bp_map_outputdir, filename="mock_flat.fits")
     this_caldb.create_entry(flat)
 
-    # Create a simulated dark frame with random hot pixels for testing
-    with fits.open(dark_current_path) as hdulist:
-        naxis1 = hdulist[0].header['NAXIS1']  # X-axis size
-        naxis2 = hdulist[0].header['NAXIS2']  # Y-axis size
+    # Load and save bad pixel map data
+    with fits.open(bp_ref_path) as hdulist:
+        bp_dat = hdulist[0].data
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                              input_dataset=mock_input_dataset)
+    bp_map.save(filedir=bp_map_outputdir, filename="mock_bpmap.fits")
+    this_caldb.create_entry(bp_map)
 
-    # Initialize a simple dark data array and simulate hot pixel clusters
-    simple_dark_data = np.zeros_like(flat.data)
-    cluster_size = 10
-    hot_pixel_value = 8
-
-    for _ in range(10):
-        cluster_center = (np.random.randint(0, naxis2), np.random.randint(0, naxis1))
-        for _ in range(cluster_size):
-            offset_x = np.random.randint(-5, 6)
-            offset_y = np.random.randint(-5, 6)
-            x = cluster_center[0] + offset_x
-            y = cluster_center[1] + offset_y
-
-            # Ensure the pixel is within image bounds
-            if 0 <= x < naxis2 and 0 <= y < naxis1:
-                simple_dark_data[x, y] = hot_pixel_value
-
-    # Create a dark object and save it
-    master_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+    # Build and save a synthesized master dark frame
+    master_dark = darks.build_synthesized_dark(mock_input_dataset, noise_maps)
     master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
@@ -95,51 +118,82 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
     # Clean up the calibration database entries
+    this_caldb.remove_entry(noise_maps)
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(master_dark)
 
     generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
 
-    # Load the generated bad pixel map image and reference dark data
+    # Load the generated bad pixel map image and master dark reference data
     generated_bp_map_img = data.Image(generated_bp_map_file)
 
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
-        diff = generated_bp_map_img.data - dark_ref_dat.data
 
-        # Check for differences between the generated bad pixel map and the reference dark data
+    with fits.open(dark_current_path) as hdulist:
+        naxis1 = hdulist[0].header['NAXIS1']  # X-axis size
+        naxis2 = hdulist[0].header['NAXIS2']  # Y-axis size
+
+    with fits.open(bp_ref_path) as hdulist:
+        bp_ref_dat = hdulist[0].data
+
+        diff = generated_bp_map_img.data - bp_ref_dat.data
+
+        # Check for differences between the generated and reference bad pixel maps
         assert np.all(np.abs(diff) < 1e-5)
 
-        # Plotting the results: generated bad pixel map, reference dark file, and their difference
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        # Identify and print any bad pixels found
+        bad_pixels = generated_bp_map_img.data[generated_bp_map_img.data > 0]
+        if bad_pixels.size > 0:
+            print(f"Bad pixel values identified: {bad_pixels}")
+        else:
+            print("No bad pixels identified")
 
-        # First subplot: Generated bad pixel map
-        im1 = axes[0].imshow(generated_bp_map_img.data, cmap="viridis",
-                                norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=1))
-        axes[0].set_title("CorGI DRP generated bad pixel map")
+        # Plot noise maps, master dark, and bad pixel maps
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        axes = axes.flatten()
+
+        # Plot each subplot with relevant data and titles
+        im1 = axes[0].imshow(fpn_dat, vmin=-240, vmax=240, cmap="gray")
+        axes[0].set_title("FPN noise map")
         axes[0].set_xlim([0, naxis1])
         axes[0].set_ylim([0, naxis2])
         fig.colorbar(im1, ax=axes[0])
 
-        # Second subplot: Reference dark file
-        im2 = axes[1].imshow(dark_ref_dat, cmap="viridis",
-                                norm=colors.PowerNorm(gamma=0.1, vmin=0, vmax=1))
-        axes[1].set_title("Referenced dark file")
+        im2 = axes[1].imshow(cic_dat, vmin=0, vmax=0.02, cmap="gray")
+        axes[1].set_title("CIC noise map")
         axes[1].set_xlim([0, naxis1])
         axes[1].set_ylim([0, naxis2])
         fig.colorbar(im2, ax=axes[1])
 
-        # Third subplot: Difference between generated BP map and reference
-        im3 = axes[2].imshow(diff, vmin=-0.01, vmax=0.01, cmap="inferno")
-        axes[2].set_title("Difference")
+        im3 = axes[2].imshow(dark_current_dat, vmin=0, vmax=0.003, cmap="gray")
+        axes[2].set_title("Dark current noise map")
         axes[2].set_xlim([0, naxis1])
         axes[2].set_ylim([0, naxis2])
         fig.colorbar(im3, ax=axes[2])
 
+        im4 = axes[3].imshow(dark_ref_dat, vmin=-240, vmax=240, cmap="gray")
+        axes[3].set_title("DRP-produced master dark")
+        axes[3].set_xlim([0, naxis1])
+        axes[3].set_ylim([0, naxis2])
+        fig.colorbar(im4, ax=axes[3])
+
+        im5 = axes[4].imshow(generated_bp_map_img.data, vmin=0, vmax=8, cmap="gray")
+        axes[4].set_title("DRP-produced BP map")
+        axes[4].set_xlim([0, naxis1])
+        axes[4].set_ylim([0, naxis2])
+        fig.colorbar(im5, ax=axes[4])
+
+        im6 = axes[5].imshow(bp_ref_dat, vmin=0, vmax=8, cmap="gray")
+        axes[5].set_title("Reference BP map")
+        axes[5].set_xlim([0, naxis1])
+        axes[5].set_ylim([0, naxis2])
+        fig.colorbar(im6, ax=axes[5])
+
         plt.tight_layout()
 
         # Save the figure to a file
-        output_path = os.path.join(bp_map_outputdir, "bp_map_simulated_dark_test.png")
+        output_path = os.path.join(bp_map_outputdir, "bp_map_master_dark_test.png")
         plt.savefig(output_path)
 
 if __name__ == "__main__":
@@ -160,4 +214,4 @@ if __name__ == "__main__":
     outputdir = args.outputdir
 
     # Run the main function with parsed arguments
-    bp_map_simulated_dark_e2e(tvacdata_dir, outputdir)
+    bp_map_master_dark_e2e(tvacdata_dir, outputdir)
