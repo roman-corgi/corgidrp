@@ -14,7 +14,7 @@ from corgidrp import walker
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_header(tvacdata_path, e2eoutput_path):
+def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
         # figure out paths, assuming everything is located in the same relative location
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
@@ -94,7 +94,6 @@ def test_header(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
-    ####### Run the walker on some test_data
     ####### Run the walker
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
@@ -199,4 +198,4 @@ if __name__ == "__main__":
     args = ap.parse_args()
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
-    test_header(tvacdata_dir, outputdir)
+    bp_map_master_dark_e2e(tvacdata_dir, outputdir)
