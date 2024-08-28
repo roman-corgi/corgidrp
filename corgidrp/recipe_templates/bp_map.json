@@ -10,8 +10,8 @@
         {
             "name" : "create_bad_pixel_map",
             "calibs": {
-                "Dark": "master_dark",
-                "FlatField" : "master_flat"
+                "Dark": "AUTOMATIC",
+                "FlatField" : "AUTOMATIC"
             }
         },
         {

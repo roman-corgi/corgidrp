@@ -68,7 +68,6 @@ def autogen_recipe(filelist, outputdir, template=None):
     Returns:
         json: the JSON recipe to process the filelist
     """
-    
     # Handle the case where filelist is empty
     if not filelist:
         print("Input filelist is empty, using default handling to create recipe.")
@@ -103,23 +102,12 @@ def autogen_recipe(filelist, outputdir, template=None):
         if "calibs" in step:
             for calib in step["calibs"]:
                 # order matters, so only one calibration file per dictionary
+
                 if step["calibs"][calib].upper() == "AUTOMATIC":
                     calib_dtype = data.datatypes[calib]
                     best_cal_file = this_caldb.get_calib(first_frame, calib_dtype)
                     # set calibration file to this one
                     step["calibs"][calib] = best_cal_file.filepath
-
-                # changed to handle the master dark and master flat files, but this assumes there is only one of each type 
-                # in the caldb database
-                if calib == "Dark" and step["calibs"][calib].upper() == "MASTER_DARK":
-                    master_dark = this_caldb._db[this_caldb._db["Type"] == "Dark"]
-                    if not master_dark.empty:
-                        step["calibs"]["Dark"] = master_dark["Filepath"].values[0]
-                if calib == "FlatField" and step["calibs"][calib].upper() == "MASTER_FLAT":
-                    master_flat = this_caldb._db[this_caldb._db["Type"] == "FlatField"]
-                    if not master_flat.empty:
-                        step["calibs"]["FlatField"] = master_flat["Filepath"].values[0]
-
         if step["name"].lower() == "dark_subtraction":
             if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
                 step["keywords"]["outputdir"] = recipe["outputdir"]
@@ -138,10 +126,7 @@ def guess_template(dataset):
         str: the best template filename
     """
     image = dataset[0] # first image for convenience
-
-    if image == None:                                   # May want to change this to do some error checking
-        recipe_filename = "bp_map.json"
-    elif image.ext_hdr['DATA_LEVEL'] == "L1":
+    if image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
         else:
@@ -216,16 +201,11 @@ def run_recipe(recipe, save_recipe_file=True):
     if recipe["inputs"]:
         filelist = recipe["inputs"]
         curr_dataset = data.Dataset(filelist)
-
         # write the recipe into the image extension header
         for frame in curr_dataset:
             frame.ext_hdr["RECIPE"] = json.dumps(recipe)
     else:
         curr_dataset = []
-    
-    # read in noise map and flats
-    #noisemap = recipe["master_dark"]
-    #flat = recipe["master_flat"]
 
     # save recipe before running recipe
     if save_recipe_file:
@@ -259,6 +239,8 @@ def run_recipe(recipe, save_recipe_file=True):
                     calib_dtype = data.datatypes[calib]
                     cal_file = calib_dtype(step["calibs"][calib])
                     other_args += (cal_file,)
+
+
             if "keywords" in step:
                 kwargs = step["keywords"]
             else:
@@ -266,7 +248,3 @@ def run_recipe(recipe, save_recipe_file=True):
 
             # run the step!
             curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
-
-
-
-
