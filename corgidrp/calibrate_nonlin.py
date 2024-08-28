@@ -116,7 +116,8 @@ class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
 
 def calibrate_nonlin(dataset_nl,
-                     n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0, max_write = 10000.0,
+                     n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0,
+                     max_write = 10000.0,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,

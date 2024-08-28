@@ -1,6 +1,7 @@
 """ Module to test the generation of the non-linearity calibration """
 import os
 import glob
+import pytest
 import argparse
 import numpy as np
 from astropy import time
@@ -91,7 +92,7 @@ def get_first_nonlin_file(
             break
     return first_fits_file
 
-
+@pytest.mark.e2e
 def test_nonlin_cal_e2e(
     tvacdata_dir,
     output_dir,
@@ -111,9 +112,9 @@ def test_nonlin_cal_e2e(
 
     # figure out paths, assuming everything is located in the same relative location
     nonlin_l1_datadir = os.path.join(tvacdata_dir,
-        'TV-20_EXCAM_noise_characterization/nonlin/')
-    tvac_caldir = os.path.join(tvacdata_dir, 'TV-36_Coronagraphic_Data/Cals/')
-    output_dir = os.path.join(output_dir, 'l1_to_l2a_output/')
+        'TV-20_EXCAM_noise_characterization', 'nonlin')
+    tvac_caldir = os.path.join(tvacdata_dir, 'TV-36_Coronagraphic_Data', 'Cals')
+    output_dir = os.path.join(output_dir, 'l1_to_l2a_output')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
@@ -138,7 +139,8 @@ def test_nonlin_cal_e2e(
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_dat = np.genfromtxt(tvac_caldir+'nonlin_table_240322.txt', delimiter=",")
+    nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,'nonlin_table_240322.txt'),
+        delimiter=",")
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -157,18 +159,18 @@ def test_nonlin_cal_e2e(
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
     nonlin_out_filename = first_nonlin_file[len(first_nonlin_file) -
-        first_nonlin_file[::-1].find('/'):]
+        first_nonlin_file[::-1].find(os.path.sep):]
     if nonlin_out_filename.find('fits') == -1:
         raise IOError('Data files must be FITS files')
     nonlin_out_filename = nonlin_out_filename[0:nonlin_out_filename.find('fits')-1]
     nonlin_out_filename += '_NonLinearityCalibration.fits'
-    nonlin_out = fits.open(output_dir+nonlin_out_filename)
+    nonlin_out = fits.open(os.path.join(output_dir, nonlin_out_filename))
     if nonlin_out[0].header['OBSTYPE'] != 'NONLIN':
         raise ValueError('Calibration type is not NL')
     nonlin_out_table = nonlin_out[1].data
 
     # NL from TVAC
-    nonlin_tvac = fits.open(output_dir+'nonlin_tvac.fits')
+    nonlin_tvac = fits.open(os.path.join(output_dir,'nonlin_tvac.fits'))
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check
@@ -187,7 +189,10 @@ def test_nonlin_cal_e2e(
     plt.title('Relative difference of NL coefficients for a given DN and EM value', fontsize=16)
     plt.legend()
     plt.grid()
-    plt.savefig(output_dir+nonlin_out_filename[:-5])
+    plt.savefig(os.path.join(output_dir,nonlin_out_filename[:-5]))
+    print('NL differences wrt nonlin_table_240322.txt (TVAC/Matlab): ' +
+        f'max={np.abs(rel_out_tvac_perc).max():.1f} %, ' + 
+        f'rms={np.std(rel_out_tvac_perc):.1f} %')
     print(f'Figure saved: {output_dir+nonlin_out_filename[:-5]}.png')
 
 if __name__ == "__main__":

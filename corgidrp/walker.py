@@ -132,6 +132,11 @@ def guess_template(dataset):
                 if data.pri_hdr['OBSTYPE'] == "NONLIN":
                     recipe_filename = "l1_to_l2a_nonlin.json" 
                     break
+                elif data.pri_hdr['OBSTYPE'] == "NONLIN":
+                    recipe_filename = "l1_to_l2a_kgain.json"
+                    break
+                else:
+                    raise ValueError(f"Define recipe for {data.pri_hdr['OBSTYPE']}")
         else:
             recipe_filename = "l1_to_l2b.json"
     else:
