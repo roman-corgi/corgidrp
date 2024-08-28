@@ -76,6 +76,7 @@ def test_tt_rms():
     tt_rms = 0
     for frame in default_dataset:
         frame.ext_hdr['RESZ2RMS'] = tt_rms
+        frame.ext_hdr['RESZ3RMS'] = tt_rms
         tt_rms += 1
 
     # does nothing
@@ -84,7 +85,29 @@ def test_tt_rms():
     assert len(pruned_dataset) == 5
 
     # removes 2 frames
-    pruned_dataset = frame_select(default_dataset, tt_thres=2.5)
+    pruned_dataset = frame_select(default_dataset, tt_rms_thres=2.5)
+    assert len(pruned_dataset) != len(default_dataset)
+    assert len(pruned_dataset) == 3
+
+def test_tt_bias():
+    """
+    Tests for tt offset
+    """
+    default_dataset = mocks.create_dark_calib_files(numfiles=5)
+    # add tt rms header
+    tt_rms = 0
+    for frame in default_dataset:
+        frame.ext_hdr['RESZ2'] = tt_rms
+        frame.ext_hdr['RESZ3'] = tt_rms
+        tt_rms += 1
+
+    # does nothing
+    pruned_dataset = frame_select(default_dataset)
+    assert len(pruned_dataset) == len(default_dataset)
+    assert len(pruned_dataset) == 5
+
+    # removes 2 frames
+    pruned_dataset = frame_select(default_dataset, tt_bias_thres=2.5)
     assert len(pruned_dataset) != len(default_dataset)
     assert len(pruned_dataset) == 3
 
@@ -101,6 +124,7 @@ def test_remove_all():
     tt_rms = 0
     for frame in default_dataset:
         frame.ext_hdr['RESZ2RMS'] = tt_rms
+        frame.ext_hdr['RESZ3RMS'] = tt_rms
         tt_rms += 1
     # add overexp
     default_dataset[1].ext_hdr['OVEREXP'] = True
@@ -108,14 +132,42 @@ def test_remove_all():
     # keep only 1 frame
     # bpix_frac removes index 0
     # overexp removes index 1
-    # tt_thres removes indicies 3,4
-    pruned_dataset = frame_select(default_dataset, bpix_frac=0.1, overexp=True, tt_thres=2.5)
+    # tt_rms_thres removes indicies 3,4
+    pruned_dataset = frame_select(default_dataset, bpix_frac=0.1, overexp=True, tt_rms_thres=2.5)
     assert len(pruned_dataset) == 1
 
     # removes all frames
     with pytest.raises(ValueError):
-        pruned_dataset = frame_select(default_dataset, bpix_frac=0.1, overexp=True, tt_thres=1.5)
+        pruned_dataset = frame_select(default_dataset, bpix_frac=0.1, overexp=True, tt_rms_thres=1.5)
 
+def test_marking():
+    """
+    Tests marking frames as bad instead of completely dropping them
+    """
+    default_dataset = mocks.create_dark_calib_files(numfiles=5)
+    # add tt rms header
+    tt_rms = 0
+    for frame in default_dataset:
+        frame.ext_hdr['RESZ2'] = tt_rms
+        frame.ext_hdr['RESZ3'] = tt_rms
+        tt_rms += 1
+
+    # does nothing
+    pruned_dataset = frame_select(default_dataset, discard_bad=False)
+    assert len(pruned_dataset) == len(default_dataset)
+    assert len(pruned_dataset) == 5
+    for frame in pruned_dataset:
+        assert frame.ext_hdr['IS_BAD'] == False
+
+    # marks 2 frames as bad
+    pruned_dataset = frame_select(default_dataset, tt_bias_thres=2.5, discard_bad=False)
+    assert len(pruned_dataset) == len(default_dataset)
+    # but first 3 are good
+    for frame in pruned_dataset[:3]:
+        assert frame.ext_hdr['IS_BAD'] == False
+    # and last 2 are bad
+    for frame in pruned_dataset[3:]:
+        assert frame.ext_hdr['IS_BAD'] == True
 
 if __name__ == "__main__":
     test_no_selection()
