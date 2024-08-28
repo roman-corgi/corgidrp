@@ -143,8 +143,7 @@ def test_tpump_analysis():
 
     emgain_divided_dataset[0].save(filedir = "./", filename = "emgain_divided_dataset_file0.fits")
 
-    import IPython; IPython.embed()
-    print("Trap those pumps!")
+    #Done preliminary data processing. Now running the tpump_analysis
 
     length_lim = 5
     tau_fit_thresh = 0.8
