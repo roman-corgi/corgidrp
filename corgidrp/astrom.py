@@ -123,7 +123,7 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
     data = ndi.map_coordinates(frame, [ydata, xdata])
     
     ### Fit the PSF to the data ###
-    popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux))
+    popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux), maxfev=2000)
     tinyoffsets = popt[0:2]
 
     binary_offset = [xoffset_guess - tinyoffsets[0], yoffset_guess - tinyoffsets[1]]
@@ -562,7 +562,12 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
 
     # find the difference between the measured and true positon angles
     offset = np.empty(len(sources))
-    same_ind = np.where((quad_skycoords.ra.value == center_coord.ra.value) & (quad_skycoords.dec.value == center_coord.dec.value))[0][0]
+    # locate a potential comparison with self
+    if len(np.where((quad_skycoords.ra.value == center_coord.ra.value) & (quad_skycoords.dec.value == center_coord.dec.value))[0]) > 0:
+        same_ind = np.where((quad_skycoords.ra.value == center_coord.ra.value) & (quad_skycoords.dec.value == center_coord.dec.value))[0][0]
+    else:
+        same_ind = None
+
     for i, (sky, pix) in enumerate(zip(pa_sky, pa_pixel)):
         if i != same_ind:
             if sky > pix:
@@ -571,9 +576,12 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
                 north_offset = sky - pix + 360 
             offset[i] = north_offset
 
-    # get rid of the comparison with self
-    offset = np.delete(offset, same_ind)
-    north_angle = np.mean(offset)
+    # get rid of the comparison with self if it exists
+    if same_ind != None:
+        offset = np.delete(offset, same_ind)
+
+    # use the median to avoid bias
+    north_angle = np.median(offset)
     
     return platescale, north_angle
 
@@ -685,8 +693,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', thr
 
     # find sources in image and match to field
     if field_path == 'JWST_CALFIELD2020.csv':
-        dir_name = os.path.dirname(__file__)
-        full_field_path = os.path.join(dir_name, "tests/test_data", field_path)
+        full_field_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tests/test_data", field_path)
         field_path = full_field_path
 
     found_sources = find_source_locations(input_dataset, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
