@@ -688,7 +688,7 @@ def make_fluxmap_image(
         dq = dq)
     return image
 
-def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
+def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescale=21.8, rotation=45):
     """
     Create simulated data for astrometric calibration.
 
@@ -696,6 +696,8 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
         field_path (str): Full path to directory with test field data (ra, dec, vmag, etc.)
         filedir (str): (Optional) Full path to directory to save to.
         subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from
+        platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
+        rotation (float): The north angle of the created image data (default: 45 [deg])
 
     Returns:
         corgidrp.data.Dataset:
@@ -715,8 +717,6 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
     ny, nx = size
     center = [nx //2, ny //2]
     target = (80.553428801, -69.514096821)
-    platescale = 21.8   #[mas]
-    rotation = 45       #[deg]
     fwhm = 3
     subfield_radius = 0.02 #[deg]
     
