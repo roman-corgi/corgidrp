@@ -48,12 +48,12 @@ def test_bad_pixels():
     row_bp_test=[546, 89, 123, 243, 447, 675]
     bp_mask = mocks.create_badpixelmap_files(filedir=datadir,
         col_bp=col_bp_test, row_bp=row_bp_test)
-    new_bp_mask = BadPixelMap(bp_mask.all_data, pri_hdr=bp_mask[0].pri_hdr.copy(),
+    new_bp_mask = BadPixelMap(bp_mask.all_data[0], pri_hdr=bp_mask[0].pri_hdr.copy(),
                      ext_hdr=bp_mask[0].ext_hdr.copy(), input_dataset=bp_mask)
 
     assert type(new_bp_mask) == corgidrp.data.BadPixelMap
 
-    new_dataset = correct_bad_pixels(dataset, bp_mask)
+    new_dataset = correct_bad_pixels(dataset, new_bp_mask)
 
     assert type(new_dataset) == corgidrp.data.Dataset
 
