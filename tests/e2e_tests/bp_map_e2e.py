@@ -37,13 +37,10 @@ def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     ###### Setup necessary calibration files
-    # Modify input files to set KGAIN value in their headers
     for file in l1_data_filelist:
         with fits.open(file, mode='update') as hdulist:
-            # Modify the extension header to set KGAIN to 8.7
             pri_hdr = hdulist[0].header
             ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-            ext_hdr["KGAIN"] = 8.7
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
