@@ -60,6 +60,7 @@ target/
 tests/simdata/*
 tests/walker_output/*
 tests/testcalib/*
+tests/e2e_tests/*/*.json
 
 # editor files
 .vscode/*
@@ -79,3 +80,4 @@ tests/testcalib/*
 # Output figures
 figures/
 tests/figures/
+tests/test_data/simastrom/guesses.csv

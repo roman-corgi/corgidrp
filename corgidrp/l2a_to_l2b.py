@@ -18,7 +18,13 @@ def add_photon_noise(input_dataset):
     phot_noise_dataset = input_dataset.copy() # necessary at all?
 
     for i, frame in enumerate(phot_noise_dataset.frames):
-        em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
+        try: # use measured gain if available TODO change hdr name if necessary
+            em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
+            try: # use EM applied EM gain if available
+                em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_A"]
+            except: # otherwise use commanded EM gain
+                em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
         phot_err = np.sqrt(frame.data)
         #add excess noise in case of em_gain
         if em_gain > 1:
@@ -136,7 +142,7 @@ def flat_division(input_dataset, flat_field):
 
     return flatdiv_dataset
 
-def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_thres=None):
+def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_rms_thres=None, tt_bias_thres=None, discard_bad=True):
     """
 
     Selects the frames that we want to use for further processing.
@@ -148,8 +154,10 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                             (e.g., 6 means 2 and 4 are not considered bad).
                             Default is 0 (all nonzero DQ flags are considered bad)
         overexp (bool): if True, removes frames where the OVEREXP keyword is True. Default: False
-        tt_thres (float): maximum allowed tip/tilt in image to be considered good. Default: None (not used)
-
+        tt_rms_thres (float): maximum allowed RMS tip or tilt in image to be considered good. Default: None (not used)
+        tt_bias_thres (float): maximum allowed bias in tip/tilt over the course of an image to be consdiered good. Default: None (not used)
+        discard_bad (bool): if True, drops the bad frames rather than keeping them through processing
+        
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with only the frames we want to use
     """
@@ -159,7 +167,7 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
 
     disallowed_bits = np.invert(allowed_bpix) # invert the mask
 
-    for i, frame in enumerate(input_dataset.frames):
+    for i, frame in enumerate(pruned_dataset.frames):
         reject_reasons[i] = [] # list of rejection reasons
         if bpix_frac < 1:
             masked_dq = np.bitwise_and(frame.dq, disallowed_bits) # handle allowed_bpix values
@@ -174,23 +182,46 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
             if frame.ext_hdr['OVEREXP']:
                 reject_flags[i] += 2 # use distinct bits in case it's useful
                 reject_reasons[i].append("OVEREXP = T")
-        if tt_thres is not None:
-            if frame.ext_hdr['RESZ2RMS'] > tt_thres:
+        if tt_rms_thres is not None:
+            if frame.ext_hdr['RESZ2RMS'] > tt_rms_thres:
                 reject_flags[i] += 4 # use distinct bits in case it's useful
-                reject_reasons[i].append("tt rms {0:.1f} > {1:.1f}"
-                                         .format(frame.ext_hdr['RESZ2RMS'], tt_thres))
-
+                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ2RMS'], tt_rms_thres))
+            if frame.ext_hdr['RESZ3RMS'] > tt_rms_thres:
+                reject_flags[i] += 8 # use distinct bits in case it's useful
+                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ3RMS'], tt_rms_thres))
+        if tt_bias_thres is not None:
+            if frame.ext_hdr['RESZ2'] > tt_bias_thres:
+                reject_flags[i] += 16 # use distinct bits in case it's useful
+                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ2'], tt_bias_thres))
+            if frame.ext_hdr['RESZ3'] > tt_bias_thres:
+                reject_flags[i] += 32 # use distinct bits in case it's useful
+                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['RESZ3'], tt_bias_thres))
+                
+        # if rejected, mark as bad in the header
+        if reject_flags[i] > 0:
+            frame.ext_hdr['IS_BAD'] = True
+                                
     good_frames = np.where(reject_flags == 0)
     bad_frames = np.where(reject_flags > 0)
     # check that we didn't remove all of the good frames
     if np.size(good_frames) == 0:
         raise ValueError("No good frames were selected. Unable to continue")
 
-    pruned_frames = pruned_dataset.frames[good_frames]
-    pruned_dataset = data.Dataset(pruned_frames)
+    # if we need to discard bad, do that here. 
+    if discard_bad:
+        pruned_frames = pruned_dataset.frames[good_frames]
+        pruned_dataset = data.Dataset(pruned_frames)
+        
+        # history message of which frames were removed and why
+        history_msg = "Removed {0} frames as bad:".format(np.size(bad_frames))
+    else:
+        # history message of which frames were marked and why
+        history_msg = "Marked {0} frames as bad:".format(np.size(bad_frames))
 
-    # history message of which frames were removed and why
-    history_msg = "Removed {0} frames:".format(np.size(bad_frames))
     for bad_index in bad_frames[0]:
         bad_frame = input_dataset.frames[bad_index]
         bad_reasons = "; ".join(reject_reasons[bad_index])
@@ -232,7 +263,7 @@ def convert_to_electrons(input_dataset, k_gain):
 def em_gain_division(input_dataset):
     """
 
-    Convert the data from detected EM electrons to detected electrons by dividing the commanded em_gain.
+    Convert the data from detected EM electrons to detected electrons by dividing by the EM gain.
     Update the change in units in the header [detected electrons].
 
     Args:
@@ -247,21 +278,24 @@ def em_gain_division(input_dataset):
     emgain_cube = emgain_dataset.all_data
     emgain_error = emgain_dataset.all_err
 
-    unique = True
-    emgain = emgain_dataset[0].ext_hdr["CMDGAIN"]
     for i in range(len(emgain_dataset)):
-        if emgain != emgain_dataset[i].ext_hdr["CMDGAIN"]:
-            unique = False
-            emgain = emgain_dataset[i].ext_hdr["CMDGAIN"]
+        try: # use measured gain if available TODO change hdr name if necessary
+            emgain = emgain_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
+            try: # use EM applied EM gain if available
+                emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
+            except: # otherwise use commanded EM gain
+                emgain = emgain_dataset[i].ext_hdr["CMDGAIN"]
         emgain_cube[i] /= emgain
         emgain_error[i] /= emgain
 
-    if unique:
-        history_msg = "data divided by em_gain {0}".format(str(emgain))
+    dataset_list, _ = emgain_dataset.split_dataset(exthdr_keywords=['CMDGAIN'])
+    if len(dataset_list) > 1:
+        history_msg = "data divided by EM gain for dataset with frames with different commanded EM gains"
     else:
-        history_msg = "data divided by non-unique em_gain"
+        history_msg = "data divided by EM gain for dataset with frames with the same commanded EM gain"
 
-    # update the output dataset with this em_gain divided data and update the history
+    # update the output dataset with this EM gain divided data and update the history
     emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
 
     return emgain_dataset
@@ -278,7 +312,7 @@ def cti_correction(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
     """
-
+    # also remember to update CTI_CORR ext header keyword
     return input_dataset.copy()
 
 
@@ -309,7 +343,7 @@ def correct_bad_pixels(input_dataset, bp_mask):
 
     for i in range(data_cube.shape[0]):
         # combine DQ and BP masks
-        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask[0].data.astype(np.uint8))
+        bp_dq_mask = np.bitwise_or(dq_cube[i],bp_mask.data.astype(np.uint8))
         # mask affected pixels with NaN
         bp = np.where(bp_dq_mask != 0)
         data_cube[i, bp[0], bp[1]] = np.nan
@@ -357,6 +391,40 @@ def desmear(input_dataset, detector_params):
         data_cube[i] -= smear
 
     history_msg = "Desmear applied to data"
-    data.update_after_processing_step(history_msg, new_all_data=data_cube)
+    header_update = {'DESMEAR' : True}
+    data.update_after_processing_step(history_msg, new_all_data=data_cube, header_entries=header_update)
 
     return data
+
+def update_to_l2b(input_dataset):
+    """
+    Updates the data level to L2b. Only works on L2a data.
+
+    Currently only checks that data is at the L2a level
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+
+    Returns:
+        corgidrp.data.Dataset: same dataset now at L2b-level
+    """
+    # check that we are running this on L1 data
+    for orig_frame in input_dataset:
+        if orig_frame.ext_hdr['DATA_LEVEL'] != "L2a":
+            err_msg = "{0} needs to be L2a data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+            raise ValueError(err_msg)
+
+    # we aren't altering the data
+    updated_dataset = input_dataset.copy(copy_data=False)
+
+    for frame in updated_dataset:
+        # update header
+        frame.ext_hdr['DATA_LEVEL'] = "L2b"
+        # update filename convention. The file convention should be
+        # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
+        frame.filename = frame.filename.replace("_L2a_", "_L2b_", 1)
+
+    history_msg = "Updated Data Level to L2b"
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset

@@ -15,7 +15,7 @@ def test_emgain_div():
     
     ###### perform em_gain division
     gain_dataset = l2a_to_l2b.em_gain_division(dataset)
-    assert("em_gain" in str(gain_dataset[0].ext_hdr["HISTORY"]))
+    assert("same" in str(gain_dataset[0].ext_hdr["HISTORY"]))
 
     emgain = gain_dataset[0].ext_hdr['CMDGAIN']
     
@@ -31,7 +31,7 @@ def test_emgain_div():
     emgain1 = 100
     dataset[1].ext_hdr['CMDGAIN'] = emgain1
     gain_dataset = l2a_to_l2b.em_gain_division(dataset)
-    assert("non-unique" in str(gain_dataset[0].ext_hdr["HISTORY"]))
+    assert("different" in str(gain_dataset[0].ext_hdr["HISTORY"]))
     assert np.mean(gain_dataset.all_data[0]) == pytest.approx(np.mean(dataset.all_data[0])/emgain, abs=1e-3)
     assert np.mean(gain_dataset.all_data[1]) == pytest.approx(np.mean(dataset.all_data[1])/emgain1, abs=1e-3)
     assert np.mean(gain_dataset.all_err[0]) == pytest.approx(np.mean(dataset.all_err[0])/emgain, abs=1e-3)
