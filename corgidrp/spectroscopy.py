@@ -15,8 +15,6 @@ from astropy.modeling.models import Const2D, Gaussian2D
 
 import pyklip.fakes as fakes
 
-#import pyklip.fakes as fakes
-
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.ndimage import center_of_mass
