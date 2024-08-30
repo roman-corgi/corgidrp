@@ -27,7 +27,7 @@ def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
-    flat_path = os.path.join(processed_cal_path, "flat_ones.fits")
+    flat_path = os.path.join(processed_cal_path, "flat.fits")
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_ref_path = os.path.join(processed_cal_path, "fixed_bp_zeros.fits")
@@ -37,10 +37,13 @@ def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     ###### Setup necessary calibration files
+    # Modify input files to set KGAIN value in their headers
     for file in l1_data_filelist:
         with fits.open(file, mode='update') as hdulist:
+            # Modify the extension header to set KGAIN to 8.7
             pri_hdr = hdulist[0].header
             ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
+            ext_hdr["KGAIN"] = 8.7
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
@@ -194,7 +197,7 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
-    flat_path = os.path.join(processed_cal_path, "flat_ones.fits")
+    flat_path = os.path.join(processed_cal_path, "flat.fits")
 
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
@@ -304,7 +307,7 @@ def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
+    tvacdata_dir = "/Users/jmilton/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
     outputdir = thisfile_dir
 
     # Argument parser setup
