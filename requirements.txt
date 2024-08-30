@@ -6,3 +6,4 @@ pytest
 scipy
 statsmodels
 pyklip
+emccd-detect
