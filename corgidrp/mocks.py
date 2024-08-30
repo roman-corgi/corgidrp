@@ -467,10 +467,10 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])
-        data_range = np.linspace(10,65536,size)
+        data_range = np.linspace(2000,65536,size)
         # Generate data for each row, where the mean increase from 10 to 65536
         for x in range(size):
-            np.random.seed(123+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
+            np.random.seed(120+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
 
         non_linearity_correction = data.NonLinearityCalibration(nonlin_filepath)
 
