@@ -268,7 +268,7 @@ class Image():
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None, input_hdulist = None):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
-            with fits.open(data_or_filepath) as hdulist:
+            with fits.open(data_or_filepath, ignore_missing_simple=True) as hdulist:
                 
                 #Pop out the primary header
                 self.pri_hdr = hdulist.pop(0).header
