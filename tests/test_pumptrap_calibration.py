@@ -1,17 +1,21 @@
 import os
 import glob
 import numpy as np
+from corgidrp.mocks import generate_mock_pump_trap_data
 from corgidrp.detector import imaging_area_geometry
 from corgidrp.data import Dataset
 from corgidrp.l1_to_l2a import prescan_biassub
 from corgidrp.l2a_to_l2b import em_gain_division
 from corgidrp.pump_trap_calibration import tpump_analysis, tau_temp
 
+# Set the seed - II&T ut tests don't work everytime, so let's fix it. 
+np.random.seed(39)
+
 # Adjust the system's limit of open files. We need to load 2000 files at once. 
 # some systems don't like that. 
 import resource
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (3001, hard_limit))
+resource.setrlimit(resource.RLIMIT_NOFILE, (6001, hard_limit))
 
 def rebuild_dict(trap_pump_array):
         '''
@@ -56,35 +60,42 @@ def test_tpump_analysis():
     test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
     '''
 
+    #Generate the mock data:
+    test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
+    metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
+    print("Generating mock data")
+    generate_mock_pump_trap_data(test_data_dir, metadata_file)
+    print("Done generating mock data")
+
     #Read in all the data. 
-    test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data")
+    # test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data")
     data_filenames = sorted(glob.glob(os.path.join(test_data_dir, "*.fits")))
     pump_trap_dataset = Dataset(data_filenames)
 
     #Parse the first three characters of each filename into a temperature
-    temps = [int(os.path.basename(f)[:3]) for f in data_filenames]
-    npumps = [int(os.path.basename(f).split("_")[5]) for f in data_filenames]
-    scheme = [int(os.path.basename(f).split("_")[2]) for f in data_filenames]
+    # temps = [int(os.path.basename(f)[:3]) for f in data_filenames]
+    # npumps = [int(os.path.basename(f).split("_")[5]) for f in data_filenames]
+    # scheme = [int(os.path.basename(f).split("_")[2]) for f in data_filenames]
     #Hack in some missing header parameters. 
     arrtype = 'SCI'
-    em_gain = 10 #The default in generate_test_data.py
+    # em_gain = 10 #The default in generate_test_data.py
 
     for j,frame in enumerate(pump_trap_dataset):
         frame.ext_hdr['ARRTYPE'] = arrtype
-        frame.ext_hdr['CMDGAIN'] = em_gain
-        frame.ext_hdr['EXCAMT'] = temps.pop(0)
+        # frame.ext_hdr['CMDGAIN'] = em_gain
+        # frame.ext_hdr['EXCAMT'] = temps.pop(0)
 
         #Get the scheme the the "scheme" list. For the current scheme set the header keyword TPSCHEM* 
         # equal to the npumps for this filename, where * is equal to the scheme. For the other schemes (up to * =4) set TPSCHEM* =0.
-        for i in range(1, 5):
-            if scheme[j] == i:
-                frame.ext_hdr['TPSCHEM' + str(i)] = npumps.pop(0)
-            else:
-                frame.ext_hdr['TPSCHEM' + str(i)] = 0
+        # for i in range(1, 5):
+        #     if scheme[j] == i:
+        #         frame.ext_hdr['TPSCHEM' + str(i)] = npumps.pop(0)
+        #     else:
+        #         frame.ext_hdr['TPSCHEM' + str(i)] = 0
 
         #Get the phase time from the filename: its between the string "phasetime" and the ".fits" extension at the end
-        phase_time = os.path.basename(data_filenames[j]).split("phasetime")[1].split(".fits")[0]
-        frame.ext_hdr['TPTAU'] = float(phase_time)
+        # phase_time = os.path.basename(data_filenames[j]).split("phasetime")[1].split(".fits")[0]
+        # frame.ext_hdr['TPTAU'] = float(phase_time)
 
     #Run the bias subtraction
     # #TODO Figure out which detector regions to pass in here. 
@@ -176,7 +187,6 @@ def test_tpump_analysis():
 
     #####
     # Run many of the tests from test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
-    
     
     assert(unused_fit_data > 0)
     assert(unused_temp_fit_data == 0)
