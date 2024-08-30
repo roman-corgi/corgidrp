@@ -121,16 +121,34 @@ def test_non_linearity_correction():
     
     Ported from II&T Pipeline
     """
+
+    #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
+    dummy_dataset = mocks.create_prescan_files()
+
+    # Make a non-linearity correction calibration file
+    input_non_linearity_filename = "nonlin_table_TVAC.txt"
+    input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
+    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+    test_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+    tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
+
+
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
+    non_linearity_correction.save(filename = test_non_linearity_path)
+    # COMMENT CSV data saved as FITS file                                             
+    # HISTORY nonlin_sample.CSV from IIT data converted to FITS  
+
+    # import IPython; IPython.embed()
+
     ###### create a simulated dataset that is non-linear
     # check that simulated data folder exists, and create if not
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
-    
-    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", "nonlin_sample.fits")
 
     emgain = 2000
-    mocks.create_nonlinear_dataset(nonlin_fits_filepath, filedir=datadir,em_gain=emgain)
+    mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir,em_gain=emgain)
 
     ####### open up the files
     sim_data_filenames = glob.glob(os.path.join(datadir, "simcal_nonlin*.fits"))
@@ -138,11 +156,11 @@ def test_non_linearity_correction():
     assert len(nonlinear_dataset) == 2
 
     ######## perform non-linearity correction
-    non_linearity_correction = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    non_linearity_correction = data.NonLinearityCalibration(test_non_linearity_path)
     linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
 
     #The data was generated with a ramp in the x-direction going from 10 to 65536
-    expected_ramp = np.linspace(10,65536,1024)
+    expected_ramp = np.linspace(2000,65536,1024)
     #Let's collapse the data and see if there's a ramp. 
     collapsed_data = np.mean(linear_dataset.all_data, axis=(0,1))
 
@@ -154,7 +172,7 @@ def test_non_linearity_correction():
 
     
     #Let's test that this returns the same thing as the II&T pipeline
-    linear_data_iit = nonlinear_dataset.all_data*get_relgains(nonlinear_dataset.all_data,emgain,os.path.join(os.path.dirname(os.path.abspath(__file__)),"test_data","nonlin_sample.csv"))
+    linear_data_iit = nonlinear_dataset.all_data*get_relgains(nonlinear_dataset.all_data,emgain,input_non_linearity_path)
 
     #We want the difference between the II&T version and ours to be zero. 
     assert np.all(np.abs(linear_dataset.all_data[0]-linear_data_iit[0]) < 1e-5)
