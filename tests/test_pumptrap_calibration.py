@@ -8,8 +8,7 @@ from corgidrp.l1_to_l2a import prescan_biassub
 from corgidrp.l2a_to_l2b import em_gain_division
 from corgidrp.pump_trap_calibration import tpump_analysis, tau_temp
 
-# Set the seed - II&T ut tests don't work everytime, so let's fix it. 
-np.random.seed(39)
+
 
 # Adjust the system's limit of open files. We need to load 2000 files at once. 
 # some systems don't like that. 
@@ -59,6 +58,9 @@ def test_tpump_analysis():
     After reading in the data and some setup, then run the subset of appropriate tests from
     test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
     '''
+
+    # Set the seed - II&T ut tests don't work everytime, so let's fix it. 
+    np.random.seed(39)
 
     #Generate the mock data:
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
@@ -266,7 +268,7 @@ def test_tpump_analysis():
         if tr[0] == 4/(nrows*ncols):
             assert(np.isclose(tr[1], 0.28, atol=0.05))
             assert(np.isclose(tr[2], 12e-15, rtol=0.1))
-
+    
 if __name__ == "__main__":
     test_tpump_analysis()
     
