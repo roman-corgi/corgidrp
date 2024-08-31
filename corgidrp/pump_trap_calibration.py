@@ -2775,9 +2775,6 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
                 prob2 (str): The probability function of the second scheme.
                 i (int): The coordinate index.
                 subel_loc (int): The sub-electrode location.
-
-            Returns:
-                None
             """
             max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
             max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
@@ -2874,9 +2871,6 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
                 prob3 (str): The probability function of the third scheme.
                 i (int): The coordinate index.
                 subel_loc (int): The sub-electrode location.
-
-            Returns:
-                None
             """
             max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
             max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
