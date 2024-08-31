@@ -18,6 +18,7 @@ import pyklip.fakes as fakes
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.ndimage import center_of_mass
+import matplotlib.pyplot as plt
 
 
 def centroid(frame):
@@ -56,16 +57,20 @@ def shift_psf(frame, dx, dy, flux, fitsize=10, stampsize=10):
         ndi..map_coordinates: New coordinates for a shifted psf
 
     """
+    fitsize = frame.shape[0]
     ystamp, xstamp = np.indices([fitsize, fitsize], dtype=float)
     xstamp -= fitsize//2
     ystamp -= fitsize//2
     
+    stampsize=frame.shape[0]
+
     xstamp += stampsize//2 + dx
     ystamp += stampsize//2 + dy
     
+    #print(f"shift_psf result shape: {ndi.map_coordinates(frame * flux, [ystamp, xstamp], mode='constant', cval=0.0).ravel().shape}")
     return ndi.map_coordinates(frame * flux, [ystamp, xstamp], mode='constant', cval=0.0).ravel()
 
-def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
+def fit_centroid(psf_template, psf_data, guessflux=1, rad=20, stampsize=30):
 #def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess, guessflux=1, rad=5, stampsize=10):
     """
     Use this code to calculate the psf centroid for the template and psf data.
@@ -96,13 +101,20 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
 
     # Get a rough estimate of the psf_template center of mass (x and y coord)
     y_com, x_com = center_of_mass(psf_template)
-    pf, fw, x_centroid, y_centroid = fakes.gaussfit2d(frame=psf_template, xguess=x_com, yguess=y_com)
+    print(y_com,x_com)  
+    #pf, fw, x_centroid, y_centroid = fakes.gaussfit2d(frame=psf_template, xguess=x_com, yguess=y_com)
+
+    x_centroid = x_com
+    y_centroid = y_com
 
     # replace frame with psf_template
     frame = psf_template
+    plt.imshow(psf_template)
+    plt.title('psf_template')
 
     yind = int(y_centroid)
     xind = int(x_centroid)
+    print(xind, yind, 'xind and yind')
         
     ymin = yind - rad
     ymax = yind + rad + 1
@@ -123,6 +135,9 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
         xmin = frame.shape[1] - 2 * rad - 1
         
     cutout = frame[ymin:ymax, xmin:xmax]
+    plt.figure()
+    plt.imshow(cutout)
+    plt.title('cutout')
     
     xstar, ystar = centroid(cutout)  # 
     xstar += xmin
@@ -135,12 +150,16 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
     xstamp += xstar
     ystamp += ystar
     
-    stamp = ndi.map_coordinates(frame, [ystamp, xstamp])
+    stamp = ndi.map_coordinates(frame, [ystamp, xstamp])  # this image doesn't have psf
     
     ### Create a data stamp ###  - this is from psf_data (in a file test_spectroscopy.py we will open this fits file)
     # I am not sure how else to estimate the offset? Unless I assume it is 0 (which is true in our example case)
     y_com_data, x_com_data = center_of_mass(psf_template)
-    pf, fw, x_centroid_data, y_centroid_data = fakes.gaussfit2d(frame=psf_data, xguess=x_com_data, yguess=y_com_data)
+    #pf, fw, x_centroid_data, y_centroid_data = fakes.gaussfit2d(frame=psf_data, xguess=x_com_data, yguess=y_com_data)
+    x_centroid_data = x_com_data
+    y_centroid_data = y_com_data
+
+    print(x_centroid_data, y_centroid_data, 'x and y centroid')
     xoffset_guess = x_centroid - x_centroid_data
     yoffset_guess = y_centroid - y_centroid_data
 
@@ -150,11 +169,22 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=5, stampsize=30):
     ydata -= fitsize//2
     xdata += xstar + xoffset_guess  # not sure what to do for guesses? Or if I should get coords from this image as well?
     ydata += ystar + yoffset_guess
-    
+
+    #print(xdata, ydata)
+
     #Pull data from psf_data
     data = ndi.map_coordinates(psf_data, [ydata, xdata])
+    plt.figure()
+    plt.imshow(data)
+    plt.title('data')
 
-    #somewhere here we need to use the psf_data
+    plt.figure()
+    plt.imshow(stamp)
+    plt.title('stamp')
+
+    # print(f"stamp shape: {stamp.shape[0]}")
+    # print(f"data shape: {data.shape}")
+    # print(data.ravel().shape, 'data ravel shape')
 
     
     ### Fit the PSF to the data ###
