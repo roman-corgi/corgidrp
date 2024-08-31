@@ -325,6 +325,13 @@ def imaging_slice(frame,obstype='SCI',detector_regions=None):
 
     Ported from II&T read_metadata.py
 
+    Args:
+        frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
+        obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        detector_regions (dict): a dictionary of detector geometry properties.  
+    
+    Returns:
+        np.ndarray: Imaging slice
     """
 
     if detector_regions is None:

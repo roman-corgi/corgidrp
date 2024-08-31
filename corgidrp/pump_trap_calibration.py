@@ -522,6 +522,15 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
     # definition if I want to use curve_fit
     def P1(time_data, offset, tauc, tau):
         """Probability function 1, one trap.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant. Units: e-.
+            tau (float): Release time constant. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.
         """
         pc = 1 - np.exp(-time_data/tauc)
         return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
@@ -529,6 +538,17 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
     def P1_P1(time_data, offset, tauc, tau, tauc2, tau2):
         """Probability function 1, two traps.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            tauc2 (float): Capture time constant for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.
         """
         pc = 1 - np.exp(-time_data/tauc)
         pc2 = 1 - np.exp(-time_data/tauc2)
@@ -538,6 +558,15 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
     def P2(time_data, offset, tauc, tau):
         """Probability function 2, one trap.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant. Units: e-.
+            tau (float): Release time constant. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.
         """
         pc = 1 - np.exp(-time_data/tauc)
         return offset+(num_pumps*pc*(np.exp(-2*time_data/tau)-
@@ -545,6 +574,17 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
     def P1_P2(time_data, offset, tauc, tau, tauc2, tau2):
         """One trap for probability function 1, one for probability function 2.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            tauc2 (float): Capture time constant for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.
         """
         pc = 1 - np.exp(-time_data/tauc)
         pc2 = 1 - np.exp(-time_data/tauc2)
@@ -554,6 +594,17 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
     def P2_P2(time_data, offset, tauc, tau, tauc2, tau2):
         """Probability function 2, two traps.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            tauc2 (float): Capture time constant for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.s
         """
         pc = 1 - np.exp(-time_data/tauc)
         pc2 = 1 - np.exp(-time_data/tauc2)
@@ -563,6 +614,15 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
     def P3(time_data, offset, tauc, tau):
         """Probability function 3, one trap.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant. Units: e-.
+            tau (float): Release time constant. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.
         """
         pc = 1 - np.exp(-time_data/tauc)
         return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
@@ -570,6 +630,17 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
     def P3_P3(time_data, offset, tauc, tau, tauc2, tau2):
         """Probability function 3, two traps.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            tauc2 (float): Capture time constant for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.
         """
         pc = 1 - np.exp(-time_data/tauc)
         pc2 = 1 - np.exp(-time_data/tauc2)
@@ -579,6 +650,17 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
     def P2_P3(time_data, offset, tauc, tau, tauc2, tau2):
         """One trap for probability function 2, one for probability function 3.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+            tauc (float): Capture time constant for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            tauc2 (float): Capture time constant for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Expected amplitude values for the given phase times.
         """
         pc = 1 - np.exp(-time_data/tauc)
         pc2 = 1 - np.exp(-time_data/tauc2)
