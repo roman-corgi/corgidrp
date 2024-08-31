@@ -1234,6 +1234,14 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     def _ENF(g, Nem):
         """
         Returns the ENF.
+
+        Args:
+            g (float): gain
+            Nem (int): Nem
+
+        Returns:
+            float: ENF
+
         """
         return np.sqrt(2*(g-1)*g**(-(Nem+1)/Nem) + 1/g)
     # std dev in e-, before gain division
@@ -1491,7 +1499,21 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         means first frame, length of time array means last frame), and the
         dipole is of the probability function prob (which can be 1, 2, 3,
         'sp', '1b', '3b', 'mf1', or 'mf2').
-        The temperature is specified by temp (in K)."""
+        The temperature is specified by temp (in K).
+        
+        Args: 
+            img_stack (np.array): image stack
+            row (int): row
+            col (int): col
+            ori (str): orientation
+            prob (int): probability
+            start (int): start
+            end (int): end
+            temp (int): temperature
+
+        Returns:
+            np.array: image stack
+        """
         img_stack[:,r0c0[0]+row,r0c0[1]+col] += amps_1_trap[prob][temp][:]
         # length limit controlled by how 'long' deficit pixel is since
         #threshold should be met for all frames for bright pixel
@@ -1520,7 +1542,24 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         use -1 for end; 0 for start means first frame, length of time array
         means last frame). The 2-dipole is of probability function
         prob.  Valid values for prob are 11, 12, 22, 23, and 33.
-        The temperature is specified by temp (in K)."""
+        The temperature is specified by temp (in K).
+        
+        Args:
+            img_stack (np.array): image stack
+            row (int): row
+            col (int): col
+            ori1 (str): orientation 1
+            ori2 (str): orientation 2
+            prob (int): probability
+            start1 (int): start 1
+            end1 (int): end 1
+            start2 (int): start 2
+            end2 (int): end 2
+            temp (int): temperature
+
+        Returns:
+            np.array: image stack    
+        """
         img_stack[:,r0c0[0]+row,r0c0[1]+col] += \
             amps_2_trap[prob][temp][:]
         # length limit controlled by how 'long' deficit pixel is since
@@ -1556,6 +1595,14 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         """Makes a series of frames according to the emccd_detect instance
         emccd_inst, one for each element in the array phase_times (assumed to
         be in s).
+
+        Args:
+            emccd_inst (EMCCDDetect): emccd instance
+            phase_times (np.array): phase times
+            inj_charge (int): injection charge
+
+        Returns:
+            np.array: full frames
         """
         full_frames = []
         for i in range(len(phase_times)):
@@ -1586,7 +1633,19 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         However, physically, a defect region of such a small number of rows is
         improbable; even a cosmic ray hit, which could have this signature for
         perhaps 1 phase time, is very unlikely to hit the same region while
-        data for each phase time is being taken."""
+        data for each phase time is being taken.
+        
+        Args: 
+            sch_imgs (np.array): scheme images
+            prob (int): probability
+            ori (str): orientation
+            temp (int): temperature
+
+            
+        Returns:
+            np.array: scheme images
+            
+        """
         # area with defect (high above mean),
         # but no dipole that stands out enough without ill_corr = True
         sch_imgs[:,r0c0[0]+12:r0c0[0]+22,r0c0[1]+17:r0c0[1]+27]=g*9000/eperdn
