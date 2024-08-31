@@ -290,8 +290,12 @@ def imaging_area_geometry(obstype='SCI',detector_regions=None):
 
     Args: 
         obstype (str): Either 'SCI' or 'ENG'
+        detector_regions (dict): a dictionary of detector geometry properties. 
 
     Returns: 
+        rows_im (int): Number of rows of imaging area
+        cols_im (int): Number of columns of imaging area
+        r0c0_im (tuple): Tuple of (row position, column position) of corner closest to (0,0)
 
     """
 
