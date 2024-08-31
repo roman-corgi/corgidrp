@@ -1319,12 +1319,34 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
     # definition if I want to use curve_fit
     def P1(time_data, offset, pc, tau):
         """Probability function 1, one trap.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability. Units: e-.
+            tau (float): Release time constant. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for a single trap.
         """
         return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
             np.exp(-2*time_data/tau)))
 
     def P1_P1(time_data, offset, pc, tau, pc2, tau2):
         """Probability function 1, two traps.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            pc2 (float): Capture probability for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for two traps.
         """
         return offset+num_pumps*pc*(np.exp(-time_data/tau)-
             np.exp(-2*time_data/tau))+ \
@@ -1332,12 +1354,34 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
 
     def P2(time_data, offset, pc, tau):
         """Probability function 2, one trap.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability. Units: e-.
+            tau (float): Release time constant. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for a single trap.
         """
         return offset+(num_pumps*pc*(np.exp(-2*time_data/tau)-
             np.exp(-3*time_data/tau)))
 
     def P1_P2(time_data, offset, pc, tau, pc2, tau2):
         """One trap for probability function 1, one for probability function 2.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            pc2 (float): Capture probability for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for two traps.
         """
         return offset+num_pumps*pc*(np.exp(-time_data/tau)-
             np.exp(-2*time_data/tau))+ \
@@ -1345,6 +1389,18 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
 
     def P2_P2(time_data, offset, pc, tau, pc2, tau2):
         """Probability function 2, two traps.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            pc2 (float): Capture probability for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for two traps.
         """
         return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
             np.exp(-3*time_data/tau))+ \
@@ -1352,12 +1408,34 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
 
     def P3(time_data, offset, pc, tau):
         """Probability function 3, one trap.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability. Units: e-.
+            tau (float): Release time constant. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for a single trap
         """
         return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
             np.exp(-4*time_data/tau)))
 
     def P3_P3(time_data, offset, pc, tau, pc2, tau2):
         """Probability function 3, two traps.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            pc2 (float): Capture probability for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for two traps.
         """
         return offset+num_pumps*pc*(np.exp(-time_data/tau)-
             np.exp(-4*time_data/tau))+ \
@@ -1365,6 +1443,18 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
 
     def P2_P3(time_data, offset, pc, tau, pc2, tau2):
         """One trap for probability function 2, one for probability function 3.
+
+        Args:
+            time_data (array): Phase times in seconds.
+            offset (float): Offset in the fitting of data for amplitude vs phase time.
+                Acts as a nuisance parameter. Units: e-.
+            pc (float): Capture probability for the first trap. Units: e-.
+            tau (float): Release time constant for the first trap. Units: seconds.
+            pc2 (float): Capture probability for the second trap. Units: e-.
+            tau2 (float): Release time constant for the second trap. Units: seconds.
+
+        Returns:
+            array: Amplitude vs phase time for two traps.
         """
         return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
             np.exp(-3*time_data/tau))+ \
@@ -2112,6 +2202,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         bins_cs (int, optional): Number of bins used for cross section in categorizing traps into 2-D bins of energy level and cross section. Defaults to 10.
         input_T (float, optional): Temperature of Roman EMCCD at which to calculate the release time constant (in units of Kelvin). Defaults to 180.
         sample_data (bool, optional): Whether to run the sample data on Alfresco. Defaults to False.
+        verbose (bool, optional): Whether to print out additional information. Defaults to False.
     
     Returns:
         corgi.drp.TrapCalibration: An object containing the results of the trap calibration. The trap densities are appended as an extension HDU, and several other parameters are stored as header keywords in the ext_hdr header.
@@ -2622,7 +2713,17 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             """Gets coordinates of dipoles shared across 2 schemes (sch1
             and sch2) with orientations or1 and or2 at a
             given temperature.
-            For the purpose of sub-electrode location."""
+            For the purpose of sub-electrode location.
+            
+            Args:
+                sch1 (int): The first scheme number.
+                or1 (str): The orientation of the first scheme.
+                sch2 (int): The second scheme number.
+                or2 (str): The orientation of the second scheme.
+                
+                Returns:
+                    list: The coordinates of the dipoles shared across the two schemes.
+            """
             coords = list(set(schemes[sch1]['rc_'+or1]) -
                 (set(schemes[sch1]['rc_'+or1]) -
                 set(schemes[sch2]['rc_'+or2])))
@@ -2632,7 +2733,19 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             """Gets coordinates of dipoles shared across 3 schemes (sch1,
             sch2, and sch3) with orientations or1 and or2 and or3 at a
             given temperature.
-            For the purpose of sub-electrode location."""
+            For the purpose of sub-electrode location.
+            
+            Args:
+                sch1 (int): The first scheme number.
+                or1 (str): The orientation of the first scheme.
+                sch2 (int): The second scheme number.
+                or2 (str): The orientation of the second scheme.
+                sch3 (int): The third scheme number.
+                or3 (str): The orientation of the third scheme.
+                
+                Returns:
+                    list: The coordinates of the dipoles shared across the three schemes.
+            """
             coords12 = _el_loc_coords2(sch1, or1, sch2, or2)
             coords23 = _el_loc_coords2(sch2, or2, sch3, or3)
             coords123 = list(set(coords12) - (set(coords12) -
@@ -2652,6 +2765,19 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             to the traps dictionary and deletes these dipole entries from
             the schemes dictionary so that they aren't used for matching up
             again.
+
+            Args:
+                sch1 (int): The first scheme number.
+                or1 (str): The orientation of the first scheme.
+                prob1 (str): The probability function of the first scheme.
+                sch2 (int): The second scheme number.
+                or2 (str): The orientation of the second scheme.
+                prob2 (str): The probability function of the second scheme.
+                i (int): The coordinate index.
+                subel_loc (int): The sub-electrode location.
+
+            Returns:
+                None
             """
             max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
             max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
@@ -2735,6 +2861,22 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             to the traps dictionary and deletes these dipole entries from
             the schemes dictionary so that they aren't used for matching up
             again.
+
+            Args:
+                sch1 (int): The first scheme number.
+                or1 (str): The orientation of the first scheme.
+                prob1 (str): The probability function of the first scheme.
+                sch2 (int): The second scheme number.
+                or2 (str): The orientation of the second scheme.
+                prob2 (str): The probability function of the second scheme.
+                sch3 (int): The third scheme number.
+                or3 (str): The orientation of the third scheme.
+                prob3 (str): The probability function of the third scheme.
+                i (int): The coordinate index.
+                subel_loc (int): The sub-electrode location.
+
+            Returns:
+                None
             """
             max_amp1 = max(schemes[sch1]['rc_'+or1][i]['amps_'+or1])
             max_amp2 = max(schemes[sch2]['rc_'+or2][i]['amps_'+or2])
@@ -3082,6 +3224,7 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
 
     Args: 
         trap_dict (dict): A dictionary output by tpump_analysis
+        input_dataset (list): A list of corgidrp.data.TPumpData objects.
     
     Returns: 
         trap_cal (corgidrp.data.TrapCalibration): A trap calibration file. 
