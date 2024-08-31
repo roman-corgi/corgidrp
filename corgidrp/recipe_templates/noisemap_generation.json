@@ -10,7 +10,7 @@
         {
             "name" : "prescan_biassub",
             "keywords" : {
-                "return_full_frame" : false
+                "return_full_frame" : true
             }
         },
         {
@@ -32,21 +32,9 @@
             "name" : "save"
         },
         {
-            "name" : "frame_select" 
-        }, 
-        {
             "name" : "convert_to_electrons",
             "calibs" : {
                 "KGain" : "AUTOMATIC"
-            }
-        },
-        {
-            "name" : "em_gain_division"
-        },
-        {
-            "name" : "desmear",
-            "calibs" : {
-                "DetectorParams" : "AUTOMATIC"
             }
         },
         {
@@ -56,7 +44,10 @@
             }
         },
         {
-            "name" : "save"
+            "name" : "save",
+            "keywords" : {
+                "suffix" : "noisemap"
+            }
         }
     ]
 }
