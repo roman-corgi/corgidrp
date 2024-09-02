@@ -44,10 +44,7 @@
             }
         },
         {
-            "name" : "save",
-            "keywords" : {
-                "suffix" : "noisemap"
-            }
+            "name" : "save"
         }
     ]
 }
