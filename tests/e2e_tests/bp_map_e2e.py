@@ -15,7 +15,7 @@ from corgidrp import walker
 thisfile_dir = os.path.dirname(__file__)
 
 @pytest.mark.e2e
-def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
+def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
@@ -185,7 +185,8 @@ def bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_master_dark_test.png")
         plt.savefig(output_path)
 
-def bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
+@pytest.mark.e2e
+def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
