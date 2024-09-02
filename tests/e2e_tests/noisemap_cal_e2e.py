@@ -3,7 +3,6 @@ import os
 import pytest
 import numpy as np
 import astropy.time as time
-import astropy.io.fits as fits
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -78,43 +77,43 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     iit_noisemap = data.autoload(iit_noisemap_fname)
     
     for noise_ext in ["FPN_map","CIC_map","DC_map"]:
-        vmaxes = {
-            "FPN_map" : 20,
-            "CIC_map" : 0.5,
-            "DC_map"  : 0.5
-        }
 
-        corgi_dat = corgidrp_noisemap.__dict__[noise_ext]
-        iit_dat = iit_noisemap.__dict__[noise_ext]
+        corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
+        iit_dat = detector.imaging_slice('SCI', iit_noisemap.__dict__[noise_ext])
 
         diff = corgi_dat - iit_dat
 
-        # Plot for debugging:
-        import matplotlib.pyplot as plt
+        # # Plot for debugging:
+        # import matplotlib.pyplot as plt
+        # vmaxes = {
+        #     "FPN_map" : 20,
+        #     "CIC_map" : 0.5,
+        #     "DC_map"  : 0.5
+        # }
 
-        fig,axes = plt.subplots(1,3,figsize=(16,4))
+        # _,axes = plt.subplots(1,3,figsize=(16,4))
 
     
-        dataset1_comparison_value = np.nanmean(corgi_dat)
-        dataset2_comparison_value = np.nanmean(iit_dat)
-        diff_comparison_value = np.nanmean(diff)
+        # dataset1_comparison_value = np.nanmean(corgi_dat)
+        # dataset2_comparison_value = np.nanmean(iit_dat)
+        # diff_comparison_value = np.nanmean(diff)
         
-        im = axes[0].imshow(corgi_dat,origin='lower',vmax=vmaxes[noise_ext],vmin=0)
-        plt.colorbar(im, ax=axes[0])
-        axes[0].set_title("CorgiDRP(mean={:.2E})".format(dataset1_comparison_value))
+        # im = axes[0].imshow(corgi_dat,origin='lower',vmax=vmaxes[noise_ext],vmin=0)
+        # plt.colorbar(im, ax=axes[0])
+        # axes[0].set_title("CorgiDRP(mean={:.2E})".format(dataset1_comparison_value))
 
-        im = axes[1].imshow(iit_dat,origin='lower',vmax=vmaxes[noise_ext],vmin=0)
-        plt.colorbar(im, ax=axes[1])
-        axes[1].set_title("II&T(mean={:.2E})".format(dataset2_comparison_value))
+        # im = axes[1].imshow(iit_dat,origin='lower',vmax=vmaxes[noise_ext],vmin=0)
+        # plt.colorbar(im, ax=axes[1])
+        # axes[1].set_title("II&T(mean={:.2E})".format(dataset2_comparison_value))
 
-        im = axes[2].imshow(diff,origin='lower',vmax=1e-5,vmin=-1e-5,cmap='seismic')
-        plt.colorbar(im, ax=axes[2])
-        axes[2].set_title("Difference(mean={:.2E})".format(diff_comparison_value))
+        # im = axes[2].imshow(diff,origin='lower',vmax=1e-5,vmin=-1e-5,cmap='seismic')
+        # plt.colorbar(im, ax=axes[2])
+        # axes[2].set_title("Difference(mean={:.2E})".format(diff_comparison_value))
 
-        plt.suptitle(noise_ext[:-4])
-        plt.tight_layout()
-        plt.savefig(os.path.join(noisemap_outputdir,f"CorgiDRP_TVAC_Comparison_{noise_ext}.pdf"))
-        plt.close()
+        # plt.suptitle(noise_ext[:-4])
+        # plt.tight_layout()
+        # plt.savefig(os.path.join(noisemap_outputdir,f"CorgiDRP_TVAC_Comparison_{noise_ext}.pdf"))
+        # plt.close()
 
         assert np.all(np.abs(diff) < 1e-5)
 
@@ -171,11 +170,6 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     iit_noisemap = data.autoload(iit_noisemap_fname)
     
     for noise_ext in ["FPN_map","CIC_map","DC_map"]:
-        vmaxes = {
-            "FPN_map" : 20,
-            "CIC_map" : 0.5,
-            "DC_map"  : 0.5
-        }
 
         corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
         iit_dat = detector.imaging_slice('SCI', iit_noisemap.__dict__[noise_ext])
@@ -184,8 +178,13 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
 
         # # Plot for debugging:
         # import matplotlib.pyplot as plt
+        # vmaxes = {
+        #     "FPN_map" : 20,
+        #     "CIC_map" : 0.5,
+        #     "DC_map"  : 0.5
+        # }
 
-        # fig,axes = plt.subplots(1,3,figsize=(16,4))
+        # _,axes = plt.subplots(1,3,figsize=(16,4))
 
     
         # dataset1_comparison_value = np.nanmean(corgi_dat)
