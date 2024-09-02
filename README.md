@@ -17,6 +17,10 @@ That configuration directory will be used to locate things on your computer such
 
 Large binary files (used in tests) are stored in Git LFS. You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
 
+### Troubleshooting
+
+If you run into any issues with things in the `.corgidrp` directory not being found properly when you run the pipeline, such as a DetectorParams file, caldb, or configuration settings, your corgidrp is configured into a weird state. Report the bug to our Github issue tracker that includes both the error message, and the state of your `.corgidrp` folder. If you don't want to wait for us to troubleshoot the bug and deploy a fix, you can probably resolve the issue by completely deleting your `.corgidrp` folder and rerunning the code (the code will automatically remake it). This however means you will lose any changes you've made to your settings as well as your calibration database.
+
 ## How to Contribute
 
 We encourage you to chat with Jason, Max, and Marie (e.g., on Slack) to discuss what to do before you get started. Brainstorming
