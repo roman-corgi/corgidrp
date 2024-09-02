@@ -219,7 +219,7 @@ if __name__ == "__main__":
     tvacdata_dir = "/Users/sbogat/Documents/01_Research/Roman/corgidrp_workspace/CGI_TVAC_Data"
     outputdir = "/Users/sbogat/Documents/01_Research/Roman/corgidrp_workspace/results"
 
-    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
+    ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
     ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
