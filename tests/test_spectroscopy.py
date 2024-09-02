@@ -15,12 +15,12 @@ def test_spectroscopy():
     # load simulated data files
     # psf template - here is g0v star
     test_data_path = '~/corgidrp/tests/test_data/'
-    psf_template_file = os.path.join(test_data_path, 'a0_spec_sim_unocc_g0v_3a.fits')
+    psf_template_file = os.path.join(test_data_path, 'g0_spec_sim_unocc_3a.fits')
     psf_template_hdulist = fits.open(psf_template_file)
     psf_template = psf_template_hdulist[0].data
 
     # "data" - here is a0v star
-    psf_data_file = os.path.join(test_data_path, 'a0_spec_sim_unocc_a0v_3a.fits')
+    psf_data_file = os.path.join(test_data_path, 'a0_spec_sim_unocc_3a.fits')
     psf_data_hdulist = fits.open(psf_data_file)
     psf_data = psf_data_hdulist[0].data
 

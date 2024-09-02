@@ -150,7 +150,7 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=20, stampsize=30):
     xstamp += xstar
     ystamp += ystar
     
-    stamp = ndi.map_coordinates(frame, [ystamp, xstamp])  # this image doesn't have psf
+    stamp = ndi.map_coordinates(frame, [ystamp, xstamp]) 
     
     ### Create a data stamp ###  - this is from psf_data (in a file test_spectroscopy.py we will open this fits file)
     # I am not sure how else to estimate the offset? Unless I assume it is 0 (which is true in our example case)
@@ -174,13 +174,26 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=20, stampsize=30):
 
     #Pull data from psf_data
     data = ndi.map_coordinates(psf_data, [ydata, xdata])
-    plt.figure()
-    plt.imshow(data)
-    plt.title('data')
+    fig, ax = plt.subplots()
+    im = ax.imshow(stamp)
+    ax.set_title('stamp')
+    fig.colorbar(im, ax=ax)
 
-    plt.figure()
-    plt.imshow(stamp)
-    plt.title('stamp')
+    fig2, ax2 = plt.subplots()
+    im2 = ax2.imshow(data)
+    ax2.set_title('data')
+    fig2.colorbar(im2, ax=ax2)
+
+    fig3, ax3 = plt.subplots()
+    im3 = ax3.imshow(stamp - data)
+    ax3.set_title('stamp - data')
+    fig3.colorbar(im3, ax=ax3)
+
+
+    fig4, ax4 = plt.subplots()
+    im4 = ax4.imshow((stamp/np.max(stamp)) - (data/np.max(data)))
+    ax4.set_title('(stamp/np.max(stamp)) - (data/np.max(data))')
+    fig4.colorbar(im4, ax=ax4)
 
     # print(f"stamp shape: {stamp.shape[0]}")
     # print(f"data shape: {data.shape}")
@@ -190,6 +203,7 @@ def fit_centroid(psf_template, psf_data, guessflux=1, rad=20, stampsize=30):
     ### Fit the PSF to the data ###
     popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux))
     tinyoffsets = popt[0:2]
+    print(popt, 'popt')
 
     binary_offset = [xoffset_guess - tinyoffsets[0], yoffset_guess - tinyoffsets[1]]
 
