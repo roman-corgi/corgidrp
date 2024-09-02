@@ -112,7 +112,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
 
         # plt.suptitle(noise_ext[:-4])
         # plt.tight_layout()
-        # plt.savefig(os.path.join(noisemap_outputdir,f"CorgiDRP_TVAC_Comparison_{noise_ext}.pdf"))
+        # plt.savefig(os.path.join(noisemap_outputdir,f"CorgiDRP_TVAC_Comparison_l1_to_l2a_{noise_ext}.pdf"))
         # plt.close()
 
         assert np.all(np.abs(diff) < 1e-5)
@@ -205,7 +205,7 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
 
         # plt.suptitle(noise_ext[:-4])
         # plt.tight_layout()
-        # plt.savefig(os.path.join(noisemap_outputdir,f"CorgiDRP_TVAC_Comparison_{noise_ext}.pdf"))
+        # plt.savefig(os.path.join(noisemap_outputdir,f"CorgiDRP_TVAC_Comparison_l2a_to_l2a_{noise_ext}.pdf"))
         # plt.close()
 
         assert np.all(np.abs(diff) < 1e-5)
@@ -228,3 +228,4 @@ if __name__ == "__main__":
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
     test_noisemap_calibration_from_l2a(tvacdata_dir, outputdir)
+    test_noisemap_calibration_from_l1(tvacdata_dir, outputdir)
