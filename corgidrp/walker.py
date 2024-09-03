@@ -3,6 +3,7 @@ import json
 import astropy.time as time
 import warnings
 import corgidrp
+import corgidrp.bad_pixel_calibration
 import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
@@ -23,6 +24,7 @@ all_steps = {
     "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
     "desmear" : corgidrp.l2a_to_l2b.desmear,
     "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
+    "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq
 }
 
@@ -68,9 +70,14 @@ def autogen_recipe(filelist, outputdir, template=None):
     Returns:
         json: the JSON recipe to process the filelist
     """
-    # load the data to check what kind of recipe it is
-    dataset = data.Dataset(filelist)
-    first_frame = dataset[0]
+    # Handle the case where filelist is empty
+    if not filelist:
+        print("Input filelist is empty, using default handling to create recipe.")
+        first_frame = None
+    else:
+        # load the data to check what kind of recipe it is
+        dataset = data.Dataset(filelist)
+        first_frame = dataset[0]
 
     # if user didn't pass in template
     if template is None:
@@ -228,13 +235,15 @@ def run_recipe(recipe, save_recipe_file=True):
         # equivalent to corgidrp.setting = recipe['drpconfig'][setting]
         setattr(corgidrp, setting, recipe['drpconfig'][setting])
 
-    # read in data
-    filelist = recipe["inputs"]
-    curr_dataset = data.Dataset(filelist)
-
-    # write the recipe into the image extension header
-    for frame in curr_dataset:
-        frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+    # read in data, if not doing bp map
+    if recipe["inputs"]:
+        filelist = recipe["inputs"]
+        curr_dataset = data.Dataset(filelist)
+        # write the recipe into the image extension header
+        for frame in curr_dataset:
+            frame.ext_hdr["RECIPE"] = json.dumps(recipe)
+    else:
+        curr_dataset = []
 
     # save recipe before running recipe
     if save_recipe_file:
@@ -293,7 +302,3 @@ def run_recipe(recipe, save_recipe_file=True):
 
             # run the step!
             curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
-
-
-
-
