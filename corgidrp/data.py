@@ -268,7 +268,7 @@ class Image():
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None, input_hdulist = None):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
-            with fits.open(data_or_filepath) as hdulist:
+            with fits.open(data_or_filepath, ignore_missing_simple=True) as hdulist:
                 
                 #Pop out the primary header
                 self.pri_hdr = hdulist.pop(0).header
@@ -400,6 +400,18 @@ class Image():
                 del self.err_hdr['Layer_{0}'.format(i + 2)]
             self.err = self.err[:1] # only save the total err, preserve 3-D shape
         self.err_hdr['TRK_ERRS'] = corgidrp.track_individual_errors # specify whether we are tracing errors
+
+        # the DRP needs to make sure certain keywords are set in its reduced products
+        # check those here, and if not, set them. 
+        # by default, assume desmear and CTI correction are not applied by default
+        # and they can be toggled to true after their step functions are run
+        if not 'DESMEAR' in self.ext_hdr:
+            self.ext_hdr.set('DESMEAR', False, "Was desmear applied to this frame?")
+        if not 'CTI_CORR' in self.ext_hdr:
+            self.ext_hdr.set('CTI_CORR', False, "Was CTI correction applied to this frame?")
+        if not 'IS_BAD' in self.ext_hdr:
+            self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
+
 
 
 
@@ -617,7 +629,7 @@ class Dark(Image):
                 self._record_parent_filenames(input_dataset)
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
+            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits

@@ -186,7 +186,17 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
 
     # Calculate the full well capacity for every frame in the dataset
     kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
-    emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
+    emgain_list = []
+    for frame in crmasked_dataset:
+        try: # use measured gain if available TODO change hdr name if necessary
+            emgain = frame.ext_hdr['EMGAIN_M']
+        except:
+            try: # use applied EM gain if available
+                emgain = frame.ext_hdr['EMGAIN_A']
+            except: # otherwise use commanded EM gain
+                emgain = frame.ext_hdr['CMDGAIN']
+        emgain_list.append(emgain)
+    emgain_arr = np.array(emgain_list)
     fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
     fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
 
@@ -257,9 +267,14 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
     if "CMDGAIN" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
-    em_gain = linearized_dataset[0].ext_hdr["CMDGAIN"] #NOTE THIS REQUIRES THAT THE EM GAIN IS MEASURED ALREADY
-
     for i in range(linearized_cube.shape[0]):
+        try: # use measured gain if available TODO change hdr name if necessary
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
+            try: # use applied EM gain if available
+                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+            except: # otherwise use commanded EM gain
+                em_gain = linearized_dataset[i].ext_hdr["CMDGAIN"]
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
 
     history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)

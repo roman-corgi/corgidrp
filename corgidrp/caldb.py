@@ -308,6 +308,6 @@ if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_202
     default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
     default_detparams.save(filedir=corgidrp.default_cal_dir)
 
-    # add default caldb entries
-    default_caldb = CalDB()
-    default_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+# add default caldb entries
+default_caldb = CalDB()
+default_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
