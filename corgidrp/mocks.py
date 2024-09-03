@@ -309,32 +309,32 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
             mask_data = data.copy()
             image_data = mask_data[row_min + (dither_sizey * j):row_max + (dither_sizey * j), col_min + (dither_sizex * i):col_max + (dither_sizex * i)]
             cents.append(((mask_size/2) + (row_cent - int(row_cent)) - (dither_sizey//2) - (dither_sizey * j), (mask_size/2) + (col_cent - int(col_cent)) - (dither_sizex//2) - (dither_sizex * i)))
-            try:
-                new_image_data = image_data * mask
-                
-                if planet == 'neptune' and band=='1' or planet == 'uranus' and band=='1':
-                    snr_ref = snr/np.sqrt(snr_constant)
-                elif planet == 'neptune' and band=='4' or planet == 'uranus' and band=='4' :
-                    snr_ref = snr/np.sqrt(snr_constant)
+            # try:
+            new_image_data = image_data * mask
+            
+            if planet == 'neptune' and band=='1' or planet == 'uranus' and band=='1':
+                snr_ref = snr/np.sqrt(snr_constant)
+            elif planet == 'neptune' and band=='4' or planet == 'uranus' and band=='4' :
+                snr_ref = snr/np.sqrt(snr_constant)
 
-                u_centroid = centr.centroid_1dg(new_image_data)
-                uxc = int(u_centroid[0])
-                uyc = int(u_centroid[1])
+            u_centroid = centr.centroid_1dg(new_image_data)
+            uxc = int(u_centroid[0])
+            uyc = int(u_centroid[1])
 
-                modified_data = new_image_data
-    
-                nx = np.arange(0,modified_data.shape[1])
-                ny = np.arange(0,modified_data.shape[0])
-                nxx,nyy = np.meshgrid(nx,ny)
-                nrr = np.sqrt((nxx-uxc)**2 + (nyy-uyc)**2)
+            modified_data = new_image_data
 
-                planmed = np.median(modified_data[nrr<radius])
-                modified_data[nrr<=radius] = np.random.normal(modified_data[nrr<=radius], (planmed/snr_ref) * np.abs(modified_data[nrr<=radius]/planmed))
-                
-                new_image_data_snr = modified_data
-            except ValueError:
-                print(image_data.shape)
-                print(mask.shape)
+            nx = np.arange(0,modified_data.shape[1])
+            ny = np.arange(0,modified_data.shape[0])
+            nxx,nyy = np.meshgrid(nx,ny)
+            nrr = np.sqrt((nxx-uxc)**2 + (nyy-uyc)**2)
+
+            planmed = np.median(modified_data[nrr<radius])
+            modified_data[nrr<=radius] = np.random.normal(modified_data[nrr<=radius], (planmed/snr_ref) * np.abs(modified_data[nrr<=radius]/planmed))
+            
+            new_image_data_snr = modified_data
+            # except ValueError:
+            #     print(image_data.shape)
+            #     print(mask.shape)
             dithers.append(new_image_data_snr)
 
     dither_stack_norm = []
