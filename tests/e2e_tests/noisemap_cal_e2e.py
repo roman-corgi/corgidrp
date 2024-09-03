@@ -117,6 +117,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
 
         assert np.all(np.abs(diff) < 1e-5)
 
+@pytest.mark.e2e
 def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location as in the TVAC Box drive
     l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
