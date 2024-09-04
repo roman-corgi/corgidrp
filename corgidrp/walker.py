@@ -286,10 +286,17 @@ def run_recipe(recipe, save_recipe_file=True):
                 # by default, this is false
                 if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
                     this_caldb = caldb.CalDB()
-                    _fill_in_calib_files(step, this_caldb, curr_dataset[0])
+                    # dataset may have turned into a single image. handle this case. 
+                    if isinstance(curr_dataset, data.Dataset):
+                        ref_image = curr_dataset[0]
+                        list_of_frames = curr_dataset
+                    else:
+                        ref_image = curr_dataset
+                        list_of_frames = [curr_dataset]
+                    _fill_in_calib_files(step, this_caldb, ref_image)
 
                     # also update the recipe we used in the headers
-                    for frame in curr_dataset:
+                    for frame in list_of_frames:
                         frame.ext_hdr["RECIPE"] = json.dumps(recipe)
 
 
