@@ -96,6 +96,7 @@ def get_first_nonlin_file(
 def test_nonlin_cal_e2e(
     tvacdata_dir,
     output_dir,
+    eng_version,
     ):
     """ Performs the e2e test to generate a non-linearity calibration object
         from raw L1 data and compares with the existing TVAC correction for the
@@ -107,6 +108,9 @@ def test_nonlin_cal_e2e(
         output_dir (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
+        eng_version (bool): If True, some parameters of the NL calibration are
+            set to the values in the engineering version of the code, delivered
+            on June, 2024. Default: False.
 
     """
 
@@ -152,8 +156,29 @@ def test_nonlin_cal_e2e(
     nonlinear_cal.save(filedir=output_dir, filename="nonlin_tvac.fits" )
 
     # Run the walker on some test_data
-    print('Running walker')
-    walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
+    if eng_version is False:
+        print('Running walker')
+        walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
+    else:
+        # Get the default recipe
+        recipe = walker.autogen_recipe(nonlin_l1_list, output_dir)
+        # Modify some keywords to compare with the engineering version from 6/24
+        idx_nl = -1
+        for step in range(len(recipe['steps'])):
+            if recipe['steps'][step]['name'] == 'calibrate_nonlin':
+                idx_nl = step
+        if idx_nl == -1:
+            raise KeyError('calibrate_nonlin is not found in the steps')
+        # Values from the engineering version (Guillermo Gonzalez/Tellus1)
+        if 'keywords' not in recipe['steps'][idx_nl]:
+            recipe['steps'][idx_nl]['keywords'] = {}
+        recipe['steps'][idx_nl]['keywords']['norm_val'] = 2020
+        recipe['steps'][idx_nl]['keywords']['min_write'] = 800
+        recipe['steps'][idx_nl]['keywords']['max_write'] = 9000
+        recipe['steps'][idx_nl]['keywords']['test_iit'] = True
+        # Run the modified recipe
+        print('Running walker with modified recipe')
+        walker.run_recipe(recipe, save_recipe_file=False)
 
     # Compare results
     print('Comparing the results with TVAC')
@@ -180,6 +205,8 @@ def test_nonlin_cal_e2e(
             'format than the one from TVAC')   
 
     rel_out_tvac_perc = 100*(nonlin_out_table[1:]/nonlin_tvac_table[1:]-1)
+
+    # Summary figure
     plt.figure(figsize=(10,6))
     em_list = nonlin_out_table[0,1:]
     for i_em, em_val in enumerate(em_list):
@@ -193,7 +220,10 @@ def test_nonlin_cal_e2e(
     print('NL differences wrt nonlin_table_240322.txt (TVAC/Matlab): ' +
         f'max={np.abs(rel_out_tvac_perc).max():.1f} %, ' + 
         f'rms={np.std(rel_out_tvac_perc):.1f} %')
-    print(f'Figure saved: {output_dir+nonlin_out_filename[:-5]}.png')
+    print(f'Figure saved: {os.path.join(output_dir,nonlin_out_filename[:-5])}.png')
+
+    # Set a quantitative test for the comparison
+    assert np.less(np.abs(rel_out_tvac_perc).max(),1)
 
 if __name__ == "__main__":
 
@@ -211,5 +241,8 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--output_dir", default=OUTPUT_DIR,
                     help="directory to write results to [%(default)s]")
+    ap.add_argument("-eng", "--eng_version", default=False,
+                    help="Using same parameter values as in the enginnering version")
     args = ap.parse_args()
-    test_nonlin_cal_e2e(args.tvacdata_dir, args.output_dir)
+    # Run the e2e test
+    test_nonlin_cal_e2e(args.tvacdata_dir, args.output_dir, args.eng_version)
