@@ -15,7 +15,7 @@ import corgidrp.detector as detector
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
+def test_flat_creation(tvacdata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
     l1_dark_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
@@ -36,28 +36,32 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
-
+    # mock flat field is all ones
+    input_flat = np.ones([1024, 1024], dtype=float)
+    # input_flat = np.random.normal(1,.03,(1024, 1024))
     # create mock onsky rasters
     hstdata_filedir = os.path.join(thisfile_dir,"..", "test_data")
     hstdata_filenames = glob.glob(os.path.join(hstdata_filedir, "med*.fits"))
     hstdata_dataset = data.Dataset(hstdata_filenames)
-    raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='neptune', band='1', im_size=420, d=50, n_dith=3, numfiles=36, radius=54, snr=25000, snr_constant=4.55)
+    raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='neptune', band='1', im_size=1024, d=50, n_dith=3, numfiles=36, radius=54, snr=25000, snr_constant=4.55, flat_map=input_flat, raster_radius=95)
     # raw science data to mock from
     l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
     l1_dark_filelist.sort()
-    l1_dark_dataset = data.Dataset(l1_dark_filelist[:len(raster_dataset)])
+    # l1_dark_dataset = data.Dataset(l1_dark_filelist[:len(raster_dataset)])
+    l1_dark_dataset = mocks.create_prescan_files(numfiles=len(raster_dataset))
     # determine average noise
     noise_map = np.std(l1_dark_dataset.all_data, axis=0)
     r0c0 = detector.detector_areas["SCI"]["image"]['r0c0']
     rows = detector.detector_areas["SCI"]["image"]['rows']
     cols = detector.detector_areas["SCI"]["image"]['cols']
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
-    target_snr = 150 # per pix
+    target_snr = 200 # per pix
     for i in range(len(l1_dark_dataset)):
         l1_dark_dataset[i].pri_hdr['TARGET'] = "Neptune"
         l1_dark_dataset[i].pri_hdr['FILTER'] = 1
         l1_dark_dataset[i].pri_hdr['OBSTYPE'] = "FLT"
         l1_dark_dataset[i].data = l1_dark_dataset[i].data.astype(float)
+        l1_dark_dataset[i].filename = l1_dark_filelist[i].split(os.path.sep)[-1]
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -129,8 +133,21 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
 
     ####### Run the walker on some test_data
 
-    walker.walk_corgidrp(l1_flatfield_filelist, "", flat_outputdir)
+    recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
+     ### Modify they keywords of some of the steps
+    for step in recipe['steps']:
+        if step['name'] in ["correct_nonlinearity", "desmear", "cti_correction"]:
+            step['skip'] = True
+    walker.run_recipe(recipe, save_recipe_file=True)
 
+
+    ####### Test the result
+    flat_filename = l1_flatfield_filelist[0].split(os.path.sep)[-1].replace("_L1_", "_L2a_")[:-5] + "_flatfield.fits"
+    flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
+    good_region = np.where(flat.data != 1)
+    diff = flat.data - input_flat
+    print(np.std(diff[good_region]))
+    assert np.std(diff[good_region]) < 0.0071
 
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
@@ -156,4 +173,4 @@ if __name__ == "__main__":
     args = ap.parse_args()
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
-    test_l1_to_l2b(tvacdata_dir, outputdir)
+    test_flat_creation(tvacdata_dir, outputdir)
