@@ -1,22 +1,31 @@
 import numpy as np
-from corgidrp.data import BadPixelMap, Dataset
+from corgidrp.data import BadPixelMap, Dataset, DetectorNoiseMaps
+from corgidrp.darks import build_synthesized_dark
 
-def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac = 0.8, fwidth = 32):
+def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac = 0.8, fwidth = 32, dark_outputdir=None):
     """
     Compute a fixed bad pixel map for EXCAM from a master dark and flat.
 
 
     Args:
         dataset (corgidrp.data.Dataset): A dataset that is ignored by this class. 
-        master_dark (corgidrp.data.Dark): A master dark object.
+        master_dark (corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps): 
+            a dark frame, or, if it is a Noise Map,  a synthesized master is created using 
+            calibrated noise maps for the EM gain and exposure time used in master_flat        
         master_flat (corgidrp.data.FlatField): A master flat field object.
         dthresh (float): Number of standard deviations above the mean to threshold for hot pixels. Must be >= 0.
         ffrac (float): Fraction of local mean value below which poorly-functioning pixels are flagged. Must be >=0 and < 1.
         fwidth (int): Number of pixels to include in local mean check with ffrac. Must be >0.
+        dark_outputdir (str): if not None, a file directory to save any synthetic darks created from noise maps
 
     Returns:
         corgi.data.BadPixelMap: A 2-D boolean array the same size as dark and flat, with bad pixels marked as True.
     """
+    if isinstance(master_dark, DetectorNoiseMaps):
+        noise_map = master_dark
+        master_dark = build_synthesized_dark(Dataset([master_flat]), noise_map)
+        if dark_outputdir is not None:
+            master_dark.save(filedir=dark_outputdir)
 
     #Extract data 
     dark_data = master_dark.data
