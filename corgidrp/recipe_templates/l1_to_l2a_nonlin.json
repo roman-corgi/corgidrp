@@ -20,13 +20,7 @@
             }
         },
         {
-            "name" : "calibrate_nonlin",
-            "keywords" : {
-                "norm_val" : 2020,
-                "min_write": 800,
-                "max_write": 9000,
-                "test_iit": true
-            }
+            "name" : "calibrate_nonlin"
         },
         {
             "name" : "save"
