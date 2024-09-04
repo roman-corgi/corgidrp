@@ -3,6 +3,7 @@ import json
 import astropy.time as time
 import warnings
 import corgidrp
+import corgidrp.astrom
 import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
@@ -22,7 +23,8 @@ all_steps = {
     "cti_correction" : corgidrp.l2a_to_l2b.cti_correction,
     "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
     "desmear" : corgidrp.l2a_to_l2b.desmear,
-    "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b
+    "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
+    "boresight_calibration": corgidrp.astrom.boresight_calibration
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -159,6 +161,8 @@ def guess_template(dataset):
     if image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
+        elif image.pri_hdr['OBSTYPE'] == "AST":
+            recipe_filename = "l1_to_boresight.json"
         else:
             recipe_filename = "l1_to_l2b.json"
     else:
