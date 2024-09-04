@@ -1,19 +1,19 @@
 import os
 import numpy as np
+import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
 from astropy.time import Time
-import numpy as np
-import corgidrp.data as data
-from corgidrp.data import Image
-import corgidrp.detector as detector
-import photutils.centroids as centr
-from corgidrp.detector import imaging_area_geom, unpack_geom
-
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
 from astropy.table import Table
+from astropy.convolution import convolve_fft
+import photutils.centroids as centr
+import corgidrp.data as data
+from corgidrp.data import Image
+import corgidrp.detector as detector
+from corgidrp.detector import imaging_area_geom, unpack_geom
 
 detector_areas_test= {
 'SCI' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
@@ -307,7 +307,11 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     for i in np.arange(-n_dith,dith_end):
         for j in np.arange(-n_dith,dith_end):
             mask_data = data.copy()
-            image_data = mask_data[row_min + (dither_sizey * j):row_max + (dither_sizey * j), col_min + (dither_sizex * i):col_max + (dither_sizex * i)]
+            new_image_row_coords = np.arange(row_min + (dither_sizey * j), row_max + (dither_sizey * j))
+            new_image_col_coords = np.arange(col_min + (dither_sizex * i), col_max + (dither_sizex * i))
+            new_image_col_coords, new_image_row_coords = np.meshgrid(new_image_col_coords, new_image_row_coords)
+            image_data = scipy.ndimage.map_coordinates(mask_data, [new_image_row_coords, new_image_col_coords], mode="constant", cval=0)
+            # image_data = mask_data[row_min + (dither_sizey * j):row_max + (dither_sizey * j), col_min + (dither_sizex * i):col_max + (dither_sizex * i)]
             cents.append(((mask_size/2) + (row_cent - int(row_cent)) - (dither_sizey//2) - (dither_sizey * j), (mask_size/2) + (col_cent - int(col_cent)) - (dither_sizex//2) - (dither_sizex * i)))
             # try:
             new_image_data = image_data * mask
@@ -348,7 +352,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, numfiles=36, radius=None, snr=250, snr_constant=None):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, numfiles=36, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=95):
     """
     Create simulated data to check the flat division
     
@@ -364,13 +368,21 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
        radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90 in HST images)
        snr (int): SNR required for the planet image (default is 250 for the HST images)
        snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
+       flat_map (np.array): a user specified flat map. Must have shape (im_size, im_size). 
+                            Default: None; assumes each pixel drawn from a normal distribution with 3% rms scatter
+       raster_radius (float): radius of circular raster done to smear out image during observation, in pixels
         
     Returns: 
     	corgidrp.data.Dataset:
         The simulated dataset of raster scanned images of planets uranus or neptune
     """
     n = im_size
-    qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
+
+    if flat_map is None:
+        qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
+    else:
+        qe_prnu_fsm_raster = flat_map
+
     pred_cents=[]
     planet_rot_images=[]
     
@@ -382,6 +394,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             centroid=centr.centroid_com(planet_image)
             xc=centroid[0]
             yc=centroid[1]
+            planet_image = convolve_fft(planet_image, detector.raster_kernel(raster_radius, planet_image))
             if planet == 'neptune':
                 planetrad=radius; snrcon=snr_constant
                 planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
