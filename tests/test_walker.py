@@ -55,7 +55,6 @@ def test_autoreducing():
     new_nonlinearity.filename = nonlin_fits_filepath
     new_nonlinearity.save()
     # index the sample nonlinearity correction that we need for processing
-    # new_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
     # fake the headers because this frame doesn't have the proper headers
     prihdr, exthdr = mocks.create_default_headers("SCI")
     new_nonlinearity.pri_hdr = prihdr

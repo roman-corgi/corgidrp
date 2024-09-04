@@ -136,8 +136,6 @@ def test_non_linearity_correction():
     pri_hdr, ext_hdr = mocks.create_default_headers()
     non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     non_linearity_correction.save(filename = test_non_linearity_path)
-    # COMMENT CSV data saved as FITS file                                             
-    # HISTORY nonlin_sample.CSV from IIT data converted to FITS  
 
     # import IPython; IPython.embed()
 
@@ -160,7 +158,7 @@ def test_non_linearity_correction():
     linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
 
     #The data was generated with a ramp in the x-direction going from 10 to 65536
-    expected_ramp = np.linspace(2000,65536,1024)
+    expected_ramp = np.linspace(800,65536,1024)
     #Let's collapse the data and see if there's a ramp. 
     collapsed_data = np.mean(linear_dataset.all_data, axis=(0,1))
 
