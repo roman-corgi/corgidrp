@@ -838,7 +838,7 @@ def make_fluxmap_image(
         dq = dq)
     return image
 
-def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescale=21.8, rotation=45):
+def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescale=21.8, rotation=45, add_gauss_noise=True):
     """
     Create simulated data for astrometric calibration.
 
@@ -848,6 +848,7 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
         subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
         rotation (float): The north angle of the created image data (default: 45 [deg])
+        add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
 
     Returns:
         corgidrp.data.Dataset:
@@ -950,16 +951,18 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
         # inject the stars into the image
         sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
-    # add Gaussian random noise
-    noise_rng = np.random.default_rng(10)
-    gain = 1
-    ref_flux = 10
-    noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
-    sim_data = sim_data + noise
+    if add_gauss_noise:
+        # add Gaussian random noise
+        noise_rng = np.random.default_rng(10)
+        gain = 1
+        ref_flux = 10
+        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
+        sim_data = sim_data + noise
 
     # load as an image object
     frames = []
     prihdr, exthdr = create_default_headers()
+    prihdr['OBSTYPE'] = 'AST'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
 
