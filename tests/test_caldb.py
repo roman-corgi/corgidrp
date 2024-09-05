@@ -122,6 +122,16 @@ def test_get_calib():
 
     with pytest.raises(ValueError):
         _ = testcaldb.get_calib(dark_dataset[2], data.DetectorNoiseMaps)
+
+    # make a second one dark
+    master_dark_2 = data.Dark(dark_dataset[1].data, dark_dataset[1].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
+    # save master dark to disk to be loaded later
+    master_dark_2.save(filedir=calibdir, filename="mockdark2.fits")
+    testcaldb.create_entry(master_dark_2)
+
+    # test that with no input data, we get the most recent dark
+    auto_dark_2 = testcaldb.get_calib(None, data.Dark)
+    assert(auto_dark_2.filepath == master_dark_2.filepath)
         
     # reset everything
     os.remove(testcaldb_filepath)

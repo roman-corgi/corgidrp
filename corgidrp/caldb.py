@@ -8,22 +8,24 @@ import corgidrp
 import corgidrp.data as data
 import astropy.time as time
 
-column_names = [
-    "Filepath",
-    "Type",
-    "MJD",
-    "EXPTIME",
-    "Files Used",
-    "Date Created",
-    "Hash",
-    "DRPVERSN",
-    "OBSID",
-    "NAXIS1",
-    "NAXIS2",
-    "OPMODE",
-    "CMDGAIN",
-    "EXCAMT",
-]
+column_dtypes = {
+    "Filepath": str,
+    "Type": str,
+    "MJD": float,
+    "EXPTIME": float,
+    "Files Used": int,
+    "Date Created": float,
+    "Hash": str,
+    "DRPVERSN": str,
+    "OBSID": int,
+    "NAXIS1": int,
+    "NAXIS2": int,
+    "OPMODE": str,
+    "CMDGAIN": float,
+    "EXCAMT": float
+}
+
+column_names = list(column_dtypes.keys())
 
 labels = {data.Dark: "Dark",
           data.NonLinearityCalibration: "NonLinearityCalibration",
@@ -76,7 +78,7 @@ class CalDB:
         """
         Load/update db from filepath
         """
-        self._db = pd.read_csv(self.filepath)
+        self._db = pd.read_csv(self.filepath, dtype=column_dtypes)
 
     def save(self):
         """
@@ -101,6 +103,27 @@ class CalDB:
                     Dictionary of data entry properties keyed by column names
 
         """
+        # return a dummy entry if nothing is passed in
+        if entry is None:
+            time_now = time.Time.now()
+            row_dict = {
+                "Filepath" : "",
+                "Type" : "Sci",
+                "MJD" : time_now.mjd,
+                "EXPTIME" : 0.,
+                "Files Used" : 0,
+                "Date Created" : time_now.mjd,
+                "Hash" : hash(time_now),
+                "DRPVERSN" : "0.0",
+                "OBSID" : 0,
+                "NAXIS1": 0,
+                "NAXIS2" : 0,
+                "OPMODE" : "",
+                "CMDGAIN" : 0.,
+                "EXCAMT" : 0
+            }
+            return list(row_dict.values()), row_dict
+
         filepath = os.path.abspath(entry.filepath)
         if is_calib:
             datatype = labels[entry.__class__]  # get the database str representation
@@ -181,7 +204,10 @@ class CalDB:
         # otherwise create new entry
         else:
             new_entry = pd.DataFrame([new_row], columns=self.columns)
-            self._db = pd.concat([self._db, new_entry], ignore_index=True)
+            if len(self._db) == 0:
+                self._db = new_entry
+            else:
+                self._db = pd.concat([self._db, new_entry], ignore_index=True)
 
         # save to disk to update changes
         if to_disk:
@@ -219,7 +245,8 @@ class CalDB:
         Outputs the best calibration file of the given type for the input sciene frame.
 
         Args:
-            frame (corgidrp.data.Image): an image frame to request a calibratio for
+            frame (corgidrp.data.Image): an image frame to request a calibration for. If None is passed in, looks for the 
+                                         most recently created calibration. 
             dtype (corgidrp.data Class): for example: corgidrp.data.Dark (TODO: document the entire list of options)
             to_disk (bool): True by default, will update DB from disk before matching
 
@@ -242,7 +269,20 @@ class CalDB:
         # downselect to only calibs of this type
         calibdf = self._db[self._db["Type"] == dtype_label]
 
-        if dtype_label in ["Dark"]:
+        # different logic for different cases
+        # each if/else statement returns a single filepath to a good calibration
+        if frame is None:
+            # no frame is passed in, get the most recently created 
+            options = calibdf
+
+            if len(options) == 0:
+                raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
+
+            # select the one that was most recently created
+            result_index = options["Date Created"].argmax()
+            calib_filepath = options.iloc[result_index, 0]
+
+        elif dtype_label in ["Dark"]:
             # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
             options = calibdf.loc[
                 (
@@ -251,19 +291,27 @@ class CalDB:
                     & (calibdf["NAXIS2"] == frame_dict["NAXIS2"])
                 )
             ]
+
+            if len(options) == 0:
+                raise ValueError("No valid Dark with EXPTIME={0} and dimension ({1},{2})"
+                                 .format(frame_dict["EXPTIME"], frame_dict["NAXIS1"], frame_dict["NAXIS2"]))
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
         else:
             options = calibdf
 
-        if len(options) == 0:
-            raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
+            if len(options) == 0:
+                raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
 
-        # select the one closest in time
-        result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
-        calib_filepath = options.iloc[result_index, 0]
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
 
         # load the object from disk and return it
         return dtype(calib_filepath)
-
+    
     def scan_dir_for_new_entries(self, filedir, look_in_subfolders=True, to_disk=True):
         """
         Scan a folder and subfolder for calibration files and add them all to the caldb
@@ -303,6 +351,6 @@ if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_202
     default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
     default_detparams.save(filedir=corgidrp.default_cal_dir)
 
-    # add default caldb entries
-    default_caldb = CalDB()
-    default_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+# add default caldb entries
+default_caldb = CalDB()
+default_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
