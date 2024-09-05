@@ -858,8 +858,11 @@ def kgain_dataset_2_list(dataset):
                 if record_gain:
                     try: # if EM gain measured directly from frame TODO change hdr name if necessary
                         gains.append(frame.ext_hdr['EMGAIN_M'])
-                    except: # use commanded gain otherwise
-                        gains.append(frame.ext_hdr['CMDGAIN'])
+                    except:
+                        try: # use applied EM gain if available
+                            gains.append(frame.ext_hdr['EMGAIN_A'])
+                        except: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['CMDGAIN'])
                     record_gain = False
                 
         # Calibration data may have different subsets
@@ -890,12 +893,10 @@ def kgain_dataset_2_list(dataset):
         raise Exception('DATETIMEs cannot be duplicated')
     # There can only be an EM gain in the data used to calibrate K-gain
     if len(set(em_gains)) != 1:
-        raise Exception('There can only be one commanded gain when calibrating K-Gain')
+        raise Exception('There can only be one commanded EM gain when calibrating K-Gain')
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
     # When measuring k_gain, there can only be one gain for all exposure times
-    actual_gain = gains[0]
-    if len(set(gains)) != 1:
-        raise Exception('Actual EM gain for K-gain calibration frames must be the same for all exposure times.')
-
+    actual_gain = np.mean(gains) # not actually used in k gain calibration since frames already gain-divided
+    
     return stack, mean_frame_stack, actual_gain
