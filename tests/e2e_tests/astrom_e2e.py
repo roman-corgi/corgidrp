@@ -5,6 +5,8 @@ import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
+import sys
+sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -34,7 +36,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
     # create raw data that includes injected stars with gaussian psfs
-    jwst_calfield_path = os.join.path(os.path.dirname(thisfile_dir), "test_data", "JWST_CALFIELD2020.csv")
+    jwst_calfield_path = os.path.join(os.path.dirname(thisfile_dir), "test_data", "JWST_CALFIELD2020.csv")
     jwst_calfield = ascii.read(jwst_calfield_path)
     v_mags = jwst_calfield['VMAG']
     amplitudes = np.power(10, ((v_mags - 22.5) / (-2.5))) * 10
@@ -48,13 +50,22 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     for dark in os.listdir(noise_characterization_path):
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
-            hdulist[0]['OBSTYPE'] = "AST"
+            hdulist[0].header['OBSTYPE'] = "AST"
             rms_noise = np.sqrt(np.mean(dark_dat.flatten())**2)
             scaled_image = ((10 * rms_noise) / np.min(amplitudes)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
+            # update headers
+            for key in image_sources[0].pri_hdr:
+                if key not in hdulist[0].header:
+                    hdulist[0].header[key] = image_sources[0].pri_hdr[key]
+
+            for ext_key in image_sources[0].ext_hdr:
+                if ext_key not in hdulist[1].header:
+                    hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
+
             # save to the data dir in the output directory
-            hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'_astrom.fits'))
+            hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'_astrom.fits'), overwrite=True)
 
     # define the raw science data to process
     ## replace w my raw data sets
