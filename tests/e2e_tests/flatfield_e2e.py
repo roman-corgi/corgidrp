@@ -43,7 +43,8 @@ def test_flat_creation(tvacdata_path, e2eoutput_path):
     hstdata_filedir = os.path.join(thisfile_dir,"..", "test_data")
     hstdata_filenames = glob.glob(os.path.join(hstdata_filedir, "med*.fits"))
     hstdata_dataset = data.Dataset(hstdata_filenames)
-    raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='neptune', band='1', im_size=1024, d=50, n_dith=3, numfiles=36, radius=54, snr=25000, snr_constant=4.55, flat_map=input_flat, raster_radius=95)
+    raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='neptune', band='1', im_size=1024, d=50, n_dith=3, numfiles=36, radius=54, snr=25000, snr_constant=4.95, flat_map=input_flat, raster_radius=40)
+    # raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='uranus',band='4',im_size=1024, d=65, n_dith=2, numfiles=36, radius=90, snr=250000, snr_constant=9.66, flat_map=input_flat, raster_radius=40)
     # raw science data to mock from
     l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
     l1_dark_filelist.sort()
@@ -55,7 +56,7 @@ def test_flat_creation(tvacdata_path, e2eoutput_path):
     rows = detector.detector_areas["SCI"]["image"]['rows']
     cols = detector.detector_areas["SCI"]["image"]['cols']
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
-    target_snr = 200 # per pix
+    target_snr = 250/np.sqrt(4.95) # per pix
     for i in range(len(l1_dark_dataset)):
         l1_dark_dataset[i].pri_hdr['TARGET'] = "Neptune"
         l1_dark_dataset[i].pri_hdr['FILTER'] = 1
@@ -136,7 +137,7 @@ def test_flat_creation(tvacdata_path, e2eoutput_path):
     recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
      ### Modify they keywords of some of the steps
     for step in recipe['steps']:
-        if step['name'] in ["correct_nonlinearity", "desmear", "cti_correction"]:
+        if step['name'] in ["desmear", "cti_correction"]:
             step['skip'] = True
     walker.run_recipe(recipe, save_recipe_file=True)
 
