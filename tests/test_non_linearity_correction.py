@@ -65,7 +65,8 @@ def get_relgains(frame, em_gain, nonlin_path):
     """
 
     ** This function has been copied directly from the II&T pipeline 
-    and is only used here to validate the new DRP vs. the old pipeline **
+    and is only used here to validate the new DRP vs. the old pipeline 
+    It is different from the function in detector.py**
 
     For a given bias subtracted frame of dn counts, return a same sized
     array of relative gain values.
