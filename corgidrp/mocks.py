@@ -352,7 +352,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, numfiles=36, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=95):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, numfiles=36, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40):
     """
     Create simulated data to check the flat division
     
