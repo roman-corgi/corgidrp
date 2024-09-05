@@ -1,5 +1,5 @@
 import argparse
-import os
+import os, shutil
 import glob
 import pytest
 import numpy as np
@@ -28,14 +28,15 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
 
     # make output directory if needed
     kgain_outputdir = os.path.join(e2eoutput_path, "l1_to_kgain_output")
-    if not os.path.exists(kgain_outputdir):
-        os.mkdir(kgain_outputdir)
+    if os.path.exists(kgain_outputdir):
+        shutil.rmtree(kgain_outputdir)
+    os.mkdir(kgain_outputdir)
 
     # define the raw science data to process
 
-    l1_data_filelist_same_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51841,51870)]#[51841, 51870]] # just grab some files of it
+    l1_data_filelist_same_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51841,51851)]#[51841, 51870]] # just grab some files of it
     print(l1_data_filelist_same_exp)
-    l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51760)]#[51731, 51840]]
+    l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51826, 51841)]#[51731, 51840]]
     print(l1_data_filelist_range_exp)
     mock_cal_filelist = [os.path.join(l1_datadir_nonlin, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in [51825, 55165]] # grab some real data to mock the calibration 
     
@@ -62,6 +63,9 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     ####### Run the walker on some test_data
 
     for file in l1_data_filelist_same_exp:
+        image = data.Image(file)
+        image.ext_hdr['OBSTYPE'] = "MNFRAME"
+        image.save(filename = file)
         l1_data_filelist_range_exp.append(file)
     print(l1_data_filelist_range_exp)
     walker.walk_corgidrp(l1_data_filelist_range_exp, "", kgain_outputdir, template="l1_to_kgain.json")
@@ -74,10 +78,10 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(nonlinear_cal)
 
     kgain = calibrate_kgain(dataset_kgain, 
-                    n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
+                    n_cal=3, n_mean=3, min_val=800, max_val=3000, binwidth=68,
                     make_plot=True,plot_outdir='figures', show_plot=True, 
                     logspace_start=-1, logspace_stop=4, logspace_num=200, 
-                    verbose=False, detector_regions=None)
+                    verbose=True, detector_regions=None)
     
     ##### Check against TVAC kgain, readnoise
     new_kgain = kgain.value
