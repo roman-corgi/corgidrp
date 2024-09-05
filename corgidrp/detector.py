@@ -670,7 +670,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     return (full_residuals,err_residuals)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=165, n_pad=None, raster_radius=95):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=165, n_pad=None, n_raster_subexps=1):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
@@ -686,7 +686,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
             planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
             n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
             n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
-            raster_radius (float): radius of circular raster done to smear out image during observation, in pixels
+            n_raster_subexps (int): number of sub-exposures that combine together to form a single raster. Will be mean combined. 
             
     	Returns:
     		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
@@ -717,7 +717,16 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
               rad_mask = 1.25
          elif band == 4:
             rad_mask = 1.75
-    
+
+    # if we have multiple sub-exposures per raster scan, combine them
+    if n_raster_subexps > 1:
+        num_rasters = len(dataset) // n_raster_subexps
+        combined_dataset = []
+        for i in range(num_rasters):
+            # combine data
+            raster_frame = np.nanmean(dataset.all_data[n_raster_subexps*i:n_raster_subexps*(i+1)], axis=0) * n_raster_subexps
+            err_frame = np.sqrt(np.sum(dataset.all_))
+            new_image = data.Image(raster_frame, )
     
     smooth_images=[]; raster_images_cent=[]; cent=[]; act_cents=[]; frames=[];
     for j in range(len(dataset)):
@@ -731,7 +740,6 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         xc =int( centroid[0])
         yc = int(centroid[1])
         up_radius=up_radius
-        smooth_planet_image = convolve_fft(planet_image, raster_kernel(raster_radius, planet_image))
         smooth_images.append(planet_image)
         # cropping the raster scanned images
         raster_images_cent.append(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius])
@@ -741,7 +749,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     resi_images=flatfield_residuals(raster_images_cent,N=N)
     raster_com=combine_flatfield_rasters(resi_images,planet=planet,band=band,cent=cent, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad)
     onskyflat=raster_com[0]
-    onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr,input_dataset=dataset)
+    onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr, input_dataset=dataset)
     onsky_flatfield.err=raster_com[1]
     
     return(onsky_flatfield)
