@@ -7,12 +7,18 @@ import corgidrp.data as data
 
 def combine_images(data_subset, err_subset, dq_subset, collapse="lower"):
     """
-    Combines several images
+    Combines several images together
 
     Args:
         data_subset (np.array): 3-D array of N 2-D images
         err_subset (np.array): 4-D array of N 2-D error maps
         dq_subset (np.array): 3-D array of N 2-D DQ maps
+        collapse (str): "mean" or "median". Regardless, the images are scaled by num_frames_per_group to ~conserve photons
+
+    Returns:
+        np.array: 2-D array of combined images
+        np.array: 3-D array of combined error map
+        np.array: 2-D array of combined DQ maps
     """
     tot_frames = data_subset.shape[0]
     # mask bad pixels
@@ -47,6 +53,9 @@ def combine_subexposures(input_dataset, num_frames_per_group, collapse="mean"):
         input_dataset (corgidrp.data.Dataset): input data. 
         num_frames_per_group (int): number of subexposures per group
         collapse (str): "mean" or "median". Regardless, the images are scaled by num_frames_per_group to ~conserve photons
+
+    Returns:
+        corgidrp.data.Dataset: dataset after combination of every "num_frames_per_group" frames together
     """
     if len(input_dataset) % num_frames_per_group != 0:
         raise ValueError("Input dataset of lenght {0} cannot be grouped in sets of {1}".format(len(input_dataset, num_frames_per_group)))
