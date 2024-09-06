@@ -1,7 +1,9 @@
 import numpy as np
 import os
-
+import sys
+sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp.data
+import corgidrp.mocks 
 
 import astropy
 import astropy.io.ascii as ascii
@@ -186,12 +188,12 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
-def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
+def find_source_locations(image, threshold=100, fwhm=7, mask_rad=1):
     ''' 
     Used to find to [pixel, pixel] locations of the sources in an image
     
     Args:
-        dataset (corgidrp.data.Dataset): Dataset with at least one image to perform the search
+        image (numpy.ndarray): 2D array of image data
         threshold (int): Number of stars to find (default: 100)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
@@ -201,7 +203,6 @@ def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
     
     '''
     # create a place to store the location arrays
-    image = np.copy(dataset[0].data)
     xs = np.empty(threshold) * np.nan
     ys = np.empty(threshold) * np.nan
     
@@ -286,12 +287,12 @@ def find_source_locations(dataset, threshold=100, fwhm=7, mask_rad=1):
     
     return sources
 
-def match_sources(dataset, sources, field_path, comparison_threshold=25, rad=0.02):
+def match_sources(image, sources, field_path, comparison_threshold=25, rad=0.02):
     ''' 
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
     Args:
-        dataset (corgidrp.data.Dataset): Dataset with at least one image to perform the field match
+        image (corgidrp.data.Image): Image data as a corgidrp Image object
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations of sources to match
         field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
         comparison_threshold (int): How many stars in the field to consider for the initial match
@@ -333,7 +334,7 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25, rad=0.0
 
     # define a search field and load in RA, DEC, Vmag
     field = ascii.read(field_path)
-    target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
 
@@ -390,14 +391,13 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25, rad=0.0
     initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
 
     # find pseudo north angle from difference in triangle rotations from the target value
-    rot_image = np.array([angle_between((dataset[0].ext_hdr['CRPIX1'], dataset[0].ext_hdr['CRPIX2']), s) for s in [source1, source2, source3]])
+    rot_image = np.array([angle_between((image.ext_hdr['CRPIX1'], image.ext_hdr['CRPIX2']), s) for s in [source1, source2, source3]])
     rot_field = np.array([target_skycoord.position_angle(t).deg for t in skycoords[[best_sky_ind]]])
 
     initial_northangle = np.abs(np.mean(rot_field - rot_image))
 
     # make a new image header with the pseudo platescale and north angle to find matchings
     # allow for some error window and assign the closest star to each source
-    image = dataset[0].data
     vert_ang = np.radians(initial_northangle)
     pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
     cdmatrix = pc * (initial_platescale)
@@ -407,8 +407,8 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25, rad=0.0
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    new_hdr['CRPIX1'] = np.shape(image)[1] // 2
-    new_hdr['CRPIX2'] = np.shape(image)[0] // 2
+    new_hdr['CRPIX1'] = np.shape(image.data)[1] // 2
+    new_hdr['CRPIX2'] = np.shape(image.data)[0] // 2
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (initial_platescale)
@@ -454,8 +454,8 @@ def match_sources(dataset, sources, field_path, comparison_threshold=25, rad=0.0
         for col in ['y','RA','DEC']:
             string += ',' + str(matched_image_to_field[source][col])
 
-        if key not in dataset[0].ext_hdr:
-            dataset[0].ext_hdr[key] = string
+        if key not in image.ext_hdr:
+            image.ext_hdr[key] = string
 
 
     return matched_image_to_field
@@ -684,32 +684,49 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', thr
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
         
     """
-    # load in the data
+    # load in the data considering multiple frames in the data
     dataset = input_dataset.copy()
-    image = dataset[0].data
-
-    # call the target coordinates from the image header
-    target_coordinate = (dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC'])
 
     # find sources in image and match to field
     if field_path == 'JWST_CALFIELD2020.csv':
         full_field_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tests/test_data", field_path)
         field_path = full_field_path
 
-    found_sources = find_source_locations(input_dataset, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
-    matched_sources = match_sources(input_dataset, found_sources, field_path, comparison_threshold=comparison_threshold)
+    # create a place to store all the calibration measurements
+    astroms = []
 
-    # compute the calibration properties
-    cal_properties = compute_platescale_and_northangle(image=image, source_info=matched_sources, center_coord=target_coordinate)
-    ra, dec = compute_boresight(image=image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
+    for i in range(len(dataset)):
+        image = dataset[i].data
 
-    # return a single AstrometricCalibration data file
-    astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1]])
-    astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[0].pri_hdr, ext_hdr=dataset[0].ext_hdr, input_dataset=dataset)
+        # call the target coordinates from the image header
+        target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
 
+        found_sources = find_source_locations(image=image, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
+        matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold)
+
+        # compute the calibration properties
+        cal_properties = compute_platescale_and_northangle(image=image, source_info=matched_sources, center_coord=target_coordinate)
+        ra, dec = compute_boresight(image=image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
+
+        # return a single AstrometricCalibration data file
+        astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1]])
+        astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=dataset)
+        astroms.append(astrom_cal)
+
+    # average the calibration properties over all frames
+    avg_ra = np.mean([astro.boresight[0] for astro in astroms])
+    avg_dec = np.mean([astro.boresight[1] for astro in astroms])
+    avg_platescale = np.mean([astro.platescale for astro in astroms])
+    avg_northangle = np.mean([astro.northangle for astro in astroms])
+
+    avg_data = np.array([avg_ra, avg_dec, avg_platescale, avg_northangle])
+    pri, ext = corgidrp.mocks.create_default_headers(obstype='AST')
+    astroms_dataset = corgidrp.data.Dataset(astroms)
+    avg_cal = corgidrp.data.AstrometricCalibration(avg_data, pri_hdr=pri, ext_hdr=ext, input_dataset=astroms_dataset)
+        
     # update the history
     history_msg = "Boresight calibration completed"
-    astrom_cal_dataset = corgidrp.data.Dataset([astrom_cal])
+    astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
 
     return astrom_cal
