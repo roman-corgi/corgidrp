@@ -43,8 +43,10 @@ def test_flat_creation(tvacdata_path, e2eoutput_path):
     hstdata_filedir = os.path.join(thisfile_dir,"..", "test_data")
     hstdata_filenames = glob.glob(os.path.join(hstdata_filedir, "med*.fits"))
     hstdata_dataset = data.Dataset(hstdata_filenames)
-    raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='neptune', band='1', im_size=1024, d=50, n_dith=3, numfiles=36, radius=54, snr=25000, snr_constant=4.95, flat_map=input_flat, raster_radius=40)
-    # raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='uranus',band='4',im_size=1024, d=65, n_dith=2, numfiles=36, radius=90, snr=250000, snr_constant=9.66, flat_map=input_flat, raster_radius=40)
+    raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='neptune', band='1', im_size=1024, d=50, n_dith=3, 
+                                                    radius=54, snr=25000, snr_constant=4.95, flat_map=input_flat, 
+                                                    raster_radius=40, raster_subexps=6)
+    # raster_dataset = mocks.create_onsky_rasterscans(hstdata_dataset, planet='uranus',band='4',im_size=1024, d=65, n_dith=2, radius=90, snr=250000, snr_constant=9.66, flat_map=input_flat, raster_radius=40)
     # raw science data to mock from
     l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
     l1_dark_filelist.sort()
@@ -57,12 +59,16 @@ def test_flat_creation(tvacdata_path, e2eoutput_path):
     cols = detector.detector_areas["SCI"]["image"]['cols']
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
-    for i in range(len(l1_dark_dataset)):
-        l1_dark_dataset[i].pri_hdr['TARGET'] = "Neptune"
-        l1_dark_dataset[i].pri_hdr['FILTER'] = 1
-        l1_dark_dataset[i].pri_hdr['OBSTYPE'] = "FLT"
-        l1_dark_dataset[i].data = l1_dark_dataset[i].data.astype(float)
-        l1_dark_dataset[i].filename = l1_dark_filelist[i].split(os.path.sep)[-1]
+
+    start_filename = int(l1_dark_filelist[0][:-5].split("_")[-1])
+    l1_flat_dataset = []
+    for i in range(len(raster_dataset)):
+        base_image = l1_dark_datadir[i % len(l1_dark_dataset)].copy()
+        base_image.pri_hdr['TARGET'] = "Neptune"
+        base_image.pri_hdr['FILTER'] = 1
+        base_image.pri_hdr['OBSTYPE'] = "FLT"
+        base_image.data = base_image.data.astype(float)
+        base_image.filename = base_image.filename[:-15] + "{0:010d}".format(start_filename+i)
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -73,9 +79,11 @@ def test_flat_creation(tvacdata_path, e2eoutput_path):
         x_end = x_start + raster_frame.shape[1]
         y_end = y_start + raster_frame.shape[0] 
 
-        l1_dark_dataset[i].data[y_start:y_end, x_start:x_end] += raster_frame * scale_factor
-
-    l1_dark_dataset.save(filedir=flat_mock_inputdir)
+        base_image.data[y_start:y_end, x_start:x_end] += raster_frame * scale_factor
+        l1_flat_dataset.append(base_image)
+    
+    l1_flat_dataset = data.Dataset(l1_flat_dataset)
+    l1_flat_dataset.save(filedir=flat_mock_inputdir)
     l1_flatfield_filelist = glob.glob(os.path.join(flat_mock_inputdir, "*.fits"))
     l1_flatfield_filelist.sort()
     

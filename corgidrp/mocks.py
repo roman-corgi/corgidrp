@@ -352,7 +352,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, numfiles=36, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40, raster_subexps=1):
     """
     Create simulated data to check the flat division
     
@@ -364,13 +364,13 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
        im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
        d (int): number of pixels across the planet (neptune=50 and uranus=65)
        n_dith (int): Number of dithers required (n_dith=3 for neptune and n_dith=2 for Uranus)
-       numfiles (int): total number of raster images (default 36) 
        radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90 in HST images)
        snr (int): SNR required for the planet image (default is 250 for the HST images)
        snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
        flat_map (np.array): a user specified flat map. Must have shape (im_size, im_size). 
                             Default: None; assumes each pixel drawn from a normal distribution with 3% rms scatter
        raster_radius (float): radius of circular raster done to smear out image during observation, in pixels
+       raster_subexps (int): number of subexposures that consist of a singular raster. Currently just duplicates images and does not simulate partial rasters
         
     Returns: 
     	corgidrp.data.Dataset:
@@ -402,13 +402,17 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
                 planetrad=radius; snrcon=snr_constant     
                 planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc,col_cent=xc, dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
     
-    for j in np.arange(len(planet_repoint_current[0])):
-        for j in np.arange(len(planet_repoint_current[0])):
+    numfiles = len(planet_repoint_current[0])
+    for j in np.arange(numfiles):
+        for k in range(raster_subexps):
+            # don't know how to simualate partial rasters, so we just append the same image multiple times
+            # it's ok to append the same noise as well because we simulated the full raster to reach the SNR after combining subexps
             planet_rot_images.append(planet_repoint_current[0][j])
             pred_cents.append(planet_repoint_current[1][j])
+
     filepattern= planet+'_'+band+"_"+"raster_scan_{0:01d}.fits"
     frames=[]
-    for i in range(numfiles):
+    for i in range(numfiles*raster_subexps):
         prihdr, exthdr = create_default_headers()
         sim_data=planet_rot_images[i]
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)

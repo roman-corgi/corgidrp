@@ -66,9 +66,14 @@
             "name" : "cti_correction"
         },
         {
+            "name" : "combine_subexposures",
+            "keywords" : {
+                "num_frames_per_group" : 6
+            }
+        },
+        {
             "name" : "create_onsky_flatfield",
             "keywords" : {
-                "n_raster_subexps" : 6,
                 "up_radius" : 60
             }
         },

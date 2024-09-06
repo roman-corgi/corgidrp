@@ -670,7 +670,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     return (full_residuals,err_residuals)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=165, n_pad=None, n_raster_subexps=1):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=165, n_pad=None):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
@@ -686,7 +686,6 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
             planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
             n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
             n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
-            n_raster_subexps (int): number of sub-exposures that combine together to form a single raster. Will be mean combined. 
             
     	Returns:
     		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
@@ -718,16 +717,6 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
          elif band == 4:
             rad_mask = 1.75
 
-    # if we have multiple sub-exposures per raster scan, combine them
-    if n_raster_subexps > 1:
-        num_rasters = len(dataset) // n_raster_subexps
-        combined_dataset = []
-        for i in range(num_rasters):
-            # combine data
-            raster_frame = np.nanmean(dataset.all_data[n_raster_subexps*i:n_raster_subexps*(i+1)], axis=0) * n_raster_subexps
-            err_frame = np.sqrt(np.sum(dataset.all_))
-            new_image = data.Image(raster_frame, )
-    
     smooth_images=[]; raster_images_cent=[]; cent=[]; act_cents=[]; frames=[];
     for j in range(len(dataset)):
         planet_image=dataset[j].data
