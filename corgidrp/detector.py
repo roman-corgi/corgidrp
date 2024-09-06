@@ -623,7 +623,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     
     if rad_mask is None:
          if band == 1:
-              rad_mask = 1.25
+            rad_mask = 1.25
          elif band == 4:
             rad_mask = 1.75
     
@@ -670,7 +670,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     return (full_residuals,err_residuals)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=165, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=44, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
@@ -681,11 +681,11 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
             band (str): 1 or 4
             up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
             im_size (int): x-dimension of the input image (in pixels; default is size of input dataset; = 420 for the HST images)
-            N (int): Number of images to be combined for creating a matched filter (defaults to 3, can be changed)
+            N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
             rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
             planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
-            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
-            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
+            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
+            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
             sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad. 
                                      If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
             sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad. 
@@ -716,7 +716,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     
     if rad_mask is None:
          if band == 1:
-              rad_mask = 1.25
+            rad_mask = 1.25
          elif band == 4:
             rad_mask = 1.75
 
@@ -736,7 +736,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         if sky_annulus_rin is not None and sky_annulus_rout is not None:
             ycoords, xcoords = np.indices(planet_image.shape)
             dist_from_planet = np.sqrt((xcoords - xc)**2 + (ycoords - yc)**2)
-            sky_annulus = np.where((dist_from_planet >= sky_annulus_rin) & (dist_from_planet < sky_annulus_rout))
+            sky_annulus = np.where((dist_from_planet >= sky_annulus_rin*planet_rad) & (dist_from_planet < sky_annulus_rout*planet_rad))
             planet_image -= np.nanmedian(planet_image[sky_annulus])
 
         smooth_images.append(planet_image)
