@@ -38,8 +38,23 @@ def test_autoreducing():
     filelist = [frame.filepath for frame in l1_dataset]
 
 
+    ###########################################
+    ### Create a dummy non-linearity file ####
+    #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
+    dummy_dataset = mocks.create_prescan_files()
+
+    # Make a non-linearity correction calibration file
+    input_non_linearity_filename = "nonlin_table_TVAC.txt"
+    input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
+    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+    tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
+
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
+    new_nonlinearity.filename = nonlin_fits_filepath
+    new_nonlinearity.save()
     # index the sample nonlinearity correction that we need for processing
-    new_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
     # fake the headers because this frame doesn't have the proper headers
     prihdr, exthdr = mocks.create_default_headers("SCI")
     new_nonlinearity.pri_hdr = prihdr
@@ -106,7 +121,20 @@ def test_auto_template_identification():
     this_caldb = caldb.CalDB() # connection to cal DB
 
     # Nonlinearity calibration
-    new_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    ### Create a dummy non-linearity file ####
+    #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
+    dummy_dataset = mocks.create_prescan_files()
+
+    # Make a non-linearity correction calibration file
+    input_non_linearity_filename = "nonlin_table_TVAC.txt"
+    input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
+    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+    tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
+
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
+    new_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
     new_nonlinearity.pri_hdr = pri_hdr
     new_nonlinearity.ext_hdr = ext_hdr
@@ -204,7 +232,19 @@ def test_saving():
     ## Test calibration image 
     ##########################
     # Fake a nonlinearity dataset
-    fake_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    ### Create a dummy non-linearity file ####
+    #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
+    dummy_dataset = mocks.create_prescan_files()
+
+    # Make a non-linearity correction calibration file
+    input_non_linearity_filename = "nonlin_table_TVAC.txt"
+    input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
+    tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
+    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    fake_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
+    fake_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
     prihdr, exthdr = mocks.create_default_headers("SCI")
     fake_nonlinearity.pri_hdr = prihdr
@@ -314,7 +354,20 @@ def test_jit_calibs():
 
 
     # index the sample nonlinearity correction that we need for processing
-    new_nonlinearity = data.NonLinearityCalibration(os.path.join(os.path.dirname(__file__),"test_data",'nonlin_sample.fits'))
+    # Fake a nonlinearity dataset
+    ### Create a dummy non-linearity file ####
+    #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
+    dummy_dataset = mocks.create_prescan_files()
+
+    # Make a non-linearity correction calibration file
+    input_non_linearity_filename = "nonlin_table_TVAC.txt"
+    input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
+    tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
+    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
+    new_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
     prihdr, exthdr = mocks.create_default_headers("SCI")
     new_nonlinearity.pri_hdr = prihdr
@@ -352,6 +405,10 @@ def test_jit_calibs():
 
 
 if __name__ == "__main__":#
+    test_autoreducing()
+    test_auto_template_identification()
+    test_saving()
+    test_skip_missing_calib()
     test_jit_calibs()
 
 
