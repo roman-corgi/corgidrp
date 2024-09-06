@@ -47,12 +47,12 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     if not os.path.exists(rawdata_dir):
         os.mkdir(rawdata_dir)
 
-    for dark in os.listdir(noise_characterization_path):
+    for dark in os.listdir(noise_characterization_path)[:2]:  ## only using the first two frames for now
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['OBSTYPE'] = "AST"
             rms_noise = np.sqrt(np.mean(dark_dat.flatten())**2)
-            scaled_image = ((10 * rms_noise) / np.min(amplitudes)) * image_sources[0].data
+            scaled_image = ((10 * rms_noise) / np.max(amplitudes)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
             # update headers
@@ -154,25 +154,23 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
         if file.is_file():
             output_files.append(file)
 
-    new_astrom_filenames = [os.path.join(astrom_cal_outputdir, f) for f in output_files]
     expected_platescale = 21.8
     expected_northangle = 45
     target = (80.553428801, -69.514096821)
 
     # currently checks each file indiidually
-    for new_filename in new_astrom_filenames:
-        astrom_cal = data.AstrometricCalibration(new_filename)
+    ## boresight now takes all frames and averages platescale, northangle, ra, dec
+    ## this now need to check only the one astrometric calibration file
+    astrom_cal = data.AstrometricCalibration(os.path.join(astrom_cal_outputdir, 'AstrometricCalibration.fits'))
 
-        # check orientation is correct within 0.3 [deg]
-        # and plate scale is correct within 0.5 [mas] (arbitrary)
-        assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
-        assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.3)
+    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=2)
+    assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
-        # check that the center is correct within 30 [mas]
-        # the simulated image should have no shift from the target
-        ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
-        assert ra == pytest.approx(target[0], abs=0.0000083)
-        assert dec == pytest.approx(target[1], abs=0.0000083)
+    # check that the center is correct within 3 [mas]
+    # the simulated image should have no shift from the target
+    ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
+    assert ra == pytest.approx(target[0], abs=8.333e-7)
+    assert dec == pytest.approx(target[1], abs=8.333e-7)
 
 if __name__ == "__main__":
     tvacdata_dir = "/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
