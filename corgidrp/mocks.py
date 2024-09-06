@@ -364,8 +364,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
        radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90 in HST images)
        snr (int): SNR required for the planet image (default is 250 for the HST images)
        snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
-       flat_map (np.array): a user specified flat map. Must have shape (im_size, im_size). 
-                            Default: None; assumes each pixel drawn from a normal distribution with 3% rms scatter
+       flat_map (np.array): a user specified flat map. Must have shape (im_size, im_size). Default: None; assumes each pixel drawn from a normal distribution with 3% rms scatter
        raster_radius (float): radius of circular raster done to smear out image during observation, in pixels
        raster_subexps (int): number of subexposures that consist of a singular raster. Currently just duplicates images and does not simulate partial rasters
         
