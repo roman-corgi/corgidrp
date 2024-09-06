@@ -19,6 +19,10 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     """
     Tests e2e flat field using Neptune in Band 4, full FOV
+
+    Args:
+        tvacdata_path (str): path to CGI_TVAC_Data dir
+        e2eoutput_path (str): output directory
     """
     # figure out paths, assuming everything is located in the same relative location
     l1_dark_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
@@ -184,6 +188,10 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     """
     Tests e2e flat field using Uranus in Band 1, only HLC FOV
+
+    Args:
+        tvacdata_path (str): path to CGI_TVAC_Data dir
+        e2eoutput_path (str): output directory
     """
     # figure out paths, assuming everything is located in the same relative location
     l1_dark_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
@@ -345,7 +353,6 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/home/jwang/Jason/Documents/DataCopy/corgi/CGI_TVAC_Data"
     tvacdata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
     outputdir = thisfile_dir
 
