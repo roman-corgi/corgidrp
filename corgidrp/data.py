@@ -4,8 +4,7 @@ import numpy.ma as ma
 import astropy.io.fits as fits
 import astropy.time as time
 import pandas as pd
-import sys
-sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
+
 import corgidrp
 
 class Dataset():
