@@ -467,15 +467,22 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])
-        data_range = np.linspace(10,65536,size)
+        data_range = np.linspace(800,65536,size)
         # Generate data for each row, where the mean increase from 10 to 65536
         for x in range(size):
-            np.random.seed(123+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
+            np.random.seed(120+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
 
         non_linearity_correction = data.NonLinearityCalibration(nonlin_filepath)
 
         #Apply the non-linearity to the data. When we correct we multiple, here when we simulate we divide
-        sim_data /= detector.get_relgains(sim_data,em_gain,non_linearity_correction)
+        #This is a bit tricky because when we correct the get_relgains function takes the current state of 
+        # the data as input, which when actually used will be the non-linear data. Here we try to get close 
+        # to that by calculating the relative gains after applying the relative gains one time. This won't be 
+        # perfect, but it'll be closer than just dividing by the straight simulated data. 
+
+        sim_data_tmp = sim_data/detector.get_relgains(sim_data,em_gain,non_linearity_correction)
+
+        sim_data /= detector.get_relgains(sim_data_tmp,em_gain,non_linearity_correction)
 
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
