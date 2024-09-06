@@ -143,7 +143,7 @@ def test_nonlin_cal_e2e(
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,'nonlin_table_240322.txt'),
+    nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,'nonlin_table_090524.txt'),
         delimiter=",")
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
@@ -218,12 +218,14 @@ def test_nonlin_cal_e2e(
     plt.grid()
     plt.savefig(os.path.join(output_dir,nonlin_out_filename[:-5]))
     print('NL differences wrt nonlin_table_240322.txt (TVAC/Matlab): ' +
-        f'max={np.abs(rel_out_tvac_perc).max():.1f} %, ' + 
-        f'rms={np.std(rel_out_tvac_perc):.1f} %')
+        f'max={np.abs(rel_out_tvac_perc).max():.2f} %, ' + 
+        f'rms={np.std(rel_out_tvac_perc):.2f} %')
     print(f'Figure saved: {os.path.join(output_dir,nonlin_out_filename[:-5])}.png')
 
-    # Set a quantitative test for the comparison
-    assert np.less(np.abs(rel_out_tvac_perc).max(),1)
+    # Set a quantitative test for the comparison (percentage)
+    assert np.less(np.abs(rel_out_tvac_perc).max(), 0.1)
+    # Print success message
+    print('e2e test for NL passed')
 
 if __name__ == "__main__":
 
