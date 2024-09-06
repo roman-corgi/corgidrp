@@ -5,8 +5,6 @@ import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
 import astropy.io.ascii as ascii
-import sys
-sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -47,7 +45,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     if not os.path.exists(rawdata_dir):
         os.mkdir(rawdata_dir)
 
-    for dark in os.listdir(noise_characterization_path)[:2]:  ## only using the first two frames for now
+    for dark in os.listdir(noise_characterization_path)[:5]:  ## only using the first five frames to save comp time
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['OBSTYPE'] = "AST"
@@ -163,7 +161,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     ## this now need to check only the one astrometric calibration file
     astrom_cal = data.AstrometricCalibration(os.path.join(astrom_cal_outputdir, 'AstrometricCalibration.fits'))
 
-    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=2)
+    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
