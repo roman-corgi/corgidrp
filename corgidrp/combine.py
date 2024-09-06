@@ -44,19 +44,22 @@ def combine_images(data_subset, err_subset, dq_subset, collapse="lower"):
 
 
 
-def combine_subexposures(input_dataset, num_frames_per_group, collapse="mean"):
+def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mean"):
     """
     Combines a sequence of exposures assuming a constant nubmer of frames per group
     The length of the dataset must be divisible by the number of frames per group
     
     Args:
         input_dataset (corgidrp.data.Dataset): input data. 
-        num_frames_per_group (int): number of subexposures per group
+        num_frames_per_group (int): number of subexposures per group. If None, combines all images together
         collapse (str): "mean" or "median". Regardless, the images are scaled by num_frames_per_group to ~conserve photons
 
     Returns:
         corgidrp.data.Dataset: dataset after combination of every "num_frames_per_group" frames together
     """
+    if num_frames_per_group is None:
+        num_frames_per_group = len(input_dataset)
+
     if len(input_dataset) % num_frames_per_group != 0:
         raise ValueError("Input dataset of lenght {0} cannot be grouped in sets of {1}".format(len(input_dataset, num_frames_per_group)))
     
