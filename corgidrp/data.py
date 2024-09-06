@@ -4,7 +4,8 @@ import numpy.ma as ma
 import astropy.io.fits as fits
 import astropy.time as time
 import pandas as pd
-
+import sys
+sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp
 
 class Dataset():
@@ -1275,7 +1276,7 @@ class AstrometricCalibration(Image):
     Class for astrometric calibration file. 
     
     Args:
-        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 2D image data
+        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 1D array of calibration measurements
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
