@@ -102,7 +102,7 @@ def test_mean_combine_subexposures_with_bad():
 
 def test_median_combine_subexposures():
     """
-    Test median combine of subexposures
+    Test median combine of subexposures. And tests defualt case wihere num_frames_per_group isn't specified. 
     """
 
     image1 = data.Image(img1, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
@@ -116,11 +116,11 @@ def test_median_combine_subexposures():
 
     dataset = data.Dataset([image1, image2, image3, image4])
 
-    combined_dataset = combine.combine_subexposures(dataset, 2, collapse="median")
+    combined_dataset = combine.combine_subexposures(dataset, collapse="median")
 
-    assert(len(combined_dataset) == 2)
-    assert(np.all(combined_dataset[0].data == 2))
-    assert(np.all(combined_dataset[0].err == pytest.approx(np.sqrt(np.pi))))
+    assert(len(combined_dataset) == 1)
+    assert(np.all(combined_dataset[0].data == 4))
+    assert(np.all(combined_dataset[0].err == pytest.approx(np.sqrt(2*np.pi))))
     assert(np.all(combined_dataset[0].dq == 0))
 
 
