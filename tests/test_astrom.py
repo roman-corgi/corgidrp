@@ -1,8 +1,6 @@
 import os
 import numpy as np
 import pytest
-import sys
-sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
