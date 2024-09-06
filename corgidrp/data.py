@@ -457,14 +457,25 @@ class Image():
         """
         Record what input dataset was used to create this Image.
         This assumes many Images were used to make this single Image.
+        Also tracks images that were used to make the images that make this image.
         Record is stored in the ext header.
 
         Args:
             input_dataset (corgidrp.data.Dataset): the input dataset that were combined together to make this image
         """
-        self.ext_hdr.set('DRPNFILE', len(input_dataset), "# of files used to create this processed frame")
-        for i, img in enumerate(input_dataset):
-            self.ext_hdr.set('FILE{0}'.format(i), img.filename, "File #{0} filename used to create this frame".format(i))
+
+        parent_filenames = set()
+        # go through filenames and also check each frames parents
+        for img in input_dataset:
+            parent_filenames.add(img.filename)
+            # also check if this frame has parent frames. keep trakc of them too
+            if 'DRPNFILE' in img.ext_hdr:
+                for j in range(img.ext_hdr['DRPNFILE']):
+                    parent_filenames.add(img.ext_hdr['FILE{0}'.format(j)])
+        
+        for i, filename in enumerate(parent_filenames):
+            self.ext_hdr.set('FILE{0}'.format(i), filename, "File #{0} filename used to create this frame".format(i))
+        self.ext_hdr.set('DRPNFILE', len(parent_filenames), "# of files used to create this processed frame")
 
     def copy(self, copy_data=True):
         """
