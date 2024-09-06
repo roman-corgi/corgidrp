@@ -670,7 +670,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     return (full_residuals,err_residuals)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=165, n_pad=None):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=3,rad_mask=None, planet_rad=None, n_pix=165, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
@@ -686,6 +686,9 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
             planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
             n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
             n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
+            sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad. 
+                                     If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
+            sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad. 
             
     	Returns:
     		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
@@ -728,7 +731,14 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
         act_cents.append((centroid[1],centroid[0]))
         xc =int( centroid[0])
         yc = int(centroid[1])
-        up_radius=up_radius
+
+        # sky subtraction if needed
+        if sky_annulus_rin is not None and sky_annulus_rout is not None:
+            ycoords, xcoords = np.indices(planet_image.shape)
+            dist_from_planet = np.sqrt((xcoords - xc)**2 + (ycoords - yc)**2)
+            sky_annulus = np.where((dist_from_planet >= sky_annulus_rin) & (dist_from_planet < sky_annulus_rout))
+            planet_image -= np.nanmedian(planet_image[sky_annulus])
+
         smooth_images.append(planet_image)
         # cropping the raster scanned images
         raster_images_cent.append(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius])
