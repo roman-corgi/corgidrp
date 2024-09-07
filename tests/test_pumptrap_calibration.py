@@ -249,7 +249,7 @@ def test_tpump_analysis():
             assert(np.isclose(trap_dict[t2]['tau at input T'], tau_temp(input_T, trap_dict_E[i][0], trap_dict_cs[i][0]*1e15), rtol = 0.1) or np.isclose(trap_dict[t2]['tau at input T'], tau_temp(input_T, trap_dict_E[i][1], trap_dict_cs[i][1]*1e15), rtol = 0.1))
                 
 
-    nrows, ncols, _ = imaging_area_geom()
+    nrows, ncols, _ = imaging_area_geom('SCI')
     assert(len(trap_densities) == 2)
 
     for tr in trap_densities:
