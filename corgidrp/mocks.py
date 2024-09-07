@@ -11,7 +11,7 @@ from corgidrp.data import Image
 import corgidrp.detector as detector
 import photutils.centroids as centr
 from corgidrp.detector import imaging_area_geom, unpack_geom
-from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, )
+from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
@@ -991,33 +991,6 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
     dataset = data.Dataset(frames)
 
     return dataset
-
-def tau_temp(temp_data, E, cs):
-    """
-    Calculate tau as a function of temperature.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        temp_data (np.array): temperature data
-        E (float): E
-        cs (float): cs
-
-    Returns:
-        np.array: tau
-    """
-    k = 8.6173e-5 # eV/K
-    kb = 1.381e-23 # mks units
-    hconst = 6.626e-34 # mks units
-    Eg = 1.1692 - (4.9e-4)*temp_data**2/(temp_data+655)
-    me = 9.109e-31 # kg
-    mlstar = 0.1963 * me
-    mtstar = 0.1905 * 1.1692 * me / Eg
-    mstardc = 6**(2/3) * (mtstar**2*mlstar)**(1/3)
-    vth = np.sqrt(3*kb*temp_data/mstardc) # m/s
-    Nc = 2*(2*np.pi*mstardc*kb*temp_data/(hconst**2))**1.5 # 1/m^3
-    # added a factor of 1e-19 so that curve_fit step size reasonable
-    return np.e**(E/(k*temp_data))/(cs*Nc*vth*1e-19)
 
 def generate_mock_pump_trap_data(output_dir,meta_path):
     """
