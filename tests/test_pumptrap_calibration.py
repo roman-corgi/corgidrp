@@ -1,7 +1,8 @@
 import os
 import glob
 import numpy as np
-from corgidrp.mocks import generate_mock_pump_trap_data
+# from corgidrp.mocks import generate_mock_pump_trap_data
+import corgidrp.mocks as mocks
 from corgidrp.detector import imaging_area_geom
 from corgidrp.data import Dataset
 from corgidrp.l1_to_l2a import prescan_biassub
@@ -66,7 +67,7 @@ def test_tpump_analysis():
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
     metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
     print("Generating mock data")
-    generate_mock_pump_trap_data(test_data_dir, metadata_file)
+    mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
     print("Done generating mock data")
 
     #Read in all the data. 
@@ -104,44 +105,9 @@ def test_tpump_analysis():
     # arrtype = pump_trap_dataset[0].ext_hdr['ARRTYPE']
 
     #Detector regions for the smaller pump_trap_data - taken from metadata_test.yaml
-    detector_regions = {
-        arrtype : {
-            'frame_rows': 120, 
-            'frame_cols': 220,
-            'image': {
-                'rows': 104,
-                'cols': 105,
-                'r0c0': [2, 108]
-                },
-            'prescan_reliable': {
-                'rows': 120,
-                'cols': 108,
-                'r0c0': [0, 0],
-                'col_start': 0, #10
-                'col_end': 108, #100
-            },        
-            'prescan': {
-                'rows': 120,
-                'cols': 108,
-                'r0c0': [0, 0],
-                'col_start': 0, #10
-                'col_end': 108, #100
-            }, 
-            'serial_overscan': {
-                'rows': 120,
-                'cols': 5,
-                'r0c0': [0, 215]
-            },
-            'parallel_overscan': {
-                'rows': 14,
-                'cols': 107,
-                'r0c0': [106, 108]
-            }
-            },
-        }
 
     #Subtract the prescane Bias
-    bias_subbed_dataset = prescan_biassub(pump_trap_dataset, detector_regions=detector_regions,use_imaging_area=True)
+    bias_subbed_dataset = prescan_biassub(pump_trap_dataset, detector_regions=mocks.detector_areas_test,use_imaging_area=True)
 
     bias_subbed_dataset[0].save(filedir = "./", filename="bias_subbed_dataset_file0.fits")
 

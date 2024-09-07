@@ -22,33 +22,37 @@ from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
 
 detector_areas_test= {
 'SCI' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
-        'frame_rows' : 120,
-        'frame_cols' : 220,
-        'image' : {
+        'frame_rows': 120, 
+        'frame_cols': 220,
+        'image': {
             'rows': 104,
             'cols': 105,
             'r0c0': [2, 108]
             },
-        'prescan' : {
+        'prescan_reliable': {
             'rows': 120,
             'cols': 108,
-            'r0c0': [0, 0]
-            },
-        'prescan_reliable' : {
+            'r0c0': [0, 0],
+            'col_start': 0, #10
+            'col_end': 108, #100
+        },        
+        'prescan': {
             'rows': 120,
             'cols': 108,
-            'r0c0': [0, 0]
-            },
-        'parallel_overscan' : {
-            'rows': 14,
-            'cols': 107,
-            'r0c0': [106, 108]
-            },
-        'serial_overscan' : {
+            'r0c0': [0, 0],
+            'col_start': 0, #10
+            'col_end': 108, #100
+        }, 
+        'serial_overscan': {
             'rows': 120,
             'cols': 5,
             'r0c0': [0, 215]
-            },
+        },
+        'parallel_overscan': {
+            'rows': 14,
+            'cols': 107,
+            'r0c0': [106, 108]
+        }
         },
 'ENG' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
         'frame_rows' : 220,
