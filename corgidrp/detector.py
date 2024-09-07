@@ -281,67 +281,6 @@ def slice_section(frame, obstype, key, detector_regions=None):
     return section
 
 
-def imaging_area_geometry(obstype='SCI',detector_regions=None):
-    """
-    
-    Return geometry of imaging area in reference to full frame.
-    
-    Ported from II&T
-
-    Args: 
-        obstype (str): Either 'SCI' or 'ENG'
-        detector_regions (dict): a dictionary of detector geometry properties. 
-
-    Returns: 
-        rows_im (int): Number of rows of imaging area
-        cols_im (int): Number of columns of imaging area
-        r0c0_im (tuple): Tuple of (row position, column position) of corner closest to (0,0)
-
-    """
-
-    if detector_regions is None:
-            detector_regions = detector_areas
-
-    _, cols_pre, _ = unpack_geom(obstype,'prescan', detector_regions = detector_regions)
-    _, cols_serial_ovr, _ = unpack_geom(obstype,'serial_overscan', detector_regions = detector_regions)
-    rows_parallel_ovr, _, _ = unpack_geom(obstype,'parallel_overscan', detector_regions = detector_regions)
-    fluxmap_rows, _, r0c0_image = unpack_geom(obstype,'image', detector_regions = detector_regions)
-
-    rows_im = detector_areas[obstype]['frame_rows'] - rows_parallel_ovr
-    cols_im = detector_areas[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
-    r0c0_im = r0c0_image.copy()
-    r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
-
-    return rows_im, cols_im, r0c0_im
-
-
-def imaging_slice(frame,obstype='SCI',detector_regions=None): 
-    """
-
-    Select only the real counts from full frame and exclude virtual.
-
-    Use this to transform mask and embed from acting on the full frame to
-    acting on only the image frame.
-
-    Ported from II&T read_metadata.py
-
-    Args:
-        frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
-        obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
-        detector_regions (dict): a dictionary of detector geometry properties.  
-    
-    Returns:
-        np.ndarray: Imaging slice
-    """
-
-    if detector_regions is None:
-            detector_regions = detector_areas
-
-    # Return geometry of imaging area in reference to full frame.
-
-    rows, cols, r0c0 = imaging_area_geometry(obstype=obstype, detector_regions = detector_regions)
-
-    return frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
 
 def unpack_geom(obstype, key, detector_regions=None):
     """Safely check format of geom sub-dictionary and return values.
