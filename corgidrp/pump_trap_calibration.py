@@ -14,7 +14,7 @@ https://doi.org/10.1117/1.JATIS.7.1.016003
     - Removed image slicing
     - Removed non-linearity correction
     - Input dataset is now a Dataset object from corgidrp.data
-    - output is not a corgi.drp.TrapCalibration object
+    - output is now a corgi.drp.TrapCalibration object
 """
 import warnings
 import numpy as np
@@ -2176,7 +2176,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         temperatures.
 
     Args:
-        input_dataset (corgi.drp.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames, sorted according to temperature and pumping scheme.
+        input_dataset (corgi.drp.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames.
         time_head (str): Keyword corresponding to phase time for each FITS file. The keyword value is assumed to be a float (units of microseconds). Defaults to 'TPTAU'.
         mean_field (float, optional): The mean electron level that was present in each pixel before trap pumping was performed (excluding EM gain). Only useful if the mean level is less than 2500 e-. If 2500 e- or higher, use None.
         length_lim (int, optional): Minimum number of frames for which a dipole needs to meet the threshold to be considered a true trap. Defaults to 6.
@@ -2338,7 +2338,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
 
             # no need for cosmic ray removal since we do ill. correction
             # plus cosmics wouldn't look same as it would on regular frame,
-            # and they affect the detection of dipoles (or very low chance)
+            # and they shouldn't affect the detection of dipoles (or very low chance)
             # This can also be mitigated by taking multiple frames per
             # phase time.
             # no need for flat-fielding since trap pumping will be done
@@ -3128,7 +3128,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             range = [[0, max(1, E_vals.max()) + 0.5/bins[0]],
                 [0, max(1e-14, cs_vals.max()) + 1e-14*0.5/bins[1]]])
 
-        nrows, ncols, _ = imaging_area_geometry()
+        nrows, ncols, _ = imaging_area_geom()
         for i in range(bins[0]):
             for j in range(bins[1]):
                 # [percentage of traps out of total # pixels, avg E bin value,

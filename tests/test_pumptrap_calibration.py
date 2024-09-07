@@ -2,7 +2,7 @@ import os
 import glob
 import numpy as np
 from corgidrp.mocks import generate_mock_pump_trap_data
-from corgidrp.detector import imaging_area_geometry
+from corgidrp.detector import imaging_area_geom
 from corgidrp.data import Dataset
 from corgidrp.l1_to_l2a import prescan_biassub
 from corgidrp.l2a_to_l2b import em_gain_division
@@ -249,7 +249,7 @@ def test_tpump_analysis():
             assert(np.isclose(trap_dict[t2]['tau at input T'], tau_temp(input_T, trap_dict_E[i][0], trap_dict_cs[i][0]*1e15), rtol = 0.1) or np.isclose(trap_dict[t2]['tau at input T'], tau_temp(input_T, trap_dict_E[i][1], trap_dict_cs[i][1]*1e15), rtol = 0.1))
                 
 
-    nrows, ncols, _ = imaging_area_geometry()
+    nrows, ncols, _ = imaging_area_geom()
     assert(len(trap_densities) == 2)
 
     for tr in trap_densities:
