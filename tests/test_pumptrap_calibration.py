@@ -109,8 +109,6 @@ def test_tpump_analysis():
     #Subtract the prescane Bias
     bias_subbed_dataset = prescan_biassub(pump_trap_dataset, detector_regions=mocks.detector_areas_test,use_imaging_area=True)
 
-    bias_subbed_dataset[0].save(filedir = "./", filename="bias_subbed_dataset_file0.fits")
-
     ## Note the data were not generated with non-linearity
     #Correct for non-linearity - use the fits file derived from nonlin_sample.csv
     # nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", "nonlin_sample.fits")
@@ -119,8 +117,6 @@ def test_tpump_analysis():
 
     #Divide by EM gain
     emgain_divided_dataset = em_gain_division(bias_subbed_dataset)
-
-    emgain_divided_dataset[0].save(filedir = "./", filename = "emgain_divided_dataset_file0.fits")
 
     #Done preliminary data processing. Now running the tpump_analysis
 
