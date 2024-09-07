@@ -28,6 +28,154 @@ from corgidrp.data import TrapCalibration
 class TPumpAnException(Exception):
     """Exception class for tpumpanalysis."""
 
+def P1(time_data, offset, tauc, tau, num_pumps=2000):
+    """Probability function 1, one trap.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant. Units: e-.
+        tau (float): Release time constant. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
+        np.exp(-2*time_data/tau)))
+
+def P1_P1(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
+    """Probability function 1, two traps.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant for the first trap. Units: e-.
+        tau (float): Release time constant for the first trap. Units: seconds.
+        tauc2 (float): Capture time constant for the second trap. Units: e-.
+        tau2 (float): Release time constant for the second trap. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    pc2 = 1 - np.exp(-time_data/tauc2)
+    return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+        np.exp(-2*time_data/tau))+ \
+        num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-2*time_data/tau2))
+
+
+def P2(time_data, offset, tauc, tau, num_pumps = 2000):
+    """Probability function 2, one trap.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant. Units: e-.
+        tau (float): Release time constant. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    return offset+(num_pumps*pc*(np.exp(-2*time_data/tau)-
+        np.exp(-3*time_data/tau)))
+
+def P1_P2(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
+    """One trap for probability function 1, one for probability function 2.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant for the first trap. Units: e-.
+        tau (float): Release time constant for the first trap. Units: seconds.
+        tauc2 (float): Capture time constant for the second trap. Units: e-.
+        tau2 (float): Release time constant for the second trap. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    pc2 = 1 - np.exp(-time_data/tauc2)
+    return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+        np.exp(-2*time_data/tau))+ \
+        num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
+
+def P2_P2(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
+    """Probability function 2, two traps.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant for the first trap. Units: e-.
+        tau (float): Release time constant for the first trap. Units: seconds.
+        tauc2 (float): Capture time constant for the second trap. Units: e-.
+        tau2 (float): Release time constant for the second trap. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.s
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    pc2 = 1 - np.exp(-time_data/tauc2)
+    return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
+        np.exp(-3*time_data/tau))+ \
+        num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
+
+def P3(time_data, offset, tauc, tau, num_pumps = 2000):
+    """Probability function 3, one trap.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant. Units: e-.
+        tau (float): Release time constant. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
+        np.exp(-4*time_data/tau)))
+
+def P3_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
+    """Probability function 3, two traps.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant for the first trap. Units: e-.
+        tau (float): Release time constant for the first trap. Units: seconds.
+        tauc2 (float): Capture time constant for the second trap. Units: e-.
+        tau2 (float): Release time constant for the second trap. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    pc2 = 1 - np.exp(-time_data/tauc2)
+    return offset+num_pumps*pc*(np.exp(-time_data/tau)-
+        np.exp(-4*time_data/tau))+ \
+        num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
+
+def P2_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
+    """One trap for probability function 2, one for probability function 3.
+
+    Args:
+        time_data (array): Phase times in seconds.
+        offset (float): Offset in the fitting of data for amplitude vs phase time.
+        tauc (float): Capture time constant for the first trap. Units: e-.
+        tau (float): Release time constant for the first trap. Units: seconds.
+        tauc2 (float): Capture time constant for the second trap. Units: e-.
+        tau2 (float): Release time constant for the second trap. Units: seconds.
+
+    Returns:
+        array: Expected amplitude values for the given phase times.
+    """
+    pc = 1 - np.exp(-time_data/tauc)
+    pc2 = 1 - np.exp(-time_data/tauc2)
+    return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
+        np.exp(-3*time_data/tau))+ \
+        num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
 def illumination_correction(img, binsize, ill_corr):
     """Performs non-uniform illumination correction by taking sections of the
     image and performing local illumination subtraction.
@@ -517,157 +665,6 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
     # if input for both_a doesn't conform to expected dictionary structure,
     # exceptions will be raised
 
-    # define all these inside this function because they depend also on
-    # num_pumps, and I can't specify an unfitted parameter in the function
-    # definition if I want to use curve_fit
-    def P1(time_data, offset, tauc, tau):
-        """Probability function 1, one trap.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant. Units: e-.
-            tau (float): Release time constant. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
-            np.exp(-2*time_data/tau)))
-
-    def P1_P1(time_data, offset, tauc, tau, tauc2, tau2):
-        """Probability function 1, two traps.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant for the first trap. Units: e-.
-            tau (float): Release time constant for the first trap. Units: seconds.
-            tauc2 (float): Capture time constant for the second trap. Units: e-.
-            tau2 (float): Release time constant for the second trap. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        pc2 = 1 - np.exp(-time_data/tauc2)
-        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
-            np.exp(-2*time_data/tau))+ \
-            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-2*time_data/tau2))
-
-    def P2(time_data, offset, tauc, tau):
-        """Probability function 2, one trap.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant. Units: e-.
-            tau (float): Release time constant. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        return offset+(num_pumps*pc*(np.exp(-2*time_data/tau)-
-            np.exp(-3*time_data/tau)))
-
-    def P1_P2(time_data, offset, tauc, tau, tauc2, tau2):
-        """One trap for probability function 1, one for probability function 2.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant for the first trap. Units: e-.
-            tau (float): Release time constant for the first trap. Units: seconds.
-            tauc2 (float): Capture time constant for the second trap. Units: e-.
-            tau2 (float): Release time constant for the second trap. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        pc2 = 1 - np.exp(-time_data/tauc2)
-        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
-            np.exp(-2*time_data/tau))+ \
-            num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
-
-    def P2_P2(time_data, offset, tauc, tau, tauc2, tau2):
-        """Probability function 2, two traps.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant for the first trap. Units: e-.
-            tau (float): Release time constant for the first trap. Units: seconds.
-            tauc2 (float): Capture time constant for the second trap. Units: e-.
-            tau2 (float): Release time constant for the second trap. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.s
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        pc2 = 1 - np.exp(-time_data/tauc2)
-        return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
-            np.exp(-3*time_data/tau))+ \
-            num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
-
-    def P3(time_data, offset, tauc, tau):
-        """Probability function 3, one trap.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant. Units: e-.
-            tau (float): Release time constant. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
-            np.exp(-4*time_data/tau)))
-
-    def P3_P3(time_data, offset, tauc, tau, tauc2, tau2):
-        """Probability function 3, two traps.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant for the first trap. Units: e-.
-            tau (float): Release time constant for the first trap. Units: seconds.
-            tauc2 (float): Capture time constant for the second trap. Units: e-.
-            tau2 (float): Release time constant for the second trap. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        pc2 = 1 - np.exp(-time_data/tauc2)
-        return offset+num_pumps*pc*(np.exp(-time_data/tau)-
-            np.exp(-4*time_data/tau))+ \
-            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
-
-    def P2_P3(time_data, offset, tauc, tau, tauc2, tau2):
-        """One trap for probability function 2, one for probability function 3.
-
-        Args:
-            time_data (array): Phase times in seconds.
-            offset (float): Offset in the fitting of data for amplitude vs phase time.
-            tauc (float): Capture time constant for the first trap. Units: e-.
-            tau (float): Release time constant for the first trap. Units: seconds.
-            tauc2 (float): Capture time constant for the second trap. Units: e-.
-            tau2 (float): Release time constant for the second trap. Units: seconds.
-
-        Returns:
-            array: Expected amplitude values for the given phase times.
-        """
-        pc = 1 - np.exp(-time_data/tauc)
-        pc2 = 1 - np.exp(-time_data/tauc2)
-        return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
-            np.exp(-3*time_data/tau))+ \
-            num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
-
     #upper bound for tauc: 1*eperdn, but our knowledge of eperdn may have
     # error.
 
@@ -735,14 +732,14 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             # attempt all possible probability functions
             try:
                 popt1l, pcov1l = curve_fit(P1, times, amps, bounds=bounds_one,
-                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01l, maxfev = np.inf,kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
                 popt1u, pcov1u = curve_fit(P1, times, amps, bounds=bounds_one,
-                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01u, maxfev = np.inf,kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             except:
                 warnings.warn('curve_fit failed')
                 return None
-            fit1l = P1(times, popt1l[0], popt1l[1], popt1l[2])
-            fit1u = P1(times, popt1u[0], popt1u[1], popt1u[2])
+            fit1l = P1(times, popt1l[0], popt1l[1], popt1l[2],num_pumps=num_pumps)
+            fit1u = P1(times, popt1u[0], popt1u[1], popt1u[2],num_pumps=num_pumps)
             ssres1l = np.sum((fit1l - amps)**2)
             ssres1u = np.sum((fit1u - amps)**2)
             # coefficient of determination, adjusted R^2:
@@ -759,14 +756,14 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
             try:
                 popt2l, pcov2l = curve_fit(P2, times, amps, bounds=bounds_one,
-                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
                 popt2u, pcov2u = curve_fit(P2, times, amps, bounds=bounds_one,
-                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             except:
                 warnings.warn('curve_fit failed')
                 return None
-            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2])
-            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2])
+            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2], num_pumps=num_pumps)
+            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2], num_pumps=num_pumps)
             ssres2l = np.sum((fit2l - amps)**2)
             ssres2u = np.sum((fit2u - amps)**2)
             # coefficient of determination, adjusted R^2:
@@ -799,16 +796,16 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
         try:
             popt11l, pcov11l = curve_fit(P1_P1, times, amps, bounds=bounds_two,
-            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             popt11u, pcov11u = curve_fit(P1_P1, times, amps, bounds=bounds_two,
-            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
         except:
             warnings.warn('curve_fit failed')
             return None
         fit11l = P1_P1(times, popt11l[0], popt11l[1], popt11l[2], popt11l[3],
-        popt11l[4])
+        popt11l[4], num_pumps=num_pumps)
         fit11u = P1_P1(times, popt11u[0], popt11u[1], popt11u[2], popt11u[3],
-        popt11u[4])
+        popt11u[4], num_pumps=num_pumps)
         ssres11l = np.sum((fit11l - amps)**2)
         ssres11u = np.sum((fit11u - amps)**2)
         # coefficient of determination, adjusted R^2:
@@ -825,16 +822,16 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
         try:
             popt12l, pcov12l = curve_fit(P1_P2, times, amps, bounds=bounds_two,
-            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             popt12u, pcov12u = curve_fit(P1_P2, times, amps, bounds=bounds_two,
-            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
         except:
             warnings.warn('curve_fit failed')
             return None
         fit12l = P1_P2(times, popt12l[0], popt12l[1], popt12l[2], popt12l[3],
-        popt12l[4])
+        popt12l[4], num_pumps=num_pumps)
         fit12u = P1_P2(times, popt12u[0], popt12u[1], popt12u[2], popt12u[3],
-        popt12u[4])
+        popt12u[4], num_pumps=num_pumps)
         ssres12l = np.sum((fit12l - amps)**2)
         ssres12u = np.sum((fit12u - amps)**2)
         # coefficient of determination, adjusted R^2:
@@ -851,16 +848,16 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
         try:
             popt22l, pcov22l = curve_fit(P2_P2, times, amps, bounds=bounds_two,
-            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             popt22u, pcov22u = curve_fit(P2_P2, times, amps, bounds=bounds_two,
-            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
         except:
             warnings.warn('curve_fit failed')
             return None
         fit22l = P2_P2(times, popt22l[0], popt22l[1], popt22l[2], popt22l[3],
-        popt22l[4])
+        popt22l[4], num_pumps=num_pumps)
         fit22u = P2_P2(times, popt22u[0], popt22u[1], popt22u[2], popt22u[3],
-        popt22u[4])
+        popt22u[4], num_pumps=num_pumps)
         ssres22l = np.sum((fit22l - amps)**2)
         ssres22u = np.sum((fit22u - amps)**2)
         # coefficient of determination, adjusted R^2:
@@ -968,14 +965,14 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             #attempt both probability functions
             try:
                 popt3l, pcov3l = curve_fit(P3, times, amps, bounds=bounds_one,
-                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
                 popt3u, pcov3u = curve_fit(P3, times, amps, bounds=bounds_one,
-                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             except:
                 warnings.warn('curve_fit failed')
                 return None
-            fit3l = P3(times, popt3l[0], popt3l[1], popt3l[2])
-            fit3u = P3(times, popt3u[0], popt3u[1], popt3u[2])
+            fit3l = P3(times, popt3l[0], popt3l[1], popt3l[2], num_pumps=num_pumps)
+            fit3u = P3(times, popt3u[0], popt3u[1], popt3u[2], num_pumps=num_pumps)
             ssres3l = np.sum((fit3l - amps)**2)
             ssres3u = np.sum((fit3u - amps)**2)
             # coefficient of determination, adjusted R^2:
@@ -992,14 +989,14 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
             try:
                 popt2l, pcov2l = curve_fit(P2, times, amps, bounds=bounds_one,
-                p0 = p01l, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
                 popt2u, pcov2u = curve_fit(P2, times, amps, bounds=bounds_one,
-                p0 = p01u, maxfev = np.inf)#, sigma = 0.1*amps)
+                p0 = p01u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             except:
                 warnings.warn('curve_fit failed')
                 return None
-            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2])
-            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2])
+            fit2l = P2(times, popt2l[0], popt2l[1], popt2l[2], num_pumps=num_pumps)
+            fit2u = P2(times, popt2u[0], popt2u[1], popt2u[2], num_pumps=num_pumps)
             ssres2l = np.sum((fit2l - amps)**2)
             ssres2u = np.sum((fit2u - amps)**2)
             # coefficient of determination, adjusted R^2:
@@ -1032,16 +1029,16 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
         try:
             popt33l, pcov33l = curve_fit(P3_P3, times, amps, bounds=bounds_two,
-            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             popt33u, pcov33u = curve_fit(P3_P3, times, amps, bounds=bounds_two,
-            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
         except:
             warnings.warn('curve_fit failed')
             return None
         fit33l = P3_P3(times, popt33l[0], popt33l[1], popt33l[2], popt33l[3],
-        popt33l[4])
+        popt33l[4], num_pumps=num_pumps)
         fit33u = P3_P3(times, popt33u[0], popt33u[1], popt33u[2], popt33u[3],
-        popt33u[4])
+        popt33u[4], num_pumps=num_pumps)
         ssres33l = np.sum((fit33l - amps)**2)
         ssres33u = np.sum((fit33u - amps)**2)
         # coefficient of determination, adjusted R^2:
@@ -1058,16 +1055,16 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
         try:
             popt23l, pcov23l = curve_fit(P2_P3, times, amps, bounds=bounds_two,
-            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             popt23u, pcov23u = curve_fit(P2_P3, times, amps, bounds=bounds_two,
-            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
         except:
             warnings.warn('curve_fit failed')
             return None
         fit23l = P2_P3(times, popt23l[0], popt23l[1], popt23l[2], popt23l[3],
-        popt23l[4])
+        popt23l[4], num_pumps=num_pumps)
         fit23u = P2_P3(times, popt23u[0], popt23u[1], popt23u[2], popt23u[3],
-        popt23u[4])
+        popt23u[4], num_pumps=num_pumps)
         ssres23l = np.sum((fit23l - amps)**2)
         ssres23u = np.sum((fit23u - amps)**2)
         # coefficient of determination, adjusted R^2:
@@ -1084,16 +1081,16 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
 
         try:
             popt22l, pcov22l = curve_fit(P2_P2, times, amps, bounds=bounds_two,
-            p0 = p02l, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02l, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
             popt22u, pcov22u = curve_fit(P2_P2, times, amps, bounds=bounds_two,
-            p0 = p02u, maxfev = np.inf)#, sigma = 0.1*amps)
+            p0 = p02u, maxfev = np.inf, kwargs={"num_pumps" : num_pumps})#, sigma = 0.1*amps)
         except:
             warnings.warn('curve_fit failed')
             return None
         fit22l = P2_P2(times, popt22l[0], popt22l[1], popt22l[2], popt22l[3],
-        popt22l[4])
+        popt22l[4], num_pumps=num_pumps)
         fit22u = P2_P2(times, popt22u[0], popt22u[1], popt22u[2], popt22u[3],
-        popt22u[4])
+        popt22u[4], num_pumps=num_pumps)
         ssres22l = np.sum((fit22l - amps)**2)
         ssres22u = np.sum((fit22u - amps)**2)
         # coefficient of determination, adjusted R^2:
