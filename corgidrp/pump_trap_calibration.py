@@ -36,6 +36,7 @@ def P1(time_data, offset, tauc, tau, num_pumps=2000):
         offset (float): Offset in the fitting of data for amplitude vs phase time.
         tauc (float): Capture time constant. Units: e-.
         tau (float): Release time constant. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.
@@ -54,6 +55,7 @@ def P1_P1(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
         tau (float): Release time constant for the first trap. Units: seconds.
         tauc2 (float): Capture time constant for the second trap. Units: e-.
         tau2 (float): Release time constant for the second trap. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.
@@ -73,6 +75,7 @@ def P2(time_data, offset, tauc, tau, num_pumps = 2000):
         offset (float): Offset in the fitting of data for amplitude vs phase time.
         tauc (float): Capture time constant. Units: e-.
         tau (float): Release time constant. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.
@@ -91,6 +94,7 @@ def P1_P2(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
         tau (float): Release time constant for the first trap. Units: seconds.
         tauc2 (float): Capture time constant for the second trap. Units: e-.
         tau2 (float): Release time constant for the second trap. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.
@@ -111,6 +115,7 @@ def P2_P2(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
         tau (float): Release time constant for the first trap. Units: seconds.
         tauc2 (float): Capture time constant for the second trap. Units: e-.
         tau2 (float): Release time constant for the second trap. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.s
@@ -129,6 +134,7 @@ def P3(time_data, offset, tauc, tau, num_pumps = 2000):
         offset (float): Offset in the fitting of data for amplitude vs phase time.
         tauc (float): Capture time constant. Units: e-.
         tau (float): Release time constant. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.
@@ -147,6 +153,7 @@ def P3_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
         tau (float): Release time constant for the first trap. Units: seconds.
         tauc2 (float): Capture time constant for the second trap. Units: e-.
         tau2 (float): Release time constant for the second trap. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.
@@ -167,6 +174,7 @@ def P2_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 2000):
         tau (float): Release time constant for the first trap. Units: seconds.
         tauc2 (float): Capture time constant for the second trap. Units: e-.
         tau2 (float): Release time constant for the second trap. Units: seconds.
+        num_pumps (int): Number of cycles for trap pumping. Must be greater than 0.
 
     Returns:
         array: Expected amplitude values for the given phase times.
