@@ -3130,7 +3130,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             range = [[0, max(1, E_vals.max()) + 0.5/bins[0]],
                 [0, max(1e-14, cs_vals.max()) + 1e-14*0.5/bins[1]]])
 
-        nrows, ncols, _ = imaging_area_geom('SCI')
+        nrows, ncols, _ = imaging_area_geom(dataset[0].ext_hdr['ARRTYPE'])
         for i in range(bins[0]):
             for j in range(bins[1]):
                 # [percentage of traps out of total # pixels, avg E bin value,
