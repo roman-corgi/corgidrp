@@ -64,7 +64,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
                     image_err.append(imaging_slice(obstype, err_slice, detector_regions=detector_regions))
                 image_err = np.array(image_err)
 
-                prows, _, r0c0 = imaging_area_geom('SCI',detector_regions=detector_regions)
+                prows, _, r0c0 = imaging_area_geom(obstype,detector_regions=detector_regions)
                 i_r0 = r0c0[0]
                 p_r0 = detector_regions[obstype]['prescan']['r0c0'][0]
                 al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
