@@ -2288,6 +2288,8 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         scheme_datasets, scheme_list = dataset.split_dataset(exthdr_keywords = scheme_header_keywords)
         
         sch_list = []
+        scheme_num_pumps = [] #the number of pumps for each scheme
+
         for i in range(len(scheme_datasets)):
             #Grab the first file's extension header from each dataset
             header0 = scheme_datasets[i][0].ext_hdr
@@ -2299,13 +2301,13 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             sch_list.append(this_scheme)
 
             #Grab the number of pumps from the first dataset. 
-            if i == 0: 
-                num_pumps = this_num_pumps[this_scheme-1]
+            scheme_num_pumps.append(this_num_pumps[this_scheme-1])
 
         #Sort the things so that Scheme 1 is first
         sch_order = np.argsort(sch_list)
         sch_list = np.array(sch_list)[sch_order]
         scheme_datasets = np.array(scheme_datasets)[sch_order]
+        scheme_num_pumps = np.array(scheme_num_pumps)[sch_order]
 
         #Make a check to make sure that one of the schemes is Scheme 1
         if 1 not in sch_list:
@@ -2324,6 +2326,9 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             frames = []
             cor_frames = []
             timings = []
+
+            #Grab the number of pumps associated with this scheme. 
+            num_pumps = scheme_num_pumps[(sch_list == curr_sch)][0]
             
             for frame in scheme_datasets[(sch_list == curr_sch),:][0]:
 
