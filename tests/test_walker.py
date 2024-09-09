@@ -282,7 +282,8 @@ def test_skip_missing_calib():
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
 
-    assert 'non-linearity' not in output_dataset[0].ext_hdr['HISTORY'][-2].lower()
+    for hist_entry in output_dataset[0].ext_hdr['HISTORY']:
+        assert 'non-linearity' not in hist_entry.lower()
 
     corgidrp.skip_missing_cal_steps = old_setting
     corgidrp.caldb_filepath = old_caldb_filepath
@@ -352,6 +353,7 @@ def test_jit_calibs():
 
 
 if __name__ == "__main__":#
+    test_skip_missing_calib()
     test_jit_calibs()
 
 
