@@ -273,7 +273,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
         dither_sizey (int):(Required) Size of the dither in X axis in pixels (number of pixels across the planet (neptune=50 and uranus=65))
         row_cent (int): (Required)  X coordinate of the centroid
         col_cent (int): (Required)  Y coordinate of the centroid
-        n_dith (int): number of dithers required (n_dith=3 for Neptune and n_dith=2 for uranus)
+        n_dith (int): number of dithers required
         mask_size (int): Size of the mask in pixels  (Size of the HST images, 420 X 420 pixels with random values mean=1, std=0.03)
         snr (int): Required SNR in the planet images (=250 in the HST images)
         planet (str): neptune or uranus
@@ -299,13 +299,10 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     if dither_sizey == None:
         dither_sizey = dither_sizex
-    if planet == 'neptune':
-        dith_end = n_dith
-    elif planet == 'uranus':
-        dith_end = n_dith+1
+
     
-    for i in np.arange(-n_dith,dith_end):
-        for j in np.arange(-n_dith,dith_end):
+    for i in np.arange(-n_dith,n_dith):
+        for j in np.arange(-n_dith,n_dith):
             mask_data = data.copy()
             new_image_row_coords = np.arange(row_min + (dither_sizey * j), row_max + (dither_sizey * j))
             new_image_col_coords = np.arange(col_min + (dither_sizex * i), col_max + (dither_sizex * i))
@@ -367,8 +364,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
        radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90 in HST images)
        snr (int): SNR required for the planet image (default is 250 for the HST images)
        snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
-       flat_map (np.array): a user specified flat map. Must have shape (im_size, im_size). 
-                            Default: None; assumes each pixel drawn from a normal distribution with 3% rms scatter
+       flat_map (np.array): a user specified flat map. Must have shape (im_size, im_size). Default: None; assumes each pixel drawn from a normal distribution with 3% rms scatter
        raster_radius (float): radius of circular raster done to smear out image during observation, in pixels
        raster_subexps (int): number of subexposures that consist of a singular raster. Currently just duplicates images and does not simulate partial rasters
         

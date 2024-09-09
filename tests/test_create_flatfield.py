@@ -50,7 +50,7 @@ def test_create_flatfield_neptune():
         filter=flat_dataset_all[i].pri_hdr['FILTER']
         if planet==target and band==filter: 
             flat_dataset.append(flat_dataset_all[i])
-    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=1024, N=3, rad_mask=1.26,  planet_rad=50, n_pix=165, n_pad=0)
+    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=1024, N=1, rad_mask=1.26,  planet_rad=50, n_pix=165, n_pad=0)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     
@@ -93,11 +93,15 @@ def test_create_flatfield_neptune():
     
     print(flatdivided_dataset[0].ext_hdr)
 
+    corgidrp.track_individual_errors = old_err_tracking
+
     return
     
      #creating flatfield using uranus for band4 
     
 def test_create_flatfield_uranus():
+
+    corgidrp.track_individual_errors = True
     ###### create simulated data
     # check that simulated data folder exists, and create if not
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
@@ -129,7 +133,7 @@ def test_create_flatfield_uranus():
         filter=flat_dataset_all[i].pri_hdr['FILTER']
         if planet==target and band==filter: 
             flat_dataset.append(flat_dataset_all[i])
-    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=1024, N=3, rad_mask=1.75,  planet_rad=65, n_pix=165)
+    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=1024, N=1, rad_mask=1.75,  planet_rad=65, n_pix=165)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     
@@ -174,5 +178,5 @@ def test_create_flatfield_uranus():
     return
 
 if __name__ == "__main__":
-    test_create_flatfield_neptune()
     test_create_flatfield_uranus()
+    test_create_flatfield_neptune()
