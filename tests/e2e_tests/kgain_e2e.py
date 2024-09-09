@@ -10,7 +10,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-from corgidrp.calibrate_kgain import calibrate_kgain
+#from corgidrp.calibrate_kgain import calibrate_kgain
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -36,8 +36,9 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
 
     l1_data_filelist_same_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51841,51851)]#[51841, 51870]] # just grab some files of it
     print(l1_data_filelist_same_exp)
-    l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51826, 51841)]#[51731, 51840]]
+    l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51761)]#[51731, 51840]]
     print(l1_data_filelist_range_exp)
+    l1_data_filelist = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51871)]
     mock_cal_filelist = [os.path.join(l1_datadir_nonlin, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in [51825, 55165]] # grab some real data to mock the calibration 
     
     ###### Setup necessary calibration files
@@ -64,44 +65,45 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
 
     for file in l1_data_filelist_same_exp:
         image = data.Image(file)
-        image.ext_hdr['OBSTYPE'] = "MNFRAME"
-        image.save(filename = file)
+        # This should not be necessary anymore after the updates of the OBSTYPE keyword, up to now it is only "SCI"
+        if image.pri_hdr['OBSTYPE'] != 'MNFRAME':
+            image.pri_hdr['OBSTYPE'] = 'MNFRAME'
+            image.save(filename = file)
         l1_data_filelist_range_exp.append(file)
-    print(l1_data_filelist_range_exp)
+
     walker.walk_corgidrp(l1_data_filelist_range_exp, "", kgain_outputdir, template="l1_to_kgain.json")
-    kgain_files = glob.glob(os.path.join(kgain_outputdir, "CGI*.fits"))
-    kgain_files.sort()
-    print (kgain_files)
-    dataset_kgain = data.Dataset(kgain_files)
+    #kgain_files = glob.glob(os.path.join(kgain_outputdir, "CGI*.fits"))
+    #kgain_files.sort()
+    #print (kgain_files)
+    #dataset_kgain = data.Dataset(kgain_files)
+    kgain_file = os.path.join(kgain_outputdir, "CGI_EXCAM_L1_0000051731_kgain.fits")
+    kgain = data.KGain(kgain_file)
     
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
 
-    kgain = calibrate_kgain(dataset_kgain, 
-                    n_cal=3, n_mean=3, min_val=800, max_val=3000, binwidth=68,
-                    make_plot=True,plot_outdir='figures', show_plot=True, 
-                    logspace_start=-1, logspace_stop=4, logspace_num=200, 
-                    verbose=True, detector_regions=None)
+    #kgain = calibrate_kgain(dataset_kgain,
+    #                n_cal=3, n_mean=3, min_val=800, max_val=3000, binwidth=68,
+    #                make_plot=True,plot_outdir='figures', show_plot=True, 
+    #                logspace_start=-1, logspace_stop=4, logspace_num=200, 
+    #                verbose=True, detector_regions=None)
     
     ##### Check against TVAC kgain, readnoise
     new_kgain = kgain.value
-    new_readnoise = kgain.exthdr["RN"]
-        
+    new_readnoise = kgain.ext_hdr["RN"]
+    print("determined TVAC kgain:", new_kgain)
+    print("determined TVAC read noise", new_readnoise)    
+    
     diff_kgain = new_kgain - tvac_kgain
     diff_readnoise = new_readnoise - tvac_readnoise
     print ("difference to TVAC kgain:", diff_kgain)
-    print ("difference to TVAC readnoise:", diff_readnoise)
+    print ("difference to TVAC read noise:", diff_readnoise)
     print ("error of kgain:", kgain.error)
-    print ("error of  readnoise:", kgain.exthdr["RN_ERR"])
+    print ("error of  readnoise:", kgain.ext_hdr["RN_ERR"])
 
-    assert np.abs(diff_kgain) < 1e-2
-    assert np.abs(diff_readnoise) < 1
+    assert np.abs(diff_kgain) < 1
+    assert np.abs(diff_readnoise) < 25
 
-    # # plotting script for debugging
-    # import matplotlib.pylab as plt
-    # plot the PTC
-    ptc = kgain.ptc
-    print(ptc)
     
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

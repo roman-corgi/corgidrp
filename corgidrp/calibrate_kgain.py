@@ -101,7 +101,7 @@ def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
     # calculate the size of output arrays
     rows, cols = frame_in.shape
     out_rows, out_cols = rows // binwidth, cols // binwidth
-      
+    
     local_mean_array = np.zeros((out_rows, out_cols))
     local_noise_array = np.zeros((out_rows, out_cols))
         
@@ -380,7 +380,6 @@ def calibrate_kgain(dataset_kgain,
             if len(cal_list[i-1]) != len(cal_list[i]):
                 raise CalKgainException('All sub-stacks must have the '
                             'same number of frames and frame shape.')
-
     tmp = mean_frame_list[0]
     for idx in range(3):
         try:
