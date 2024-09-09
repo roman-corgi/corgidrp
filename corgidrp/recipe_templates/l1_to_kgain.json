@@ -10,7 +10,7 @@
         {
             "name" : "prescan_biassub",
             "keywords" : {
-                "return_full_frame" : false
+                "return_full_frame" : true
             }
         },
         {
@@ -25,7 +25,13 @@
                 "NonLinearityCalibration" : "AUTOMATIC"
             }
         },
-        {
+		{   "name" : "calibrate_kgain",
+		    "keywords" : {
+		        "n_cal" : 3,
+				"n_mean" : 3
+		    }
+		},
+		{
             "name" : "save"
         }
     ]
