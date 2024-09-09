@@ -4,10 +4,12 @@ import astropy.time as time
 import warnings
 import corgidrp
 import corgidrp.bad_pixel_calibration
+import corgidrp.combine
 import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.combine as combine
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -25,7 +27,8 @@ all_steps = {
     "desmear" : corgidrp.l2a_to_l2b.desmear,
     "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
     "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
-    "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield
+    "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
+    "combine_subexposures" : corgidrp.combine.combine_subexposures
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
