@@ -9,6 +9,9 @@
     "steps" : [
         {
             "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
+            },
             "keywords" : {
                 "return_full_frame" : false
             }
