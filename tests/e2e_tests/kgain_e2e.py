@@ -91,8 +91,8 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     ##### Check against TVAC kgain, readnoise
     new_kgain = kgain.value
     new_readnoise = kgain.ext_hdr["RN"]
-    print("determined TVAC kgain:", new_kgain)
-    print("determined TVAC read noise", new_readnoise)    
+    print("determined kgain:", new_kgain)
+    print("determined read noise", new_readnoise)    
     
     diff_kgain = new_kgain - tvac_kgain
     diff_readnoise = new_readnoise - tvac_readnoise
