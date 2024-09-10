@@ -18,20 +18,20 @@ from corgidrp.calibrate_kgain import CalKgainException
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params = {
     # ROI constants
-    'rowroi1': 304,
-    'rowroi2': 734,
-    'colroi1': 1384,
-    'colroi2': 1844,
+    'rowroi1': 305,
+    'rowroi2': 736,
+    'colroi1': 1385,
+    'colroi2': 1846,
      
     # background ROIs
-    'rowback11': 19,
-    'rowback12': 299,
-    'rowback21': 739,
-    'rowback22': 999,
-    'colback11': 1199,
-    'colback12': 1999,
-    'colback21': 1199,
-    'colback22': 1999,
+    'rowback11': 20,
+    'rowback12': 301,
+    'rowback21': 740,
+    'rowback22': 1001,
+    'colback11': 1200,
+    'colback12': 2001,
+    'colback21': 1200,
+    'colback22': 2001,
      
     # minimum exposure time, s
     'min_exp_time': 0,

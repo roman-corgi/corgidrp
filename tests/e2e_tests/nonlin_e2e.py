@@ -143,7 +143,7 @@ def test_nonlin_cal_e2e(
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,'nonlin_table_090524.txt'),
+    nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,'nonlin_table_090924.txt'),
         delimiter=",")
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
@@ -172,12 +172,11 @@ def test_nonlin_cal_e2e(
         # Values from the engineering version (Guillermo Gonzalez/Tellus1)
         if 'keywords' not in recipe['steps'][idx_nl]:
             recipe['steps'][idx_nl]['keywords'] = {}
-        recipe['steps'][idx_nl]['keywords']['norm_val'] = 2020
-        recipe['steps'][idx_nl]['keywords']['min_write'] = 800
-        recipe['steps'][idx_nl]['keywords']['max_write'] = 9000
-        recipe['steps'][idx_nl]['keywords']['test_iit'] = True
+        #recipe['steps'][idx_nl]['keywords']['norm_val'] = 2020
+        print('WARNING: implement parameter changes for the comparison')
+        breakpoint()
         # Run the modified recipe
-        print('Running walker with modified recipe')
+        #print('Running walker with modified recipe')
         walker.run_recipe(recipe, save_recipe_file=False)
 
     # Compare results
