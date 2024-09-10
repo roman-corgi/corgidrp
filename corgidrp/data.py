@@ -595,6 +595,7 @@ class Image():
         if name in self.hdu_names:
             raise ValueError("Extension name already exists in HDU list")
         else: 
+            self.hdu_names.append(name)
             self.hdu_list.append(new_hdu)
 
 
@@ -729,9 +730,12 @@ class NonLinearityCalibration(Image):
      - Row headers (dn counts) must be monotonically increasing
      - Column headers (EM gains) must be monotonically increasing
      - Data columns (relative gain curves) must straddle 1
-     - The first row will provide the the Gain axis values (accesssed via gain_ax = non_lin_correction.data[0, 1:])
-     - The first column will provide the "count" axis value (accessed via count_ax = non_lin_correction.data[1:, 0])
-     - The rest of the array will be the calibration data (accessed via relgains = non_lin_correction.data[1:, 1:])
+     - The first row will provide the the Gain axis values (accesssed via 
+        gain_ax = non_lin_correction.data[0, 1:])
+     - The first column will provide the "count" axis value (accessed via 
+        count_ax = non_lin_correction.data[1:, 0])
+     - The rest of the array will be the calibration data (accessed via 
+     relgains = non_lin_correction.data[1:, 1:])
 
     For example:
     [
@@ -749,12 +753,18 @@ class NonLinearityCalibration(Image):
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
      Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D calibration data. See above for the required format.
-        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
-        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this NonLinearityCalibration file (required only if raw 2D data is passed in)
+        data_or_filepath (str or np.array): either the filepath to the FITS file 
+        to read in OR the 2D calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if 
+        raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required 
+        only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined 
+        together to make this NonLinearityCalibration file (required only if 
+        raw 2D data is passed in)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, 
+                 input_dataset=None):
 
         # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
@@ -763,21 +773,27 @@ class NonLinearityCalibration(Image):
         nonlin_raw = self.data
         if nonlin_raw.ndim < 2 or nonlin_raw.shape[0] < 2 or \
         nonlin_raw.shape[1] < 2:
-            raise ValueError('The non-linearity calibration array must be at least 2x2 (room for x '
-                                'and y axes and one data point)')
+            raise ValueError('The non-linearity calibration array must be at' 
+                             'least 2x2 (room for x and y axes and one data' 
+                             'point)')
         if not np.isnan(nonlin_raw[0, 0]):
-            raise ValueError('The first value of the non-linearity calibration array  (upper left) must be set to '
-                                '"nan"')
+            raise ValueError('The first value of the non-linearity calibration '
+                             'array  (upper left) must be set to "nan"')
 
 
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new NonLinearityCalibration file
+        # b/c of logic in the super.__init__, we just need to check this to see if 
+        # it is a new NonLinearityCalibration file
         if ext_hdr is not None:
             if input_dataset is None:
                 # error check. this is required in this case
-                raise ValueError("This appears to be a new Non Linearity Correction. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this calibration file.")
-            self.ext_hdr['DATATYPE'] = 'NonLinearityCalibration' # corgidrp specific keyword for saving to disk
+                raise ValueError("This appears to be a new Non Linearity "
+                                 "Correction. The dataset of input files needs" 
+                                 "to be passed in to the input_dataset keyword" 
+                                 "to record history of this calibration file.")
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'NonLinearityCalibration' 
 
             # log all the data that went into making this calibration file
             self._record_parent_filenames(input_dataset)
@@ -1134,11 +1150,16 @@ class DetectorNoiseMaps(Image):
 
 class DetectorParams(Image):
     """
-    Class containing detector parameters that may change over time
+    Class containing detector parameters that may change over time. 
+
+    To create a new instance of DetectorParams, you only need to pass in the values you would like to change from default values:
+        new_valid_date = astropy.time.Time("2027-01-01")
+        new_det_params = DetectorParams({'gmax' : 7500.0 }, date_valid=new_valid_date). 
 
     Args:
-        data_or_filepath (dict or str): either a filepath string or a dictionary of
-                                        parameters to modify from default values
+        data_or_filepath (dict or str): either a filepath string corresponding to an 
+                                        existing DetectorParams file saved to disk or a
+                                        dictionary of parameters to modify from default values
         date_valid (astropy.time.Time): date after which these parameters are valid
 
     Attributes:
@@ -1317,6 +1338,53 @@ class AstrometricCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
             raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
         
+class TrapCalibration(Image):
+    """
+
+    Class for data related to charge traps that cause charge transfer inefficiency. 
+    The calibration is generated by trap-pumped data. 
+
+    The format will be [n,10], where each entry will have: 
+    [row, column, sub-electrode location, index numnber of trap at this pixel/electrode, 
+    capture time constant, maximum amplitude of the dipole, energy level of hole, 
+    cross section for holes, R^2 value of fit, release time constant]
+
+     Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make the trap calibration
+    """
+    def __init__(self,data_or_filepath, pri_hdr=None,ext_hdr=None, input_dataset=None):
+        # run the image class constructor
+        super().__init__(data_or_filepath,pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        
+        # if this is a new calibration, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new cal
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new TrapCalibration. The dataset of input files needs to be "
+                                 "passed in to the input_dataset keyword to record history of this TrapCalibration.")
+            self.ext_hdr['DATATYPE'] = 'TrapCalibration' # corgidrp specific keyword for saving to disk
+
+            # log all the data that went into making this dark
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "TrapCalibration created from {0} frames".format(self.ext_hdr['DRPNFILE'])
+
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+            self.filename = "{0}_trapcal.fits".format(orig_input_filename)
+
+
+        # double check that this is actually a dark file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'TrapCalibration':
+            raise ValueError("File that was loaded was not a TrapCalibration file.")
+
 datatypes = { "Image" : Image,
              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -1325,7 +1393,8 @@ datatypes = { "Image" : Image,
               "DetectorNoiseMaps": DetectorNoiseMaps,
               "FlatField" : FlatField,
               "DetectorParams" : DetectorParams,
-              "AstrometricCalibration" : AstrometricCalibration }
+              "AstrometricCalibration" : AstrometricCalibration,
+              "TrapCalibration": TrapCalibration }
 
 def autoload(filepath):
     """
