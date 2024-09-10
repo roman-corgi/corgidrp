@@ -1150,11 +1150,16 @@ class DetectorNoiseMaps(Image):
 
 class DetectorParams(Image):
     """
-    Class containing detector parameters that may change over time
+    Class containing detector parameters that may change over time. 
+
+    To create a new instance of DetectorParams, you only need to pass in the values you would like to change from default values:
+        new_valid_date = astropy.time.Time("2027-01-01")
+        new_det_params = DetectorParams({'gmax' : 7500.0 }, date_valid=new_valid_date). 
 
     Args:
-        data_or_filepath (dict or str): either a filepath string or a dictionary of
-                                        parameters to modify from default values
+        data_or_filepath (dict or str): either a filepath string corresponding to an 
+                                        existing DetectorParams file saved to disk or a
+                                        dictionary of parameters to modify from default values
         date_valid (astropy.time.Time): date after which these parameters are valid
 
     Attributes:
