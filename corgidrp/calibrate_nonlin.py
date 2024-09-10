@@ -35,6 +35,8 @@ nonlin_params = {
      
     # minimum exposure time, s
     'min_exp_time': 0,
+
+    # histogram bin parameters; min_bin is in DN
     'num_bins': 50,
     'min_bin': 200,
      
