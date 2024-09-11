@@ -204,7 +204,7 @@ def test_nonlin_cal_e2e(
         raise ValueError('Non-linearity table from CORGI DRP has a different',
             'format than the one from TVAC')   
 
-    rel_out_tvac_perc = 100*(nonlin_out_table[1:]/nonlin_tvac_table[1:]-1)
+    rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:]-1)
 
     # Summary figure
     plt.figure(figsize=(10,6))
@@ -219,14 +219,13 @@ def test_nonlin_cal_e2e(
     plt.savefig(os.path.join(output_dir,nonlin_out_filename[:-5]))
     print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
         f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
-        f'rms={np.std(rel_out_tvac_perc):1.1ef} %')
+        f'rms={np.std(rel_out_tvac_perc):1.1e} %')
     print(f'Figure saved: {os.path.join(output_dir,nonlin_out_filename[:-5])}.png')
 
     # Set a quantitative test for the comparison (percentage)
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
-    # Print success message
+   # Print success message
     print('e2e test for NL passed')
-    breakpoint()
 
 if __name__ == "__main__":
 
