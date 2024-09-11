@@ -34,9 +34,9 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
 
     # define the raw science data to process
 
-    l1_data_filelist_same_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51841,51851)]#[51841, 51870]] # just grab some files of it
+    l1_data_filelist_same_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51841,51871)]#[51841, 51851]] # just grab some files of it
     print(l1_data_filelist_same_exp)
-    l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51761)]#[51731, 51840]]
+    l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51841)]#[51731, 51761]]
     print(l1_data_filelist_range_exp)
     l1_data_filelist = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51871)]
     mock_cal_filelist = [os.path.join(l1_datadir_nonlin, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in [51825, 55165]] # grab some real data to mock the calibration 
@@ -72,21 +72,11 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
         l1_data_filelist_range_exp.append(file)
 
     walker.walk_corgidrp(l1_data_filelist_range_exp, "", kgain_outputdir, template="l1_to_kgain.json")
-    #kgain_files = glob.glob(os.path.join(kgain_outputdir, "CGI*.fits"))
-    #kgain_files.sort()
-    #print (kgain_files)
-    #dataset_kgain = data.Dataset(kgain_files)
     kgain_file = os.path.join(kgain_outputdir, "CGI_EXCAM_L1_0000051731_kgain.fits")
     kgain = data.KGain(kgain_file)
     
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
-
-    #kgain = calibrate_kgain(dataset_kgain,
-    #                n_cal=3, n_mean=3, min_val=800, max_val=3000, binwidth=68,
-    #                make_plot=True,plot_outdir='figures', show_plot=True, 
-    #                logspace_start=-1, logspace_stop=4, logspace_num=200, 
-    #                verbose=True, detector_regions=None)
     
     ##### Check against TVAC kgain, readnoise
     new_kgain = kgain.value
@@ -101,8 +91,8 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     print ("error of kgain:", kgain.error)
     print ("error of  readnoise:", kgain.ext_hdr["RN_ERR"])
 
-    assert np.abs(diff_kgain) < 1
-    assert np.abs(diff_readnoise) < 25
+    assert np.abs(diff_kgain) < 0.1
+    assert np.abs(diff_readnoise) < 1
 
     
 if __name__ == "__main__":

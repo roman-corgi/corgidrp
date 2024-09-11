@@ -25,11 +25,8 @@
                 "NonLinearityCalibration" : "AUTOMATIC"
             }
         },
-		{   "name" : "calibrate_kgain",
-		    "keywords" : {
-		        "n_cal" : 3,
-				"n_mean" : 3
-		    }
+		{
+			"name" : "calibrate_kgain"
 		},
 		{
             "name" : "save"
