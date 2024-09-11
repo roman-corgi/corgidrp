@@ -9,6 +9,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -19,6 +20,9 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     l2a_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L2a")
     nonlin_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
+    dark_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "dark_current_20240322.fits")
+    fpn_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "fpn_20240322.fits")
+    cic_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "cic_20240322.fits")
 
     # make output directory if needed
     l2a_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_output")
@@ -51,12 +55,37 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(nonlinear_cal)
 
+
+    # NoiseMap
+    with fits.open(fpn_path) as hdulist:
+        fpn_dat = hdulist[0].data
+    with fits.open(cic_path) as hdulist:
+        cic_dat = hdulist[0].data
+    with fits.open(dark_path) as hdulist:
+        dark_dat = hdulist[0].data
+    noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_dat])
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
+    noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
+    noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
+    noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected EM electrons'
+    ext_hdr['B_O'] = 0
+    ext_hdr['B_O_ERR'] = 0
+    noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                    input_dataset=mock_input_dataset, err=noise_map_noise,
+                                    dq = noise_map_dq, err_hdr=err_hdr)
+    noise_map.save(filedir=l2a_outputdir, filename="mock_detnoisemaps.fits")
+    this_caldb.create_entry(noise_map)
+
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
 
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
+    this_caldb.remove_entry(noise_map)
 
     
     ##### Check against TVAC data
