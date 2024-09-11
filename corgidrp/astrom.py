@@ -187,12 +187,12 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
-def find_source_locations(image, threshold=100, fwhm=7, mask_rad=1):
+def find_source_locations(image_data, threshold=25, fwhm=7, mask_rad=1):
     ''' 
     Used to find to [pixel, pixel] locations of the sources in an image
     
     Args:
-        image (numpy.ndarray): 2D array of image data
+        image_data (numpy.ndarray): 2D array of image data
         threshold (int): Number of stars to find (default: 100)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
@@ -201,7 +201,8 @@ def find_source_locations(image, threshold=100, fwhm=7, mask_rad=1):
         sources (astropy.table.Table): Astropy table with columns 'x', 'y' as pixel locations
     
     '''
-    # create a place to store the location arrays
+    # create a place to store the location arrays and use a copy of the input image
+    image = np.copy(image_data)
     xs = np.empty(threshold) * np.nan
     ys = np.empty(threshold) * np.nan
     
@@ -209,7 +210,7 @@ def find_source_locations(image, threshold=100, fwhm=7, mask_rad=1):
         
     i = 0
     while i < threshold:
-        ind = np.where(image == np.max(image))
+        ind = np.where(image == np.nanmax(image))
         if len(ind) > 2:
             ind = ind[0:2]
 
@@ -286,7 +287,7 @@ def find_source_locations(image, threshold=100, fwhm=7, mask_rad=1):
     
     return sources
 
-def match_sources(image, sources, field_path, comparison_threshold=25, rad=0.02):
+def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.0075, plate_guess=(21.8, 0.5)):
     ''' 
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
@@ -296,6 +297,9 @@ def match_sources(image, sources, field_path, comparison_threshold=25, rad=0.02)
         field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
         comparison_threshold (int): How many stars in the field to consider for the initial match
         rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
+        plate_guess (tuple): 
+            (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
+            (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.5)
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
@@ -309,7 +313,7 @@ def match_sources(image, sources, field_path, comparison_threshold=25, rad=0.02)
     # gather the pixel locations for the (3) brightest sources in the image
     source1, source2, source3 = sources[0], sources[1], sources[2]
 
-    # define the side length to perimeter ratio for the triangle made from these sources
+    # define the side length to perimeter ratio for the triangle made from these sources [pixels]
     l1, l2, l3 = np.sqrt(np.power(source1['x'] - source2['x'], 2) + np.power(source1['y'] - source2['y'], 2)), np.sqrt(np.power(source2['x'] - source3['x'], 2) + np.power(source2['y'] - source3['y'], 2)), np.sqrt(np.power(source3['x'] - source1['x'], 2) + np.power(source3['y'] - source1['y'], 2))
     perimeter = l1 + l2 + l3
 
@@ -355,28 +359,33 @@ def match_sources(image, sources, field_path, comparison_threshold=25, rad=0.02)
         j, k, l = ind
         s1, s2, s3 = skycoords[j], skycoords[k], skycoords[l]
 
-        len1, len2, len3 = s1.separation(s2).value, s2.separation(s3).value, s3.separation(s1).value
+        len1, len2, len3 = np.sort([s1.separation(s2).value, s2.separation(s3).value, s3.separation(s1).value])
 
-        # sort from shortest to longest sides
-        if len1 < len2:
-            if len2 < len3:
-                len1, len2, len3 = len1, len2, len3
-            elif len3 < len1:
-                len1, len2, len3 = len3, len1, len2
-            else:
-                len1, len2, len3 = len1, len3, len2
-        else: 
-            if len1 < len3:
-                len1, len2, len3 = len2, len1, len3
-            elif len3 < len2:
-                len1, len2, len3  = len3, len2, len1
-            else:
-                len1, len2, len3 = len2, len3, len1
+        # # sort from shortest to longest sides
+        # if len1 < len2:
+        #     if len2 < len3:
+        #         len1, len2, len3 = len1, len2, len3
+        #     elif len3 < len1:
+        #         len1, len2, len3 = len3, len1, len2
+        #     else:
+        #         len1, len2, len3 = len1, len3, len2
+        # else: 
+        #     if len1 < len3:
+        #         len1, len2, len3 = len2, len1, len3
+        #     elif len3 < len2:
+        #         len1, len2, len3  = len3, len2, len1
+        #     else:
+        #         len1, len2, len3 = len2, len3, len1
 
         field_side_lengths[i] = np.array([len1, len2, len3])
-        
         perimeter = len1 + len2 + len3
         ap, bp, cp = len1/perimeter, len2/perimeter, len3/perimeter
+
+        # make sure plate scale is within tolerance of the guess or else discard this possibility
+        if ((len1 / l1) > plate_guess[0]* (1 + plate_guess[1])) or ((len2 / l2) > plate_guess[0]* (1 + plate_guess[1])) or ((len3 / l3) > plate_guess[0]* (1 + plate_guess[1])):
+            ap, bp, cp = 0, 0, 0
+        elif ((len1 / l1) < plate_guess[0]* (plate_guess[1])) or ((len2 / l2) < plate_guess[0]* (plate_guess[1])) or ((len3 / l3) < plate_guess[0]* (plate_guess[1])):
+            ap, bp, cp = 0, 0, 0
 
         # find the best fit to the brightest image triangle
         lstsq = (a - ap)**2 + (b - bp)**2 + (c - cp)**2
@@ -667,7 +676,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', threshold=100, fwhm=7, mask_rad=1, comparison_threshold=25):
+def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', threshold=25, fwhm=7, mask_rad=1, comparison_threshold=50):
     """
     Perform the boresight calibration of a dataset.
     
@@ -695,21 +704,22 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', thr
     astroms = []
 
     for i in range(len(dataset)):
+        in_dataset = corgidrp.data.Dataset([dataset[i]])
         image = dataset[i].data
 
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
 
-        found_sources = find_source_locations(image=image, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
+        found_sources = find_source_locations(image, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
         matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold)
 
         # compute the calibration properties
-        cal_properties = compute_platescale_and_northangle(image=image, source_info=matched_sources, center_coord=target_coordinate)
-        ra, dec = compute_boresight(image=image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
+        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate)
+        ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
 
         # return a single AstrometricCalibration data file
         astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1]])
-        astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=dataset)
+        astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=in_dataset)
         astroms.append(astrom_cal)
 
     # average the calibration properties over all frames
