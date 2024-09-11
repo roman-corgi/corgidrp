@@ -111,8 +111,8 @@ detector_areas= {
             },
         'prescan_reliable' : {
             'rows': 1200,
-            'cols': 201,
-            'r0c0': [0, 799]
+            'cols': 200,
+            'r0c0': [0, 800]
             },
         'parallel_overscan' : {
             'rows': 163,
