@@ -1,8 +1,8 @@
 """ Module to test the generation of the non-linearity calibration """
 import os
 import glob
-import pytest
 import argparse
+import pytest
 import numpy as np
 from astropy import time
 from astropy.io import fits
@@ -199,7 +199,7 @@ def test_nonlin_cal_e2e(
         f'rms={np.std(rel_out_tvac_perc):1.1e} %')
     print(f'Figure saved: {os.path.join(output_dir,nonlin_out_filename[:-5])}.png')
 
-    # Set a quantitative test for the comparison 
+    # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
    # Print success message
     print('e2e test for NL passed')
