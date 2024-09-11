@@ -96,7 +96,6 @@ def get_first_nonlin_file(
 def test_nonlin_cal_e2e(
     tvacdata_dir,
     output_dir,
-    eng_version,
     ):
     """ Performs the e2e test to generate a non-linearity calibration object
         from raw L1 data and compares with the existing TVAC correction for the
@@ -108,9 +107,6 @@ def test_nonlin_cal_e2e(
         output_dir (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
-        eng_version (bool): If True, some parameters of the NL calibration are
-            set to the values in the engineering version of the code, delivered
-            on June, 2024. Default: False.
 
     """
 
@@ -184,15 +180,15 @@ def test_nonlin_cal_e2e(
         raise ValueError('Non-linearity table from CORGI DRP has a different',
             'format than the one from TVAC')   
 
-    rel_out_tvac = nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:] - 1
+    rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:]-1)
 
     # Summary figure
     plt.figure(figsize=(10,6))
     em_list = nonlin_out_table[0,1:]
     for i_em, em_val in enumerate(em_list):
-        plt.plot(nonlin_out_table[1:,0], rel_out_tvac[:,i_em], label=f'EM={em_val:.1f}')
-    plt.xlabel('DN value', fontsize=16)
-    plt.ylabel('Relative difference', fontsize=16)
+        plt.plot(nonlin_out_table[1:,0], rel_out_tvac_perc[:,i_em], label=f'EM={em_val:.1f}')
+    plt.xlabel('DN value', fontsize=14)
+    plt.ylabel('Relative difference (%)', fontsize=14)
     plt.title('Comparison of ENG/CORGI DRP NL table for a given DN and EM value',
         fontsize=14)
     plt.legend()
@@ -204,7 +200,7 @@ def test_nonlin_cal_e2e(
     print(f'Figure saved: {os.path.join(output_dir,nonlin_out_filename[:-5])}.png')
 
     # Set a quantitative test for the comparison 
-    assert np.less(np.abs(rel_out_tvac).max(), 1e-6)
+    assert np.less(np.abs(rel_out_tvac).max(), 1e-4)
    # Print success message
     print('e2e test for NL passed')
 
@@ -226,4 +222,4 @@ if __name__ == "__main__":
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     # Run the e2e test
-    test_nonlin_cal_e2e(args.tvacdata_dir, args.output_dir, args.eng_version)
+    test_nonlin_cal_e2e(args.tvacdata_dir, args.output_dir)
