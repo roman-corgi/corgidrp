@@ -157,28 +157,8 @@ def test_nonlin_cal_e2e(
     nonlinear_cal.save(filedir=output_dir, filename="nonlin_tvac.fits" )
 
     # Run the walker on some test_data
-    if eng_version is False:
-        print('Running walker')
-        walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
-    else:
-        # Get the default recipe
-        recipe = walker.autogen_recipe(nonlin_l1_list, output_dir)
-        # Modify some keywords to compare with the engineering version from 6/24
-        idx_nl = -1
-        for step in range(len(recipe['steps'])):
-            if recipe['steps'][step]['name'] == 'calibrate_nonlin':
-                idx_nl = step
-        if idx_nl == -1:
-            raise KeyError('calibrate_nonlin is not found in the steps')
-        # Values from the engineering version (Guillermo Gonzalez/Tellus1)
-        if 'keywords' not in recipe['steps'][idx_nl]:
-            recipe['steps'][idx_nl]['keywords'] = {}
-        #recipe['steps'][idx_nl]['keywords']['norm_val'] = 2020
-        print('WARNING: implement parameter changes for the comparison')
-        breakpoint()
-        # Run the modified recipe
-        #print('Running walker with modified recipe')
-        walker.run_recipe(recipe, save_recipe_file=False)
+    print('Running walker')
+    walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
 
     # Compare results
     print('Comparing the results with TVAC')
@@ -244,9 +224,6 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--output_dir", default=OUTPUT_DIR,
                     help="directory to write results to [%(default)s]")
-    # TODO: Keep eng version or remove? This may be used in the ENG/CORGI DRP comparison
-    ap.add_argument("-eng", "--eng_version", default=False,
-                    help="Using same parameter values as in the enginnering version")
     args = ap.parse_args()
     # Run the e2e test
     test_nonlin_cal_e2e(args.tvacdata_dir, args.output_dir, args.eng_version)

@@ -10,7 +10,7 @@
         {
             "name" : "prescan_biassub",
               "keywords" : {
-                "return_full_frame" : false,
+                "return_full_frame" : true,
                 "detector_regions" : {
                     "SCI" : {
                         "frame_rows" : 1200,
