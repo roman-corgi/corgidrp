@@ -300,14 +300,16 @@ def em_gain_division(input_dataset):
 
     return emgain_dataset
 
-def cti_correction(input_dataset):
+def cti_correction(input_dataset, pump_trap_cal):
     """
 
     Apply the CTI correction to the dataset.
-    TODO: Establish the interaction with the CalDB for obtaining CTI correction calibrations
+
+    Currently a no-op step function. 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+        pump_trap_cal (corgidrp.data.TrapCalibration): Pump trap calibration file
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the CTI correction applied
