@@ -195,12 +195,12 @@ def test_nonlin_cal_e2e(
     plt.grid()
     plt.savefig(os.path.join(output_dir,nonlin_out_filename[:-5]))
     print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
-        f'max={np.abs(rel_out_tvac).max():1.1e} %, ' + 
-        f'rms={np.std(rel_out_tvac):1.1e} %')
+        f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
+        f'rms={np.std(rel_out_tvac_perc):1.1e} %')
     print(f'Figure saved: {os.path.join(output_dir,nonlin_out_filename[:-5])}.png')
 
     # Set a quantitative test for the comparison 
-    assert np.less(np.abs(rel_out_tvac).max(), 1e-4)
+    assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
    # Print success message
     print('e2e test for NL passed')
 
