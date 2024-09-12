@@ -63,7 +63,10 @@
             }
         },
         {
-            "name" : "cti_correction"
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
         },
         {
             "name" : "combine_subexposures",
