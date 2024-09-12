@@ -41,7 +41,7 @@ def test_astrom():
     assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
-    # check that the center is correct within 30 [mas]
+    # check that the center is correct within 3 [mas]
     # the simulated image should have no shift from the target
     target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
