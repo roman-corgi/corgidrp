@@ -94,27 +94,27 @@ def get_first_nonlin_file(
 
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
-    tvacdata_dir,
-    output_dir,
+    tvacdata_path,
+    e2eoutput_path,
     ):
     """ Performs the e2e test to generate a non-linearity calibration object
         from raw L1 data and compares with the existing TVAC correction for the
         same data.
 
         Args:
-        tvacdata_dir (str): Location of L1 data used to generate the non-linearity
+        tvacdata_path (str): Location of L1 data used to generate the non-linearity
             calibration.
-        output_dir (str): Location of the output products: recipe, non-linearity
+        e2eoutput_path (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
 
     """
 
     # figure out paths, assuming everything is located in the same relative location
-    nonlin_l1_datadir = os.path.join(tvacdata_dir,
+    nonlin_l1_datadir = os.path.join(tvacdata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
-    tvac_caldir = os.path.join(tvacdata_dir, 'TV-36_Coronagraphic_Data', 'Cals')
-    output_dir = os.path.join(output_dir, 'l1_to_l2a_output')
+    tvac_caldir = os.path.join(tvacdata_path, 'TV-36_Coronagraphic_Data', 'Cals')
+    e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_l2a_output')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
@@ -123,8 +123,8 @@ def test_nonlin_cal_e2e(
     if not os.path.exists(tvac_caldir):
         raise FileNotFoundError(f'Please store L1 calibration data in {tvac_caldir}')
 
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
+    if not os.path.exists(e2eoutput_path):
+        os.mkdir(e2eoutput_path)
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
@@ -150,11 +150,11 @@ def test_nonlin_cal_e2e(
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=output_dir, filename="nonlin_tvac.fits" )
+    nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits" )
 
     # Run the walker on some test_data
     print('Running walker')
-    walker.walk_corgidrp(nonlin_l1_list, '', output_dir)
+    walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path)
 
     # Compare results
     print('Comparing the results with TVAC')
@@ -165,13 +165,13 @@ def test_nonlin_cal_e2e(
         raise IOError('Data files must be FITS files')
     nonlin_out_filename = nonlin_out_filename[0:nonlin_out_filename.find('fits')-1]
     nonlin_out_filename += '_NonLinearityCalibration.fits'
-    nonlin_out = fits.open(os.path.join(output_dir, nonlin_out_filename))
+    nonlin_out = fits.open(os.path.join(e2eoutput_path, nonlin_out_filename))
     if nonlin_out[0].header['OBSTYPE'] != 'NONLIN':
         raise ValueError('Calibration type is not NL')
     nonlin_out_table = nonlin_out[1].data
 
     # NL from TVAC
-    nonlin_tvac = fits.open(os.path.join(output_dir,'nonlin_tvac.fits'))
+    nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check
@@ -193,11 +193,11 @@ def test_nonlin_cal_e2e(
         fontsize=14)
     plt.legend()
     plt.grid()
-    plt.savefig(os.path.join(output_dir,nonlin_out_filename[:-5]))
+    plt.savefig(os.path.join(e2eoutput_path,nonlin_out_filename[:-5]))
     print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
         f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
         f'rms={np.std(rel_out_tvac_perc):1.1e} %')
-    print(f'Figure saved: {os.path.join(output_dir,nonlin_out_filename[:-5])}.png')
+    print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_out_filename[:-5])}.png')
 
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
