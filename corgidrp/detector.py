@@ -113,7 +113,9 @@ detector_areas= {
         'prescan' : {
             'rows': 1200,
             'cols': 1088,
-            'r0c0': [0, 0]
+            'r0c0': [0, 0],
+            'col_start': 800,
+            'col_end': 1000,
             },
         'prescan_reliable' : {
             'rows': 1200,
@@ -142,7 +144,9 @@ detector_areas= {
         'prescan' : {
             'rows': 2200,
             'cols': 1088,
-            'r0c0': [0, 0]
+            'r0c0': [0, 0],
+            'col_start': 800,
+            'col_end': 1000,
             },
         'prescan_reliable' : {
             'rows': 2200,
@@ -254,6 +258,8 @@ def slice_section(frame, obstype, key, detector_regions=None):
     """
     Slice 2d section out of frame
 
+    Ported from II&T read_metadata.py
+
     Args:
         frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
         obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
@@ -273,6 +279,8 @@ def slice_section(frame, obstype, key, detector_regions=None):
     if section.size == 0:
         raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
     return section
+
+
 
 def unpack_geom(obstype, key, detector_regions=None):
     """Safely check format of geom sub-dictionary and return values.
