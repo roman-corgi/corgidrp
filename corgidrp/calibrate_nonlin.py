@@ -883,8 +883,11 @@ def nonlin_dataset_2_stack(dataset):
                 if record_gain:
                     try: # if EM gain measured directly from frame TODO change hdr name if necessary
                         gains.append(frame.ext_hdr['EMGAIN_M'])
-                    except: # use commanded gain otherwise
-                        gains.append(frame.ext_hdr['CMDGAIN'])
+                    except:
+                        try: # use applied EM gain if available
+                            gains.append(frame.ext_hdr['EMGAIN_A'])
+                        except: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['CMDGAIN'])
                     record_gain = False
         # First layer (array of unique EM values)
         stack.append(np.stack(sub_stack))
@@ -898,7 +901,7 @@ def nonlin_dataset_2_stack(dataset):
         raise Exception('Substacks must have at least one element')
     # Every EM gain must be greater than or equal to 1
     if np.any(np.array(split[1]) < 1):
-        raise Exception('Commanded EM gains must be greater than or equal to 1') 
+        raise Exception('Each set of frames categorized by commanded EM gains must be have 1 or more frames')
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
 

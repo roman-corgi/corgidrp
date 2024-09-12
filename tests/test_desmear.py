@@ -51,12 +51,20 @@ def test_desmear():
     
     assert type(dataset_smeared) == corgidrp.data.Dataset
 
+    # check the header keyword hasn't been toggled yet
+    for frame in dataset_smeared:
+        assert not frame.ext_hdr['DESMEAR']
+
     # Apply desmear correction
     dataset_desmear = desmear(dataset_smeared, detector_params)
 
     assert type(dataset_desmear) == corgidrp.data.Dataset
 
     assert(np.max(np.abs(dataset_desmear.all_data[0] - unsmeared_frame)) < tol)
+
+    # check the header keyword is toggled
+    for frame in dataset_desmear:
+        assert frame.ext_hdr['DESMEAR']
 
 if __name__ == '__main__':
     test_desmear()

@@ -1,9 +1,10 @@
 # A file that holds the functions that transmogrify l1 data to l2a data
-from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc
+from corgidrp.detector import get_relgains, slice_section, detector_areas, flag_cosmics, calc_sat_fwc, imaging_slice, imaging_area_geom
 import numpy as np
 import corgidrp.data as data
 
-def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, detector_regions=None):
+def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
+                    detector_regions=None, use_imaging_area = False):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
@@ -17,6 +18,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, det
             only the bias-subtracted image area. Defaults to False.
         detector_regions: (dict):  A dictionary of detector geometry properties.
             Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        use_imaging_area (bool): flag indicating whether to use the imaging area (like in the trap pump code) or use the defualt (equivalent to EMCCDFrame)
 
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
@@ -49,24 +51,39 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, det
                 raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG' or 'ENG_EM' or 'EMG_CONV'")
 
         # Get the reliable prescan area
-        prescan = slice_section(frame_data, obstype, 'prescan_reliable', detector_regions)
+        prescan = slice_section(frame_data, obstype, 'prescan', detector_regions=detector_regions)
 
         if not return_full_frame:
             # Get the image area
-            image_data = slice_section(frame_data, obstype, 'image', detector_regions)
-            image_dq = slice_section(frame_dq, obstype, 'image', detector_regions)
+            if use_imaging_area: 
+                image_data = imaging_slice(obstype, frame_data, detector_regions=detector_regions)
+                image_dq = imaging_slice(obstype, frame_dq, detector_regions=detector_regions)
 
-            # Special treatment for 3D error array
-            image_err = []
-            for err_slice in frame_err:
-                image_err.append(slice_section(err_slice, obstype, 'image', detector_regions))
-            image_err = np.array(image_err)
+                image_err = []
+                for err_slice in frame_err:
+                    image_err.append(imaging_slice(obstype, err_slice, detector_regions=detector_regions))
+                image_err = np.array(image_err)
 
-            # Get the part of the prescan that lines up with the image
-            i_r0 = detector_areas[obstype]['image']['r0c0'][0]
-            p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
-            i_nrow = detector_areas[obstype]['image']['rows']
-            al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
+                prows, _, r0c0 = imaging_area_geom(obstype,detector_regions=detector_regions)
+                i_r0 = r0c0[0]
+                p_r0 = detector_regions[obstype]['prescan']['r0c0'][0]
+                al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
+
+            else: 
+                image_data = slice_section(frame_data, obstype, 'image', detector_regions)
+                image_dq = slice_section(frame_dq, obstype, 'image', detector_regions)
+
+                # Special treatment for 3D error array
+                image_err = []
+                for err_slice in frame_err:
+                    image_err.append(slice_section(err_slice, obstype, 'image', detector_regions))
+                image_err = np.array(image_err)
+
+                # Get the part of the prescan that lines up with the image
+                i_r0 = detector_areas[obstype]['image']['r0c0'][0]
+                p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
+                i_nrow = detector_areas[obstype]['image']['rows']
+                al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
 
         else:
             # Use full frame
@@ -81,9 +98,12 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, det
 
             al_prescan = prescan
 
+        st = detector_regions[obstype]['prescan']['col_start']
+        end = detector_regions[obstype]['prescan']['col_end']
+
         # Measure bias and error (standard error of the median for each row, add this to 3D image array)
-        medbyrow = np.median(al_prescan, axis=1)[:, np.newaxis]
-        sterrbyrow = np.std(al_prescan, axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan.shape[1])
+        medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
+        sterrbyrow = np.std(al_prescan[:,st:end], axis=1)[:, np.newaxis] * np.ones_like(image_data) / np.sqrt(al_prescan[:,st:end].shape[1])
         if noise_maps is not None:
             bias_offset = noise_maps.bias_offset
             bias_offset_err = noise_maps.bias_offset_err
@@ -186,7 +206,17 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
 
     # Calculate the full well capacity for every frame in the dataset
     kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
-    emgain_arr = np.array([frame.ext_hdr['CMDGAIN'] for frame in crmasked_dataset])
+    emgain_list = []
+    for frame in crmasked_dataset:
+        try: # use measured gain if available TODO change hdr name if necessary
+            emgain = frame.ext_hdr['EMGAIN_M']
+        except:
+            try: # use applied EM gain if available
+                emgain = frame.ext_hdr['EMGAIN_A']
+            except: # otherwise use commanded EM gain
+                emgain = frame.ext_hdr['CMDGAIN']
+        emgain_list.append(emgain)
+    emgain_arr = np.array(emgain_list)
     fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
     fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
 
@@ -257,9 +287,14 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
     if "CMDGAIN" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
-    em_gain = linearized_dataset[0].ext_hdr["CMDGAIN"] #NOTE THIS REQUIRES THAT THE EM GAIN IS MEASURED ALREADY
-
     for i in range(linearized_cube.shape[0]):
+        try: # use measured gain if available TODO change hdr name if necessary
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
+            try: # use applied EM gain if available
+                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+            except: # otherwise use commanded EM gain
+                em_gain = linearized_dataset[i].ext_hdr["CMDGAIN"]
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
 
     history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
