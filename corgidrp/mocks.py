@@ -827,7 +827,7 @@ def make_fluxmap_image(
     Returns:
         corgidrp.data.Image
     """
-    # Generate random values of rn in elecrons from a Gaussian distribution
+    # Generate random values of rn in electrons from a Gaussian distribution
     random_array = np.random.normal(0, rn, (1200, 2200)) # e-
     # Generate random values from fluxmap from a Poisson distribution
     Poiss_noise_arr = emgain*np.random.poisson(time*f_map) # e-
