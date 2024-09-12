@@ -139,7 +139,7 @@ def test_nonlin_cal_e2e(
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_table_from_eng = 'nonlin_table_091024_GG.txt'
+    nonlin_table_from_eng = 'nonlin_table_091224.txt'
     nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,nonlin_table_from_eng),
         delimiter=",")
     pri_hdr, ext_hdr = mocks.create_default_headers()
