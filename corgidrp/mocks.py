@@ -11,6 +11,7 @@ from corgidrp.data import Image
 import corgidrp.detector as detector
 import photutils.centroids as centr
 from corgidrp.detector import imaging_area_geom, unpack_geom
+from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
@@ -22,33 +23,37 @@ from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
 
 detector_areas_test= {
 'SCI' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
-        'frame_rows' : 120,
-        'frame_cols' : 220,
-        'image' : {
+        'frame_rows': 120, 
+        'frame_cols': 220,
+        'image': {
             'rows': 104,
             'cols': 105,
             'r0c0': [2, 108]
             },
-        'prescan' : {
+        'prescan_reliable': {
             'rows': 120,
             'cols': 108,
-            'r0c0': [0, 0]
-            },
-        'prescan_reliable' : {
+            'r0c0': [0, 0],
+            'col_start': 0, #10
+            'col_end': 108, #100
+        },        
+        'prescan': {
             'rows': 120,
             'cols': 108,
-            'r0c0': [0, 0]
-            },
-        'parallel_overscan' : {
-            'rows': 14,
-            'cols': 107,
-            'r0c0': [106, 108]
-            },
-        'serial_overscan' : {
+            'r0c0': [0, 0],
+            'col_start': 0, #10
+            'col_end': 108, #100
+        }, 
+        'serial_overscan': {
             'rows': 120,
             'cols': 5,
             'r0c0': [0, 215]
-            },
+        },
+        'parallel_overscan': {
+            'rows': 14,
+            'cols': 107,
+            'r0c0': [106, 108]
+        }
         },
 'ENG' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
         'frame_rows' : 220,
@@ -472,15 +477,22 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])
-        data_range = np.linspace(10,65536,size)
+        data_range = np.linspace(800,65536,size)
         # Generate data for each row, where the mean increase from 10 to 65536
         for x in range(size):
-            np.random.seed(123+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
+            np.random.seed(120+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
 
         non_linearity_correction = data.NonLinearityCalibration(nonlin_filepath)
 
-        #Apply the non-linearity to the data. When we correct we multiply, here when we simulate we divide
-        sim_data /= detector.get_relgains(sim_data,em_gain,non_linearity_correction)
+        #Apply the non-linearity to the data. When we correct we multiple, here when we simulate we divide
+        #This is a bit tricky because when we correct the get_relgains function takes the current state of 
+        # the data as input, which when actually used will be the non-linear data. Here we try to get close 
+        # to that by calculating the relative gains after applying the relative gains one time. This won't be 
+        # perfect, but it'll be closer than just dividing by the straight simulated data. 
+
+        sim_data_tmp = sim_data/detector.get_relgains(sim_data,em_gain,non_linearity_correction)
+
+        sim_data /= detector.get_relgains(sim_data_tmp,em_gain,non_linearity_correction)
 
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
@@ -986,216 +998,6 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
     dataset = data.Dataset(frames)
 
     return dataset
-
-def P1(time_data, offset, tauc, tau, num_pumps = 10000):
-    """
-    Probability function 1, one trap.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args: 
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
-        np.exp(-2*time_data/tau)))
-
-def P1_P1(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 10000):
-    """
-    Probability function 1, two traps.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args: 
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        tauc2 (float): tauc2
-        tau2 (float): tau2
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    pc2 = 1 - np.exp(-time_data/tauc2)
-    return offset+num_pumps*pc*(np.exp(-time_data/tau)-
-        np.exp(-2*time_data/tau))+ \
-        num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-2*time_data/tau2))
-
-def P2(time_data, offset, tauc, tau, num_pumps = 10000):
-    """
-    Probability function 2, one trap.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    return offset+(num_pumps*pc*(np.exp(-2*time_data/tau)-
-        np.exp(-3*time_data/tau)))
-
-def P1_P2(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 10000):
-    """
-    One trap for probability function 1, one for probability function 2.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        tauc2 (float): tauc2
-        tau2 (float): tau2
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    pc2 = 1 - np.exp(-time_data/tauc2)
-    return offset+num_pumps*pc*(np.exp(-time_data/tau)-
-        np.exp(-2*time_data/tau))+ \
-        num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
-
-def P2_P2(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 10000):
-    """
-    Probability function 2, two traps.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        tauc2 (float): tauc2
-        tau2 (float): tau2
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    pc2 = 1 - np.exp(-time_data/tauc2)
-    return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
-        np.exp(-3*time_data/tau))+ \
-        num_pumps*pc2*(np.exp(-2*time_data/tau2)-np.exp(-3*time_data/tau2))
-
-def P3(time_data, offset, tauc, tau, num_pumps = 10000):
-    """
-    Probability function 3, one trap.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    return offset+(num_pumps*pc*(np.exp(-time_data/tau)-
-        np.exp(-4*time_data/tau)))
-
-def P3_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 10000):
-    """
-    Probability function 3, two traps.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        tauc2 (float): tauc2
-        tau2 (float): tau2
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    pc2 = 1 - np.exp(-time_data/tauc2)
-    return offset+num_pumps*pc*(np.exp(-time_data/tau)-
-        np.exp(-4*time_data/tau))+ \
-        num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
-
-def P2_P3(time_data, offset, tauc, tau, tauc2, tau2, num_pumps = 10000):
-    """
-    One trap for probability function 2, one for probability function 3.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        time_data (np.array): time data
-        offset (float): offset
-        tauc (float): tauc
-        tau (float): tau
-        tauc2 (float): tauc2
-        tau2 (float): tau2
-        num_pumps (int): number of pumps
-
-    Returns:
-        np.array: probability function
-    """
-    pc = 1 - np.exp(-time_data/tauc)
-    pc2 = 1 - np.exp(-time_data/tauc2)
-    return offset+num_pumps*pc*(np.exp(-2*time_data/tau)-
-        np.exp(-3*time_data/tau))+ \
-        num_pumps*pc2*(np.exp(-time_data/tau2)-np.exp(-4*time_data/tau2))
-
-def tau_temp(temp_data, E, cs):
-    """
-    Calculate tau as a function of temperature.
-
-    Ported from ut_trap_fitting.py in the II&T Pipeline
-
-    Args:
-        temp_data (np.array): temperature data
-        E (float): E
-        cs (float): cs
-
-    Returns:
-        np.array: tau
-    """
-    k = 8.6173e-5 # eV/K
-    kb = 1.381e-23 # mks units
-    hconst = 6.626e-34 # mks units
-    Eg = 1.1692 - (4.9e-4)*temp_data**2/(temp_data+655)
-    me = 9.109e-31 # kg
-    mlstar = 0.1963 * me
-    mtstar = 0.1905 * 1.1692 * me / Eg
-    mstardc = 6**(2/3) * (mtstar**2*mlstar)**(1/3)
-    vth = np.sqrt(3*kb*temp_data/mstardc) # m/s
-    Nc = 2*(2*np.pi*mstardc*kb*temp_data/(hconst**2))**1.5 # 1/m^3
-    # added a factor of 1e-19 so that curve_fit step size reasonable
-    return np.e**(E/(k*temp_data))/(cs*Nc*vth*1e-19)
-
-
 
 def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10, 
                                  read_noise = 100, eperdn = 6, e2emode=False, 
@@ -2175,30 +1977,30 @@ def generate_mock_pump_trap_data2(output_dir,meta_path, nonlin_path=None):
     amps2_mean_field = {}
     amps11 = {}; amps12 = {}; amps22 = {}; amps23 = {}; amps33 = {}; amps21 ={}
     for i in temp_data:
-        amps1[i] = offset_u + g*P1(time_data_s, 0, tauc, taus[i])/eperdn
+        amps1[i] = offset_u + g*P1(time_data_s, 0, tauc, taus[i], num_pumps=num_pumps)/eperdn
         amps11[i] = offset_u + g*P1_P1(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i])/eperdn
-        amps2[i] = offset_u + g*P2(time_data_s, 0, tauc, taus[i])/eperdn
+            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
+        amps2[i] = offset_u + g*P2(time_data_s, 0, tauc, taus[i], num_pumps=num_pumps)/eperdn
         amps12[i] = offset_u + g*P1_P2(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i])/eperdn
+            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
         amps22[i] = offset_u + g*P2_P2(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i])/eperdn
-        amps3[i] = offset_u + g*P3(time_data_s, 0, tauc, taus[i])/eperdn
+            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
+        amps3[i] = offset_u + g*P3(time_data_s, 0, tauc, taus[i], num_pumps=num_pumps)/eperdn
         amps33[i] = offset_u + g*P3_P3(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i])/eperdn
+            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
         amps23[i] = offset_u + g*P2_P3(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i])/eperdn
+            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
         # just for (98,33)
         amps21[i] =  offset_u + g*P1_P2(time_data_s, 0, tauc2, taus2[i],
-            tauc, taus[i])/eperdn
+            tauc, taus[i], num_pumps=num_pumps)/eperdn
         # now a special amps just for ensuring good eperdn determination
         # actually, doesn't usually meet trap_id thresh, but no harm
         # including it
-        amps1_k[i] = offset_u + g*P1(time_data_s, 0, tauc3, taus3[i])/eperdn
+        amps1_k[i] = offset_u + g*P1(time_data_s, 0, tauc3, taus3[i], num_pumps=num_pumps)/eperdn
         # for the case of (89,2) with a single trap with tau2
-        amps1_tau2[i] = offset_u + g*P1(time_data_s, 0, tauc2, taus2[i])/eperdn
+        amps1_tau2[i] = offset_u + g*P1(time_data_s, 0, tauc2, taus2[i], num_pumps=num_pumps)/eperdn
         # for the case of (77,90) with a single trap with tau2
-        amps3_tau2[i] = offset_u + g*P3(time_data_s, 0, tauc2, taus2[i])/eperdn
+        amps3_tau2[i] = offset_u + g*P3(time_data_s, 0, tauc2, taus2[i], num_pumps=num_pumps)/eperdn
         #amps1_k[i] = g*2500/eperdn
         # make a trap for the mean_field test (when mean field=400e- < 2500e-)
         #this trap peaks at 250 e-

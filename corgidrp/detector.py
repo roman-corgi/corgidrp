@@ -281,38 +281,6 @@ def slice_section(frame, obstype, key, detector_regions=None):
     return section
 
 
-def imaging_area_geometry(obstype='SCI',detector_regions=None):
-    """
-    
-    Return geometry of imaging area in reference to full frame.
-    
-    Ported from II&T
-
-    Args: 
-        obstype (str): Either 'SCI' or 'ENG'
-        detector_regions (dict): a dictionary of detector geometry properties. 
-
-    Returns: 
-        rows_im (int): Number of rows of imaging area
-        cols_im (int): Number of columns of imaging area
-        r0c0_im (tuple): Tuple of (row position, column position) of corner closest to (0,0)
-
-    """
-
-    if detector_regions is None:
-            detector_regions = detector_areas
-
-    _, cols_pre, _ = unpack_geom(obstype,'prescan', detector_regions = detector_regions)
-    _, cols_serial_ovr, _ = unpack_geom(obstype,'serial_overscan', detector_regions = detector_regions)
-    rows_parallel_ovr, _, _ = unpack_geom(obstype,'parallel_overscan', detector_regions = detector_regions)
-    fluxmap_rows, _, r0c0_image = unpack_geom(obstype,'image', detector_regions = detector_regions)
-
-    rows_im = detector_areas[obstype]['frame_rows'] - rows_parallel_ovr
-    cols_im = detector_areas[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
-    r0c0_im = r0c0_image.copy()
-    r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
-
-    return rows_im, cols_im, r0c0_im
 
 def unpack_geom(obstype, key, detector_regions=None):
     """Safely check format of geom sub-dictionary and return values.

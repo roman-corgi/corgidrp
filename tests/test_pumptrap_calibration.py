@@ -1,8 +1,9 @@
 import os
 import glob
 import numpy as np
-from corgidrp.mocks import generate_mock_pump_trap_data
-from corgidrp.detector import imaging_area_geometry
+# from corgidrp.mocks import generate_mock_pump_trap_data
+import corgidrp.mocks as mocks
+from corgidrp.detector import imaging_area_geom
 from corgidrp.data import Dataset
 from corgidrp.l1_to_l2a import prescan_biassub
 from corgidrp.l2a_to_l2b import em_gain_division
@@ -69,46 +70,9 @@ def test_tpump_analysis():
     # arrtype = pump_trap_dataset[0].ext_hdr['ARRTYPE']
 
     #Detector regions for the smaller pump_trap_data - taken from metadata_test.yaml
-    detector_regions = {
-        arrtype : {
-            'frame_rows': 120, 
-            'frame_cols': 220,
-            'image': {
-                'rows': 104,
-                'cols': 105,
-                'r0c0': [2, 108]
-                },
-            'prescan_reliable': {
-                'rows': 120,
-                'cols': 108,
-                'r0c0': [0, 0],
-                'col_start': 0, #10
-                'col_end': 108, #100
-            },        
-            'prescan': {
-                'rows': 120,
-                'cols': 108,
-                'r0c0': [0, 0],
-                'col_start': 0, #10
-                'col_end': 108, #100
-            }, 
-            'serial_overscan': {
-                'rows': 120,
-                'cols': 5,
-                'r0c0': [0, 215]
-            },
-            'parallel_overscan': {
-                'rows': 14,
-                'cols': 107,
-                'r0c0': [106, 108]
-            }
-            },
-        }
 
     #Subtract the prescane Bias
-    bias_subbed_dataset = prescan_biassub(pump_trap_dataset, detector_regions=detector_regions,use_imaging_area=True)
-
-    bias_subbed_dataset[0].save(filedir = "./", filename="bias_subbed_dataset_file0.fits")
+    bias_subbed_dataset = prescan_biassub(pump_trap_dataset, detector_regions=mocks.detector_areas_test,use_imaging_area=True)
 
     ## Note the data were not generated with non-linearity
     #Correct for non-linearity - use the fits file derived from nonlin_sample.csv
@@ -118,8 +82,6 @@ def test_tpump_analysis():
 
     #Divide by EM gain
     emgain_divided_dataset = em_gain_division(bias_subbed_dataset)
-
-    emgain_divided_dataset[0].save(filedir = "./", filename = "emgain_divided_dataset_file0.fits")
 
     #Done preliminary data processing. Now running the tpump_analysis
 
@@ -216,7 +178,7 @@ def test_tpump_analysis():
             assert(np.isclose(trap_dict[t2]['tau at input T'], tau_temp(input_T, trap_dict_E[i][0], trap_dict_cs[i][0]*1e15), rtol = 0.1) or np.isclose(trap_dict[t2]['tau at input T'], tau_temp(input_T, trap_dict_E[i][1], trap_dict_cs[i][1]*1e15), rtol = 0.1))
                 
 
-    nrows, ncols, _ = imaging_area_geometry()
+    nrows, ncols, _ = imaging_area_geom('SCI')
     assert(len(trap_densities) == 2)
 
     for tr in trap_densities:
