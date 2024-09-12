@@ -905,7 +905,7 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
                 # finding optimal matchings of schemes for sub-el loc; if
                 #no particular assignment is better at that point, then the
                 #assignment doesn't matter
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P1 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(2)
                 #P1 for tau2
@@ -930,7 +930,7 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P1 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(2)
                 #P2 for tau2
@@ -955,7 +955,7 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P2 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(3/2)
                 #P2 for tau2
@@ -1133,7 +1133,7 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P3 for tau
                 a_tau = t_a[max_a_ind[0]]/(2*np.log(2)/3)
                 #P3 for tau2
@@ -1158,7 +1158,7 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P2 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(3/2)
                 #P3 for tau2
@@ -1183,7 +1183,7 @@ def trap_fit(scheme, amps, times, num_pumps, fit_thresh, tau_min, tau_max,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P2 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(3/2)
                 #P2 for tau2
@@ -1696,7 +1696,7 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
                 # points to make it out), then I could look at the
                 # complementary probability functions in the corresponding
                 #deficit pixels and curve fit those
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P1 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(2)
                 #P1 for tau2
