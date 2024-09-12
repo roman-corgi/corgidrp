@@ -299,7 +299,9 @@ def trap_id(cor_img_stack, ill_corr_min, ill_corr_max, timings, thresh_factor,
         IS_DIPOLE_UPPER.append((frame > (np.median(frame) +
                 np.std(frame)*thresh_factor)).astype(int))
         IS_DIPOLE_LOWER.append((frame < (np.median(frame) -
-                np.std(frame)*thresh_factor)).astype(int))
+                np.std(frame)*thresh_factor)).astype(int))  
+        # IS_DIPOLE_UPPER.append((frame > (np.percentile(frame, 100-thresh_factor))).astype(int))
+        # IS_DIPOLE_LOWER.append((frame < (np.percentile(frame, thresh_factor))).astype(int))
     IS_DIPOLE_UPPER = np.stack(IS_DIPOLE_UPPER)
     IS_DIPOLE_LOWER = np.stack(IS_DIPOLE_LOWER)
 
@@ -1714,7 +1716,7 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P1 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(2)
                 #P2 for tau2
@@ -1739,7 +1741,7 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P2 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(3/2)
                 #P2 for tau2
@@ -1917,7 +1919,7 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P3 for tau
                 a_tau = t_a[max_a_ind[0]]/(2*np.log(2)/3)
                 #P3 for tau2
@@ -1942,7 +1944,7 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P2 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(3/2)
                 #P3 for tau2
@@ -1967,7 +1969,7 @@ def trap_fit_const(scheme, amps, times, num_pumps, fit_thresh, tau_min,
             if both_a != None:
                 amp_a = both_a['amp']
                 t_a = both_a['t']
-                max_a_ind = np.where(amp_a == np.max(amp_a))
+                max_a_ind = np.where(amp_a == np.max(amp_a))[0]
                 #P2 for tau
                 a_tau = t_a[max_a_ind[0]]/np.log(3/2)
                 #P2 for tau2
@@ -2178,7 +2180,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
     Args:
         input_dataset (corgi.drp.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames, sorted according to temperature and pumping scheme.
         time_head (str): Keyword corresponding to phase time for each FITS file. The keyword value is assumed to be a float (units of microseconds). Defaults to 'TPTAU'.
-        mean_field (float, optional): The mean electron level that was present in each pixel before trap pumping was performed (excluding EM gain). Only useful if the mean level is less than 2500 e-. If 2500 e- or higher, use None.
+        mean_field (float, optional): The mean electron level that was present in each pixel before trap pumping was performed (excluding EM gain). Only useful if the mean level is less than num_pumps/4 e-. If num_pumps/4 e- or higher, use None.
         length_lim (int, optional): Minimum number of frames for which a dipole needs to meet the threshold to be considered a true trap. Defaults to 6.
         thresh_factor (float, optional): Number of standard deviations from the mean a dipole should stand out to be considered for a trap. Defaults to 3.
         k_prob (int, optional): The probability function used for finding the e-/DN factor. Defaults to 1.
@@ -2432,7 +2434,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
                     prob_factor_eperdn = 1/4
                 if k_prob == 2:
                     prob_factor_eperdn = 4/27
-                # if mean e- per pixel is lower than 2500e-, than max amp
+                # if mean e- per pixel is lower than num_pumps/4, then max amp
                 # is that mean e- per pixel amount
                 if mean_field is not None:
                     max_e = min(num_pumps*1*prob_factor_eperdn, mean_field)
@@ -3279,3 +3281,40 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
                     input_dataset=input_dataset)
     
     return trapcal
+
+def rebuild_dict(trap_pump_array):
+        '''
+        Partially rebuild the trap_dictionary from the trap_pump_array to help with testing
+
+        Args:
+            trap_pump_array: array of trap_pump objects
+        
+        Returns:
+            trap_dict: dictionary of trap_pump objects
+
+        '''
+        trap_dict = {}
+
+        electrode_dict = {"LHS": 10, 
+                        "CEN": 20,
+                        "RHS": 30}
+        
+        electrode_dict_inverse = {10: "LHS",
+                                20: "CEN",
+                                30: "RHS"}
+        
+        
+        for trap_pump in trap_pump_array:
+            electrode_key = int(((trap_pump[2] // 10) % 10)*10)
+            electrode_number = int(trap_pump[2] % 10)
+            electrode_string = electrode_dict_inverse[electrode_key]+"el"+str(electrode_number)
+            key = ((trap_pump[0],trap_pump[1]), electrode_string, int(trap_pump[3]))
+            
+            trap_dict[key] = {}
+            trap_dict[key]['cap']  = [trap_pump[4], 0, trap_pump[5]] #Add the error in to keep the expected dimensions
+            trap_dict[key]['E'] = trap_pump[6]
+            trap_dict[key]['cs'] = trap_pump[7]
+            trap_dict[key]['Rsq'] = trap_pump[8]
+            trap_dict[key]['tau at input T'] = trap_pump[9]
+
+        return trap_dict

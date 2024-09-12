@@ -7,6 +7,7 @@ import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.pump_trap_calibration
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -22,7 +23,8 @@ all_steps = {
     "cti_correction" : corgidrp.l2a_to_l2b.cti_correction,
     "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
     "desmear" : corgidrp.l2a_to_l2b.desmear,
-    "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b
+    "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
+    "calibrate_trap_pump": corgidrp.pump_trap_calibration.tpump_analysis
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")

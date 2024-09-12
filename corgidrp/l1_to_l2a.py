@@ -13,7 +13,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L1a-level)
         noise_maps (corgidrp.data.DetectorNoiseMaps): the bias offset (an offset value to be subtracted from the bias) is extracted from this calibration class instance.
-        If None, a default value of 0 is used with for the bias offset and its error.
+        If None, a default value of 0 is used for the bias offset and its error.
         return_full_frame (bool): flag indicating whether to return the full frame or
             only the bias-subtracted image area. Defaults to False.
         detector_regions: (dict):  A dictionary of detector geometry properties.
@@ -50,6 +50,8 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         if not obstype in ['SCI','ENG','ENG_EM','ENG_CONV'] :
                 raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG' or 'ENG_EM' or 'EMG_CONV'")
 
+        if detector_regions[obstype]['frame_rows'] != frame_data.shape[0] or detector_regions[obstype]['frame_cols'] != frame_data.shape[1]:
+            raise Exception('Frame size incompatible with specified detector_regions.')
         # Get the reliable prescan area
         prescan = slice_section(frame_data, obstype, 'prescan', detector_regions=detector_regions)
 
