@@ -1038,13 +1038,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     nrows, ncols, _ = meta._unpack_geom('image')
     #EM gain
     g = EMgain
-    cic = .02 #.02*num_pumps/512
+    cic = 200  
     rn = read_noise 
     dc = {180: 0.163, 190: 0.243, 200: 0.323, 210: 0.403,
           220: 0.483}
     # dc = {180: 0, 190: 0, 195: 0, 200: 0, 210: 0, 220: 0}
     bias = 1000 
     inj_charge = 500 # 0
+    full_well_image=50000.  # e-
+    full_well_serial=50000.
     # trap-pumping done when CGI is secondary instrument (i.e., dark):
     fluxmap = np.zeros((nrows, ncols))
     # frametime for pumped frames: 1000ms, or 1 s
@@ -1053,12 +1055,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     later_eperdn = eperdn
     if e2emode: 
         eperdn = 1
-        num_pumps = 70000#15000#5000
-        inj_charge = 35000#8000 #num_pumps/2 # always more than 10000/4, so no  mean_field input needed #2500
+        cic = 0.02
+        num_pumps = 50000#120000#90000#15000#5000
+        inj_charge = 25000#31000#70000#45000#8000 #num_pumps/2 # always more than 10000/4, so no  mean_field input needed #2500
         multiple = 1
         g = 1
         rn = 0
         bias = 0
+        full_well_image=105000.  # e-
+        full_well_serial=105000.
     bias_dn = bias/eperdn
     nbits = 14 #1
     
@@ -1118,8 +1123,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     #180K: gain of 10-20
     emccd[180] = EMCCDDetect(
             em_gain=g,#10,
-            full_well_image=100000.,  # e-
-            full_well_serial=100000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[180], #0.163,  # e-/pix/s
             cic=cic, # e-/pix/frame; lots of CIC from all the prep clocking
             read_noise=rn,  # e-/pix/frame
@@ -1135,8 +1140,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     #190K: gain of 10-20
     emccd[190] = EMCCDDetect(
             em_gain=g,#10,
-            full_well_image=100000.,  # e-
-            full_well_serial=100000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current= dc[190],#0.243,  # e-/pix/s
             cic=cic, # e-/pix/frame
             read_noise=rn,  # e-/pix/frame
@@ -1169,8 +1174,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     #200K: gain of 10-20
     emccd[200] = EMCCDDetect(
             em_gain=g,#10,
-            full_well_image=100000.,  # e-
-            full_well_serial=100000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[200], #0.323,  # e-/pix/s
             cic=cic, # e-/pix/frame
             read_noise=rn,  # e-/pix/frame
@@ -1186,8 +1191,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     #210K: gain of 10-20
     emccd[210] = EMCCDDetect(
             em_gain=g, #10,
-            full_well_image=100000.,  # e-
-            full_well_serial=100000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[210], #0.403,  # e-/pix/s
             cic=cic, # e-/pix/frame
             read_noise=rn,  # e-/pix/frame
@@ -1203,8 +1208,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     #220K: gain of 10-20
     emccd[220] = EMCCDDetect(
             em_gain=g, #10,
-            full_well_image=100000.,  # e-
-            full_well_serial=100000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[220], #0.483,  # e-/pix/s
             cic=cic, # e-/pix/frame; divide by 15 to get the same 1000
             read_noise=rn,  # e-/pix/frame
@@ -1360,10 +1365,9 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 print(neg_inds[0].size)
                 pass
             region[neg_inds[0]] = 0
-            img_stack[start:end,r0c0[0]+row,r0c0[1]+col][good_inds[0]] += amps_1_trap[prob][temp][start:end][good_inds[0]]
-            img_stack[start:end,r0c0[0]+row,r0c0[1]+col][neg_inds[0]] += region_c[neg_inds[0]]
-            #img_stack[good_inds[0],r0c0[0]+row,r0c0[1]+col] += amps_1_trap[prob][temp][good_inds[0]]
-            #img_stack[neg_inds[0],r0c0[0]+row,r0c0[1]+col] += region_c[neg_inds[0]]
+            # img_stack[start:end,r0c0[0]+row,r0c0[1]+col][good_inds[0]] += amps_1_trap[prob][temp][start:end][good_inds[0]]
+            # img_stack[start:end,r0c0[0]+row,r0c0[1]+col][neg_inds[0]] += region_c[neg_inds[0]]
+            img_stack[: ,r0c0[0]+row,r0c0[1]+col] += amps_1_trap[prob][temp][:] 
         else:
             img_stack[: ,r0c0[0]+row,r0c0[1]+col] += amps_1_trap[prob][temp][:]
 
@@ -1426,10 +1430,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 pass
             good_inds1 = np.where(region1 >= 0)
             region1[neg_inds1] = 0
-            img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][good_inds1[0]] += amps_2_trap[prob][temp][start1:end1][good_inds1[0]]
-            img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][neg_inds1[0]] += region1_c[neg_inds1[0]]
-            # img_stack[good_inds1[0],r0c0[0]+row,r0c0[1]+col] += amps_2_trap[prob][temp][good_inds1[0]]
-            # img_stack[neg_inds1[0],r0c0[0]+row,r0c0[1]+col] += region1_c[neg_inds1[0]]
+            # img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][good_inds1[0]] += amps_2_trap[prob][temp][start1:end1][good_inds1[0]]
+            # img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][neg_inds1[0]] += region1_c[neg_inds1[0]]
         
             # can't draw more e- than what's there
             neg_inds2 = np.where(region2 < 0)
@@ -1438,10 +1440,10 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 pass
             good_inds2 = np.where(region2 >= 0)
             region2[neg_inds2] = 0
-            img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][good_inds2[0]] += amps_2_trap[prob][temp][start2:end2][good_inds2[0]]
-            img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][neg_inds2[0]] += region2_c[neg_inds2[0]]
-            # img_stack[good_inds2[0],r0c0[0]+row,r0c0[1]+col] += amps_2_trap[prob][temp][good_inds2[0]]
-            # img_stack[neg_inds2[0],r0c0[0]+row,r0c0[1]+col] += region2_c[neg_inds2[0]]
+            # img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][good_inds2[0]] += amps_2_trap[prob][temp][start2:end2][good_inds2[0]]
+            # img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][neg_inds2[0]] += region2_c[neg_inds2[0]]
+            img_stack[:,r0c0[0]+row,r0c0[1]+col] += amps_2_trap[prob][temp][:]
+        
         else:
             img_stack[:,r0c0[0]+row,r0c0[1]+col] += amps_2_trap[prob][temp][:]
         # technically, if there is overlap b/w start1:end1 and start2:end2,
@@ -1524,8 +1526,9 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             neg_inds = np.where(region < 0)
             good_inds = np.where(region >= 0)
             region[neg_inds[0]] = 0
-            sch_imgs[good_inds[0],r0c0[0]+13, r0c0[1]+21] += amps_1_trap[prob][temp][good_inds[0]]
-            sch_imgs[neg_inds[0],r0c0[0]+13,r0c0[1]+21] += region_c[neg_inds[0]]
+            # sch_imgs[good_inds[0],r0c0[0]+13, r0c0[1]+21] += amps_1_trap[prob][temp][good_inds[0]]
+            # sch_imgs[neg_inds[0],r0c0[0]+13,r0c0[1]+21] += region_c[neg_inds[0]]
+            sch_imgs[:,r0c0[0]+13, r0c0[1]+21] += amps_1_trap[prob][temp][:] 
         else:
             sch_imgs[:,r0c0[0]+13, r0c0[1]+21] += amps_1_trap[prob][temp][:]
 
@@ -1657,8 +1660,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
         if e2emode:
             readout_emccd = EMCCDDetect(
                 em_gain=EMgain, #10,
-                full_well_image=100000.,  # e-
-                full_well_serial=100000.,  # e-
+                full_well_image=full_well_image,  # e-
+                full_well_serial=full_well_serial,  # e-
                 dark_current=0,  # e-/pix/s
                 cic=0, # e-/pix/frame
                 read_noise=read_noise,  # e-/pix/frame
