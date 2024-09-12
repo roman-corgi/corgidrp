@@ -832,7 +832,7 @@ def kgain_dataset_2_list(dataset):
             if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
                 raise Exception('Frames in the same data set must have the same exposure time')
 
-            if frame.ext_hdr['OBSTYPE'] == 'MNFRAME':
+            if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
                 if frame.ext_hdr['CMDGAIN'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
