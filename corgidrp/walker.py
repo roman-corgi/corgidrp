@@ -133,23 +133,28 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
     for calib in step["calibs"]:
         # order matters, so only one calibration file per dictionary
 
-        if step["calibs"][calib].upper() == "AUTOMATIC":
+        if "AUTOMATIC" in step["calibs"][calib].upper():
             calib_dtype = data.datatypes[calib]
 
             # try to look up the best calibration, but it could raise an error
             try:
                 best_cal_file = this_caldb.get_calib(ref_frame, calib_dtype)
+                best_cal_filepath = best_cal_file.filepath
             except ValueError as e:
-                if corgidrp.skip_missing_cal_steps:
+                if "OPTIONAL" in step["calibs"][calib].upper():
+                    # couldn't find a good cal but this one is optional, so we are going to put nothing in there
+                    # this means the step function can run without this calibration file
+                    best_cal_filepath = None
+                elif corgidrp.skip_missing_cal_steps:
                     step["skip"] = True # skip this step but continue
-                    step["calibs"][calib] = "None"
+                    step["calibs"][calib] = None
                     warnings.warn("Skipping {0} because no {1} in caldb and skip_missing_cal_steps is True".format(step['name'], calib))
                     continue # continue on the for loop
                 else:
                     raise # reraise exception
 
             # set calibration file to this one
-            step["calibs"][calib] = best_cal_file.filepath
+            step["calibs"][calib] = best_cal_filepath
 
     return step
 
@@ -291,7 +296,10 @@ def run_recipe(recipe, save_recipe_file=True):
                 # load the calibration files in from disk
                 for calib in step["calibs"]:
                     calib_dtype = data.datatypes[calib]
-                    cal_file = calib_dtype(step["calibs"][calib])
+                    if step["calibs"][calib] is not None:
+                        cal_file = calib_dtype(step["calibs"][calib])
+                    else:
+                        cal_file = None
                     other_args += (cal_file,)
 
 
