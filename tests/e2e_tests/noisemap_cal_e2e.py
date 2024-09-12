@@ -29,7 +29,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     
     # define the raw science data to process
-    l1_data_filelist = glob(os.path.join(l1_datadir,"*.fits"))
+    l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
     mock_cal_filelist = l1_data_filelist [-2:] # grab the last two input data to mock the calibration 
     
     ###### Setup necessary calibration files
@@ -52,7 +52,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
-    kgain_val = 8.7
+    kgain_val = 8.7 
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=noisemap_outputdir, filename="mock_kgain.fits")
@@ -70,7 +70,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(kgain)
 
     ##### Check against TVAC data
-    corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,"CGI_EXCAM_L2a_0000064355_DetectorNoiseMaps.fits")
+    corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,"CGI_EXCAM_L2a_0000050775_DetectorNoiseMaps.fits")
     iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
 
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
@@ -130,8 +130,8 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
         os.mkdir(noisemap_outputdir)
 
     # define the raw science data to process
-    l1_data_filelist = glob(os.path.join(l1_datadir,"*.fits"))
-    l2a_data_filelist = glob(os.path.join(l2a_datadir,"*.fits"))
+    l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
+    l2a_data_filelist = sorted(glob(os.path.join(l2a_datadir,"*.fits")))
     mock_cal_filelist = l1_data_filelist [-2:] # grab the last two input data to mock the calibration 
     
     ###### Setup necessary calibration files
@@ -164,7 +164,7 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(kgain)
 
     ##### Check against TVAC data
-    corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,"CGI_EXCAM_L2a_0000064355_DetectorNoiseMaps.fits")
+    corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,"CGI_EXCAM_L2a_0000050775_DetectorNoiseMaps.fits")
     iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
 
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
