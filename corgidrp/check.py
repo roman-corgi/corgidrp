@@ -1,5 +1,7 @@
 """
 Module to hold input-checking functions to minimize repetition
+
+Copied over from the II&T pipeline
 """
 import numbers
 

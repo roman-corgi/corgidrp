@@ -11,8 +11,21 @@ from astropy.time import Time
 from scipy.ndimage import median_filter
 from pytest import approx
 
-nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", "nonlin_sample.fits")
+###########################################
+### Create a dummy non-linearity file ####
+#Create a mock dataset because it is a required input when creating a NonLinearityCalibration
+dummy_dataset = mocks.create_prescan_files()
 
+# Make a non-linearity correction calibration file
+input_non_linearity_filename = "nonlin_table_TVAC.txt"
+input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
+test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
+
+pri_hdr, ext_hdr = mocks.create_default_headers()
+non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
+non_linearity_correction.save(filename = nonlin_fits_filepath)
 
 ## Copy-pasted II&T code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_remove_cosmics.py ##
 

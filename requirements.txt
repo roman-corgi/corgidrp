@@ -4,5 +4,7 @@ numpy
 pandas
 pytest
 scipy
+photutils
 statsmodels
 pyklip
+emccd-detect
