@@ -162,6 +162,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 
 
     ####### Test the flat field result
+    # the requirement: <=0.71% error per resolution element
     flat_filename = l1_flatfield_filelist[0].split(os.path.sep)[-1].replace("_L1_", "_L2a_")[:-5] + "_flatfield.fits"
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
@@ -325,6 +326,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
 
 
     ####### Test the result
+    # the requirement: <=0.71% error per resolution element
     flat_filename = l1_flatfield_filelist[0].split(os.path.sep)[-1].replace("_L1_", "_L2a_")[:-5] + "_flatfield.fits"
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)

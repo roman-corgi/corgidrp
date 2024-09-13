@@ -12,6 +12,7 @@ import corgidrp
 from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
+from corgidrp import caldb
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -201,6 +202,12 @@ def test_nonlin_cal_e2e(
 
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
+
+    # remove entry from caldb
+    nonlin_entry = data.NonLinearityCalibration(os.path.join(e2eoutput_path, nonlin_out_filename))
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(nonlin_entry)
+
    # Print success message
     print('e2e test for NL passed')
 
