@@ -9,8 +9,11 @@
     "steps" : [
         {
             "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
             "keywords" : {
-                "return_full_frame" : true
+                "return_imaging_area" : true
             }
         },
         {

@@ -2188,7 +2188,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         mean_field (float, optional): The mean electron level that was present in each pixel before trap pumping was performed (excluding EM gain). Only useful if the mean level is less than num_pumps/4 e-. If num_pumps/4 e- or higher, use None.
         length_lim (int, optional): Minimum number of frames for which a dipole needs to meet the threshold to be considered a true trap. Defaults to 6.
         thresh_factor (float, optional): Number of standard deviations from the mean a dipole should stand out to be considered for a trap. Defaults to 3.
-        k_prob (int, optional): The probability function used for finding the e-/DN factor. Defaults to 1.
+        k_prob (int, optional): The probability function used for finding the e-/DN factor. If the code fails with an exception, re-run the code with 2.  Defaults to 1.
         ill_corr (bool, optional): Whether to run local illumination correction on each trap-pumped frame. Defaults to True.
         tfit_const (bool, optional): Whether to use trap_fit_const() for curve fitting, treating the capture probability as constant. Defaults to True.
         tau_fit_thresh (float, optional): Minimum adjusted R^2 value required for curve fitting for the release time constant (tau). Defaults to 0.8.
