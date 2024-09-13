@@ -187,4 +187,32 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 * Where do I save FITS files or other data files I need to use for my tests?
   * Auxiliary data to run tests should be stored in the tests/test_data folder
-  * If they are larger than 1 MB, they should be stored using `git lfs`. Ask Jason about setting up git lfs (as of writing, we have not set up git lfs yet). 
+  * If they are larger than 1 MB, they should be stored using `git lfs`. Ask Jason about setting up git lfs (as of writing, we have not set up git lfs yet).
+ 
+## Change Log
+
+**v1.0** (To be released..)
+ * First official pipeline release!
+ * Step functions to produce the necessary calibration files for L1 to L2b step functions implemented and tested
+ * Step function to produce boresight calibration implemented and tested
+ * Automated data processing handling for L1/L2 calibration files and for boresight calibration
+ * End-to-end testing demonstrating L1/L2 calibration files and boresight calibration file can be produced from realistic/real L1 data files
+
+**v0.2.1**
+ * Update end-to-end tests to handle updated test data filenames
+
+**v0.2**
+ * All L1 to L2b step functions implemented and tested
+ * Automated data porcessing for L1 to L2b
+ * End-to-end testing for L1 to L2b processing
+ * Minor bug fixes throughout
+
+**v0.1.2**
+ * Added ability to change paths for L1 to L2a end-to-end test from command line
+ * v0.1.1 was a partial release of this release, and should not be used. 
+ 
+**v0.1**
+ * First preliminary release of pipeline including step functions (see next bullet), calibration database, walker (pipeline automation framework)
+ * All L1 to L2a step funtions implemented and tested
+ * Automated data processing for L1 to L2a
+ * End-to-end test demonstrating L1 to L2a processing
