@@ -9,10 +9,12 @@ import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.calibrate_nonlin
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
     "detect_cosmic_rays" : corgidrp.l1_to_l2a.detect_cosmic_rays,
+    "calibrate_nonlin": corgidrp.calibrate_nonlin.calibrate_nonlin,
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
     "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
     "add_photon_noise" : corgidrp.l2a_to_l2b.add_photon_noise,
@@ -173,6 +175,19 @@ def guess_template(dataset):
     if image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
+        elif image.pri_hdr['OBSTYPE'] == "NONLIN":
+            recipe_filename = "l1_to_l2a_nonlin.json"
+        elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
+            # Disambiguate between NONLIN and KGAIN
+            for data in dataset:
+                if data.pri_hdr['OBSTYPE'] == "NONLIN":
+                    recipe_filename = "l1_to_l2a_nonlin.json" 
+                    break
+                elif data.pri_hdr['OBSTYPE'] == "NONLIN":
+                    recipe_filename = "l1_to_l2a_kgain.json"
+                    break
+                else:
+                    raise ValueError(f"Define recipe for {data.pri_hdr['OBSTYPE']}")
         else:
             recipe_filename = "l1_to_l2b.json"
     else:
@@ -311,3 +326,4 @@ def run_recipe(recipe, save_recipe_file=True):
 
             # run the step!
             curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+
