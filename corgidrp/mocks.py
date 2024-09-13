@@ -322,10 +322,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
             # try:
             new_image_data = image_data * mask
             
-            if planet == 'neptune' and band=='1' or planet == 'uranus' and band=='1':
-                snr_ref = snr/np.sqrt(snr_constant)
-            elif planet == 'neptune' and band=='4' or planet == 'uranus' and band=='4' :
-                snr_ref = snr/np.sqrt(snr_constant)
+            snr_ref = snr/np.sqrt(snr_constant)
 
             u_centroid = centr.centroid_1dg(new_image_data)
             uxc = int(u_centroid[0])
