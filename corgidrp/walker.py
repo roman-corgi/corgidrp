@@ -4,6 +4,7 @@ import astropy.time as time
 import warnings
 import corgidrp
 import corgidrp.bad_pixel_calibration
+import corgidrp.combine
 import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
@@ -26,7 +27,9 @@ all_steps = {
     "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
     "desmear" : corgidrp.l2a_to_l2b.desmear,
     "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
-    "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map
+    "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
+    "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
+    "combine_subexposures" : corgidrp.combine.combine_subexposures
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -103,7 +106,10 @@ def autogen_recipe(filelist, outputdir, template=None):
     this_caldb = caldb.CalDB()
     for step in recipe["steps"]:
         # by default, identify all the calibration files needed, unless jit setting is turned on
-        if not corgidrp.jit_calib_id:
+        # two cases where we should be identifying the calibration recipes now
+        if "jit_calib_id" in recipe['drpconfig'] and (not recipe['drpconfig']["jit_calib_id"]):
+            _fill_in_calib_files(step, this_caldb, first_frame)
+        elif ("jit_calib_id" not in recipe['drpconfig']) and (not corgidrp.jit_calib_id):
             _fill_in_calib_files(step, this_caldb, first_frame)
 
         if step["name"].lower() == "dark_subtraction":
@@ -173,6 +179,8 @@ def guess_template(dataset):
     if image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
+        elif image.pri_hdr['OBSTYPE'] == "FLT":
+            recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['OBSTYPE'] == "NONLIN":
             recipe_filename = "l1_to_l2a_nonlin.json"
         elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
@@ -298,12 +306,19 @@ def run_recipe(recipe, save_recipe_file=True):
             if "calibs" in step:
                 # if JIT calibration resolving is toggled, figure out the calibrations here
                 # by default, this is false
-                if corgidrp.jit_calib_id:
+                if (corgidrp.jit_calib_id and ("jit_calib_id" not in recipe['drpconfig'])) or (("jit_calib_id" in recipe['drpconfig']) and recipe['drpconfig']["jit_calib_id"]) :
                     this_caldb = caldb.CalDB()
-                    _fill_in_calib_files(step, this_caldb, curr_dataset[0])
+                    # dataset may have turned into a single image. handle this case. 
+                    if isinstance(curr_dataset, data.Dataset):
+                        ref_image = curr_dataset[0]
+                        list_of_frames = curr_dataset
+                    else:
+                        ref_image = curr_dataset
+                        list_of_frames = [curr_dataset]
+                    _fill_in_calib_files(step, this_caldb, ref_image)
 
                     # also update the recipe we used in the headers
-                    for frame in curr_dataset:
+                    for frame in list_of_frames:
                         frame.ext_hdr["RECIPE"] = json.dumps(recipe)
 
 
