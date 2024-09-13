@@ -33,7 +33,8 @@ labels = {data.Dark: "Dark",
           data.KGain : "KGain",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
           data.DetectorParams : "DetectorParams",
-          data.FlatField : "FlatField"}
+          data.FlatField : "FlatField",
+          data.TrapCalibration : "TrapCalibration"}
 
 class CalDB:
     """
