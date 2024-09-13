@@ -25,145 +25,123 @@ def test_tpump_analysis():
     '''
 
     # Set the seed - II&T ut tests don't work everytime, so let's fix it. 
-    counter = 0
-    passes = False
-    while passes is False:
-        np.random.seed(39+counter)
+    np.random.seed(39)
+    #Generate the mock data:
+    test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
+    metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
+    print("Generating mock data")
+    mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
+    print("Done generating mock data")
 
-        #Generate the mock data:
-        test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
-        metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
-        nonlin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "nonlin_table_TVAC.txt")
-        print("Generating mock data")
-        mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file, e2emode=True, nonlin_path=None, EMgain=1, read_noise=90)
-        print("Done generating mock data")
+    #Read in all the data. 
+    # test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data")
+    data_filenames = sorted(glob.glob(os.path.join(test_data_dir, "*.fits")))
+    pump_trap_dataset = Dataset(data_filenames)
 
-        #Read in all the data. 
-        # test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data")
-        data_filenames = sorted(glob.glob(os.path.join(test_data_dir, "*.fits")))
-        pump_trap_dataset = Dataset(data_filenames)
+    #Parse the first three characters of each filename into a temperature
+    # temps = [int(os.path.basename(f)[:3]) for f in data_filenames]
+    # npumps = [int(os.path.basename(f).split("_")[5]) for f in data_filenames]
+    # scheme = [int(os.path.basename(f).split("_")[2]) for f in data_filenames]
+    #Hack in some missing header parameters. 
+    arrtype = 'SCI'
+    # em_gain = 10 #The default in generate_test_data.py
 
-        #Parse the first three characters of each filename into a temperature
-        # temps = [int(os.path.basename(f)[:3]) for f in data_filenames]
-        # npumps = [int(os.path.basename(f).split("_")[5]) for f in data_filenames]
-        # scheme = [int(os.path.basename(f).split("_")[2]) for f in data_filenames]
-        #Hack in some missing header parameters. 
-        arrtype = 'SCI'
-        # em_gain = 10 #The default in generate_test_data.py
+    for j,frame in enumerate(pump_trap_dataset):
+        frame.ext_hdr['ARRTYPE'] = arrtype
+        # frame.ext_hdr['CMDGAIN'] = em_gain
+        # frame.ext_hdr['EXCAMT'] = temps.pop(0)
 
-        for j,frame in enumerate(pump_trap_dataset):
-            frame.ext_hdr['ARRTYPE'] = arrtype
-            # frame.ext_hdr['CMDGAIN'] = em_gain
-            # frame.ext_hdr['EXCAMT'] = temps.pop(0)
+        #Get the scheme the the "scheme" list. For the current scheme set the header keyword TPSCHEM* 
+        # equal to the npumps for this filename, where * is equal to the scheme. For the other schemes (up to * =4) set TPSCHEM* =0.
+        # for i in range(1, 5):
+        #     if scheme[j] == i:
+        #         frame.ext_hdr['TPSCHEM' + str(i)] = npumps.pop(0)
+        #     else:
+        #         frame.ext_hdr['TPSCHEM' + str(i)] = 0
 
-            #Get the scheme the the "scheme" list. For the current scheme set the header keyword TPSCHEM* 
-            # equal to the npumps for this filename, where * is equal to the scheme. For the other schemes (up to * =4) set TPSCHEM* =0.
-            # for i in range(1, 5):
-            #     if scheme[j] == i:
-            #         frame.ext_hdr['TPSCHEM' + str(i)] = npumps.pop(0)
-            #     else:
-            #         frame.ext_hdr['TPSCHEM' + str(i)] = 0
+        #Get the phase time from the filename: its between the string "phasetime" and the ".fits" extension at the end
+        # phase_time = os.path.basename(data_filenames[j]).split("phasetime")[1].split(".fits")[0]
+        # frame.ext_hdr['TPTAU'] = float(phase_time)
 
-            #Get the phase time from the filename: its between the string "phasetime" and the ".fits" extension at the end
-            # phase_time = os.path.basename(data_filenames[j]).split("phasetime")[1].split(".fits")[0]
-            # frame.ext_hdr['TPTAU'] = float(phase_time)
+    #Run the bias subtraction
+    # #TODO Figure out which detector regions to pass in here. 
+    # arrtype = pump_trap_dataset[0].ext_hdr['ARRTYPE']
 
-        #Run the bias subtraction
-        # #TODO Figure out which detector regions to pass in here. 
-        # arrtype = pump_trap_dataset[0].ext_hdr['ARRTYPE']
+    #Detector regions for the smaller pump_trap_data - taken from metadata_test.yaml
 
-        #Detector regions for the smaller pump_trap_data - taken from metadata_test.yaml
+    #Subtract the prescane Bias
+    bias_subbed_dataset = prescan_biassub(pump_trap_dataset, detector_regions=mocks.detector_areas_test,use_imaging_area=True)
 
-        #Subtract the prescane Bias
-        bias_subbed_dataset = prescan_biassub(pump_trap_dataset, detector_regions=mocks.detector_areas_test,use_imaging_area=True)
+    ## Note the data were not generated with non-linearity
+    #Correct for non-linearity - use the fits file derived from nonlin_sample.csv
+    # nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", "nonlin_sample.fits")
+    # non_linearity_correction = NonLinearityCalibration(nonlin_fits_filepath)
+    # linear_dataset = correct_nonlinearity(bias_subbed_dataset, non_linearity_correction)
 
-        ## Note the data were not generated with non-linearity
-        #Correct for non-linearity - use the fits file derived from nonlin_sample.csv
-        # nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", "nonlin_sample.fits")
-        # non_linearity_correction = NonLinearityCalibration(nonlin_fits_filepath)
-        # linear_dataset = correct_nonlinearity(bias_subbed_dataset, non_linearity_correction)
+    #Divide by EM gain
+    emgain_divided_dataset = em_gain_division(bias_subbed_dataset)
 
-        #Divide by EM gain
-        emgain_divided_dataset = em_gain_division(bias_subbed_dataset)
+    #Done preliminary data processing. Now running the tpump_analysis
 
-        #Done preliminary data processing. Now running the tpump_analysis
+    length_lim = 5
+    tau_fit_thresh = .8#.5#0.8#0.65 #0.8
+    cs_fit_thresh = .8#.5#0.8# 0.2 #0.65 #0.8#0.65 #0.8
+    thresh_factor = 1.5 #.5
+    ill_corr = True
+    tfit_const = True
+    input_T = 185
+    bins_E = 50
+    bins_cs = 5
+    mean_field = None #500
 
-        length_lim = 5
-        tau_fit_thresh = .8#.5#0.8#0.65 #0.8
-        cs_fit_thresh = .8#.5#0.8# 0.2 #0.65 #0.8#0.65 #0.8
-        thresh_factor = 1.5 #.5
-        ill_corr = True
-        tfit_const = True
-        input_T = 185
-        bins_E = 50
-        bins_cs = 5
-        mean_field = None #500
+    tpump_calibration = tpump_analysis(emgain_divided_dataset,
+                        mean_field=mean_field,
+                        length_lim = length_lim, thresh_factor = thresh_factor,
+                        ill_corr = ill_corr, tfit_const = tfit_const,
+                        tau_min = 0.7e-6, tau_max = 1.3e-2,
+                        tau_fit_thresh = tau_fit_thresh,
+                        tauc_min = 0, tauc_max = 1e-5, offset_min = 10, offset_max = 10,
+                        pc_min=0, pc_max=2,
+                        cs_fit_thresh = cs_fit_thresh, 
+                        input_T=input_T,
+                        bins_E=bins_E, bins_cs=bins_cs)
 
-        tpump_calibration = tpump_analysis(emgain_divided_dataset,
-                            mean_field=mean_field,
-                            length_lim = length_lim, thresh_factor = thresh_factor,
-                            ill_corr = ill_corr, tfit_const = tfit_const,
-                            tau_min = 0.7e-6, tau_max = 1.3e-2,
-                            tau_fit_thresh = tau_fit_thresh,
-                            tauc_min = 0, tauc_max = 1e-5, offset_min = 10, offset_max = 10,
-                            pc_min=0, pc_max=2,
-                            cs_fit_thresh = cs_fit_thresh, 
-                            input_T=input_T,
-                            bins_E=bins_E, bins_cs=bins_cs)
+    #Extract the extra info. 
+    unused_fit_data = tpump_calibration.ext_hdr['unfitdat']
+    unused_temp_fit_data = tpump_calibration.ext_hdr['untempfd']
+    two_or_less_count = tpump_calibration.ext_hdr['twoorles']
+    noncontinuous_count = tpump_calibration.ext_hdr['noncontc']
+    pre_sub_el_count = tpump_calibration.ext_hdr['prsbelct']
+    trap_densities = tpump_calibration.hdu_list[tpump_calibration.hdu_names.index('trap_densities')-2].data
 
-        #Extract the extra info. 
-        unused_fit_data = tpump_calibration.ext_hdr['unfitdat']
-        unused_temp_fit_data = tpump_calibration.ext_hdr['untempfd']
-        two_or_less_count = tpump_calibration.ext_hdr['twoorles']
-        noncontinuous_count = tpump_calibration.ext_hdr['noncontc']
-        pre_sub_el_count = tpump_calibration.ext_hdr['prsbelct']
-        trap_densities = tpump_calibration.hdu_list[tpump_calibration.hdu_names.index('trap_densities')-2].data
+    #####
+    # Run many of the tests from test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
+    
+    assert(unused_fit_data > 0)
+    assert(unused_temp_fit_data == 0)
+    assert(two_or_less_count > 0)
+    assert(noncontinuous_count >= 0)
+    assert(pre_sub_el_count > 0)
 
-        #####
-        # Run many of the tests from test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
-        
-        # assert(unused_fit_data > 0)
-        # assert(unused_temp_fit_data == 0)
-        # assert(two_or_less_count > 0)
-        # assert(noncontinuous_count >= 0)
-        # assert(pre_sub_el_count > 0)
+    #Convert the output back to a dictionary for more testing. 
+    trap_dict = rebuild_dict(tpump_calibration.data)
+    trap_dict_keys = list(trap_dict.keys())
 
-        #Convert the output back to a dictionary for more testing. 
-        trap_dict = rebuild_dict(tpump_calibration.data)
-        trap_dict_keys = list(trap_dict.keys())
+    #Truth values for the sim dataset from ut_tpump_final.py
+    test_trap_dict_keys = [((26, 28), 'CENel1', 0),
+            ((50, 50), 'RHSel1', 0), ((60, 80), 'LHSel2', 0),
+            ((68, 67), 'CENel2', 0), ((98, 33), 'LHSel3', 0),
+            ((98, 33), 'RHSel2', 0), ((41, 15), 'CENel3', 0),
+            ((89, 2), 'RHSel3', 0), ((89, 2), 'LHSel4', 0),
+            [((10, 10), 'LHSel4', 0), ((10, 10), 'LHSel4', 1)],
+            ((56, 56), 'CENel4', 0), ((77, 90), 'RHSel4', 0),
+            ((77, 90), 'CENel2', 0), ((13, 21), 'LHSel1', 0)]
+    trap_dict_E = [0.32, 0.32, 0.32, 0.32, 0.28, 0.32, 0.32, 0.32,
+            0.28, [0.32, 0.28], 0.32, 0.28, 0.32, 0.32]
+    trap_dict_cs = [2e-15, 2e-15, 2e-15, 2e-15, 12e-15, 2e-15, 2e-15,
+            2e-15, 12e-15, [2e-15, 12e-15], 2e-15, 12e-15, 2e-15, 2e-15]
 
-        #Truth values for the sim dataset from ut_tpump_final.py
-        test_trap_dict_keys = [((26, 28), 'CENel1', 0),
-                ((50, 50), 'RHSel1', 0), ((60, 80), 'LHSel2', 0),
-                ((68, 67), 'CENel2', 0), ((98, 33), 'LHSel3', 0),
-                ((98, 33), 'RHSel2', 0), ((41, 15), 'CENel3', 0),
-                ((89, 2), 'RHSel3', 0), ((89, 2), 'LHSel4', 0),
-                [((10, 10), 'LHSel4', 0), ((10, 10), 'LHSel4', 1)],
-                ((56, 56), 'CENel4', 0), ((77, 90), 'RHSel4', 0),
-                ((77, 90), 'CENel2', 0), ((13, 21), 'LHSel1', 0)]
-        trap_dict_E = [0.32, 0.32, 0.32, 0.32, 0.28, 0.32, 0.32, 0.32,
-                0.28, [0.32, 0.28], 0.32, 0.28, 0.32, 0.32]
-        trap_dict_cs = [2e-15, 2e-15, 2e-15, 2e-15, 12e-15, 2e-15, 2e-15,
-                2e-15, 12e-15, [2e-15, 12e-15], 2e-15, 12e-15, 2e-15, 2e-15]
-        try:
-            #Note: removed several tests about sig_E and sig_cs, since we're not saving them.
-            for i in range(len(test_trap_dict_keys)):
-                if i!= 9:
-                    t = test_trap_dict_keys[i]
-                    assert(t in trap_dict_keys)
-                    assert(not np.isnan(trap_dict[t]['E']))
-                    # now make sure they appear for all temperatures
-                if i==9: #special case of (10,10)
-                    t1, t2 = test_trap_dict_keys[i]
-                    assert(t1 in trap_dict)
-                    assert(t2 in trap_dict)
-                    assert(not np.isnan(trap_dict[t1]['E']))
-                    assert(not np.isnan(trap_dict[t2]['E']))
-            passes = True
-        except:
-            counter += 1
-    print('counter: ',counter)        
-
+    #Note: removed several tests about sig_E and sig_cs, since we're not saving them.
     for i in range(len(test_trap_dict_keys)):
         if i!= 9:
             t = test_trap_dict_keys[i]
