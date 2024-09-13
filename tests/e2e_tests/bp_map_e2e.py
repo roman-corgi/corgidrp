@@ -110,11 +110,12 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(noise_maps)
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(master_dark)
+    this_caldb.remove_entry(bp_map)
 
     generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
 
     # Load the generated bad pixel map image and master dark reference data
-    generated_bp_map_img = data.Image(generated_bp_map_file)
+    generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
 
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
@@ -184,6 +185,8 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
         # Save the figure to a file
         output_path = os.path.join(bp_map_outputdir, "bp_map_master_dark_test.png")
         plt.savefig(output_path)
+
+    this_caldb.remove_entry(generated_bp_map_img)
 
 @pytest.mark.e2e
 def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
@@ -265,7 +268,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
 
     # Load the generated bad pixel map image and reference dark data
-    generated_bp_map_img = data.Image(generated_bp_map_file)
+    generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
 
     with fits.open(master_dark_ref) as hdulist:
         dark_ref_dat = hdulist[1].data
@@ -305,6 +308,8 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
         # Save the figure to a file
         output_path = os.path.join(bp_map_outputdir, "bp_map_simulated_dark_test.png")
         plt.savefig(output_path)
+    
+    this_caldb.remove_entry(generated_bp_map_img)
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
