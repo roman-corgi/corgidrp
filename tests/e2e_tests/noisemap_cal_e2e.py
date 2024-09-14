@@ -15,6 +15,13 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
 def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
+    """End-to-End test for generating NoiseMap calibration files, starting with L1 data.
+
+    Args:
+        tvacdata_path (str or path): Path to the directory holding all TVAC data.
+        e2eoutput_path (str or path): Path for test output files.
+    """
+
     # figure out paths, assuming everything is located in the same relative location as in the TVAC Box drive
     l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
     iit_noisemap_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data")
@@ -119,6 +126,13 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
 
 @pytest.mark.e2e
 def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
+    """End-to-End test for generating NoiseMap calibration files, starting with L2a data.
+
+    Args:
+        tvacdata_path (str or path): Path to the directory holding all TVAC data.
+        e2eoutput_path (str or path): Path for test output files.
+    """
+
     # figure out paths, assuming everything is located in the same relative location as in the TVAC Box drive
     l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
     l2a_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l2a_data")
