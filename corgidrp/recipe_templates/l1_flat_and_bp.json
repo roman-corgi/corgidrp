@@ -1,17 +1,15 @@
 {
-    "name" : "l1_to_l2b",
+    "name" : "l1_flat_and_bp",
     "template" : true,
     "drpconfig" : {
-        "track_individual_errors" : false
+        "track_individual_errors" : false,
+        "jit_calib_id" : true
     },
     "inputs" : [],
     "outputdir" : "",
     "steps" : [
         {
             "name" : "prescan_biassub",
-            "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC"
-            },
             "keywords" : {
                 "return_full_frame" : false
             }
@@ -71,19 +69,26 @@
             }
         },
         {
-            "name" : "flat_division",
-            "calibs" : {
+            "name" : "combine_subexposures",
+            "keywords" : {
+                "num_frames_per_group" : 6
+            }
+        },
+        {
+            "name" : "create_onsky_flatfield",
+            "keywords" : {
+                "up_radius" : 60
+            }
+        },
+        {
+            "name" : "save"
+        },
+        {
+            "name" : "create_bad_pixel_map",
+            "calibs": {
+                "DetectorNoiseMaps": "AUTOMATIC",
                 "FlatField" : "AUTOMATIC"
             }
-        },
-        {
-            "name" : "correct_bad_pixels",
-            "calibs" : {
-                "BadPixelMap" : "AUTOMATIC"
-            }
-        },
-        {
-            "name" : "update_to_l2b"
         },
         {
             "name" : "save"
