@@ -33,9 +33,7 @@ detector_areas_test= {
         'prescan_reliable': {
             'rows': 120,
             'cols': 108,
-            'r0c0': [0, 0],
-            'col_start': 0, #10
-            'col_end': 108, #100
+            'r0c0': [0, 0]
         },        
         'prescan': {
             'rows': 120,
@@ -64,9 +62,11 @@ detector_areas_test= {
             'r0c0': [13, 108]
             },
         'prescan' : {
-            'rows': 120,
+            'rows': 220,
             'cols': 108,
-            'r0c0': [0, 0]
+            'r0c0': [0, 0],
+            'col_start': 0, #10
+            'col_end': 108, #100
             },
         'prescan_reliable' : {
             'rows': 220,

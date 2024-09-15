@@ -307,7 +307,7 @@ def test_prescan_sub():
             for return_imaging_area in [True, False]:
                 if return_full_frame is True and return_imaging_area is True:
                     continue # don't test this case b/c function not can't work
-                output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
+                output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame, use_imaging_area=return_imaging_area)
 
                 # Check that output shape is as expected
                 output_shape = output_dataset[0].data.shape

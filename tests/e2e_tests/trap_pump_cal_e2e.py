@@ -28,7 +28,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
         sim_traps = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
     if e2e:
         trap_pump_datadir = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
-        sim_traps = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
+        sim_traps = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
     # this is a .npy file; read it in as a dictionary
     td = np.load(sim_traps, allow_pickle=True)
     TVAC_trap_dict = dict(td[()])
@@ -104,8 +104,9 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
 
     # add calibration files to caldb
     this_caldb = caldb.CalDB()
-    this_caldb.create_entry(nonlinear_cal)
-    this_caldb.create_entry(noise_maps)
+    if e2e:
+        this_caldb.create_entry(nonlinear_cal)
+        this_caldb.create_entry(noise_maps)
 
     ####### Run the walker on some test_data
     if not e2e: # if you want to test older simulated data
@@ -116,11 +117,14 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
 
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
+    this_caldb.remove_entry(noise_maps)
 
-    
+    generated_trapcal_file = os.path.join(trap_pump_outputdir, "TPUMP_Npumps_10000_gain10_phasetime13.530477745798075_trapcal.fits")
+
+    # Load the generated bad pixel map image and master dark reference data
+    tpump_calibration = data.Image(generated_trapcal_file)
     ##### Check against TVAC trap pump dictionary
-    with fits.open(trap_pump_outputdir) as hdulist:
-        tpump_calibration = hdulist[1]
+    
     #Convert the output back to a dictionary for more testing. 
     e2e_trap_dict = rebuild_dict(tpump_calibration.data)
     e2e_trap_dict_keys = list(e2e_trap_dict.keys())
@@ -180,8 +184,10 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
-    ap.add_argument('-e2e', '--e2e_flag', default=True, help="True if testing newer simulated ENG data, false if testing older scaled-down SCI data")
-    args = ap.parse_args()
+    ap.add_argument('-e2e', '--e2e_flag', default=True, help="True if testing newer simulated data, false if testing older scaled-down data")
+    args_here = ['--tvacdata_dir', tvacdata_dir, '--outputdir', outputdir]#, '--e2e_flag',False]
+    #args = ap.parse_args()
+    args = ap.parse_args(args_here)
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
     e2e = args.e2e_flag

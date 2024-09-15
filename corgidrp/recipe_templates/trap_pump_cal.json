@@ -13,7 +13,7 @@
                 "DetectorNoiseMaps" : "AUTOMATIC"
             },
             "keywords" : {
-                "return_imaging_area" : true
+                "use_imaging_area" : true
             }
         },
         {
@@ -24,9 +24,6 @@
         },
         {
             "name" : "update_to_l2a"
-        },
-        {
-            "name" : "save"
         },
         {
             "name" : "em_gain_division"
