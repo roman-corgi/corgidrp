@@ -298,10 +298,11 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
             except: # otherwise use commanded EM gain
                 em_gain = linearized_dataset[i].ext_hdr["CMDGAIN"]
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
+    
+    if non_lin_correction is not None:
+        history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
 
-    history_msg = "Data corrected for non-linearity with {0}".format(non_lin_correction.filename)
-
-    linearized_dataset.update_after_processing_step(history_msg, new_all_data=linearized_cube)
+        linearized_dataset.update_after_processing_step(history_msg, new_all_data=linearized_cube)
 
     return linearized_dataset
 
