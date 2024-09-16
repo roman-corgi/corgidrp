@@ -5,7 +5,7 @@ import corgidrp
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
-from corgidrp.detector import detector_areas, unpack_geom
+from corgidrp.detector import detector_areas, unpack_geom, imaging_area_geom
 
 import numpy as np
 import yaml
@@ -311,7 +311,12 @@ def test_prescan_sub():
 
                 # Check that output shape is as expected
                 output_shape = output_dataset[0].data.shape
-                if output_shape != shapes[obstype][return_full_frame]:
+                if return_imaging_area is False:
+                    shape_compare = shapes[obstype][return_full_frame]
+                else:
+                    r, c, _ = imaging_area_geom(obstype) 
+                    shape_compare = (r,c)
+                if output_shape != shape_compare:
                     raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
 
                 # Check that bias extension has the right size, dtype
@@ -330,6 +335,8 @@ def test_prescan_sub():
 
                 # Check that corgiDRP and II&T pipeline produce the same result
                 corgidrp_result = output_dataset[0].data
+                if return_imaging_area is True:
+                    continue
                 iit_result = iit_frames[0] if return_full_frame else iit_images[0]
                 if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
                     raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
