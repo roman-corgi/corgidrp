@@ -1,22 +1,21 @@
 import os
+from pathlib import Path
 import numpy as np
+import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
 from astropy.time import Time
-import numpy as np
-from pathlib import Path
-
-import corgidrp.data as data
-from corgidrp.data import Image
-import corgidrp.detector as detector
-import photutils.centroids as centr
-from corgidrp.detector import imaging_area_geom, unpack_geom
-from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
-
 import astropy.io.ascii as ascii
 from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
 from astropy.table import Table
+from astropy.convolution import convolve_fft
+import photutils.centroids as centr
+import corgidrp.data as data
+from corgidrp.data import Image
+import corgidrp.detector as detector
+from corgidrp.detector import imaging_area_geom, unpack_geom
+from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 
 from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
@@ -283,7 +282,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
         dither_sizey (int):(Required) Size of the dither in X axis in pixels (number of pixels across the planet (neptune=50 and uranus=65))
         row_cent (int): (Required)  X coordinate of the centroid
         col_cent (int): (Required)  Y coordinate of the centroid
-        n_dith (int): number of dithers required (n_dith=3 for Neptune and n_dith=2 for uranus)
+        n_dith (int): number of dithers required
         mask_size (int): Size of the mask in pixels  (Size of the HST images, 420 X 420 pixels with random values mean=1, std=0.03)
         snr (int): Required SNR in the planet images (=250 in the HST images)
         planet (str): neptune or uranus
@@ -309,42 +308,40 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     if dither_sizey == None:
         dither_sizey = dither_sizex
-    if planet == 'neptune':
-        dith_end = n_dith
-    elif planet == 'uranus':
-        dith_end = n_dith+1
+
     
-    for i in np.arange(-n_dith,dith_end):
-        for j in np.arange(-n_dith,dith_end):
+    for i in np.arange(-n_dith,n_dith):
+        for j in np.arange(-n_dith,n_dith):
             mask_data = data.copy()
-            image_data = mask_data[row_min + (dither_sizey * j):row_max + (dither_sizey * j), col_min + (dither_sizex * i):col_max + (dither_sizex * i)]
+            new_image_row_coords = np.arange(row_min + (dither_sizey * j), row_max + (dither_sizey * j))
+            new_image_col_coords = np.arange(col_min + (dither_sizex * i), col_max + (dither_sizex * i))
+            new_image_col_coords, new_image_row_coords = np.meshgrid(new_image_col_coords, new_image_row_coords)
+            image_data = scipy.ndimage.map_coordinates(mask_data, [new_image_row_coords, new_image_col_coords], mode="constant", cval=0)
+            # image_data = mask_data[row_min + (dither_sizey * j):row_max + (dither_sizey * j), col_min + (dither_sizex * i):col_max + (dither_sizex * i)]
             cents.append(((mask_size/2) + (row_cent - int(row_cent)) - (dither_sizey//2) - (dither_sizey * j), (mask_size/2) + (col_cent - int(col_cent)) - (dither_sizex//2) - (dither_sizex * i)))
-            try:
-                new_image_data = image_data * mask
-                
-                if planet == 'neptune' and band=='1' or planet == 'uranus' and band=='1':
-                    snr_ref = snr/np.sqrt(snr_constant)
-                elif planet == 'neptune' and band=='4' or planet == 'uranus' and band=='4' :
-                    snr_ref = snr/np.sqrt(snr_constant)
+            # try:
+            new_image_data = image_data * mask
+            
+            snr_ref = snr/np.sqrt(snr_constant)
 
-                u_centroid = centr.centroid_1dg(new_image_data)
-                uxc = int(u_centroid[0])
-                uyc = int(u_centroid[1])
+            u_centroid = centr.centroid_1dg(new_image_data)
+            uxc = int(u_centroid[0])
+            uyc = int(u_centroid[1])
 
-                modified_data = new_image_data
-    
-                nx = np.arange(0,modified_data.shape[1])
-                ny = np.arange(0,modified_data.shape[0])
-                nxx,nyy = np.meshgrid(nx,ny)
-                nrr = np.sqrt((nxx-uxc)**2 + (nyy-uyc)**2)
+            modified_data = new_image_data
 
-                planmed = np.median(modified_data[nrr<radius])
-                modified_data[nrr<=radius] = np.random.normal(modified_data[nrr<=radius], (planmed/snr_ref) * np.abs(modified_data[nrr<=radius]/planmed))
-                
-                new_image_data_snr = modified_data
-            except ValueError:
-                print(image_data.shape)
-                print(mask.shape)
+            nx = np.arange(0,modified_data.shape[1])
+            ny = np.arange(0,modified_data.shape[0])
+            nxx,nyy = np.meshgrid(nx,ny)
+            nrr = np.sqrt((nxx-uxc)**2 + (nyy-uyc)**2)
+
+            planmed = np.median(modified_data[nrr<radius])
+            modified_data[nrr<=radius] = np.random.normal(modified_data[nrr<=radius], (planmed/snr_ref) * np.abs(modified_data[nrr<=radius]/planmed))
+            
+            new_image_data_snr = modified_data
+            # except ValueError:
+            #     print(image_data.shape)
+            #     print(mask.shape)
             dithers.append(new_image_data_snr)
 
     dither_stack_norm = []
@@ -358,7 +355,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, numfiles=36, radius=None, snr=250, snr_constant=None):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40, raster_subexps=1):
     """
     Create simulated data to check the flat division
     
@@ -370,17 +367,24 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
        im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
        d (int): number of pixels across the planet (neptune=50 and uranus=65)
        n_dith (int): Number of dithers required (n_dith=3 for neptune and n_dith=2 for Uranus)
-       numfiles (int): total number of raster images (default 36) 
        radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90 in HST images)
        snr (int): SNR required for the planet image (default is 250 for the HST images)
        snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
+       flat_map (np.array): a user specified flat map. Must have shape (im_size, im_size). Default: None; assumes each pixel drawn from a normal distribution with 3% rms scatter
+       raster_radius (float): radius of circular raster done to smear out image during observation, in pixels
+       raster_subexps (int): number of subexposures that consist of a singular raster. Currently just duplicates images and does not simulate partial rasters
         
     Returns: 
     	corgidrp.data.Dataset:
         The simulated dataset of raster scanned images of planets uranus or neptune
     """
     n = im_size
-    qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
+
+    if flat_map is None:
+        qe_prnu_fsm_raster = np.random.normal(1,.03,(n,n))
+    else:
+        qe_prnu_fsm_raster = flat_map
+
     pred_cents=[]
     planet_rot_images=[]
     
@@ -392,6 +396,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             centroid=centr.centroid_com(planet_image)
             xc=centroid[0]
             yc=centroid[1]
+            planet_image = convolve_fft(planet_image, detector.raster_kernel(raster_radius, planet_image))
             if planet == 'neptune':
                 planetrad=radius; snrcon=snr_constant
                 planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
@@ -399,13 +404,17 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
                 planetrad=radius; snrcon=snr_constant     
                 planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc,col_cent=xc, dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
     
-    for j in np.arange(len(planet_repoint_current[0])):
-        for j in np.arange(len(planet_repoint_current[0])):
+    numfiles = len(planet_repoint_current[0])
+    for j in np.arange(numfiles):
+        for k in range(raster_subexps):
+            # don't know how to simualate partial rasters, so we just append the same image multiple times
+            # it's ok to append the same noise as well because we simulated the full raster to reach the SNR after combining subexps
             planet_rot_images.append(planet_repoint_current[0][j])
             pred_cents.append(planet_repoint_current[1][j])
+
     filepattern= planet+'_'+band+"_"+"raster_scan_{0:01d}.fits"
     frames=[]
-    for i in range(numfiles):
+    for i in range(numfiles*raster_subexps):
         prihdr, exthdr = create_default_headers()
         sim_data=planet_rot_images[i]
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -815,7 +824,7 @@ def make_fluxmap_image(
     Returns:
         corgidrp.data.Image
     """
-    # Generate random values of rn in elecrons from a Gaussian distribution
+    # Generate random values of rn in electrons from a Gaussian distribution
     random_array = np.random.normal(0, rn, (1200, 2200)) # e-
     # Generate random values from fluxmap from a Poisson distribution
     Poiss_noise_arr = emgain*np.random.poisson(time*f_map) # e-

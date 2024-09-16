@@ -1,15 +1,17 @@
 # Place to put detector-related utility functions
 
 import numpy as np
-import corgidrp.data as data
 from scipy import interpolate
 from scipy.ndimage import median_filter
-import astropy.io.fits as fits
-import photutils.centroids as centr
 from scipy.ndimage import gaussian_filter as gauss
-from photutils.aperture import CircularAperture
 from scipy import ndimage
 from scipy.signal import convolve2d
+import astropy.io.fits as fits
+from astropy.convolution import convolve_fft
+import photutils.centroids as centr
+from photutils.aperture import CircularAperture
+
+import corgidrp.data as data
 
 def create_flatfield(flat_dataset):
 
@@ -545,6 +547,39 @@ def calc_sat_fwc(emgain_arr,fwcpp_arr,fwcem_arr,sat_thresh):
 
 	return sat_fwcs
 
+def raster_kernel(width, image, hard=True):
+    """
+    Convolution kernel to create flat field circular raster pattern
+
+    Args:
+        width (float): radius of circular raster in pixels
+        image (np.array): 2-D image to specify the full size of the kernel needed
+        hard (bool): if true, use hard edge kernel, otherwise, use Gaussian tapered kernel
+    
+    Returns:
+        np.array: smoothing kernel value at each pixel
+    """
+
+    kernel_width = width
+    im = image
+
+    # define coordinate grid
+    x = np.arange(0,im.shape[1] + 1) - im.shape[1]/2 - 1
+    y = np.arange(0,im.shape[0] + 1) - im.shape[0]/2 - 1
+    xx,yy = np.meshgrid(x, y)
+    rr = np.sqrt(xx**2 + yy**2)
+    rr_hard = np.sqrt(xx**2 + yy**2)
+
+    # Define the convolution kernel
+    if hard == True:
+        rr_hard[rr_hard<=kernel_width/2] = 1
+        rr_hard[rr_hard>kernel_width/2] = 0
+        kernel = rr_hard # option 1: hard-edge kernel
+    else:
+        kernel = np.exp(-rr**2/(2*kernel_width**2)) # option 2: Gaussian kernel
+
+    return kernel
+
 def flatfield_residuals(images, N=None):
     """Turn this dataset of image frames of neptune or uranus and create matched filters and estimate residuals after 
      dividing from matched filters
@@ -595,16 +630,16 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     full_residuals = np.zeros((n,n))
     err_residuals= np.zeros((n,n))
     if planet_rad is None:
-        if planet=='neptune':
-             planet_rad=54
-        elif planet=='uranus':
-             planet_rad=65
+        if planet.lower() == 'neptune':
+             planet_rad = 50
+        elif planet.lower() == 'uranus':
+             planet_rad = 65
     
     if rad_mask is None:
-         if band==1:
-              rad_mask==1.25
-         elif band==4:
-            rad_mask=1.75
+         if band == 1:
+            rad_mask = 1.25
+         elif band == 4:
+            rad_mask = 1.75
     
     aperture = CircularAperture((np.ceil(rad_mask), np.ceil(rad_mask)), r=rad_mask)
     mask= aperture.to_mask().data
@@ -649,7 +684,7 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
     return (full_residuals,err_residuals)
     
     
-def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=420,N=3,rad_mask=None,  planet_rad=None, n_pix=165, n_pad=302):
+def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=None,N=1,rad_mask=None, planet_rad=None, n_pix=44, n_pad=None, sky_annulus_rin=2, sky_annulus_rout=4):
     """Turn this dataset of image frames of uranus or neptune raster scannned that were taken for performing the flat calibration and create one master flat image. 
     The input image frames are L2b image frames that have been dark subtracted, divided by k-gain, divided by EM gain, desmeared. 
 
@@ -659,36 +694,46 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=4
             planet (str): neptune or uranus
             band (str): 1 or 4
             up_radius (int): Number of pixels on either side of centroided planet images (=55 pixels for Neptune and uranus)
-            im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
-            N (int): Number of images to be combined for creating a matched filter (defaults to 3, can be changed)
+            im_size (int): x-dimension of the input image (in pixels; default is size of input dataset; = 420 for the HST images)
+            N (int): Number of images to be combined for creating a matched filter (defaults to 1, may not work for N>1 right now)
             rad_mask (float): radius in pixels used for creating a mask for band (band1=1.25, band4=1.75)
             planet_rad (int): radius of the planet in pixels (planet_rad=50 for neptune, planet_rad=65)
-            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV defaults to 165 pixels
-            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to 302 pixels)
-
-
+            n_pix (int): Number of pixels in radius covering the Roman CGI imaging FOV (defaults to 44 pix for Band1 HLC; 165 pixels for full shaped pupil FOV).
+            n_pad (int): Number of pixels padded with '1s'  to generate the image size 1024X1024 pixels around imaging FOV (defaults to None; rest of the FOV to reach 1024)
+            sky_annulus_rin (float): Inner radius of annulus to use for sky subtraction. In units of planet_rad. 
+                                     If both sky_annulus_rin and sky_annulus_rout = None, skips sky subtraciton.
+            sky_annulus_rout (float): Outer radius of annulus to use for sky subtraction. In units of planet_rad. 
+            
     	Returns:
     		data.FlatField (corgidrp.data.FlatField): a master flat for flat calibration using on sky images of planet in band specified
     		
 	"""
+    if im_size is None:
+        # assume square images
+        im_size = dataset[0].data.shape[0]
+
+    if n_pad is None:
+        n_pad = 1024 - im_size
+        if n_pad < 0:
+            n_pad = 0 
+
     if planet is None:
          planet=dataset[0].pri_hdr['TARGET']
     if band is None:
          band=dataset[0].pri_hdr['FILTER']
     
     if planet_rad is None:
-        if planet=='neptune':
-             planet_rad=50
-        elif planet=='uranus':
-             planet_rad=65
+        if planet.lower() =='neptune':
+             planet_rad = 50
+        elif planet.lower() == 'uranus':
+             planet_rad = 65
     
     if rad_mask is None:
-         if band==1:
-              rad_mask==1.25
-         elif band==4:
-            rad_mask=1.75
-    
-    
+         if band == 1:
+            rad_mask = 1.25
+         elif band == 4:
+            rad_mask = 1.75
+
     smooth_images=[]; raster_images_cent=[]; cent=[]; act_cents=[]; frames=[];
     for j in range(len(dataset)):
         planet_image=dataset[j].data
@@ -700,19 +745,24 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=4
         act_cents.append((centroid[1],centroid[0]))
         xc =int( centroid[0])
         yc = int(centroid[1])
-        up_radius=up_radius
+
+        # sky subtraction if needed
+        if sky_annulus_rin is not None and sky_annulus_rout is not None:
+            ycoords, xcoords = np.indices(planet_image.shape)
+            dist_from_planet = np.sqrt((xcoords - xc)**2 + (ycoords - yc)**2)
+            sky_annulus = np.where((dist_from_planet >= sky_annulus_rin*planet_rad) & (dist_from_planet < sky_annulus_rout*planet_rad))
+            planet_image -= np.nanmedian(planet_image[sky_annulus])
+
         smooth_images.append(planet_image)
         # cropping the raster scanned images
         raster_images_cent.append(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius])
         #centroid of the cropped images
         cent.append((yc-up_radius,yc+up_radius,xc-up_radius,xc+up_radius))
-        frame=data.Image(smooth_images[j][yc-up_radius:yc+up_radius,xc-up_radius:xc+up_radius], pri_hdr=prihdr, ext_hdr=exthdr)
-        frames.append(frame)
-    dataset=data.Dataset(frames)
+
     resi_images=flatfield_residuals(raster_images_cent,N=N)
     raster_com=combine_flatfield_rasters(resi_images,planet=planet,band=band,cent=cent, im_size=im_size, rad_mask=rad_mask,planet_rad=planet_rad,n_pix=n_pix, n_pad=n_pad)
     onskyflat=raster_com[0]
-    onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr,input_dataset=dataset)
+    onsky_flatfield = data.FlatField(onskyflat, pri_hdr=prihdr, ext_hdr=exthdr, input_dataset=dataset)
     onsky_flatfield.err=raster_com[1]
     
     return(onsky_flatfield)

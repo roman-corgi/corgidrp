@@ -35,6 +35,8 @@ nonlin_params = {
      
     # minimum exposure time, s
     'min_exp_time': 0,
+
+    # histogram bin parameters; min_bin is in DN
     'num_bins': 50,
     'min_bin': 200,
      
@@ -116,7 +118,8 @@ class CalNonlinException(Exception):
     """Exception class for calibrate_nonlin."""
 
 def calibrate_nonlin(dataset_nl,
-                     n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0, max_write = 10000.0,
+                     n_cal=20, n_mean=30, norm_val = 2500, min_write = 800.0,
+                     max_write = 10000.0,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
@@ -439,7 +442,6 @@ def calibrate_nonlin(dataset_nl,
     min_count_index_within_range = np.argmin(filtered_counts)
     # Get the corresponding bin edge value and increase by min_mask_factor
     min_mask = min_mask_factor*filtered_bin_edges[min_count_index_within_range]
-    
     # Create the mask
     mask = np.where(good_mean_frame < min_mask, 0, 1)
     
@@ -856,7 +858,7 @@ def nonlin_dataset_2_stack(dataset):
         len_cal_frames = 0
         record_gain = True 
         for frame in data_set.frames:
-            if frame.ext_hdr['OBSTYPE'] == 'MNFRAME':
+            if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
