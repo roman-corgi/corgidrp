@@ -11,7 +11,6 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from astropy.io import fits
 
 import test_check
 from corgidrp import check
@@ -43,7 +42,7 @@ rms_test = 0.0035 # Value used when using an equivalent dataset as in IIT
 # Usual number of frames to deal with real rn values is ~200
 rn = 130 # read noise in e-
 if True:
-    rms_test = 0.04 # Less strict comparison sue to having significantly less frames
+    rms_test = 0.04 # Less strict comparison due to having significantly less frames
     # Usual number of frames to deal with real rn values is ~200
     rn = 130/np.sqrt(200/n_cal) # read noise in e-
     for iG in range(len(len_list0)):
@@ -90,7 +89,7 @@ for j in range(n_mean):
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
     # Temporary keyword value. Mean frame is TBD
-    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
+    image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
     frame_list.append(image_sim)
 
 init_nonlins = []
@@ -124,7 +123,7 @@ for iG in range(len(gain_arr0)):
             image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                 nonlin_flag=nonlin_flag)
             image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
+        image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
         frame_list.append(image_sim)
 # Join all frames in a Dataset
 dataset_nl = Dataset(frame_list) 
@@ -135,15 +134,14 @@ local_path = os.path.dirname(os.path.realpath(__file__))
 exp_time_stack_arr = exp_time_stack_arr0
 time_stack_arr = time_stack_arr0
 len_list = len_list0
-actual_gain_arr = gain_arr0
-actual_gain_mean_frame = 1.0
 norm_val = 3000
 min_write = 800
 max_write = 10000
 
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
+    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
+        max_write)
         
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
