@@ -30,10 +30,7 @@ def test_tpump_analysis():
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
     metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
     print("Generating mock data")
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
-    nonlin_path = os.path.join(tvacdata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
-    mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file, e2emode=True, nonlin_path=nonlin_path, EMgain=1.5, read_noise=100, arrtype='SCI')
-    #mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
+    mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
     print("Done generating mock data")
 
     #Read in all the data. 
