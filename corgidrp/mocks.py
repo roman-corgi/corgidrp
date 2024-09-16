@@ -1064,7 +1064,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
         bias = 0
         full_well_image=105000.  # e-
         full_well_serial=105000.
-        phase_times = 100
+        phase_times = 10
     bias_dn = bias/eperdn
     nbits = 14 #1
     
@@ -1862,11 +1862,11 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     output_dn = readout_emccd.readout(gain_counts)
                 else:
                     output_dn = temps[temp][sc][i]
-                prihdr, _ = create_default_headers(arrtype)
+                prihdr, exthdr = create_default_headers(arrtype)
                 prim = fits.PrimaryHDU(header = prihdr)
-                hdr_img = fits.ImageHDU(output_dn)
+                hdr_img = fits.ImageHDU(output_dn, header=exthdr)
                 hdul = fits.HDUList([prim, hdr_img])
-                ## Add in the headers that corgidrp expects
+                ## Fill in the headers that matter to corgidrp
                 hdul[1].header['EXCAMT']  = temp
                 hdul[1].header['CMDGAIN'] = EMgain
                 hdul[1].header['ARRTYPE'] = arrtype

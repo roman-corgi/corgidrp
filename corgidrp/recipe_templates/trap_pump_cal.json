@@ -10,7 +10,7 @@
         {
             "name" : "prescan_biassub",
             "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC"
+                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
             },
             "keywords" : {
                 "use_imaging_area" : true
@@ -29,7 +29,10 @@
             "name" : "em_gain_division"
         },
         {
-            "name" : "calibrate_trap_pump"
+            "name" : "calibrate_trap_pump",
+            "keywords" : {
+                "length_lim" : 5, "thresh_factor" : 1.5
+            }
         },
         {
             "name" : "save"
