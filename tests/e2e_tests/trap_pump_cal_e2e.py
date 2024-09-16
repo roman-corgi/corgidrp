@@ -45,10 +45,13 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
 
     # define the raw science data to process
     trap_pump_data_filelist = []
+    trap_cal_filename = None
     for root, _, files in os.walk(trap_pump_datadir):
         for name in files:
             if not name.endswith('.fits'):
                 continue
+            if trap_cal_filename is None:
+                trap_cal_filename = name # get first filename fed to walk_corgidrp for finding cal file later
             f = os.path.join(root, name)
             trap_pump_data_filelist.append(f)
 
@@ -71,6 +74,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
                                                  input_dataset=mock_input_dataset)
     nonlinear_cal.save(filedir=trap_pump_outputdir, filename="mock_nonlinearcal.fits" )
 
+
     # Load and combine noise maps from various calibration files into a single array
     with fits.open(fpn_path) as hdulist:
         fpn_dat = hdulist[0].data
@@ -92,7 +96,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected EM electrons'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
-    ext_hdr['B_O'] = -0.0394 # bias offset not simulated in the data, but won't hurt to include this in the processing
+    ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
 
     # Create a DetectorNoiseMaps object and save it
@@ -118,10 +122,10 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
     this_caldb.remove_entry(noise_maps)
-
-    generated_trapcal_file = os.path.join(trap_pump_outputdir, "TPUMP_Npumps_10000_gain10_phasetime13.530477745798075_trapcal.fits")
-
-    # Load the generated bad pixel map image and master dark reference data
+    # find cal file (naming convention for data.TrapCalibration class)
+    generated_trapcal_file = trap_cal_filename[:-5]+'_trapcal.fits'
+    generated_trapcal_file = os.path.join(trap_pump_outputdir, generated_trapcal_file) 
+    # Load
     tpump_calibration = data.Image(generated_trapcal_file)
     ##### Check against TVAC trap pump dictionary
     
@@ -150,13 +154,14 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
         
     
     #Note: removed several tests about sig_E and sig_cs, since we're not saving sig_E and sig_cs currently
-    for i in range(len(TVAC_trap_dict)):
-        t = TVAC_trap_dict[i]
+    for t in list(TVAC_trap_dict.keys()):
         assert(t in e2e_trap_dict_keys)
-        assert(TVAC_trap_dict[t]['E'] == e2e_trap_dict[t]['E'])
-        assert(TVAC_trap_dict[t]['cs'] == e2e_trap_dict[t]['cs'])
-        assert(TVAC_trap_dict[t]['tau at input T'] == e2e_trap_dict[t]['tau at input T'])
-            
+        assert((TVAC_trap_dict[t]['E'] == e2e_trap_dict[t]['E']) or 
+                ((TVAC_trap_dict[t]['E'] is None and np.isnan(e2e_trap_dict[t]['E']))))
+        assert((TVAC_trap_dict[t]['cs'] == e2e_trap_dict[t]['cs']) or 
+                ((TVAC_trap_dict[t]['cs'] is None and np.isnan(e2e_trap_dict[t]['cs']))))
+        assert((TVAC_trap_dict[t]['tau at input T'] == e2e_trap_dict[t]['tau at input T']) or 
+                ((TVAC_trap_dict[t]['tau at input T'] is None and np.isnan(e2e_trap_dict[t]['tau at input T']))))
     # trap densities should all match if the above passes; that was tested in II&T tests mainly 
     # b/c all the outputs of the trap-pump function were tested
 
@@ -172,10 +177,10 @@ if __name__ == "__main__":
     if False: # making e2e simulated data, which is ENG and includes nonlinearity
         nonlin_path = os.path.join(tvacdata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
         #nonlin_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..', 'test_data', "nonlin_table_TVAC.txt")
-        metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..','test_data', "metadata.yaml")
+        metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), '..','test_data', "metadata_eng.yaml")
         output_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/simulated_e2e_trap_pumped_frames/"
         np.random.seed(39)
-        mocks.generate_mock_pump_trap_data(output_dir, metadata_file, e2emode=True, nonlin_path=nonlin_path, EMgain=1, read_noise=100, arrtype='SCI')
+        mocks.generate_mock_pump_trap_data(output_dir, metadata_file, e2emode=True, nonlin_path=nonlin_path, EMgain=1.5, read_noise=100, arrtype='ENG')
 
     outputdir = thisfile_dir
 
@@ -186,8 +191,8 @@ if __name__ == "__main__":
                     help="directory to write results to [%(default)s]")
     ap.add_argument('-e2e', '--e2e_flag', default=True, help="True if testing newer simulated data, false if testing older scaled-down data")
     args_here = ['--tvacdata_dir', tvacdata_dir, '--outputdir', outputdir]#, '--e2e_flag',False]
-    #args = ap.parse_args()
-    args = ap.parse_args(args_here)
+    args = ap.parse_args()
+    #args = ap.parse_args(args_here)
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
     e2e = args.e2e_flag
