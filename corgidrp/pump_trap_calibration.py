@@ -2128,7 +2128,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
     cs_fit_thresh = 0.8, E_min = 0, E_max = 1, cs_min = 0,
     cs_max = 50, bins_E = 100, bins_cs = 10, input_T = 180,
     sample_data = False,
-    verbose=False):
+    verbose=False, bin_size=None):
     """This function analyzes trap-pumped frames and outputs the location of
     each radiation trap (pixel and sub-electrode location within the pixel),
     everything needed to determine the release time constant at any temperature
@@ -2210,6 +2210,9 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         input_T (float, optional): Temperature of Roman EMCCD at which to calculate the release time constant (in units of Kelvin). Defaults to 180.
         sample_data (bool, optional): Whether to run the sample data on Alfresco. Defaults to False.
         verbose (bool, optional): Whether to print out additional information. Defaults to False.
+        bin_size (int, optional): Side length of the square of pixels to consider for binning in illumination_correction(). If None, the square root of the smaller dimension (the smaller of the number of rows and number of cols) is used. Defaults to None. 
+            If a value bigger than the smaller dimension is input, then the size of the smaller dimension is used instead.  The optimal value for bin_size depends on the trap density, which is unknown, so in principle, 
+            this function could be run several times with decreasing bin size until the maximum number of traps have been detected.
     
     Returns:
         corgi.drp.TrapCalibration: An object containing the results of the trap calibration. The trap densities are appended as an extension HDU, and several other parameters are stored as header keywords in the ext_hdr header.
@@ -2385,7 +2388,10 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             nrows = frames[0].shape[0]
             ncols = frames[0].shape[1]
             small = min(nrows, ncols)
-            binsize = int(np.sqrt(small))
+            if bin_size is not None:
+                binsize = min(small, bin_size)
+            else: 
+                binsize = int(np.sqrt(small))
             for frame in frames:
                 img, local_ill = illumination_correction(frame,
                     binsize = binsize, ill_corr=ill_corr)
