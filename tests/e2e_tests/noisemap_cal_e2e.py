@@ -59,7 +59,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
-    kgain_val = 8.7 
+    kgain_val = 8.7 # From TVAC-20 noise characterization measurements
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=noisemap_outputdir, filename="mock_kgain.fits")
@@ -161,7 +161,7 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     this_caldb = caldb.CalDB() # connection to cal DB
 
     # KGain
-    kgain_val = 8.7
+    kgain_val = 8.7 # From TVAC-20 noise characterization measurements
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=noisemap_outputdir, filename="mock_kgain.fits")
