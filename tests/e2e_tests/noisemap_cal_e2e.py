@@ -1,3 +1,5 @@
+# DetectorNoiseMap E2E Test Code
+
 import argparse
 import os
 import pytest
@@ -28,9 +30,16 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
+    if not os.path.exists(e2eoutput_path):
+        os.mkdir(e2eoutput_path)
     noisemap_outputdir = os.path.join(e2eoutput_path, "noisemap_output")
     if not os.path.exists(noisemap_outputdir):
         os.mkdir(noisemap_outputdir)
+
+    # remove old DetectorNoiseMaps
+    old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DetectorNoiseMaps.fits')))
+    for old_DNM in old_DNMs:
+        os.remove(old_DNM)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -61,7 +70,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
-    kgain_val = 8.7 # From TVAC-20 noise characterization measurements
+    kgain_val = 8.7 
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=noisemap_outputdir, filename="mock_kgain.fits")
@@ -141,9 +150,16 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     iit_noisemap_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data")
     
     # make output directory if needed
+    if not os.path.exists(e2eoutput_path):
+        os.mkdir(e2eoutput_path)
     noisemap_outputdir = os.path.join(e2eoutput_path, "noisemap_output")
     if not os.path.exists(noisemap_outputdir):
         os.mkdir(noisemap_outputdir)
+
+    # remove old DetectorNoiseMaps
+    old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DetectorNoiseMaps.fits')))
+    for old_DNM in old_DNMs:
+        os.remove(old_DNM)
 
     # define the raw science data to process
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
