@@ -739,6 +739,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
 
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
+    
+    l2a_data_filename = dataset.copy()[0].filename
+    noise_maps.filename =  l2a_data_filename[:24] + '_DetectorNoiseMaps.fits'
 
     return noise_maps
 
