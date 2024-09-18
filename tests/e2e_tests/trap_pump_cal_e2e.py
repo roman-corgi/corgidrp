@@ -1,6 +1,7 @@
 import argparse
 import os
 import pytest
+import json
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -22,6 +23,9 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
 def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
+    '''When e2e=True, the end-to-end test is run, which uses more realistic simulated data compared 
+    to when e2e=False, in which case the less-realistic simulated data for the unit test in test_trap_pump_calibration is used.
+    The recipe for that scaled-down data for the unit test is stored in the e2e_tests folder.'''
     # figure out paths, assuming everything is located in the same relative location
     if not e2e: # if you want to test older simulated data
         trap_pump_datadir = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
@@ -114,9 +118,13 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
 
     ####### Run the walker on some test_data
     if not e2e: # if you want to test older simulated data
-        walker.walk_corgidrp(trap_pump_data_filelist, "", trap_pump_outputdir, template="trap_pump_cal_small_size.json")
+        template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_small_size_e2e.json"), 'r'))
+        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
+        walker.run_recipe(recipe)
     if e2e:
-        walker.walk_corgidrp(trap_pump_data_filelist, "", trap_pump_outputdir, template="trap_pump_cal.json")        
+        template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_e2e.json"), 'r'))
+        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
+        walker.run_recipe(recipe)
 
 
     # clean up by removing entry
@@ -162,6 +170,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
                 ((TVAC_trap_dict[t]['cs'] is None and np.isnan(e2e_trap_dict[t]['cs']))))
         assert((TVAC_trap_dict[t]['tau at input T'] == e2e_trap_dict[t]['tau at input T']) or 
                 ((TVAC_trap_dict[t]['tau at input T'] is None and np.isnan(e2e_trap_dict[t]['tau at input T']))))
+    pass
     # trap densities should all match if the above passes; that was tested in II&T tests mainly 
     # b/c all the outputs of the trap-pump function were tested
 

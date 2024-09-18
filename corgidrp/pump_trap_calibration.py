@@ -2120,15 +2120,15 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
 
 
 def tpump_analysis(input_dataset,time_head = 'TPTAU', 
-                   mean_field = None, length_lim = 6,
-    thresh_factor = 3, k_prob = 1, ill_corr = True, tfit_const = True,
+                   mean_field = None, length_lim = 5,
+    thresh_factor = 1.5, k_prob = 1, ill_corr = True, tfit_const = True,
     tau_fit_thresh = 0.8, tau_min = 0.7e-6, tau_max = 1.3e-2, tauc_min = 0,
     tauc_max = 1e-5, pc_min = 0, pc_max = 2, offset_min = 10,
     offset_max = 10,
     cs_fit_thresh = 0.8, E_min = 0, E_max = 1, cs_min = 0,
     cs_max = 50, bins_E = 100, bins_cs = 10, input_T = 180,
     sample_data = False,
-    verbose=False, bin_size=None):
+    verbose=False, bin_size=10):
     """This function analyzes trap-pumped frames and outputs the location of
     each radiation trap (pixel and sub-electrode location within the pixel),
     everything needed to determine the release time constant at any temperature
@@ -2186,8 +2186,8 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         input_dataset (corgi.drp.Dataset): The input dataset to be analyzed. The dataset should be a stack of trap-pumped frames.
         time_head (str): Keyword corresponding to phase time for each FITS file. The keyword value is assumed to be a float (units of microseconds). Defaults to 'TPTAU'.
         mean_field (float, optional): The mean electron level that was present in each pixel before trap pumping was performed (excluding EM gain). Only useful if the mean level is less than num_pumps/4 e-. If num_pumps/4 e- or higher, use None.
-        length_lim (int, optional): Minimum number of frames for which a dipole needs to meet the threshold to be considered a true trap. Defaults to 6.
-        thresh_factor (float, optional): Number of standard deviations from the mean a dipole should stand out to be considered for a trap. Defaults to 3.
+        length_lim (int, optional): Minimum number of frames for which a dipole needs to meet the threshold to be considered a true trap. Defaults to 5.
+        thresh_factor (float, optional): Number of standard deviations from the mean a dipole should stand out to be considered for a trap. Defaults to 1.5.
         k_prob (int, optional): The probability function used for finding the e-/DN factor. If the code fails with an exception, re-run the code with 2.  Defaults to 1.
         ill_corr (bool, optional): Whether to run local illumination correction on each trap-pumped frame. Defaults to True.
         tfit_const (bool, optional): Whether to use trap_fit_const() for curve fitting, treating the capture probability as constant. Defaults to True.
@@ -2210,7 +2210,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
         input_T (float, optional): Temperature of Roman EMCCD at which to calculate the release time constant (in units of Kelvin). Defaults to 180.
         sample_data (bool, optional): Whether to run the sample data on Alfresco. Defaults to False.
         verbose (bool, optional): Whether to print out additional information. Defaults to False.
-        bin_size (int, optional): Side length of the square of pixels to consider for binning in illumination_correction(). If None, the square root of the smaller dimension (the smaller of the number of rows and number of cols) is used. Defaults to None. 
+        bin_size (int, optional): Side length of the square of pixels to consider for binning in illumination_correction(). If None, the square root of the smaller dimension (the smaller of the number of rows and number of cols) is used. Defaults to 10. 
             If a value bigger than the smaller dimension is input, then the size of the smaller dimension is used instead.  The optimal value for bin_size depends on the trap density, which is unknown, so in principle, 
             this function could be run several times with decreasing bin size until the maximum number of traps have been detected.
     

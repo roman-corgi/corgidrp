@@ -1021,8 +1021,17 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
         read_noise (float): desired read noise for frames
         eperdn (float):  desired k gain (e-/DN conversion factor)
         e2emode (bool):  If True, e2e simulated data made instead of data for the unit test.  
-            Difference b/w the two: e2e is ENG size and has readout effects 
-            (read noise, EM gain, bias, k gain, nonlinearity) added after traps added.  
+            Difference b/w the two: 
+            This e2emode data differs from the data generated when e2emode is False in the following ways:
+            -The bright pixel of each trap is simulated in a more realistic way (i.e., at every phase time frame).
+            -Simulated readout is more realistic (read noise, EM gain, k gain, nonlinearity, bias invoked after traps simulated).  
+            In the other dataset (when e2emode is False), readout was simulated before traps were added, and no nonlinearity was applied.  
+            Also, the number of electrons in the dark pixels of the dipoles can no longer be negative, and this condition is enforced.
+            -The number of pumps and injected charge are much higher in these frames so that traps stand out above the read noise.  
+            This was not an issue in the other dataset since read noise was added to frames that were EM-gained before charge was injected, which suppressed the effective read noise.
+            -The EM gain used is 1.5.  For a large injected charge amount, the EM gain cannot be very high because of the risk of saturation.  
+            -The number of phase times is 10 per scheme, to reduce the dataset size (compared to 100 when e2emode is False).
+            -The frame format is ENG, as real trap-pump data is.
         nonlin_path (str): Path of nonlinearity correction file to use.  
             The inverse is applied, implementing rather than correcting nonlinearity.  
             If None, no nonlinearity is applied.  Defaults to None.
@@ -1346,6 +1355,10 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
         'sp', '1b', '3b', 'mf1', or 'mf2').
         The temperature is specified by temp (in K).
         
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
+        See doc string of generate_mock_pump_trap_data for full e2emode details.
+
         Args: 
             img_stack (np.array): image stack
             row (int): row
@@ -1385,85 +1398,6 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
 
         return img_stack
 
-    def add_2_dipole_old(img_stack, row, col, ori1, ori2, prob, start1, end1,
-        start2, end2, temp):
-        """Adds a 2-dipole to an image stack img_stack at the location of the
-        bright pixel given by row and col (relative to image area coordinates)
-        that is of orientation 'above' or
-        'below' (specified by ori1 and ori2).  The 1st dipole is for a number
-        of unique phase times going from start1 to end1, and
-        the 2nd dipole starts from start2 and ends at end2 (inclusive; don't
-        use -1 for end; 0 for start means first frame, length of time array
-        means last frame). The 2-dipole is of probability function
-        prob.  Valid values for prob are 11, 12, 22, 23, and 33.
-        The temperature is specified by temp (in K).
-        
-        Args:
-            img_stack (np.array): image stack
-            row (int): row
-            col (int): col
-            ori1 (str): orientation 1
-            ori2 (str): orientation 2
-            prob (int): probability
-            start1 (int): start 1
-            end1 (int): end 1
-            start2 (int): start 2
-            end2 (int): end 2
-            temp (int): temperature
-
-        Returns:
-            np.array: image stack    
-        """
-        # length limit controlled by how 'long' deficit pixel is since
-        #threshold should be met for all frames for bright pixel
-        if ori1 == 'above':
-            region1 = img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col]
-            region1_c = img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col].copy()
-            #img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col] = offset_l
-        if ori1 == 'below':
-            #img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col] = offset_l
-            region1 = img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col] 
-            region1_c = img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col].copy()
-        if ori2 == 'above':
-            #img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col] = offset_l
-            region2 = img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col]
-            region2_c = img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col].copy()
-        if ori2 == 'below':
-            region2 = img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col]
-            region2_c = img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col].copy()
-        #img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col] = offset_l
-        region1 -= amps_2_trap[prob][temp][start1:end1]
-        region2 -= amps_2_trap[prob][temp][start2:end2]
-        if e2emode:
-            # can't draw more e- than what's there
-            neg_inds1 = np.where(region1 < 0)
-            if neg_inds1[0].size > 0:
-                print(neg_inds1[0].size)
-                pass
-            good_inds1 = np.where(region1 >= 0)
-            region1[neg_inds1] = 0
-            img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][good_inds1[0]] += amps_2_trap[prob][temp][start1:end1][good_inds1[0]]
-            img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][neg_inds1[0]] += region1_c[neg_inds1[0]]
-        
-            # can't draw more e- than what's there
-            neg_inds2 = np.where(region2 < 0)
-            if neg_inds2[0].size > 0:
-                print(neg_inds2[0].size)
-                pass
-            good_inds2 = np.where(region2 >= 0)
-            region2[neg_inds2] = 0
-            img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][good_inds2[0]] += amps_2_trap[prob][temp][start2:end2][good_inds2[0]]
-            img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][neg_inds2[0]] += region2_c[neg_inds2[0]]
-        
-        else:
-            img_stack[:,r0c0[0]+row,r0c0[1]+col] += amps_2_trap[prob][temp][:]
-        # technically, if there is overlap b/w start1:end1 and start2:end2,
-        # then you are physically causing too big of a deficit since you're
-        # saying more emitted than the amount captured in bright pixel, so
-        # avoid this
-        return img_stack
-    
-
     def add_2_dipole(img_stack, row, col, ori1, ori2, prob, start1, end1,
         start2, end2, temp):
         """Adds a 2-dipole to an image stack img_stack at the location of the
@@ -1477,8 +1411,12 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
         prob.  Valid values for prob are 11, 12, 22, 23, and 33.
         The temperature is specified by temp (in K).
 
-        For e2emode, start2:end2 should not overlap with start1:end1, and the ranges should 
-        cover the whole 0:100.
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
+        Also, start2:end2 should not overlap with start1:end1, and the ranges should 
+        cover the whole 0:10 frames.  This condition allows for the simulation of the probability 
+        distribution across all phase times.
+        See doc string of generate_mock_pump_trap_data for full e2emode details.
         
         Args:
             img_stack (np.array): image stack
@@ -1592,6 +1530,12 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
         perhaps 1 phase time, is very unlikely to hit the same region while
         data for each phase time is being taken.
         
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
+        This condition allows for the simulation of the probability 
+        distribution across all phase times.
+        See doc string of generate_mock_pump_trap_data for full e2emode details.
+
         Args: 
             sch_imgs (np.array): scheme images
             prob (int): probability
