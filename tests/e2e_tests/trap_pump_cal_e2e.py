@@ -25,7 +25,13 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     '''When e2e=True, the end-to-end test is run, which uses more realistic simulated data compared 
     to when e2e=False, in which case the less-realistic simulated data for the unit test in test_trap_pump_calibration is used.
-    The recipe for that scaled-down data for the unit test is stored in the e2e_tests folder.'''
+    The recipe for that scaled-down data for the unit test is stored in the e2e_tests folder.
+
+    Args:
+        tvacdata_path (str): path to TVAC data root directory
+        e2eoutput_path (str): path to output files made by this test
+        e2e (bool): If True, run this for the official end-to-end test.  If False, run the scaled-down simulated data used for the unit test for pump_trap_calibration.
+    '''
     # figure out paths, assuming everything is located in the same relative location
     if not e2e: # if you want to test older simulated data
         trap_pump_datadir = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
