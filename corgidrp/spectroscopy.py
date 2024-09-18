@@ -287,26 +287,21 @@ def gaussfit1d(frame, xguess, fwhm_guess=6, halfwidth=5, guesspeak=1, oversample
 
     return xfit, fwhm, peakflux, fitwin, model, residual
 
-def psf_registration_costfunc(p, template, data):
+def shift_and_scale_2darray(array, xshift, yshift, amp):
     """
-    Cost function for a least-squares fit to register a PSF with a fitting template.
+    Evaluate x,y shift and amplitude scale parameters 
+    for a least-squares PSF fit.
 
     Args:
-        p (tuple): shift and scale parameters: 
-                    (x-axis shift in pixels, y-axis shift in pixels, 
-                     amplitude scale factor)
-        template (numpy.ndarray): PSF tempate array, 2d
-        data (numpy.ndarray): PSF data array, 2d
+        array (numpy.ndarray): input data array, 2d
+        xshift (float): x-axis shift in pixels
+        yshift (float): y-axis shift in pixels
+        amp (float): amplitude scale factor
 
     Returns:
-        The sum of squares of differences between the data array and the shifted
-        and scaled template.
+        Flattened array of values after applying the shift and scale parameters
     """
-    xshift = p[0]
-    yshift = p[1]
-    amp = p[2]
-    shifted_template = amp * ndi.shift(template, (yshift, xshift), order=1, prefilter=False)
-    return np.sum((data - shifted_template)**2)
+    return np.ravel(amp * ndi.shift(array, (yshift, xshift), order=1, prefilter=False))
 
 def fit_psf_centroid(psf_template, psf_data, 
                      xcent_template = None, ycent_template = None,
@@ -370,13 +365,14 @@ def fit_psf_centroid(psf_template, psf_data,
     xoffset_guess, yoffset_guess = (0.0, 0.0)
     amp_guess = np.sum(psf_data) / np.sum(psf_template)
     guess_params = (xoffset_guess, yoffset_guess, amp_guess)
-    registration_result = optimize.minimize(psf_registration_costfunc, guess_params, 
-                                            args = (template_stamp, data_stamp), method='L-BFGS-B')
-    assert(registration_result.success == True)
-    (xoffset, yoffset) = (registration_result.x[0], registration_result.x[1])
+
+    (fit_popt, pcov, 
+     infodict, mesg, ier) = optimize.curve_fit(shift_and_scale_2darray, template_stamp, 
+                                               np.ravel(data_stamp), p0=guess_params, full_output=True)
+    assert ier >= 1, mesg
     
-    xfit = xcent_template + (xcom_data - xcom_template) + xoffset
-    yfit = ycent_template + (ycom_data - ycom_template) + yoffset
+    xfit = xcent_template + (xcom_data - xcom_template) + fit_popt[0]
+    yfit = ycent_template + (ycom_data - ycom_template) + fit_popt[1]
     
     psf_data_bkg = psf_data.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
