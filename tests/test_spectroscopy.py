@@ -19,7 +19,7 @@ def test_fit_psf_centroid(errortol_pix = 0.01, verbose = False):
     """
     print('Testing the PSF centroid fitting function used by the spectroscopy wavecal recipe...')
 
-    test_data_path = os.path.join(os.path.dirname(__file__), "test_data")
+    test_data_path = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
     spc_offset_psf_array_fname = os.path.join(test_data_path, 
             'g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits')
     psf_array = fits.getdata(spc_offset_psf_array_fname, ext=0)

@@ -20,7 +20,6 @@ import scipy.optimize as optimize
 from scipy.ndimage import center_of_mass
 import matplotlib.pyplot as plt
 
-
 def get_center_of_mass(frame):
     """
     Finds the center coordinates for a given frame.
