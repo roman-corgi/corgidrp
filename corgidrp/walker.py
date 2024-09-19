@@ -28,6 +28,7 @@ all_steps = {
     "desmear" : corgidrp.l2a_to_l2b.desmear,
     "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
     "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
+    "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures
 }
