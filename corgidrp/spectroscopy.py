@@ -287,6 +287,26 @@ def gaussfit1d(frame, xguess, fwhm_guess=6, halfwidth=5, guesspeak=1, oversample
 
     return xfit, fwhm, peakflux, fitwin, model, residual
 
+def rotate_points(points, angle_rad, pivot_point):
+    """ 
+    Rotate an array of (x,y) coordinates by an angle about a pivot point.
+
+    Args:
+        points (tuple): Two-element tuple of (x,y) coordinates. 
+                The first element is an array of x values; 
+                the second element is an array of y values. 
+        angle_rad (float): Rotation angle in radians
+        pivot_point (tuple): Tuple of (x,y) coordinates of the pivot point.
+
+    Returns:
+        Two-element tuple of rotated (x,y) coordinates.
+    """
+    rotated_points = (points[0] - pivot_point[0], points[1] - pivot_point[1]) 
+    rotated_points = (rotated_points[0] * np.cos(angle_rad) - rotated_points[1] * np.sin(angle_rad),
+                      rotated_points[0] * np.sin(angle_rad) + rotated_points[1] * np.cos(angle_rad))
+    rotated_points = (rotated_points[0] + pivot_point[0], rotated_points[1] + pivot_point[1])
+    return rotated_points
+
 def shift_and_scale_2darray(array, xshift, yshift, amp):
     """
     Evaluate x,y shift and amplitude scale parameters 
