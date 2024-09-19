@@ -324,7 +324,7 @@ def psf_registration_costfunc(p, template, data):
     shifted_template = amp * ndi.shift(template, (yshift, xshift), order=1, prefilter=False)
     return np.sum((data - shifted_template)**2)
 
-def fit_psf_centroid(psf_template, psf_data, 
+def fit_psf_centroid(psf_data, psf_template,
                      xcent_template = None, ycent_template = None,
                      xcent_guess = None, ycent_guess = None,
                      halfwidth = 10, halfheight = 10, 
@@ -334,8 +334,8 @@ def fit_psf_centroid(psf_template, psf_data,
     Fit the centroid of a PSF image with a template.
     
     Args:
-        psf_template (np.ndarray): template PSF, 2D array
-        psf_data (np.ndarray): data PSF, 2D array
+        psf_data (np.ndarray): PSF data, 2D array
+        psf_template (np.ndarray): PSF template, 2D array
         xcent_template (float): true x centroid of the template PSF; for accurate 
                 results this must be determined in advance.
         ycent_template (float): true y centroid of the template PSF; for accurate
@@ -357,6 +357,7 @@ def fit_psf_centroid(psf_template, psf_data,
                 the main lobe of the PSF
         gauss2d_yfit (float): Data PSF y centroid estimated by a 2-D Gaussian fit to 
                 the main lobe of the PSF
+        peakpix_snr (float): Peak-pixel signal-to-noise ratio
         x_precis (float): Statistical precision of the x centroid fit, estimated from
                 peak-pixel S/N ratio
         y_precis (float): Statistical precision of the y centroid fit, estimated from
@@ -370,15 +371,16 @@ def fit_psf_centroid(psf_template, psf_data,
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
     if xcent_guess == None or ycent_guess == None:
-        xcom_data, ycom_data = np.rint(get_center_of_mass(psf_data))
+        median_filt_psf = ndi.median_filter(psf_data, size=2)
+        xcom_data, ycom_data = np.rint(get_center_of_mass(median_filt_psf))
     else:
         xcom_data, ycom_data = (np.rint(xcent_guess), np.rint(ycent_guess))
     
     xmin_template_cut, xmax_template_cut = (int(xcom_template) - halfwidth, int(xcom_template) + halfwidth)
-    ymin_template_cut, ymax_template_cut = (int(ycom_template) - halfwidth, int(ycom_template) + halfwidth) 
+    ymin_template_cut, ymax_template_cut = (int(ycom_template) - halfheight, int(ycom_template) + halfheight) 
     
     xmin_data_cut, xmax_data_cut = (int(xcom_data) - halfwidth, int(xcom_data) + halfwidth)
-    ymin_data_cut, ymax_data_cut = (int(ycom_data) - halfwidth, int(ycom_data) + halfwidth) 
+    ymin_data_cut, ymax_data_cut = (int(ycom_data) - halfheight, int(ycom_data) + halfheight) 
     
     template_stamp = psf_template[ymin_template_cut:ymax_template_cut+1, xmin_template_cut:xmax_template_cut+1]
     data_stamp = psf_data[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
@@ -410,7 +412,7 @@ def fit_psf_centroid(psf_template, psf_data,
                                                 guesspeak = np.max(psf_data), oversample = gauss2d_oversample, 
                                                 refinefit = True)
     
-    (x_precis, y_precis) = (xfwhm / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
-                            yfwhm / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr)
+    (x_precis, y_precis) = (np.abs(xfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
+                            np.abs(yfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr)
 
-    return xfit, yfit, gauss2d_xfit, gauss2d_yfit, x_precis, y_precis
+    return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
