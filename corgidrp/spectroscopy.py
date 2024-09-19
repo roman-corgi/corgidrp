@@ -435,3 +435,71 @@ def fit_psf_centroid(psf_data, psf_template,
                             np.abs(yfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr)
 
     return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
+
+def estimate_dispersion_clocking_angle(xpts, ypts, weights):
+    """ 
+    Estimate the clocking angle of the dispersion axis based on the centroids of
+    the sub-band filter PSFs.
+
+    Args:
+        xpts (numpy.ndarray): Array of x coordinates in EXCAM pixels
+        ypts (numpy.ndarray): Array of y coordinates in EXCAM pixels
+        weights (numpy.ndarray): Array of weights for line fit
+
+    Returns:
+        clocking_angle, clocking_angle_uncertainty
+    """
+    linear_fit, V = np.polyfit(ypts, xpts, deg=1, w=weights, cov=True)
+    
+    theta = np.arctan(1/linear_fit[0])
+    if theta > 0:
+        clocking_angle = np.rad2deg(theta - np.pi)
+    else:
+        clocking_angle = np.rad2deg(theta)
+    clocking_angle_uncertainty = np.abs(np.rad2deg(np.arctan(linear_fit[0] + np.sqrt(V[0,0]))) - 
+                                        np.rad2deg(np.arctan(linear_fit[0] - np.sqrt(V[0,0])))) / 2
+
+    return clocking_angle, clocking_angle_uncertainty 
+
+#def fit_dispersion_polynomials(wavelens, xpts, bandcent):
+#    """ 
+#    Given arrays of wavelengths and positions, fit two polynomials:  
+#    1. Displacement from the band center along the dispersion axis as a function of wavelength  
+#    2. Wavelength as a function of displacement along the dispersion axis
+#    """
+#
+#    # Fit a polynomial to the displacement versus wavelength data points
+#    # Rotate the centroid coordinates so the dispersion axis is horizontal
+#    # to define a rotation pivot point, select the filter closest to the nominal zero deviation wavelength
+#    ref_idx = np.argmin(np.abs(meas['center wavel (nm)'] - ref_wavelen))
+#    (meas['x_cent rot'], 
+#     meas['y_cent rot']) = spectroscopy.rotate_points((meas['x_cent'], meas['y_cent']),
+#                                                      -np.deg2rad(clocking_angle),
+#                                                      (meas['x_cent'][ref_idx], meas['y_cent'][ref_idx]))
+#    
+#    # Fit a polynomial to wavelength versus position
+#    delta_x = (meas['x_cent rot'] - meas['x_cent rot'][ref_idx]) * pixel_pitch_mm
+#    pos_err = meas['y_err est'] * pixel_pitch_mm
+#    wavelens = meas['center wavel (nm)']
+#    weights = 1 / pos_err
+#    lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = meas['center wavel (nm)'], 
+#                                         deg = 3, w = weights))
+#    # Find the position at the band reference wavelength
+#    poly_roots = (np.poly1d(lambda_func_x) - ref_wavelen).roots
+#    real_root = poly_roots[np.isreal(poly_roots)][0]
+#    pos_bandcenter = np.real(real_root)
+#    np.testing.assert_almost_equal(lambda_func_x(pos_bandcenter), ref_wavelen)
+#    rel_pos_mm = delta_x - pos_bandcenter
+#
+#    #Fit two polynomials:  
+#    #1. Displacement from the band center along the dispersion axis as a function of wavelength  
+#    #2. Wavelength as a function of displacement along the dispersion axis
+#    pfit_xrel_lambda = np.polyfit(x = (wavelens - ref_wavelen) / ref_wavelen,                                   
+#                                  y = rel_pos_mm, 
+#                                  deg = 3, w = weights)
+#    xrel_func_lambda = np.poly1d(pfit_xrel_lambda)
+#    
+#    pfit_lambda_xrel = np.polyfit(x = rel_pos_mm,
+#                                  y = wavelens,
+#                                  deg = 3, w = weights)
+#    lambda_func_xrel = np.poly1d(pfit_lambda_xrel)
