@@ -287,7 +287,7 @@ def find_source_locations(image_data, threshold=25, fwhm=7, mask_rad=1):
     
     return sources
 
-def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.0075, plate_guess=(21.8, 0.5)):
+def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.0075, platescale_guess=21.8, platescale_tol=0.1):
     ''' 
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
@@ -297,9 +297,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
         field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.)
         comparison_threshold (int): How many stars in the field to consider for the initial match
         rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
-        plate_guess (tuple): 
-            (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
-            (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.5)
+        platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
+        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.5)
 
     Returns:
         matched_sources (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
@@ -361,30 +360,14 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
 
         len1, len2, len3 = np.sort([s1.separation(s2).value, s2.separation(s3).value, s3.separation(s1).value])
 
-        # # sort from shortest to longest sides
-        # if len1 < len2:
-        #     if len2 < len3:
-        #         len1, len2, len3 = len1, len2, len3
-        #     elif len3 < len1:
-        #         len1, len2, len3 = len3, len1, len2
-        #     else:
-        #         len1, len2, len3 = len1, len3, len2
-        # else: 
-        #     if len1 < len3:
-        #         len1, len2, len3 = len2, len1, len3
-        #     elif len3 < len2:
-        #         len1, len2, len3  = len3, len2, len1
-        #     else:
-        #         len1, len2, len3 = len2, len3, len1
-
         field_side_lengths[i] = np.array([len1, len2, len3])
         perimeter = len1 + len2 + len3
         ap, bp, cp = len1/perimeter, len2/perimeter, len3/perimeter
 
         # make sure plate scale is within tolerance of the guess or else discard this possibility
-        if ((len1 / l1) > plate_guess[0]* (1 + plate_guess[1])) or ((len2 / l2) > plate_guess[0]* (1 + plate_guess[1])) or ((len3 / l3) > plate_guess[0]* (1 + plate_guess[1])):
+        if ((len1 / l1) > platescale_guess* (1 + platescale_tol)) or ((len2 / l2) > platescale_guess* (1 + platescale_tol)) or ((len3 / l3) > platescale_guess* (1 + platescale_tol)):
             ap, bp, cp = 0, 0, 0
-        elif ((len1 / l1) < plate_guess[0]* (plate_guess[1])) or ((len2 / l2) < plate_guess[0]* (plate_guess[1])) or ((len3 / l3) < plate_guess[0]* (plate_guess[1])):
+        elif ((len1 / l1) < platescale_guess* (platescale_tol)) or ((len2 / l2) < platescale_guess* (platescale_tol)) or ((len3 / l3) < platescale_guess* (platescale_tol)):
             ap, bp, cp = 0, 0, 0
 
         # find the best fit to the brightest image triangle
