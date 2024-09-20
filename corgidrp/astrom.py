@@ -316,21 +316,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
     perimeter = l1 + l2 + l3
 
     # the shortest to longest sides get reordered to l1, l2, l3
-    if l1 < l2:
-        if l2 < l3:
-            l1, l2, l3 = l1, l2, l3
-        elif l3 < l1:
-            l1, l2, l3 = l3, l1, l2
-        else:
-            l1, l2, l3 = l1, l3, l2
-    else: 
-        if l1 < l3:
-            l1, l2, l3 = l2, l1, l3
-        elif l3 < l2:
-            l1, l2, l3  = l3, l2, l1
-        else:
-            l1, l2, l3 = l2, l3, l1
-    
+    l1, l2, l3 = np.sort([l1, l2, l3])
+
     a, b, c = l1/perimeter, l2/perimeter, l3/perimeter
 
     # define a search field and load in RA, DEC, Vmag
