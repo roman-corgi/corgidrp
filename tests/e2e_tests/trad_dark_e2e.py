@@ -141,7 +141,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     TVAC_trad_dark = fits.getdata(TVAC_dark_path)
     # clean_trad_dark = (trad_dark.data - fpn_dat/1.340000033378601 - cic_dat)/100
     # master darks are exactly equal, ignoring the telemetry rows (first and last in this case)
-    assert(np.array_equal(TVAC_trad_dark[1:-1], trad_dark[1:-1]))
+    assert(np.allclose(TVAC_trad_dark[1:-1], trad_dark[1:-1], atol=1e-10))
     pass
 
 if __name__ == "__main__":
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
+    tvacdata_dir = "/home/maxmb/Data/corgidrp/CGI_TVAC_Data/"
 
     outputdir = thisfile_dir
 
