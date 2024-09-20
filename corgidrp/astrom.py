@@ -451,7 +451,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
 
     return matched_image_to_field
 
-def compute_platescale_and_northangle(image, source_info, center_coord):
+def compute_platescale_and_northangle(image, source_info, center_coord, center_radius=1):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
     and returns the averged platescale. Calculates the north angle for pairs of stars with the center target
@@ -463,6 +463,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
         center_coord (tuple):
             (float): RA coordinate of the target source
             (float): Dec coordinate of the target source
+        center_radius (float): Percent of the image radius used to crop the image and compute plate scale and north angle from (default: 1 -- ie: the full image is used)
 
     Returns:
         platescale (float): Platescale [mas/pixel]
@@ -487,10 +488,11 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
 
     # use only center quadrant
     imageshape = np.shape(image)
-    quady, quadx = imageshape[0] // 4, imageshape[1] // 4
-    center_source_inds = np.where((guesses['x'] >= quadx) & (guesses['x'] <= imageshape[1] - quadx) & (guesses['y'] >= quady) & (guesses['y'] <= imageshape[0] - quady))
-    quad_guesses = guesses[center_source_inds]
-    quad_skycoords = skycoords[center_source_inds]
+    cut = 1 - center_radius
+    suby, subx = imageshape[0] * cut, imageshape[1] * cut
+    center_source_inds = np.where((guesses['x'] >= subx) & (guesses['x'] <= imageshape[1] - subx) & (guesses['y'] >= suby) & (guesses['y'] <= imageshape[0] - suby))
+    sub_guesses = guesses[center_source_inds]
+    sub_skycoords = skycoords[center_source_inds]
 
     # Platescale calculation
     # create 1_000 random combinations of stars
@@ -501,8 +503,8 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
     # gather the skycoord separations for all combinations
     seps = np.empty(len(combo_list))
     for i,c in enumerate(combo_list):
-        star1 = quad_skycoords[c[0]]
-        star2 = quad_skycoords[c[1]]
+        star1 = sub_skycoords[c[0]]
+        star2 = sub_skycoords[c[1]]
 
         sep = star1.separation(star2).mas
         seps[i] = sep
@@ -510,8 +512,8 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
     # find the separations in pixel space on the image between all combinations
     pixseps = np.empty(len(combo_list))
     for i,c in enumerate(combo_list):
-        star1 = quad_guesses[c[0]]
-        star2 = quad_guesses[c[1]]
+        star1 = sub_guesses[c[0]]
+        star2 = sub_guesses[c[1]]
 
         xguess = star2['x'] - star1['x']
         yguess = star2['y'] - star1['y']
@@ -527,9 +529,9 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
 
     # North angle calculation
     # find the true centerings of the sources in the image from the guesses and save into a table
-    xs = np.empty(len(quad_guesses))
-    ys = np.empty(len(quad_guesses))
-    for i, (gx, gy) in enumerate(zip(quad_guesses['x'], quad_guesses['y'])):
+    xs = np.empty(len(sub_guesses))
+    ys = np.empty(len(sub_guesses))
+    for i, (gx, gy) in enumerate(zip(sub_guesses['x'], sub_guesses['y'])):
         pf, fw, x, y = fakes.gaussfit2d(frame= image, xguess= gx, yguess=gy)
         xs[i] = x
         ys[i] = y
@@ -539,23 +541,22 @@ def compute_platescale_and_northangle(image, source_info, center_coord):
     sources['y'] = ys
 
     # find the sky position angles between the center star and all others
-    pa_sky = np.empty(len(quad_skycoords))
-    for i, star in enumerate(quad_skycoords):
+    pa_sky = np.empty(len(sub_skycoords))
+    for i, star in enumerate(sub_skycoords):
         pa = center_coord.position_angle(star).deg
         pa_sky[i] = pa
 
     # find the pixel position angles
-    pa_pixel = np.empty(len(sources))
-    image_center = 512.
-    for i, (x, y) in enumerate(zip(sources['x'], sources['y'])):
-        pa = angle_between((image_center, image_center), (x,y))
+    pa_pixel = np.empty(len(sub_guesses))
+    for i, (x, y) in enumerate(zip(sub_guesses['x'], sub_guesses['y'])):
+        pa = angle_between((np.shape(image)[0]//2, np.shape(image)[1]//2), (x,y))
         pa_pixel[i] = pa
 
     # find the difference between the measured and true positon angles
-    offset = np.empty(len(sources))
+    offset = np.empty(len(sub_guesses))
     # locate a potential comparison with self
-    if len(np.where((quad_skycoords.ra.value == center_coord.ra.value) & (quad_skycoords.dec.value == center_coord.dec.value))[0]) > 0:
-        same_ind = np.where((quad_skycoords.ra.value == center_coord.ra.value) & (quad_skycoords.dec.value == center_coord.dec.value))[0][0]
+    if len(np.where((sub_skycoords.ra.value == center_coord.ra.value) & (sub_skycoords.dec.value == center_coord.dec.value))[0]) > 0:
+        same_ind = np.where((sub_skycoords.ra.value == center_coord.ra.value) & (sub_skycoords.dec.value == center_coord.dec.value))[0][0]
     else:
         same_ind = None
 
