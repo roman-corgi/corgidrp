@@ -2,7 +2,6 @@ import numpy as np
 import os
 
 import corgidrp.data
-import corgidrp.mocks 
 
 import astropy
 import astropy.io.ascii as ascii
@@ -750,9 +749,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     avg_northangle = np.mean([astro.northangle for astro in astroms])
 
     avg_data = np.array([avg_ra, avg_dec, avg_platescale, avg_northangle])
-    pri, ext = corgidrp.mocks.create_default_headers(obstype='AST')
     astroms_dataset = corgidrp.data.Dataset(astroms)
-    avg_cal = corgidrp.data.AstrometricCalibration(avg_data, pri_hdr=pri, ext_hdr=ext, input_dataset=astroms_dataset)
+    avg_cal = corgidrp.data.AstrometricCalibration(avg_data, pri_hdr=input_dataset[0].pri_hdr, ext_hdr=input_dataset[0].ext_hdr, input_dataset=astroms_dataset)
         
     # update the history
     history_msg = "Boresight calibration completed"
