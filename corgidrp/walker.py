@@ -13,6 +13,7 @@ import corgidrp.l2a_to_l2b
 import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
 import corgidrp.detector
+import corgidrp.darks
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -35,7 +36,8 @@ all_steps = {
     "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
-    "combine_subexposures" : corgidrp.combine.combine_subexposures
+    "combine_subexposures" : corgidrp.combine.combine_subexposures,
+    "build_trad_dark" : corgidrp.darks.build_trad_dark
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")

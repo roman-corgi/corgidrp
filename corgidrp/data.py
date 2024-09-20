@@ -645,7 +645,7 @@ class Dark(Image):
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
-            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
             self.filename = "{0}_dark.fits".format(orig_input_filename)
 
         if err_hdr is not None:
