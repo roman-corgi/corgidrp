@@ -697,6 +697,28 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         full_field_path = os.path.join(os.path.dirname(__file__), "data", field_path)
         field_path = full_field_path
 
+    # combine data frames if requested
+    if frames_to_combine is not None:
+        num_frames = len(input_dataset)
+        data_array = []
+        for frame in range(num_frames):
+            data_array.append(input_dataset[frame].data)
+
+        image_objects = []
+        count = 0
+        while count < num_frames:
+            count += frames_to_combine
+            if count >= num_frames:
+                sub_array = data_array[count - frames_to_combine:]
+            else:
+                sub_array = data_array[count - frames_to_combine: count]
+
+            comb = np.mean(sub_array, axis=0)
+            im = corgidrp.data.Image(comb, pri_hdr=input_dataset[count - frames_to_combine].pri_hdr, ext_hdr=input_dataset[0].ext_hdr)
+            image_objects.append(im)
+        
+        dataset = corgidrp.data.Dataset(image_objects)
+
     # create a place to store all the calibration measurements
     astroms = []
 
