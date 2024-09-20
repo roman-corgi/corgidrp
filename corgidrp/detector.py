@@ -62,7 +62,9 @@ def get_relgains(frame, em_gain, non_lin_correction):
     Returns:
         array_like: Array of relative gain values.
     """
-
+    if non_lin_correction is None: # then no correction
+        return np.ones_like(frame) 
+    
     # Column headers are gains, row headers are dn counts
     gain_ax = non_lin_correction.data[0, 1:]
     count_ax = non_lin_correction.data[1:, 0]
@@ -187,7 +189,9 @@ detector_areas= {
         'prescan' : {
             'rows': 2200,
             'cols': 1088,
-            'r0c0': [0, 0]
+            'r0c0': [0, 0],
+            'col_start': 800,
+            'col_end': 1000
             },
         'prescan_reliable' : {
             'rows': 2200,
@@ -230,7 +234,9 @@ detector_areas= {
         'prescan' : {
             'rows': 2200,
             'cols': 1128,
-            'r0c0': [0, 1072]
+            'r0c0': [0, 1072],
+            'col_start': 1200,
+            'col_end': 1400
             },
         'prescan_reliable' : {
             # not sure if these are good in the eng_conv case where the geometry is
