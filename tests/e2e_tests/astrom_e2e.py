@@ -35,9 +35,6 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
 
     # create raw data that includes injected stars with gaussian psfs
     jwst_calfield_path = os.path.join(os.path.dirname(thisfile_dir), "test_data", "JWST_CALFIELD2020.csv")
-    jwst_calfield = ascii.read(jwst_calfield_path)
-    v_mags = jwst_calfield['VMAG']
-    amplitudes = np.power(10, ((v_mags - 22.5) / (-2.5))) * 10
     image_sources = mocks.create_astrom_data(jwst_calfield_path, add_gauss_noise=False)
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     # create a directory in the output dir to hold the simulated data files
@@ -45,12 +42,21 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     if not os.path.exists(rawdata_dir):
         os.mkdir(rawdata_dir)
 
-    for dark in os.listdir(noise_characterization_path)[:5]:  ## only using the first five frames to save comp time
+    # get an idea of the noise rms
+    noise_datacube = []
+    for dark in os.listdir(noise_characterization_path)[:25]:
+        with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
+            dark_dat = hdulist[1].data
+            noise_datacube.append(dark_dat)
+    noise_std = np.std(noise_datacube, axis=0)
+    noise_rms = np.mean(noise_std)
+
+    for dark in os.listdir(noise_characterization_path)[:25]:
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['OBSTYPE'] = "AST"
-            rms_noise = np.sqrt(np.mean(dark_dat.flatten())**2)
-            scaled_image = ((10 * rms_noise) / np.max(amplitudes)) * image_sources[0].data
+            # setting SNR to ~50 (arbitrary)
+            scaled_image = ((50 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
             # update headers
@@ -146,7 +152,8 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(bp_map)
 
-    ## Check against astrom ground truth (target= [], ps=21.8[mas/pixel], na=45)
+    ## Check against astrom ground truth -- target= [80.553428801, -69.514096821],
+    ## plate scale = 21.8[mas/pixel], north angle = 45 [deg]
     output_files = []
     for file in os.scandir(astrom_cal_outputdir): # sort between added files and subdirectories
         if file.is_file():
@@ -156,11 +163,10 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     expected_northangle = 45
     target = (80.553428801, -69.514096821)
 
-    # currently checks each file indiidually
-    ## boresight now takes all frames and averages platescale, northangle, ra, dec
-    ## this now need to check only the one astrometric calibration file
     astrom_cal = data.AstrometricCalibration(os.path.join(astrom_cal_outputdir, 'AstrometricCalibration.fits'))
 
+    # check orientation is correct within 0.05 [deg]
+    # and plate scale is correct within 0.5 [mas] (arbitrary)
     assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
