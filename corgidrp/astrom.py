@@ -537,7 +537,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
 
     # find the pixel position angles
     pa_pixel = np.empty(len(sub_guesses))
-    for i, (x, y) in enumerate(zip(sub_guesses['x'], sub_guesses['y'])):
+    for i, (x, y) in enumerate(zip(xs, ys)):
         pa = angle_between((np.shape(image)[0]//2, np.shape(image)[1]//2), (x,y))
         pa_pixel[i] = pa
 
