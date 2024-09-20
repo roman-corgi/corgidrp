@@ -9,6 +9,9 @@
     "steps" : [
         {
             "name" : "prescan_biassub",
+            "calibs" :{
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
             "keywords" : {
                 "return_full_frame" : false
             }
@@ -83,7 +86,10 @@
             "name" : "save"
         }, 
         {
-            "name" : "boresight_calibration"
+            "name" : "boresight_calibration",
+            "keywords" : {
+                "frames_to_combine" : 5
+            }
         },
         {
             "name" : "save"
