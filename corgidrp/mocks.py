@@ -32,9 +32,7 @@ detector_areas_test= {
         'prescan_reliable': {
             'rows': 120,
             'cols': 108,
-            'r0c0': [0, 0],
-            'col_start': 0, #10
-            'col_end': 108, #100
+            'r0c0': [0, 0]
         },        
         'prescan': {
             'rows': 120,
@@ -63,9 +61,11 @@ detector_areas_test= {
             'r0c0': [13, 108]
             },
         'prescan' : {
-            'rows': 120,
+            'rows': 220,
             'cols': 108,
-            'r0c0': [0, 0]
+            'r0c0': [0, 0],
+            'col_start': 0, #10
+            'col_end': 108, #100
             },
         'prescan_reliable' : {
             'rows': 220,
@@ -1008,13 +1008,34 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
 
     return dataset
 
-def generate_mock_pump_trap_data(output_dir,meta_path):
+def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10, 
+                                 read_noise = 100, eperdn = 6, e2emode=False, 
+                                 nonlin_path=None, arrtype='SCI'):
     """
     Generate mock pump trap data, save it to the output_directory
     
     Args:
         output_dir (str): output directory
         meta_path (str): metadata path
+        EMgain (float): desired EM gain for frames
+        read_noise (float): desired read noise for frames
+        eperdn (float):  desired k gain (e-/DN conversion factor)
+        e2emode (bool):  If True, e2e simulated data made instead of data for the unit test.  
+            Difference b/w the two: 
+            This e2emode data differs from the data generated when e2emode is False in the following ways:
+            -The bright pixel of each trap is simulated in a more realistic way (i.e., at every phase time frame).
+            -Simulated readout is more realistic (read noise, EM gain, k gain, nonlinearity, bias invoked after traps simulated).  
+            In the other dataset (when e2emode is False), readout was simulated before traps were added, and no nonlinearity was applied.  
+            Also, the number of electrons in the dark pixels of the dipoles can no longer be negative, and this condition is enforced.
+            -The number of pumps and injected charge are much higher in these frames so that traps stand out above the read noise.  
+            This was not an issue in the other dataset since read noise was added to frames that were EM-gained before charge was injected, which suppressed the effective read noise.
+            -The EM gain used is 1.5.  For a large injected charge amount, the EM gain cannot be very high because of the risk of saturation.  
+            -The number of phase times is 10 per scheme, to reduce the dataset size (compared to 100 when e2emode is False).
+            -The frame format is ENG, as real trap-pump data is.
+        nonlin_path (str): Path of nonlinearity correction file to use.  
+            The inverse is applied, implementing rather than correcting nonlinearity.  
+            If None, no nonlinearity is applied.  Defaults to None.
+        arrtype (str): array type (for this function, choice of 'SCI' or 'ENG')
     """
 
     #If output_dir doesn't exist then make it
@@ -1026,6 +1047,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     #meta_path = Path(here, '..', 'util', 'metadata.yaml')
     meta = MetadataWrapper(meta_path)
     num_pumps = 10000
+    multiple = 1
     #nrows, ncols, _ = meta._imaging_area_geom()
     # the way emccd_detect works is that it takes an input for the selected
     # image area within the viable CCD pixels, so my input here must be that
@@ -1033,17 +1055,37 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     # (commented out above)
     nrows, ncols, _ = meta._unpack_geom('image')
     #EM gain
-    g = 10 #1
-    cic = 200 # 0
-    rn = 100 #0
+    g = EMgain
+    cic = 200  
+    rn = read_noise 
     dc = {180: 0.163, 190: 0.243, 200: 0.323, 210: 0.403,
           220: 0.483}
     # dc = {180: 0, 190: 0, 195: 0, 200: 0, 210: 0, 220: 0}
-    bias = 1000 #0
-    eperdn = 6 #1
+    bias = 1000 
+    inj_charge = 500 # 0
+    full_well_image=50000.  # e-
+    full_well_serial=50000.
+    # trap-pumping done when CGI is secondary instrument (i.e., dark):
+    fluxmap = np.zeros((nrows, ncols))
+    # frametime for pumped frames: 1000ms, or 1 s
+    frametime = 1
+    # set these to have no effect, then use these with their input values at the end
+    later_eperdn = eperdn
+    if e2emode: 
+        eperdn = 1
+        cic = 0.02
+        num_pumps = 50000 #120000#90000#15000#5000
+        inj_charge = 27000 #31000#70000#45000#8000 #num_pumps/2 # more than num_pumps/4, so no mean_field input needed
+        multiple = 1
+        g = 1
+        rn = 0
+        bias = 0
+        full_well_image=105000.  # e-
+        full_well_serial=105000.
+        phase_times = 10
     bias_dn = bias/eperdn
     nbits = 14 #1
-    inj_charge = 500 # 0
+    
     def _ENF(g, Nem):
         """
         Returns the ENF.
@@ -1100,8 +1142,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     #180K: gain of 10-20
     emccd[180] = EMCCDDetect(
             em_gain=g,#10,
-            full_well_image=50000.,  # e-
-            full_well_serial=50000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[180], #0.163,  # e-/pix/s
             cic=cic, # e-/pix/frame; lots of CIC from all the prep clocking
             read_noise=rn,  # e-/pix/frame
@@ -1117,8 +1159,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     #190K: gain of 10-20
     emccd[190] = EMCCDDetect(
             em_gain=g,#10,
-            full_well_image=50000.,  # e-
-            full_well_serial=50000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current= dc[190],#0.243,  # e-/pix/s
             cic=cic, # e-/pix/frame
             read_noise=rn,  # e-/pix/frame
@@ -1151,8 +1193,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     #200K: gain of 10-20
     emccd[200] = EMCCDDetect(
             em_gain=g,#10,
-            full_well_image=50000.,  # e-
-            full_well_serial=50000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[200], #0.323,  # e-/pix/s
             cic=cic, # e-/pix/frame
             read_noise=rn,  # e-/pix/frame
@@ -1168,8 +1210,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     #210K: gain of 10-20
     emccd[210] = EMCCDDetect(
             em_gain=g, #10,
-            full_well_image=50000.,  # e-
-            full_well_serial=50000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[210], #0.403,  # e-/pix/s
             cic=cic, # e-/pix/frame
             read_noise=rn,  # e-/pix/frame
@@ -1185,8 +1227,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     #220K: gain of 10-20
     emccd[220] = EMCCDDetect(
             em_gain=g, #10,
-            full_well_image=50000.,  # e-
-            full_well_serial=50000.,  # e-
+            full_well_image=full_well_image,  # e-
+            full_well_serial=full_well_serial,  # e-
             dark_current=dc[220], #0.483,  # e-/pix/s
             cic=cic, # e-/pix/frame; divide by 15 to get the same 1000
             read_noise=rn,  # e-/pix/frame
@@ -1199,11 +1241,6 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
             numel_gain_register=604,
             meta_path=meta_path
         )
-
-    # trap-pumping done when CGI is secondary instrument (i.e., dark):
-    fluxmap = np.zeros((nrows, ncols))
-    # frametime for pumped frames: 1000ms, or 1 s
-    frametime = 1
 
     #when tauc is 3e-3, that gives a mean e- field of 2090 e-
     tauc = 1e-8 #3e-3
@@ -1245,11 +1282,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         taus4[i] = tau_temp(i, E4, cs4)
     #tau = 7.5e-3
     #tau2 = 8.8e-3
-    time_data = (np.logspace(-6, -2, 100))*10**6 # in us
+    if e2emode:
+        time_data = (np.logspace(-6, -2, phase_times))*10**6 # in us 
+    else:
+        time_data = (np.logspace(-6, -2, 100))*10**6 # in us 
     #time_data = (np.linspace(1e-6, 1e-2, 50))*10**6 # in us
     time_data = time_data.astype(float)
     # make one phase time a repitition
     time_data[-1] = time_data[-2]
+    time_data = np.array(time_data.tolist()*multiple)
     time_data_s = time_data/10**6 # in s
     # half the # of frames for length limit
     length_limit = 5 #int(np.ceil((len(time_data)/2)))
@@ -1262,37 +1303,37 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     amps2_mean_field = {}
     amps11 = {}; amps12 = {}; amps22 = {}; amps23 = {}; amps33 = {}; amps21 ={}
     for i in temp_data:
-        amps1[i] = offset_u + g*P1(time_data_s, 0, tauc, taus[i], num_pumps=num_pumps)/eperdn
+        amps1[i] = offset_u + g*P1(time_data_s, 0, tauc, taus[i], num_pumps)/eperdn
         amps11[i] = offset_u + g*P1_P1(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
-        amps2[i] = offset_u + g*P2(time_data_s, 0, tauc, taus[i], num_pumps=num_pumps)/eperdn
+            tauc2, taus2[i], num_pumps)/eperdn
+        amps2[i] = offset_u + g*P2(time_data_s, 0, tauc, taus[i], num_pumps)/eperdn
         amps12[i] = offset_u + g*P1_P2(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
+            tauc2, taus2[i], num_pumps)/eperdn
         amps22[i] = offset_u + g*P2_P2(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
-        amps3[i] = offset_u + g*P3(time_data_s, 0, tauc, taus[i], num_pumps=num_pumps)/eperdn
+            tauc2, taus2[i], num_pumps)/eperdn
+        amps3[i] = offset_u + g*P3(time_data_s, 0, tauc, taus[i], num_pumps)/eperdn
         amps33[i] = offset_u + g*P3_P3(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
+            tauc2, taus2[i], num_pumps)/eperdn
         amps23[i] = offset_u + g*P2_P3(time_data_s, 0, tauc, taus[i],
-            tauc2, taus2[i], num_pumps=num_pumps)/eperdn
+            tauc2, taus2[i], num_pumps)/eperdn
         # just for (98,33)
         amps21[i] =  offset_u + g*P1_P2(time_data_s, 0, tauc2, taus2[i],
-            tauc, taus[i], num_pumps=num_pumps)/eperdn
+            tauc, taus[i], num_pumps)/eperdn
         # now a special amps just for ensuring good eperdn determination
         # actually, doesn't usually meet trap_id thresh, but no harm
         # including it
-        amps1_k[i] = offset_u + g*P1(time_data_s, 0, tauc3, taus3[i], num_pumps=num_pumps)/eperdn
+        amps1_k[i] = offset_u + g*P1(time_data_s, 0, tauc3, taus3[i], num_pumps)/eperdn
         # for the case of (89,2) with a single trap with tau2
-        amps1_tau2[i] = offset_u + g*P1(time_data_s, 0, tauc2, taus2[i], num_pumps=num_pumps)/eperdn
+        amps1_tau2[i] = offset_u + g*P1(time_data_s, 0, tauc2, taus2[i], num_pumps)/eperdn
         # for the case of (77,90) with a single trap with tau2
-        amps3_tau2[i] = offset_u + g*P3(time_data_s, 0, tauc2, taus2[i], num_pumps=num_pumps)/eperdn
+        amps3_tau2[i] = offset_u + g*P3(time_data_s, 0, tauc2, taus2[i], num_pumps)/eperdn
         #amps1_k[i] = g*2500/eperdn
         # make a trap for the mean_field test (when mean field=400e- < 2500e-)
         #this trap peaks at 250 e-
         amps1_mean_field[i] = offset_u + \
-            g*P1(time_data_s,0,tauc4,taus4[i])/eperdn
+            g*P1(time_data_s,0,tauc4,taus4[i], num_pumps)/eperdn
         amps2_mean_field[i] = offset_u + \
-            g*P2(time_data_s,0,tauc4,taus4[i])/eperdn
+            g*P2(time_data_s,0,tauc4,taus4[i], num_pumps)/eperdn
     amps_1_trap = {1: amps1, 2: amps2, 3: amps3, 'sp': amps1_k,
             '1b': amps1_tau2, '3b': amps3_tau2, 'mf1': amps1_mean_field,
             'mf2': amps2_mean_field}
@@ -1314,6 +1355,10 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         'sp', '1b', '3b', 'mf1', or 'mf2').
         The temperature is specified by temp (in K).
         
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
+        See doc string of generate_mock_pump_trap_data for full e2emode details.
+
         Args: 
             img_stack (np.array): image stack
             row (int): row
@@ -1327,21 +1372,30 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         Returns:
             np.array: image stack
         """
-        img_stack[:,r0c0[0]+row,r0c0[1]+col] += amps_1_trap[prob][temp][:]
         # length limit controlled by how 'long' deficit pixel is since
         #threshold should be met for all frames for bright pixel
-        # The subtractions below may get the e- value negative for a sub frame,
-        #  but this
-        # is simply to ensure that the trap_id() threshold is met since
-        # the std dev for a small sub will be big with the presence of traps
         if ori == 'above':
             #img_stack[start:end,r0c0[0]+row+1,r0c0[1]+col] = offset_l
-            img_stack[start:end,r0c0[0]+row+1,r0c0[1]+col] -= \
-                amps_1_trap[prob][temp][start:end]
+            region = img_stack[start:end,r0c0[0]+row+1,r0c0[1]+col]
+            region_c = img_stack[start:end,r0c0[0]+row+1,r0c0[1]+col].copy()
         if ori == 'below':
             #img_stack[start:end,r0c0[0]+row-1,r0c0[1]+col] = offset_l
-            img_stack[start:end,r0c0[0]+row-1,r0c0[1]+col] -= \
-                amps_1_trap[prob][temp][start:end]
+            region = img_stack[start:end,r0c0[0]+row-1,r0c0[1]+col]
+            region_c = img_stack[start:end,r0c0[0]+row-1,r0c0[1]+col].copy()
+        region -= amps_1_trap[prob][temp][start:end]
+        if e2emode:
+            # can't draw more e- than what's there
+            neg_inds = np.where(region < 0)
+            good_inds = np.where(region >= 0)
+            if neg_inds[0].size > 0:
+                print(neg_inds[0].size)
+                pass
+            region[neg_inds[0]] = 0
+            img_stack[start:end,r0c0[0]+row,r0c0[1]+col][good_inds[0]] += amps_1_trap[prob][temp][start:end][good_inds[0]]
+            img_stack[start:end,r0c0[0]+row,r0c0[1]+col][neg_inds[0]] += region_c[neg_inds[0]]
+        else:
+            img_stack[: ,r0c0[0]+row,r0c0[1]+col] += amps_1_trap[prob][temp][:]
+
         return img_stack
 
     def add_2_dipole(img_stack, row, col, ori1, ori2, prob, start1, end1,
@@ -1356,6 +1410,13 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         means last frame). The 2-dipole is of probability function
         prob.  Valid values for prob are 11, 12, 22, 23, and 33.
         The temperature is specified by temp (in K).
+
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
+        Also, start2:end2 should not overlap with start1:end1, and the ranges should 
+        cover the whole 0:10 frames.  This condition allows for the simulation of the probability 
+        distribution across all phase times.
+        See doc string of generate_mock_pump_trap_data for full e2emode details.
         
         Args:
             img_stack (np.array): image stack
@@ -1367,36 +1428,57 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
             start1 (int): start 1
             end1 (int): end 1
             start2 (int): start 2
-            end2 (int): end 2
+            end2 (int): end 2  
             temp (int): temperature
 
         Returns:
             np.array: image stack    
         """
-        img_stack[:,r0c0[0]+row,r0c0[1]+col] += \
-            amps_2_trap[prob][temp][:]
         # length limit controlled by how 'long' deficit pixel is since
         #threshold should be met for all frames for bright pixel
-        # The subtractions below may get the e- value negative for a sub frame,
-        #  but this
-        # is simply to ensure that the trap_id() threshold is met since
-        # the std dev for a small sub will be big with the presence of traps
         if ori1 == 'above':
+            region1 = img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col]
+            region1_c = img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col].copy()
             #img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col] = offset_l
-            img_stack[start1:end1,r0c0[0]+row+1,r0c0[1]+col] -= \
-                amps_2_trap[prob][temp][start1:end1]
         if ori1 == 'below':
             #img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col] = offset_l
-            img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col] -= \
-                amps_2_trap[prob][temp][start1:end1]
+            region1 = img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col] 
+            region1_c = img_stack[start1:end1,r0c0[0]+row-1,r0c0[1]+col].copy()
         if ori2 == 'above':
             #img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col] = offset_l
-            img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col] -= \
-                amps_2_trap[prob][temp][start2:end2]
+            region2 = img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col]
+            region2_c = img_stack[start2:end2,r0c0[0]+row+1,r0c0[1]+col].copy()
         if ori2 == 'below':
-            #img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col] = offset_l
-            img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col] -= \
-                amps_2_trap[prob][temp][start2:end2]
+            region2 = img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col]
+            region2_c = img_stack[start2:end2,r0c0[0]+row-1,r0c0[1]+col].copy()
+        # technically, should subtract 1 prob distribution at at time (amps_1_trap), but I'm just subtracting 
+        # a bit more than I'm supposed to, and doesn't matter too much since these 
+        # are the deficit pixels (or pixel) next to the bright pixel, which is what counts for doing fits
+        region1 -= amps_2_trap[prob][temp][start1:end1]
+        region2 -= amps_2_trap[prob][temp][start2:end2]
+        if e2emode:
+            # can't draw more e- than what's there
+            neg_inds1 = np.where(region1 < 0)
+            if neg_inds1[0].size > 0:
+                print(neg_inds1[0].size)
+                pass
+            good_inds1 = np.where(region1 >= 0)
+            region1[neg_inds1] = 0
+            img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][good_inds1[0]] += amps_2_trap[prob][temp][start1:end1][good_inds1[0]]
+            img_stack[start1:end1,r0c0[0]+row,r0c0[1]+col][neg_inds1[0]] += region1_c[neg_inds1[0]]
+        
+            # can't draw more e- than what's there
+            neg_inds2 = np.where(region2 < 0)
+            if neg_inds2[0].size > 0:
+                print(neg_inds2[0].size)
+                pass
+            good_inds2 = np.where(region2 >= 0)
+            region2[neg_inds2] = 0
+            img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][good_inds2[0]] += amps_2_trap[prob][temp][start2:end2][good_inds2[0]]
+            img_stack[start2:end2,r0c0[0]+row,r0c0[1]+col][neg_inds2[0]] += region2_c[neg_inds2[0]]
+        
+        else:
+            img_stack[:,r0c0[0]+row,r0c0[1]+col] += amps_2_trap[prob][temp][:]
         # technically, if there is overlap b/w start1:end1 and start2:end2,
         # then you are physically causing too big of a deficit since you're
         # saying more emitted than the amount captured in bright pixel, so
@@ -1448,6 +1530,12 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         perhaps 1 phase time, is very unlikely to hit the same region while
         data for each phase time is being taken.
         
+        When e2emode is True, the amount subtracted from the dark pixel and added to the bright 
+        pixel of a given dipole is constrained so that a pixel is not left with a negative number of electrons. 
+        This condition allows for the simulation of the probability 
+        distribution across all phase times.
+        See doc string of generate_mock_pump_trap_data for full e2emode details.
+
         Args: 
             sch_imgs (np.array): scheme images
             prob (int): probability
@@ -1461,27 +1549,42 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         """
         # area with defect (high above mean),
         # but no dipole that stands out enough without ill_corr = True
-        sch_imgs[:,r0c0[0]+12:r0c0[0]+22,r0c0[1]+17:r0c0[1]+27]=g*9000/eperdn
+        amount = 9000
+        if e2emode:
+            amount = inj_charge*2
+        sch_imgs[:,r0c0[0]+12:r0c0[0]+22,r0c0[1]+17:r0c0[1]+27]=g*amount/eperdn
         # now a dipole that meets threshold around local mean doesn't meet
         # threshold around frame mean; would be detected only after
         # illumination correction
-        sch_imgs[:,r0c0[0]+13, r0c0[1]+21] += \
-            amps_1_trap[prob][temp][:]
-            #offset_u + amps_1_trap[prob][temp][:]
-            #2*offset_u + fit_thresh*std_dev/eperdn
         if ori == 'above':
-            sch_imgs[:,r0c0[0]+13+1, r0c0[1]+21] -= \
-                amps_1_trap[prob][temp][:]
+            region = sch_imgs[:,r0c0[0]+13+1, r0c0[1]+21] 
+            region_c = region.copy()
         if ori == 'below':
-            sch_imgs[:,r0c0[0]+13-1, r0c0[1]+21] -= \
-                amps_1_trap[prob][temp][:]
+            region = sch_imgs[:,r0c0[0]+13-1, r0c0[1]+21] 
+            region_c = region.copy()
                 # 2*offset_u - fit_thresh*std_dev/eperdn
+        region -= amps_1_trap[prob][temp][:]
+        if e2emode: # realistic handling:  can't trap more charge than what's there in a pixel
+            neg_inds = np.where(region < 0)
+            if neg_inds[0].size > 0:
+                print(neg_inds[0].size)
+            good_inds = np.where(region >= 0)
+            region[neg_inds[0]] = 0
+            sch_imgs[good_inds[0],r0c0[0]+13, r0c0[1]+21] += amps_1_trap[prob][temp][good_inds[0]]
+            sch_imgs[neg_inds[0],r0c0[0]+13,r0c0[1]+21] += region_c[neg_inds[0]]
+        else:
+            sch_imgs[:,r0c0[0]+13, r0c0[1]+21] += amps_1_trap[prob][temp][:]
 
         return sch_imgs
+    
     #initializing
     sch = {1: None, 2: None, 3: None, 4: None}
     #temps = {170: sch, 180: sch, 190: sch, 200: sch, 210: sch, 220: sch}
-    temps = {180: sch, 190: sch, 200: sch, 210: sch, 220: sch}
+    # change from last iteration: make copies of sch below b/c make_scheme_frames() below was changing sch present in 
+    # EVERY temp for every iteration in the temps for loop; however, no actual change in the output since 
+    # the output .fits files were saved before the next iteration's make_scheme_frames() is called. So, Max's
+    # unit test is unchanged. 
+    temps = {180: sch, 190: sch.copy(), 200: sch.copy(), 210: sch.copy(), 220: sch.copy()}
     #temps = {180: sch}
 
     # first, get rid of files already existing in the folders where I'll put
@@ -1494,8 +1597,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
     #             os.remove(Path(curr_sch_dir, file))
 
     for temp in temps.keys():
-        for sch in [1,2,3,4]:
-            temps[temp][sch] = make_scheme_frames(emccd[temp])
+        for sc in [1,2,3,4]:
+            temps[temp][sc] = make_scheme_frames(emccd[temp])
         # 14 total traps (15 with the (13,19) defect trap); at least 1 in every
         # possible sub-electrode location
         # careful not to add traps in defect region; do that with add_defect()
@@ -1515,104 +1618,213 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
         # has tau value outside of 1e-6 to 1e-2, but provides a peak trap
         # actually, doesn't meet threshold usually to count as trap, but
         #no harm leaving it in
-        add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, 100, temp)
-        # add in 'CENel1' trap for all phase times
-    #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
-    #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
-        add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, 100, temp)
-        add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, 100, temp)
-        # add in 'RHSel1' trap for more than length limit (but diff lengths)
-        #unused sch2 in this same pixel that is compatible with another trap
-        add_1_dipole(temps[temp][1], 50, 50, 'above', 1, 0, 100, temp)
-        add_1_dipole(temps[temp][4], 50, 50, 'above', 3, 3, 98, temp)
-        add_1_dipole(temps[temp][2], 50, 50, 'below', 1, 2, 99, temp)
-        # FALSE TRAPS: 'LHSel2' trap that doesn't meet length limit of unique
-        # phase times even though the actual length is met for first 2
-        # (and/or doesn't pass trap_id(), but I've already tested this case in
-        # its unit test file)
-        # (3rd will be 'unused')
-        add_1_dipole(temps[temp][1], 71, 84, 'above', 2, 95, 100, temp)
-        add_1_dipole(temps[temp][2], 71, 84, 'below', 1, 95, 100, temp)
-        add_1_dipole(temps[temp][4], 71, 84, 'above', 3, 9, 20, temp)
-        # 'LHSel2' trap
-        add_1_dipole(temps[temp][1], 60, 80, 'above', 2, 1, 100, temp)
-        add_1_dipole(temps[temp][2], 60, 80, 'below', 1, 1, 100, temp)
-        add_1_dipole(temps[temp][4], 60, 80, 'above', 3, 1, 100, temp)
-        # 'CENel2' trap
-        add_1_dipole(temps[temp][1], 68, 67, 'above', 1, 0, 100, temp)
-        add_1_dipole(temps[temp][2], 68, 67, 'below', 1, 0, 100, temp)
-    #    add_1_dipole(temps[temp][1], 68, 67, 'above', 'mf1', 0, 100, temp)
-    #    add_1_dipole(temps[temp][2], 68, 67, 'below', 'mf1', 0, 100, temp)
-        # 'RHSel2' and 'LHSel3' traps in same pixel (could overlap phase time),
-        # but good detectability means separation of peaks
-        add_1_dipole(temps[temp][1], 98, 33, 'above', 1, 0, 100, temp)
-        add_2_dipole(temps[temp][2], 98, 33, 'below', 'below', 21,
-            60, 100, 0, 40, temp) #80, 100, 0, 20, temp)
-        add_2_dipole(temps[temp][4], 98, 33, 'below', 'below', 33,
-            60, 100, 0, 40, temp)
-        # old:
-        # add_2_dipole(temps[temp][2], 98, 33, 'below', 'below', 21,
-        #     50, 100, 0, 50, temp) #80, 100, 0, 20, temp)
-        # add_2_dipole(temps[temp][4], 98, 33, 'below', 'below', 33,
-        #     50, 100, 0, 50, temp)
-        # 'CENel3' trap (where sch3 has a 2-trap where one goes unused)
-        add_2_dipole(temps[temp][3], 41, 15, 'above', 'above', 23,
-           30, 100, 0, 30, temp)
-        add_1_dipole(temps[temp][4], 41, 15, 'below', 2, 30, 100, temp)
-        # 'RHSel3' and 'LHSel4'
-        add_1_dipole(temps[temp][1], 89, 2, 'below', '1b', 0, 100, temp)
-        add_2_dipole(temps[temp][2], 89, 2, 'above', 'above', 12,
-            60, 100, 0, 30, temp) #30 was 40 in the past
-        add_2_dipole(temps[temp][3], 89, 2, 'above', 'above', 33,
-            60, 100, 0, 40, temp)
-        # 2 'LHSel4' traps; whether the '0' or '1' trap gets assigned tau2 is
-        # somewhat random; if one has an earlier starting temp than the other,
-        # it would get assigned tau
-        add_2_dipole(temps[temp][1], 10, 10, 'below', 'below', 11,
-            0, 40, 63, 100, temp)
-        add_2_dipole(temps[temp][2], 10, 10, 'above', 'above', 22,
-            0, 40, 63, 100, temp)
-        add_2_dipole(temps[temp][3], 10, 10, 'above', 'above', 33,
-            0, 40, 63, 100, temp) #30, 60, 100
-        # old:
-        # add_2_dipole(temps[temp][1], 10, 10, 'below', 'below', 11,
-        #     0, 40, 50, 100, temp)
-        # add_2_dipole(temps[temp][2], 10, 10, 'above', 'above', 22,
-        #     0, 40, 50, 100, temp)
-        # add_2_dipole(temps[temp][3], 10, 10, 'above', 'above', 33,
-        #     0, 40, 50, 100, temp)
-        # 'CENel4' trap
-        add_1_dipole(temps[temp][1], 56, 56, 'below', 1, 1, 100, temp)
-        add_1_dipole(temps[temp][2], 56, 56, 'above', 1, 3, 99, temp)
-        #'RHSel4' and 'CENel2' trap (tests 'a' and 'b' splitting in trap_fit_*)
-        add_2_dipole(temps[temp][1], 77, 90, 'above', 'below', 12,
-            60, 100, 0, 40, temp)
-        add_2_dipole(temps[temp][2], 77, 90, 'below', 'above', 11,
-            60, 100, 0, 40, temp)
-        add_1_dipole(temps[temp][3], 77, 90, 'below', '3b', 0, 40, temp)
-        # old:
-        # add_2_dipole(temps[temp][1], 77, 90, 'above', 'below', 12,
-        #     30, 100, 0, 30, temp)
-        # add_2_dipole(temps[temp][2], 77, 90, 'below', 'above', 11,
-        #     53, 100, 0, 53, temp)
-        # add_1_dipole(temps[temp][3], 77, 90, 'below', '3b', 0, 30, temp)
-        pass
-        # save to FITS files
-        for sch in [1,2,3,4]:
-            for i in range(len(temps[temp][sch])):
-                hdr = fits.Header()
-                hdr['EM_GAIN'] = g
-                hdr['PHASE_T'] = time_data[i]
-                prim = fits.PrimaryHDU(header = hdr)
-                hdr_img = fits.ImageHDU(temps[temp][sch][i])
-                hdul = fits.HDUList([prim, hdr_img])
+        if not e2emode:
+            add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, 100, temp)
+            # add in 'CENel1' trap for all phase times
+        #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
+        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+            add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, 100, temp)
+            add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, 100, temp)
+            # add in 'RHSel1' trap for more than length limit (but diff lengths)
+            #unused sch2 in this same pixel that is compatible with another trap
+            add_1_dipole(temps[temp][1], 50, 50, 'above', 1, 0, 100, temp)
+            add_1_dipole(temps[temp][4], 50, 50, 'above', 3, 3, 98, temp)
+            add_1_dipole(temps[temp][2], 50, 50, 'below', 1, 2, 99, temp)
+            # FALSE TRAPS: 'LHSel2' trap that doesn't meet length limit of unique
+            # phase times even though the actual length is met for first 2
+            # (and/or doesn't pass trap_id(), but I've already tested this case in
+            # its unit test file)
+            # (3rd will be 'unused')
+            add_1_dipole(temps[temp][1], 71, 84, 'above', 2, 95, 100, temp)
+            add_1_dipole(temps[temp][2], 71, 84, 'below', 1, 95, 100, temp)
+            add_1_dipole(temps[temp][4], 71, 84, 'above', 3, 9, 20, temp)
+            # 'LHSel2' trap
+            add_1_dipole(temps[temp][1], 60, 80, 'above', 2, 1, 100, temp)
+            add_1_dipole(temps[temp][2], 60, 80, 'below', 1, 1, 100, temp)
+            add_1_dipole(temps[temp][4], 60, 80, 'above', 3, 1, 100, temp)
+            # 'CENel2' trap
+            add_1_dipole(temps[temp][1], 68, 67, 'above', 1, 0, 100, temp)
+            add_1_dipole(temps[temp][2], 68, 67, 'below', 1, 0, 100, temp)
+        #    add_1_dipole(temps[temp][1], 68, 67, 'above', 'mf1', 0, 100, temp)
+        #    add_1_dipole(temps[temp][2], 68, 67, 'below', 'mf1', 0, 100, temp)
+            # 'RHSel2' and 'LHSel3' traps in same pixel (could overlap phase time),
+            # but good detectability means separation of peaks
+            add_1_dipole(temps[temp][1], 98, 33, 'above', 1, 0, 100, temp)
+            add_2_dipole(temps[temp][2], 98, 33, 'below', 'below', 21,
+                60, 100, 0, 40, temp) #80, 100, 0, 20, temp)
+            add_2_dipole(temps[temp][4], 98, 33, 'below', 'below', 33,
+                60, 100, 0, 40, temp)
+            # old:
+            # add_2_dipole(temps[temp][2], 98, 33, 'below', 'below', 21,
+            #     50, 100, 0, 50, temp) #80, 100, 0, 20, temp)
+            # add_2_dipole(temps[temp][4], 98, 33, 'below', 'below', 33,
+            #     50, 100, 0, 50, temp)
+            # 'CENel3' trap (where sch3 has a 2-trap where one goes unused)
+            add_2_dipole(temps[temp][3], 41, 15, 'above', 'above', 23,
+            30, 100, 0, 30, temp)
+            add_1_dipole(temps[temp][4], 41, 15, 'below', 2, 30, 100, temp)
+            # 'RHSel3' and 'LHSel4'
+            add_1_dipole(temps[temp][1], 89, 2, 'below', '1b', 0, 100, temp)
+            add_2_dipole(temps[temp][2], 89, 2, 'above', 'above', 12,
+                60, 100, 0, 30, temp) #30 was 40 in the past
+            add_2_dipole(temps[temp][3], 89, 2, 'above', 'above', 33,
+                60, 100, 0, 40, temp)
+            # 2 'LHSel4' traps; whether the '0' or '1' trap gets assigned tau2 is
+            # somewhat random; if one has an earlier starting temp than the other,
+            # it would get assigned tau
+            add_2_dipole(temps[temp][1], 10, 10, 'below', 'below', 11,
+                0, 40, 63, 100, temp)
+            add_2_dipole(temps[temp][2], 10, 10, 'above', 'above', 22,
+                0, 40, 63, 100, temp)
+            add_2_dipole(temps[temp][3], 10, 10, 'above', 'above', 33,
+                0, 40, 63, 100, temp) #30, 60, 100
+            # old:
+            # add_2_dipole(temps[temp][1], 10, 10, 'below', 'below', 11,
+            #     0, 40, 50, 100, temp)
+            # add_2_dipole(temps[temp][2], 10, 10, 'above', 'above', 22,
+            #     0, 40, 50, 100, temp)
+            # add_2_dipole(temps[temp][3], 10, 10, 'above', 'above', 33,
+            #     0, 40, 50, 100, temp)
+            # 'CENel4' trap
+            add_1_dipole(temps[temp][1], 56, 56, 'below', 1, 1, 100, temp)
+            add_1_dipole(temps[temp][2], 56, 56, 'above', 1, 3, 99, temp)
+            #'RHSel4' and 'CENel2' trap (tests 'a' and 'b' splitting in trap_fit_*)
+            add_2_dipole(temps[temp][1], 77, 90, 'above', 'below', 12,
+                60, 100, 0, 40, temp)
+            add_2_dipole(temps[temp][2], 77, 90, 'below', 'above', 11,
+                60, 100, 0, 40, temp)
+            add_1_dipole(temps[temp][3], 77, 90, 'below', '3b', 0, 40, temp)
+            # old:
+            # add_2_dipole(temps[temp][1], 77, 90, 'above', 'below', 12,
+            #     30, 100, 0, 30, temp)
+            # add_2_dipole(temps[temp][2], 77, 90, 'below', 'above', 11,
+            #     53, 100, 0, 53, temp)
+            # add_1_dipole(temps[temp][3], 77, 90, 'below', '3b', 0, 30, temp)
 
-                ## Add in the headers that corgidrp expects
+        if e2emode: # full range should be covered if trap present
+            add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, phase_times, temp)
+            # add in 'CENel1' trap for all phase times
+        #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
+        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+            add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, phase_times, temp)
+            add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, phase_times, temp)
+            # add in 'RHSel1' trap for more than length limit (but diff lengths)
+            #unused sch2 in this same pixel that is compatible with another trap
+            add_1_dipole(temps[temp][1], 50, 50, 'above', 1, 0, phase_times, temp)
+            add_1_dipole(temps[temp][4], 50, 50, 'above', 3, 3, phase_times, temp)
+            add_1_dipole(temps[temp][2], 50, 50, 'below', 1, 2, phase_times, temp)
+            # FALSE TRAPS: 'LHSel2' trap that doesn't meet length limit of unique
+            # phase times even though the actual length is met for first 2
+            # (and/or doesn't pass trap_id(), but I've already tested this case in
+            # its unit test file)
+            # (3rd will be 'unused')
+            add_1_dipole(temps[temp][1], 71, 84, 'above', 2, 95, phase_times, temp)
+            add_1_dipole(temps[temp][2], 71, 84, 'below', 1, 95, phase_times, temp)
+            add_1_dipole(temps[temp][4], 71, 84, 'above', 3, 9, phase_times, temp)
+            # 'LHSel2' trap
+            add_1_dipole(temps[temp][1], 60, 80, 'above', 2, 1, phase_times, temp)
+            add_1_dipole(temps[temp][2], 60, 80, 'below', 1, 1, phase_times, temp)
+            add_1_dipole(temps[temp][4], 60, 80, 'above', 3, 1, phase_times, temp)
+            # 'CENel2' trap
+            add_1_dipole(temps[temp][1], 68, 67, 'above', 1, 0, phase_times, temp)
+            add_1_dipole(temps[temp][2], 68, 67, 'below', 1, 0, phase_times, temp)
+        #    add_1_dipole(temps[temp][1], 68, 67, 'above', 'mf1', 0, 100, temp)
+        #    add_1_dipole(temps[temp][2], 68, 67, 'below', 'mf1', 0, 100, temp)
+            # 'RHSel2' and 'LHSel3' traps in same pixel (could overlap phase time),
+            # but good detectability means separation of peaks
+            add_1_dipole(temps[temp][1], 98, 33, 'above', 1, 0, phase_times, temp)
+            add_2_dipole(temps[temp][2], 98, 33, 'below', 'below', 21,
+                int(phase_times/2), phase_times, 0, int(phase_times/2), temp) #80, 100, 0, 20, temp)
+            add_2_dipole(temps[temp][4], 98, 33, 'below', 'below', 33,
+                int(phase_times/2), phase_times, 0, int(phase_times/2), temp)
+            # old:
+            # add_2_dipole(temps[temp][2], 98, 33, 'below', 'below', 21,
+            #     50, 100, 0, 50, temp) #80, 100, 0, 20, temp)
+            # add_2_dipole(temps[temp][4], 98, 33, 'below', 'below', 33,
+            #     50, 100, 0, 50, temp)
+            # 'CENel3' trap (where sch3 has a 2-trap where one goes unused)
+            add_2_dipole(temps[temp][3], 41, 15, 'above', 'above', 23,
+            int(phase_times/2), phase_times, 0, int(phase_times/2), temp)
+            add_1_dipole(temps[temp][4], 41, 15, 'below', 2, 0, phase_times, temp)
+            # 'RHSel3' and 'LHSel4'
+            add_1_dipole(temps[temp][1], 89, 2, 'below', '1b', 0, phase_times, temp)
+            add_2_dipole(temps[temp][2], 89, 2, 'above', 'above', 12,
+                int(phase_times/2), phase_times, 0, int(phase_times/2), temp) #30 was 40 in the past
+            add_2_dipole(temps[temp][3], 89, 2, 'above', 'above', 33,
+                int(phase_times/2), phase_times, 0, int(phase_times/2), temp)
+            # 2 'LHSel4' traps; whether the '0' or '1' trap gets assigned tau2 is
+            # somewhat random; if one has an earlier starting temp than the other,
+            # it would get assigned tau
+            add_2_dipole(temps[temp][1], 10, 10, 'below', 'below', 11,
+                0, int(phase_times/2), int(phase_times/2), phase_times, temp)
+            add_2_dipole(temps[temp][2], 10, 10, 'above', 'above', 22,
+                0, int(phase_times/2), int(phase_times/2), phase_times, temp)
+            add_2_dipole(temps[temp][3], 10, 10, 'above', 'above', 33,
+                0, int(phase_times/2), int(phase_times/2), phase_times, temp) #30, 60, 100
+            # old:
+            # add_2_dipole(temps[temp][1], 10, 10, 'below', 'below', 11,
+            #     0, 40, 50, 100, temp)
+            # add_2_dipole(temps[temp][2], 10, 10, 'above', 'above', 22,
+            #     0, 40, 50, 100, temp)
+            # add_2_dipole(temps[temp][3], 10, 10, 'above', 'above', 33,
+            #     0, 40, 50, 100, temp)
+            # 'CENel4' trap
+            add_1_dipole(temps[temp][1], 56, 56, 'below', 1, 1, phase_times, temp)
+            add_1_dipole(temps[temp][2], 56, 56, 'above', 1, 3, phase_times, temp)
+            #'RHSel4' and 'CENel2' trap (tests 'a' and 'b' splitting in trap_fit_*)
+            add_2_dipole(temps[temp][1], 77, 90, 'above', 'below', 12,
+                int(phase_times/2), phase_times, 0, int(phase_times/2), temp)
+            add_2_dipole(temps[temp][2], 77, 90, 'below', 'above', 11,
+                int(phase_times/2), phase_times, 0, int(phase_times/2), temp)
+            add_1_dipole(temps[temp][3], 77, 90, 'below', '3b', 0, phase_times, temp)
+            # old:
+            # add_2_dipole(temps[temp][1], 77, 90, 'above', 'below', 12,
+            #     30, 100, 0, 30, temp)
+            # add_2_dipole(temps[temp][2], 77, 90, 'below', 'above', 11,
+            #     53, 100, 0, 53, temp)
+            # add_1_dipole(temps[temp][3], 77, 90, 'below', '3b', 0, 30, temp)
+        pass
+        if e2emode:
+            readout_emccd = EMCCDDetect(
+                em_gain=EMgain, #10,
+                full_well_image=full_well_image,  # e-
+                full_well_serial=full_well_serial,  # e-
+                dark_current=0,  # e-/pix/s
+                cic=0, # e-/pix/frame
+                read_noise=read_noise,  # e-/pix/frame
+                bias=1000,  # e-
+                qe=1, # no QE hit here; just simulating readout
+                cr_rate=0.,  # hits/cm^2/s
+                pixel_pitch=13e-6,  # m
+                eperdn=later_eperdn,
+                nbits=nbits,
+                numel_gain_register=604,
+                meta_path=meta_path,
+                nonlin_path=nonlin_path
+                )
+        # save to FITS files
+        for sc in [1,2,3,4]:
+            for i in range(len(temps[temp][sc])):
+                if e2emode:
+                    if temps[temp][sc][i].any() >= full_well_image:
+                        raise Exception('Saturated before EM gain applied.')
+                    # Now apply readout things for e2e mode 
+                    gain_counts = np.reshape(readout_emccd._gain_register_elements(temps[temp][sc][i].ravel()),temps[temp][sc][i].shape)
+                    if gain_counts.any() >= full_well_serial:
+                        raise Exception('Saturated after EM gain applied.')
+                    output_dn = readout_emccd.readout(gain_counts)
+                else:
+                    output_dn = temps[temp][sc][i]
+                prihdr, exthdr = create_default_headers(arrtype)
+                prim = fits.PrimaryHDU(header = prihdr)
+                hdr_img = fits.ImageHDU(output_dn, header=exthdr)
+                hdul = fits.HDUList([prim, hdr_img])
+                ## Fill in the headers that matter to corgidrp
                 hdul[1].header['EXCAMT']  = temp
-                hdul[1].header['CMDGAIN'] = g
-                
+                hdul[1].header['CMDGAIN'] = EMgain
+                hdul[1].header['ARRTYPE'] = arrtype
                 for j in range(1, 5):
-                    if sch == j:
+                    if sc == j:
                         hdul[1].header['TPSCHEM' + str(j)] = num_pumps
                     else:
                         hdul[1].header['TPSCHEM' + str(j)] = 0
@@ -1628,6 +1840,15 @@ def generate_mock_pump_trap_data(output_dir,meta_path):
                 #     str(temp)+'K'+'Scheme_'+str(sch)+'TPUMP_Npumps_10000_gain'+str(g)+'_phasetime'+
                 #     str(t)+'_2.fits'), overwrite = True)
                 # else: 
-                hdul.writeto(Path(output_dir,
-                str(temp)+'K'+'Scheme_'+str(sch)+'TPUMP_Npumps_10000_gain'+str(g)+'_phasetime'+
-                str(t)+'.fits'), overwrite = True)
+                mult_counter = 0
+                filename = Path(output_dir,
+                str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps'+str(int(num_pumps))+'_gain'+str(EMgain)+'_phasetime'+
+                str(t)+'.fits')
+                if multiple > 1:
+                    if not os.path.exists(filename):
+                        hdul.writeto(filename, overwrite = True)
+                    else:
+                        mult_counter += 1
+                        hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
+                else:
+                    hdul.writeto(filename, overwrite = True)
