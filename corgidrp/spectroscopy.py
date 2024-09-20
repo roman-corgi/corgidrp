@@ -461,45 +461,44 @@ def estimate_dispersion_clocking_angle(xpts, ypts, weights):
 
     return clocking_angle, clocking_angle_uncertainty 
 
-#def fit_dispersion_polynomials(wavelens, xpts, bandcent):
-#    """ 
-#    Given arrays of wavelengths and positions, fit two polynomials:  
-#    1. Displacement from the band center along the dispersion axis as a function of wavelength  
-#    2. Wavelength as a function of displacement along the dispersion axis
-#    """
-#
-#    # Fit a polynomial to the displacement versus wavelength data points
-#    # Rotate the centroid coordinates so the dispersion axis is horizontal
-#    # to define a rotation pivot point, select the filter closest to the nominal zero deviation wavelength
-#    ref_idx = np.argmin(np.abs(meas['center wavel (nm)'] - ref_wavelen))
-#    (meas['x_cent rot'], 
-#     meas['y_cent rot']) = spectroscopy.rotate_points((meas['x_cent'], meas['y_cent']),
-#                                                      -np.deg2rad(clocking_angle),
-#                                                      (meas['x_cent'][ref_idx], meas['y_cent'][ref_idx]))
-#    
-#    # Fit a polynomial to wavelength versus position
-#    delta_x = (meas['x_cent rot'] - meas['x_cent rot'][ref_idx]) * pixel_pitch_mm
-#    pos_err = meas['y_err est'] * pixel_pitch_mm
-#    wavelens = meas['center wavel (nm)']
-#    weights = 1 / pos_err
-#    lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = meas['center wavel (nm)'], 
-#                                         deg = 3, w = weights))
-#    # Find the position at the band reference wavelength
-#    poly_roots = (np.poly1d(lambda_func_x) - ref_wavelen).roots
-#    real_root = poly_roots[np.isreal(poly_roots)][0]
-#    pos_bandcenter = np.real(real_root)
-#    np.testing.assert_almost_equal(lambda_func_x(pos_bandcenter), ref_wavelen)
-#    rel_pos_mm = delta_x - pos_bandcenter
-#
-#    #Fit two polynomials:  
-#    #1. Displacement from the band center along the dispersion axis as a function of wavelength  
-#    #2. Wavelength as a function of displacement along the dispersion axis
-#    pfit_xrel_lambda = np.polyfit(x = (wavelens - ref_wavelen) / ref_wavelen,                                   
-#                                  y = rel_pos_mm, 
-#                                  deg = 3, w = weights)
-#    xrel_func_lambda = np.poly1d(pfit_xrel_lambda)
-#    
-#    pfit_lambda_xrel = np.polyfit(x = rel_pos_mm,
-#                                  y = wavelens,
-#                                  deg = 3, w = weights)
-#    lambda_func_xrel = np.poly1d(pfit_lambda_xrel)
+def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wavlen, pixel_pitch_um=13.0):
+    """ 
+    Given arrays of wavlengths and positions, fit two polynomials:  
+    1. Displacement from a reference wavelength along the dispersion axis, 
+       in millimeters as a function of wavelength  
+    2. Wavelength as a function of displacement along the dispersion axis
+    """
+    pixel_pitch_mm = pixel_pitch_um * 1E-3
+
+    # Rotate the centroid coordinates so the dispersion axis is horizontal
+    # to define a rotation pivot point, select the filter closest to the nominal 
+    # zero deviation wavelength
+    refidx = np.argmin(np.abs(wavlens - ref_wavlen))
+    (x_rot, y_rot) = rotate_points((xpts, ypts), -np.deg2rad(clock_ang), 
+                                    pivot_point = (xpts[refidx], ypts[refidx]))
+    
+    # Fit an intermediate polynomial to wavelength versus position
+    delta_x = (x_rot - x_rot[refidx]) * pixel_pitch_mm
+    pos_err = cent_errs * pixel_pitch_mm
+    weights = 1 / pos_err
+    lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = wavlens, deg = 3, w = weights))
+    # Determine the position at the reference wavelength
+    poly_roots = (np.poly1d(lambda_func_x) - ref_wavlen).roots
+    real_root = poly_roots[np.isreal(poly_roots)][0]
+    pos_ref = np.real(real_root)
+    np.testing.assert_almost_equal(lambda_func_x(pos_ref), ref_wavlen)
+    displacements_mm = delta_x - pos_ref
+
+    # Fit two polynomials:  
+    # 1. Displacement from the band center along the dispersion axis as a 
+    #    function of wavelength  
+    # 2. Wavelength as a function of displacement along the dispersion axis
+    (pfit_pos_vs_wavlen,
+     cov_pos_vs_wavlen) = np.polyfit(x = (wavlens - ref_wavlen) / ref_wavlen,
+                                      y = displacements_mm, deg = 3, w = weights, cov=True)
+    
+    (pfit_wavlen_vs_pos,
+     cov_wavlen_vs_pos) = np.polyfit(x = displacements_mm, y = wavlens, deg = 3, 
+                                      w = weights, cov=True)
+
+    return pfit_pos_vs_wavlen, cov_pos_vs_wavlen, pfit_wavlen_vs_pos, cov_wavlen_vs_pos

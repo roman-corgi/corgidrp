@@ -83,7 +83,7 @@ def test_fit_psf_centroid(errortol_pix = 0.01, verbose = False):
           f"{np.std(xerr_gauss_list):.2E}, {np.std(yerr_gauss_list):.2E} pixels")
     print("PSF centroid fit accuracy test passed.")
 
-def test_dispersion_fit(errortol_nm=1.0, prism='PRISM3', verbose=False):
+def test_dispersion_fit(errortol_nm=0.5, prism='PRISM3', verbose=False):
     """ 
     Test the function that fits the spectral dispersion profile of the CGI ZOD prism.
     """
@@ -95,16 +95,16 @@ def test_dispersion_fit(errortol_nm=1.0, prism='PRISM3', verbose=False):
         subband_list = ['2A', '2B', '2C']
         tvac_dispersion_params_fname = os.path.join(test_data_path, 
                                                     "TVAC_PRISM2_dispersion_profile.npz")
-        ref_wavelen = 660.0
+        ref_wavlen = 660.0
         bandpass = [610, 710]
     else:
         subband_list = ['3A', '3B', '3C', '3D', '3E', '3G']
         tvac_dispersion_params_fname = os.path.join(test_data_path, 
                                                     "TVAC_PRISM3_dispersion_profile.npz")
-        ref_wavelen = 730.0
+        ref_wavlen = 730.0
         bandpass = [675, 785]
     tvac_dispersion = np.load(tvac_dispersion_params_fname)
-    pixel_pitch_mm = 13.0E-3 # EXCAM pixel pitch (mm)
+    pixel_pitch_um = 13.0 # EXCAM pixel pitch (microns)
     
     prism_filtersweep_sim_fname = os.path.join(test_data_path,
             'g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits')
@@ -116,6 +116,8 @@ def test_dispersion_fit(errortol_nm=1.0, prism='PRISM3', verbose=False):
     
     template_array = fits.getdata(prism_filtersweep_sim_fname, ext=0)
     filtersweep_table = Table(fits.getdata(prism_filtersweep_sim_fname, ext=1))
+    template_hdr = fits.getheader(prism_filtersweep_sim_fname, ext=0)
+    true_clocking_angle = template_hdr['PRISMANG']
 
     # Add random noise to the filter sweep template images to serve as fake data
     np.random.seed(5)
@@ -175,76 +177,36 @@ def test_dispersion_fit(errortol_nm=1.0, prism='PRISM3', verbose=False):
     meas = filtersweep_table[subband_mask]
     assert len(meas) >= 4, 'Need images taken in at least four sub-band filters to model the dispersion'
 
-#    # Estimate the clocking angle of the dispersion axis.
-#    weights = 1. / meas['y_err est']
-#    linear_fit, V = np.polyfit(meas['y_cent'], meas['x_cent'], deg=1, w=weights, cov=True)
-#    
-#    theta = np.arctan(1/linear_fit[0])
-#    if theta > 0:
-#        clocking_angle = np.rad2deg(theta - np.pi)
-#    else:
-#        clocking_angle = np.rad2deg(theta)
-#    clocking_angle_uncertainty = np.abs(np.rad2deg(np.arctan(linear_fit[0] + np.sqrt(V[0,0]))) - 
-#                                        np.rad2deg(np.arctan(linear_fit[0] - np.sqrt(V[0,0])))) / 2
-#    
-#    print("angle = {:.2f} +/- {:.2f}".format(clocking_angle, clocking_angle_uncertainty))
-
     (clocking_angle,
      clocking_angle_uncertainty) = spectroscopy.estimate_dispersion_clocking_angle(
          meas['x_cent'], meas['y_cent'], weights=1./meas['y_err est']
      )
-    print("Clocking angle = {:.2f} +/- {:.2f}".format(clocking_angle, clocking_angle_uncertainty))
+    assert clocking_angle == pytest.approx(true_clocking_angle, abs=0.1)
+    print("Estimated clocking angle = {:.2f} +/- {:.2f} deg; input model angle is {:.2f} deg".format(
+            clocking_angle, clocking_angle_uncertainty, true_clocking_angle))
 
-    # Fit a polynomial to the displacement versus wavelength data points
-    # Rotate the centroid coordinates so the dispersion axis is horizontal
-    # to define a rotation pivot point, select the filter closest to the nominal zero deviation wavelength
-    ref_idx = np.argmin(np.abs(meas['center wavel (nm)'] - ref_wavelen))
-    (meas['x_cent rot'], 
-     meas['y_cent rot']) = spectroscopy.rotate_points((meas['x_cent'], meas['y_cent']),
-                                                      -np.deg2rad(clocking_angle),
-                                                      (meas['x_cent'][ref_idx], meas['y_cent'][ref_idx]))
-    
-    # Fit a polynomial to wavelength versus position
-    delta_x = (meas['x_cent rot'] - meas['x_cent rot'][ref_idx]) * pixel_pitch_mm
-    pos_err = meas['y_err est'] * pixel_pitch_mm
-    wavelens = meas['center wavel (nm)']
-    weights = 1 / pos_err
-    lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = meas['center wavel (nm)'], 
-                                         deg = 3, w = weights))
-    # Find the position at the band reference wavelength
-    poly_roots = (np.poly1d(lambda_func_x) - ref_wavelen).roots
-    real_root = poly_roots[np.isreal(poly_roots)][0]
-    pos_bandcenter = np.real(real_root)
-    np.testing.assert_almost_equal(lambda_func_x(pos_bandcenter), ref_wavelen)
-    rel_pos_mm = delta_x - pos_bandcenter
-
-    #Fit two polynomials:  
-    #1. Displacement from the band center along the dispersion axis as a function of wavelength  
-    #2. Wavelength as a function of displacement along the dispersion axis
-    pfit_xrel_lambda = np.polyfit(x = (wavelens - ref_wavelen) / ref_wavelen,                                   
-                                  y = rel_pos_mm, 
-                                  deg = 3, w = weights)
-    xrel_func_lambda = np.poly1d(pfit_xrel_lambda)
-    
-    pfit_lambda_xrel = np.polyfit(x = rel_pos_mm,
-                                  y = wavelens,
-                                  deg = 3, w = weights)
-    lambda_func_xrel = np.poly1d(pfit_lambda_xrel)
+    (pfit_pos_vs_wavlen, cov_pos_vs_wavlen,
+     pfit_wavlen_vs_pos, cov_wavlen_vs_pos) = spectroscopy.fit_dispersion_polynomials(
+            meas['center wavel (nm)'],meas['x_cent'], meas['y_cent'], meas['y_err est'],
+            clocking_angle, ref_wavlen, pixel_pitch_um 
+     )
+    pos_func_wavlen = np.poly1d(pfit_pos_vs_wavlen)
+    wavlen_func_pos = np.poly1d(pfit_wavlen_vs_pos)
 
     #### Load TVAC dispersion profile to compare and test the agreement in the wavelength vs position.
-    tvac_lambda_func_xrel = np.poly1d(tvac_dispersion['wavelen_vs_position_polycoeff'])
-    tvac_xrel_func_lambda = np.poly1d(tvac_dispersion['position_vs_wavelen_polycoeff'])    
+    tvac_wavlen_func_pos = np.poly1d(tvac_dispersion['wavelen_vs_position_polycoeff'])
+    tvac_pos_func_wavlen = np.poly1d(tvac_dispersion['position_vs_wavelen_polycoeff'])    
 
-    (xtest_min, xtest_max) = (tvac_xrel_func_lambda((bandpass[0] - ref_wavelen)/ref_wavelen),
-                          tvac_xrel_func_lambda((bandpass[1] - ref_wavelen)/ref_wavelen))
+    (xtest_min, xtest_max) = (tvac_pos_func_wavlen((bandpass[0] - ref_wavlen)/ref_wavlen),
+                          tvac_pos_func_wavlen((bandpass[1] - ref_wavlen)/ref_wavlen))
 
     xtest = np.linspace(xtest_min, xtest_max, 1000)
-    tvac_model_wavelens = tvac_lambda_func_xrel(xtest)
-    corgi_model_wavelens = lambda_func_xrel(xtest)
-    wavelen_model_error = corgi_model_wavelens - tvac_model_wavelens
-    worst_case_wavelen_error = np.abs(wavelen_model_error).max()
-    print(f"Worst case wavelength disagreement from the test input model: {worst_case_wavelen_error:.2f} nm")
-    assert worst_case_wavelen_error  == pytest.approx(0, abs=0.5)
+    tvac_model_wavlens = tvac_wavlen_func_pos(xtest)
+    corgi_model_wavlens = wavlen_func_pos(xtest)
+    wavlen_model_error = corgi_model_wavlens - tvac_model_wavlens
+    worst_case_wavlen_error = np.abs(wavlen_model_error).max()
+    print(f"Worst case wavelength disagreement from the test input model: {worst_case_wavlen_error:.2f} nm")
+    assert worst_case_wavlen_error == pytest.approx(0, abs=errortol_nm)
     print("Dispersion profile fit test passed.")
 
 if __name__ == "__main__":
