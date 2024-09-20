@@ -7,21 +7,17 @@ import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
 import corgidrp.data as data
-import corgidrp.mocks as mocks
 import corgidrp.walker as walker
-import corgidrp.caldb as caldb
-#from corgidrp.calibrate_kgain import calibrate_kgain
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-tvac_kgain = 8.8145 #e/DN
-tvac_readnoise = 130.12 #e
+tvac_kgain = 8.8145 #e/DN, result from new iit drp code
+tvac_readnoise = 130.12 #e, result from new iit drp code
 
 @pytest.mark.e2e
 def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
     l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "kgain")
-    kgain_result = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "results", "kgain_read_noise.txt")
 
     # make output directory if needed
     kgain_outputdir = os.path.join(e2eoutput_path, "l1_to_kgain_output")
