@@ -124,7 +124,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
 
     ####### Run the walker on some test_data
     if not e2e: # if you want to test older simulated data
-        template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_small_size_e2e.json"), 'r'))
+        template = json.load(open(os.path.join(thisfile_dir, "trap_pump_cal_small_size_e2e.json"), 'r'))
         recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
         walker.run_recipe(recipe)
     if e2e:
@@ -206,8 +206,8 @@ if __name__ == "__main__":
                     help="directory to write results to [%(default)s]")
     ap.add_argument('-e2e', '--e2e_flag', default=True, help="True if testing newer simulated data, false if testing older scaled-down data")
     args_here = ['--tvacdata_dir', tvacdata_dir, '--outputdir', outputdir]#, '--e2e_flag',False]
-    args = ap.parse_args()
-    #args = ap.parse_args(args_here)
+    #args = ap.parse_args()
+    args = ap.parse_args(args_here)
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
     e2e = args.e2e_flag

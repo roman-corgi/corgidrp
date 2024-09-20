@@ -133,20 +133,18 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have had the cosmic ray masks combined with any bad pixel masks which may
-    have come from pre-processing if there are any (because creation of the
-    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
-    functionality requires a master dark, which requires this function first)
     - have been desmeared if desmearing is appropriate.  Under normal
     circumstances, darks should not be desmeared.  The only time desmearing
     would be useful is in the unexpected case that, for example,
     dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge
-    and fixed-pattern noise.
+    not smeared upon readout, such as clock-induced charge, 
+    fixed-pattern noise, and read noise.
     - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
-    dataset.
+    dataset.  And note that creation of the
+    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
+    functionality requires a master dark, which requires this function first.
 
     The steps shown above are a subset of the total number of steps
     involved in going from L1 to L2b.  This function averages
@@ -267,24 +265,22 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     EM gain values and exposure times.  The frames in each stack should be
     SCI full frames that:
 
-    - have had their bias subtracted (assuming 0 bias offset and full frame;
-    this function calibrates bias offset)
+    - have had their bias subtracted (assuming full frame)
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have had the cosmic ray masks combined with any bad pixel masks which may
-    have come from pre-processing if there are any (because creation of the
-    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
-    functionality requires a master dark, which requires this function first)
     - have been desmeared if desmearing is appropriate.  Under normal
     circumstances, darks should not be desmeared.  The only time desmearing
     would be useful is in the unexpected case that, for example,
     dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge
-    and fixed-pattern noise.
+    not smeared upon readout, such as clock-induced charge, 
+    fixed-pattern noise, and read noise.
+    - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
-    dataset.
+    dataset.  And note that creation of the
+    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
+    functionality requires a master dark, which requires this function first.
 
     The steps shown above are a subset of the total number of steps
     involved in going from L1 to L2b.  This function averages
