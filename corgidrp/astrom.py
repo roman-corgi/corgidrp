@@ -663,17 +663,23 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', threshold=25, fwhm=7, mask_rad=1, comparison_threshold=50):
+def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=1, frames_to_combine=None):
     """
     Perform the boresight calibration of a dataset.
     
     Args:
-        input_dataset (corgidrp.data.Dataset): Dataset containing a single image for astrometric calibration
-        field_path (str): Full path to directory with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
-        threshold (int): Number of stars to find (default 100)
+        input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
+        field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
+        field_matches (str): Full path to file with calibration field matches to the image sources (x, y, ra, dec), if None, automated source matching is used (default: None)
+        find_threshold (int): Number of stars to find (default 100)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
         comparison_threshold (int): How many stars in the field to consider for the initial match (default: 25)
+        search_rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
+        platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
+        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.5)
+        center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 1 -- ie: 100% of the image is used)
+        frames_to_combine (int): The number of frames to combine in a dataset (default: None)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -682,9 +688,13 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', thr
     # load in the data considering multiple frames in the data
     dataset = input_dataset.copy()
 
-    # find sources in image and match to field
+    # load in the source matches if automated source finder is not being used
+    if field_matches is not None:
+        matched_sources = ascii.read(field_matches)
+
+    # load in field data to refer to
     if field_path == 'JWST_CALFIELD2020.csv':
-        full_field_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tests/test_data", field_path)
+        full_field_path = os.path.join(os.path.dirname(__file__), "data", field_path)
         field_path = full_field_path
 
     # create a place to store all the calibration measurements
@@ -697,11 +707,13 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', thr
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
 
-        found_sources = find_source_locations(image, threshold=threshold, fwhm=fwhm, mask_rad=mask_rad)
-        matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold)
+        # run automated source finder if no matches are given
+        if field_matches is None:
+            found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
+            matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
 
         # compute the calibration properties
-        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate)
+        cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
 
         # return a single AstrometricCalibration data file
