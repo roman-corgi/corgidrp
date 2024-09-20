@@ -437,7 +437,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
 
     return matched_image_to_field
 
-def compute_platescale_and_northangle(image, source_info, center_coord, center_radius=1):
+def compute_platescale_and_northangle(image, source_info, center_coord, center_radius=0.9):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
     and returns the averged platescale. Calculates the north angle for pairs of stars with the center target
