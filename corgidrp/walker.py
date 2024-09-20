@@ -32,6 +32,7 @@ all_steps = {
     "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
     "calibrate_trap_pump": corgidrp.pump_trap_calibration.tpump_analysis,
     "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
+    "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark
