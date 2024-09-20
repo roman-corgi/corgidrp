@@ -344,7 +344,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
         j, k, l = ind
         s1, s2, s3 = skycoords[j], skycoords[k], skycoords[l]
 
-        len1, len2, len3 = np.sort([s1.separation(s2).value, s2.separation(s3).value, s3.separation(s1).value])
+        len1, len2, len3 = np.sort([s1.separation(s2).mas, s2.separation(s3).mas, s3.separation(s1).mas])
 
         field_side_lengths[i] = np.array([len1, len2, len3])
         perimeter = len1 + len2 + len3
@@ -368,7 +368,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
     initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
 
     # find pseudo north angle from difference in triangle rotations from the target value
-    rot_image = np.array([angle_between((image.ext_hdr['CRPIX1'], image.ext_hdr['CRPIX2']), s) for s in [source1, source2, source3]])
+    rot_image = np.array([angle_between((image.ext_hdr['CRPIX1'], image.ext_hdr['CRPIX2']), (s['x'], s['y'])) for s in [source1, source2, source3]])
     rot_field = np.array([target_skycoord.position_angle(t).deg for t in skycoords[[best_sky_ind]]])
 
     initial_northangle = np.abs(np.mean(rot_field - rot_image))
@@ -377,7 +377,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
     # allow for some error window and assign the closest star to each source
     vert_ang = np.radians(initial_northangle)
     pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
-    cdmatrix = pc * (initial_platescale)
+    cdmatrix = pc * (initial_platescale * 0.001) / 3600.
 
     new_hdr = {}
     new_hdr['CD1_1'] = cdmatrix[0,0]
@@ -388,8 +388,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
     new_hdr['CRPIX2'] = np.shape(image.data)[0] // 2
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
-    new_hdr['CDELT1'] = (initial_platescale)
-    new_hdr['CDELT2'] = (initial_platescale)
+    new_hdr['CDELT1'] = (initial_platescale * 0.001) / 3600.
+    new_hdr['CDELT2'] = (initial_platescale * 0.001) / 3600.
     new_hdr['CRVAL1'] = target[0]
     new_hdr['CRVAL2'] = target[1]
     w = astropy.wcs.WCS(new_hdr)
