@@ -167,7 +167,7 @@ def angle_between(pos1, pos2):
         pos2 (tuple): Position of the second target
     
     Returns:
-        angle (float): Angle between two sources, from north going counterclockwise
+        angle (float): Angle [deg] between two sources, from north going counterclockwise
     """
     
     xdif = pos2[0] - pos1[0]
@@ -186,7 +186,7 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
-def find_source_locations(image_data, threshold=25, fwhm=7, mask_rad=1):
+def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     ''' 
     Used to find to [pixel, pixel] locations of the sources in an image
     
