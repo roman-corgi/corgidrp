@@ -495,10 +495,13 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
     sub_skycoords = skycoords[center_source_inds]
 
     # Platescale calculation
-    # create 1_000 random combinations of stars
-    all_combinations = list(compute_combinations(quad_guesses))
-    rand_inds = np.random.randint(low=0, high=len(all_combinations), size=1000)
-    combo_list = np.array(all_combinations)[rand_inds]
+    # create random combinations of stars
+    all_combinations = list(compute_combinations(sub_guesses))
+    if len(all_combinations) > 100:
+        rand_inds = np.random.randint(low=0, high=len(all_combinations), size=100)
+        combo_list = np.array(all_combinations)[rand_inds]
+    else:
+        combo_list = np.array(all_combinations)
 
     # gather the skycoord separations for all combinations
     seps = np.empty(len(combo_list))
@@ -573,7 +576,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
         offset = np.delete(offset, same_ind)
 
     # use the median to avoid bias
-    north_angle = np.median(offset)
+    north_angle = np.mean(offset)
     
     return platescale, north_angle
 
