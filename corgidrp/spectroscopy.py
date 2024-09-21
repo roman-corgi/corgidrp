@@ -481,7 +481,7 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     delta_x = (x_rot - x_rot[refidx]) * pixel_pitch_mm
     pos_err = cent_errs * pixel_pitch_mm
     weights = 1 / pos_err
-    lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = wavlens, deg = 3, w = weights))
+    lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = wavlens, deg = 2, w = weights))
     # Determine the position at the reference wavelength
     poly_roots = (np.poly1d(lambda_func_x) - ref_wavlen).roots
     real_root = poly_roots[np.isreal(poly_roots)][0]
