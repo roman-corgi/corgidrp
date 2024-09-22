@@ -53,6 +53,9 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
                 trad_dark_filename = name # get first filename fed to walk_corgidrp for finding cal file later
             f = os.path.join(root, name)
             trad_dark_data_filelist.append(f)
+    # run in order of files input to II&T code to get exactly the same results
+    trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
+    trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
     ###### Setup necessary calibration files
     # Create necessary calibration files
@@ -141,7 +144,8 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     TVAC_trad_dark = fits.getdata(TVAC_dark_path)
     # clean_trad_dark = (trad_dark.data - fpn_dat/1.340000033378601 - cic_dat)/100
     # master darks are exactly equal, ignoring the telemetry rows (first and last in this case)
-    assert(np.allclose(TVAC_trad_dark[1:-1], trad_dark[1:-1], atol=1e-10))
+    assert(np.array_equal(TVAC_trad_dark[1:-1], trad_dark[1:-1]))
+    #assert(np.allclose(TVAC_trad_dark[1:-1], trad_dark[1:-1], atol=1e-10))
     pass
 
 if __name__ == "__main__":

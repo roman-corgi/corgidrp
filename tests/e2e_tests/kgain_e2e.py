@@ -11,8 +11,8 @@ import corgidrp.walker as walker
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-tvac_kgain = 8.8145 #e/DN, result from new iit drp code
-tvac_readnoise = 130.12 #e, result from new iit drp code
+tvac_kgain = 8.49404981510777 #8.8145 #e/DN, result from new iit code with specified file input order
+tvac_readnoise = 121.76070832489948 # 130.12 #e, result from new iit code with specified file input order
 
 @pytest.mark.e2e
 def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
@@ -39,9 +39,11 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
             image.pri_hdr['OBSTYPE'] = 'MNFRAME'
             image.save(filename = file)
         l1_data_filelist_range_exp.append(file)
-
+    # actually, use same order of files used in II&T processing of data to ensure exactly the same results
+    l1_data_filelist_range_exp = np.load(os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "results", "TVAC_kgain_file_order.npy"), allow_pickle=True)
+    l1_data_filelist_range_exp = l1_data_filelist_range_exp.tolist()
     walker.walk_corgidrp(l1_data_filelist_range_exp, "", kgain_outputdir, template="l1_to_kgain.json")
-    kgain_file = os.path.join(kgain_outputdir, "CGI_EXCAM_L1_0000051731_kgain.fits")
+    kgain_file = os.path.join(kgain_outputdir, os.path.split(l1_data_filelist_range_exp[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
     kgain = data.KGain(kgain_file)
     
     ##### Check against TVAC kgain, readnoise
@@ -57,8 +59,8 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     print ("error of kgain:", kgain.error)
     print ("error of readnoise:", kgain.ext_hdr["RN_ERR"])
 
-    assert np.abs(diff_kgain) < 0.01
-    assert np.abs(diff_readnoise) < 3
+    assert np.abs(diff_kgain) == 0 #< 0.01
+    assert np.abs(diff_readnoise) == 0 #< 3
 
     
 if __name__ == "__main__":
@@ -67,7 +69,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
+    tvacdata_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data'  #"/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

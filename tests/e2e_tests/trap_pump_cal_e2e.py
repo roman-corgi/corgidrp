@@ -121,7 +121,9 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     if e2e:
         this_caldb.create_entry(nonlinear_cal)
         this_caldb.create_entry(noise_maps)
-
+    # load in files in order they were run on II&T code for exactly the same results
+    trap_pump_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", 'tpump_e2e_filelist_order.npy'), allow_pickle=True)
+    trap_pump_data_filelist = trap_pump_data_filelist.tolist()
     ####### Run the walker on some test_data
     if not e2e: # if you want to test older simulated data
         template = json.load(open(os.path.join(thisfile_dir, "trap_pump_cal_small_size_e2e.json"), 'r'))
@@ -171,11 +173,11 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     for t in list(TVAC_trap_dict.keys()):
         assert(t in e2e_trap_dict_keys)
         assert(((TVAC_trap_dict[t]['E'] is None and np.isnan(e2e_trap_dict[t]['E']))) or 
-               np.abs((TVAC_trap_dict[t]['E'] - e2e_trap_dict[t]['E'])/TVAC_trap_dict[t]['E']) < 1e-4)
+               np.abs((TVAC_trap_dict[t]['E'] - e2e_trap_dict[t]['E'])/TVAC_trap_dict[t]['E']) == 0)#< 1e-4)
         assert(((TVAC_trap_dict[t]['cs'] is None and np.isnan(e2e_trap_dict[t]['cs']))) or 
-               np.abs((TVAC_trap_dict[t]['cs']-e2e_trap_dict[t]['cs'])/TVAC_trap_dict[t]['cs']) < 1e-4)
+               np.abs((TVAC_trap_dict[t]['cs']-e2e_trap_dict[t]['cs'])/TVAC_trap_dict[t]['cs']) == 0)#< 1e-4)
         assert(((TVAC_trap_dict[t]['tau at input T'] is None and np.isnan(e2e_trap_dict[t]['tau at input T']))) or 
-               np.abs((TVAC_trap_dict[t]['tau at input T']-e2e_trap_dict[t]['tau at input T'])/TVAC_trap_dict[t]['tau at input T']) < 1e-4)
+               np.abs((TVAC_trap_dict[t]['tau at input T']-e2e_trap_dict[t]['tau at input T'])/TVAC_trap_dict[t]['tau at input T']) == 0)#< 1e-4)
     pass
     # trap densities should all match if the above passes; that was tested in II&T tests mainly 
     # b/c all the outputs of the trap-pump function were tested
