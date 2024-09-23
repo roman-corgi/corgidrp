@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_l2a_eng",
+    "name" : "noisemap_generation",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
@@ -9,9 +9,6 @@
     "steps" : [
         {
             "name" : "prescan_biassub",
-            "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
-            },
             "keywords" : {
                 "return_full_frame" : true
             }
@@ -30,6 +27,21 @@
         },
         {
             "name" : "update_to_l2a"
+        },
+        {
+            "name" : "save"
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "calibrate_darks",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
         },
         {
             "name" : "save"

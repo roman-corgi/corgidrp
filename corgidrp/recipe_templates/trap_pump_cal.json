@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_l2a_eng",
+    "name" : "trap_pump_cal",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
@@ -13,13 +13,7 @@
                 "DetectorNoiseMaps" : "AUTOMATIC,OPTIONAL"
             },
             "keywords" : {
-                "return_full_frame" : true
-            }
-        },
-        {
-            "name" : "detect_cosmic_rays",
-            "calibs" : {
-                "DetectorParams" : "AUTOMATIC"
+                "use_imaging_area" : true
             }
         },
         {
@@ -30,6 +24,12 @@
         },
         {
             "name" : "update_to_l2a"
+        },
+        {
+            "name" : "em_gain_division"
+        },
+        {
+            "name" : "calibrate_trap_pump"
         },
         {
             "name" : "save"
