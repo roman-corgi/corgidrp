@@ -14,6 +14,7 @@ import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+@pytest.mark.e2e
 def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
