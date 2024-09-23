@@ -142,7 +142,10 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     # clean_trad_dark = (trad_dark.data - fpn_dat/1.340000033378601 - cic_dat)/100
     # master darks are exactly equal, ignoring the telemetry rows (first and last in this case)
     assert(np.allclose(TVAC_trad_dark[1:-1], trad_dark[1:-1], atol=1e-10))
-    pass
+    
+    # remove from caldb
+    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
+    this_caldb.remove_entry(trad_dark)
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
