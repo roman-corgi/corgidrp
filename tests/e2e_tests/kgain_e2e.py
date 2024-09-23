@@ -31,6 +31,12 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51841)]#[51731, 51761]]
     
     ####### Run the walker on some test_data
+    for file in l1_data_filelist_range_exp:
+        image = data.Image(file)
+        # This should not be necessary anymore after the updates of the OBSTYPE keyword, up to now it is only "SCI"
+        if image.pri_hdr['OBSTYPE'] != 'KGAIN':
+            image.pri_hdr['OBSTYPE'] = 'KGAIN'
+            image.save(filename = file)
 
     for file in l1_data_filelist_same_exp:
         image = data.Image(file)
@@ -40,7 +46,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
             image.save(filename = file)
         l1_data_filelist_range_exp.append(file)
 
-    walker.walk_corgidrp(l1_data_filelist_range_exp, "", kgain_outputdir, template="l1_to_kgain.json")
+    walker.walk_corgidrp(l1_data_filelist_range_exp, "", kgain_outputdir)
     kgain_file = os.path.join(kgain_outputdir, "CGI_EXCAM_L1_0000051731_kgain.fits")
     kgain = data.KGain(kgain_file)
     

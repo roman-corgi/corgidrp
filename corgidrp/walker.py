@@ -195,6 +195,8 @@ def guess_template(dataset):
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['OBSTYPE'] == "NONLIN":
             recipe_filename = "l1_to_l2a_nonlin.json"
+        elif image.pri_hdr['OBSTYPE'] == "KGAIN":
+            recipe_filename = "l1_to_kgain.json"
         elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
             # Disambiguate between NONLIN and KGAIN
             for data in dataset:
