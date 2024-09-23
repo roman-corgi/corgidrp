@@ -133,20 +133,18 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have had the cosmic ray masks combined with any bad pixel masks which may
-    have come from pre-processing if there are any (because creation of the
-    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
-    functionality requires a master dark, which requires this function first)
     - have been desmeared if desmearing is appropriate.  Under normal
     circumstances, darks should not be desmeared.  The only time desmearing
     would be useful is in the unexpected case that, for example,
     dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge
-    and fixed-pattern noise.
+    not smeared upon readout, such as clock-induced charge, 
+    fixed-pattern noise, and read noise.
     - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
-    dataset.
+    dataset.  And note that creation of the
+    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
+    functionality requires a master dark, which requires this function first.
 
     The steps shown above are a subset of the total number of steps
     involved in going from L1 to L2b.  This function averages
@@ -267,24 +265,22 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     EM gain values and exposure times.  The frames in each stack should be
     SCI full frames that:
 
-    - have had their bias subtracted (assuming 0 bias offset and full frame;
-    this function calibrates bias offset)
+    - have had their bias subtracted (assuming full frame)
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have had the cosmic ray masks combined with any bad pixel masks which may
-    have come from pre-processing if there are any (because creation of the
-    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
-    functionality requires a master dark, which requires this function first)
     - have been desmeared if desmearing is appropriate.  Under normal
     circumstances, darks should not be desmeared.  The only time desmearing
     would be useful is in the unexpected case that, for example,
     dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge
-    and fixed-pattern noise.
+    not smeared upon readout, such as clock-induced charge, 
+    fixed-pattern noise, and read noise.
+    - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
-    dataset.
+    dataset.  And note that creation of the
+    fixed bad pixel mask containing warm/hot pixels and pixels with sub-optimal
+    functionality requires a master dark, which requires this function first.
 
     The steps shown above are a subset of the total number of steps
     involved in going from L1 to L2b.  This function averages
@@ -527,14 +523,12 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         raise CalDarksLSQException("Must have at least 2 unique EM gains "
                                    'represented by the sub-stacks in '
                                    'datasets.')
-    if len(EMgain_arr[EMgain_arr<=1]) != 0:
-        raise CalDarksLSQException('Each EM gain must be greater '
-            'than 1.')
+    if len(EMgain_arr[EMgain_arr<1]) != 0:
+        raise CalDarksLSQException('Each EM gain must be 1 or greater.')
     if len(np.unique(exptime_arr)) < 2:
         raise CalDarksLSQException("Must have at 2 unique exposure times.")
-    if len(exptime_arr[exptime_arr<=0]) != 0:
-        raise CalDarksLSQException('Each exposure time must be greater '
-            'than 0.')
+    if len(exptime_arr[exptime_arr<0]) != 0:
+        raise CalDarksLSQException('Each exposure time cannot be negative.')
     if len(kgain_arr[kgain_arr<=0]) != 0:
         raise CalDarksLSQException('Each element of k_arr must be greater '
             'than 0.')
@@ -741,6 +735,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
 
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
+    
+    l2a_data_filename = dataset.copy()[0].filename
+    noise_maps.filename =  l2a_data_filename[:24] + '_DetectorNoiseMaps.fits'
 
     return noise_maps
 
