@@ -32,7 +32,7 @@ all_steps = {
     "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
     "desmear" : corgidrp.l2a_to_l2b.desmear,
     "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
-    "boresight_calibration": corgidrp.astrom.boresight_calibration
+    "boresight_calibration": corgidrp.astrom.boresight_calibration,
     "calibrate_trap_pump": corgidrp.pump_trap_calibration.tpump_analysis,
     "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
     "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
