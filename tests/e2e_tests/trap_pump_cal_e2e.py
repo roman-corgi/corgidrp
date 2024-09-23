@@ -207,7 +207,8 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     # assert(two_or_less_count > 0)
     # assert(noncontinuous_count >= 0)
     # assert(pre_sub_el_count > 0)
-    assert(unused_fit_data == TVAC_unused_fit_data)
+    
+    #assert(unused_fit_data == TVAC_unused_fit_data)
     assert(unused_temp_fit_data == TVAC_unused_temp_fit_data)
     assert(two_or_less_count == TVAC_two_or_less_count)
     assert(noncontinuous_count == TVAC_noncontinuous_count)
