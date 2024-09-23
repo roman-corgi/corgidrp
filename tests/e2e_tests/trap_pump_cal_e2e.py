@@ -12,6 +12,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 from corgidrp.pump_trap_calibration import rebuild_dict
+from cal.tpumpanalysis.tpump_final import tpump_analysis
 
 # Adjust the system's limit of open files. We need to load 2000 files at once. 
 # some systems don't like that. 
@@ -52,6 +53,44 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     trap_pump_outputdir = os.path.join(e2eoutput_path, "trap_pump_cal_output")
     if not os.path.exists(trap_pump_outputdir):
         os.mkdir(trap_pump_outputdir)
+
+    ####### run II&T code
+    time_head = 'TPTAU'#PHASE_T'
+    emgain_head = 'CMDGAIN'#'EM_GAIN'
+    meta_path_eng = os.path.join(os.path.split(thisfile_dir)[0], 'test_data','metadata_eng.yaml')
+    tau_fit_thresh = 0.8#0.9#0.9#0.8
+    cs_fit_thresh = 0.8
+    thresh_factor = 1.5#1.5 #3
+    length_lim = 5
+    ill_corr = True
+    tfit_const = True
+    offset_min = 10
+    offset_max = 10
+    pc_min = 0
+    pc_max = 2
+    mean_field = None#2090 #250 #e- #None
+    tauc_min = 0
+    tauc_max = 1e-5 #1e-2
+    k_prob = 1
+    bins_E = 50#70#100#80 # at 80% for noisy, with inj charge
+    bins_cs = 5#7#10#8 # at 80%
+    sample_data = False #True
+    #num_pumps = {1:10000,2:10000,3:10000,4:10000}
+    num_pumps = {1:50000,2:50000,3:50000,4:50000}
+    
+    (TVAC_trap_dict, TVAC_trap_densities, TVAC_bad_fit_counter, TVAC_pre_sub_el_count,
+    TVAC_unused_fit_data, TVAC_unused_temp_fit_data, TVAC_two_or_less_count,
+    TVAC_noncontinuous_count) = tpump_analysis(trap_pump_datadir, time_head,
+    emgain_head, num_pumps, meta_path_eng, nonlin_path = nonlin_path,
+    length_lim = length_lim, thresh_factor = thresh_factor,
+    ill_corr = ill_corr, tfit_const = tfit_const, save_temps = None,
+    tau_min = 0.7e-6, tau_max = 1.3e-2, tau_fit_thresh = tau_fit_thresh,
+    tauc_min = tauc_min, tauc_max = tauc_max, offset_min = offset_min,
+    offset_max = offset_max,
+    pc_min=pc_min, pc_max=pc_max, k_prob = k_prob, mean_field = mean_field,
+    cs_fit_thresh = cs_fit_thresh, bins_E = bins_E, bins_cs = bins_cs,
+    sample_data = sample_data)
+    ######################
 
     # define the raw science data to process
     trap_pump_data_filelist = []
@@ -122,8 +161,12 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
         this_caldb.create_entry(nonlinear_cal)
         this_caldb.create_entry(noise_maps)
     # load in files in order they were run on II&T code for exactly the same results
-    trap_pump_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", 'tpump_e2e_filelist_order.npy'), allow_pickle=True)
-    trap_pump_data_filelist = trap_pump_data_filelist.tolist()
+    # trap_pump_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", 'tpump_e2e_filelist_order.npy'), allow_pickle=True)
+    # trap_pump_data_filelist = trap_pump_data_filelist.tolist()
+    # tempp = trap_pump_data_filelist[4]
+    # trap_pump_data_filelist[4] = trap_pump_data_filelist[3]
+    # trap_pump_data_filelist[3] = tempp
+
     ####### Run the walker on some test_data
     if not e2e: # if you want to test older simulated data
         template = json.load(open(os.path.join(thisfile_dir, "trap_pump_cal_small_size_e2e.json"), 'r'))
@@ -159,11 +202,16 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     #####
     # Run many of the tests from test_tfit_const_True_sub_noise_ill in ut_tpump_final.py
     # these things are true of the TVAC result, so make sure they are also true of this output
-    assert(unused_fit_data > 0)
-    assert(unused_temp_fit_data == 0)
-    assert(two_or_less_count > 0)
-    assert(noncontinuous_count >= 0)
-    assert(pre_sub_el_count > 0)
+    # assert(unused_fit_data > 0)
+    # assert(unused_temp_fit_data == 0)
+    # assert(two_or_less_count > 0)
+    # assert(noncontinuous_count >= 0)
+    # assert(pre_sub_el_count > 0)
+    assert(unused_fit_data == TVAC_unused_fit_data)
+    assert(unused_temp_fit_data == TVAC_unused_fit_data)
+    assert(two_or_less_count == TVAC_two_or_less_count)
+    assert(noncontinuous_count == TVAC_noncontinuous_count)
+    assert(pre_sub_el_count == TVAC_pre_sub_el_count)
 
     for t in e2e_trap_dict_keys:
         assert(t in TVAC_trap_dict)
