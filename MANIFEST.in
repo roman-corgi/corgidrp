@@ -5,3 +5,4 @@ include tests/test_data/metadata.yaml
 include tests/test_data/metadata_eng.yaml
 include tests/test_data/nonlin_sample.csv
 include tests/test_data/nonlin_sample.fits
+include corgidrp/data/JWST_CALFIELD2020.csv
