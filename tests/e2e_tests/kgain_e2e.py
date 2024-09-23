@@ -8,6 +8,7 @@ import astropy.io.fits as fits
 import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
+import corgidrp.caldb as caldb
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -65,6 +66,9 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
 
     assert np.abs(diff_kgain) < 0.01
     assert np.abs(diff_readnoise) < 3
+
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(kgain)
 
     
 if __name__ == "__main__":

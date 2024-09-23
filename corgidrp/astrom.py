@@ -657,14 +657,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
         field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
         field_matches (str): Full path to file with calibration field matches to the image sources (x, y, ra, dec), if None, automated source matching is used (default: None)
-        find_threshold (int): Number of stars to find (default 100)
+        find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
-        comparison_threshold (int): How many stars in the field to consider for the initial match (default: 25)
+        comparison_threshold (int): How many stars in the field to consider for the initial match (default: 50)
         search_rad (float): The radius [deg] around the target coordinate for creating a subfield to match image sources to
         platescale_guess (float): An initial guess for the platescale value (default: 21.8 [mas/ pixel])
-        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.5)
-        center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 1 -- ie: 100% of the image is used)
+        platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
+        center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 0.9 -- ie: 90% of the image is used)
         frames_to_combine (int): The number of frames to combine in a dataset (default: None)
 
     Returns:
