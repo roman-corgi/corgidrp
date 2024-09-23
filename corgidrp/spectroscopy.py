@@ -20,6 +20,109 @@ import scipy.optimize as optimize
 from scipy.ndimage import center_of_mass
 import matplotlib.pyplot as plt
 
+class DispersionModel():
+    """ 
+    Class for dispersion model parameter data structure
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+
+    Attributes:
+        data (numpy.lib.npyio.NpzFile): numpy Npz file
+
+        clocking_angle (float): Clocking angle of the dispersion axis, theta,
+        oriented in the direction of increasing wavelength, measured in degrees
+        counterclockwise from the positive x-axis on the EXCAM data array
+        (direction of increasing column index).
+
+        clocking_angle_uncertainty (float): Uncertainty of the dispersion axis
+        clocking angle in degrees.
+
+        position_vs_wavelen_polycoeff (numpy.ndarray): Polynomial fit to the
+        source displacement on EXCAM along the dispersion axis as a function of
+        wavelength, relative to the source position at the band reference
+        wavelength (lambda_c = 730.0 nm for Band 3) in units of millimeters.
+
+        position_vs_wavelen_covmatrix (numpy.ndarray): Covariance matrix of the
+        polynomial coefficients
+
+        wavelen_vs_position_polycoeff (numpy.ndarray): Polynomial fit to the
+        wavelength as a function of displacement along the dispersion axis on
+        EXCAM, relative to the source position at the Band 3 reference
+        wavelength (x_c at lambda_c = 730.0 nm) in units of nanometers. 
+
+        wavelen_vs_position_covmatrix (numpy.ndarray): Covariance matrix of the
+        polynomial coefficients
+    """
+
+    def __init__(self, data_or_filepath=None,
+                 clocking_angle=None, clocking_angle_uncertainty=None,
+                 wavlen_vs_pos_polycoeff=None, wavlen_vs_pos_cov=None,
+                 pos_vs_wavlen_polycoeff=None, pos_vs_wavlen_cov=None):
+        if isinstance(data_or_filepath, str):
+            # a filepath is passed in
+            dispersion_params = np.load(data_or_filepath)
+            if 'clocking_angle' in dispersion_params: 
+                self.clocking_angle = dispersion_params['clocking_angle']
+            if 'clocking_angle_uncertainty' in dispersion_params: 
+                self.clocking_angle_uncertainty = dispersion_params['clocking_angle_uncertainty']
+            if 'position_vs_wavelen_polycoeff' in dispersion_params:
+                self.pos_vs_wavlen_polycoeff = dispersion_params['position_vs_wavelen_polycoeff']
+            if 'position_vs_wavelen_covmatrix' in dispersion_params:
+                self.pos_vs_wavlen_cov = dispersion_params['position_vs_wavelen_covmatrix']
+            if 'wavelen_vs_position_polycoeff' in dispersion_params:
+                self.wavlen_vs_pos_polycoeff = dispersion_params['wavelen_vs_position_polycoeff']
+            if 'wavelen_vs_position_covmatrix' in dispersion_params:
+                self.wavlen_vs_pos_cov = dispersion_params['wavelen_vs_position_covmatrix']
+
+            # parse the filepath to store the filedir and filename
+            filepath_args = data_or_filepath.split(os.path.sep)
+            if len(filepath_args) == 1:
+                # no directory info in filepath, so current working directory
+                self.filedir = "."
+                self.filename = filepath_args[0]
+            else:
+                self.filename = filepath_args[-1]
+                self.filedir = os.path.sep.join(filepath_args[:-1])
+        else:
+            # initialization data passed in directly
+            self.data = data_or_filepath
+            self.clocking_angle = clocking_angle
+            self.clocking_angle_uncertainty = clocking_angle_uncertainty
+            self.pos_vs_wavlen_polycoeff = pos_vs_wavlen_polycoeff
+            self.pos_vs_wavlen_cov = pos_vs_wavlen_cov
+            self.wavlen_vs_pos_polycoeff = wavlen_vs_pos_polycoeff
+            self.wavlen_vs_pos_cov = wavlen_vs_pos_cov
+
+    # create this field dynamically
+    @property
+    def filepath(self):
+        return os.path.join(self.filedir, self.filename)
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        np.savez(self.filepath,
+            clocking_angle = self.clocking_angle,
+            clocking_angle_uncertainty = self.clocking_angle_uncertainty,
+            position_vs_wavelen_polycoeff = self.pos_vs_wavlen_polycoeff ,
+            position_vs_wavelen_covmatrix = self.pos_vs_wavlen_cov,
+            wavelen_vs_position_polycoeff = self.wavlen_vs_pos_polycoeff,
+            wavelen_vs_position_covmatrix = self.wavlen_vs_pos_cov)
+
 def get_center_of_mass(frame):
     """
     Finds the center coordinates for a given frame.
@@ -484,8 +587,9 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = wavlens, deg = 2, w = weights))
     # Determine the position at the reference wavelength
     poly_roots = (np.poly1d(lambda_func_x) - ref_wavlen).roots
-    real_root = poly_roots[np.isreal(poly_roots)][0]
-    pos_ref = np.real(real_root)
+    real_roots = poly_roots[np.isreal(poly_roots)]
+    root_select_ind = np.argmin(np.abs(poly_roots[np.isreal(poly_roots)]))
+    pos_ref = np.real(real_roots[root_select_ind])
     np.testing.assert_almost_equal(lambda_func_x(pos_ref), ref_wavlen)
     displacements_mm = delta_x - pos_ref
 

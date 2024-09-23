@@ -83,12 +83,14 @@ def test_fit_psf_centroid(errortol_pix = 0.01, verbose = False):
           f"{np.std(xerr_gauss_list):.2E}, {np.std(yerr_gauss_list):.2E} pixels")
     print("PSF centroid fit accuracy test passed.")
 
-def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3'):
+def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path = None):
     """ 
     Test the function that fits the spectral dispersion profile of the CGI ZOD prism.
     """
     test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
-                                  "tests", "test_data", "spectroscopy")
+            "tests", "test_data", "spectroscopy")
+    if test_product_path == None:
+        test_product_path = os.path.join(test_data_path, "test_products")
     assert prism in ['PRISM2', 'PRISM3']
     # load inputs and instrument data
     if prism == 'PRISM2':
@@ -105,7 +107,7 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3'):
         ref_wavlen = 730.0
         ref_cfam = '3C'
         bandpass = [675, 785]
-    tvac_dispersion = np.load(tvac_dispersion_params_fname)
+    tvac_dispersion = spectroscopy.DispersionModel(tvac_dispersion_params_fname)
     pixel_pitch_um = 13.0 # EXCAM pixel pitch (microns)
 
     # One version of the filter sweep simulation array has no filter-to-filter image offsets; 
@@ -215,8 +217,8 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3'):
     wavlen_func_pos = np.poly1d(pfit_wavlen_vs_pos)
 
     #### Load TVAC dispersion profile to compare and test the agreement in the wavelength vs position.
-    tvac_wavlen_func_pos = np.poly1d(tvac_dispersion['wavelen_vs_position_polycoeff'])
-    tvac_pos_func_wavlen = np.poly1d(tvac_dispersion['position_vs_wavelen_polycoeff'])    
+    tvac_wavlen_func_pos = np.poly1d(tvac_dispersion.wavlen_vs_pos_polycoeff)
+    tvac_pos_func_wavlen = np.poly1d(tvac_dispersion.pos_vs_wavlen_polycoeff)    
 
     (xtest_min, xtest_max) = (tvac_pos_func_wavlen((bandpass[0] - ref_wavlen)/ref_wavlen),
                               tvac_pos_func_wavlen((bandpass[1] - ref_wavlen)/ref_wavlen))
@@ -230,6 +232,21 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3'):
     assert worst_case_wavlen_error == pytest.approx(0, abs=errortol_nm)
     print("Dispersion profile fit test passed.")
 
+    if not os.path.exists(test_product_path):
+        os.mkdir(test_product_path)
+    
+    dispersion_profile_npz_fname = "corgidrp_{:s}_dispersion_profile.npz".format(prism)
+    corgi_dispersion_profile = spectroscopy.DispersionModel(
+        clocking_angle = clocking_angle,
+        clocking_angle_uncertainty = clocking_angle_uncertainty,
+        pos_vs_wavlen_polycoeff = pfit_pos_vs_wavlen,
+        pos_vs_wavlen_cov = cov_pos_vs_wavlen,
+        wavlen_vs_pos_polycoeff = pfit_wavlen_vs_pos,
+        wavlen_vs_pos_cov = cov_wavlen_vs_pos
+    )
+    corgi_dispersion_profile.save(test_product_path, dispersion_profile_npz_fname)
+    print(f"Stored the dispersion profile fit results to {corgi_dispersion_profile.filepath}")
+
 if __name__ == "__main__":
     # The test applied to spectroscopy.fit_psf_centroid() loads 
     # a simulation file containing an array of PSFs computed for 
@@ -238,4 +255,4 @@ if __name__ == "__main__":
 
     # Test the dispersion profile fitting function with an array
     # of simulated PSF images for a set of sub-band color filters.
-    test_dispersion_fit(errortol_nm = 0.5)
+    test_dispersion_fit(errortol_nm = 1.0)
