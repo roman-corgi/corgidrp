@@ -5,7 +5,7 @@ import corgidrp
 import corgidrp.data as data
 from corgidrp.l1_to_l2a import prescan_biassub
 import corgidrp.mocks as mocks
-from corgidrp.detector import detector_areas, unpack_geom
+from corgidrp.detector import detector_areas, unpack_geom, imaging_area_geom
 
 import numpy as np
 import yaml
@@ -269,7 +269,7 @@ def test_prescan_sub():
     ###### create simulated data
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
 
-    for obstype in ['SCI', 'ENG']:
+    for obstype in ['SCI','ENG']:
         # create simulated data
         dataset = mocks.create_prescan_files(filedir=datadir, obstype=obstype)
 
@@ -304,57 +304,67 @@ def test_prescan_sub():
             raise Exception(f"Mock dataset is an unexpected length ({len(dataset)}).")
 
         for return_full_frame in [True, False]:
-            output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame)
+            for return_imaging_area in [True, False]:
+                if return_full_frame is True and return_imaging_area is True:
+                    continue # don't test this case b/c function not can't work
+                output_dataset = prescan_biassub(dataset, noise_maps, return_full_frame=return_full_frame, use_imaging_area=return_imaging_area)
 
-            # Check that output shape is as expected
-            output_shape = output_dataset[0].data.shape
-            if output_shape != shapes[obstype][return_full_frame]:
-                raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
+                # Check that output shape is as expected
+                output_shape = output_dataset[0].data.shape
+                if return_imaging_area is False:
+                    shape_compare = shapes[obstype][return_full_frame]
+                else:
+                    r, c, _ = imaging_area_geom(obstype) 
+                    shape_compare = (r,c)
+                if output_shape != shape_compare:
+                    raise Exception(f"Shape of output frame for {obstype}, return_full_frame={return_full_frame} is {output_shape}, \nwhen {shapes[obstype][return_full_frame]} was expected.")
 
-            # Check that bias extension has the right size, dtype
-            for i, frame in enumerate(output_dataset):
+                # Check that bias extension has the right size, dtype
+                for i, frame in enumerate(output_dataset):
 
-                try: 
-                    frame_bias = frame.hdu_list['BIAS'].data
-                except KeyError:
-                    raise Exception(f"BIAS extension not found in frame {i}.")
-                
-                if frame_bias.shape != (frame.data.shape[0],):
-                    raise Exception(f"Bias of frame {i} has shape {frame.bias.shape} when we expected {(frame.data.shape[0],)}.")
-                
-                if frame_bias.dtype != np.float32:
-                    raise Exception(f"Bias of frame {i} does not have datatype np.float32.")
+                    try: 
+                        frame_bias = frame.hdu_list['BIAS'].data
+                    except KeyError:
+                        raise Exception(f"BIAS extension not found in frame {i}.")
+                    
+                    if frame_bias.shape != (frame.data.shape[0],):
+                        raise Exception(f"Bias of frame {i} has shape {frame.bias.shape} when we expected {(frame.data.shape[0],)}.")
+                    
+                    if frame_bias.dtype != np.float32:
+                        raise Exception(f"Bias of frame {i} does not have datatype np.float32.")
 
-            # Check that corgiDRP and II&T pipeline produce the same result
-            corgidrp_result = output_dataset[0].data
-            iit_result = iit_frames[0] if return_full_frame else iit_images[0]
-            if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
-                raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
+                # Check that corgiDRP and II&T pipeline produce the same result
+                corgidrp_result = output_dataset[0].data
+                if return_imaging_area is True:
+                    continue
+                iit_result = iit_frames[0] if return_full_frame else iit_images[0]
+                if np.nanmax(np.abs(corgidrp_result-iit_result)) > tol:
+                    raise Exception(f"corgidrp result does not match II&T result for generated mock data, obstype={obstype}, return_full_frame={return_full_frame}.")
 
-            # check that data, err, and dq arrays are consistently modified
-            output_dataset.all_data[0, 0, 0] = 0.
-            if output_dataset[0].data[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_data did not modify individual frame data.")
+                # check that data, err, and dq arrays are consistently modified
+                output_dataset.all_data[0, 0, 0] = 0.
+                if output_dataset[0].data[0, 0] != 0. :
+                    raise Exception("Modifying dataset.all_data did not modify individual frame data.")
 
-            output_dataset[0].data[0,0] = 1.
-            if output_dataset.all_data[0,0,0] != 1. :
-                raise Exception("Modifying individual frame data did not modify dataset.all_data.")
+                output_dataset[0].data[0,0] = 1.
+                if output_dataset.all_data[0,0,0] != 1. :
+                    raise Exception("Modifying individual frame data did not modify dataset.all_data.")
 
-            output_dataset.all_err[0, 0, 0, 0] = 0.
-            if output_dataset[0].err[0, 0, 0] != 0. :
-                raise Exception("Modifying dataset.all_err did not modify individual frame err.")
+                output_dataset.all_err[0, 0, 0, 0] = 0.
+                if output_dataset[0].err[0, 0, 0] != 0. :
+                    raise Exception("Modifying dataset.all_err did not modify individual frame err.")
 
-            output_dataset[0].err[0, 0, 0] = 1.
-            if output_dataset.all_err[0, 0, 0, 0] != 1. :
-                raise Exception("Modifying individual frame err did not modify dataset.all_err.")
+                output_dataset[0].err[0, 0, 0] = 1.
+                if output_dataset.all_err[0, 0, 0, 0] != 1. :
+                    raise Exception("Modifying individual frame err did not modify dataset.all_err.")
 
-            output_dataset.all_dq[0, 0, 0] = 0.
-            if output_dataset[0].dq[0, 0] != 0. :
-                raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
+                output_dataset.all_dq[0, 0, 0] = 0.
+                if output_dataset[0].dq[0, 0] != 0. :
+                    raise Exception("Modifying dataset.all_dq did not modify individual frame dq.")
 
-            output_dataset[0].dq[0,0] = 1.
-            if output_dataset.all_dq[0,0,0] != 1. :
-                raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
+                output_dataset[0].dq[0,0] = 1.
+                if output_dataset.all_dq[0,0,0] != 1. :
+                    raise Exception("Modifying individual frame dq did not modify dataset.all_dq.")
 
 def test_bias_zeros_frame():
     """Verify prescan_biassub does not break for a frame of all zeros
