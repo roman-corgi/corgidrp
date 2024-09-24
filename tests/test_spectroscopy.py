@@ -2,6 +2,7 @@ import os, sys
 import numpy as np
 import pytest
 import corgidrp
+from corgidrp.astrom import centroid
 import corgidrp.mocks as mocks
 import corgidrp.data as data
 import corgidrp.spectroscopy as spectroscopy
@@ -143,7 +144,7 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
     # File name of table to store the test centroid fit results
     prism_filtersweep_centroid_table_fname = os.path.join(
             test_product_path,
-            Path(prism_filtersweep_offsets_sim_fname).stem + '_centroids.ecsv')
+            Path(prism_filtersweep_offsets_sim_fname).stem + '_centroids.csv')
     
     bandpass_center_table_fname = os.path.join(test_data_path, "CGI_bandpass_centers.csv")
     bandpass_center_table = pd.read_csv(bandpass_center_table_fname, index_col=0)
@@ -190,7 +191,6 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
     
         psf_data = noisy_data_array[i]
         psf_template = template_array[i]
-        xcent_template, ycent_template = (template_pos_table['xcent'][i], template_pos_table['ycent'][i])
         (xcent_fit, ycent_fit, 
          xcent_gauss, ycent_gauss,
          psf_peakpix_snr,
@@ -286,6 +286,11 @@ def test_zeropoint_centroid(errortol_pix = 0.5):
     Test the procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter and slit.
 
+    Args:
+        
+        errortol_pix (numpy.float): Tolerance on the standard deviation of
+        the registration error distribution across the trials.
+
     """
     print('Testing the zero-point centroid fitting procedure...')
     test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
@@ -352,6 +357,99 @@ def test_zeropoint_centroid(errortol_pix = 0.5):
     print(f"Std of {num_trials:d} source-to-slit vertical offset errors: {np.std(source_to_slit_offset_errs):.2f} pixels")
     assert np.std(source_to_slit_offset_errs) == pytest.approx(0, abs=errortol_pix)
 
+def test_star_spectrum_registration(errortol_pix = 0.5):
+    """
+
+    Test the procedure for registering the unocculted star spectrum image from
+    an array of raster scan offsets, choosing the prism image spectrum
+    whose centroid best matches the wavelength calibration zero-point position.
+    
+    Args:
+        
+        errortol_pix (numpy.float): Tolerance on the registration offset between
+        the noisy spectrum image and the best-matched template.
+
+    """
+    print("Testing star spectrum registration procedure...")
+    test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
+            "tests", "test_data", "spectroscopy")
+    test_product_path = os.path.join(test_data_path, "test_products")
+    prism_slit_offset_spec_array_fname = os.path.join(test_data_path, 
+            'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
+
+    # File name of table to store the test centroid fit results
+    star_spec_centroid_table_fname = os.path.join(
+            test_product_path,
+            Path(prism_slit_offset_spec_array_fname).stem + '_centroids.csv')
+
+    spec_template_array = fits.getdata(prism_slit_offset_spec_array_fname)
+    centroid_table = Table(fits.getdata(prism_slit_offset_spec_array_fname, ext=1))
+    num_rows_template = len(centroid_table)
+
+    wave_cal_fname = os.path.join(test_product_path,
+            'g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets_wavecal.fits')
+    if os.path.exists(wave_cal_fname):
+        wave_cal_hdr = fits.getheader(wave_cal_fname)
+        zeropt = spectroscopy.WavelengthZeropoint(
+            wave_cal_hdr['PRISM'].strip(), wave_cal_hdr['WAVLEN0'],
+            wave_cal_hdr['X0'], wave_cal_hdr['X0_ERR'],
+            wave_cal_hdr['Y0'], wave_cal_hdr['Y0_ERR'],
+            (wave_cal_hdr['NAXIS1'], wave_cal_hdr['NAXIS2'])
+        )
+    else:
+        zeropt = spectroscopy.WavelengthZeropoint(
+            'PRISM3', 753.83,
+            40.0, 0.5, 40.0, 0.5, 
+            spec_template_array[0].shape
+        )
+
+    centroid_table.rename_column('xcent', 'true x_cent')
+    centroid_table.rename_column('ycent', 'true y_cent')
+    centroid_table['x_cent'] = 0.
+    centroid_table['y_cent'] = 0.
+    centroid_table['x_cent gauss'] = 0.
+    centroid_table['y_cent gauss'] = 0.
+    centroid_table['peak pix SNR'] = 0.
+    centroid_table['x_err est'] = 0.
+    centroid_table['y_err est'] = 0.
+
+    np.random.seed(5)
+    read_noise = 200
+    noisy_spec_array = (np.random.poisson(np.abs(spec_template_array) / 2) + 
+                        np.random.normal(loc=0, scale=read_noise, size=spec_template_array.shape))
+
+    halfheight = 30
+
+    for ii in range(num_rows_template): 
+        star_spec_data = noisy_spec_array[ii]
+        star_spec_template = spec_template_array[ii]
+
+        (xcent_fit, ycent_fit, 
+         xcent_gauss, ycent_gauss,
+         psf_peakpix_snr,
+         xprecis, yprecis) = spectroscopy.fit_psf_centroid(star_spec_data, star_spec_template, 
+                                          xcent_template=centroid_table[ii]['true x_cent'],
+                                          ycent_template=centroid_table[ii]['true y_cent'],
+                                          halfheight=halfheight)
+        centroid_table['x_cent'][ii] = xcent_fit
+        centroid_table['y_cent'][ii] = ycent_fit
+        centroid_table['x_cent gauss'][ii] = xcent_gauss
+        centroid_table['y_cent gauss'][ii] = ycent_gauss
+        centroid_table['peak pix SNR'][ii] = psf_peakpix_snr
+        centroid_table['x_err est'][ii] = xprecis
+        centroid_table['y_err est'][ii] = yprecis
+
+    centroid_table['x_err true'] = centroid_table['x_cent'] - centroid_table['true x_cent']
+    centroid_table['y_err true'] = centroid_table['y_cent'] - centroid_table['true y_cent'] 
+    centroid_table['zeropt_dist'] = np.sqrt((centroid_table['x_cent'] - zeropt.x)**2 + 
+                                            (centroid_table['y_cent'] - zeropt.y)**2) 
+
+    idx_match = np.argmin(centroid_table['zeropt_dist'])
+    assert centroid_table[idx_match]['zeropt_dist'] == pytest.approx(0, abs=errortol_pix)
+
+    centroid_table.write(star_spec_centroid_table_fname, overwrite=True)
+    print(f"Stored the centroid estimate table to {star_spec_centroid_table_fname}")
+
 def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_product_path = None):
     """
 
@@ -389,7 +487,7 @@ def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_produ
     # File name of table of test centroid fit results
     prism_filtersweep_centroid_table_fname = os.path.join(
         test_product_path,
-        Path(prism_filtersweep_sim_fname).stem + '_centroids.ecsv')
+        Path(prism_filtersweep_sim_fname).stem + '_centroids.csv')
     # File name of wavelength calibration map
     wavecal_map_fname = os.path.join(
         test_product_path,
@@ -456,25 +554,8 @@ def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_produ
     hdulist = fits.HDUList([primary_hdu, error_hdu, lookup_table_hdu])
     hdulist.writeto(wavecal_map_fname, overwrite=True)
     print(f"Wrote wavelength calibration map to {wavecal_map_fname}")
+
     return wavecal_map_fname
-
-def test_star_spectrum_registration():
-        """
-
-        Test the procedure for registering the unocculted star spectrum image from
-        an array of raster scan offsets, choosing the prism image spectrum
-        whose centroid best matches the wavelength calibration zero-point position.
-      
-        """
-
-        test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
-                "tests", "test_data", "spectroscopy")
-        prism_slit_offset_spec_array_fname = os.path.join(test_data_path, 
-                'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
-    
-        spec_template_array = fits.getdata(prism_slit_offset_spec_array_fname)
-        template_offset_table = Table(fits.getdata(prism_slit_offset_spec_array_fname), ext=1)
-
 
 if __name__ == "__main__":
     # The test applied to spectroscopy.fit_psf_centroid() loads 
@@ -493,7 +574,9 @@ if __name__ == "__main__":
 
     # Test the wavelength calibration map function with the dispersion profile
     # computed above and a wavelength zero-point test input.
-    wavecal_fname = test_wave_cal(errortol_nm = 1.0)
+    test_wave_cal(errortol_nm = 1.0)
 
-
-    
+    # Test the procedure for registering the unocculted star spectrum image from
+    # an array of raster scan offsets, choosing the prism image spectrum whose
+    # centroid best matches the wavelength calibration zero-point position.
+    test_star_spectrum_registration(errortol_pix = 0.5)
