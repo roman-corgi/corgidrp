@@ -18,30 +18,25 @@ class DispersionModel():
 
     Attributes:
         data (numpy.lib.npyio.NpzFile): numpy Npz file
-
         clocking_angle (float): Clocking angle of the dispersion axis, theta,
         oriented in the direction of increasing wavelength, measured in degrees
         counterclockwise from the positive x-axis on the EXCAM data array
         (direction of increasing column index).
-
         clocking_angle_uncertainty (float): Uncertainty of the dispersion axis
         clocking angle in degrees.
-
         pos_vs_wavlen_polycoeff (numpy.ndarray): Polynomial fit to the
         source displacement on EXCAM along the dispersion axis as a function of
         wavelength, relative to the source position at the band reference
         wavelength (lambda_c = 730.0 nm for Band 3) in units of millimeters.
-
         pos_vs_wavlen_cov (numpy.ndarray): Covariance matrix of the
         polynomial coefficients
-
         wavlen_vs_pos_polycoeff (numpy.ndarray): Polynomial fit to the
         wavelength as a function of displacement along the dispersion axis on
         EXCAM, relative to the source position at the Band 3 reference
         wavelength (x_c at lambda_c = 730.0 nm) in units of nanometers. 
-
         wavlen_vs_pos_cov (numpy.ndarray): Covariance matrix of the
         polynomial coefficients
+        filepath (str): full path to the file on disk, if it exists
     """
 
     def __init__(self, data_or_filepath=None,
@@ -118,23 +113,16 @@ class WavelengthZeropoint():
     Class for a wavelength zero-point data structure.
 
     Attributes:
-
-    prism (str): Label for the DPAM zero-deviation prism; must be either
-    'PRISM3' or 'PRISM2'. 
-
-    wavlen (float): Wavelength of the zero-point (nanometers)
-
-    x (float): x-coordinate of the zero-point position (EXCAM array columns)
-
-    x_err (float): x-coordinate uncertainty of the zero-point position
-    (EXCAM array columns)
-
-    y (float): y-coordinate of the zero-point position (EXCAM array rows)
-
-    y_err (float): y-coordinate uncertainty of the zero-point position
-    (EXCAM array columns)
-
-    image_shape (tuple): shape tuple of the 2D image array
+        prism (str): Label for the DPAM zero-deviation prism; must be either
+        'PRISM3' or 'PRISM2'. 
+        wavlen (float): Wavelength of the zero-point (nanometers)
+        x (float): x-coordinate of the zero-point position (EXCAM array columns)
+        x_err (float): x-coordinate uncertainty of the zero-point position
+        (EXCAM array columns)
+        y (float): y-coordinate of the zero-point position (EXCAM array rows)
+        y_err (float): y-coordinate uncertainty of the zero-point position
+        (EXCAM array columns)
+        image_shape (tuple): shape tuple of the 2D image array
     """
     prism: str
     wavlen: float
@@ -169,9 +157,14 @@ def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     2d guassian function for guassfit2d
 
     Args:
-        x0,y0: center of gaussian
+        x0: center of gaussian
+        y0: center of gaussian
         peak: peak amplitude of guassian
-        sigma_x,sigma_y: stddev in x and y directions
+        sigma_x: stddev in x direction
+        sigma_y: stddev in y direction
+    
+    Returns:
+        function evaluated at coordinate tuple y,x
     """
     return lambda y,x: peak * np.exp(-( ((x - x0) / sigma_x) ** 2 + ((y - y0) / sigma_y) **2 ) / 2)
 
@@ -183,6 +176,9 @@ def gauss1d(x0, sigma, peak):
         x0: center of gaussian
         peak: peak amplitude of guassian
         sigma: stddev
+
+    Returns:
+        function evaluated at coordinate x
     """
     return lambda x: peak * np.exp(-( ((x - x0) / sigma) ** 2 ) / 2)
 
@@ -193,7 +189,8 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
 
     Args:
         frame: the data - Array of size (y,x)
-        xguess, yguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
+        xguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
+        yguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
         xfwhm_guess: approximate x-axis fwhm to fit to
         yfwhm_guess: approximate y-axis fwhm to fit to    
         halfwidth: 1/2 the width of the box used for the fit
@@ -280,7 +277,8 @@ def gaussfit2d(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
 
     Args:
         frame: the data - Array of size (y,x)
-        xguess, yguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
+        xguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
+        yguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
         xfwhm_guess: approximate x-axis fwhm to fit to
         yfwhm_guess: approximate y-axis fwhm to fit to    
         halfwidth: 1/2 the width of the box used for the fit
@@ -384,12 +382,12 @@ def gaussfit1d(frame, xguess, fwhm_guess=6, halfwidth=5, guesspeak=1, oversample
     npix = fitwin.shape[0]
     fitwin[np.where(np.isnan(fitwin))] = 0
 
-    overampled_coord = np.linspace(-(oversample // 2) / oversample, 
+    oversampled_coord = np.linspace(-(oversample // 2) / oversample, 
                                    npix - 1 + (oversample // 2) / oversample,
                                    npix * oversample)
     
     if refinefit:
-        errorfunction = lambda p: np.reshape(gauss1d(*p)(overampled_coord), (npix, oversample)).mean(axis=1) - fitwin
+        errorfunction = lambda p: np.reshape(gauss1d(*p)(oversampled_coord), (npix, oversample)).mean(axis=1) - fitwin
 
         guess = (halfwidth, fwhm_guess/(2 * np.sqrt(2*np.log(2))), guesspeak)
         p, success = optimize.leastsq(errorfunction, guess)
@@ -398,7 +396,7 @@ def gaussfit1d(frame, xguess, fwhm_guess=6, halfwidth=5, guesspeak=1, oversample
         fwhm = p[1] * (2 * np.sqrt(2*np.log(2)))
         peakflux = p[2]
 
-        model = np.reshape(gauss1d(*p)(overampled_coord), (npix, oversample)).mean(axis=1)
+        model = np.reshape(gauss1d(*p)(oversampled_coord), (npix, oversample)).mean(axis=1)
         residual = fitwin - model
     else:
         model = np.reshape(gauss1d(*guess)(oversampled_coord), (npix, oversample)).mean(axis=1)
@@ -415,32 +413,22 @@ def fit_line_spread_function(image, wave_cal_map, zeropt, halfwidth = 1, halfhei
     Fit the line spread function 
 
     Args:
-
         image (numpy.ndarray): 2-D image array containg a narrowband filter + prism PSF
-
-        wavlen_map (numpy.ndarray): 2-D wavelength calibration map. Each image
+        wave_cal_map (numpy.ndarray): 2-D wavelength calibration map. Each image
         pixel value is a wavelength in units of nanometers, computed for the
         dispersion profile, zero-point position, coordinates, and image shape
         specified in the input wavelength zero-point object.
-
         zeropt (spectroscopy.WavelengthZeropoint): Wavelength zero-point data
         object containing the image array coordinates and center wavelength of
         the narrowband signal.
-
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels.
-        
         halfheight (int): The height of the fitting region is 2 * halfwidth + 1 pixels.
 
     Returns:
-        
         wavlens (numpy.ndarray)
-        
         flux_profile (numpy.ndarray) 
-
         fwhm_fit (float)
-        
         mean_fit (float)
-
         peak_fit (float)
 
     """
@@ -546,6 +534,7 @@ def fit_psf_centroid(psf_data, psf_template,
         fwhm_minor_guess (float): guess for FWHM value along minor axis of PSF, pixels
         gauss2d_oversample (int): upsample factor for 2-D Gaussian PSF fit;
                 this must be an odd number.
+
     Returns:
         xfit (float): Data PSF x centroid obtained from the template fit, 
                 array pixels
@@ -650,29 +639,20 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     Args:
         wavlens (numpy.ndarray): Array of wavelengths corresponding to the
         centroid data points
-
         xpts (numpy.ndarray): Array of x coordinates in EXCAM pixels
-        
         ypts (numpy.ndarray): Array of y coordinates in EXCAM pixels
-
         cent_errs (numpy.ndarray): Array of centroid uncertainties in EXCAM pixels
-
         clock_ang (float): Clocking angle of the dispersion axis in degrees
-
         ref_wavlen (float): Reference wavelength of the bandpass, in nanometers
-
         pixel_pitch_um (float): EXCAM pixel pitch in microns
 
     Returns:
         pfit_pos_vs_wavlen (numpy.ndarray): polynomial coefficients for the
         position vs wavelength fit
-
         cov_pos_vs_wavlen (numpy.ndarray): covariance matrix of the polynomial
         coefficients for the position vs wavelength fit
-
         pfit_wavlen_vs_pos (numpy.ndarray): polynomial coefficients for the
         wavelength vs position fit
-
         cov_wavlen_vs_pos (numpy.ndarray): covariance matrix of the polynomial
         coefficients for the wavelength vs position fit
     """
@@ -719,23 +699,17 @@ def create_wave_cal_map(disp_params, zeropt, ref_wavlen, pixel_pitch_um=13.0):
 
     Args:
         disp_params (spectroscopy.DispersionModel): Dispersion model object
-
         zeropt (spectroscopy.WavelengthZeropoint): Wavelength zero-point data object
-        
         ref_wavlen (float): Reference wavelength of the bandpass, in nanometers
-
         pixel_pitch_um (float): EXCAM pixel pitch in microns
     
     Returns:
-
         wavlen_map (numpy.ndarray): 2-D wavelength calibration map. Each image
         pixel value is a wavelength in units of nanometers, computed for the
         dispersion profile, zero-point position, coordinates, and image shape
         specified in the input wavelength zero-point object.
-        
         wavlen_uncertainty (numpy.ndarray): 2-D array of wavelength calibration map
         uncertainty values in units of nanometers.
-
         pos_lookup_table (astropy.table.table.Table): Wavelength-to-position
         lookup table, computed for the dispersion profile, zero-point position,
         coordinates, and image shape specified in the input wavelength
