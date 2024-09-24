@@ -8,7 +8,11 @@ import corgidrp.spectroscopy as spectroscopy
 from astropy.io import fits
 import itertools
 import pandas as pd
+from pathlib import Path
 from astropy.table import Table, Column
+
+from scipy.stats import binned_statistic
+from scipy.interpolate import interp1d
 
 def test_fit_psf_centroid(errortol_pix = 0.01, verbose = False):
     """
@@ -86,6 +90,24 @@ def test_fit_psf_centroid(errortol_pix = 0.01, verbose = False):
 def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path = None):
     """ 
     Test the function that fits the spectral dispersion profile of the CGI ZOD prism.
+
+    For test inputs, load an array of slitless prism images of an unocculted
+    star, simulated for a set of sub-band calibration filters, using the
+    TVAC-derived dispersion profile. Test the accuracy of the dispersion fit
+    based on the estimation of the input dispersion profile.
+
+    Args:
+    
+    errortol_nm (numpy.float): Tolerance on the worst-case wavelength
+    disagreement between the input (TVAC) dispersion model and the estimated dispersion
+    profile, compared across the bandpass.
+
+    prism (str): Label for the selected DPAM zero-deviation prism; must be
+    either 'PRISM3' or 'PRISM2'
+
+    test_product_path (str): Location to store the dispersion profile estimated
+    during the test.
+
     """
     test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
             "tests", "test_data", "spectroscopy")
@@ -95,17 +117,17 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
     # load inputs and instrument data
     if prism == 'PRISM2':
         subband_list = ['2A', '2B', '2C']
-        tvac_dispersion_params_fname = os.path.join(test_data_path, 
-                                                    "TVAC_PRISM2_dispersion_profile.npz")
+        tvac_dispersion_params_fname = os.path.join(
+                  test_data_path, "TVAC_PRISM2_dispersion_profile.npz")
         ref_wavlen = 660.0
-        ref_cfam = '2C'
+        ref_cfam = '2'
         bandpass = [610, 710]
     else:
         subband_list = ['3A', '3B', '3C', '3D', '3E', '3G']
-        tvac_dispersion_params_fname = os.path.join(test_data_path, 
-                                                    "TVAC_PRISM3_dispersion_profile.npz")
+        tvac_dispersion_params_fname = os.path.join(
+                  test_data_path, "TVAC_PRISM3_dispersion_profile.npz")
         ref_wavlen = 730.0
-        ref_cfam = '3C'
+        ref_cfam = '3'
         bandpass = [675, 785]
     tvac_dispersion = spectroscopy.DispersionModel(tvac_dispersion_params_fname)
     pixel_pitch_um = 13.0 # EXCAM pixel pitch (microns)
@@ -117,6 +139,10 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
     # One version includes filter-to-filter image offsets, which are recorded in an extension table.
     prism_filtersweep_offsets_sim_fname = os.path.join(test_data_path,
             'g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits')
+    # File name of table to store the test centroid fit results
+    prism_filtersweep_centroid_table_fname = os.path.join(
+            test_product_path,
+            Path(prism_filtersweep_offsets_sim_fname).stem + '_centroids.ecsv')
     
     bandpass_center_table_fname = os.path.join(test_data_path, "CGI_bandpass_centers.csv")
     bandpass_center_table = pd.read_csv(bandpass_center_table_fname, index_col=0)
@@ -244,8 +270,117 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
         wavlen_vs_pos_polycoeff = pfit_wavlen_vs_pos,
         wavlen_vs_pos_cov = cov_wavlen_vs_pos
     )
+
+    filtersweep_table.write(prism_filtersweep_centroid_table_fname, overwrite=True)
+    print(f"Stored the centroid estimate table to {prism_filtersweep_centroid_table_fname}")
+
     corgi_dispersion_profile.save(test_product_path, dispersion_profile_npz_fname)
     print(f"Stored the dispersion profile fit results to {corgi_dispersion_profile.filepath}")
+
+def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_product_path = None):
+    """
+
+    Test the wave_cal_map() step function that computes the wavelength
+    calibration map and lookup table.
+
+    In addition to a dispersion profile data structure, the wave_cal_map()
+    function requires a wavelength zero-point position on the EXCAM array. As a
+    test input, use the PSF centroid of one of the simulated sub-band filter
+    images.
+
+    Args:
+    
+    errortol_nm (numpy.float): Tolerance on the worst-case wavelength
+    disagreement between the input (TVAC) dispersion model and the estimated dispersion
+    profile, compared across the bandpass.
+
+    prism (str): Label for the selected DPAM zero-deviation prism; must be
+    either 'PRISM3' or 'PRISM2'
+
+    zeropt (spectroscopy.WavelengthZeropoint): Wavelength zero point data
+    object; the class is defined in the corgidrp spectroscopy module.
+
+    test_product_path (str): Location to store the dispersion profile estimated
+    during the test.
+
+    """
+
+    test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), "tests", "test_data", "spectroscopy")
+    test_product_path = os.path.join(test_data_path, "test_products")
+
+    # Use an array of simulated filter sweep 
+    prism_filtersweep_sim_fname = prism_filtersweep_offsets_sim_fname = os.path.join(test_data_path,
+        'g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits')
+    # File name of table of test centroid fit results
+    prism_filtersweep_centroid_table_fname = os.path.join(
+        test_product_path,
+        Path(prism_filtersweep_sim_fname).stem + '_centroids.ecsv')
+    # File name of wavelength calibration map
+    wavecal_map_fname = os.path.join(
+        test_product_path,
+        Path(prism_filtersweep_sim_fname).stem + '_wavecal.fits')   
+
+    prism_filtersweep_array = fits.getdata(prism_filtersweep_sim_fname, ext=0)
+    filtersweep_table = Table.read(prism_filtersweep_centroid_table_fname)
+    filtersweep_table.add_index('CFAM')
+    bandpass_center_table_fname = os.path.join(test_data_path, "CGI_bandpass_centers.csv")
+    bandpass_center_table = pd.read_csv(bandpass_center_table_fname, index_col=0)
+    
+    dispersion_params_fname = os.path.join(test_product_path, 'corgidrp_PRISM3_dispersion_profile.npz')
+    disp_params = spectroscopy.DispersionModel(dispersion_params_fname)
+
+    pixel_pitch_um = 13.0 # EXCAM pixel pitch (microns)
+    if prism == 'PRISM2':
+        ref_wavlen = 660.0
+        ref_cfam = '2'
+        zeropt_cfam = '2C'
+    else:
+        ref_wavlen = 730.0
+        ref_cfam = '3'
+        zeropt_cfam = '3D'
+
+    if zeropt is None:
+        zeropt = spectroscopy.WavelengthZeropoint(
+            prism,
+            bandpass_center_table.loc[zeropt_cfam]['TVAC TV-40b center wavelength (nm)'],
+            filtersweep_table.loc[zeropt_cfam]['x_cent offset corr'], 
+            filtersweep_table.loc[zeropt_cfam]['y_cent offset corr'],
+            filtersweep_table.loc[zeropt_cfam]['x_err est'], 
+            filtersweep_table.loc[zeropt_cfam]['y_err est'],
+            prism_filtersweep_array[0].shape 
+        )
+
+    (wavlen_cal_map, 
+     wavlen_uncertainty_map,
+     pos_lookup_table) = spectroscopy.create_wave_cal_map(disp_params, zeropt, ref_wavlen)
+
+    worst_case_wavlen_uncertainty = np.nanmax(wavlen_uncertainty_map)
+    print(f"Worst case wavelength uncertainty after Monte Carlo error propagation: {worst_case_wavlen_uncertainty:.2f} nm")
+    assert worst_case_wavlen_uncertainty == pytest.approx(0, abs=errortol_nm)
+
+    # Store the wavelength calibration map, wavelength uncertainty map, and
+    # wavelength-position lookup table to a FITS file.
+    primary_hdu = fits.PrimaryHDU(data = wavlen_cal_map)
+    # write zeropoint to FITS header
+    primary_hdu.header['prism'] = zeropt.prism
+    primary_hdu.header['wavlen0'] = zeropt.wavlen
+    primary_hdu.header['x0'] = zeropt.x
+    primary_hdu.header['x0_err'] = zeropt.x_err
+    primary_hdu.header['y0'] = zeropt.x
+    primary_hdu.header['y0_err'] = zeropt.y_err
+    
+    error_hdu = fits.ImageHDU(data = wavlen_uncertainty_map)
+    
+    lookup_table_hdu = fits.TableHDU.from_columns((
+        fits.Column(name='wavlen', array=pos_lookup_table['Wavelength (nm)'], format='F'),
+        fits.Column(name='x', array=pos_lookup_table['x (column)'], format='F'),
+        fits.Column(name='x_err', array=pos_lookup_table['x uncertainty'], format='F'),
+        fits.Column(name='y', array=pos_lookup_table['y (row)'], format='F'),
+        fits.Column(name='y_err', array=pos_lookup_table['y uncertainty'], format='F')
+    ))
+    hdulist = fits.HDUList([primary_hdu, error_hdu, lookup_table_hdu])
+    hdulist.writeto(wavecal_map_fname, overwrite=True)
+    print(f"Wrote wavelength calibration map to {wavecal_map_fname}")
 
 if __name__ == "__main__":
     # The test applied to spectroscopy.fit_psf_centroid() loads 
@@ -256,3 +391,10 @@ if __name__ == "__main__":
     # Test the dispersion profile fitting function with an array
     # of simulated PSF images for a set of sub-band color filters.
     test_dispersion_fit(errortol_nm = 1.0)
+
+    # Test the wavelength calibration map function with the dispersion profile
+    # computed above and a wavelength zero-point test input.
+    test_wave_cal(errortol_nm = 1.0)
+
+
+    

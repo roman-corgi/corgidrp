@@ -7,11 +7,13 @@ import numpy as np
 import os
 
 import corgidrp.data
+from dataclasses import dataclass
 
 import astropy
 import astropy.io.ascii as ascii
-from astropy.coordinates import SkyCoord
-from astropy.modeling.models import Const2D, Gaussian2D
+from astropy.table import Table, Column
+from scipy.stats import binned_statistic
+from scipy.interpolate import interp1d
 
 import pyklip.fakes as fakes
 
@@ -38,20 +40,20 @@ class DispersionModel():
         clocking_angle_uncertainty (float): Uncertainty of the dispersion axis
         clocking angle in degrees.
 
-        position_vs_wavelen_polycoeff (numpy.ndarray): Polynomial fit to the
+        pos_vs_wavlen_polycoeff (numpy.ndarray): Polynomial fit to the
         source displacement on EXCAM along the dispersion axis as a function of
         wavelength, relative to the source position at the band reference
         wavelength (lambda_c = 730.0 nm for Band 3) in units of millimeters.
 
-        position_vs_wavelen_covmatrix (numpy.ndarray): Covariance matrix of the
+        pos_vs_wavlen_cov (numpy.ndarray): Covariance matrix of the
         polynomial coefficients
 
-        wavelen_vs_position_polycoeff (numpy.ndarray): Polynomial fit to the
+        wavlen_vs_pos_polycoeff (numpy.ndarray): Polynomial fit to the
         wavelength as a function of displacement along the dispersion axis on
         EXCAM, relative to the source position at the Band 3 reference
         wavelength (x_c at lambda_c = 730.0 nm) in units of nanometers. 
 
-        wavelen_vs_position_covmatrix (numpy.ndarray): Covariance matrix of the
+        wavlen_vs_pos_cov (numpy.ndarray): Covariance matrix of the
         polynomial coefficients
     """
 
@@ -66,14 +68,14 @@ class DispersionModel():
                 self.clocking_angle = dispersion_params['clocking_angle']
             if 'clocking_angle_uncertainty' in dispersion_params: 
                 self.clocking_angle_uncertainty = dispersion_params['clocking_angle_uncertainty']
-            if 'position_vs_wavelen_polycoeff' in dispersion_params:
-                self.pos_vs_wavlen_polycoeff = dispersion_params['position_vs_wavelen_polycoeff']
-            if 'position_vs_wavelen_covmatrix' in dispersion_params:
-                self.pos_vs_wavlen_cov = dispersion_params['position_vs_wavelen_covmatrix']
-            if 'wavelen_vs_position_polycoeff' in dispersion_params:
-                self.wavlen_vs_pos_polycoeff = dispersion_params['wavelen_vs_position_polycoeff']
-            if 'wavelen_vs_position_covmatrix' in dispersion_params:
-                self.wavlen_vs_pos_cov = dispersion_params['wavelen_vs_position_covmatrix']
+            if 'pos_vs_wavlen_polycoeff' in dispersion_params:
+                self.pos_vs_wavlen_polycoeff = dispersion_params['pos_vs_wavlen_polycoeff']
+            if 'pos_vs_wavlen_cov' in dispersion_params:
+                self.pos_vs_wavlen_cov = dispersion_params['pos_vs_wavlen_cov']
+            if 'wavlen_vs_pos_polycoeff' in dispersion_params:
+                self.wavlen_vs_pos_polycoeff = dispersion_params['wavlen_vs_pos_polycoeff']
+            if 'wavlen_vs_pos_cov' in dispersion_params:
+                self.wavlen_vs_pos_cov = dispersion_params['wavlen_vs_pos_cov']
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -118,10 +120,42 @@ class DispersionModel():
         np.savez(self.filepath,
             clocking_angle = self.clocking_angle,
             clocking_angle_uncertainty = self.clocking_angle_uncertainty,
-            position_vs_wavelen_polycoeff = self.pos_vs_wavlen_polycoeff ,
-            position_vs_wavelen_covmatrix = self.pos_vs_wavlen_cov,
-            wavelen_vs_position_polycoeff = self.wavlen_vs_pos_polycoeff,
-            wavelen_vs_position_covmatrix = self.wavlen_vs_pos_cov)
+            pos_vs_wavlen_polycoeff = self.pos_vs_wavlen_polycoeff ,
+            pos_vs_wavlen_cov = self.pos_vs_wavlen_cov,
+            wavlen_vs_pos_polycoeff = self.wavlen_vs_pos_polycoeff,
+            wavlen_vs_pos_cov = self.wavlen_vs_pos_cov)
+
+@dataclass
+class WavelengthZeropoint():
+    """
+    Class for a wavelength zero-point data structure.
+
+    Attributes:
+
+    prism (str): Label for the DPAM zero-deviation prism; must be either
+    'PRISM3' or 'PRISM2'. 
+
+    wavlen (float): Wavelength of the zero-point (nanometers)
+
+    x (float): x-coordinate of the zero-point position (EXCAM array columns)
+
+    x_err (float): x-coordinate uncertainty of the zero-point position
+    (EXCAM array columns)
+
+    y (float): y-coordinate of the zero-point position (EXCAM array rows)
+
+    y_err (float): y-coordinate uncertainty of the zero-point position
+    (EXCAM array columns)
+
+    image_shape (tuple): shape tuple of the 2D image array
+    """
+    prism: str
+    wavlen: float
+    x: float
+    x_err: float
+    y: float
+    y_err: float
+    image_shape: tuple
 
 def get_center_of_mass(frame):
     """
@@ -570,6 +604,35 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     1. Displacement from a reference wavelength along the dispersion axis, 
        in millimeters as a function of wavelength  
     2. Wavelength as a function of displacement along the dispersion axis
+
+    Args:
+        wavlens (numpy.ndarray): Array of wavelengths corresponding to the
+        centroid data points
+
+        xpts (numpy.ndarray): Array of x coordinates in EXCAM pixels
+        
+        ypts (numpy.ndarray): Array of y coordinates in EXCAM pixels
+
+        cent_errs (numpy.ndarray): Array of centroid uncertainties in EXCAM pixels
+
+        clock_ang (float): Clocking angle of the dispersion axis in degrees
+
+        ref_wavlen (float): Reference wavelength of the bandpass, in nanometers
+
+        pixel_pitch_um (float): EXCAM pixel pitch in microns
+
+    Returns:
+        pfit_pos_vs_wavlen (numpy.ndarray): polynomial coefficients for the
+        position vs wavelength fit
+
+        cov_pos_vs_wavlen (numpy.ndarray): covariance matrix of the polynomial
+        coefficients for the position vs wavelength fit
+
+        pfit_wavlen_vs_pos (numpy.ndarray): polynomial coefficients for the
+        wavelength vs position fit
+
+        cov_wavlen_vs_pos (numpy.ndarray): covariance matrix of the polynomial
+        coefficients for the wavelength vs position fit
     """
     pixel_pitch_mm = pixel_pitch_um * 1E-3
 
@@ -606,3 +669,111 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
                                       w = weights, cov=True)
 
     return pfit_pos_vs_wavlen, cov_pos_vs_wavlen, pfit_wavlen_vs_pos, cov_wavlen_vs_pos
+
+def create_wave_cal_map(disp_params, zeropt, ref_wavlen, pixel_pitch_um=13.0):
+    """
+    Create a wavelength calibration map and a wavelength-position lookup table,
+    given a dispersion model and a wavelength zero-point.
+
+    Args:
+        disp_params (spectroscopy.DispersionModel): Dispersion model object
+
+        zeropt (spectroscopy.WavelengthZeropoint): Wavelength zero-point data object
+        
+        ref_wavlen (float): Reference wavelength of the bandpass, in nanometers
+
+        pixel_pitch_um (float): EXCAM pixel pitch in microns
+    
+    Returns:
+
+        wavlen_map (numpy.ndarray): 2-D wavelength calibration map. Each image
+        pixel value is a wavelength in units of nanometers, computed for the
+        dispersion profile, zero-point position, coordinates, and image shape
+        specified in the input wavelength zero-point object.
+        
+        wavlen_uncertainty (numpy.ndarray): 2-D array of wavelength calibration map
+        uncertainty values in units of nanometers.
+
+        pos_lookup_table (astropy.table.table.Table): Wavelength-to-position
+        lookup table, computed for the dispersion profile, zero-point position,
+        coordinates, and image shape specified in the input wavelength
+        zero-point object. The table contains 5 columns: wavelength, x, x
+        uncertainty, y, y uncertainty.
+
+    """
+
+    pos_vs_wavlen_poly = np.poly1d(disp_params.pos_vs_wavlen_polycoeff)
+    wavlen_vs_pos_poly = np.poly1d(disp_params.wavlen_vs_pos_polycoeff)
+    wavlen_c = ref_wavlen
+    d_zp_mm = pos_vs_wavlen_poly((zeropt.wavlen - wavlen_c) / wavlen_c)
+
+    pixel_pitch_mm = pixel_pitch_um * 1E-3
+    theta = np.deg2rad(disp_params.clocking_angle)
+    x_c, y_c = (zeropt.x - d_zp_mm * np.cos(theta) / pixel_pitch_mm,
+                zeropt.y - d_zp_mm * np.sin(theta) / pixel_pitch_mm)
+
+    yy, xx = np.indices(zeropt.image_shape)
+    dd_mm = (xx - x_c) * np.cos(theta) + (yy - y_c) * np.sin(theta) * pixel_pitch_mm
+    wavlen_map = wavlen_vs_pos_poly(dd_mm)
+
+    bandpass_frac = 0.17
+    delta_wav = 0.5
+    n_wav = int(ref_wavlen * bandpass_frac / delta_wav)
+    n_wav_odd = n_wav + (n_wav % 2 == 0) # force odd array length
+    wavlen_beg = ref_wavlen - n_wav_odd // 2 * delta_wav
+    wavlen_end = ref_wavlen + n_wav_odd // 2 * delta_wav
+    
+    wavlens = np.linspace(wavlen_beg, wavlen_end, n_wav_odd)
+    np.testing.assert_almost_equal(wavlens[n_wav_odd // 2], ref_wavlen)
+        
+    # Use a Monte Carlo error propagation to estimate the uncertainties of the
+    # values in the wavelength calibration map and the position lookup table. 
+    ntrials = 1000
+    polyfit_order = len(disp_params.pos_vs_wavlen_polycoeff) - 1
+    prand_wavlen_pos = np.zeros((ntrials, polyfit_order + 1))
+    prand_pos_wavlen = np.zeros((ntrials, polyfit_order + 1))
+    
+    # Add the wavelength zero-point position error to the dispersion profile uncertainty 
+    d_zp_err_mm = np.sqrt((zeropt.x_err * np.cos(theta))**2 + (zeropt.y_err * np.sin(theta))**2) * pixel_pitch_mm
+    # To translate the position uncertainty to wavelength uncertainty, use the second coefficient of the
+    # the wavelength(x) polynomial, which is the linear dispersion coefficient (units nm/mm).
+    d_zp_err_nm = disp_params.wavlen_vs_pos_polycoeff[2] * d_zp_err_mm 
+    disp_params.pos_vs_wavlen_cov[polyfit_order, polyfit_order] += d_zp_err_mm**2
+    disp_params.wavlen_vs_pos_cov[polyfit_order, polyfit_order] += d_zp_err_nm**2 
+
+    # Generate random polynomial coefficients consistent with the covariance
+    # matrix in the dispersion profile.
+    for ii in range(ntrials):
+        prand_wavlen_pos[ii] = np.random.multivariate_normal(disp_params.wavlen_vs_pos_polycoeff, cov=disp_params.wavlen_vs_pos_cov)
+        prand_pos_wavlen[ii] = np.random.multivariate_normal(disp_params.pos_vs_wavlen_polycoeff, cov=disp_params.pos_vs_wavlen_cov)
+
+    ws = (wavlens - wavlen_c) / wavlen_c
+    ds_mm = pos_vs_wavlen_poly(ws)
+    
+    ds_vander = np.vander(ds_mm, N=polyfit_order+1, increasing=False)
+    ws_vander = np.vander(ws, N=polyfit_order+1, increasing=False)
+    
+    wavlen_rand_eval = prand_wavlen_pos.dot(ds_vander.T)
+    pos_rand_eval = prand_pos_wavlen.dot(ws_vander.T)
+    pos_eval_std = np.std(pos_rand_eval, axis=0)
+    wavlen_eval_std = np.std(wavlen_rand_eval, axis=0)
+    
+    pos_vs_wavlen_err_func = interp1d(wavlens, pos_eval_std, fill_value="extrapolate")
+    wavlen_vs_pos_err_func = interp1d(ds_mm, wavlen_eval_std, fill_value="extrapolate")
+
+    # Wavelength uncertainty map
+    wavlen_uncertainty_map = wavlen_vs_pos_err_func(dd_mm)
+
+    # Build the position lookup table 
+    ds_eval = pos_vs_wavlen_poly((wavlens - wavlen_c) / wavlen_c) / pixel_pitch_mm
+    xs_eval, ys_eval = (x_c + ds_eval * np.cos(theta),
+                        y_c + ds_eval * np.sin(theta))
+    pos_lookup_1d = (wavlens, xs_eval, ys_eval)
+    
+    xs_uncertainty, ys_uncertainty = (np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.cos(theta)),
+                                      np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.sin(theta)))
+
+    pos_lookup_table = Table((wavlens, xs_eval, xs_uncertainty, ys_eval, ys_uncertainty),
+                             names=('Wavelength (nm)', 'x (column)', 'x uncertainty', 'y (row)', 'y uncertainty'))
+
+    return wavlen_map, wavlen_uncertainty_map, pos_lookup_table
