@@ -59,3 +59,11 @@ geom:
     r0c0:
       - 0
       - 2144
+
+eperdn: #7
+fwc: #100000
+sat_thresh: 0.99
+plat_thresh: 0.85
+cosm_filter: 2
+tail_filter: #5
+cic_thresh: #100
