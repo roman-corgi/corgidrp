@@ -13,6 +13,7 @@ from astropy.table import Table, Column
 
 from scipy.stats import binned_statistic
 from scipy.interpolate import interp1d
+from scipy.signal import correlate2d
 
 def test_fit_psf_centroid(errortol_pix = 0.01, verbose = False):
     """
@@ -160,7 +161,7 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
     np.random.seed(5)
     read_noise = 200
     noisy_data_array = (np.random.poisson(np.abs(data_array) / 2) + 
-                       np.random.normal(loc=0, scale=read_noise, size=data_array.shape))
+                        np.random.normal(loc=0, scale=read_noise, size=data_array.shape))
 
     template_pos_table.add_index('CFAM')
     filtersweep_table.add_index('CFAM')
@@ -277,6 +278,80 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
     corgi_dispersion_profile.save(test_product_path, dispersion_profile_npz_fname)
     print(f"Stored the dispersion profile fit results to {corgi_dispersion_profile.filepath}")
 
+    return prism_filtersweep_centroid_table_fname, corgi_dispersion_profile
+
+def test_zeropoint_centroid(errortol_pix = 0.5):
+    """ 
+
+    Test the procedure for estimating the centroid of the zero-point image
+    (satellite spot or PSF) taken through the narrowband filter and slit.
+
+    """
+    print('Testing the zero-point centroid fitting procedure...')
+    test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
+            "tests", "test_data", "spectroscopy")
+    prism_slit_offset_psf_array_fname = os.path.join(test_data_path, 
+            'g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits')
+    
+    psf_template_array = fits.getdata(prism_slit_offset_psf_array_fname, ext=0)
+    template_offset_table = Table(fits.getdata(prism_slit_offset_psf_array_fname , ext=1))
+    num_rows_template = len(template_offset_table)
+    template_offset_table['peak crosscorr'] = 0.
+    
+    # Use the position for the zero-offset PSF template to set the projected,
+    # vertical slit position on the image array. This should be in the exact
+    # center of the array.
+    xoffset_cent, yoffset_cent = (template_offset_table[num_rows_template // 2]['xoffset'],
+                                  template_offset_table[num_rows_template // 2]['yoffset'])
+    np.testing.assert_equal(xoffset_cent, 0.)
+    np.testing.assert_equal(yoffset_cent, 0.)
+    slit_y = template_offset_table[num_rows_template // 2]['ycent']
+
+    read_noise = 200
+    num_rand_realiz = 10 # number of random realizations per offset position
+    num_trials = num_rows_template * num_rand_realiz
+    np.random.seed(0)
+
+    source_to_slit_offset_errs = list() 
+    peak_pix_snrs = list()
+
+    halfwidth = 12
+    xcent_guess, ycent_guess = (template_offset_table[len(template_offset_table) // 2]['xcent'], 
+                                template_offset_table[len(template_offset_table) // 2]['ycent'])
+
+    xmin_cut, xmax_cut = (int(xcent_guess) - halfwidth, int(xcent_guess) + halfwidth)
+    ymin_cut, ymax_cut = (int(ycent_guess) - halfwidth, int(ycent_guess) + halfwidth) 
+    template_stamps = psf_template_array[:,ymin_cut:ymax_cut+1, xmin_cut:xmax_cut+1]
+
+    for offset_idx in range(num_rows_template):
+        source_to_slit_offset_true = template_offset_table[offset_idx]['ycent'] - slit_y
+
+        for rr in range(num_rand_realiz):
+            zeropt_img = (np.random.poisson(np.abs(psf_template_array[offset_idx]) / 3) 
+                        + np.random.normal(loc=0, scale=read_noise, 
+                          size = psf_template_array[offset_idx].shape))
+            zeropt_stamp = zeropt_img[ymin_cut:ymax_cut+1, xmin_cut:xmax_cut+1]
+
+            # Cross-correlate the noisy zero-point spot image and the templates to
+            # estimate the best match.
+            for jj in range(num_rows_template):
+                crosscorr_arr = correlate2d(template_stamps[jj], zeropt_stamp)
+                template_offset_table[jj]['peak crosscorr'] = np.max(crosscorr_arr)
+            peak_row = np.argmax(template_offset_table['peak crosscorr'])
+
+            # Now use the best-matched template to fit the PSF centroid.
+            true_xcent_template, true_ycent_template = (template_offset_table['xcent'][peak_row],
+                                                        template_offset_table['ycent'][peak_row])
+            true_xcent_data, true_ycent_data = (template_offset_table['xcent'][offset_idx], 
+                                                template_offset_table['ycent'][offset_idx])
+            source_to_slit_offset_est = template_offset_table[peak_row]['yoffset'] - slit_y
+            source_to_slit_offset_errs.append(source_to_slit_offset_est - source_to_slit_offset_true)
+            peak_pix_snrs.append(np.max(zeropt_img) / read_noise)
+
+    print(f"Mean peak pixel SNR = {np.mean(peak_pix_snrs):.1f}")
+    print(f"Std of {num_trials:d} source-to-slit vertical offset errors: {np.std(source_to_slit_offset_errs):.2f} pixels")
+    assert np.std(source_to_slit_offset_errs) == pytest.approx(0, abs=errortol_pix)
+
 def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_product_path = None):
     """
 
@@ -333,11 +408,11 @@ def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_produ
     if prism == 'PRISM2':
         ref_wavlen = 660.0
         ref_cfam = '2'
-        zeropt_cfam = '2C'
+        zeropt_cfam = '2C' # the narrowband filter will be used to anchor the zero-point
     else:
         ref_wavlen = 730.0
         ref_cfam = '3'
-        zeropt_cfam = '3D'
+        zeropt_cfam = '3D' # the narrowband filter will be used to anchor the zero-point
 
     if zeropt is None:
         zeropt = spectroscopy.WavelengthZeropoint(
@@ -381,6 +456,25 @@ def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_produ
     hdulist = fits.HDUList([primary_hdu, error_hdu, lookup_table_hdu])
     hdulist.writeto(wavecal_map_fname, overwrite=True)
     print(f"Wrote wavelength calibration map to {wavecal_map_fname}")
+    return wavecal_map_fname
+
+def test_star_spectrum_registration():
+        """
+
+        Test the procedure for registering the unocculted star spectrum image from
+        an array of raster scan offsets, choosing the prism image spectrum
+        whose centroid best matches the wavelength calibration zero-point position.
+      
+        """
+
+        test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
+                "tests", "test_data", "spectroscopy")
+        prism_slit_offset_spec_array_fname = os.path.join(test_data_path, 
+                'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
+    
+        spec_template_array = fits.getdata(prism_slit_offset_spec_array_fname)
+        template_offset_table = Table(fits.getdata(prism_slit_offset_spec_array_fname), ext=1)
+
 
 if __name__ == "__main__":
     # The test applied to spectroscopy.fit_psf_centroid() loads 
@@ -388,13 +482,18 @@ if __name__ == "__main__":
     # a 2-D grid of sub-pixel offsets.
     test_fit_psf_centroid(errortol_pix = 1E-2, verbose=False)
 
+    # Test the procedure for estimating the wavelength zero-point position, in
+    # practice either a DM satellite spot or PSF observed through the slit and
+    # narrowband filter.
+    test_zeropoint_centroid(errortol_pix = 0.5)
+
     # Test the dispersion profile fitting function with an array
     # of simulated PSF images for a set of sub-band color filters.
     test_dispersion_fit(errortol_nm = 1.0)
 
     # Test the wavelength calibration map function with the dispersion profile
     # computed above and a wavelength zero-point test input.
-    test_wave_cal(errortol_nm = 1.0)
+    wavecal_fname = test_wave_cal(errortol_nm = 1.0)
 
 
     
