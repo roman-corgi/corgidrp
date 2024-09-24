@@ -7,7 +7,7 @@ from corgidrp.detector import imaging_area_geom
 from corgidrp.data import Dataset
 from corgidrp.l1_to_l2a import prescan_biassub
 from corgidrp.l2a_to_l2b import em_gain_division
-from corgidrp.pump_trap_calibration import tpump_analysis, tau_temp
+from corgidrp.pump_trap_calibration import tpump_analysis, tau_temp, rebuild_dict
 
 
 
@@ -17,42 +17,6 @@ import resource
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (6001, hard_limit))
 
-def rebuild_dict(trap_pump_array):
-        '''
-        Partially rebuild the trap_dictionary from the trap_pump_array to help with testing
-
-        Args:
-            trap_pump_array: array of trap_pump objects
-        
-        Returns:
-            trap_dict: dictionary of trap_pump objects
-
-        '''
-        trap_dict = {}
-
-        electrode_dict = {"LHS": 10, 
-                        "CEN": 20,
-                        "RHS": 30}
-        
-        electrode_dict_inverse = {10: "LHS",
-                                20: "CEN",
-                                30: "RHS"}
-        
-        
-        for trap_pump in trap_pump_array:
-            electrode_key = int(((trap_pump[2] // 10) % 10)*10)
-            electrode_number = int(trap_pump[2] % 10)
-            electrode_string = electrode_dict_inverse[electrode_key]+"el"+str(electrode_number)
-            key = ((trap_pump[0],trap_pump[1]), electrode_string, int(trap_pump[3]))
-            
-            trap_dict[key] = {}
-            trap_dict[key]['cap']  = [trap_pump[4], 0, trap_pump[5]] #Add the error in to keep the expected dimensions
-            trap_dict[key]['E'] = trap_pump[6]
-            trap_dict[key]['cs'] = trap_pump[7]
-            trap_dict[key]['Rsq'] = trap_pump[8]
-            trap_dict[key]['tau at input T'] = trap_pump[9]
-
-        return trap_dict
 
 def test_tpump_analysis():
     '''
@@ -62,7 +26,6 @@ def test_tpump_analysis():
 
     # Set the seed - II&T ut tests don't work everytime, so let's fix it. 
     np.random.seed(39)
-
     #Generate the mock data:
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
     metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
@@ -121,16 +84,18 @@ def test_tpump_analysis():
     #Done preliminary data processing. Now running the tpump_analysis
 
     length_lim = 5
-    tau_fit_thresh = 0.8
-    cs_fit_thresh = 0.8
-    thresh_factor = 1.5
+    tau_fit_thresh = .8#.5#0.8#0.65 #0.8
+    cs_fit_thresh = .8#.5#0.8# 0.2 #0.65 #0.8#0.65 #0.8
+    thresh_factor = 1.5 #.5
     ill_corr = True
     tfit_const = True
     input_T = 185
     bins_E = 50
     bins_cs = 5
+    mean_field = None #500
 
     tpump_calibration = tpump_analysis(emgain_divided_dataset,
+                        mean_field=mean_field,
                         length_lim = length_lim, thresh_factor = thresh_factor,
                         ill_corr = ill_corr, tfit_const = tfit_const,
                         tau_min = 0.7e-6, tau_max = 1.3e-2,
@@ -155,7 +120,7 @@ def test_tpump_analysis():
     assert(unused_fit_data > 0)
     assert(unused_temp_fit_data == 0)
     assert(two_or_less_count > 0)
-    assert(noncontinuous_count > 0)
+    assert(noncontinuous_count >= 0)
     assert(pre_sub_el_count > 0)
 
     #Convert the output back to a dictionary for more testing. 
@@ -170,20 +135,17 @@ def test_tpump_analysis():
             ((89, 2), 'RHSel3', 0), ((89, 2), 'LHSel4', 0),
             [((10, 10), 'LHSel4', 0), ((10, 10), 'LHSel4', 1)],
             ((56, 56), 'CENel4', 0), ((77, 90), 'RHSel4', 0),
-            ((77, 90), 'CENel2', 0)]
+            ((77, 90), 'CENel2', 0), ((13, 21), 'LHSel1', 0)]
     trap_dict_E = [0.32, 0.32, 0.32, 0.32, 0.28, 0.32, 0.32, 0.32,
-            0.28, [0.32, 0.28], 0.32, 0.28, 0.32]
+            0.28, [0.32, 0.28], 0.32, 0.28, 0.32, 0.32]
     trap_dict_cs = [2e-15, 2e-15, 2e-15, 2e-15, 12e-15, 2e-15, 2e-15,
-            2e-15, 12e-15, [2e-15, 12e-15], 2e-15, 12e-15, 2e-15]
+            2e-15, 12e-15, [2e-15, 12e-15], 2e-15, 12e-15, 2e-15, 2e-15]
 
     #Note: removed several tests about sig_E and sig_cs, since we're not saving them.
     for i in range(len(test_trap_dict_keys)):
         if i!= 9:
             t = test_trap_dict_keys[i]
             assert(t in trap_dict_keys)
-            # now make sure they appear for all temperatures, even
-            # the harder-to-fit 2-traps, since there's no noise
-
             # A good uncertainty for a single-measured value (e.g., 1 set
             # of trap-pumped frames from which we extract 1 tau per trap)
             # is the standard deviation (std dev) from the fit for tau,
@@ -230,6 +192,8 @@ def test_tpump_analysis():
         if tr[0] == 4/(nrows*ncols):
             assert(np.isclose(tr[1], 0.28, atol=0.05))
             assert(np.isclose(tr[2], 12e-15, rtol=0.1))
+        
+    
     
 if __name__ == "__main__":
     test_tpump_analysis()

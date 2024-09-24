@@ -645,7 +645,7 @@ class Dark(Image):
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
-            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
             self.filename = "{0}_dark.fits".format(orig_input_filename)
 
         if err_hdr is not None:
@@ -1307,7 +1307,7 @@ class AstrometricCalibration(Image):
     Class for astrometric calibration file. 
     
     Args:
-        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 2D image data
+        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 1D array of calibration measurements
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         

@@ -94,6 +94,9 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     iit_noisemap = data.autoload(iit_noisemap_fname)
     
+    # remove from caldb
+    this_caldb.remove_entry(corgidrp_noisemap)
+
     for noise_ext in ["FPN_map","CIC_map","DC_map"]:
 
         corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
@@ -204,6 +207,9 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     iit_noisemap = data.autoload(iit_noisemap_fname)
     
+    # remove from caldb
+    this_caldb.remove_entry(corgidrp_noisemap)
+
     for noise_ext in ["FPN_map","CIC_map","DC_map"]:
 
         corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
