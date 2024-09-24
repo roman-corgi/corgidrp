@@ -208,7 +208,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain, sat_thresh=0.7,
 
 
     # Calculate the full well capacity for every frame in the dataset
-    kgain = k_gain.value
+    kgain = k_gain.value #get the kgain value from the k_gain calibration file
     emgain_list = []
     for frame in crmasked_dataset:
         try: # use measured gain if available TODO change hdr name if necessary
