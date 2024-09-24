@@ -1,25 +1,12 @@
-# Spectroscopy functions
-
-#can import astropy, but don't import photutils
-
-#want to load in 2 files (template and data) 
 import numpy as np
 import os
-
 import corgidrp.data
 from dataclasses import dataclass
-
-import astropy
-import astropy.io.ascii as ascii
-from astropy.table import Table, Column
-from scipy.stats import binned_statistic
+from astropy.table import Table
 from scipy.interpolate import interp1d
-
-import pyklip.fakes as fakes
-
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
-from scipy.ndimage import center_of_mass
+from astropy.modeling import models, fitting
 import matplotlib.pyplot as plt
 
 class DispersionModel():
@@ -422,6 +409,61 @@ def gaussfit1d(frame, xguess, fwhm_guess=6, halfwidth=5, guesspeak=1, oversample
         peakflux = guesspeak
 
     return xfit, fwhm, peakflux, fitwin, model, residual
+
+def fit_line_spread_function(image, wave_cal_map, zeropt, halfwidth = 1, halfheight = 9):
+    """
+    Fit the line spread function 
+
+    Args:
+
+        image (numpy.ndarray): 2-D image array containg a narrowband filter + prism PSF
+
+        wavlen_map (numpy.ndarray): 2-D wavelength calibration map. Each image
+        pixel value is a wavelength in units of nanometers, computed for the
+        dispersion profile, zero-point position, coordinates, and image shape
+        specified in the input wavelength zero-point object.
+
+        zeropt (spectroscopy.WavelengthZeropoint): Wavelength zero-point data
+        object containing the image array coordinates and center wavelength of
+        the narrowband signal.
+
+        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels.
+        
+        halfheight (int): The height of the fitting region is 2 * halfwidth + 1 pixels.
+
+    Returns:
+        
+        wavlens (numpy.ndarray)
+        
+        flux_profile (numpy.ndarray) 
+
+        fwhm_fit (float)
+        
+        mean_fit (float)
+
+        peak_fit (float)
+
+    """
+    xcent_round, ycent_round = (int(np.rint(zeropt.x)), int(np.rint(zeropt.y)))
+    image_cutout = image[ycent_round - halfheight:ycent_round + halfheight + 1,
+                         xcent_round - halfwidth:xcent_round + halfwidth + 1]
+
+    wave_cal_map_cutout = wave_cal_map[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                       xcent_round - halfwidth:xcent_round + halfwidth + 1]
+
+    flux_profile = np.sum(image_cutout, axis=1) / np.sum(image_cutout)
+    wavlens = np.mean(wave_cal_map_cutout, axis=1)
+
+    g_init = models.Gaussian1D(amplitude = np.max(flux_profile),
+                               mean = wavlens[halfheight], 
+                               stddev = 10./(2 * np.sqrt(2*np.log(2))))
+    fit_g = fitting.LevMarLSQFitter()
+    g_func = fit_g(g_init, x = wavlens, y = flux_profile)
+    fwhm_fit_nm = 2 * np.sqrt(2*np.log(2)) * g_func.stddev.value
+    mean_wavlen_fit_nm = g_func.mean.value
+    peak_fit = g_func.amplitude
+
+    return wavlens, flux_profile, fwhm_fit_nm, mean_wavlen_fit_nm, peak_fit
 
 def rotate_points(points, angle_rad, pivot_point):
     """ 

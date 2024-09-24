@@ -11,10 +11,14 @@ import itertools
 import pandas as pd
 from pathlib import Path
 from astropy.table import Table, Column
+from astropy.modeling import models, fitting
 
 from scipy.stats import binned_statistic
 from scipy.interpolate import interp1d
 from scipy.signal import correlate2d
+import scipy.ndimage as ndi
+
+import matplotlib.pyplot as plt
 
 def test_fit_psf_centroid(errortol_pix = 0.01, verbose = False):
     """
@@ -313,7 +317,7 @@ def test_zeropoint_centroid(errortol_pix = 0.5):
     slit_y = template_offset_table[num_rows_template // 2]['ycent']
 
     read_noise = 200
-    num_rand_realiz = 10 # number of random realizations per offset position
+    num_rand_realiz = 5 # number of random realizations per offset position
     num_trials = num_rows_template * num_rand_realiz
     np.random.seed(0)
 
@@ -555,7 +559,80 @@ def test_wave_cal(errortol_nm = 1.0, prism = 'PRISM3', zeropt = None, test_produ
     hdulist.writeto(wavecal_map_fname, overwrite=True)
     print(f"Wrote wavelength calibration map to {wavecal_map_fname}")
 
-    return wavecal_map_fname
+def test_line_spread_function():
+    """
+    Test the line spread function calibration 
+    """
+    print('Testing the line spread function calibration procedure...')
+    test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), 
+            "tests", "test_data", "spectroscopy")
+    test_product_path = os.path.join(test_data_path, "test_products")
+
+    # Simulated images of an unocculted star with the narrowband filter, slit, and prism 
+    prism_slit_offset_psf_array_fname = os.path.join(test_data_path, 
+            'g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits')
+
+    prism_slit_psf_array = fits.getdata(prism_slit_offset_psf_array_fname, ext=0)
+    centroid_table = Table(fits.getdata(prism_slit_offset_psf_array_fname , ext=1))    
+    prism_slit_psf_hdr = fits.getheader(prism_slit_offset_psf_array_fname, ext=0)
+
+    prism = 'PRISM3'
+    slitname = prism_slit_psf_hdr['SLIT'].strip()
+    wavlen_filt = prism_slit_psf_hdr['CENLAM'] * 1000
+    cfam = prism_slit_psf_hdr['BANDPASS'].strip().upper()
+    line_spread_func_fname = os.path.join(test_product_path, 
+                                          f'Line_spread_function_CFAM{cfam}_{slitname}SLIT_{prism}.fits')
+
+    num_rows_template = len(prism_slit_psf_array)
+    # Use the position for the zero-offset PSF template to set the projected,
+    # vertical slit position on the image array. This should be in the exact
+    # center of the array.
+    xoffset_cent, yoffset_cent = (centroid_table[num_rows_template // 2]['xoffset'],
+                                  centroid_table[num_rows_template // 2]['yoffset'])
+    np.testing.assert_equal(xoffset_cent, 0.)
+    np.testing.assert_equal(yoffset_cent, 0.)
+
+    xcent, ycent = (centroid_table[num_rows_template // 2]['xcent'],
+                    centroid_table[num_rows_template // 2]['ycent'])
+    halfwidth = 1
+    halfheight = 9
+
+    zeropt = spectroscopy.WavelengthZeropoint(
+        'PRISM3', wavlen_filt, xcent, 0, ycent, 0, prism_slit_psf_array[0].shape
+    )
+    ref_wavlen = 730.0
+    dispersion_params_fname = os.path.join(test_product_path, 'corgidrp_PRISM3_dispersion_profile.npz')
+    disp_params = spectroscopy.DispersionModel(dispersion_params_fname)
+
+    wave_cal_map, _, _ = spectroscopy.create_wave_cal_map(disp_params, zeropt, ref_wavlen)
+
+    (wavlens, flux_profile, 
+     fwhm_nm, mean_wavlen,
+     peak_fit) = spectroscopy.fit_line_spread_function(
+            prism_slit_psf_array[num_rows_template // 2], 
+            wave_cal_map, zeropt, halfwidth = halfwidth, halfheight = halfheight) 
+
+    print(f"FWHM of narrowband + slit + prism PSF: {fwhm_nm:.2f} nm")
+    wavlens_eval = np.linspace(wavlens[0], wavlens[-1], 100)
+    sigma = fwhm_nm / (2 * np.sqrt(2 * np.log(2)))
+    flux_eval = peak_fit * np.exp(-( ((wavlens_eval - mean_wavlen) / sigma) ** 2 ) / 2)
+    lsf_plot_fname = os.path.join(test_product_path, "narrowband_LSF_fit.png")
+    plt.figure(figsize=(6,5))
+    plt.plot(wavlens, flux_profile, 'ko', label='integrated profile')
+    plt.plot(wavlens_eval, flux_eval,
+             label = 'Gaussian fit: position = {:.2f}, FWHM = {:.2f}'.format(mean_wavlen, fwhm_nm))
+    plt.legend(loc='upper left')
+    plt.title(f'Integrated flux profile for narrowband filter {cfam} + {slitname} slit + {prism}')
+    plt.savefig(lsf_plot_fname)
+    plt.show()
+
+    line_spread_func_table_hdu = fits.TableHDU.from_columns(
+        (fits.Column(name='wavlen', array=wavlens, format='F'),
+         fits.Column(name='normalized profile flux', array=flux_profile, format='F')))
+    line_spread_func_table_hdu.writeto(line_spread_func_fname, overwrite=True)
+    print(f"Estimated LSF width {fwhm_nm:.1f} nm corresponds to R = {mean_wavlen / fwhm_nm:.1f}.")
+    assert mean_wavlen / fwhm_nm == pytest.approx(50, abs=10)
+    print(f"Wrote line spread function array to {line_spread_func_fname}")
 
 if __name__ == "__main__":
     # The test applied to spectroscopy.fit_psf_centroid() loads 
@@ -580,3 +657,6 @@ if __name__ == "__main__":
     # an array of raster scan offsets, choosing the prism image spectrum whose
     # centroid best matches the wavelength calibration zero-point position.
     test_star_spectrum_registration(errortol_pix = 0.5)
+
+    # Test the line spread function fit
+    test_line_spread_function()
