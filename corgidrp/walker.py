@@ -3,13 +3,18 @@ import json
 import astropy.time as time
 import warnings
 import corgidrp
+import corgidrp.astrom
 import corgidrp.bad_pixel_calibration
+import corgidrp.calibrate_kgain
 import corgidrp.combine
 import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
+import corgidrp.detector
+import corgidrp.darks
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -27,10 +32,14 @@ all_steps = {
     "correct_bad_pixels" : corgidrp.l2a_to_l2b.correct_bad_pixels,
     "desmear" : corgidrp.l2a_to_l2b.desmear,
     "update_to_l2b" : corgidrp.l2a_to_l2b.update_to_l2b,
+    "boresight_calibration": corgidrp.astrom.boresight_calibration,
+    "calibrate_trap_pump": corgidrp.pump_trap_calibration.tpump_analysis,
     "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
+    "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
-    "combine_subexposures" : corgidrp.combine.combine_subexposures
+    "combine_subexposures" : corgidrp.combine.combine_subexposures,
+    "build_trad_dark" : corgidrp.darks.build_trad_dark
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -180,18 +189,22 @@ def guess_template(dataset):
     if image.ext_hdr['DATA_LEVEL'] == "L1":
         if image.pri_hdr['OBSTYPE'] == "ENG":
             recipe_filename = "l1_to_l2a_eng.json"
+        elif image.pri_hdr['OBSTYPE'] == "ASTROM":
+            recipe_filename = "l1_to_boresight.json"
         elif image.pri_hdr['OBSTYPE'] == "FLT":
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['OBSTYPE'] == "NONLIN":
             recipe_filename = "l1_to_l2a_nonlin.json"
+        elif image.pri_hdr['OBSTYPE'] == "KGAIN":
+            recipe_filename = "l1_to_kgain.json"
         elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
             # Disambiguate between NONLIN and KGAIN
             for data in dataset:
                 if data.pri_hdr['OBSTYPE'] == "NONLIN":
                     recipe_filename = "l1_to_l2a_nonlin.json" 
                     break
-                elif data.pri_hdr['OBSTYPE'] == "NONLIN":
-                    recipe_filename = "l1_to_l2a_kgain.json"
+                elif data.pri_hdr['OBSTYPE'] == "KGAIN":
+                    recipe_filename = "l1_to_kgain.json"
                     break
                 else:
                     raise ValueError(f"Define recipe for {data.pri_hdr['OBSTYPE']}")
