@@ -10,7 +10,8 @@
         {
             "name" : "prescan_biassub",
             "calibs" : {
-                "DetectorNoiseMaps" : "AUTOMATIC"
+                "DetectorNoiseMaps" : "AUTOMATIC",
+				"KGain" : "AUTOMATIC"
             },
             "keywords" : {
                 "return_full_frame" : true
@@ -19,7 +20,8 @@
         {
             "name" : "detect_cosmic_rays",
             "calibs" : {
-                "DetectorParams" : "AUTOMATIC"
+                "DetectorParams" : "AUTOMATIC",
+				""
             },
             "keywords" : {
                 "mode" : "full"
