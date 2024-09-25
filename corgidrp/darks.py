@@ -139,7 +139,6 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     dark current is so high that it stands far above other noise that is
     not smeared upon readout, such as clock-induced charge, 
     fixed-pattern noise, and read noise.
-    - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -275,7 +274,6 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     dark current is so high that it stands far above other noise that is
     not smeared upon readout, such as clock-induced charge, 
     fixed-pattern noise, and read noise.
-    - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the

@@ -12,6 +12,8 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 
+from proc_cgi_frame.gsw_process import Process, median_combine, mean_combine
+
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
@@ -137,8 +139,37 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     # find cal file (naming convention for data.Dark class)
     generated_trad_dark_file = trad_dark_filename[:-5]+'_dark.fits'
     generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, generated_trad_dark_file) 
-    # Load
-    trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    
+    ###################### run II&T code on data
+    bad_pix = np.zeros((1200,2200)) # what is used in DRP
+    eperdn = 8.7 # what is used in DRP
+    bias_offset = 0 # what is used in DRP
+    em_gain = 1.340000033378601 # read off header from TVAC files
+    exptime = 100.0 # read off header from TVAC files
+    fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
+    fwc_em_e = 100000  # same as what is in DRP's DetectorParams
+    proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
+                 bias_offset, em_gain, exptime,
+                 nonlin_path)
+    dark_frames = []
+    bp_frames = []
+    filelist = []
+    for f in os.listdir(trad_dark_raw_datadir):
+        filelist.append(os.path.join(trad_dark_raw_datadir, f))
+        file = os.path.join(trad_dark_raw_datadir, f)
+        data = fits.getdata(file)
+        _, _, _, _, d0, bp0, _ = proc_dark.L1_to_L2a(data)
+        d1, bp1, _ = proc_dark.L2a_to_L2b(d0, bp0)
+        d1 *= em_gain # undo gain division
+        dark_frames.append(d1)
+        bp_frames.append(bp1)
+
+    # The last output of mean_combine() are useful for calibrate_darks
+    # module in the calibration repository:
+    mean_frame, _, mean_num_good_fr, _ = mean_combine(dark_frames, bp_frames)
+    TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    ###################
     
     ##### Check against TVAC traditional dark result
     TVAC_trad_dark = fits.getdata(TVAC_dark_path)
