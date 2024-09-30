@@ -32,6 +32,13 @@
             }
         },
 		{
+		     "name" : "detect_cosmic_rays",
+		     "calibs" : {
+				"KGain" : "AUTOMATIC, OPTIONAL",
+		         "DetectorParams" : "AUTOMATIC"
+		     }
+		 },
+		{
 			"name" : "calibrate_kgain",
 			"keywords" : {
 				"detector_regions" : {

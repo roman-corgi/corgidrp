@@ -16,8 +16,8 @@
         {
             "name" : "detect_cosmic_rays",
             "calibs" : {
-                "DetectorParams" : "AUTOMATIC",
-				"KGain" : "AUTOMATIC"
+				"KGain" : "AUTOMATIC, OPTIONAL",
+                "DetectorParams" : "AUTOMATIC"
             }
         },
         {
