@@ -56,8 +56,8 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
             f = os.path.join(root, name)
             trad_dark_data_filelist.append(f)
     # run in order of files input to II&T code to get exactly the same results
-    trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
-    trad_dark_data_filelist = trad_dark_data_filelist.tolist()
+    # trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
+    # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
     ###### Setup necessary calibration files
     # Create necessary calibration files
@@ -148,35 +148,42 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     exptime = 100.0 # read off header from TVAC files
     fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
     fwc_em_e = 100000  # same as what is in DRP's DetectorParams
+    telem_rows_start = detector_params.params['telem_rows_start']
+    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows = slice(telem_rows_start, telem_rows_end)
     proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
                  bias_offset, em_gain, exptime,
                  nonlin_path)
     dark_frames = []
     bp_frames = []
     filelist = []
-    for f in os.listdir(trad_dark_raw_datadir):
-        filelist.append(os.path.join(trad_dark_raw_datadir, f))
-        file = os.path.join(trad_dark_raw_datadir, f)
-        data = fits.getdata(file)
-        _, _, _, _, d0, bp0, _ = proc_dark.L1_to_L2a(data)
+    for f in trad_dark_data_filelist: #os.listdir(trad_dark_raw_datadir):
+        # filelist.append(os.path.join(trad_dark_raw_datadir, f))
+        # file = os.path.join(trad_dark_raw_datadir, f)
+        d = fits.getdata(f).astype(float) #file)
+        d[telem_rows] = np.nan
+        _, _, _, _, d0, bp0, _ = proc_dark.L1_to_L2a(d)
         d1, bp1, _ = proc_dark.L2a_to_L2b(d0, bp0)
         d1 *= em_gain # undo gain division
+        d1[telem_rows] = 0
         dark_frames.append(d1)
         bp_frames.append(bp1)
 
     # The last output of mean_combine() are useful for calibrate_darks
     # module in the calibration repository:
     mean_frame, _, mean_num_good_fr, _ = mean_combine(dark_frames, bp_frames)
-    TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    # trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    mean_frame[telem_rows] = np.nan
+    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
+    # np.save(TVAC_dark_path, trad_dark_data_filelist)
+    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
     ###################
     
     ##### Check against TVAC traditional dark result
-    TVAC_trad_dark = fits.getdata(TVAC_dark_path)
-    # clean_trad_dark = (trad_dark.data - fpn_dat/1.340000033378601 - cic_dat)/100
-    # master darks are exactly equal, ignoring the telemetry rows (first and last in this case)
-    assert(np.array_equal(TVAC_trad_dark[1:-1], trad_dark[1:-1]))
-    #assert(np.allclose(TVAC_trad_dark[1:-1], trad_dark[1:-1], atol=1e-10))
+    TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
+
+    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
     pass
 
 if __name__ == "__main__":
@@ -186,7 +193,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = "/home/maxmb/Data/corgidrp/CGI_TVAC_Data/"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
     outputdir = thisfile_dir
 

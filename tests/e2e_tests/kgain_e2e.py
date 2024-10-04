@@ -9,13 +9,66 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
 
+from cal.kgain.calibrate_kgain import calibrate_kgain
+import cal
+
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-tvac_kgain = 8.49404981510777 #8.8145 #e/DN, result from new iit code with specified file input order
-tvac_readnoise = 121.76070832489948 # 130.12 #e, result from new iit code with specified file input order
+# tvac_kgain = 8.49404981510777 #8.8145 #e/DN, result from new iit code with specified file input order
+# tvac_readnoise = 121.76070832489948 # 130.12 #e, result from new iit code with specified file input order
 
 @pytest.mark.e2e
 def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
+
+    # run II&T code 
+    default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')
+    stack_arr2_f = []
+    stack_arr_f = []
+    box_data = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'kgain') 
+    for f in os.listdir(box_data):
+        file = os.path.join(box_data, f)
+        if not file.endswith('.fits'):
+            continue
+        for i in range(51841, 51871):
+            if str(i) in file:
+                stack_arr2_f.append(file)
+                with fits.open(file, mode='update') as hdus:
+                    try:
+                        hdus[0].header['OBSTYPE'] = 'MNFRAME'
+                    except:
+                        pass
+                    try:
+                        hdus[1].header['OBSTYPE'] = 'MNFRAME'
+                    except:
+                        pass
+                exit
+        for i in range(51731, 51841):
+            if str(i) in file:
+                stack_arr_f.append(file)
+                exit
+    #stack_arr2 = np.stack(stack_arr2)
+    # fileorder_filepath = os.path.join(os.path.split(box_data)[0], 'results', 'TVAC_kgain_file_order.npy')
+    #np.save(fileorder_filepath, stack_arr_f+stack_arr2_f)
+    ordered_filelist = stack_arr_f+stack_arr2_f
+    stack_dat = data.Dataset(stack_arr_f)
+    stack2_dat = data.Dataset(stack_arr2_f)
+    stack_arr2 = stack2_dat.all_data
+
+    split, _ = stack_dat.split_dataset(exthdr_keywords=['EXPTIME'])
+    stack_arr = []
+    for dset in split:
+        if dset.all_data.shape[0] == 10:
+            stack_arr.append(dset.all_data[:5])
+            stack_arr.append(dset.all_data[5:])
+            continue
+        stack_arr.append(dset.all_data)
+    stack_arr = np.stack(stack_arr)
+    pass
+
+    (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
+                    binwidth=68, config_file=default_config_file, 
+                    mkplot=None, verbose=None)
+
     # figure out paths, assuming everything is located in the same relative location
     l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "kgain")
 
@@ -25,25 +78,10 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
         shutil.rmtree(kgain_outputdir)
     os.mkdir(kgain_outputdir)
 
-    # define the raw science data to process
-
-    l1_data_filelist_same_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51841,51871)]#[51841, 51851]] # just grab some files of it
-    l1_data_filelist_range_exp = [os.path.join(l1_datadir, "CGI_EXCAM_L1_00000{0}.fits".format(i)) for i in np.arange(51731, 51841)]#[51731, 51761]]
-    
     ####### Run the walker on some test_data
 
-    for file in l1_data_filelist_same_exp:
-        image = data.Image(file)
-        # This should not be necessary anymore after the updates of the OBSTYPE keyword, up to now it is only "SCI"
-        if image.pri_hdr['OBSTYPE'] != 'MNFRAME':
-            image.pri_hdr['OBSTYPE'] = 'MNFRAME'
-            image.save(filename = file)
-        l1_data_filelist_range_exp.append(file)
-    # actually, use same order of files used in II&T processing of data to ensure exactly the same results
-    l1_data_filelist_range_exp = np.load(os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "results", "TVAC_kgain_file_order.npy"), allow_pickle=True)
-    l1_data_filelist_range_exp = l1_data_filelist_range_exp.tolist()
-    walker.walk_corgidrp(l1_data_filelist_range_exp, "", kgain_outputdir, template="l1_to_kgain.json")
-    kgain_file = os.path.join(kgain_outputdir, os.path.split(l1_data_filelist_range_exp[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
+    walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
+    kgain_file = os.path.join(kgain_outputdir, os.path.split(ordered_filelist[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
     kgain = data.KGain(kgain_file)
     
     ##### Check against TVAC kgain, readnoise
@@ -69,7 +107,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data'  #"/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
+    tvacdata_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder'  #"/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

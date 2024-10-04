@@ -156,7 +156,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image'):
+                       mode='image', detector_regions=None):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -192,6 +192,9 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
             If 'full', a full-frame input is assumed, and if the input tail length
             is longer than the length to the end of the full-frame row, the masking
             continues onto the next row.  Defaults to 'image'.
+        detector_regions: (dict):  
+            A dictionary of detector geometry properties.  Keys should be as 
+            found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
 
     Returns:
         corgidrp.data.Dataset:
@@ -200,11 +203,13 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
 
+    if detector_regions is None:
+        detector_regions = detector_areas
+
     # you should make a copy the dataset to start
     crmasked_dataset = input_dataset.copy()
 
     crmasked_cube = crmasked_dataset.all_data
-
 
     # Calculate the full well capacity for every frame in the dataset
     kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
@@ -246,6 +251,7 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
     m2 = np.zeros_like(crmasked_cube)
 
     for i in range(len(crmasked_cube)):
+        obstype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
                         fwc=fwcem_dn_arr[i],
                         sat_thresh=sat_thresh,
@@ -253,7 +259,9 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
                         cosm_filter=cosm_filter,
                         cosm_box=cosm_box,
                         cosm_tail=cosm_tail,
-                        mode=mode
+                        mode=mode,
+                        detector_regions=detector_regions,
+                        obstype=obstype
                         ) * cr_dqval
 
     # add the two masks to the all_dq mask
