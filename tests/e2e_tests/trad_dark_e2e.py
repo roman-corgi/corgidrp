@@ -181,10 +181,16 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     ###################
     
     ##### Check against TVAC traditional dark result
+
     TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
     pass
+
+    # remove from caldb
+    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
+    this_caldb.remove_entry(trad_dark)
+
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

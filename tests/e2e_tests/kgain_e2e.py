@@ -8,6 +8,7 @@ import astropy.io.fits as fits
 import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
+import corgidrp.caldb as caldb
 
 from cal.kgain.calibrate_kgain import calibrate_kgain
 import cal
@@ -79,9 +80,16 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     os.mkdir(kgain_outputdir)
 
     ####### Run the walker on some test_data
+    for file in l1_data_filelist_range_exp:
+        image = data.Image(file)
+        # This should not be necessary anymore after the updates of the OBSTYPE keyword, up to now it is only "SCI"
+        if image.pri_hdr['OBSTYPE'] != 'KGAIN':
+            image.pri_hdr['OBSTYPE'] = 'KGAIN'
+            image.save(filename = file)
 
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
     kgain_file = os.path.join(kgain_outputdir, os.path.split(ordered_filelist[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
+
     kgain = data.KGain(kgain_file)
     
     ##### Check against TVAC kgain, readnoise
@@ -99,6 +107,9 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
 
     assert np.abs(diff_kgain) == 0 #< 0.01
     assert np.abs(diff_readnoise) == 0 #< 3
+
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(kgain)
 
     
 if __name__ == "__main__":
