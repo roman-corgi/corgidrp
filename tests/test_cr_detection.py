@@ -56,20 +56,21 @@ class Metadata(object):
     def __init__(self, meta_path=meta_path):
         self.meta_path = meta_path
 
-        self.data = self.get_data()
-        self.frame_rows = self.data['frame_rows']
-        self.frame_cols = self.data['frame_cols']
-        self.geom = self.data['geom']
+        #self.data = self.get_data()
+        # self.frame_rows = self.data['frame_rows']
+        # self.frame_cols = self.data['frame_cols']
+        # self.geom = self.data['geom']
 
-    def get_data(self):
-        """Read yaml data into dictionary.
+    ### not actually used here, so comment it out to avoid having to require yaml as an import
+    # def get_data(self):
+    #     """Read yaml data into dictionary.
 
-        Returns:
-            data (dict): Metadata dictionary.
-        """
-        with open(self.meta_path, 'r') as stream:
-            data = yaml.safe_load(stream)
-        return data
+    #     Returns:
+    #         data (dict): Metadata dictionary.
+    #     """
+    #     with open(self.meta_path, 'r') as stream:
+    #         data = yaml.safe_load(stream)
+    #     return data
 
     def slice_section(self, frame, key):
         """Slice 2d section out of frame.
