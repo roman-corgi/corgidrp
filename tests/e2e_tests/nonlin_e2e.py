@@ -14,9 +14,6 @@ from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
 
-import cal
-from cal.nonlinearity.calibrate_nonlin import calibrate_nonlin
-
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
 
@@ -144,15 +141,6 @@ def test_nonlin_cal_e2e(
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
     
-    ############ run II&T code
-    default_config_file = os.path.join(cal.lib_dir, 'nonlinearity', 'config_files', 'nonlin_parms.yaml')
-    (headers, nonlin_arr3, csv_lines, means_min_max) = calibrate_nonlin(stack_arr, 
-                    exp_time_stack_arr, time_stack_arr, len_list, 
-                     stack_arr2, actual_gain_arr, norm_val = 2500, 
-                     min_write = 800.0, max_write = 10000.0,
-                     config_file=default_config_file, mkplot=None, verbose=None)
-
-    ##########################
 
     nonlin_table_from_eng = 'nonlin_table_091224.txt'
     nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,nonlin_table_from_eng),

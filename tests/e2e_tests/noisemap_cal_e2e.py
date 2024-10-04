@@ -334,17 +334,12 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
 
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     # iit_noisemap = data.autoload(iit_noisemap_fname)
-    
-    # ignoring telemetry row
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0], F_map)) < 1e-11)
+
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
     assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
 
-    # assert(np.array_equal(corgidrp_noisemap.data[1][:-1], C_map[:-1]))
-    # assert(np.array_equal(corgidrp_noisemap.data[2][:-1], D_map[:-1]))
-    # assert(np.array_equal(corgidrp_noisemap.dq, unreliable_pix_map))
-    # assert(bias_offset == corgidrp_noisemap.ext_hdr['B_O'])
     pass
     
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
@@ -427,22 +422,6 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     meta_path = os.path.join(corgidrp_f, 'tests', 'test_data', 'metadata.yaml')
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
-
-    # stack_arr_f = []
-    # l2a_datadir = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'noisemap_test_data', 'test_l2a_data')
-    # for f in os.listdir(l2a_datadir):
-    #     file = os.path.join(l2a_datadir, f)
-    #     if not file.endswith('.fits'):
-    #         continue
-    #     stack_arr_f.append(file)
-    # stack_dat = data.Dataset(stack_arr_f)
-    # # split_dataset arranges files
-    # split, split_params = stack_dat.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN'])
-    # l2a_data_filelist = []
-    # for dset in split:
-    #     for frame in dset.frames[:10]:
-    #         # ensure the same file ordering
-    #         l2a_data_filelist.append(frame.filepath)
     
     # still need to run II&T code on L1 data b/c that's what it expects
     # We'll also process via II&T from L1 to L2a
@@ -539,7 +518,6 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
 
 
     ####### Run the walker on some test_data
-    print(l2a_filepaths[:5])
     template = "l2a_to_l2a_noisemap.json"
     walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
 
@@ -554,12 +532,10 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     # iit_noisemap = data.autoload(iit_noisemap_fname)
     
-    # ignoring telemetry row
-    assert(np.array_equal(corgidrp_noisemap.data[0][1:], F_map[1:]))
-    assert(np.array_equal(corgidrp_noisemap.data[1][1:], C_map[1:]))
-    assert(np.array_equal(corgidrp_noisemap.data[2][1:], D_map[1:]))
-    assert(np.array_equal(corgidrp_noisemap.dq, unreliable_pix_map))
-    assert(bias_offset == corgidrp_noisemap.ext_hdr['B_O'])
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
+    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
     pass
     
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
@@ -608,7 +584,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")

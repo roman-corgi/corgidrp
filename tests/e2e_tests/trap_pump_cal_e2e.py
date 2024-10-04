@@ -207,7 +207,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     # assert(two_or_less_count > 0)
     # assert(noncontinuous_count >= 0)
     # assert(pre_sub_el_count > 0)
-    
+
     #assert(unused_fit_data == TVAC_unused_fit_data)
     assert(unused_temp_fit_data == TVAC_unused_temp_fit_data)
     assert(two_or_less_count == TVAC_two_or_less_count)
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
     if False: # making e2e simulated data, which is ENG and includes nonlinearity
         nonlin_path = os.path.join(tvacdata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
