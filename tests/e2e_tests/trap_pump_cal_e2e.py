@@ -266,4 +266,5 @@ if __name__ == "__main__":
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
     e2e = args.e2e_flag
+    # NOTE just use e2e=True, the default.  Other scaled-down test not so pertinent anymore.
     test_trap_pump_cal(tvacdata_dir, outputdir, e2e)
