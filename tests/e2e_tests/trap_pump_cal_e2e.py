@@ -231,6 +231,10 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True):
     # trap densities should all match if the above passes; that was tested in II&T tests mainly 
     # b/c all the outputs of the trap-pump function were tested
 
+    # remove generated calibration from caldb
+    this_cal = data.TrapCalibration(generated_trapcal_file)
+    this_caldb.remove_entry(this_cal)
+
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
     # that call this script with the correct arguments and they do not need
