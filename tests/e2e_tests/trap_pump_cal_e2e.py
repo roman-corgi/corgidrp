@@ -11,9 +11,11 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-from corgidrp.pump_trap_calibration import rebuild_dict
-from cal.tpumpanalysis.tpump_final import tpump_analysis
-
+try:
+    from corgidrp.pump_trap_calibration import rebuild_dict
+    from cal.tpumpanalysis.tpump_final import tpump_analysis
+except:
+    pass
 # Adjust the system's limit of open files. We need to load 2000 files at once. 
 # some systems don't like that. 
 import resource
