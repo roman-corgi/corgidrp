@@ -16,8 +16,11 @@ import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 
-from cal.calibrate_darks.calibrate_darks_lsq import calibrate_darks_lsq 
-from proc_cgi_frame.gsw_process import Process
+try:
+    from cal.calibrate_darks.calibrate_darks_lsq import calibrate_darks_lsq 
+    from proc_cgi_frame.gsw_process import Process
+except:
+    pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 

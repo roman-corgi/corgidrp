@@ -10,8 +10,11 @@ import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 
-from cal.kgain.calibrate_kgain import calibrate_kgain
-import cal
+try:
+    from cal.kgain.calibrate_kgain import calibrate_kgain
+    import cal
+except:
+    pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 

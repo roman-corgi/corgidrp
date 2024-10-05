@@ -11,8 +11,10 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-
-from proc_cgi_frame.gsw_process import Process, median_combine, mean_combine
+try:
+    from proc_cgi_frame.gsw_process import Process, mean_combine
+except:
+    pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
