@@ -46,11 +46,6 @@ class Metadata(object):
     Args:
         meta_path (str): Full path of metadta yaml.
 
-    Attributes:
-        data (dict):
-            Data from metadata file.
-        geom (SimpleNamespace):
-            Geometry specific data.
     """
 
     def __init__(self, meta_path=meta_path):
@@ -217,48 +212,46 @@ def remove_cosmics_iit(image, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_bo
     Use cosm_filter to determine the smallest plateaus (in pixels) that will
     be identified. A reasonable value is 2.
 
-    Parameters
-    ----------
-    image : array_like, float
-        Image area of frame (bias of zero).
-    fwc : float
-        Full well capacity of detector *in DNs*.  Note that this may require a
-        conversion as FWCs are usually specified in electrons, but the image
-        is in DNs at this point.
-    sat_thresh : float
-        Multiplication factor for fwc that determines saturated cosmic pixels.
-    plat_thresh : float
-        Multiplication factor for fwc that determines edges of cosmic plateau.
-    cosm_filter : int
-        Minimum length in pixels of cosmic plateaus to be identified.
-    cosm_box : int
-        Number of pixels out from an identified cosmic head (i.e., beginning of
-        the plateau) to mask out.
-        For example, if cosm_box is 3, a 7x7 box is masked,
-        with the cosmic head as the center pixel of the box.
-    cosm_tail : int
-        Number of pixels in the row downstream of the end of a cosmic plateau
-        to mask.  If cosm_tail is greater than the number of
-        columns left to the end of the row from the cosmic
-        plateau, the cosmic masking ends at the end of the row. Defaults to 10.
-    meta : Metadata class instance
-        Metadata class instance, which is used to determine whether the
-        beginning of a plateau is not in the image area, in which case no 
-        cosmic ray masking should occur.  Only relevant when mode is 'full'.
-        Defaults to None, in which case masking is allowed anywhere on the 
-        input frame.
-    mode : string
-        If 'image', an image-area input is assumed, and if the input
-        tail length is longer than the length to the end of the image-area row,
-        the mask is truncated at the end of the row.
-        If 'full', a full-frame input is assumed, and if the input tail length
-        is longer than the length to the end of the full-frame row, the masking
-        continues onto the next row.  Defaults to 'image'.
+    Args:
+        image : array_like, float
+            Image area of frame (bias of zero).
+        fwc : float
+            Full well capacity of detector *in DNs*.  Note that this may require a
+            conversion as FWCs are usually specified in electrons, but the image
+            is in DNs at this point.
+        sat_thresh : float
+            Multiplication factor for fwc that determines saturated cosmic pixels.
+        plat_thresh : float
+            Multiplication factor for fwc that determines edges of cosmic plateau.
+        cosm_filter : int
+            Minimum length in pixels of cosmic plateaus to be identified.
+        cosm_box : int
+            Number of pixels out from an identified cosmic head (i.e., beginning of
+            the plateau) to mask out.
+            For example, if cosm_box is 3, a 7x7 box is masked,
+            with the cosmic head as the center pixel of the box.
+        cosm_tail : int
+            Number of pixels in the row downstream of the end of a cosmic plateau
+            to mask.  If cosm_tail is greater than the number of
+            columns left to the end of the row from the cosmic
+            plateau, the cosmic masking ends at the end of the row. Defaults to 10.
+        meta : Metadata class instance
+            Metadata class instance, which is used to determine whether the
+            beginning of a plateau is not in the image area, in which case no 
+            cosmic ray masking should occur.  Only relevant when mode is 'full'.
+            Defaults to None, in which case masking is allowed anywhere on the 
+            input frame.
+        mode : string
+            If 'image', an image-area input is assumed, and if the input
+            tail length is longer than the length to the end of the image-area row,
+            the mask is truncated at the end of the row.
+            If 'full', a full-frame input is assumed, and if the input tail length
+            is longer than the length to the end of the full-frame row, the masking
+            continues onto the next row.  Defaults to 'image'.
 
-    Returns
-    -------
-    mask : array_like, int
-        Mask for pixels that have been set to zero.
+    Returns:
+        mask : array_like, int
+            Mask for pixels that have been set to zero.
 
     Notes
     -----
