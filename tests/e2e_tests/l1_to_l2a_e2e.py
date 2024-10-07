@@ -79,6 +79,13 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     noise_map.save(filedir=l2a_outputdir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
+    # KGain
+    kgain_val = 8.7
+    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                    input_dataset=mock_input_dataset)
+    kgain.save(filedir=l2a_outputdir, filename="mock_kgain.fits")
+    this_caldb.create_entry(kgain)
+
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
@@ -86,7 +93,7 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
     this_caldb.remove_entry(noise_map)
-
+    this_caldb.remove_entry(kgain)
     
     ##### Check against TVAC data
     new_l2a_filenames = [os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
