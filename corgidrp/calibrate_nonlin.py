@@ -128,13 +128,15 @@ def calibrate_nonlin(dataset_nl,
     """
     Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
     frames ranging over exposure time, each sub-stack having at least 1 illuminated 
-    pupil SCI-sized L1 frame for each exposure time, this function processes the 
+    used to make a mask;
+    the mask is used to select pixels in each frame in the large array of stacks
+    in order to calculate its mean signal.upil SCI-sized L1 frame for each exposure time, this function processes the 
     frames to create a nonlinearity table. A mean pupil array is created from a 
     separate stack of frames of constant exposure time and used to make a mask; 
     the mask is used to select pixels in each frame in the large array of stacks 
     in order to calculate its mean signal.
 
-    The frames are bias-subtracted.
+    All frames in the input dataset are bias-subtracted.
 
     Two sub-stacks/groups of frames at each EM gain value contain noncontiguous 
     frames with the same (repeated) exposure time, taken near the start and end 
@@ -172,8 +174,9 @@ def calibrate_nonlin(dataset_nl,
         a set of at least 30 frames used to generate a mean frame. These frames
         have the same exp time, such that the mean signal in the pupil regions
         is a few thousand DN, which helps identify the pixels containing the 
-        pupil image. They also have unity EM gain. These frames are
-        identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
+        pupil image. They also have unity EM gain. All data must be obtained
+        under the same positioning of the pupil relative to the detector. These
+        frames are identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
       n_cal (int):
         Minimum number of sub-stacks used to calibrate Non-Linearity. The default
         value is 20.
@@ -246,15 +249,15 @@ def calibrate_nonlin(dataset_nl,
         raise TypeError('cal_arr must be an ndarray.')
     if np.ndim(cal_arr) != 3:
         raise CalNonlinException('cal_arr must be 3-D')
-    # mean_frame_arr must have at least 30 frames
-    if len(cal_arr) < n_cal:
-        raise Exception(f'mean_frame_arr must have at least {n_cal} frames')
-    if np.sum(len_list) != len(cal_arr):
-        raise CalNonlinException('Number of sub-stacks in cal_arr must '
-                'equal the sum of the elements in len_list')
     if len(len_list) < 1:
         raise CalNonlinException('Number of elements in len_list must '
                 'be greater than or equal to 1.')
+    if np.sum(len_list) != len(cal_arr):
+        raise CalNonlinException('Number of sub-stacks in cal_arr must '
+                'equal the sum of the elements in len_list')
+    # cal_arr must have at least 20 frames for each EM gain
+    if np.any(np.array(len_list) < n_cal):
+        raise Exception(f'cal_arr must have at least {n_cal} frames for each EM value')
     if len(np.unique(datetime_arr)) != len(datetime_arr):
         raise CalNonlinException('All elements of datetime_arr must be unique.')
     for g_index in range(len(len_list)):
@@ -274,6 +277,7 @@ def calibrate_nonlin(dataset_nl,
     if np.ndim(mean_frame_arr) != 3:
         raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
+    # mean_frame_arr must have at least 30 frames
     if len(mean_frame_arr) < n_mean:
         raise CalNonlinException(f'Number of frames in mean_frame_arr must '
                 'be at least {n_mean}.')
