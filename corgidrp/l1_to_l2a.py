@@ -154,7 +154,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, k_gain = None, detector_params = None, sat_thresh=0.7,
+def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
                        mode='image'):
     """
@@ -165,8 +165,8 @@ def detect_cosmic_rays(input_dataset, k_gain = None, detector_params = None, sat
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
-        k_gain (corgidrp.data.KGain): KGain calibration file
         detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
+        k_gain (corgidrp.data.KGain): KGain calibration file
         sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
             pixels. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging saturation.
@@ -201,8 +201,6 @@ def detect_cosmic_rays(input_dataset, k_gain = None, detector_params = None, sat
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
 
-    if detector_params == None:
-        raise ValueError("calibration file detector_params is needed although it is an optional parameter")
     # you should make a copy the dataset to start
     crmasked_dataset = input_dataset.copy()
 
