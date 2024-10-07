@@ -283,9 +283,9 @@ def calibrate_kgain(dataset_kgain,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
                     verbose=False, detector_regions=None):
     """
-    Given an array of frame stacks for various exposure times, each sub-stack
-    having at least 5 illuminated pupil L1 SCI-size frames having the same 
-    exposure time. The frames are bias-subtracted, and in addition, if EM gain
+    Given an array of stack of pupil L1 SCI frames obtained with various exposure
+    times, each sub-stack with the same exposure time having at least 5 frames, 
+    . The frames are bias-subtracted, and in addition, if EM gain
     is >1 for the input data for calibrate_kgain, EM gain division is also needed.
     It also creates a mean pupil array from a separate stack of
     frames of uniform exposure time. The mean pupil array is scaled to the mean
@@ -295,24 +295,22 @@ def calibrate_kgain(dataset_kgain,
     is plotted from the std dev and mean values from the bins. 
     
     Args:
-      dataset_kgain (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
-        pupil L1 SCI frames (counts in DN) having a range of exp times.
-        datset_cal contains a set of subset of frames, and all subsets must have
-        the same number of frames, which is a minimum of 5. The frames in a subset
-        must all have the same exposure time. There must be at least 10 subsets 
-        (More than 20 sub-stacks recommended. The mean signal in the pupil region should 
-        span from about 100 to about 10000 DN.
+      dataset_kgain (corgidrp.Dataset): dataset_kgain contains a set of subsets 
+        of EXCAM illuminated pupil L1 SCI frames (counts in DN). There must be
+        at least 20 subsets. All subsets must have the same number of frames,
+        which is a minimum of 5. The frames in a subset must all have the same
+        exposure time. The mean signal in the pupil region should span from about 100 to about 10000 DN.
+        Notice that unity EM gain is recommended when k-gain is the primary
+        desired product, since it is known more accurately than non-unity values.
         In addition, dataset_kgain contains a set of at least 30 frames used to
-        build a mean frame. All the frames must have the same exposure time,
+        build a mean frame. All these frames must have the same exposure time,
         such that the net mean counts in the pupil region is a few thousand DN
-        (2000 to 4000 DN recommended;
-        notice that unity EM gain is recommended when k-gain is the primary desired
-        product, since it is known more accurately than non-unity values. This
-        mean frame is used to select pixels with similar illumination for
-        calculating variances (since the pupil illumination is not perfectly uniform).
+        (2000 to 4000 DN recommended. The mean frame is used to select pixels
+        with similar illumination to calculate variances (since the pupil
+        illumination is not perfectly uniform).
         All data must be obtained under the same positioning of the pupil
-        relative to the detector. These frames are identified with the kewyord
-        'OBSTYPE'='MNFRAME' (TBD). 
+        relative to the detector.
+        These frames are identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD). 
       n_cal (int):
         Minimum number of sub-stacks used to calibrate K-Gain. The default value
         is 10.
