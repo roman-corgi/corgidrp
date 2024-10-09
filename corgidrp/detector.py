@@ -377,7 +377,7 @@ def imaging_slice(obstype, frame, detector_regions=None):
     return sl
 
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
-                   cosm_tail, mode='image'):
+                   cosm_tail, mode='image', detector_regions=None, obstype='SCI'):
     """Identify and remove saturated cosmic ray hits and tails.
 
     Use sat_thresh (interval 0 to 1) to set the threshold above which cosmics
@@ -422,6 +422,11 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
             If 'full', a full-frame input is assumed, and if the input tail length
             is longer than the length to the end of the full-frame row, the masking
             continues onto the next row.  Defaults to 'image'.
+        detector_regions: (dict):  
+            A dictionary of detector geometry properties.  Keys should be as 
+            found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        obstype (string):
+            'ARRTYPE' from the header associated with the input data cube.  Defaults to 'SCI'.
 
     Returns:
         array_like, int:
@@ -440,9 +445,26 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
      ......|<-plateau->|<------------------tail---------->|.........
 
     B Nemati and S Miller - UAH - 02-Oct-2018
+    Kevin Ludwick - UAH - 2024
 
     """
     mask = np.zeros(cube.shape, dtype=int)
+
+    if detector_regions is None:
+        detector_regions = detector_areas
+
+    if mode=='full':
+        im_num_rows = detector_regions[obstype]['image']['rows']
+        im_num_cols = detector_regions[obstype]['image']['cols']
+        im_starting_row = detector_regions[obstype]['image']['r0c0'][0]
+        im_ending_row = im_starting_row + im_num_rows
+        im_starting_col = detector_regions[obstype]['image']['r0c0'][1]
+        im_ending_col = im_starting_col + im_num_cols
+    else:
+        im_starting_row = 0
+        im_ending_row = mask.shape[1] - 1 # - 1 to get the index, not size
+        im_starting_col = 0
+        im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
 
     # Do a cheap prefilter for rows that don't have anything bright
     max_rows = np.max(cube, axis=-1,keepdims=True)
@@ -450,7 +472,8 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
 
     for j,i in ji_streak_rows:
         row = cube[j,i]
-
+        if i < im_starting_row or i > im_ending_row:
+            continue
         # Find if and where saturated plateaus start in streak row
         i_begs = find_plateaus(row, fwc, sat_thresh, plat_thresh, cosm_filter)
 
@@ -459,6 +482,8 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
         ex_l = np.array([])
         if i_begs is not None:
             for i_beg in i_begs:
+                if i_beg < im_starting_col or i_beg > im_ending_col:
+                    continue
                 # implement cosm_tail
                 if i_beg+cosm_filter+cosm_tail+1 > mask.shape[2]:
                     ex_l = np.append(ex_l,
@@ -468,10 +493,11 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
                                 mask.shape[2]))
                 mask[j, i, i_beg:streak_end] = 1
                 # implement cosm_box
-                st_row = max(i-cosm_box, 0)
-                end_row = min(i+cosm_box+1, mask.shape[1])
-                st_col = max(i_beg-cosm_box, 0)
-                end_col = min(i_beg+cosm_box+1, mask.shape[2])
+                # can't have cosm_box appear in non-image pixels
+                st_row = max(i-cosm_box, im_starting_row)
+                end_row = min(i+cosm_box+1, im_ending_row+1)
+                st_col = max(i_beg-cosm_box, im_starting_col)
+                end_col = min(i_beg+cosm_box+1, im_ending_col+1)
                 mask[j, st_row:end_row, st_col:end_col] = 1
                 pass
 
