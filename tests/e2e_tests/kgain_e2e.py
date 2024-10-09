@@ -49,11 +49,20 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
         for i in range(51731, 51841):
             if str(i) in file:
                 stack_arr_f.append(file)
+                with fits.open(file, mode='update') as hdus:
+                    try:
+                        hdus[0].header['OBSTYPE'] = 'KGAIN'
+                    except:
+                        pass
+                    try:
+                        hdus[1].header['OBSTYPE'] = 'KGAIN'
+                    except:
+                        pass
                 exit
     #stack_arr2 = np.stack(stack_arr2)
     # fileorder_filepath = os.path.join(os.path.split(box_data)[0], 'results', 'TVAC_kgain_file_order.npy')
     #np.save(fileorder_filepath, stack_arr_f+stack_arr2_f)
-    ordered_filelist = stack_arr_f+stack_arr2_f
+    stack_arr_f = sorted(stack_arr_f)
     stack_dat = data.Dataset(stack_arr_f)
     stack2_dat = data.Dataset(stack_arr2_f)
     stack_arr2 = stack2_dat.all_data
@@ -61,13 +70,21 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     split, _ = stack_dat.split_dataset(exthdr_keywords=['EXPTIME'])
     stack_arr = []
     for dset in split:
+        # Breaking up the one set that has 10 frames at the same exptime instead of 5 like all the rest
+        # Making the set 2 separate sets of 5 each perhaps unfairly weights this exptime 
+        # which is doubly represented now, but doing this results in the same 8.8145 number from before
         if dset.all_data.shape[0] == 10:
             stack_arr.append(dset.all_data[:5])
+            # for ind in [5,6,7,8,9]:
+            #     fp = dset.frames[ind].filepath
+            #     stack_arr_f.remove(fp)
+            
             stack_arr.append(dset.all_data[5:])
             continue
         stack_arr.append(dset.all_data)
     stack_arr = np.stack(stack_arr)
     pass
+    ordered_filelist = stack_arr_f+stack_arr2_f
 
     (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
                     binwidth=68, config_file=default_config_file, 
