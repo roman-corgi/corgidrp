@@ -207,8 +207,8 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     crmasked_cube = crmasked_dataset.all_data
 
     # Calculate the full well capacity for every frame in the dataset
-    if k_gain == None:
-        kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
+    if k_gain is None:
+        kgain = detector_params.params['kgain']
     else:
         #get the kgain value from the k_gain calibration file
         kgain = k_gain.value
