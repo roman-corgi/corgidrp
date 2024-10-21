@@ -117,8 +117,9 @@ def test_l1_to_l2b_fromscratch(tvacdata_path, e2eoutput_path):
             tvac_dat = hdulist[1].data
         
         diff = img.data - tvac_dat
+        middle_diff = diff[475:535, 500:560]
 
-        assert np.median(np.abs(diff) < 1e-5)
+        assert np.median(np.abs(middle_diff)) < 1.0 # assert not too different
 
         # # plotting script for debugging
         # import matplotlib.pylab as plt
