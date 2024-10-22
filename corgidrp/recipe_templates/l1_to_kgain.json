@@ -16,11 +16,11 @@
 		        "frame_rows" : 1200,
 		        "frame_cols" : 2200,
 		        "prescan" : {
-		        "rows": 1200,
-		        "cols": 1088,
-		        "r0c0": [0, 0],
-		        "col_start": 799,
-		        "col_end": 1000
+		            "rows": 1200,
+		            "cols": 1088,
+		            "r0c0": [0, 0],
+		            "col_start": 799,
+		            "col_end": 1000
 		        },
 		        "prescan_reliable" : {
 		            "rows": 901,
