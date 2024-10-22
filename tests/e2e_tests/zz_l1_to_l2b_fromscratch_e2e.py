@@ -1,3 +1,12 @@
+"""
+Test that we can produce all calibrations and sciencec data from scratch without needing to bootstrap anything
+Note that this test needs to run after the following e2e tests are run once:
+ * nonlin_e2e.py
+ * kgain_e2e.py
+ * noisemap_cal_e2e.py
+ * flatfield_e2e.py
+This is because the above four tests creates L1 data from TVAC L1 data that has the headers we expect for in-flight data
+"""
 import argparse
 import glob
 import os
