@@ -33,7 +33,7 @@ def set_obstype_for_darks(
     for file in list_of_fits:
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
-        prihdr['OBSTYPE'] = 'DARKS'
+        prihdr['OBSTYPE'] = 'DARK'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
