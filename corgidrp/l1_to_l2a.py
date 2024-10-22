@@ -154,7 +154,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
+def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
                        mode='image'):
     """
@@ -166,6 +166,7 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
         detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
+        k_gain (corgidrp.data.KGain): KGain calibration file
         sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
             pixels. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging saturation.
@@ -205,9 +206,12 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
 
     crmasked_cube = crmasked_dataset.all_data
 
-
     # Calculate the full well capacity for every frame in the dataset
-    kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
+    if k_gain is None:
+        kgain = detector_params.params['kgain']
+    else:
+        #get the kgain value from the k_gain calibration file
+        kgain = k_gain.value
     emgain_list = []
     for frame in crmasked_dataset:
         try: # use measured gain if available TODO change hdr name if necessary

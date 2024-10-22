@@ -152,6 +152,15 @@ def test_nonlin_cal_e2e(
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
     nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits" )
+    
+    
+        # KGain
+    kgain_val = 8.7
+    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                    input_dataset=mock_input_dataset)
+    kgain.save(filedir=e2eoutput_path, filename="mock_kgain.fits")
+    this_caldb = caldb.CalDB()
+    this_caldb.create_entry(kgain)
 
     # Run the walker on some test_data
     print('Running walker')
@@ -205,9 +214,8 @@ def test_nonlin_cal_e2e(
 
     # remove entry from caldb
     nonlin_entry = data.NonLinearityCalibration(os.path.join(e2eoutput_path, nonlin_out_filename))
-    this_caldb = caldb.CalDB()
     this_caldb.remove_entry(nonlin_entry)
-
+    this_caldb.remove_entry(kgain)
    # Print success message
     print('e2e test for NL passed')
 

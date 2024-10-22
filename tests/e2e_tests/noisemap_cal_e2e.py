@@ -12,8 +12,30 @@ import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 from glob import glob
+from astropy.io import fits
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
+
+def set_obstype_for_darks(
+    list_of_fits,
+    ):
+    """ Adds proper values to OBSTYPE for the NoiseMap calibration: DARKS
+    (data used to calibrate the dark noise sources).
+
+    This function is unnecessary with future data because data will have
+    the proper values in OBSTYPE. 
+
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+
+    """
+    # Folder with files
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        prihdr['OBSTYPE'] = 'DARK'
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
@@ -80,7 +102,9 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     ####### Run the walker on some test_data
 
     template = "l1_to_l2a_noisemap.json"
-    walker.walk_corgidrp(l1_data_filelist, "", noisemap_outputdir,template=template)
+    # Update OBSTYPE for each file to "DARKS"
+    set_obstype_for_darks(l1_data_filelist)
+    walker.walk_corgidrp(l1_data_filelist, "", noisemap_outputdir,template=None)
 
 
     # clean up by removing entry
@@ -194,7 +218,9 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     ####### Run the walker on some test_data
 
     template = "l2a_to_l2a_noisemap.json"
-    walker.walk_corgidrp(l2a_data_filelist, "", noisemap_outputdir,template=template)
+    # Update OBSTYPE to "DARKS"
+    set_obstype_for_darks(l2a_data_filelist)
+    walker.walk_corgidrp(l2a_data_filelist, "", noisemap_outputdir,template=None)
 
 
     # clean up by removing entry
