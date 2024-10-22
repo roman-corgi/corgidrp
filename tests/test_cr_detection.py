@@ -27,6 +27,11 @@ pri_hdr, ext_hdr = mocks.create_default_headers()
 non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
 non_linearity_correction.save(filename = nonlin_fits_filepath)
 
+# Make a dummy kgain calibration file
+kgain = 8.7
+gain_value = np.array([[kgain]])
+k_gain = data.KGain(gain_value, pri_hdr = pri_hdr, ext_hdr = ext_hdr, input_dataset = dummy_dataset)
+
 ## Copy-pasted II&T code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/gsw_remove_cosmics.py ##
 
 def find_plateaus_iit(streak_row, fwc, sat_thresh, plat_thresh, cosm_filter):
@@ -198,7 +203,6 @@ def test_iit_vs_corgidrp():
     and check that output is consistent with results II&T code.
     """
 
-    kgain = detector_params.params['kgain']
     fwc_em = detector_params.params['fwc_em'] / kgain
     fwc_pp = detector_params.params['fwc_pp'] / kgain
     em_gain = 500
@@ -233,7 +237,7 @@ def test_iit_vs_corgidrp():
     iit_masks_arr = np.array(iit_masks)
 
     # corgidrp version
-    crmasked_dataset = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    crmasked_dataset = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                                           plat_thresh, cosm_filter, cosm_box,
                                           cosm_tail, mode)
     corgi_crmask_bool = np.where(crmasked_dataset.all_dq>0,1,0)
@@ -264,7 +268,7 @@ def test_correct_headers():
     """
     # create simulated data
     dataset = mocks.create_cr_dataset(nonlin_fits_filepath, filedir=datadir, numfiles=2,numCRs=5, plateau_length=10)
-    output_dataset = detect_cosmic_rays(dataset, detector_params)
+    output_dataset = detect_cosmic_rays(dataset, detector_params, k_gain)
 
     for frame in output_dataset:
         if not ("FWC_EM_E" in frame.ext_hdr):
@@ -377,7 +381,7 @@ def test_mask():
     check_mask = np.zeros_like(dataset.all_dq, dtype=int)
     c_tail = 6
     check_mask[0,1, 2:2+cosm_filter+c_tail+1] = 1 #add 1 to include last column in the slice
-    dataset_masked = detect_cosmic_rays(dataset, detector_params, sat_thresh, plat_thresh, cosm_filter, cosm_box=0, cosm_tail=c_tail)
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh, plat_thresh, cosm_filter, cosm_box=0, cosm_tail=c_tail)
     if not np.where(dataset_masked.all_dq>0,1,0) == approx(check_mask):
         raise Exception("Incorrect pixels were masked.")
 
@@ -402,14 +406,14 @@ def test_mask_box():
     frame = data.Image(bs_image_box, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
-    dataset_masked = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                         plat_thresh, cosm_filter=2, cosm_box=0,
                         cosm_tail=20)
 
     assert not (np.array_equal(np.where(dataset_masked.all_dq>0,1,0)[0], check_mask)) # since cosm_box=0
 
     # now use cosm_box=2 to catch pixels surrounding head
-    dataset_masked2 = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    dataset_masked2 = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                         plat_thresh, cosm_filter=2, cosm_box=2,
                         cosm_tail=20)
 
@@ -442,7 +446,7 @@ def test_mask_box_corners():
     frame = data.Image(image, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
-    dataset_masked = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                         plat_thresh, cosm_filter=2, cosm_box=2)
 
     if not np.array_equal(np.where(dataset_masked.all_dq>0,1,0)[0], check_mask):
@@ -467,7 +471,7 @@ def test_cosm_tail_2():
     frame = data.Image(image, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
-    dataset_masked = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                         plat_thresh, cosm_filter=2, cosm_box=0,
                         cosm_tail=1)
 
@@ -479,7 +483,7 @@ def test_cosm_tail_2():
     # cosmic head #2
     check_mask[-2,6:6+2+3+1] = 1
 
-    dataset_masked = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                         plat_thresh, cosm_filter=2, cosm_box=0,
                         cosm_tail=3)
 
@@ -501,7 +505,7 @@ def test_cosm_tail_bleed_over():
     frame = data.Image(image, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
-    dataset_masked = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                         plat_thresh, cosm_filter=2, cosm_box=2,
                         cosm_tail=14, mode='full')
 
@@ -511,7 +515,7 @@ def test_cosm_tail_bleed_over():
     check_mask[-1,0:12] = 0 # undo the bleed over
     # cosm_box=2 again since I undid some in previous line
     check_mask[-4:,4:9] = 1
-    dataset_masked = detect_cosmic_rays(dataset, detector_params, sat_thresh,
+    dataset_masked = detect_cosmic_rays(dataset, detector_params, k_gain, sat_thresh,
                         plat_thresh, cosm_filter=2, cosm_box=2,
                         cosm_tail=14)
 
