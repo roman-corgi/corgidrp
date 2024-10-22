@@ -197,6 +197,8 @@ def guess_template(dataset):
             recipe_filename = "l1_to_l2a_nonlin.json"
         elif image.pri_hdr['OBSTYPE'] == "KGAIN":
             recipe_filename = "l1_to_kgain.json"
+        elif image.pri_hdr['OBSTYPE'] == "DARKS":
+            recipe_filename = "l1_to_l2a_noisemap.json"
         elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
             # Disambiguate between NONLIN and KGAIN
             for data in dataset:
@@ -210,6 +212,11 @@ def guess_template(dataset):
                     raise ValueError(f"Define recipe for {data.pri_hdr['OBSTYPE']}")
         else:
             recipe_filename = "l1_to_l2b.json"
+    elif image.ext_hdr['DATA_LEVEL'] == "L2a":
+        if image.pri_hdr['OBSTYPE'] == "DARKS":
+            recipe_filename = "l2a_to_l2a_noisemap.json"
+        else:
+            raise NotImplementedError()
     else:
         raise NotImplementedError()
 
