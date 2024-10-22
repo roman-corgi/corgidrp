@@ -68,7 +68,7 @@ def test_l1_to_l2b_fromscratch(tvacdata_path, e2eoutput_path):
     noisemap_l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
     noisemap_l1_data_filelist = sorted(glob.glob(os.path.join(noisemap_l1_datadir,"*.fits")))
     noisemap_l1_data_filelist.sort()
-    process_one_dataset(noisemap_l1_data_filelist, '', cal_outputdir, template="l1_to_l2a_noisemap.json")
+    process_one_dataset(noisemap_l1_data_filelist, '', cal_outputdir)
 
     ##### Flat field and Bad Pixel Map
     flat_mock_inputdir = os.path.join(e2eoutput_path, "flat_uranus_output", "mock_input_data")
