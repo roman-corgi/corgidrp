@@ -15,6 +15,10 @@ def step_2_for_all_data_load_cal(this_caldb, main_cal_dir):
 def step_3_for_all_data_process(input_filelist, cpgs_xml_filepath, outputdir, template =None):
      walker.walk_corgidrp(input_filelist, cpgs_xml_filepath, outputdir, template=template)
 
+def all_steps(main_cal_dir, input_filelist, cpgs_xml_filepath, outputdir, template=None):
+    this_caldb = caldb.CalDB()
+    this_caldb.scan_dir_for_new_entries(main_cal_dir)
+    walker.walk_corgidrp(input_filelist, cpgs_xml_filepath, outputdir, template=template)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process data using corgidrp.")
