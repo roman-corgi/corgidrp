@@ -355,7 +355,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
-def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=None, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40, raster_subexps=1):
+def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=3, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40, raster_subexps=1):
     """
     Create simulated data to check the flat division
     
@@ -366,7 +366,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
        band (str): 1 or 4
        im_size (int): x-dimension of the planet image (in pixels= 420 for the HST images)
        d (int): number of pixels across the planet (neptune=50 and uranus=65)
-       n_dith (int): Number of dithers required (n_dith=3 for neptune and n_dith=2 for Uranus)
+       n_dith (int): Number of dithers required (Default is 3)
        radius (int): radius of the planet in pixels (radius=54 for neptune, radius=90 in HST images)
        snr (int): SNR required for the planet image (default is 250 for the HST images)
        snr_constant (int): constant for snr reference  (4.95 for band1 and 9.66 for band4)
