@@ -315,7 +315,7 @@ class Image():
                     self.hdu_list = input_hdulist
                 else: 
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
-                    self.hdu_list = hdulist
+                    self.hdu_list = hdulist.copy()
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
