@@ -250,7 +250,7 @@ class Image():
         dq (np.array): 2-D data quality, 0: good. Other values track different causes for bad pixels and other pixel-level effects in accordance with the DRP implementation document.x
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
-        hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that contains any other extension types. 
+        hdu_list (astropy.io.fits.HDUList or dict): an astropy HDUList object that contains any other extension types, or a dict of HDUs with HDU names as keys
 
     Attributes:
         data (np.array): 2-D data for this Image
@@ -260,7 +260,7 @@ class Image():
         ext_hdr (astropy.io.fits.Header): image extension header. Generally this header will be edited/added to
         err_hdr (astropy.io.fits.Header): the error extension header
         dq_hdr (astropy.io.fits.Header): the data quality extension header
-        hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that contains any other extension types.
+        hdu_list (dict): a dictionary of HDUs that contains any other extension types, indexed by their name
         filename (str): the filename corresponding to this Image
         filedir (str): the file directory on disk where this image is to be/already saved.
         filepath (str): full path to the file on disk (if it exists)
@@ -312,10 +312,10 @@ class Image():
 
 
                 if input_hdulist is not None:
-                    self.hdu_list = input_hdulist
+                    hdu_list = input_hdulist
                 else: 
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
-                    self.hdu_list = hdulist
+                    hdu_list = hdulist
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -337,8 +337,6 @@ class Image():
             self.data = data_or_filepath
             self.filedir = "."
             self.filename = ""
-
-            # self.hdu_names = [hdu.name for hdu in self.hdu_list]
 
             if err is not None:
                 if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
@@ -363,12 +361,12 @@ class Image():
 
             #Take the input hdulist or make a blank one. 
             if input_hdulist is not None:
-                self.hdu_list = input_hdulist
+                hdu_list = input_hdulist
                 #Keep track of the names 
                 for hdu in input_hdulist:
                     self.hdu_names.append(hdu.name)
             else: 
-                self.hdu_list = fits.HDUList()
+                hdu_list = {}
 
             
             
@@ -413,6 +411,15 @@ class Image():
             self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
 
 
+        # turn hdu_list into a dictionary for pickling purposes if HDUList passed in
+        if isinstance(hdu_list, fits.HDUList):
+            hdu_dict = {}
+            for hdu in hdu_list:
+                hdu_dict[hdu.name] = hdu
+            self.hdu_list = hdu_dict
+        else:
+            # already a dict
+            self.hdu_list = hdu_list
 
 
     # create this field dynamically
@@ -447,8 +454,8 @@ class Image():
         dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
         hdulist.append(dqhdu)
 
-        for hdu in self.hdu_list:
-            hdulist.append(hdu)
+        for hdu_name in self.hdu_list:
+            hdulist.append(self.hdu_list[hdu_name])
 
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
@@ -607,7 +614,7 @@ class Image():
             raise ValueError("Extension name already exists in HDU list")
         else: 
             self.hdu_names.append(name)
-            self.hdu_list.append(new_hdu)
+            self.hdu_list[name] = new_hdu
 
 
 class Dark(Image):
