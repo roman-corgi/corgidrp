@@ -24,6 +24,27 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+def set_obstype_for_darks(
+    list_of_fits,
+    ):
+    """ Adds proper values to OBSTYPE for the NoiseMap calibration: DARKS
+    (data used to calibrate the dark noise sources).
+
+    This function is unnecessary with future data because data will have
+    the proper values in OBSTYPE. 
+
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+
+    """
+    # Folder with files
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        prihdr['OBSTYPE'] = 'DARK'
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 @pytest.mark.e2e
 def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     """End-to-End test for generating NoiseMap calibration files, starting with L1 data.
@@ -93,6 +114,10 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
         if not file.endswith('.fits'):
             continue
         stack_arr_f_l1.append(file)
+
+    # Update OBSTYPE to "DARKS"
+    set_obstype_for_darks(stack_arr_f_l1)
+
     stackl1_dat = data.Dataset(stack_arr_f_l1)
     splitl1, splitl1_params = stackl1_dat.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN'])
     stackl1_arr = []
@@ -275,6 +300,10 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
         if not file.endswith('.fits'):
             continue
         stack_arr_f_l1.append(file)
+    
+    # Update OBSTYPE to "DARKS"
+    set_obstype_for_darks(stack_arr_f_l1)
+    
     stackl1_dat = data.Dataset(stack_arr_f_l1)
     splitl1, splitl1_params = stackl1_dat.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN'])
     stackl1_arr = []
