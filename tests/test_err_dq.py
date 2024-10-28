@@ -117,6 +117,24 @@ def test_add_error_term():
     assert image_test.err_hdr["Layer_2"] == "error_noid"
     assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
+def test_rescale_error():
+    """
+    test the rescale_error function
+
+    Runs assuming tracking individual errors
+    """
+    corgidrp.track_individual_errors = True
+
+    image_test = Image('test_image0.fits')
+    scale_factor = 8.1
+    image_test.rescale_error(scale_factor, "test_factor")
+    assert np.array_equal(image_test.err[1], err1 * scale_factor)
+    scale_factor = np.ones([1024,1024]) * 8.1
+    image_test.rescale_error(scale_factor, "test_factor")
+    assert np.array_equal(image_test.err[1], err1 * scale_factor * scale_factor)
+    assert "test_factor" in str(image_test.err_hdr["HISTORY"])
+    
+
 def test_err_dq_dataset():
     """
     test the behavior of the err and data arrays in the dataset
@@ -134,6 +152,20 @@ def test_err_dq_dataset():
     assert dataset.all_dq.ndim == 3
     assert dataset.all_err.shape[2] == err.shape[0]
     assert dataset.all_dq.shape[2] == dq.shape[1]
+    
+    #test add_error_term for datasets
+    dataset.add_error_term(err1, "err_add")
+    print(dataset[0].err.shape)
+    assert dataset[0].err.shape == (2, 1024, 1024)
+    assert dataset[1].err.shape == (2, 1024, 1024)
+    assert dataset[0].err_hdr["Layer_2"] == "err_add"
+    
+    #test rescale_error for datasets
+    scale_factor = 8.1
+    dataset.rescale_error(scale_factor, "scale_test")
+    assert np.array_equal(dataset[0].err[1], err1 * scale_factor)
+    assert np.array_equal(dataset[1].err[1], err1 * scale_factor)
+    assert "scale_test" in str(dataset[1].err_hdr["HISTORY"])
 
 def test_get_masked_data():
     """
@@ -241,6 +273,7 @@ if __name__ == '__main__':
     test_err_dq_creation()
     test_err_dq_copy()
     test_add_error_term()
+    test_rescale_error()
     test_err_dq_dataset()
     test_get_masked_data()
 
