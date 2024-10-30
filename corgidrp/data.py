@@ -365,7 +365,8 @@ class Image():
 
             #Take the input hdulist or make a blank one. 
             if input_hdulist is not None:
-                self.hdu_list = input_hdulist
+                this_hdu_list = [hdu.copy() for hdu in input_hdulist]
+                self.hdu_list = fits.HDUList(this_hdu_list)
                 #Keep track of the names 
                 for hdu in input_hdulist:
                     self.hdu_names.append(hdu.name)
