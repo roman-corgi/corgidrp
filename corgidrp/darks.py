@@ -314,6 +314,35 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         Defaults to None, in which case detector_areas from detector.py is used.
 
     Returns:
+    noise_maps : corgidrp.data.DetectorNoiseMaps instance
+        Includes a 3-D stack of frames for the data, err, and the dq.
+        input data: np.stack([FPN_map, CIC_map, DC_map])
+        input err:  np.stack([FPN_std_map, C_std_map_combo, DC_std_map])
+        FPN_std_map, C_std_map_combo, and DC_std_map contain the fitting error, but C_std_map_combo includes
+        also the statistical error across the frames and accounts for any err
+        content of the individual input frames.  We include it in the CIC part
+        since it will not be scaled by EM gain or exposure time when the master
+        dark is created.  In all the err, masked pixels are accounted for in
+        the calculations.
+        input dq:   np.stack([output_dq, output_dq, output_dq])
+        unreliable_pix_map is used for the
+        output Dark's dq after assigning these pixels a flag value of 256.
+        They should have large err values.
+        The pixels that are masked for EVERY frame in all sub-stacks
+        but 4 (or less) are assigned a flag value of
+        1, which falls under the category of "Bad pixel - unspecified reason".
+        These pixels would have no reliability for dark subtraction.
+
+        The header info is taken from that of
+        one of the frames from the input datasets and can be changed via a call
+        to the DetectorNoiseMaps class if necessary.  The bias offset info is
+        found in the exthdr under these keys:
+        'B_O': bias offset
+        'B_O_ERR': bias offset error
+        'B_O_UNIT': DN
+
+
+    Info on intermediate products in this function:
     FPN_map : array-like (full frame)
         A per-pixel map of fixed-pattern noise (in deteceted EM electrons).  Any negative values
         from the fit are made positive in the end.
@@ -398,25 +427,6 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     stacks_err : array-like (full frame)
         Standard error per pixel coming from the frames in datasets used to
         calibrate the noise maps.
-    noise_maps : corgidrp.data.DetectorNoiseMaps instance
-        Includes a 3-D stack of frames for the data, err, and the dq.
-        input data: np.stack([FPN_map, CIC_map, DC_map])
-        input err:  np.stack([FPN_std_map, C_std_map_combo, DC_std_map])
-        All 3 of these include the fitting error, but C_std_map_combo includes
-        also the statistical error across the frames and accounts for any err
-        content of the individual input frames.  We include it in the CIC part
-        since it will not be scaled by EM gain or exposure time when the master
-        dark is created.  In all the err, masked pixels are accounted for in
-        the calculations.
-        input dq:   np.stack([output_dq, output_dq, output_dq])
-
-        The header info is taken from that of
-        one of the frames from the input datasets and can be changed via a call
-        to the DetectorNoiseMaps class if necessary.  The bias offset info is
-        found in the exthdr under these keys:
-        'B_O': bias offset
-        'B_O_ERR': bias offset error
-        'B_O_UNIT': DN
     """
     if detector_regions is None:
             detector_regions = detector_areas

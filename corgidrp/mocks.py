@@ -572,14 +572,14 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
 
     return dataset
 
-def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
+def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
     """
     Create simulated raw data.
 
     Args:
         filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset.  Defaults to 2.
-        obstype (str): Observation type. Defaults to "SCI".
+        arrtype (str): Observation type. Defaults to "SCI".
 
     Returns:
         corgidrp.data.Dataset:
@@ -589,22 +589,22 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    if obstype == "SCI":
+    if arrtype == "SCI":
         size = (1200, 2200)
-    elif obstype == "ENG":
+    elif arrtype == "ENG":
         size = (2200, 2200)
-    elif obstype == "CAL":
+    elif arrtype == "CAL":
         size = (2200,2200)
     else:
-        raise ValueError(f'Obstype {obstype} not in ["SCI","ENG","CAL"]')
+        raise ValueError(f'Arrtype {arrtype} not in ["SCI","ENG","CAL"]')
 
 
-    filepattern = f"sim_prescan_{obstype}"
+    filepattern = f"sim_prescan_{arrtype}"
     filepattern = filepattern+"{0:04d}.fits"
 
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers(obstype=obstype)
+        prihdr, exthdr = create_default_headers(arrtype=arrtype)
         sim_data = np.random.poisson(lam=150., size=size).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
@@ -617,12 +617,12 @@ def create_prescan_files(filedir=None, numfiles=2, obstype="SCI"):
 
     return dataset
 
-def create_default_headers(obstype="SCI"):
+def create_default_headers(arrtype="SCI"):
     """
     Creates an empty primary header and an Image extension header with some possible keywords
 
     Args:
-        obstype (str): Observation type. Defaults to "SCI".
+        arrtype (str): Observation type. Defaults to "SCI".
 
     Returns:
         tuple:
@@ -633,7 +633,7 @@ def create_default_headers(obstype="SCI"):
     prihdr = fits.Header()
     exthdr = fits.Header()
 
-    if obstype != "SCI":
+    if arrtype != "SCI":
         NAXIS1 = 2200
         NAXIS2 = 1200
     else:
@@ -643,7 +643,7 @@ def create_default_headers(obstype="SCI"):
     # fill in prihdr
     prihdr['OBSID'] = 0
     prihdr['BUILD'] = 0
-    prihdr['OBSTYPE'] = obstype
+    prihdr['OBSTYPE'] = arrtype
     prihdr['MOCK'] = True
 
     # fill in exthdr
@@ -654,7 +654,7 @@ def create_default_headers(obstype="SCI"):
     exthdr['GCOUNT'] = 1
     exthdr['BSCALE'] = 1
     exthdr['BZERO'] = 32768
-    exthdr['ARRTYPE'] = obstype # seems to be the same as OBSTYPE
+    exthdr['ARRTYPE'] = arrtype # seems to be the same as OBSTYPE
     exthdr['SCTSRT'] = '2024-01-01T12:00:00.000Z'
     exthdr['SCTEND'] = '2024-01-01T20:00:00.000Z'
     exthdr['STATUS'] = 0
