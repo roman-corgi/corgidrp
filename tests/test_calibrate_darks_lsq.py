@@ -1,5 +1,6 @@
 import os
 import pytest
+import pickle
 import warnings
 import numpy as np
 
@@ -91,6 +92,11 @@ def test_expected_results_sub():
     # statistical error (std dev across frames), so skip the assertion for CIC here
     assert(np.nanmean(noise_maps.FPN_err) < np.nanmean(noise_maps.FPN_map))
 
+    # check the noisemap can be pickled (for CTC operations)
+    pickled = pickle.dumps(noise_maps)
+    pickled_noisemap = pickle.loads(pickled)
+    assert np.all((noise_maps.data == pickled_noisemap.data))
+
     # save noise map
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     nm_filename = noise_maps.filename
@@ -99,6 +105,12 @@ def test_expected_results_sub():
     noise_maps.save(filedir=calibdir, filename=nm_filename)
     nm_filepath = os.path.join(calibdir, nm_filename)
     nm_f = DetectorNoiseMaps(nm_filepath)
+
+    # check the noisemap can be pickled (for CTC operations)
+    pickled = pickle.dumps(nm_f)
+    pickled_noisemap = pickle.loads(pickled)
+    assert np.all((nm_f.data == pickled_noisemap.data))
+
     # tests the copy method, from filepath way of creating class
     # instance, too
     nm_open = nm_f.copy()

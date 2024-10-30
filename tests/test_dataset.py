@@ -128,7 +128,7 @@ def test_split_dataset():
 
 def test_pickling():
     """
-    Test that datasets can be pickled
+    Test that datasets and images can be pickled
     """
     ###### create simulated data
     # check that simulated data folder exists, and create if not
