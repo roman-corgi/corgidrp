@@ -18,13 +18,13 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-# tvac_kgain = 8.49404981510777 #8.8145 #e/DN, result from new iit code with specified file input order
-# tvac_readnoise = 121.76070832489948 # 130.12 #e, result from new iit code with specified file input order
+# tvac_kgain: 8.49404981510777 e-/DN, result from new iit code with specified file input order; used to be #8.8145 #e/DN,
+# tvac_readnoise: 121.76070832489948 e-, result from new iit code with specified file input order; used to be 130.12 e-
 
 @pytest.mark.e2e
 def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
 
-    # run II&T code 
+    # sort and prepare raw files to run through both II&T and DRP
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')
     stack_arr2_f = []
     stack_arr_f = []
@@ -70,7 +70,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     split, _ = stack_dat.split_dataset(exthdr_keywords=['EXPTIME'])
     stack_arr = []
     for dset in split:
-        # Breaking up the one set that has 10 frames at the same exptime instead of 5 like all the rest
+        # Breaking up the one set that has 10 frames at the same exptime (instead of 5 like all the rest);
         # Making the set 2 separate sets of 5 each perhaps unfairly weights this exptime 
         # which is doubly represented now, but doing this results in the same 8.8145 number from before
         if dset.all_data.shape[0] == 10:
@@ -84,29 +84,31 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
         stack_arr.append(dset.all_data)
     stack_arr = np.stack(stack_arr)
     pass
+    #### Done ordering files for II&T and DRP
+
+    ####### ordered_filelist is simply the combination of the the two ordered stacks that are II&T inputs is the input needed for the DRP calibration
     ordered_filelist = stack_arr_f+stack_arr2_f
 
+    ########## Calling II&T code
     (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
                     binwidth=68, config_file=default_config_file, 
                     mkplot=None, verbose=None)
+    
+    ########### Now run the DRP
 
-    # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "kgain")
-
-    # make output directory if needed
+    # make DRP output directory if needed
     kgain_outputdir = os.path.join(e2eoutput_path, "l1_to_kgain_output")
     if os.path.exists(kgain_outputdir):
         shutil.rmtree(kgain_outputdir)
     os.mkdir(kgain_outputdir)
 
-    ####### Run the walker on some test_data
-
+    ####### Run the DRP walker
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
     kgain_file = os.path.join(kgain_outputdir, os.path.split(ordered_filelist[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
 
     kgain = data.KGain(kgain_file)
     
-    ##### Check against TVAC kgain, readnoise
+    ##### compare II&T ("TVAC") results with DRP results
     new_kgain = kgain.value
     new_readnoise = kgain.ext_hdr["RN"]
     print("determined kgain:", new_kgain)
