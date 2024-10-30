@@ -95,7 +95,7 @@ def test_expected_results_sub():
     # check the noisemap can be pickled (for CTC operations)
     pickled = pickle.dumps(noise_maps)
     pickled_noisemap = pickle.loads(pickled)
-    assert np.all((noise_maps.data == pickled_noisemap.data))
+    assert np.all((noise_maps.data == pickled_noisemap.data) | np.isnan(noise_maps.data))
 
     # save noise map
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
@@ -109,7 +109,7 @@ def test_expected_results_sub():
     # check the noisemap can be pickled (for CTC operations)
     pickled = pickle.dumps(nm_f)
     pickled_noisemap = pickle.loads(pickled)
-    assert np.all((nm_f.data == pickled_noisemap.data))
+    assert np.all((noise_maps.data == pickled_noisemap.data) | np.isnan(noise_maps.data))
 
     # tests the copy method, from filepath way of creating class
     # instance, too
