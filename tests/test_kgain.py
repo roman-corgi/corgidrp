@@ -1,5 +1,6 @@
 #A file to test the kgain conversion
 import os
+import pickle
 import numpy as np
 from corgidrp.mocks import create_default_headers
 import corgidrp.data as data
@@ -35,6 +36,11 @@ def test_kgain():
     assert kgain_ptc.ptc[0,0] == 1.
     assert kgain_ptc.ptc_hdr is not None
     
+    # check the kgain can be pickled (for CTC operations)
+    pickled = pickle.dumps(kgain_ptc)
+    pickled_kgain = pickle.loads(pickled)
+    assert np.all((kgain_ptc.data == pickled_kgain.data))
+
     #test copy and save
     kgain_ptc_copy = kgain_ptc.copy(copy_data = False)
     assert kgain_ptc_copy.value == gain_value[0,0]
@@ -61,6 +67,11 @@ def test_kgain():
     assert kgain_open.ptc_hdr["EXTNAME"] == "PTC"
     assert kgain_open.err_hdr is not None
     
+    # check the kgain can be pickled (for CTC operations)
+    pickled = pickle.dumps(kgain_open)
+    pickled_kgain = pickle.loads(pickled)
+    assert np.all((kgain_open.data == pickled_kgain.data))
+
     # test convert_to_electrons
     k_gain = kgain.value
 
