@@ -45,6 +45,9 @@ def test_bad_pixels():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
     col_bp_test=[12, 120, 234, 450, 678, 990]
     row_bp_test=[546, 89, 123, 243, 447, 675]
     bp_mask = mocks.create_badpixelmap_files(filedir=datadir,
@@ -108,8 +111,8 @@ def test_bad_pixels():
 
 
     # save and reload bad pixel map
-    new_bp_mask.save(filedir=datadir, filename="sim_bp_map_cal.fits")
-    new_bp_mask_2 = BadPixelMap(os.path.join(datadir, "sim_bp_map_cal.fits"))
+    new_bp_mask.save(filedir=outputdir, filename="sim_bp_map_cal.fits")
+    new_bp_mask_2 = BadPixelMap(os.path.join(outputdir, "sim_bp_map_cal.fits"))
     
     # check the bpmap can be pickled (for CTC operations)
     pickled = pickle.dumps(new_bp_mask_2)
