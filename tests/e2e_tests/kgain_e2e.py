@@ -121,8 +121,8 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     print ("error of kgain:", kgain.error)
     print ("error of readnoise:", kgain.ext_hdr["RN_ERR"])
 
-    assert np.abs(diff_kgain) == 0 #< 0.01
-    assert np.abs(diff_readnoise) == 0 #< 3
+    assert np.abs(diff_kgain) == 0
+    assert np.abs(diff_readnoise) == 0 
 
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(kgain)
