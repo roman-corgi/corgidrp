@@ -1,6 +1,7 @@
 #A file to test the non-linearity correction, including a comparison with the II&T pipeline
 import os
 import glob
+import pickle
 import numpy as np
 import corgidrp.mocks as mocks
 import corgidrp.data as data
@@ -138,6 +139,11 @@ def test_non_linearity_correction():
     non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     non_linearity_correction.save(filename = test_non_linearity_path)
 
+    # check the nonlin can be pickled (for CTC operations)
+    pickled = pickle.dumps(non_linearity_correction)
+    pickled_nonlin = pickle.loads(pickled)
+    assert np.all((non_linearity_correction.data == pickled_nonlin.data) | np.isnan(non_linearity_correction.data))
+
     # import IPython; IPython.embed()
 
     ###### create a simulated dataset that is non-linear
@@ -156,6 +162,12 @@ def test_non_linearity_correction():
 
     ######## perform non-linearity correction
     non_linearity_correction = data.NonLinearityCalibration(test_non_linearity_path)
+
+    # check the nonlin can be pickled (for CTC operations)
+    pickled = pickle.dumps(non_linearity_correction)
+    pickled_nonlin = pickle.loads(pickled)
+    assert np.all((non_linearity_correction.data == pickled_nonlin.data) | np.isnan(non_linearity_correction.data))
+
     linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
 
     #The data was generated with a ramp in the x-direction going from 10 to 65536
