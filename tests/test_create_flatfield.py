@@ -1,5 +1,6 @@
 import os
 import glob
+import pickle
 import pytest
 import numpy as np
 import corgidrp
@@ -55,6 +56,11 @@ def test_create_flatfield_neptune():
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels
     
+    # check the flat can be pickled (for CTC operations)
+    pickled = pickle.dumps(onskyflat_field)
+    pickled_flat = pickle.loads(pickled)
+    assert np.all(onskyflat_field.data == pickled_flat.data)
+
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     
     flat_filename = "sim_flatfield_"+str(planet)+"_"+str(band)+".fits"
@@ -67,6 +73,10 @@ def test_create_flatfield_neptune():
     flat_filepath = os.path.join(calibdir, flat_filename)
     onsky_flatfield = data.FlatField(flat_filepath)
 
+    # check the flat can be pickled (for CTC operations)
+    pickled = pickle.dumps(onskyflat_field)
+    pickled_flat = pickle.loads(pickled)
+    assert np.all(onskyflat_field.data == pickled_flat.data)
     
     flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset,onsky_flatfield)
     print(flatdivided_dataset[0].ext_hdr["HISTORY"])
