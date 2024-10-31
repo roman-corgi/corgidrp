@@ -111,7 +111,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
         exthdr['EMGAIN_M'] = None
     exthdr['CMDGAIN'] = None
     exthdr['KGAIN'] = None
-    exthdr['BUNIT'] = 'detected EM electrons'
+    exthdr['BUNIT'] = 'detected electrons'
     exthdr['HIERARCH DATA_LEVEL'] = None
     # simulate raw data filenames
     exthdr['DRPNFILE'] = 2
@@ -122,7 +122,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     exthdr['B_O_ERR'] = 0.001
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
     input_data = np.stack([FPN_map, CIC_map, DC_map])
     err = np.stack([[FPN_map_err, CIC_map_err, DC_map_err]])

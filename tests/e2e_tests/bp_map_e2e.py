@@ -70,7 +70,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
 
