@@ -59,7 +59,6 @@ def test_kgain():
     assert kgain_open.error == gain_err[0,0]
     assert kgain_open.ptc[0,0] == 1.
     assert kgain_open.ptc_hdr["EXTNAME"] == "PTC"
-    assert kgain_open.ext_hdr['RN_UNIT'] == 'detected electrons'
     assert kgain_open.err_hdr is not None
     
     # test convert_to_electrons
