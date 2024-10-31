@@ -306,7 +306,7 @@ def embed(data, arrtype, key, pad_val=0, detector_regions=None):
             detector_regions = detector_areas
         ff_rows = detector_regions[arrtype]['frame_rows']
         ff_cols = detector_regions[arrtype]['frame_cols']
-        full_frame = pad_val*np.ones(ff_rows, ff_cols)
+        full_frame = pad_val*np.ones((ff_rows, ff_cols))
         rows, cols, r0c0 = unpack_geom(arrtype, key, detector_regions)
         try:
             full_frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = data
