@@ -72,10 +72,11 @@ def test_ops_produces_expected_file():
     this_caldb = ops.step_1_initialize()
     ops.step_2_load_cal(this_caldb, main_cal_dir)
 
-    #Process the data. 
+    #Process the data. Ops generally won't have a template, but a template-less 
+    # test would require generating more calibrations than are necessary for just testing this functionality.
     ops.step_3_process_data(filelist, CPGS_XML_filepath, outputdir,template="l1_to_l2a_basic.json")
 
-    #Check that the output files are as expected
+    #Check that the output files are as expected. 
     output_filelist = [os.path.join(outputdir,os.path.basename(filename).replace("L1", "L2a")) for filename in filelist]
     for output_file in output_filelist:
         assert os.path.exists(output_file), f"Expected output file {output_file} does not exist."
