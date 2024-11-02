@@ -1,10 +1,12 @@
+# ulimit -n 500 to be able to open the 500 files
+
 import os
 import random
 import numpy as np
 from pathlib import Path
 import astropy.io.fits as fits
 
-from corgidrp import calsort
+from corgidrp import calsort as cl
 import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_headers
@@ -61,12 +63,13 @@ def get_cmdgain_exptime_nonlin(
 
     TBW: Rules for non-linearity plus full doc string
     """
-    cmdgain_list = nonunity_em
+    cmdgain_list = []
     exptime_list = []
     fac_change = 0
     if change_exptime:
         fac_change = 1
-    for cmdgain in cmdgain_list:
+    for emgain in nonunity_em:
+        cmdgain_list += [emgain] * len(exptime_sec)
         exptime_sec = np.array(exptime_sec) * (1 + fac_change*random.uniform(-0.1, 0.1))
         exptime_list += exptime_sec.tolist()
     return cmdgain_list, exptime_list
@@ -121,10 +124,8 @@ def make_minimal_image(
     hdul[1].header['CMDGAIN'] = cmdgain
     # Record actual exposure time
     hdul[1].header['EXPTIME'] = exptime_sec
-    filename = Path('simdata', 'CGI_EXCAM_L1_{frameid:10d}.fits')
-    breakpoint()
+    filename = str(Path('simdata', f'CGI_EXCAM_L1_{frameid:0{10}d}.fits'))
     hdul.writeto(filename, overwrite = True)
-    breakpoint()
     return filename
 
 # Main code
@@ -177,6 +178,13 @@ if len(EXPTIME_NONLIN) < 22:
     raise Exception(f'Insufficient frames ({len(EXPTIME_NONLIN)}) per unique EM value in non-linearity')
 if len(CMDGAIN_NONLIN) < 11:
     raise Exception(f'Insufficient values of distinct EM Values ({len(EXPTIME_NONLIN)}) in non-linearity')
+if np.sum(np.array(EXPTIME_NONLIN) == EXPTIME_NONLIN[-1]) != 2:
+    raise Exception('Last exposure time must be repeated once')
+if len(set(EXPTIME_NONLIN)) != len(EXPTIME_NONLIN) - 1:
+    raise Exception('Only one exposure time can be repeated in non-linearity')
+if EXPTIME_NONLIN[-1] in EXPTIME_NONLIN[0:5] is False:
+    raise Exception('The last exposure time must be present at the beginning of the exposure times in non-linearity')
+
 # Values
 # w/o changing exposure times among non-unity EM gains
 cmdgain_nonlin_wo_change, exptime_nonlin_wo_change = get_cmdgain_exptime_nonlin(
@@ -186,6 +194,8 @@ cmdgain_nonlin_wo_change, exptime_nonlin_wo_change = get_cmdgain_exptime_nonlin(
     )
 if len(cmdgain_nonlin_wo_change) != len(exptime_nonlin_wo_change):
     raise Exception('Inconsistent lengths in non-linearity')
+# Total number of frames
+n_nonlin_wo_changes_total = len(cmdgain_nonlin_wo_change)
 
 # changing exposure times among non-unity EM gains
 cmdgain_nonlin_w_change, exptime_nonlin_w_change = get_cmdgain_exptime_nonlin(
@@ -195,6 +205,8 @@ cmdgain_nonlin_w_change, exptime_nonlin_w_change = get_cmdgain_exptime_nonlin(
     )
 if len(cmdgain_nonlin_w_change) != len(exptime_nonlin_w_change):
     raise Exception('Inconsistent lengths in non-linearity')
+# Total number of frames
+n_nonlin_w_changes_total = len(cmdgain_nonlin_w_change)
 
 # EM-gain vs DAC (The amount of data is illustrative. It was taken from a draft
 # of the Commissioning Activity Report)
@@ -220,38 +232,80 @@ cmdgain_emgain, exptime_emgain = get_cmdgain_exptime_emgain(
     )
 if len(cmdgain_emgain) != len(exptime_emgain):
     raise Exception(f'Inconsistent lengths in em-gain vs dac')
+# Total number of frames
+n_emgain_total = len(cmdgain_emgain)
 
-
-# Dataset
+# DRP Dataset
 # Create directory for temporary data files (not tracked by git)
 if not os.path.exists(Path('simdata')):
-    os.mkdir((Path('simdata'))
+    os.mkdir(Path('simdata'))
 
 # Loop over the two cases of non-linearity
 change_exptime = [False, True]
 idx_frame = 0
 for change in change_exptime:
+    filename_list = []
+    if change == 0:
+        cmdgain_nonlin = cmdgain_nonlin_wo_change
+        exptime_nonlin = exptime_nonlin_wo_change
+    elif change == 1:
+        cmdgain_nonlin = cmdgain_nonlin_w_change
+        exptime_nonlin = exptime_nonlin_w_change
+    else:
+        raise Exception('Undefined choice for non-linearity')
+    n_nonlin_total = len(exptime_nonlin)
     # Mean frame
-    for i_f in range(
-    
+    print('Generating frames for mean frame')
+    for i_f in range(n_mean_frame_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_mean_frame[i_f],
+            exptime_sec=exptime_mean_frame[i_f],
+            frameid=idx_frame,
+            )
+        filename_list += [filename]
         idx_frame += 1
     # K-gain
-    
+    print('Generating frames for k-gain')
+    for i_f in range(n_kgain_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_kgain[i_f],
+            exptime_sec=exptime_kgain[i_f],
+            frameid=idx_frame,
+            )
+        filename_list += [filename]
         idx_frame += 1
     # Non-linearity
-
+    print('Generating frames for non-linearity')
+    for i_f in range(n_nonlin_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_nonlin[i_f],
+            exptime_sec=exptime_nonlin[i_f],
+            frameid=idx_frame,
+            )
+        filename_list += [filename]
         idx_frame += 1
     # EM-gain
-   
+    print('Generating frames for em-gain')
+    for i_f in range( n_emgain_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_emgain[i_f],
+            exptime_sec=exptime_emgain[i_f],
+            frameid=idx_frame,
+            )
+        filename_list += [filename]
         idx_frame += 1
 
+    # Shuffle file order randomnly
+    random.shuffle(filename_list)
     # Create Dataset
-
-    # Check it has filename, headers set correctly, etc
-
+    dataset_cal = data.Dataset(filename_list)
     # Erase FITS files
-
+    for file in filename_list:
+        os.remove(file)
+    # Apply sorting algorithm and check results (maybe output of sorting is
+    # mean frame and the type used as input? Instead of them all. Then, check
+    # those properties
+    cl.calsort(dataset_cal)
 
 breakpoint()
-
 
