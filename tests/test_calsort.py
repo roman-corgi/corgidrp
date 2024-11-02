@@ -1,5 +1,3 @@
-# ulimit -n 500 to be able to open the 500 files
-
 import os
 import random
 import numpy as np
@@ -7,7 +5,7 @@ from pathlib import Path
 import astropy.io.fits as fits
 
 from corgidrp import calsort as cl
-import corgidrp.data as data
+#import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_headers
 
@@ -297,15 +295,13 @@ for change in change_exptime:
 
     # Shuffle file order randomnly
     random.shuffle(filename_list)
-    # Create Dataset
-    dataset_cal = data.Dataset(filename_list)
-    # Erase FITS files
-    for file in filename_list:
-        os.remove(file)
+
     # Apply sorting algorithm and check results (maybe output of sorting is
     # mean frame and the type used as input? Instead of them all. Then, check
     # those properties
-    cl.calsort(dataset_cal)
+    cal_filename_list = cl.calsort(filename_list)
 
-breakpoint()
+    # Erase FITS files
+    for file in filename_list:
+        os.remove(file)
 
