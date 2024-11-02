@@ -299,7 +299,11 @@ for change in change_exptime:
     # Apply sorting algorithm and check results (maybe output of sorting is
     # mean frame and the type used as input? Instead of them all. Then, check
     # those properties
-    cal_filename_list = cl.calsort(filename_list)
+    mean_frame_list, cal_filename_list = cl.calsort(filename_list, cal_type='k-gain')
+
+    mean_frame_list, cal_filename_list = cl.calsort(filename_list, cal_type='non-lin')
+
+    mean_frame_list, cal_filename_list = cl.calsort(filename_list, cal_type='em-gain')
 
     # Erase FITS files
     for file in filename_list:
