@@ -1,5 +1,6 @@
 import os
 import glob
+import pickle
 import pytest
 import numpy as np
 import corgidrp
@@ -80,6 +81,12 @@ def test_dark_sub():
     # load in the dark
     dark_filepath = os.path.join(calibdir, dark_filename)
     new_dark = data.Dark(dark_filepath)
+
+    # check the dark can be pickled (for CTC operations)
+    pickled = pickle.dumps(new_dark)
+    pickled_dark = pickle.loads(pickled)
+    assert np.all(new_dark.data == pickled_dark.data)
+
     # subtract darks from itself; also saves to testcalib folder
     darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
     assert(dark_filename in str(darkest_dataset[0].ext_hdr["HISTORY"]))
@@ -135,6 +142,11 @@ def test_dark_sub():
     nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(nm_dataset0.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
+
+    # check the dark can be pickled (for CTC operations)
+    pickled = pickle.dumps(master_dark)
+    pickled_dark = pickle.loads(pickled)
+    assert np.all(master_dark.data == pickled_dark.data)
 
     corgidrp.track_individual_errors = old_err_tracking
 

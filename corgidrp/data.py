@@ -310,10 +310,12 @@ class Image():
 
 
                 if input_hdulist is not None:
-                    self.hdu_list = input_hdulist
+                    this_hdu_list = [hdu.copy() for hdu in input_hdulist]
                 else: 
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
-                    self.hdu_list = hdulist
+                    this_hdu_list = [hdu.copy() for hdu in hdulist]
+                self.hdu_list = fits.HDUList(this_hdu_list)
+                
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -361,7 +363,8 @@ class Image():
 
             #Take the input hdulist or make a blank one. 
             if input_hdulist is not None:
-                self.hdu_list = input_hdulist
+                this_hdu_list = [hdu.copy() for hdu in input_hdulist]
+                self.hdu_list = fits.HDUList(this_hdu_list)
                 #Keep track of the names 
                 for hdu in input_hdulist:
                     self.hdu_names.append(hdu.name)
