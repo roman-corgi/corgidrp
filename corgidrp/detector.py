@@ -261,7 +261,7 @@ detector_areas= {
     }
 
 
-def slice_section(frame, obstype, key, detector_regions=None):
+def slice_section(frame, arrtype, key, detector_regions=None):
 
     """
     Slice 2d section out of frame
@@ -270,7 +270,7 @@ def slice_section(frame, obstype, key, detector_regions=None):
 
     Args:
         frame (np.ndarray): Full frame consistent with size given in frame_rows, frame_cols
-        obstype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+        arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         key (str): Keyword referencing section to be sliced; must exist in detector_areas
         detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
@@ -279,22 +279,46 @@ def slice_section(frame, obstype, key, detector_regions=None):
     """
     if detector_regions is None:
             detector_regions = detector_areas
-    rows = detector_regions[obstype][key]['rows']
-    cols = detector_regions[obstype][key]['cols']
-    r0c0 = detector_regions[obstype][key]['r0c0']
+    rows = detector_regions[arrtype][key]['rows']
+    cols = detector_regions[arrtype][key]['cols']
+    r0c0 = detector_regions[arrtype][key]['r0c0']
 
     section = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
     if section.size == 0:
         raise Exception('Corners invalid. Tried to slice shape of {0} from {1} to {2} rows and {3} columns'.format(frame.shape, r0c0, rows, cols))
     return section
 
+def embed(data, arrtype, key, pad_val=0, detector_regions=None):
+        '''
+        Embed subframe data into a full frame with a specified value per pixel everywhere else. 
+        
+        Args:
+            data (np.ndarray):  Subframe data to embed
+            arrtype (str): Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
+            key (str): Keyword referencing section to be sliced; must exist in detector_areas
+            pad_val (float): Value to fill in each pixel outside the subframe region
+            detector_regions (dict): a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
 
+        Returns:
+            np.ndarray: a 2D array of the full detector area with embedded subframe
+        '''
+        if detector_regions is None:
+            detector_regions = detector_areas
+        ff_rows = detector_regions[arrtype]['frame_rows']
+        ff_cols = detector_regions[arrtype]['frame_cols']
+        full_frame = pad_val*np.ones((ff_rows, ff_cols))
+        rows, cols, r0c0 = unpack_geom(arrtype, key, detector_regions)
+        try:
+            full_frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = data
+        except Exception:
+            raise Exception('Data does not fit in selected section')
+        return full_frame
 
-def unpack_geom(obstype, key, detector_regions=None):
+def unpack_geom(arrtype, key, detector_regions=None):
     """Safely check format of geom sub-dictionary and return values.
 
     Args:
-        obstype: str
+        arrtype: str
         Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         key: str
         Desired section
@@ -311,19 +335,19 @@ def unpack_geom(obstype, key, detector_regions=None):
     """
     if detector_regions is None:
         detector_regions = detector_areas
-    coords = detector_regions[obstype][key]
+    coords = detector_regions[arrtype][key]
     rows = coords['rows']
     cols = coords['cols']
     r0c0 = coords['r0c0']
 
     return rows, cols, r0c0
 
-def imaging_area_geom(obstype, detector_regions=None):
+def imaging_area_geom(arrtype, detector_regions=None):
     """Return geometry of imaging area (including shielded pixels)
     in reference to full frame.  Different from normal image area.
 
     Args:
-        obstype: str
+        arrtype: str
         Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         detector_regions: dict
         a dictionary of detector geometry properties.  Keys should be as found in detector_areas in detector.py.  Defaults to that dictionary.
@@ -339,20 +363,20 @@ def imaging_area_geom(obstype, detector_regions=None):
     """
     if detector_regions is None:
         detector_regions = detector_areas
-    _, cols_pre, _ = unpack_geom(obstype, 'prescan', detector_regions)
-    _, cols_serial_ovr, _ = unpack_geom(obstype, 'serial_overscan', detector_regions)
-    rows_parallel_ovr, _, _ = unpack_geom(obstype, 'parallel_overscan', detector_regions)
+    _, cols_pre, _ = unpack_geom(arrtype, 'prescan', detector_regions)
+    _, cols_serial_ovr, _ = unpack_geom(arrtype, 'serial_overscan', detector_regions)
+    rows_parallel_ovr, _, _ = unpack_geom(arrtype, 'parallel_overscan', detector_regions)
     #_, _, r0c0_image = self._unpack_geom('image')
-    fluxmap_rows, _, r0c0_image = unpack_geom(obstype, 'image', detector_regions)
+    fluxmap_rows, _, r0c0_image = unpack_geom(arrtype, 'image', detector_regions)
 
-    rows_im = detector_regions[obstype]['frame_rows'] - rows_parallel_ovr
-    cols_im = detector_regions[obstype]['frame_cols'] - cols_pre - cols_serial_ovr
+    rows_im = detector_regions[arrtype]['frame_rows'] - rows_parallel_ovr
+    cols_im = detector_regions[arrtype]['frame_cols'] - cols_pre - cols_serial_ovr
     r0c0_im = r0c0_image.copy()
     r0c0_im[0] = r0c0_im[0] - (rows_im - fluxmap_rows)
 
     return rows_im, cols_im, r0c0_im
 
-def imaging_slice(obstype, frame, detector_regions=None):
+def imaging_slice(arrtype, frame, detector_regions=None):
     """Select only the real counts from full frame and exclude virtual.
     Includes shielded pixels.
 
@@ -360,7 +384,7 @@ def imaging_slice(obstype, frame, detector_regions=None):
     acting on only the image frame.
 
     Args:
-        obstype: str
+        arrtype: str
         Keyword referencing the observation type (e.g. 'ENG' or 'SCI')
         frame: array_like
         Input frame
@@ -372,12 +396,12 @@ def imaging_slice(obstype, frame, detector_regions=None):
         Imaging slice
 
     """
-    rows, cols, r0c0 = imaging_area_geom(obstype, detector_regions)
+    rows, cols, r0c0 = imaging_area_geom(arrtype, detector_regions)
     sl = frame[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols]
     return sl
 
 def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
-                   cosm_tail, mode='image'):
+                   cosm_tail, mode='image', detector_regions=None, arrtype='SCI'):
     """Identify and remove saturated cosmic ray hits and tails.
 
     Use sat_thresh (interval 0 to 1) to set the threshold above which cosmics
@@ -422,6 +446,11 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
             If 'full', a full-frame input is assumed, and if the input tail length
             is longer than the length to the end of the full-frame row, the masking
             continues onto the next row.  Defaults to 'image'.
+        detector_regions: (dict):  
+            A dictionary of detector geometry properties.  Keys should be as 
+            found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        arrtype (string):
+            'ARRTYPE' from the header associated with the input data cube.  Defaults to 'SCI'.
 
     Returns:
         array_like, int:
@@ -440,9 +469,26 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
      ......|<-plateau->|<------------------tail---------->|.........
 
     B Nemati and S Miller - UAH - 02-Oct-2018
+    Kevin Ludwick - UAH - 2024
 
     """
     mask = np.zeros(cube.shape, dtype=int)
+
+    if detector_regions is None:
+        detector_regions = detector_areas
+
+    if mode=='full':
+        im_num_rows = detector_regions[arrtype]['image']['rows']
+        im_num_cols = detector_regions[arrtype]['image']['cols']
+        im_starting_row = detector_regions[arrtype]['image']['r0c0'][0]
+        im_ending_row = im_starting_row + im_num_rows
+        im_starting_col = detector_regions[arrtype]['image']['r0c0'][1]
+        im_ending_col = im_starting_col + im_num_cols
+    else:
+        im_starting_row = 0
+        im_ending_row = mask.shape[1] - 1 # - 1 to get the index, not size
+        im_starting_col = 0
+        im_ending_col = mask.shape[2] - 1 # - 1 to get the index, not size
 
     # Do a cheap prefilter for rows that don't have anything bright
     max_rows = np.max(cube, axis=-1,keepdims=True)
@@ -450,7 +496,8 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
 
     for j,i in ji_streak_rows:
         row = cube[j,i]
-
+        if i < im_starting_row or i > im_ending_row:
+            continue
         # Find if and where saturated plateaus start in streak row
         i_begs = find_plateaus(row, fwc, sat_thresh, plat_thresh, cosm_filter)
 
@@ -459,6 +506,8 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
         ex_l = np.array([])
         if i_begs is not None:
             for i_beg in i_begs:
+                if i_beg < im_starting_col or i_beg > im_ending_col:
+                    continue
                 # implement cosm_tail
                 if i_beg+cosm_filter+cosm_tail+1 > mask.shape[2]:
                     ex_l = np.append(ex_l,
@@ -468,10 +517,11 @@ def flag_cosmics(cube, fwc, sat_thresh, plat_thresh, cosm_filter, cosm_box,
                                 mask.shape[2]))
                 mask[j, i, i_beg:streak_end] = 1
                 # implement cosm_box
-                st_row = max(i-cosm_box, 0)
-                end_row = min(i+cosm_box+1, mask.shape[1])
-                st_col = max(i_beg-cosm_box, 0)
-                end_col = min(i_beg+cosm_box+1, mask.shape[2])
+                # can't have cosm_box appear in non-image pixels
+                st_row = max(i-cosm_box, im_starting_row)
+                end_row = min(i+cosm_box+1, im_ending_row+1)
+                st_col = max(i_beg-cosm_box, im_starting_col)
+                end_col = min(i_beg+cosm_box+1, im_ending_col+1)
                 mask[j, st_row:end_row, st_col:end_col] = 1
                 pass
 

@@ -770,6 +770,7 @@ def calibrate_kgain(dataset_kgain,
     rn_err_DN = np.std(rn_gauss)
     rn_err_e = np.sqrt((kgain*rn_err_DN)**2 + (mean_rn_gauss_DN*kgain_err)**2)
     exthd['RN_ERR'] = rn_err_e
+    exthd['RN_UNIT'] = 'detected electrons'
     
     # Update history
     exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"

@@ -640,7 +640,7 @@ class Dark(Image):
             self.ext_hdr['BUNIT'] = 'detected electrons'
 
             # log all the data that went into making this calibration file
-            if 'DRPNFILE' not in ext_hdr.keys():
+            if 'DRPNFILE' not in ext_hdr.keys() and input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
 
             # add to history
@@ -648,8 +648,9 @@ class Dark(Image):
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_dark.fits".format(orig_input_filename)
+            if input_dataset is not None:
+                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                self.filename = "{0}_dark.fits".format(orig_input_filename)
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'detected electrons'
@@ -895,7 +896,7 @@ class KGain(Image):
                 self.filename = "{0}_kgain.fits".format(orig_input_filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected EM electrons/DN'
+            self.ext_hdr['BUNIT'] = 'detected electrons/DN'
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
 
@@ -1095,7 +1096,7 @@ class DetectorNoiseMaps(Image):
                 raise ValueError("This appears to be a new DetectorNoiseMaps instance. The dataset of input files needs to be passed in to the input_dataset keyword to record the history of the files that made the calibration products.")
 
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected EM electrons'
+            self.ext_hdr['BUNIT'] = 'detected electrons'
             # bias offset
             self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
 
@@ -1110,7 +1111,7 @@ class DetectorNoiseMaps(Image):
             self.filename = "{0}_DetectorNoiseMaps.fits".format(orig_input_filename)
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'detected EM electrons'
+            self.err_hdr['BUNIT'] = 'detected electrons'
 
         # double check that this is actually a DetectorNoiseMaps file that got read in
         # since if only a filepath was passed in, any file could have been read in
