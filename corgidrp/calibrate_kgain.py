@@ -286,10 +286,11 @@ def calibrate_kgain(dataset_kgain,
     kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
     is plotted from the std dev and mean values from the bins. 
+
     Args:
       dataset_kgain (corgidrp.Dataset): The frames in the dataset are
         bias-subtracted. The dataset contains frames belonging to two different
-        sets: Mean frame and a large array of unity gain frames.
+        sets -- Mean frame and a large array of unity gain frames.
         Mean frame: Unity gain frames with constant exposure time. These frames
         are used to create a mean pupil image. The mean frame is used to select
         pixels in each frame of the large array of unity gain frames (see next)
@@ -310,7 +311,7 @@ def calibrate_kgain(dataset_kgain,
         within this category. The 110 frames consisted of 22 subsets, each with
         5 frames. All 5 frames had the same exposure time. The exposure times in
         TVAC in seconds were, each repeated 5 times to collect 5 frames in each
-        subset: 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
+        subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
         6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
         13.846, 14.615, 15.385, and 1.538 (again).
       n_cal (int):

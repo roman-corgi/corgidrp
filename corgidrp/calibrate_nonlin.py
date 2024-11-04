@@ -128,12 +128,13 @@ def calibrate_nonlin(dataset_nl,
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
+
     Args:
       dataset_nl (corgidrp.Dataset): The frames in the dataset are
         bias-subtracted. The dataset contains frames belonging to two different
-        sets: Mean frame, a large array of unity gain frames, and set with
+        sets -- Mean frame, a large array of unity gain frames, and set with
         non-unity gain frames.
-        Mean frame: Unity gain frames with constant exposure time. These frames
+        Mean frame -- Unity gain frames with constant exposure time. These frames
         are used to create a mean pupil image. The mean frame is used to select
         pixels in each frame of the large array of unity gain frames (see next)
         to calculate its mean signal. In general, it is expected that at least
@@ -153,7 +154,7 @@ def calibrate_nonlin(dataset_nl,
         within this category. The 110 frames consisted of 22 subsets, each with
         5 frames. All 5 frames had the same exposure time. The exposure times in
         TVAC in seconds were, each repeated 5 times to collect 5 frames in each
-        subset: 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
+        subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
         6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
         13.846, 14.615, 15.385, and 1.538 (again).
         Set with non-unity gain frames:: a set of subsets of frames. All frames
