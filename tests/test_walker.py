@@ -29,7 +29,7 @@ def test_autoreducing():
 
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -110,7 +110,7 @@ def test_auto_template_identification():
         os.mkdir(outputdir)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -164,7 +164,7 @@ def test_auto_template_identification():
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -303,7 +303,7 @@ def test_skip_missing_calib():
         os.mkdir(outputdir)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_200_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -368,7 +368,7 @@ def test_skip_missing_optional_calib():
         os.mkdir(outputdir)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_200_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -410,7 +410,7 @@ def test_jit_calibs():
 
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
