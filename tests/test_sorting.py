@@ -4,8 +4,8 @@ import numpy as np
 from pathlib import Path
 import astropy.io.fits as fits
 
-from corgidrp import calsort as cl
-#import corgidrp.data as data
+from corgidrp import sorting as calsort
+import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_headers
 
@@ -296,14 +296,17 @@ for change in change_exptime:
     # Shuffle file order randomnly
     random.shuffle(filename_list)
 
+    # Create Dataset
+    dataset_cal = data.Dataset(filename_list)
+
     # Apply sorting algorithm and check results (maybe output of sorting is
     # mean frame and the type used as input? Instead of them all. Then, check
     # those properties
-    mean_frame_list, cal_filename_list = cl.calsort(filename_list, cal_type='k-gain')
+    dataset_kgain = calsort.sorting(dataset_cal, cal_type='k-gain')
 
-    mean_frame_list, cal_filename_list = cl.calsort(filename_list, cal_type='non-lin')
+    dataset_nonlin = calsort.sorting(dataset_cal, cal_type='non-lin')
 
-    mean_frame_list, cal_filename_list = cl.calsort(filename_list, cal_type='em-gain')
+    dataset_emgain = calsort.sorting(dataset_cal, cal_type='em-gain')
 
     # Erase FITS files
     for file in filename_list:

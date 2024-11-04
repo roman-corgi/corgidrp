@@ -1,11 +1,11 @@
-# ulimit -n 500 to be able to open the 500 files
+# Mac: ulimit -n 500 to be able to open the 500 files
 
 import numpy as np
 
 import corgidrp.data as data
 
-def calsort(
-    filename_list,
+def sorting(
+    dataset_in,
     cal_type=None):
     """ TBW
 
@@ -13,10 +13,10 @@ def calsort(
 
     Returns:
     """
-    # Create Dataset
-    dataset_cal = data.Dataset(filename_list)
+    # Copy dataset
+    dataset_cp = dataset_in.copy()
     # Split by CMDGAIN
-    split_cmdgain = dataset_cal.split_dataset(exthdr_keywords=['CMDGAIN'])
+    split_cmdgain = dataset_cp.split_dataset(exthdr_keywords=['CMDGAIN'])
     # Mean frame: split by EXPTIME
     idx_unity = np.where(np.array(split_cmdgain[1])==1)[0][0]
     split_exptime = split_cmdgain[0][idx_unity].split_dataset(exthdr_keywords=['EXPTIME'])
