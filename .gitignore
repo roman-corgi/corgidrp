@@ -22,6 +22,8 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+src/ 
+# II&T code for e2e tests may install in src/ if package by same name already installed in your env library
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -81,4 +83,5 @@ tests/e2e_tests/*/*.json
 figures/
 tests/figures/
 tests/e2e_tests/*/*.png
+tests/e2e_tests/*_output
 tests/test_data/simastrom/guesses.csv

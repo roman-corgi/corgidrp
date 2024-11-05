@@ -139,7 +139,6 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     dark current is so high that it stands far above other noise that is
     not smeared upon readout, such as clock-induced charge, 
     fixed-pattern noise, and read noise.
-    - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -275,7 +274,6 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     dark current is so high that it stands far above other noise that is
     not smeared upon readout, such as clock-induced charge, 
     fixed-pattern noise, and read noise.
-    - have been divided by EM gain.
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -316,14 +314,43 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         Defaults to None, in which case detector_areas from detector.py is used.
 
     Returns:
+    noise_maps : corgidrp.data.DetectorNoiseMaps instance
+        Includes a 3-D stack of frames for the data, err, and the dq.
+        input data: np.stack([FPN_map, CIC_map, DC_map])
+        input err:  np.stack([FPN_std_map, C_std_map_combo, DC_std_map])
+        FPN_std_map, C_std_map_combo, and DC_std_map contain the fitting error, but C_std_map_combo includes
+        also the statistical error across the frames and accounts for any err
+        content of the individual input frames.  We include it in the CIC part
+        since it will not be scaled by EM gain or exposure time when the master
+        dark is created.  In all the err, masked pixels are accounted for in
+        the calculations.
+        input dq:   np.stack([output_dq, output_dq, output_dq])
+        unreliable_pix_map is used for the
+        output Dark's dq after assigning these pixels a flag value of 256.
+        They should have large err values.
+        The pixels that are masked for EVERY frame in all sub-stacks
+        but 4 (or less) are assigned a flag value of
+        1, which falls under the category of "Bad pixel - unspecified reason".
+        These pixels would have no reliability for dark subtraction.
+
+        The header info is taken from that of
+        one of the frames from the input datasets and can be changed via a call
+        to the DetectorNoiseMaps class if necessary.  The bias offset info is
+        found in the exthdr under these keys:
+        'B_O': bias offset
+        'B_O_ERR': bias offset error
+        'B_O_UNIT': DN
+
+
+    Info on intermediate products in this function:
     FPN_map : array-like (full frame)
-        A per-pixel map of fixed-pattern noise (in deteceted EM electrons).  Any negative values
+        A per-pixel map of fixed-pattern noise (in deteceted electrons).  Any negative values
         from the fit are made positive in the end.
     CIC_map : array-like (full frame)
-        A per-pixel map of EXCAM clock-induced charge (in deteceted EM electrons). Any negative
+        A per-pixel map of EXCAM clock-induced charge (in deteceted electrons). Any negative
         values from the fit are made positive in the end.
     DC_map : array-like (full frame)
-        A per-pixel map of dark current (in deteceted EM electrons/s). Any negative values
+        A per-pixel map of dark current (in deteceted electrons/s). Any negative values
         from the fit are made positive in the end.
     bias_offset : float
         The median for the residual FPN+CIC in the region where bias was
@@ -335,22 +362,22 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         The lower bound of bias offset, accounting for error in input datasets
         and the fit.
     FPN_image_map : array-like (image area)
-        A per-pixel map of fixed-pattern noise in the image area (in deteceted EM electrons).
+        A per-pixel map of fixed-pattern noise in the image area (in deteceted electrons).
         Any negative values from the fit are made positive in the end.
     CIC_image_map : array-like (image area)
         A per-pixel map of EXCAM clock-induced charge in the image area
-        (in deteceted EM electrons). Any negative values from the fit are made positive in the end.
+        (in deteceted electrons). Any negative values from the fit are made positive in the end.
     DC_image_map : array-like (image area)
-        A per-pixel map of dark current in the image area (in deteceted EM electrons/s).
+        A per-pixel map of dark current in the image area (in deteceted electrons/s).
         Any negative values from the fit are made positive in the end.
     FPNvar : float
-        Variance of fixed-pattern noise map (in deteceted EM electrons).
+        Variance of fixed-pattern noise map (in deteceted electrons).
     CICvar : float
-        Variance of clock-induced charge map (in deteceted EM electrons).
+        Variance of clock-induced charge map (in deteceted electrons).
     DCvar : float
-        Variance of dark current map (in deteceted EM electrons).
+        Variance of dark current map (in deteceted electrons).
     read_noise : float
-        Read noise estimate from the noise profile of a mean frame (in deteceted EM electrons).
+        Read noise estimate from the noise profile of a mean frame (in deteceted electrons).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
         lower than read noise variance, thus making reading it off doable.
@@ -400,25 +427,6 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     stacks_err : array-like (full frame)
         Standard error per pixel coming from the frames in datasets used to
         calibrate the noise maps.
-    noise_maps : corgidrp.data.DetectorNoiseMaps instance
-        Includes a 3-D stack of frames for the data, err, and the dq.
-        input data: np.stack([FPN_map, CIC_map, DC_map])
-        input err:  np.stack([FPN_std_map, C_std_map_combo, DC_std_map])
-        All 3 of these include the fitting error, but C_std_map_combo includes
-        also the statistical error across the frames and accounts for any err
-        content of the individual input frames.  We include it in the CIC part
-        since it will not be scaled by EM gain or exposure time when the master
-        dark is created.  In all the err, masked pixels are accounted for in
-        the calculations.
-        input dq:   np.stack([output_dq, output_dq, output_dq])
-
-        The header info is taken from that of
-        one of the frames from the input datasets and can be changed via a call
-        to the DetectorNoiseMaps class if necessary.  The bias offset info is
-        found in the exthdr under these keys:
-        'B_O': bias offset
-        'B_O_ERR': bias offset error
-        'B_O_UNIT': DN
     """
     if detector_regions is None:
             detector_regions = detector_areas
@@ -714,11 +722,11 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         exthdr['EMGAIN_M'] = None
     exthdr['CMDGAIN'] = None
     exthdr['KGAIN'] = None
-    exthdr['BUNIT'] = 'detected EM electrons'
+    exthdr['BUNIT'] = 'detected electrons'
     exthdr['HIERARCH DATA_LEVEL'] = None
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
 
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
 
@@ -737,7 +745,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
                            input_err, input_dq, err_hdr=err_hdr)
     
     l2a_data_filename = dataset.copy()[0].filename
-    noise_maps.filename =  l2a_data_filename[:24] + '_DetectorNoiseMaps.fits'
+    noise_maps.filename =  l2a_data_filename[:-5] + '_DetectorNoiseMaps.fits'
 
     return noise_maps
 
@@ -752,7 +760,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         in the course of acquisition, alignment, and HOWFSC.  Better to take data
         sets that don't vary.
 
-        Output is a bias-subtracted, gain-divided master dark in electrons.
+        Output is a bias-subtracted, gain-divided master dark in detected electrons.
         (Bias is inherently subtracted as we don't use it as
         one of the building blocks to assemble the dark frame.)
 
