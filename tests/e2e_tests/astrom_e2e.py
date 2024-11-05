@@ -55,7 +55,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     for dark in os.listdir(noise_characterization_path):
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
-            hdulist[0].header['OBSTYPE'] = "ASTROM"
+            hdulist[0].header['VISTYPE'] = "BORESITE"
             # setting SNR to ~250 (arbitrary SNR)
             scaled_image = ((250 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))

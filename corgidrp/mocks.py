@@ -643,7 +643,7 @@ def create_default_headers(arrtype="SCI"):
     # fill in prihdr
     prihdr['OBSID'] = 0
     prihdr['BUILD'] = 0
-    prihdr['OBSTYPE'] = arrtype
+    # prihdr['OBSTYPE'] = arrtype
     prihdr['MOCK'] = True
 
     # fill in exthdr
@@ -654,7 +654,7 @@ def create_default_headers(arrtype="SCI"):
     exthdr['GCOUNT'] = 1
     exthdr['BSCALE'] = 1
     exthdr['BZERO'] = 32768
-    exthdr['ARRTYPE'] = arrtype # seems to be the same as OBSTYPE
+    exthdr['ARRTYPE'] = arrtype 
     exthdr['SCTSRT'] = '2024-01-01T12:00:00.000Z'
     exthdr['SCTEND'] = '2024-01-01T20:00:00.000Z'
     exthdr['STATUS'] = 0
@@ -988,7 +988,7 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
     # load as an image object
     frames = []
     prihdr, exthdr = create_default_headers()
-    prihdr['OBSTYPE'] = 'ASTROM'
+    prihdr['OBSTYPE'] = 'BORESITE'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
 
