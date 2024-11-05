@@ -187,17 +187,19 @@ def guess_template(dataset):
     """
     image = dataset[0] # first image for convenience
     if image.ext_hdr['DATA_LEVEL'] == "L1":
-        if image.pri_hdr['OBSTYPE'] == "ENG":
+        if image.pri_hdr['VISTYPE'][:3] == "ENG":
+            # first three letters are ENG
+            # for either ENGPUPIL or ENGIMGAGE
             recipe_filename = "l1_to_l2a_eng.json"
-        elif image.pri_hdr['OBSTYPE'] == "ASTROM":
+        elif image.pri_hdr['VISTYPE'] == "BORESITE":
             recipe_filename = "l1_to_boresight.json"
-        elif image.pri_hdr['OBSTYPE'] == "FLT":
+        elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['OBSTYPE'] == "NONLIN":
             recipe_filename = "l1_to_l2a_nonlin.json"
         elif image.pri_hdr['OBSTYPE'] == "KGAIN":
             recipe_filename = "l1_to_kgain.json"
-        elif image.pri_hdr['OBSTYPE'] == "DARK":
+        elif image.pri_hdr['VISTYPE'] == "DARK":
             recipe_filename = "l1_to_l2a_noisemap.json"
         elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
             # Disambiguate between NONLIN and KGAIN
@@ -213,7 +215,7 @@ def guess_template(dataset):
         else:
             recipe_filename = "l1_to_l2b.json"
     elif image.ext_hdr['DATA_LEVEL'] == "L2a":
-        if image.pri_hdr['OBSTYPE'] == "DARK":
+        if image.pri_hdr['VISTYPE'] == "DARK":
             recipe_filename = "l2a_to_l2a_noisemap.json"
         else:
             raise NotImplementedError()
