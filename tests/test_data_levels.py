@@ -12,7 +12,7 @@ def test_l1_to_l4():
     """
     Tests a successful upgrade of L1 to L4 in bookkeeping only
     """
-    l1_dataset = mocks.create_prescan_files(obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
     # edit filenames
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
