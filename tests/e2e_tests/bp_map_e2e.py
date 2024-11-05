@@ -70,7 +70,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
 
@@ -255,6 +255,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     # Create a dark object and save it
     master_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                             input_dataset=mock_input_dataset)
+
     master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
@@ -314,7 +315,8 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
+    # tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
     outputdir = thisfile_dir
 
     # Argument parser setup
