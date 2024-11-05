@@ -70,7 +70,7 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -79,6 +79,13 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     noise_map.save(filedir=l2a_outputdir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
+    # KGain
+    kgain_val = 8.7
+    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                    input_dataset=mock_input_dataset)
+    kgain.save(filedir=l2a_outputdir, filename="mock_kgain.fits")
+    this_caldb.create_entry(kgain)
+
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
@@ -86,7 +93,7 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     # clean up by removing entry
     this_caldb.remove_entry(nonlinear_cal)
     this_caldb.remove_entry(noise_map)
-
+    this_caldb.remove_entry(kgain)
     
     ##### Check against TVAC data
     new_l2a_filenames = [os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
@@ -130,7 +137,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#"/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
