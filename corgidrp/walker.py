@@ -195,23 +195,24 @@ def guess_template(dataset):
             recipe_filename = "l1_to_boresight.json"
         elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
-        elif image.pri_hdr['OBSTYPE'] == "NONLIN":
-            recipe_filename = "l1_to_l2a_nonlin.json"
-        elif image.pri_hdr['OBSTYPE'] == "KGAIN":
-            recipe_filename = "l1_to_kgain.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
             recipe_filename = "l1_to_l2a_noisemap.json"
-        elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
-            # Disambiguate between NONLIN and KGAIN
-            for data in dataset:
-                if data.pri_hdr['OBSTYPE'] == "NONLIN":
-                    recipe_filename = "l1_to_l2a_nonlin.json" 
-                    break
-                elif data.pri_hdr['OBSTYPE'] == "KGAIN":
-                    recipe_filename = "l1_to_kgain.json"
-                    break
-                else:
-                    raise ValueError(f"Define recipe for {data.pri_hdr['OBSTYPE']}")
+        if "OBSTYPE" in image.pri_hdr:
+            if image.pri_hdr['OBSTYPE'] == "NONLIN":
+                recipe_filename = "l1_to_l2a_nonlin.json"
+            elif image.pri_hdr['OBSTYPE'] == "KGAIN":
+                recipe_filename = "l1_to_kgain.json"
+            elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
+                # Disambiguate between NONLIN and KGAIN
+                for data in dataset:
+                    if data.pri_hdr['OBSTYPE'] == "NONLIN":
+                        recipe_filename = "l1_to_l2a_nonlin.json" 
+                        break
+                    elif data.pri_hdr['OBSTYPE'] == "KGAIN":
+                        recipe_filename = "l1_to_kgain.json"
+                        break
+                    else:
+                        raise ValueError(f"Define recipe for {data.pri_hdr['OBSTYPE']}")
         else:
             recipe_filename = "l1_to_l2b.json"
     elif image.ext_hdr['DATA_LEVEL'] == "L2a":

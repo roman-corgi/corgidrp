@@ -617,12 +617,13 @@ def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
 
     return dataset
 
-def create_default_headers(arrtype="SCI"):
+def create_default_headers(arrtype="SCI", vistype="TDEMO"):
     """
     Creates an empty primary header and an Image extension header with some possible keywords
 
     Args:
-        arrtype (str): Observation type. Defaults to "SCI".
+        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+        vistype (str): Visit type. Defaults to "TDEMO"
 
     Returns:
         tuple:
@@ -644,6 +645,7 @@ def create_default_headers(arrtype="SCI"):
     prihdr['OBSID'] = 0
     prihdr['BUILD'] = 0
     # prihdr['OBSTYPE'] = arrtype
+    prihdr['VISTYPE'] = vistype
     prihdr['MOCK'] = True
 
     # fill in exthdr
