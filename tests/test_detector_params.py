@@ -1,4 +1,8 @@
+import os
+import pickle
+import numpy as np
 import astropy.time as time
+import corgidrp
 import corgidrp.data as data
 
 
@@ -30,4 +34,14 @@ def test_hashing():
     new_detparams = data.DetectorParams({'fwc_em' : 200000}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
     assert default_detparams.get_hash() != new_detparams.get_hash()
 
-    
+def test_pickling():
+    """
+    Test detector params can be pickled
+    """
+    filename = os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00:00:00.000.fits")
+    default_detparams = data.DetectorParams(filename)
+        
+    # check they can be pickled (for CTC operations)
+    pickled = pickle.dumps(default_detparams)
+    pickled_detparams = pickle.loads(pickled)
+    assert np.all((default_detparams.data == pickled_detparams.data))
