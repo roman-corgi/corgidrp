@@ -1,5 +1,3 @@
-# Mac: ulimit -n 500 to be able to open the 500 files
-
 import copy
 import numpy as np
 
@@ -17,11 +15,32 @@ def extract_frame_id(filename):
 def sorting(
     dataset_in,
     cal_type=None):
-    """ TBW
+    """ Sorting algorithm that given a dataset will output a dataset with the
+        frames used to generate a mean frame and the frames used to calibrate
+        the calibration type: k-gain. non-linearity or em-gain
 
-    Args: TBW
+        The output dataset has an added keyword value in its extended header:
+        OBSTYPE with values 'MNFRAME' (for mean frame), 'KGAIN' (for K-gain),
+        'NONLIN' (for non-linearity) and 'EMGAIN' (for EM-gain vs DAC).
+
+        TODO: EM-gain calibration
+
+    Args:
+        dataset_in (corgidrp.Dataset): dataset with all the frames to be sorted.
+        By default, it is expected to contain all the frames from the PUPILIMG
+        visit files associated with a calibration campaign
+        cal_type (string): the calibration type. Case insensitive
+        Accepted values are:
+        'k-gain' or 'kgain' for K-gain calibration
+        'non-lin(earity)', 'nonlin(earity)' for non-linearity calibration, where
+        the letters within parenthesis are optional.
+        'em-gain' or 'emgain' for EM-gain vs DAC calibration
 
     Returns:
+
+        Dataset with the frames used to generate a mean frame and the frames
+        used to calibrate the calibration type: k-gain. non-linearity or em-gain.
+    
     """
     # Copy dataset
     dataset_cp = dataset_in.copy()
@@ -73,12 +92,12 @@ def sorting(
                 exptime_list += [frame.ext_hdr['EXPTIME']]
                 unity_gain_filepath_list += [frame.filepath]
         idx_id_sort = np.argsort(frame_id_list)
-        exptime_list = np.array(exptime_list)[idx_id_sort]
+        exptime_arr = np.array(exptime_list)[idx_id_sort]
         # Count repeated, consecutive elements
         count_cons = [1]
-        exptime_cons = [exptime_list[0]]
+        exptime_cons = [exptime_arr[0]]
         idx_cons = 0
-        for exptime in exptime_list:
+        for exptime in exptime_arr:
             if exptime == exptime_cons[-1]:
                 count_cons[idx_cons] += 1
             else:
@@ -89,7 +108,7 @@ def sorting(
         count_cons[0] -= 1
 
         idx_cons2 = [0]
-        exptime_cons2 = [exptime_list[idx_cons2[0]]]
+        exptime_cons2 = [exptime_arr[idx_cons2[0]]]
         kgain_subset = []
         # Iterate over unique counts
         for idx_count in range(len(count_cons) - 1):
@@ -102,7 +121,7 @@ def sorting(
                     len(exptime_cons2) - 1 == len(set(exptime_cons2))):
                     kgain_subset += [idx_cons2[1] - 1, idx_cons2[-1]]
                     idx_cons2 = [idx_count+1]
-                    exptime_cons2 = [exptime_list[idx_cons2[0]]]
+                    exptime_cons2 = [exptime_arr[idx_cons2[0]]]
                 else:
                 # It is not a subset for kgain
                     continue
@@ -117,8 +136,8 @@ def sorting(
         idx_kgain_last = idx_kgain_first + np.sum(count_cons[idx_kgain_0:idx_kgain_1+1])
 
         # Sort unity gain filenames
-        unity_gain_filepath_list = np.array(unity_gain_filepath_list)[idx_id_sort].tolist()
-        cal_list = unity_gain_filepath_list[idx_kgain_first:idx_kgain_last]
+        unity_gain_filepath_arr = np.array(unity_gain_filepath_list)[idx_id_sort]
+        cal_list = unity_gain_filepath_arr[idx_kgain_first:idx_kgain_last]
         # Update OBSTYPE and take profit to check files are in the list
         n_kgain = 0
         cal_frame_list = []
@@ -131,8 +150,71 @@ def sorting(
         print(f'K-gain has {n_kgain} unity frames with exposure times', exptime_cons[idx_kgain_0:idx_kgain_1+1], f'seconds with each {count_cons[idx_kgain_0]} frames each')
         
     # Non-lin
-    elif cal_type.lower() == 'non-lin' or cal_type.lower() == 'nonlin':
+    elif cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
         print('Considering Non-linearity')
+        # Non-unity gain frames
+        split_cmdgain[0].remove(split_cmdgain[0][idx_unity])
+        split_cmdgain[1].remove(split_cmdgain[1][idx_unity])
+        # List of frames from multiple subsets
+        cal_frame_list = []
+        n_nonlin = 0
+        nonlin_emgain = []
+        for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
+            # Frames must be taken consecutively
+            frame_id_list = []
+            exptime_list = []
+            gain_filepath_list = []
+            for frame in gain_set:
+                frame_id_list += [extract_frame_id(frame.filename)]
+                exptime_list += [frame.ext_hdr['EXPTIME']]
+                gain_filepath_list += [frame.filepath]
+            # One can set a stronger condition, though in the end the max set
+            if len(frame_id_list) < 3:
+                continue
+            idx_id_sort = np.argsort(frame_id_list)
+            exptime_arr = np.array(exptime_list)[idx_id_sort]
+            # We need an increasing series of exposure times with the last one
+            # the only repeated value in the series
+            idx_subsets = np.where(np.diff(exptime_arr) < 0)[0]
+            if len(idx_subsets) == 0:
+                continue
+            # length of candidate subsets
+            nonlin_len = []
+            for idx, idx_subset in enumerate(idx_subsets):
+                # Add 0th element plus the one lost in diff
+                if idx == 0:
+                    exptime_tmp = exptime_arr[0:idx_subset+2]
+                else:
+                    exptime_tmp = exptime_arr[idx_subsets[idx-1]+1:idx_subset+2]
+                # Check conditions
+                if (exptime_tmp[-1] in exptime_tmp[:-1] and
+                    len(exptime_tmp) - 1 == len(set(exptime_tmp))):
+                    nonlin_len += [len(exptime_tmp)]
+                else:
+                    nonlin_len += [-1]
+            # COntinue of there are no good candidates
+            if np.max(nonlin_len) <= 0:
+                continue
+            # Find maximum set among good candidates
+            if np.argmax(nonlin_len) == 0:
+                idx_nonlin_first = 0
+                idx_nonlin_last = idx_subsets[0] + 1
+            else:
+                idx_nonlin_first = idx_subsets[np.argmax(nonlin_len)-1] + 1
+                idx_nonlin_last = idx_subsets[np.argmax(nonlin_len)] + 1
+            # Sort unity gain filenames
+            gain_filepath_arr = np.array(gain_filepath_list)[idx_id_sort]
+            cal_list = gain_filepath_arr[idx_nonlin_first:idx_nonlin_last+1]
+            # Update OBSTYPE and take profit to check files are in the list
+            for frame in dataset_cp:
+                if frame.filepath in cal_list:
+                    frame.pri_hdr['OBSTYPE'] = 'NONLIN'
+                    cal_frame_list += [frame]
+                    n_nonlin += 1
+            nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
+
+        print(f'Non-linearity has {n_nonlin} frames with gains', nonlin_emgain)
+        
     # EM-gain: TODO
     elif cal_type.lower() == 'em-gain' or cal_type.lower() == 'emgain':
             print('Considering low EM-gain: TODO')
