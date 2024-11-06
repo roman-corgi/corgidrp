@@ -222,7 +222,10 @@ def guess_template(dataset):
     """
     image = dataset[0] # first image for convenience
     if image.ext_hdr['DATA_LEVEL'] == "L1":
-        if image.pri_hdr['VISTYPE'][:3] == "ENG":
+        if 'VISTYPE' not in image.pri_hdr:
+            # this is probably IIT test data. Do generic processing
+            recipe_filename = "l1_to_l2b.json"
+        elif image.pri_hdr['VISTYPE'][:3] == "ENG":
             # first three letters are ENG
             # for either ENGPUPIL or ENGIMGAGE
             recipe_filename = "l1_to_l2a_eng.json"
