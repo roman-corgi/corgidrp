@@ -23,7 +23,13 @@ def get_cmdgain_exptime_mean_frame(
     Create an array of CMDGAIN, EXPTIME for frames that will be used to
     generate a mean frame.
 
-    TBW: Rules for mean frame plus full doc string
+    Args:
+        exptime_sec (float): exposure time of the frame in seconds
+        nframes (int): (minimum) number of frames to generate a mean frame
+    
+    Returns:
+        cmdgain_list (list): list of commanded gains
+        exptime_list (list): list of exposure frames
     """
     cmdgain_list = [1] * nframes
     exptime_list = [exptime_sec] * nframes
@@ -39,7 +45,14 @@ def get_cmdgain_exptime_kgain(
     Create an array of CMDGAIN, EXPTIME for frames that will be used to
     calibrate k-gain.
 
-    TBW: Rules for k-gain plus full doc string
+    Args:
+        exptime_sec (list): set of distinct exposure times n seconds chosen to
+        collect frames for K-gain calibration
+        nframes (int): number of frames per ditinct exposure time
+
+    Returns:
+        cmdgain_list (list): list of commanded gains
+        exptime_list (list): list of exposure frames
     """
     cmdgain_list = [1] * (len(exptime_sec) * nframes)
     exptime_list = []
@@ -59,39 +72,70 @@ def get_cmdgain_exptime_nonlin(
     Create an array of CMDGAIN, EXPTIME for frames that will be used to
     calibrate non-linearity.
 
-    TBW: Rules for non-linearity plus full doc string
+    Args:
+        exptime_sec (list): set of distinct exposure times in seconds chosen to
+        collect frames for non-linearity calibration for each EM gain
+        nonunity_em (list): set of ditinct (non-unity) EM gains chosen to collect
+        data for non-linearity
+        change_exptime (bool) (optional): if True, it will change the input exposure
+        times by a small amount without changing the ordering of exptime_sec
+
+    Returns:
+        cmdgain_list (list): list of commanded gains
+        exptime_list (list): list of exposure frames
     """
     cmdgain_list = []
     exptime_list = []
     fac_change = 0
     if change_exptime:
-        fac_change = 1
+        # Avoid the (unlikely) coincidence of +1/-1 in the uniform distribution
+        fac_change = min(np.abs(np.diff(exptime_sec))) / 3
     for emgain in nonunity_em:
         cmdgain_list += [emgain] * len(exptime_sec)
-        exptime_sec = np.array(exptime_sec) * (1 + fac_change*random.uniform(-0.1, 0.1))
+        exptime_sec = (np.array(exptime_sec) *
+            (1 + fac_change*random.uniform(-1, 1)))
         exptime_list += exptime_sec.tolist()
     return cmdgain_list, exptime_list
 
 def get_cmdgain_exptime_emgain(
-    em_emgain=[1.000, 1.007, 1.015, 1.024, 1.035, 1.047, 1.060, 1.076, 1.094,
+    em_emgain=[1.000, 1.000, 1.007, 1.015, 1.024, 1.035, 1.047, 1.060, 1.076, 1.094,
         1.115, 1.138, 1.165, 1.197, 1.234, 1.276, 1.325, 1.385, 1.453, 1.534, 1.633,
         1.749, 1.890, 2.066, 2.278, 2.541, 2.873, 3.308, 3.858, 4.581, 5.577, 6.189,
         6.906, 7.753, 8.757, 9.955, 11.392, 13.222, 15.351, 17.953, 21.157, 25.128,
         30.082, 36.305, 44.621, 54.768, 67.779, 84.572, 106.378, 134.858, 172.244,
         224.385, 290.538, 378.283, 494.762, 649.232, 853.428],
-    exptime_emgain=[3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 
-        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 10, 10, 10,
+    exptime_emgain_sec=[5, 10, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 
+        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 10, 10,
         10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
+    nframes=[3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 5,
+        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
         ):
     """
     Create an array of CMDGAIN, EXPTIME for frames that will be used to
     calibrate EM-gain vs DAC.
 
-    TBW: Rules for EM-gain vs DAC plus full doc string
+     Args:
+        em_gain (list): set of ditinct (non-unity) EM gains chosen to collect
+        data for EM gain with pupil images
+        exptime_emgain_sec (list): set of distinct exposure times in seconds chosen to
+        collect frames for non-linearity calibration for each EM gain
+        nframes (int): number of frames per ditinct exposure time
+
+    Returns:
+        cmdgain_list (list): list of commanded gains
+        exptime_list (list): list of exposure frames
     """
     # Create pairs of frames
-    cmdgain_list = [1] * len(em_emgain) + em_emgain
-    exptime_list = exptime_emgain * 2
+    nonunity_gain_list = []
+    for idx in range(len(em_emgain)):
+        nonunity_gain_list += [em_emgain[idx]] * nframes[idx] 
+    cmdgain_list = [1] * np.sum(nframes) + nonunity_gain_list
+    exptime_list = []
+    for idx in range(len(exptime_emgain_sec)):
+        exptime_list += [exptime_emgain_sec[idx]] * nframes[idx]
+    # Unity and non-unity gains
+    exptime_list += exptime_list
     return cmdgain_list, exptime_list
 
 def make_minimal_image(
@@ -103,10 +147,13 @@ def make_minimal_image(
     This function makes a mock frame with minimum memory in its data and error
     fields. It is used in this test script only.
 
-    Args: TBW
+    Args:
+        cmdgain (float): commanded gain of the frame
+        exptime_sec (float): exposure time of the frame
+        frameid (int): an integer value used to indentify the frame
 
     Returns:
-        corgidrp.data.Image
+        filename (String): filename with path of the generated FITS file
     """
     signal = np.zeros(1)
 
@@ -215,18 +262,24 @@ EM_EMGAIN = [1.000, 1.007, 1.015, 1.024, 1.035, 1.047, 1.060, 1.076, 1.094,
     6.906, 7.753, 8.757, 9.955, 11.392, 13.222, 15.351, 17.953, 21.157, 25.128,
     30.082, 36.305, 44.621, 54.768, 67.779, 84.572, 106.378, 134.858, 172.244,
     224.385, 290.538, 378.283, 494.762, 649.232, 853.428]
-EXPTIME_EMGAIN = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+EXPTIME_EMGAIN_SEC = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
     3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 10, 10, 10, 10,
     10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11]
+NFRAMES_EMGAIN = [3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 5,
+        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
 # Checks
 if len(EM_EMGAIN) < 56:
     raise Exception(f'Insufficient number of EM gain values ({len(EM_EMGAIN)}) in EM-gain vs DAC')
-if len(EXPTIME_EMGAIN) != len(EM_EMGAIN):
+if len(EXPTIME_EMGAIN_SEC) != len(EM_EMGAIN):
+    raise Exception(f'Inconsistent number of sets in EM-gain vs DAC')
+if len(EXPTIME_EMGAIN_SEC) != len(NFRAMES_EMGAIN):
     raise Exception(f'Inconsistent number of sets in EM-gain vs DAC')
 # Values
 cmdgain_emgain, exptime_emgain = get_cmdgain_exptime_emgain(
     em_emgain = EM_EMGAIN,
-    exptime_emgain = EXPTIME_EMGAIN,
+    exptime_emgain_sec = EXPTIME_EMGAIN_SEC,
+    nframes = NFRAMES_EMGAIN,
     )
 if len(cmdgain_emgain) != len(exptime_emgain):
     raise Exception(f'Inconsistent lengths in em-gain vs dac')
@@ -243,10 +296,10 @@ change_exptime = [False, True]
 idx_frame = 0
 for change in change_exptime:
     filename_list = []
-    if change == 0:
+    if change == False:
         cmdgain_nonlin = cmdgain_nonlin_wo_change
         exptime_nonlin = exptime_nonlin_wo_change
-    elif change == 1:
+    elif change == True:
         cmdgain_nonlin = cmdgain_nonlin_w_change
         exptime_nonlin = exptime_nonlin_w_change
     else:
