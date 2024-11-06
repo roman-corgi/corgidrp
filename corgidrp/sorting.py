@@ -7,6 +7,12 @@ def extract_frame_id(filename):
     """
     Extract frame ID from an L1 filename. Structure is assumed to be ending
     like '..._frame_id.fits' where frame_id is a series of digits
+
+    Args:
+      filename: L1 filename
+
+    Returns:
+      Frame id as a string of length 10
     """
     idx_0 = len(filename) - filename[::-1].find('_')
     idx_1 = len(filename) - filename[::-1].find('.') - 1
