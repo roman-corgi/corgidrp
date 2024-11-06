@@ -63,6 +63,7 @@ tests/simdata/*
 tests/walker_output/*
 tests/testcalib/*
 tests/e2e_tests/*/*.json
+tests/ops_output/*.json
 
 # editor files
 .vscode/*
