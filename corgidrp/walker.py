@@ -53,14 +53,22 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         filelist (list of str): list of filepaths to files
         CPGS_XML_filepath (str): path to CPGS XML file for this set of files in filelist
         outputdir (str): output directory folderpath
-        template (str or json): custom template. either the full json file, or a filename of
-                                a template that's already in the recipe_templates folder
+        template (str or json): custom template. It can be one of three things
+                                  * the full json object, 
+                                  * a filename of a template that's already in the recipe_templates folder
+                                  * a filepath to a template on disk somewhere
+                                
 
     Returns:
         json or list: the JSON recipe (or list of JSON recipes) that was used for processing
     """
     if isinstance(template, str):
-        recipe_filepath = os.path.join(recipe_dir, template)
+        if os.path.sep not in template:
+            # this is just a template name in the recipe_templates folder
+            recipe_filepath = os.path.join(recipe_dir, template)
+        else:
+            recipe_filepath = template
+        
         template = json.load(open(recipe_filepath, 'r'))
 
     # generate recipe
