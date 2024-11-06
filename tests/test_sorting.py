@@ -24,12 +24,12 @@ def get_cmdgain_exptime_mean_frame(
     generate a mean frame.
 
     Args:
-        exptime_sec (float): exposure time of the frame in seconds
-        nframes (int): (minimum) number of frames to generate a mean frame
+      exptime_sec (float): exposure time of the frame in seconds
+      nframes (int): (minimum) number of frames to generate a mean frame
     
     Returns:
-        cmdgain_list (list): list of commanded gains
-        exptime_list (list): list of exposure frames
+      cmdgain_list (list): list of commanded gains
+      exptime_list (list): list of exposure frames
     """
     cmdgain_list = [1] * nframes
     exptime_list = [exptime_sec] * nframes
@@ -46,13 +46,13 @@ def get_cmdgain_exptime_kgain(
     calibrate k-gain.
 
     Args:
-        exptime_sec (list): set of distinct exposure times n seconds chosen to
-        collect frames for K-gain calibration
-        nframes (int): number of frames per ditinct exposure time
+      exptime_sec (list): set of distinct exposure times n seconds chosen to
+      collect frames for K-gain calibration
+      nframes (int): number of frames per ditinct exposure time
 
     Returns:
-        cmdgain_list (list): list of commanded gains
-        exptime_list (list): list of exposure frames
+      cmdgain_list (list): list of commanded gains
+      exptime_list (list): list of exposure frames
     """
     cmdgain_list = [1] * (len(exptime_sec) * nframes)
     exptime_list = []
@@ -73,16 +73,16 @@ def get_cmdgain_exptime_nonlin(
     calibrate non-linearity.
 
     Args:
-        exptime_sec (list): set of distinct exposure times in seconds chosen to
+      exptime_sec (list): set of distinct exposure times in seconds chosen to
         collect frames for non-linearity calibration for each EM gain
-        nonunity_em (list): set of ditinct (non-unity) EM gains chosen to collect
+      nonunity_em (list): set of ditinct (non-unity) EM gains chosen to collect
         data for non-linearity
-        change_exptime (bool) (optional): if True, it will change the input exposure
+      change_exptime (bool) (optional): if True, it will change the input exposure
         times by a small amount without changing the ordering of exptime_sec
 
     Returns:
-        cmdgain_list (list): list of commanded gains
-        exptime_list (list): list of exposure frames
+      cmdgain_list (list): list of commanded gains
+      exptime_list (list): list of exposure frames
     """
     cmdgain_list = []
     exptime_list = []
@@ -116,15 +116,15 @@ def get_cmdgain_exptime_emgain(
     calibrate EM-gain vs DAC.
 
      Args:
-        em_gain (list): set of ditinct (non-unity) EM gains chosen to collect
+      em_gain (list): set of ditinct (non-unity) EM gains chosen to collect
         data for EM gain with pupil images
-        exptime_emgain_sec (list): set of distinct exposure times in seconds chosen to
+      exptime_emgain_sec (list): set of distinct exposure times in seconds chosen to
         collect frames for non-linearity calibration for each EM gain
-        nframes (int): number of frames per ditinct exposure time
+      nframes (int): number of frames per ditinct exposure time
 
     Returns:
-        cmdgain_list (list): list of commanded gains
-        exptime_list (list): list of exposure frames
+      cmdgain_list (list): list of commanded gains
+      exptime_list (list): list of exposure frames
     """
     # Create pairs of frames
     nonunity_gain_list = []
@@ -148,12 +148,12 @@ def make_minimal_image(
     fields. It is used in this test script only.
 
     Args:
-        cmdgain (float): commanded gain of the frame
-        exptime_sec (float): exposure time of the frame
-        frameid (int): an integer value used to indentify the frame
+      cmdgain (float): commanded gain of the frame
+      exptime_sec (float): exposure time of the frame
+      frameid (int): an integer value used to indentify the frame
 
     Returns:
-        filename (String): filename with path of the generated FITS file
+      filename (String): filename with path of the generated FITS file
     """
     signal = np.zeros(1)
 
