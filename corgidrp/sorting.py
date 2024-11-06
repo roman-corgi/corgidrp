@@ -4,8 +4,9 @@ import numpy as np
 import corgidrp.data as data
 
 def extract_frame_id(filename):
-    """ Extract frame ID from an L1 filename. Structure is assumed to be
-        ending like '..._frame_id.fits' where frame_id is a series of digits
+    """
+    Extract frame ID from an L1 filename. Structure is assumed to be ending
+    like '..._frame_id.fits' where frame_id is a series of digits
     """
     idx_0 = len(filename) - filename[::-1].find('_')
     idx_1 = len(filename) - filename[::-1].find('.') - 1
@@ -15,21 +16,22 @@ def extract_frame_id(filename):
 def sorting(
     dataset_in,
     cal_type=None):
-    """ Sorting algorithm that given a dataset will output a dataset with the
-        frames used to generate a mean frame and the frames used to calibrate
-        the calibration type: k-gain. non-linearity or em-gain
+    """ 
+    Sorting algorithm that given a dataset will output a dataset with the
+    frames used to generate a mean frame and the frames used to calibrate
+    the calibration type: k-gain. non-linearity or em-gain
 
-        The output dataset has an added keyword value in its extended header:
-        OBSTYPE with values 'MNFRAME' (for mean frame), 'KGAIN' (for K-gain),
-        'NONLIN' (for non-linearity) and 'EMGAIN' (for EM-gain vs DAC).
+    The output dataset has an added keyword value in its extended header:
+    OBSTYPE with values 'MNFRAME' (for mean frame), 'KGAIN' (for K-gain),
+    'NONLIN' (for non-linearity) and 'EMGAIN' (for EM-gain vs DAC).
 
-        TODO: EM-gain calibration
+    TODO: EM-gain calibration
 
     Args:
-        dataset_in (corgidrp.Dataset): dataset with all the frames to be sorted.
+      dataset_in (corgidrp.Dataset): dataset with all the frames to be sorted.
         By default, it is expected to contain all the frames from the PUPILIMG
         visit files associated with a calibration campaign
-        cal_type (string): the calibration type. Case insensitive
+      cal_type (string): the calibration type. Case insensitive.
         Accepted values are:
         'k-gain' or 'kgain' for K-gain calibration
         'non-lin(earity)', 'nonlin(earity)' for non-linearity calibration, where
@@ -40,7 +42,6 @@ def sorting(
 
         Dataset with the frames used to generate a mean frame and the frames
         used to calibrate the calibration type: k-gain. non-linearity or em-gain.
-    
     """
     # Copy dataset
     dataset_cp = dataset_in.copy()
@@ -217,7 +218,7 @@ def sorting(
         
     # EM-gain: TODO
     elif cal_type.lower() == 'em-gain' or cal_type.lower() == 'emgain':
-            print('Considering low EM-gain: TODO')
+        print('Considering low EM-gain: TODO')
     else:
         raise Exception('Unrecognized calibration type (expected k-gain, non-lin or em-gain)')
 
