@@ -1,4 +1,5 @@
 import os
+import pickle
 import numpy as np
 import pytest
 import corgidrp
@@ -47,6 +48,20 @@ def test_astrom():
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
+
+    # check they can be pickled (for CTC operations)
+    pickled = pickle.dumps(astrom_cal)
+    pickled_astrom = pickle.loads(pickled)
+    assert np.all((astrom_cal.data == pickled_astrom.data))
+
+    # save and check it can be pickled after save
+    astrom_cal.save(filedir=datadir, filename="astrom_cal_output.fits")
+    astrom_cal_2 = data.AstrometricCalibration(os.path.join(datadir, "astrom_cal_output.fits"))
+
+    # check they can be pickled (for CTC operations)
+    pickled = pickle.dumps(astrom_cal_2)
+    pickled_astrom = pickle.loads(pickled)
+    assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
 
 if __name__ == "__main__":
     test_astrom()
