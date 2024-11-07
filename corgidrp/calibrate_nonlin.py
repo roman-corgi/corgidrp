@@ -808,8 +808,7 @@ def calibrate_nonlin(dataset_nl,
     prhd = dataset_nl.frames[0].pri_hdr
     exthd = dataset_nl.frames[0].ext_hdr
     exthd['HISTORY'] = f"Non-linearity calibration derived from a set of frames on {exthd['DATETIME']}"
-    # Just for the purpose of getting the instance created. NEED to clarify the
-    # role of nonlin_arr3 and headers compared to data.NonLinearityCalibration.data
+    # Just for the purpose of getting the instance created
     nonlin = data.NonLinearityCalibration(nonlin_data,
         pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_nl)
     

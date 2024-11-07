@@ -166,11 +166,14 @@ def sort_pupilimg_frames(
         cal_frame_list = []
         for frame in dataset_cp:
             if frame.filepath in cal_list:
+                vistype = frame.pri_hdr['VISTYPE']
                 frame.pri_hdr['OBSTYPE'] = 'KGAIN'
                 cal_frame_list += [frame]
                 n_kgain += 1
 
-        print(f'K-gain has {n_kgain} unity frames with exposure times', exptime_cons[idx_kgain_0:idx_kgain_1+1], f'seconds with each {count_cons[idx_kgain_0]} frames each')
+        sorting_summary = (f'K-gain has {n_kgain} unity frames with exposure ' +
+            f'times {exptime_cons[idx_kgain_0:idx_kgain_1+1]} seconds with ' +
+            f'{count_cons[idx_kgain_0]} frames each')
 
     # Non-lin
     elif cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
@@ -231,15 +234,25 @@ def sort_pupilimg_frames(
             # Update OBSTYPE and take profit to check files are in the list
             for frame in dataset_cp:
                 if frame.filepath in cal_list:
+                    vistype = frame.pri_hdr['VISTYPE']
                     frame.pri_hdr['OBSTYPE'] = 'NONLIN'
                     cal_frame_list += [frame]
                     n_nonlin += 1
             nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
 
-        print(f'Non-linearity has {n_nonlin} frames with gains', nonlin_emgain)
+        sorting_summary = (f'Non-linearity has {n_nonlin} frames with gains ' +
+            f'{nonlin_emgain}')
         
     else:
         raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
+    
+    # TODO: Add a HISTORY entry
+    history = (f'Dataset to calibrate {cal_type.upper()}. A sorting algorithm ' +
+        'based on the constraints that NFRAMES, EXPTIME and CMDGAIN have when collecting ' +
+        'calibration data for K-gain, Non-linearity and EM-gain vs DAC '
+        f"was applied to an input dataset from {vistype} visit files." +
+        f'The result is that {sorting_summary}.')
+    print(history)
 
     # Return Datafrane with mean frame and cal type
     return data.Dataset(mean_frame_list + cal_frame_list)
