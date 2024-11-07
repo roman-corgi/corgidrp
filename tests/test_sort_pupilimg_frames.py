@@ -149,7 +149,7 @@ def get_cmdgain_exptime_emgain(
     gain frames.
 
      Args:
-      em_gain (list): set of ditinct (non-unity) EM gains chosen to collect
+      em_emgain (list): set of ditinct (non-unity) EM gains chosen to collect
         data for EM gain with pupil images
       exptime_emgain_sec (list): set of distinct exposure times in seconds chosen to
         collect frames for non-linearity calibration for each EM gain
