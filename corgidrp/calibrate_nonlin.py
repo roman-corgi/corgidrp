@@ -218,8 +218,8 @@ def calibrate_nonlin(dataset_nl,
         input signal in DN is the first column. Signal values start with min_write
         and run through max_write in steps of 20 DN.
     """
-    breakpoint()
     # dataset_nl.all_data must be 3-D 
+    breakpoint()
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
     # cast dataset objects into np arrays and retrieve aux information
