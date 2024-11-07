@@ -134,7 +134,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder'  #"/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
+    tvacdata_dir = '/Users/srhildeb/Documents/GitHub/CGI_TVAC_Data/'  #"/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

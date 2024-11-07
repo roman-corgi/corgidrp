@@ -79,18 +79,17 @@ def sort_pupilimg_frames(
     idx_mean_frame_first = idx_mean_frame_last - count_cons[idx_mean_frame_cons]
     frame_id_mean_frame = frame_id_sort[idx_mean_frame_first:idx_mean_frame_last]
     mean_frame_list = []
-#    breakpoint()
 
     n_mean_frame = 0
     for frame in split_exptime[0][idx_mean_frame]:
         if int(extract_frame_id(frame.filename)) in frame_id_mean_frame:
+            exptime_mean_frame = frame.ext_hdr['EXPTIME']
             # Update keyword OBSTYPE
             frame.pri_hdr['OBSTYPE'] = 'MNFRAME'
             mean_frame_list += [frame]
             n_mean_frame += 1
             
-    print(f"\nMean frame has {n_mean_frame} unity frames with exposure time {frame.ext_hdr['EXPTIME']} seconds")
-#    breakpoint()
+    print(f'\nMean frame has {n_mean_frame} unity frames with exposure time {exptime_mean_frame} seconds')
 
     # K-gain
     cal_frame_list = []
@@ -149,6 +148,7 @@ def sort_pupilimg_frames(
                     continue
         # Choose the largest subset
         kgain_subset = np.array(kgain_subset)
+        breakpoint()
         idx_kgain = np.argmax(kgain_subset[1::2] - kgain_subset[0::2])
         # Extract first/last index in the subset of consecutive frames
         idx_kgain_0 = kgain_subset[2 * idx_kgain]
