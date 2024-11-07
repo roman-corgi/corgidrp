@@ -134,7 +134,7 @@ def test_nonlin_cal_e2e(
 
     # Run the walker on some test_data
     print('Running walker')
-    walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path)
+    walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")
 
     # Compare results
     print('Comparing the results with TVAC')
