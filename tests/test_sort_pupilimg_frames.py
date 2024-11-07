@@ -468,7 +468,7 @@ def test_nonlin_sorting_wo_change():
 
     
     # Same number of files as expected
-    assert n_nonlin_test == n_nonlin_total
+    assert n_nonlin_test == n_nonlin_wo_change_total
     # Unique exposure time for the mean frame
     assert len(set(exptime_mean_frame_list)) == 1
     # Expected exposure time for the mean frame
@@ -489,7 +489,7 @@ def test_nonlin_sorting_w_change():
 
     # Checks
     n_mean_frame = 0
-    n_nonlin = 0
+    n_nonlin_test = 0
     filename_mean_frame_list = []
     filename_nonlin_list = []
     exptime_mean_frame_list = []
@@ -501,7 +501,7 @@ def test_nonlin_sorting_w_change():
             filename_mean_frame_list += [frame.filename]
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
         elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
-            n_nonlin += 1
+            n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
         else:
@@ -512,6 +512,8 @@ def test_nonlin_sorting_w_change():
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Non-linearity calibration dataset'))
 
+    # Same number of files as expected
+    assert n_nonlin_test == n_nonlin_w_change_total
     # Unique exposure time for the mean frame
     assert len(set(exptime_mean_frame_list)) == 1
     # Expected exposure time for the mean frame
