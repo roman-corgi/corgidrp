@@ -55,7 +55,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     for dark in os.listdir(noise_characterization_path):
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
-            hdulist[0].header['OBSTYPE'] = "ASTROM"
+            hdulist[0].header['VISTYPE'] = "BORESITE"
             # setting SNR to ~250 (arbitrary SNR)
             scaled_image = ((250 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
@@ -117,7 +117,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,

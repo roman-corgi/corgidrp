@@ -18,7 +18,9 @@
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC",
                 "KGain" : "AUTOMATIC, OPTIONAL"
-				
+            },
+            "keywords" : {
+                "mode" : "full"
             }
         },
         {
