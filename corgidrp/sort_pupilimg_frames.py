@@ -89,13 +89,13 @@ def sort_pupilimg_frames(
             mean_frame_list += [frame]
             n_mean_frame += 1
             
-    print(f"Mean frame has {n_mean_frame} unity frames with exposure time {frame.ext_hdr['EXPTIME']} seconds")
+    print(f"\nMean frame has {n_mean_frame} unity frames with exposure time {frame.ext_hdr['EXPTIME']} seconds")
 #    breakpoint()
 
     # K-gain
     cal_frame_list = []
     if cal_type.lower() == 'k-gain' or cal_type.lower() == 'kgain':
-        print('Considering K-gain')
+        print('Considering K-gain:')
         # Remove main frame frames from unity gain frames
         split_exptime[0].remove(split_exptime[0][idx_mean_frame])
         split_exptime[1].remove(split_exptime[1][idx_mean_frame])
@@ -174,7 +174,7 @@ def sort_pupilimg_frames(
 
     # Non-lin
     elif cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
-        print('Considering Non-linearity')
+        print('Considering Non-linearity:')
         # Non-unity gain frames
         split_cmdgain[0].remove(split_cmdgain[0][idx_unity])
         split_cmdgain[1].remove(split_cmdgain[1][idx_unity])
