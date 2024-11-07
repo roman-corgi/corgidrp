@@ -237,7 +237,7 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "DARK":
             recipe_filename = "l1_to_l2a_noisemap.json"
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
-            recipe_filename = ["l1_to_l2a_nonlin_sorting.json"]#, "l1_to_kgain.json"]
+            recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
             recipe_filename = "l1_to_l2b.json"
     elif image.ext_hdr['DATA_LEVEL'] == "L2a":
