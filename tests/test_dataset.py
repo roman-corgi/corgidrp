@@ -1,10 +1,12 @@
 import os
+import glob
+import pickle
 import pytest
 import numpy as np
 import astropy.io.fits as fits
 import corgidrp
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_headers, create_dark_calib_files
 
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024])
@@ -122,6 +124,33 @@ def test_split_dataset():
     sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',])
     assert len(sliced_datasets) == 2
 
+
+
+def test_pickling():
+    """
+    Test that datasets and images can be pickled
+    """
+    ###### create simulated data
+    # check that simulated data folder exists, and create if not
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+
+    create_dark_calib_files(filedir=datadir)
+
+    ####### test data architecture
+    dark_filenames = glob.glob(os.path.join(datadir, "simcal_dark*.fits"))
+
+    dark_dataset = Dataset(dark_filenames)
+
+    pickle_filename = os.path.join(datadir, "simcal_dataset.pkl")
+    pickled = pickle.dumps(dark_dataset)
+    pickled_dark_dataset = pickle.loads(pickled)
+
+    assert np.all(dark_dataset[0].data == pickled_dark_dataset[0].data)
+
+
 if __name__ == "__main__":
     test_hashing()
     test_split_dataset()
+    test_pickling()

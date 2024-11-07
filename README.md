@@ -135,6 +135,19 @@ To run the existing end-to-end tests, you need to have downloaded all the TVAC d
 pytest --which e2e --tvacdata_path /path/to/CGI_TVAC_Data --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
 ```
 
+To run the existing end-to-end tests, you also need the II&T code, which is used directly for comparing results.  First install Git LFS if it isn't already installed (https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage).  Then install the II&T code by doing the following while in the top-level folder:
+
+```
+pip install -r requirements_e2etests.txt corgidrp
+```
+
+This will install the II&T repositories `cal` and `proc_cgi_frame`.  To ensure the version from cgi_iit_drp (https://github.com/roman-corgi/cgi_iit_drp) is installed, you may have to do the following first:
+
+```
+pip uninstall proc_cgi_frame
+pip uninstall cal
+```
+
 ### Linting
 
 In addition to unit tests, your code will need to pass a static analysis before being merged.  `corgidrp` currently runs a subset of flake8 tests, which you can replicate on your local system by running:
@@ -167,11 +180,11 @@ Before creating a pull request, review the design Principles below. Use the Gith
 
 ## FAQ
 
-  * Does my pipeline function need to save files?
-    * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
-  * Can I create new data classes?
-    * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
-
+* Does my pipeline function need to save files?
+  * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
+* Can I create new data classes?
+  * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
+  * You do not necessarily need to write a copy function for subclasses of the `Image` class. If you need to copy calibration objects at all, you can use the copy function of the Image class.
 * What python version should I develop in?
   * Python 3.12
     

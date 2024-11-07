@@ -1,4 +1,5 @@
 import os
+import pickle
 import pytest
 import corgidrp
 import numpy as np
@@ -44,6 +45,9 @@ def test_bad_pixels():
     datadir = os.path.join(os.path.dirname(__file__), "simdata")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
     col_bp_test=[12, 120, 234, 450, 678, 990]
     row_bp_test=[546, 89, 123, 243, 447, 675]
     bp_mask = mocks.create_badpixelmap_files(filedir=datadir,
@@ -52,6 +56,12 @@ def test_bad_pixels():
                      ext_hdr=bp_mask[0].ext_hdr.copy(), input_dataset=bp_mask)
 
     assert type(new_bp_mask) == corgidrp.data.BadPixelMap
+    
+    # check the bpmap can be pickled (for CTC operations)
+    pickled = pickle.dumps(new_bp_mask)
+    pickled_bpmap = pickle.loads(pickled)
+    assert np.all((new_bp_mask.data == pickled_bpmap.data))
+
 
     new_dataset = correct_bad_pixels(dataset, new_bp_mask)
 
@@ -98,6 +108,16 @@ def test_bad_pixels():
         assert ii in col_bp_test and ii in col_cr_test
     for jj in bp_cr_dq[1]:
         assert jj in row_bp_test and jj in row_cr_test
+
+
+    # save and reload bad pixel map
+    new_bp_mask.save(filedir=outputdir, filename="sim_bp_map_cal.fits")
+    new_bp_mask_2 = BadPixelMap(os.path.join(outputdir, "sim_bp_map_cal.fits"))
+    
+    # check the bpmap can be pickled (for CTC operations)
+    pickled = pickle.dumps(new_bp_mask_2)
+    pickled_bpmap = pickle.loads(pickled)
+    assert np.all((new_bp_mask_2.data == pickled_bpmap.data))
 
     print("UT passed")
 
