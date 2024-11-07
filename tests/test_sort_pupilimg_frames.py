@@ -360,8 +360,7 @@ def test_kgain_sorting(dataset_in):
     Args:
        dataset_in (corgidrp.Dataset): input dataset with the calibration data
     """
-    dataset_cp = dataset_in.copy()
-    dataset_kgain = sorting.sort_pupilimg_frames(dataset_cp, cal_type='k-gain')
+    dataset_kgain = sorting.sort_pupilimg_frames(dataset_in, cal_type='k-gain')
 
     # Checks
     n_mean_frame = 0
@@ -416,8 +415,7 @@ def test_nonlin_sorting(dataset_in):
     Args:
       dataset_in (corgidrp.Dataset): input dataset with the calibration data
     """        
-    dataset_cp = dataset_in.copy()
-    dataset_nonlin = sorting.sort_pupilimg_frames(dataset_cp, cal_type='non-lin')
+    dataset_nonlin = sorting.sort_pupilimg_frames(dataset_in, cal_type='non-lin')
     
 if __name__ == "__main__":
     print('Running test_sort_pupilimg_sorting')
