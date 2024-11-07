@@ -386,7 +386,7 @@ def test_kgain_sorting():
 
     # Checks
     n_mean_frame = 0
-    n_kgain = 0
+    n_kgain_test = 0
     filename_mean_frame_list = []
     filename_kgain_list = []
     exptime_mean_frame_list = []
@@ -398,7 +398,7 @@ def test_kgain_sorting():
             filename_mean_frame_list += [frame.filename]
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
         elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
-            n_kgain += 1
+            n_kgain_test += 1
             filename_kgain_list += [frame.filename]
             exptime_kgain_list += [frame.ext_hdr['EXPTIME']]
         else:
@@ -409,6 +409,8 @@ def test_kgain_sorting():
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Kgain calibration dataset'))
     
+    # Same number of files as expected
+    assert n_kgain_test == n_kgain_total
     # Unique exposure time for the mean frame
     assert len(set(exptime_mean_frame_list)) == 1
     # Expected exposure time for the mean frame
@@ -441,7 +443,7 @@ def test_nonlin_sorting_wo_change():
 
     # Checks
     n_mean_frame = 0
-    n_nonlin = 0
+    n_nonlin_test = 0
     filename_mean_frame_list = []
     filename_nonlin_list = []
     exptime_mean_frame_list = []
@@ -453,7 +455,7 @@ def test_nonlin_sorting_wo_change():
             filename_mean_frame_list += [frame.filename]
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
         elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
-            n_nonlin += 1
+            n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
         else:
@@ -464,6 +466,9 @@ def test_nonlin_sorting_wo_change():
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Non-linearity calibration dataset'))
 
+    
+    # Same number of files as expected
+    assert n_nonlin_test == n_nonlin_total
     # Unique exposure time for the mean frame
     assert len(set(exptime_mean_frame_list)) == 1
     # Expected exposure time for the mean frame
