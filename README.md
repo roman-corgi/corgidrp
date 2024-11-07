@@ -180,21 +180,11 @@ Before creating a pull request, review the design Principles below. Use the Gith
 
 ## FAQ
 
-  * Does my pipeline function need to save files?
-    * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
-  * Can I create new data classes?
-    * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
-    * You do not necessarily need to write a copy function for subclasses of the `Image` class. If you need to copy calibration objects at all you can import and apply the copy module of python, see
-      example: 
-      ```
-      import copy
-      flatfield = data.Flatfield('flatfield.fits')
-      #reference copy
-      flatfield_copy = copy.copy(flatfield)
-      #deep data copy
-      flatfield_copy = copy.deepcopy(flatfield)
-      ```
-
+* Does my pipeline function need to save files?
+  * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
+* Can I create new data classes?
+  * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
+  * You do not necessarily need to write a copy function for subclasses of the `Image` class. If you need to copy calibration objects at all, you can use the copy function of the Image class.
 * What python version should I develop in?
   * Python 3.12
     
