@@ -192,7 +192,7 @@ if NFRAMES_MEAN_FRAME < 30:
 
 # K-gain
 EXPTIME_KGAIN = [0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
-    6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077, 13.846,
+    6.923, 7.692, 8.462, 9.231, 10.000, 10.769, 11.538, 12.308, 13.077, 13.846,
     14.615, 15.385, 1.538]
 NFRAMES_KGAIN = 5
 # Checks
@@ -200,6 +200,8 @@ if NFRAMES_KGAIN < 5:
     raise Exception(f'Insufficient frames ({NFRAMES_KGAIN}) per unique exposure time in k-gain')
 if len(EXPTIME_KGAIN) < 22:
     raise Exception(f'Insufficient unique exposure times ({len(EXPTIME_KGAIN)}) in k-gain')
+if np.all(np.sign(np.diff(EXPTIME_KGAIN[:-1])) == 1) is False:
+    raise Exception('Exposure times in K-gain must be monotonic but for the last value')
 
 # Non-linearity
 EXPTIME_NONLIN = [0.076, 0.758, 1.515, 2.273, 3.031, 3.789, 4.546, 5.304, 6.062,
@@ -218,6 +220,8 @@ if len(set(EXPTIME_NONLIN)) != len(EXPTIME_NONLIN) - 1:
     raise Exception('Only one exposure time can be repeated in non-linearity')
 if EXPTIME_NONLIN[-1] in EXPTIME_NONLIN[0:5] is False:
     raise Exception('The last exposure time must be present at the beginning of the exposure times in non-linearity')
+if np.all(np.sign(np.diff(EXPTIME_NONLIN[:-1])) == 1) is False:
+    raise Exception('Exposure times in Non-linearity must be monotonic but for the last value')
 
 # Notice the pairing between unity and non-unity gain frames
 EM_EMGAIN=[1.000, 1.000, 1.007, 1.015, 1.024, 1.035, 1.047, 1.060, 1.076, 1.094,
@@ -387,7 +391,6 @@ def test_kgain_sorting():
     # Checks
     n_mean_frame = 0
     n_kgain_test = 0
-    filename_mean_frame_list = []
     filename_kgain_list = []
     exptime_mean_frame_list = []
     exptime_kgain_list = []
@@ -395,7 +398,6 @@ def test_kgain_sorting():
     for idx_frame, frame in enumerate(dataset_kgain):
         if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
             n_mean_frame += 1
-            filename_mean_frame_list += [frame.filename]
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
         elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
             n_kgain_test += 1
@@ -439,25 +441,25 @@ def test_nonlin_sorting_wo_change():
     identical exposure times among the different subsets of non-unity gain
     used to calibrate non-linearity
     """        
-    dataset_nonlin = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='non-lin')
+    dataset_nonlin_wo_change = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='non-lin')
 
     # Checks
     n_mean_frame = 0
     n_nonlin_test = 0
-    filename_mean_frame_list = []
     filename_nonlin_list = []
     exptime_mean_frame_list = []
     exptime_nonlin_list = []
+    cmdgain_nonlin_list = []
     # This way there's no need to perform a sum check and identifies any issue
-    for idx_frame, frame in enumerate(dataset_nonlin):
+    for idx_frame, frame in enumerate(dataset_nonlin_wo_change):
         if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
             n_mean_frame += 1
-            filename_mean_frame_list += [frame.filename]
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
         elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
             n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
+            cmdgain_nonlin_list += [frame.ext_hdr['CMDGAIN']]
         else:
             try:
                 raise Exception((f'Frame #{idx_frame}: Misidentified calibration' +
@@ -465,7 +467,6 @@ def test_nonlin_sorting_wo_change():
             except:
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Non-linearity calibration dataset'))
-
     
     # Same number of files as expected
     assert n_nonlin_test == n_nonlin_wo_change_total
@@ -475,6 +476,21 @@ def test_nonlin_sorting_wo_change():
     assert exptime_mean_frame_list[0] == EXPTIME_MEAN_FRAME
     # Expected number of frames for the mean frame
     assert n_mean_frame == NFRAMES_MEAN_FRAME
+    # Needs ordering
+    idx_nonlin_sort = np.argsort(filename_nonlin_list)
+    # Expected exposure times for Non-linearity
+    exptime_nonlin_arr = np.array(exptime_nonlin_list)[idx_nonlin_sort]
+    # Subset of unique non-unity EM gains
+    nonlin_em_gain_arr = np.unique(cmdgain_nonlin_list)
+    nonlin_em_gain_arr.sort()
+    assert np.all(nonlin_em_gain_arr == CMDGAIN_NONLIN)
+    n_exptime_nonlin = len(EXPTIME_NONLIN)
+    # Expected exposure times (this test keeps the same values for all subsets) 
+    exptime_nonlin_arr = np.array(exptime_nonlin_list)[idx_nonlin_sort]
+    for idx_em, nonlin_em in enumerate(nonlin_em_gain_arr):
+        assert np.all(exptime_nonlin_arr[idx_em*n_exptime_nonlin:(idx_em+1)*n_exptime_nonlin] == EXPTIME_NONLIN)
+        assert (exptime_nonlin_arr[(idx_em+1)*n_exptime_nonlin-1] in
+            exptime_nonlin_arr[idx_em*n_exptime_nonlin:(idx_em+1)*n_exptime_nonlin-1])
 
 def test_nonlin_sorting_w_change():
     """
@@ -485,25 +501,25 @@ def test_nonlin_sorting_w_change():
     different exposure times among the different subsets of non-unity gain
     used to calibrate non-linearity
     """
-    dataset_nonlin = sorting.sort_pupilimg_frames(dataset_w_change, cal_type='non-lin')
+    dataset_nonlin_w_change = sorting.sort_pupilimg_frames(dataset_w_change, cal_type='non-lin')
 
     # Checks
     n_mean_frame = 0
     n_nonlin_test = 0
-    filename_mean_frame_list = []
     filename_nonlin_list = []
     exptime_mean_frame_list = []
     exptime_nonlin_list = []
+    cmdgain_nonlin_list = []
     # This way there's no need to perform a sum check and identifies any issue
-    for idx_frame, frame in enumerate(dataset_nonlin):
+    for idx_frame, frame in enumerate(dataset_nonlin_w_change):
         if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
             n_mean_frame += 1
-            filename_mean_frame_list += [frame.filename]
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
         elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
             n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
+            cmdgain_nonlin_list += [frame.ext_hdr['CMDGAIN']]
         else:
             try:
                 raise Exception((f'Frame #{idx_frame}: Misidentified calibration' +
@@ -513,13 +529,27 @@ def test_nonlin_sorting_w_change():
                     'type in the Non-linearity calibration dataset'))
 
     # Same number of files as expected
-    assert n_nonlin_test == n_nonlin_w_change_total
+    assert n_nonlin_test == n_nonlin_wo_change_total
     # Unique exposure time for the mean frame
     assert len(set(exptime_mean_frame_list)) == 1
     # Expected exposure time for the mean frame
     assert exptime_mean_frame_list[0] == EXPTIME_MEAN_FRAME
     # Expected number of frames for the mean frame
     assert n_mean_frame == NFRAMES_MEAN_FRAME
+    # Needs ordering
+    idx_nonlin_sort = np.argsort(filename_nonlin_list)
+    # Expected exposure times for Non-linearity
+    exptime_nonlin_arr = np.array(exptime_nonlin_list)[idx_nonlin_sort]
+    # Subset of unique non-unity EM gains
+    nonlin_em_gain_arr = np.unique(cmdgain_nonlin_list)
+    nonlin_em_gain_arr.sort()
+    assert np.all(nonlin_em_gain_arr == CMDGAIN_NONLIN)
+    n_exptime_nonlin = len(EXPTIME_NONLIN)
+    # Expected exposure times (this test changed the values for all subsets)
+    exptime_nonlin_arr = np.array(exptime_nonlin_list)[idx_nonlin_sort]
+    for idx_em, nonlin_em in enumerate(nonlin_em_gain_arr):
+        assert (exptime_nonlin_arr[(idx_em+1)*n_exptime_nonlin-1] in
+            exptime_nonlin_arr[idx_em*n_exptime_nonlin:(idx_em+1)*n_exptime_nonlin-1])
     
 if __name__ == "__main__":
     print('Running test_sort_pupilimg_sorting')
