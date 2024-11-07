@@ -899,4 +899,5 @@ def kgain_dataset_2_list(dataset):
     # When measuring k_gain, there can only be one gain for all exposure times
     actual_gain = np.mean(gains) # not actually used in k gain calibration since frames already gain-divided
     
+    breakpoint()
     return stack, mean_frame_stack, actual_gain

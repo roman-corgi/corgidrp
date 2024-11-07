@@ -297,6 +297,7 @@ def calibrate_nonlin(dataset_nl,
     if not r_flag:
         raise CalNonlinException('each substack of cal_arr must have a '
             'group of frames with a repeated exposure time.')   
+    breakpoint()
     if len(len_list) != len(actual_gain_arr):
         raise CalNonlinException('Length of actual_gain_arr be the same as the '
                                  'length of len_list.')
@@ -876,6 +877,7 @@ def nonlin_dataset_2_stack(dataset):
                     raise Exception('Exposure times must be positive')
                 exp_times.append(exp_time)
                 datetime = frame.ext_hdr['DATETIME']
+                
                 if isinstance(datetime, str) is False:
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
@@ -904,5 +906,6 @@ def nonlin_dataset_2_stack(dataset):
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
 
+    breakpoint()
     return (np.vstack(stack), np.stack(mean_frame_stack), np.array(exp_times),
         np.array(datetimes), len_sstack, np.array(gains))
