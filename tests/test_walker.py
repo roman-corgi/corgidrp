@@ -29,7 +29,7 @@ def test_autoreducing():
 
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -63,6 +63,16 @@ def test_autoreducing():
     new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     mycaldb = caldb.CalDB()
     mycaldb.create_entry(new_nonlinearity)
+    
+    #Make a KGain calibration file
+    kgain_arr = np.array([[8.8]])
+    new_kgain = data.KGain(kgain_arr,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
+    new_kgain.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
+    new_kgain.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
+    new_kgain.save(filedir = os.path.join(os.path.dirname(__file__), "test_data"), filename = "kgain.fits")
+    
+    mycaldb.create_entry(new_kgain)
+    
 
     CPGS_XML_filepath = "" # not yet implemented
 
@@ -85,6 +95,7 @@ def test_autoreducing():
 
     # clean up
     mycaldb.remove_entry(new_nonlinearity)
+    mycaldb.remove_entry(new_kgain)
 
 def test_auto_template_identification():
     """
@@ -99,7 +110,7 @@ def test_auto_template_identification():
         os.mkdir(outputdir)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -153,7 +164,7 @@ def test_auto_template_identification():
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -292,7 +303,7 @@ def test_skip_missing_calib():
         os.mkdir(outputdir)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_200_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -357,7 +368,7 @@ def test_skip_missing_optional_calib():
         os.mkdir(outputdir)
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_200_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -399,7 +410,7 @@ def test_jit_calibs():
 
 
     # create simulated data
-    l1_dataset = mocks.create_prescan_files(filedir=datadir, obstype="SCI", numfiles=2)
+    l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
     fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
     for i, image in enumerate(l1_dataset):
@@ -431,6 +442,15 @@ def test_jit_calibs():
     new_nonlinearity.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     mycaldb = caldb.CalDB()
     mycaldb.create_entry(new_nonlinearity)
+
+    #Make a KGain calibration file
+    kgain_arr = np.array([[8.8]])
+    new_kgain = data.KGain(kgain_arr,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
+    new_kgain.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
+    new_kgain.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
+    new_kgain.save(filedir = os.path.join(os.path.dirname(__file__), "test_data"), filename = "kgain.fits")
+    
+    mycaldb.create_entry(new_kgain)
 
     CPGS_XML_filepath = "" # not yet implemented
 
@@ -494,6 +514,7 @@ def test_jit_calibs():
 
     # clean up
     mycaldb.remove_entry(new_nonlinearity)
+    mycaldb.remove_entry(new_kgain)
 
     corgidrp.jit_calib_id = old_setting
 

@@ -11,6 +11,10 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+try:
+    from proc_cgi_frame.gsw_process import Process, mean_combine
+except:
+    pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -20,7 +24,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     mean of several darks at the same EM gain and exposure time), but all the parts are there in proc_cgi_frame.  
     So this function compares the DRP's output of build_trad_dark()
     to the output of CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/results/run_TVAC_data_ENG_code_trad_dark.py, 
-    which uses proc_cgi_frame code to make a traditional master dark. 
+    which uses proc_cgi_frame code to make a traditional master dark. This is for the full-frame case.
 
     Args:
         tvacdata_path (str): path to TVAC data root directory
@@ -53,6 +57,9 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
                 trad_dark_filename = name # get first filename fed to walk_corgidrp for finding cal file later
             f = os.path.join(root, name)
             trad_dark_data_filelist.append(f)
+    # run in order of files input to II&T code to get exactly the same results
+    # trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
+    # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
     ###### Setup necessary calibration files
     # Create necessary calibration files
@@ -93,7 +100,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
@@ -134,15 +141,230 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     # find cal file (naming convention for data.Dark class)
     generated_trad_dark_file = trad_dark_filename[:-5]+'_dark.fits'
     generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, generated_trad_dark_file) 
-    # Load
+    
+    ###################### run II&T code on data
+    bad_pix = np.zeros((1200,2200)) # what is used in DRP
+    eperdn = 8.7 # what is used in DRP
+    bias_offset = 0 # what is used in DRP
+    em_gain = 1.340000033378601 # read off header from TVAC files
+    exptime = 100.0 # read off header from TVAC files
+    fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
+    fwc_em_e = 100000  # same as what is in DRP's DetectorParams
+    telem_rows_start = detector_params.params['telem_rows_start']
+    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows = slice(telem_rows_start, telem_rows_end)
+    proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
+                 bias_offset, em_gain, exptime,
+                 nonlin_path)
+    dark_frames = []
+    bp_frames = []
+    filelist = []
+    for f in trad_dark_data_filelist: #os.listdir(trad_dark_raw_datadir):
+        # filelist.append(os.path.join(trad_dark_raw_datadir, f))
+        # file = os.path.join(trad_dark_raw_datadir, f)
+        d = fits.getdata(f).astype(float) #file)
+        d[telem_rows] = np.nan
+        _, _, _, _, d0, bp0, _ = proc_dark.L1_to_L2a(d)
+        d1, bp1, _ = proc_dark.L2a_to_L2b(d0, bp0)
+        d1 *= em_gain # undo gain division
+        d1[telem_rows] = 0
+        dark_frames.append(d1)
+        bp_frames.append(bp1)
+
+    # The last output of mean_combine() are useful for calibrate_darks
+    # module in the calibration repository:
+    mean_frame, _, mean_num_good_fr, _ = mean_combine(dark_frames, bp_frames)
+    mean_frame[telem_rows] = np.nan
+    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
+    # np.save(TVAC_dark_path, trad_dark_data_filelist)
+    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
     trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    ###################
     
     ##### Check against TVAC traditional dark result
-    TVAC_trad_dark = fits.getdata(TVAC_dark_path)
-    # clean_trad_dark = (trad_dark.data - fpn_dat/1.340000033378601 - cic_dat)/100
-    # master darks are exactly equal, ignoring the telemetry rows (first and last in this case)
-    assert(np.allclose(TVAC_trad_dark[1:-1], trad_dark[1:-1], atol=1e-10))
+
+    TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
+
+    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
+    pass
+
+    # remove from caldb
+    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
+    this_caldb.remove_entry(trad_dark)
+
+
+@pytest.mark.e2e
+def test_trad_dark_im(tvacdata_path, e2eoutput_path):
+    '''There is no official II&T code for creating a "traditional" master dark (i.e., a dark made from taking the 
+    mean of several darks at the same EM gain and exposure time), but all the parts are there in proc_cgi_frame.  
+    So this function compares the DRP's output of build_trad_dark()
+    to the output of CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/results/run_TVAC_data_ENG_code_trad_dark.py, 
+    which uses proc_cgi_frame code to make a traditional master dark. This is for the image-area case.
+
+    Args:
+        tvacdata_path (str): path to TVAC data root directory
+        e2eoutput_path (str): path to output files made by this test
+    '''
+    # figure out paths, assuming everything is located in the same relative location    
+    trad_dark_raw_datadir = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'darkmap')
+    #TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
+    TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+
+    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
+    dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
+    fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
+    cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
+
+    # make output directory if needed
+    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
+    if not os.path.exists(build_trad_dark_outputdir):
+        os.mkdir(build_trad_dark_outputdir)
+
+    # define the raw science data to process
+    trad_dark_data_filelist = []
+    trad_dark_filename = None
+    for root, _, files in os.walk(trad_dark_raw_datadir):
+        for name in files:
+            if not name.endswith('.fits'):
+                continue
+            if trad_dark_filename is None:
+                trad_dark_filename = name # get first filename fed to walk_corgidrp for finding cal file later
+            f = os.path.join(root, name)
+            trad_dark_data_filelist.append(f)
+    # run in order of files input to II&T code to get exactly the same results
+    # trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
+    # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
+
+    ###### Setup necessary calibration files
+    # Create necessary calibration files
+    # we are going to make a new nonlinear calibration file using
+    # a combination of the II&T nonlinearty file and the mock headers from
+    # our unit test version of the NonLinearityCalibration
+    nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
+    # dummy data; basically just need the header info to combine with II&T nonlin calibration
+    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
+    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    ext_hdr["DRPCTIME"] = time.Time.now().isot
+    ext_hdr['DRPVERSN'] =  corgidrp.__version__
+    mock_input_dataset = data.Dataset(mock_cal_filelist)
+    nonlinear_cal = data.NonLinearityCalibration(nonlin_dat,
+                                                 pri_hdr=pri_hdr,
+                                                 ext_hdr=ext_hdr,
+                                                 input_dataset=mock_input_dataset)
+    nonlinear_cal.save(filedir=build_trad_dark_outputdir, filename="mock_nonlinearcal.fits" )
+
+
+    # Load and combine noise maps from various calibration files into a single array
+    with fits.open(fpn_path) as hdulist:
+        fpn_dat = hdulist[0].data
+    with fits.open(cic_path) as hdulist:
+        cic_dat = hdulist[0].data
+    with fits.open(dark_current_path) as hdulist:
+        dark_current_dat = hdulist[0].data
+
+    # Combine all noise data into one 3D array
+    noise_map_dat_img = np.array([fpn_dat, cic_dat, dark_current_dat])
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'],
+                              detector.detector_areas['SCI']['frame_cols']))
+    rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
+    noise_map_dat[:, r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] = noise_map_dat_img
+
+    # Initialize additional noise map parameters
+    noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
+    noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electrons'
+    # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
+    ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
+    ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
+
+    # Create a DetectorNoiseMaps object and save it
+    noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                        input_dataset=mock_input_dataset, err=noise_map_noise,
+                                        dq=noise_map_dq, err_hdr=err_hdr)
+    noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
     
+    # create a DetectorParams object and save it
+    detector_params = data.DetectorParams({})
+    detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
+
+    # create a k gain object and save it
+    kgain_dat = np.array([[8.7]])
+    kgain = data.KGain(kgain_dat,
+                                pri_hdr=pri_hdr,
+                                ext_hdr=ext_hdr,
+                                input_dataset=mock_input_dataset)
+    kgain.save(filedir=build_trad_dark_outputdir, filename="mock_kgain.fits")
+
+    # add calibration files to caldb
+    this_caldb = caldb.CalDB()
+    this_caldb.create_entry(nonlinear_cal)
+    this_caldb.create_entry(noise_maps)
+    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(detector_params)
+
+    ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
+    walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_image.json")
+
+    # clean up by removing entry
+    this_caldb.remove_entry(nonlinear_cal)
+    this_caldb.remove_entry(noise_maps)
+    this_caldb.remove_entry(kgain)
+    this_caldb.remove_entry(detector_params)
+    # find cal file (naming convention for data.Dark class)
+    generated_trad_dark_file = trad_dark_filename[:-5]+'_dark.fits'
+    generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, generated_trad_dark_file) 
+    
+    ###################### run II&T code on data
+    bad_pix = np.zeros((1200,2200)) # what is used in DRP
+    eperdn = 8.7 # what is used in DRP
+    bias_offset = 0 # what is used in DRP
+    em_gain = 1.340000033378601 # read off header from TVAC files
+    exptime = 100.0 # read off header from TVAC files
+    fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
+    fwc_em_e = 100000  # same as what is in DRP's DetectorParams
+    telem_rows_start = detector_params.params['telem_rows_start']
+    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows = slice(telem_rows_start, telem_rows_end)
+    proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
+                 bias_offset, em_gain, exptime,
+                 nonlin_path)
+    dark_frames = []
+    bp_frames = []
+    filelist = []
+    for f in trad_dark_data_filelist: #os.listdir(trad_dark_raw_datadir):
+        # filelist.append(os.path.join(trad_dark_raw_datadir, f))
+        # file = os.path.join(trad_dark_raw_datadir, f)
+        d = fits.getdata(f).astype(float) #file)
+        d[telem_rows] = np.nan
+        _, _, _, _, d0, bp0, _ = proc_dark.L1_to_L2a(d)
+        d1, bp1, _ = proc_dark.L2a_to_L2b(d0, bp0)
+        d1 *= em_gain # undo gain division
+        d1[telem_rows] = 0
+        dark_frames.append(d1)
+        bp_frames.append(bp1)
+
+    # The last output of mean_combine() are useful for calibrate_darks
+    # module in the calibration repository:
+    mean_frame, _, mean_num_good_fr, _ = mean_combine(dark_frames, bp_frames)
+    mean_frame[telem_rows] = np.nan
+    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
+    # np.save(TVAC_dark_path, trad_dark_data_filelist)
+    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    ###################
+    
+    ##### Check against TVAC traditional dark result
+
+    TVAC_trad_dark = detector.slice_section(mean_frame, 'SCI', 'image')
+
+    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
+    pass
+
     # remove from caldb
     trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
     this_caldb.remove_entry(trad_dark)
@@ -154,7 +376,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = "/home/maxmb/Data/corgidrp/CGI_TVAC_Data/"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
     outputdir = thisfile_dir
 
@@ -168,4 +390,5 @@ if __name__ == "__main__":
     args = ap.parse_args(args_here)
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
+    test_trad_dark_im(tvacdata_dir, outputdir)
     test_trad_dark(tvacdata_dir, outputdir)
