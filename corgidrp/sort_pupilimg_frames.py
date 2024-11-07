@@ -17,21 +17,19 @@ def extract_frame_id(filename):
     idx_0 = len(filename) - filename[::-1].find('_')
     idx_1 = len(filename) - filename[::-1].find('.') - 1
 
-    return filename[idx_0:idx_1]
+    return int(filename[idx_0:idx_1])
 
-def sorting(
+def sort_pupilimg_frames(
     dataset_in,
-    cal_type=None):
+    cal_type=''):
     """ 
     Sorting algorithm that given a dataset will output a dataset with the
     frames used to generate a mean frame and the frames used to calibrate
-    the calibration type: k-gain. non-linearity or em-gain
+    the calibration type: k-gain. non-linearity.
 
     The output dataset has an added keyword value in its extended header:
     OBSTYPE with values 'MNFRAME' (for mean frame), 'KGAIN' (for K-gain),
-    'NONLIN' (for non-linearity) and 'EMGAIN' (for EM-gain vs DAC).
-
-    TODO: EM-gain calibration
+    and 'NONLIN' (for non-linearity).
 
     Args:
       dataset_in (corgidrp.Dataset): dataset with all the frames to be sorted.
@@ -42,16 +40,14 @@ def sorting(
         'k-gain' or 'kgain' for K-gain calibration
         'non-lin(earity)', 'nonlin(earity)' for non-linearity calibration, where
         the letters within parenthesis are optional.
-        'em-gain' or 'emgain' for EM-gain vs DAC calibration
 
     Returns:
 
         Dataset with the frames used to generate a mean frame and the frames
-        used to calibrate the calibration type: k-gain. non-linearity or em-gain.
+        used to calibrate the calibration type: k-gain or non-linearity.
     """
     # Copy dataset
     dataset_cp = dataset_in.copy()
-
     # Split by CMDGAIN
     split_cmdgain = dataset_cp.split_dataset(exthdr_keywords=['CMDGAIN'])
     # Mean frame: split by EXPTIME
@@ -67,20 +63,34 @@ def sorting(
     for frame in split_exptime[0][idx_mean_frame]:
         frame_id_list += [extract_frame_id(frame.filename)]
     # Choose the frames with consecutive ID numbers (same row in AUX file)
-    frame_id_sort = np.array(frame_id_list).astype(int)
+    frame_id_sort = np.array(frame_id_list)
     frame_id_sort.sort()
-    frame_id_sort = \
-        frame_id_sort[np.where(np.diff(frame_id_sort) == 1)]
+    count_cons = [1]
+    idx_cons = 0
+    for idx in range(len(frame_id_sort)-1):
+        if frame_id_sort[idx+1] - frame_id_sort[idx] == 1:
+            count_cons[idx_cons] += 1
+        else:
+            idx_cons += 1
+            count_cons += [1]
+    # Choose the largest subset
+    idx_mean_frame_cons = np.argmax(count_cons)
+    idx_mean_frame_last = np.sum(count_cons[0:idx_mean_frame_cons+1]).astype(int)
+    idx_mean_frame_first = idx_mean_frame_last - count_cons[idx_mean_frame_cons]
+    frame_id_mean_frame = frame_id_sort[idx_mean_frame_first:idx_mean_frame_last]
     mean_frame_list = []
+#    breakpoint()
+
     n_mean_frame = 0
     for frame in split_exptime[0][idx_mean_frame]:
-        if int(extract_frame_id(frame.filename)) in frame_id_sort:
+        if int(extract_frame_id(frame.filename)) in frame_id_mean_frame:
             # Update keyword OBSTYPE
             frame.pri_hdr['OBSTYPE'] = 'MNFRAME'
             mean_frame_list += [frame]
             n_mean_frame += 1
             
     print(f"Mean frame has {n_mean_frame} unity frames with exposure time {frame.ext_hdr['EXPTIME']} seconds")
+#    breakpoint()
 
     # K-gain
     cal_frame_list = []
@@ -117,9 +127,14 @@ def sorting(
         idx_cons2 = [0]
         exptime_cons2 = [exptime_arr[idx_cons2[0]]]
         kgain_subset = []
-        # Iterate over unique counts
+        # Iterate over unique counts that are consecutive
         for idx_count in range(len(count_cons) - 1):
-            if count_cons[idx_count+1] == count_cons[idx_count]:
+            # Both subsets must have all Ids consecutive
+            idx_id_first = np.sum(count_cons[0:idx_count]).astype(int)
+            idx_id_last  = np.sum(count_cons[0:idx_count+2]).astype(int)
+            diff_id = np.diff(np.array(frame_id_list)[idx_id_sort[idx_id_first:idx_id_last]])
+            if (count_cons[idx_count+1] == count_cons[idx_count] and
+                np.all(diff_id == 1)):
                 exptime_cons2 += [exptime_cons[idx_count+1]]
                 idx_cons2 += [idx_count+1]
             else:
@@ -139,8 +154,9 @@ def sorting(
         idx_kgain_0 = kgain_subset[2 * idx_kgain]
         idx_kgain_1 = kgain_subset[2 * idx_kgain + 1]
         # Count frames before and subset length
-        idx_kgain_first = np.sum(count_cons[0:idx_kgain_0])
-        idx_kgain_last = idx_kgain_first + np.sum(count_cons[idx_kgain_0:idx_kgain_1+1])
+        idx_kgain_first = np.sum(count_cons[0:idx_kgain_0]).astype(int)
+        idx_kgain_last = (idx_kgain_first +
+            np.sum(count_cons[idx_kgain_0:idx_kgain_1+1]).astype(int))
 
         # Sort unity gain filenames
         unity_gain_filepath_arr = np.array(unity_gain_filepath_list)[idx_id_sort]
@@ -155,7 +171,7 @@ def sorting(
                 n_kgain += 1
 
         print(f'K-gain has {n_kgain} unity frames with exposure times', exptime_cons[idx_kgain_0:idx_kgain_1+1], f'seconds with each {count_cons[idx_kgain_0]} frames each')
-        
+
     # Non-lin
     elif cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
         print('Considering Non-linearity')
@@ -222,11 +238,8 @@ def sorting(
 
         print(f'Non-linearity has {n_nonlin} frames with gains', nonlin_emgain)
         
-    # EM-gain: TODO
-    elif cal_type.lower() == 'em-gain' or cal_type.lower() == 'emgain':
-        print('Considering low EM-gain: TODO')
     else:
-        raise Exception('Unrecognized calibration type (expected k-gain, non-lin or em-gain)')
+        raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
 
     # Return Datafrane with mean frame and cal type
     return data.Dataset(mean_frame_list + cal_frame_list)
