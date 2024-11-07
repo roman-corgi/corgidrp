@@ -1,0 +1,17 @@
+{
+    "name" : "l1_to_l2a_nonlin_sorting",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "calibrate_nonlin"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

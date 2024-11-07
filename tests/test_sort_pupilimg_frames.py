@@ -355,11 +355,9 @@ for change in change_exptime:
     # Apply sorting algorithm and check results (maybe output of sorting is
     # mean frame and the type used as input? Instead of them all. Then, check
     # those properties
-    dataset_kgain = calsort.sorting(dataset_cal, cal_type='k-gain')
+    dataset_kgain = calsort.sort_pupilimg_frames(dataset_cal, cal_type='k-gain')
 
-    dataset_nonlin = calsort.sorting(dataset_cal, cal_type='non-lin')
-
-    dataset_emgain = calsort.sorting(dataset_cal, cal_type='em-gain')
+    dataset_nonlin = calsort.sort_pupilimg_frames(dataset_cal, cal_type='non-lin')
 
     # Erase FITS files
     for file in filename_list:
