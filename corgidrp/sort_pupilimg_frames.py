@@ -254,5 +254,7 @@ def sort_pupilimg_frames(
         f'The result is that {sorting_summary}.')
     print(history)
 
+    dataset_sorted = data.Dataset(mean_frame_list + cal_frame_list)
+    dataset_sorted.update_after_processing_step(history)
     # Return Datafrane with mean frame and cal type
-    return data.Dataset(mean_frame_list + cal_frame_list)
+    return dataset_sorted
