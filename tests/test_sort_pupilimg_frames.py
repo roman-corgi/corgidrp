@@ -173,6 +173,9 @@ def make_minimal_image(
     hdul[1].header['CMDGAIN'] = cmdgain
     # Record actual exposure time
     hdul[1].header['EXPTIME'] = exptime_sec
+    # Add corresponding VISTYPE
+    hdul[0].header['VISTYPE'] = 'PUPILIMG'
+    # IIT filename convention. TODO: replace with latest L1 filename version
     filename = str(Path('simdata', f'CGI_EXCAM_L1_{frameid:0{10}d}.fits'))
     hdul.writeto(filename, overwrite = True)
     return filename
