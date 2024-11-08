@@ -894,7 +894,7 @@ def nonlin_dataset_2_stack(dataset):
                 raise Exception('OBSTYPE can only be MNFRAME or NONLIN in non-linearity')
         
         # First layer (array of unique EM values)
-        if len(substack):
+        if len(sub_stack):
             stack.append(np.stack(sub_stack))
             len_sstack.append(len_cal_frames)
 
