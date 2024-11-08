@@ -910,6 +910,5 @@ def nonlin_dataset_2_stack(dataset):
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
 
-    breakpoint()
     return (np.vstack(stack), np.stack(mean_frame_stack), np.array(exp_times),
         np.array(datetimes), len_sstack, np.array(gains))
