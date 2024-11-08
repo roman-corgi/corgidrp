@@ -42,6 +42,7 @@ def set_vistype_for_tvac(
 
 def get_drp_nonlin_filename(directory_path):
     """ Function that finds the output DRP FITS file with the Non-linearity table.
+
     Args:
       directory_path (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
