@@ -122,7 +122,7 @@ for j in range(len(exp_repeat_counts)):
                                divide_em=True)
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
         # OBSTYPE has no KGAIN value, but NONLIN
-        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
+        image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
         frame_list.append(image_sim)
 dataset_kg = Dataset(frame_list)
 
