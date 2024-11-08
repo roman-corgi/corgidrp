@@ -14,6 +14,8 @@ try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
     import cal
 except:
+    # For tests to pass. Is it not necessary? See 'default_config_file' below
+    print('Install e2e dependencies with pip install -r requirements_e2etests.txt')
     pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
@@ -38,6 +40,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
                 stack_arr2_f.append(file)
                 with fits.open(file, mode='update') as hdus:
                     try:
+                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
                         hdus[0].header['OBSTYPE'] = 'MNFRAME'
                     except:
                         pass
@@ -51,6 +54,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
                 stack_arr_f.append(file)
                 with fits.open(file, mode='update') as hdus:
                     try:
+                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
                         hdus[0].header['OBSTYPE'] = 'KGAIN'
                     except:
                         pass
@@ -103,8 +107,12 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     os.mkdir(kgain_outputdir)
 
     ####### Run the DRP walker
+    print('Running walker')
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
-    kgain_file = os.path.join(kgain_outputdir, os.path.split(ordered_filelist[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
+
+    ####### Load in the output data. It should be the latest kgain file produced.
+    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_kgain.fits'))
+    kgain_file = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
 
     kgain = data.KGain(kgain_file)
     
@@ -134,7 +142,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder'  #"/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
+    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")
