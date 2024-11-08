@@ -7,6 +7,11 @@
     "inputs" : [],
     "outputdir" : "",
     "steps" : [
+        {   "name" : "sort_pupilimg_frames",
+              "keywords" : {
+                "cal_type" : "non-lin"
+              }
+        },
         {
             "name" : "prescan_biassub",
               "keywords" : {
@@ -36,13 +41,7 @@
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC",
                 "KGain" : "AUTOMATIC, OPTIONAL"
-				
             }
-        },
-        {   "name" : "sort_pupilimg_frames",
-              "keywords" : {
-                "cal_type" : "non-lin"
-              }
         },
         {
             "name" : "calibrate_nonlin"
