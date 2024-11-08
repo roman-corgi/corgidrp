@@ -46,6 +46,7 @@ def get_drp_nonlin_filename(directory_path):
       directory_path (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
+
     Returns:
       str: filename of the output DRP table.
     """
