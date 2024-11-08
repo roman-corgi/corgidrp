@@ -63,7 +63,7 @@ def get_drp_nonlin_filename(directory_path):
                     most_recent_time = mod_time
 
     if most_recent_time is None:
-        raise Exception(f'No output FITS file has been found in {e2eoutput_path}')
+        raise Exception(f'No output FITS file has been found in {directory_path}')
 
     return most_recent_file
 
