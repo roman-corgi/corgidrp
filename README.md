@@ -15,7 +15,15 @@ That configuration directory will be used to locate things on your computer such
 
 ### For Developers
 
-Large binary files (used in tests) are stored in Git LFS. You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
+Large binary files (used in tests) are stored in Git LFS. [Install Git LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage) if it isn't already installed.  You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
+
+To run the existing end-to-end tests, you also need the II&T code, which is used directly for comparing results. This also requires Git LFS to be installed first. Then install the II&T code by doing the following while in the top-level folder:
+
+```
+pip install -r requirements_e2etests.txt corgidrp
+```
+
+This will install the II&T repositories `cal` and `proc_cgi_frame`.  
 
 ### Troubleshooting
 
@@ -133,19 +141,6 @@ To run the existing end-to-end tests, you need to have downloaded all the TVAC d
 
 ```
 pytest --which e2e --tvacdata_path /path/to/CGI_TVAC_Data --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
-```
-
-To run the existing end-to-end tests, you also need the II&T code, which is used directly for comparing results.  First install Git LFS if it isn't already installed (https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage).  Then install the II&T code by doing the following while in the top-level folder:
-
-```
-pip install -r requirements_e2etests.txt corgidrp
-```
-
-This will install the II&T repositories `cal` and `proc_cgi_frame`.  To ensure the version from cgi_iit_drp (https://github.com/roman-corgi/cgi_iit_drp) is installed, you may have to do the following first:
-
-```
-pip uninstall proc_cgi_frame
-pip uninstall cal
 ```
 
 ### Linting
