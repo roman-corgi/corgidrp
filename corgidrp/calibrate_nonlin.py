@@ -866,7 +866,8 @@ def nonlin_dataset_2_stack(dataset):
                 if frame.ext_hdr['CMDGAIN'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-            elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
+            elif (frame.pri_hdr['OBSTYPE'] == 'KGAIN' or
+                frame.pri_hdr['OBSTYPE'] == 'NONLIN'):
                 len_cal_frames += 1
                 sub_stack.append(frame.data)
                 exp_time = frame.ext_hdr['EXPTIME']
