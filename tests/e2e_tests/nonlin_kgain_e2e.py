@@ -23,10 +23,6 @@ def set_vistype_for_tvac(
 
     This function is unnecessary with future data because data will have
     the proper values in VISTYPE. Hence, the "tvac" string in its name.
-    For reference, TVAC data used to calibrate non-linearity were the
-    following 382 files with IDs: 51841-51870 (30: mean frame). And NL:
-    51731-51840 (110), 51941-51984 (44), 51986-52051 (66), 55122-55187 (66),
-    55191-55256 (66)  
 
     Args:
     list_of_fits (list): list of FITS files that need to be updated.
@@ -81,7 +77,8 @@ def test_nonlin_and_kgain_e2e(
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
 
-    # only add the ones from the kgain list that don't share the same 
+    # both kgain and nonlin dirs have the same MNFRAME files
+    # only add the files from the kgain list that don't share the same filename
     # grab filenames for l1 
     nonlin_l1_filenames = [filepath.split(os.path.sep)[-1] for filepath in nonlin_l1_list]
     pupilimg_l1_list = nonlin_l1_list # start with the nonlin filelist
@@ -92,7 +89,7 @@ def test_nonlin_and_kgain_e2e(
             pupilimg_l1_list.append(filepath)
 
 
-    # Set TVAC OBSTYPE to MNFRAME/NONLIN (flight data should have these values)
+    # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
 
    
