@@ -48,7 +48,7 @@ def get_drp_nonlin_filename(directory_path):
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
     Returns:
-      most_recent_file (str): filename of the output DRP FITS file with the Non-linearity table.
+      most_recent_file (str): filename of the output DRP table.
     """
     most_recent_file = None
     most_recent_time = 0
