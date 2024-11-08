@@ -868,6 +868,7 @@ def nonlin_dataset_2_stack(dataset):
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
             else:
+                breakpoint()
                 len_cal_frames += 1
                 sub_stack.append(frame.data)
                 exp_time = frame.ext_hdr['EXPTIME']
