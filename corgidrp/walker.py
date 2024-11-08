@@ -15,6 +15,7 @@ import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
 import corgidrp.detector
 import corgidrp.darks
+import corgidrp.sort_pupilimg_frames
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -39,7 +40,8 @@ all_steps = {
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
-    "build_trad_dark" : corgidrp.darks.build_trad_dark
+    "build_trad_dark" : corgidrp.darks.build_trad_dark,
+    "sort_pupilimg_frames" : corgidrp.sort_pupilimg_frames.sort_pupilimg_frames
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -84,7 +86,6 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         run_recipe(recipes)
 
     return recipes
-
 
 def autogen_recipe(filelist, outputdir, template=None):
     """

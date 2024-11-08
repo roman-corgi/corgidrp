@@ -1,3 +1,4 @@
+
 {
     "name" : "l1_to_kgain",
     "template" : true,
@@ -7,6 +8,11 @@
     "inputs" : [],
     "outputdir" : "",
     "steps" : [
+        {   "name" : "sort_pupilimg_frames",
+              "keywords" : {
+                "cal_type" : "k-gain"
+              }
+        },
         {
             "name" : "prescan_biassub",
             "keywords" : {
