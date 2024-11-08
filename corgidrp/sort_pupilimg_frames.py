@@ -89,102 +89,106 @@ def sort_pupilimg_frames(
             mean_frame_list += [frame]
             n_mean_frame += 1
             
-    print(f'\nMean frame has {n_mean_frame} unity frames with exposure time {exptime_mean_frame} seconds')
+    sorting_summary = (f'Mean frame has {n_mean_frame} unity frames with' + 
+        f' exposure time {exptime_mean_frame} seconds. ')
 
-    # K-gain
+    # K-gain and non-linearity
     cal_frame_list = []
     if cal_type.lower() == 'k-gain' or cal_type.lower() == 'kgain':
         print('Considering K-gain:')
-        # Remove main frame frames from unity gain frames
-        split_exptime[0].remove(split_exptime[0][idx_mean_frame])
-        split_exptime[1].remove(split_exptime[1][idx_mean_frame])
-        # Frames must be taken consecutively
-        frame_id_list = []
-        exptime_list = []
-        unity_gain_filepath_list = []
-        for subset in split_exptime[0]:
-            for frame in subset:
-                frame_id_list += [extract_frame_id(frame.filename)]
-                exptime_list += [frame.ext_hdr['EXPTIME']]
-                unity_gain_filepath_list += [frame.filepath]
-        idx_id_sort = np.argsort(frame_id_list)
-        exptime_arr = np.array(exptime_list)[idx_id_sort]
-        # Count repeated, consecutive elements
-        count_cons = [1]
-        exptime_cons = [exptime_arr[0]]
-        idx_cons = 0
-        for exptime in exptime_arr:
-            if exptime == exptime_cons[-1]:
-                count_cons[idx_cons] += 1
-            else:
-                idx_cons += 1
-                count_cons += [1]
-                exptime_cons += [exptime]
-        # First index always has a repetition in the previous loop (id=id)
-        count_cons[0] -= 1
-
-        idx_cons2 = [0]
-        exptime_cons2 = [exptime_cons[idx_cons2[0]]]
-        kgain_subset = []
-        # Iterate over unique counts that are consecutive
-        for idx_count in range(len(count_cons) - 1):
-            # Indices to cover two consecutive sets
-            idx_id_first = np.sum(count_cons[0:idx_count]).astype(int)
-            idx_id_last  = np.sum(count_cons[0:idx_count+2]).astype(int)
-            diff_id = np.diff(np.array(frame_id_list)[idx_id_sort[idx_id_first:idx_id_last]])
-            diff_exp = np.diff(exptime_cons)
-            # Both subsets must have all Ids consecutive because they are in
-            # time order
-            if (count_cons[idx_count+1] == count_cons[idx_count] and
-                np.all(diff_id == 1) and diff_exp[idx_count] > 0):
-                exptime_cons2 += [exptime_cons[idx_count+1]]
-                idx_cons2 += [idx_count+1]
-            # Last exposure time must be repeated and only once
-            elif (diff_exp[idx_count] < 0  and
-                exptime_cons[idx_count+1] in exptime_cons[0:idx_count+1] and
-                len(exptime_cons2) == len(set(exptime_cons2))):
-                kgain_subset += [idx_cons2[0], idx_count+1]
-                idx_cons2 = [idx_count+1]
-                exptime_cons2 = [exptime_cons]
-            else:
-            # It is not a subset for kgain
-               continue
-        # Choose the largest subset
-        kgain_subset = np.array(kgain_subset)
-        idx_kgain = np.argmax(kgain_subset[1::2] - kgain_subset[0::2])
-        # Extract first/last index in the subset of consecutive frames
-        idx_kgain_0 = kgain_subset[2*idx_kgain]
-        idx_kgain_1 = kgain_subset[2*idx_kgain + 1]
-        # Count frames before and subset length
-        idx_kgain_first = np.sum(count_cons[0:idx_kgain_0]).astype(int)
-        idx_kgain_last = (idx_kgain_first +
-            np.sum(count_cons[idx_kgain_0:idx_kgain_1+1]).astype(int))
-
-        # Sort unity gain filenames
-        unity_gain_filepath_arr = np.array(unity_gain_filepath_list)[idx_id_sort]
-        cal_list = unity_gain_filepath_arr[idx_kgain_first:idx_kgain_last]
-        # Update OBSTYPE and take profit to check files are in the list
-        n_kgain = 0
-        cal_frame_list = []
-        for frame in dataset_cp:
-            if frame.filepath in cal_list:
-                vistype = frame.pri_hdr['VISTYPE']
-                frame.pri_hdr['OBSTYPE'] = 'KGAIN'
-                cal_frame_list += [frame]
-                n_kgain += 1
-
-        sorting_summary = (f'K-gain has {n_kgain} unity frames with exposure ' +
-            f'times {exptime_cons[idx_kgain_0:idx_kgain_1+1]} seconds with ' +
-            f'{count_cons[idx_kgain_0]} frames each')
-
-    # Non-lin
     elif cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
+        print('Considering Non-linearity:')
+    else:
+        raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
+
+    # Remove main frame frames from unity gain frames
+    split_exptime[0].remove(split_exptime[0][idx_mean_frame])
+    split_exptime[1].remove(split_exptime[1][idx_mean_frame])
+    # Frames must be taken consecutively
+    frame_id_list = []
+    exptime_list = []
+    unity_gain_filepath_list = []
+    for subset in split_exptime[0]:
+        for frame in subset:
+            frame_id_list += [extract_frame_id(frame.filename)]
+            exptime_list += [frame.ext_hdr['EXPTIME']]
+            unity_gain_filepath_list += [frame.filepath]
+    idx_id_sort = np.argsort(frame_id_list)
+    exptime_arr = np.array(exptime_list)[idx_id_sort]
+    # Count repeated, consecutive elements
+    count_cons = [1]
+    exptime_cons = [exptime_arr[0]]
+    idx_cons = 0
+    for exptime in exptime_arr:
+        if exptime == exptime_cons[-1]:
+            count_cons[idx_cons] += 1
+        else:
+            idx_cons += 1
+            count_cons += [1]
+            exptime_cons += [exptime]
+    # First index always has a repetition in the previous loop (id=id)
+    count_cons[0] -= 1
+
+    idx_cons2 = [0]
+    exptime_cons2 = [exptime_cons[idx_cons2[0]]]
+    kgain_subset = []
+    # Iterate over unique counts that are consecutive
+    for idx_count in range(len(count_cons) - 1):
+        # Indices to cover two consecutive sets
+        idx_id_first = np.sum(count_cons[0:idx_count]).astype(int)
+        idx_id_last  = np.sum(count_cons[0:idx_count+2]).astype(int)
+        diff_id = np.diff(np.array(frame_id_list)[idx_id_sort[idx_id_first:idx_id_last]])
+        diff_exp = np.diff(exptime_cons)
+        # Both subsets must have all Ids consecutive because they are in
+        # time order
+        if (count_cons[idx_count+1] == count_cons[idx_count] and
+            np.all(diff_id == 1) and diff_exp[idx_count] > 0):
+            exptime_cons2 += [exptime_cons[idx_count+1]]
+            idx_cons2 += [idx_count+1]
+        # Last exposure time must be repeated and only once
+        elif (diff_exp[idx_count] < 0  and
+            exptime_cons[idx_count+1] in exptime_cons[0:idx_count+1] and
+            len(exptime_cons2) == len(set(exptime_cons2))):
+            kgain_subset += [idx_cons2[0], idx_count+1]
+            idx_cons2 = [idx_count+1]
+            exptime_cons2 = [exptime_cons]
+        else:
+        # It is not a subset for kgain
+           continue
+    # Choose the largest subset
+    kgain_subset = np.array(kgain_subset)
+    idx_kgain = np.argmax(kgain_subset[1::2] - kgain_subset[0::2])
+    # Extract first/last index in the subset of consecutive frames
+    idx_kgain_0 = kgain_subset[2*idx_kgain]
+    idx_kgain_1 = kgain_subset[2*idx_kgain + 1]
+    # Count frames before and subset length
+    idx_kgain_first = np.sum(count_cons[0:idx_kgain_0]).astype(int)
+    idx_kgain_last = (idx_kgain_first +
+        np.sum(count_cons[idx_kgain_0:idx_kgain_1+1]).astype(int))
+
+    # Sort unity gain filenames
+    unity_gain_filepath_arr = np.array(unity_gain_filepath_list)[idx_id_sort]
+    cal_list = unity_gain_filepath_arr[idx_kgain_first:idx_kgain_last]
+    # Update OBSTYPE and take profit to check files are in the list
+    n_kgain = 0
+    cal_frame_list = []
+    for frame in dataset_cp:
+        if frame.filepath in cal_list:
+            vistype = frame.pri_hdr['VISTYPE']
+            frame.pri_hdr['OBSTYPE'] = 'KGAIN'
+            cal_frame_list += [frame]
+            n_kgain += 1
+
+    sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
+        f'times {exptime_cons[idx_kgain_0:idx_kgain_1+1]} seconds with ' +
+        f'{count_cons[idx_kgain_0]} frames each. ')
+
+    # Non-unity gain frames for Non-linearity
+    if cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
         print('Considering Non-linearity:')
         # Non-unity gain frames
         split_cmdgain[0].remove(split_cmdgain[0][idx_unity])
         split_cmdgain[1].remove(split_cmdgain[1][idx_unity])
-        # List of frames from multiple subsets
-        cal_frame_list = []
         n_nonlin = 0
         nonlin_emgain = []
         for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
@@ -242,12 +246,9 @@ def sort_pupilimg_frames(
                     n_nonlin += 1
             nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
 
-        sorting_summary = (f'Non-linearity has {n_nonlin} frames with gains ' +
+        sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
             f'{nonlin_emgain}')
         
-    else:
-        raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
-    
     # TODO: Add a HISTORY entry
     history = (f'Dataset to calibrate {cal_type.upper()}. A sorting algorithm ' +
         'based on the constraints that NFRAMES, EXPTIME and CMDGAIN have when collecting ' +
