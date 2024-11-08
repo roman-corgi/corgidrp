@@ -109,9 +109,11 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     ####### Run the DRP walker
     print('Running walker')
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
-    breakpoint()
-    # TODO: Read kgain calibration file (not from the original ordered_filelist that may change when sorting)
-    
+
+    ####### Load in the output data. It should be the latest kgain file produced.
+    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_kgain.fits'))
+    kgain_file = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
+
     kgain = data.KGain(kgain_file)
     
     ##### compare II&T ("TVAC") results with DRP results
@@ -140,7 +142,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/Users/srhildeb/Documents/GitHub/CGI_TVAC_Data/'  
+    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

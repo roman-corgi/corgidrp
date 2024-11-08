@@ -40,33 +40,6 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def get_drp_cal_filename(directory_path):
-    """ Function that finds the output DRP FITS file with the Non-linearity table.
-
-    Args:
-      directory_path (str): Location of the output products: recipe, non-linearity
-            calibration FITS file and summary figure with a comparison of the NL
-            coefficients for different values of DN and EM is stored.
-
-    Returns:
-      str: filename of the output DRP table.
-    """
-    most_recent_file = None
-    most_recent_time = 0
-    for entry in os.scandir(directory_path):
-        if entry.is_file():
-            if entry.name.find('.fits') != -1:
-                # get the modification time of the file using entry.stat().st_mtime_ns
-                mod_time = entry.stat().st_mtime_ns
-                if mod_time > most_recent_time:
-                    # update the most recent file and its modification time
-                    most_recent_file = entry.name
-                    most_recent_time = mod_time
-
-    if most_recent_time is None:
-        raise Exception(f'No output FITS file has been found in {directory_path}')
-
-    return most_recent_file
 
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
@@ -142,7 +115,9 @@ def test_nonlin_cal_e2e(
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
-    nonlin_drp_filename = get_drp_cal_filename(e2eoutput_path)
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NonLinearityCalibration.fits'))
+    nonlin_drp_filename = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
+
     nonlin_out = fits.open(os.path.join(e2eoutput_path, nonlin_drp_filename))
     nonlin_out_table = nonlin_out[1].data
     n_emgain = nonlin_out_table.shape[1]
@@ -194,7 +169,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    TVACDATA_DIR = "/Users/srhildeb/Documents/GitHub/CGI_TVAC_Data/"
+    TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
