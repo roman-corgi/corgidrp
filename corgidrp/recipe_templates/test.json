@@ -36,7 +36,6 @@
             "calibs" : {
                 "DetectorParams" : "AUTOMATIC",
                 "KGain" : "AUTOMATIC, OPTIONAL"
-				
             }
         },
         {   "name" : "sort_pupilimg_frames",

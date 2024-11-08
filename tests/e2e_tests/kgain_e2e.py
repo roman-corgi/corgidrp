@@ -14,7 +14,7 @@ try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
     import cal
 except:
-    pass
+    raise Exception('Install e2e dependencies with pip install -r requirements_e2etests.txt')
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -38,6 +38,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
                 stack_arr2_f.append(file)
                 with fits.open(file, mode='update') as hdus:
                     try:
+                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
                         hdus[0].header['OBSTYPE'] = 'MNFRAME'
                     except:
                         pass
@@ -51,6 +52,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
                 stack_arr_f.append(file)
                 with fits.open(file, mode='update') as hdus:
                     try:
+                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
                         hdus[0].header['OBSTYPE'] = 'KGAIN'
                     except:
                         pass
@@ -103,6 +105,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     os.mkdir(kgain_outputdir)
 
     ####### Run the DRP walker
+    print('Running walker')
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
     kgain_file = os.path.join(kgain_outputdir, os.path.split(ordered_filelist[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
 
@@ -134,7 +137,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/Users/srhildeb/Documents/GitHub/CGI_TVAC_Data/'  #"/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/"
+    tvacdata_dir = '/Users/srhildeb/Documents/GitHub/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

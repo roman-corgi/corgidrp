@@ -124,35 +124,37 @@ def sort_pupilimg_frames(
         count_cons[0] -= 1
 
         idx_cons2 = [0]
-        exptime_cons2 = [exptime_arr[idx_cons2[0]]]
+        exptime_cons2 = [exptime_cons[idx_cons2[0]]]
         kgain_subset = []
         # Iterate over unique counts that are consecutive
         for idx_count in range(len(count_cons) - 1):
-            # Both subsets must have all Ids consecutive
+            # Indices to cover two consecutive sets
             idx_id_first = np.sum(count_cons[0:idx_count]).astype(int)
             idx_id_last  = np.sum(count_cons[0:idx_count+2]).astype(int)
             diff_id = np.diff(np.array(frame_id_list)[idx_id_sort[idx_id_first:idx_id_last]])
+            diff_exp = np.diff(exptime_cons)
+            # Both subsets must have all Ids consecutive because they are in
+            # time order
             if (count_cons[idx_count+1] == count_cons[idx_count] and
-                np.all(diff_id == 1)):
+                np.all(diff_id == 1) and diff_exp[idx_count] > 0):
                 exptime_cons2 += [exptime_cons[idx_count+1]]
                 idx_cons2 += [idx_count+1]
+            # Last exposure time must be repeated and only once
+            elif (diff_exp[idx_count] < 0  and
+                exptime_cons[idx_count+1] in exptime_cons[0:idx_count+1] and
+                len(exptime_cons2) == len(set(exptime_cons2))):
+                kgain_subset += [idx_cons2[0], idx_count+1]
+                idx_cons2 = [idx_count+1]
+                exptime_cons2 = [exptime_cons]
             else:
-                # Last exposure time must be repeated and only once
-                if (exptime_cons2[-1] in exptime_cons2[:-1] and
-                    len(exptime_cons2) - 1 == len(set(exptime_cons2))):
-                    kgain_subset += [idx_cons2[1] - 1, idx_cons2[-1]]
-                    idx_cons2 = [idx_count+1]
-                    exptime_cons2 = [exptime_arr[idx_cons2[0]]]
-                else:
-                # It is not a subset for kgain
-                    continue
+            # It is not a subset for kgain
+               continue
         # Choose the largest subset
         kgain_subset = np.array(kgain_subset)
-        breakpoint()
         idx_kgain = np.argmax(kgain_subset[1::2] - kgain_subset[0::2])
         # Extract first/last index in the subset of consecutive frames
-        idx_kgain_0 = kgain_subset[2 * idx_kgain]
-        idx_kgain_1 = kgain_subset[2 * idx_kgain + 1]
+        idx_kgain_0 = kgain_subset[2*idx_kgain]
+        idx_kgain_1 = kgain_subset[2*idx_kgain + 1]
         # Count frames before and subset length
         idx_kgain_first = np.sum(count_cons[0:idx_kgain_0]).astype(int)
         idx_kgain_last = (idx_kgain_first +
