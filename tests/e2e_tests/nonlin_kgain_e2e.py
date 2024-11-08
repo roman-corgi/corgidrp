@@ -80,7 +80,17 @@ def test_nonlin_and_kgain_e2e(
     nonlin_l1_list.sort()
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
-    pupilimg_l1_list = nonlin_l1_list + kgain_l1_list
+
+    # only add the ones from the kgain list that don't share the same 
+    # grab filenames for l1 
+    nonlin_l1_filenames = [filepath.split(os.path.sep)[-1] for filepath in nonlin_l1_list]
+    pupilimg_l1_list = nonlin_l1_list # start with the nonlin filelist
+    # iterate through kgain filelist to find ones that don't share the same filename
+    for filepath in kgain_l1_list:
+        filename = filepath.split(os.path.sep)[-1]
+        if filename not in nonlin_l1_filenames:
+            pupilimg_l1_list.append(filepath)
+
 
     # Set TVAC OBSTYPE to MNFRAME/NONLIN (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
@@ -99,7 +109,7 @@ def test_nonlin_and_kgain_e2e(
     # kgain from corgidrp
     possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_kgain.fits'))
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
-    kgain = data.Kgain(kgain_filepath)
+    kgain = data.KGain(kgain_filepath)
 
     # remove entry from caldb
     this_caldb = caldb.CalDB()
