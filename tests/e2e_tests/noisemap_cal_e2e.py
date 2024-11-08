@@ -169,6 +169,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
 
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
+    this_caldb.remove_entry(corgidrp_noisemap)
 
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)

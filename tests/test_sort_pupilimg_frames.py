@@ -6,7 +6,7 @@ import numpy as np
 from pathlib import Path
 import astropy.io.fits as fits
 
-from corgidrp import sort_pupilimg_frames as sorting
+from corgidrp import sorting as sorting
 import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_headers
