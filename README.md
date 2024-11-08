@@ -209,7 +209,14 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
-**v1.0** (To be released..)
+**v1.1**
+ * Bug fix so that corgidrp classes can be pickled
+ * New corgidrp.ops interface
+ * Improved agreement with II&T pipeline in updated e2e tests
+ * Ability to embed just the illuminated part of the detector back into a full engineering frame 
+ * Updated DRP throughout to handle recently updated data header specification
+
+**v1.0** 
  * First official pipeline release!
  * Step functions to produce the necessary calibration files for analog L1 to L2b step functions implemented and tested
  * Step function to produce boresight calibration implemented and tested
