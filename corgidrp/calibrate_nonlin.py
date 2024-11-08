@@ -297,7 +297,6 @@ def calibrate_nonlin(dataset_nl,
     if not r_flag:
         raise CalNonlinException('each substack of cal_arr must have a '
             'group of frames with a repeated exposure time.')   
-    breakpoint()
     if len(len_list) != len(actual_gain_arr):
         raise CalNonlinException('Length of actual_gain_arr be the same as the '
                                  'length of len_list.')

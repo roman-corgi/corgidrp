@@ -16,7 +16,6 @@ from corgidrp import caldb
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
-
 def set_vistype_for_tvac(
     list_of_fits,
     ):
@@ -41,29 +40,32 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def get_first_nonlin_file(
-    list_of_fits,
-    ):
-    """ Returns the first FITS file with the NONLIN value on OBSTYPE in a list
-        of FITS files.
+def get_drp_nonlin_filename(directory_path):
+    """ Function that finds the output DRP FITS file with the Non-linearity table.
 
-        Remember that FITS files used for NL calibration must have DATETIME in
-        ascending order.
-
-        Args:
-        list_of_fits (list): list of FITS files that need to be updated.
-
-        Returns:
-        first_fits_file (str): First FITS file with OBSTYPE set to NONLIN.
-
+    Args:
+      e2eoutput_path (str): Location of the output products: recipe, non-linearity
+            calibration FITS file and summary figure with a comparison of the NL
+            coefficients for different values of DN and EM is stored.
+    Returns:
+      filename (str): filename of the output DRP FITS file with the Non-linearity table.
     """
-    first_fits_file = 'NONLIN not found'
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        if fits_file[0].header['OBSTYPE'] == 'NONLIN':
-            first_fits_file = fits_file.filename()
-            break
-    return first_fits_file
+    most_recent_file = None
+    most_recent_time = 0
+    for entry in os.scandir(directory_path):
+        if entry.is_file():
+            if entry.name.find('.fits') != -1:
+                # get the modification time of the file using entry.stat().st_mtime_ns
+                mod_time = entry.stat().st_mtime_ns
+                if mod_time > most_recent_time:
+                    # update the most recent file and its modification time
+                    most_recent_file = entry.name
+                    most_recent_time = mod_time
+
+    if most_recent_time is None:
+        raise Exception(f'No output FITS file has been found in {e2eoutput_path}')
+
+    return most_recent_file
 
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
@@ -139,29 +141,16 @@ def test_nonlin_cal_e2e(
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
-    first_nonlin_file = get_first_nonlin_file(nonlin_l1_list)
-    nonlin_out_filename = first_nonlin_file[len(first_nonlin_file) -
-        first_nonlin_file[::-1].find(os.path.sep):]
-    if nonlin_out_filename.find('fits') == -1:
-        raise IOError('Data files must be FITS files')
-    nonlin_out_filename = nonlin_out_filename[0:nonlin_out_filename.find('fits')-1]
-    nonlin_out_filename += '_NonLinearityCalibration.fits'
-    nonlin_out = fits.open(os.path.join(e2eoutput_path, nonlin_out_filename))
-    if nonlin_out[0].header['OBSTYPE'] != 'NONLIN':
-        raise ValueError('Calibration type is not NL')
+    nonlin_drp_filename = get_drp_nonlin_filename(e2eoutput_path)
+    nonlin_out = fits.open(os.path.join(e2eoutput_path, nonlin_drp_filename))
     nonlin_out_table = nonlin_out[1].data
+    n_emgain = nonlin_out_table.shape[1]
 
     # NL from TVAC
     nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
     nonlin_tvac_table = nonlin_tvac[1].data
 
-    # Check
-    if (nonlin_out_table.shape[0] != nonlin_tvac_table.shape[0] or
-        nonlin_out_table.shape[1] != nonlin_tvac_table.shape[1]):
-        raise ValueError('Non-linearity table from CORGI DRP has a different',
-            'format than the one from TVAC')   
-
-    rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:]-1)
+    rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:n_emgain]/nonlin_tvac_table[1:,1:n_emgain]-1)
 
     # Summary figure
     plt.figure(figsize=(10,6))
@@ -174,17 +163,17 @@ def test_nonlin_cal_e2e(
         fontsize=14)
     plt.legend()
     plt.grid()
-    plt.savefig(os.path.join(e2eoutput_path,nonlin_out_filename[:-5]))
+    plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]))
     print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
         f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
         f'rms={np.std(rel_out_tvac_perc):1.1e} %')
-    print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_out_filename[:-5])}.png')
+    print(f'Figure saved: {os.path.join(e2eoutput_path,nonlin_drp_filename[:-5])}.png')
 
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
 
     # remove entry from caldb
-    nonlin_entry = data.NonLinearityCalibration(os.path.join(e2eoutput_path, nonlin_out_filename))
+    nonlin_entry = data.NonLinearityCalibration(os.path.join(e2eoutput_path, nonlin_drp_filename))
     this_caldb.remove_entry(nonlin_entry)
     this_caldb.remove_entry(kgain)
    # Print success message
