@@ -990,7 +990,7 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
     # load as an image object
     frames = []
     prihdr, exthdr = create_default_headers()
-    prihdr['OBSTYPE'] = 'BORESITE'
+    prihdr['VISTYPE'] = 'BORESITE'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
 
