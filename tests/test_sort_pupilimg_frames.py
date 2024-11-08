@@ -180,206 +180,213 @@ def make_minimal_image(
     hdul.writeto(filename, overwrite = True)
     return filename
 
-# Note: the values for the non-unity em gains and the number
-# of frames used for the mean frame, K-gain, non-linearity and EM-gain vs DAC
-# calibration come from either TVAC or some preliminary version of the
-# Commissioning test calculations
-
-# Global constants
-# Mean frame
-EXPTIME_MEAN_FRAME = 5
-NFRAMES_MEAN_FRAME = 30
-# Checks
-if NFRAMES_MEAN_FRAME < 30:
-    raise Exception(f'Insufficient frames ({NFRAMES_MEAN_FRAME}) for the mean frame')
-
-# K-gain
-EXPTIME_KGAIN = [0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
-    6.923, 7.692, 8.462, 9.231, 10.000, 10.769, 11.538, 12.308, 13.077, 13.846,
-    14.615, 15.385, 1.538]
-NFRAMES_KGAIN = 5
-# Checks
-if NFRAMES_KGAIN < 5:
-    raise Exception(f'Insufficient frames ({NFRAMES_KGAIN}) per unique exposure time in k-gain')
-if len(EXPTIME_KGAIN) < 22:
-    raise Exception(f'Insufficient unique exposure times ({len(EXPTIME_KGAIN)}) in k-gain')
-if np.all(np.sign(np.diff(EXPTIME_KGAIN[:-1])) == 1) is False:
-    raise Exception('Exposure times in K-gain must be monotonic but for the last value')
-
-# Non-linearity
-EXPTIME_NONLIN = [0.076, 0.758, 1.515, 2.273, 3.031, 3.789, 4.546, 5.304, 6.062,
-    6.820, 7.577, 8.335, 9.093, 9.851, 10.608, 11.366, 12.124, 12.881, 13.639,
-    14.397, 15.155, 1.515]
-CMDGAIN_NONLIN = [1.65, 5.24, 8.60, 16.70, 27.50, 45.26, 87.50, 144.10, 237.26,
-    458.70, 584.40]
-# Checks
-if len(EXPTIME_NONLIN) < 22:
-    raise Exception(f'Insufficient frames ({len(EXPTIME_NONLIN)}) per unique EM value in non-linearity')
-if len(CMDGAIN_NONLIN) < 11:
-    raise Exception(f'Insufficient values of distinct EM Values ({len(EXPTIME_NONLIN)}) in non-linearity')
-if np.sum(np.array(EXPTIME_NONLIN) == EXPTIME_NONLIN[-1]) != 2:
-    raise Exception('Last exposure time must be repeated once')
-if len(set(EXPTIME_NONLIN)) != len(EXPTIME_NONLIN) - 1:
-    raise Exception('Only one exposure time can be repeated in non-linearity')
-if EXPTIME_NONLIN[-1] in EXPTIME_NONLIN[0:5] is False:
-    raise Exception('The last exposure time must be present at the beginning of the exposure times in non-linearity')
-if np.all(np.sign(np.diff(EXPTIME_NONLIN[:-1])) == 1) is False:
-    raise Exception('Exposure times in Non-linearity must be monotonic but for the last value')
-
-# Notice the pairing between unity and non-unity gain frames
-EM_EMGAIN=[1.000, 1.000, 1.007, 1.015, 1.024, 1.035, 1.047, 1.060, 1.076, 1.094,
-    1.115, 1.138, 1.165, 1.197, 1.234, 1.276, 1.325, 1.385, 1.453, 1.534, 1.633,
-    1.749, 1.890, 2.066, 2.278, 2.541, 2.873, 3.308, 3.858, 4.581, 5.577, 6.189,
-    6.906, 7.753, 8.757, 9.955, 11.392, 13.222, 15.351, 17.953, 21.157, 25.128,
-    30.082, 36.305, 44.621, 54.768, 67.779, 84.572, 106.378, 134.858, 172.244,
-    224.385, 290.538, 378.283, 494.762, 649.232, 853.428]
-EXPTIME_EMGAIN_SEC=[5, 10, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 10, 10,
-    10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
-NFRAMES_EMGAIN=[3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 5,
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
-# Checks
-if len(EM_EMGAIN) < 56:
-    raise Exception(f'Insufficient number of EM gain values ({len(EM_EMGAIN)}) in EM-gain vs DAC')
-if len(EXPTIME_EMGAIN_SEC) != len(EM_EMGAIN):
-    raise Exception(f'Inconsistent number of sets in EM-gain vs DAC')
-if len(EXPTIME_EMGAIN_SEC) != len(NFRAMES_EMGAIN):
-    raise Exception(f'Inconsistent number of sets in EM-gain vs DAC')
-
-# Test data: Consider two possible scenarios: identical exposure times among the
-# different subsets of non-unity gain used to calibrate non-linearity or different
-# values of exposure times
-
-# Values for mean frame
-cmdgain_mean_frame, exptime_mean_frame = get_cmdgain_exptime_mean_frame(
-    exptime_sec=EXPTIME_MEAN_FRAME,
-    nframes=NFRAMES_MEAN_FRAME,
-    )
-
-if len(cmdgain_mean_frame) != len(exptime_mean_frame):
-    raise Exception('Inconsistent lengths in the mean frame')
-# Total number of frames
-n_mean_frame_total = len(cmdgain_mean_frame)
-
-# Values for K-gain
-cmdgain_kgain, exptime_kgain = get_cmdgain_exptime_kgain(
-    exptime_sec=EXPTIME_KGAIN,
-    nframes=NFRAMES_KGAIN,
-    )
-if len(cmdgain_kgain) != len(exptime_kgain):
-    raise Exception('Inconsistent lengths in k-gain')
-# Total number of frames
-n_kgain_total = len(cmdgain_kgain)
-
-# Values for Non-linearity
-cmdgain_nonlin_wo_change, exptime_nonlin_wo_change = get_cmdgain_exptime_nonlin(
-    exptime_sec=EXPTIME_NONLIN,
-    nonunity_em=CMDGAIN_NONLIN,
-    change_exptime=False,
-    )
-if len(cmdgain_nonlin_wo_change) != len(exptime_nonlin_wo_change):
-    raise Exception('Inconsistent lengths in non-linearity')
-# Total number of frames
-n_nonlin_wo_change_total = len(cmdgain_nonlin_wo_change)
-
-cmdgain_nonlin_w_change, exptime_nonlin_w_change = get_cmdgain_exptime_nonlin(
-    exptime_sec=EXPTIME_NONLIN,
-    nonunity_em=CMDGAIN_NONLIN,
-    change_exptime=True,
-    )
-if len(cmdgain_nonlin_w_change) != len(exptime_nonlin_w_change):
-    raise Exception('Inconsistent lengths in non-linearity')
-# Total number of frames
-n_nonlin_w_change_total = len(cmdgain_nonlin_w_change)
-
-# Values for EM-gain vs DAC
-cmdgain_emgain, exptime_emgain = get_cmdgain_exptime_emgain(
-    em_emgain = EM_EMGAIN,
-    exptime_emgain_sec = EXPTIME_EMGAIN_SEC,
-    nframes = NFRAMES_EMGAIN,
-    )
-if len(cmdgain_emgain) != len(exptime_emgain):
-    raise Exception(f'Inconsistent lengths in em-gain vs dac')
-# Total number of frames
-n_emgain_total = len(cmdgain_emgain)
-
-# DRP Dataset
-# Create directory for temporary data files (not tracked by git)
-if not os.path.exists(Path('simdata')):
-    os.mkdir(Path('simdata'))
-
-idx_frame = 0
-filename_list = []
-# Mean frame
-print('Generating frames for mean frame')
-for i_f in range(n_mean_frame_total):
-    filename = make_minimal_image(
-        cmdgain=cmdgain_mean_frame[i_f],
-        exptime_sec=exptime_mean_frame[i_f],
-        frameid=idx_frame,
+def setup_module():
+    global EXPTIME_MEAN_FRAME, NFRAMES_MEAN_FRAME
+    global EXPTIME_KGAIN,  NFRAMES_KGAIN
+    global EXPTIME_NONLIN, CMDGAIN_NONLIN
+    global EXPTIME_EMGAIN_SEC, EXPTIME_EMGAIN_SEC
+    global n_mean_frame_total, n_kgain_total, n_nonlin_wo_change_total, n_nonlin_w_change_total
+    global dataset_w_change, dataset_wo_change 
+    # Note: the values for the non-unity em gains and the number
+    # of frames used for the mean frame, K-gain, non-linearity and EM-gain vs DAC
+    # calibration come from either TVAC or some preliminary version of the
+    # Commissioning test calculations
+    
+    # Global constants
+    # Mean frame
+    EXPTIME_MEAN_FRAME = 5
+    NFRAMES_MEAN_FRAME = 30
+    # Checks
+    if NFRAMES_MEAN_FRAME < 30:
+        raise Exception(f'Insufficient frames ({NFRAMES_MEAN_FRAME}) for the mean frame')
+    
+    # K-gain
+    EXPTIME_KGAIN = [0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
+        6.923, 7.692, 8.462, 9.231, 10.000, 10.769, 11.538, 12.308, 13.077, 13.846,
+        14.615, 15.385, 1.538]
+    NFRAMES_KGAIN = 5
+    # Checks
+    if NFRAMES_KGAIN < 5:
+        raise Exception(f'Insufficient frames ({NFRAMES_KGAIN}) per unique exposure time in k-gain')
+    if len(EXPTIME_KGAIN) < 22:
+        raise Exception(f'Insufficient unique exposure times ({len(EXPTIME_KGAIN)}) in k-gain')
+    if np.all(np.sign(np.diff(EXPTIME_KGAIN[:-1])) == 1) is False:
+        raise Exception('Exposure times in K-gain must be monotonic but for the last value')
+    
+    # Non-linearity
+    EXPTIME_NONLIN = [0.076, 0.758, 1.515, 2.273, 3.031, 3.789, 4.546, 5.304, 6.062,
+        6.820, 7.577, 8.335, 9.093, 9.851, 10.608, 11.366, 12.124, 12.881, 13.639,
+        14.397, 15.155, 1.515]
+    CMDGAIN_NONLIN = [1.65, 5.24, 8.60, 16.70, 27.50, 45.26, 87.50, 144.10, 237.26,
+        458.70, 584.40]
+    # Checks
+    if len(EXPTIME_NONLIN) < 22:
+        raise Exception(f'Insufficient frames ({len(EXPTIME_NONLIN)}) per unique EM value in non-linearity')
+    if len(CMDGAIN_NONLIN) < 11:
+        raise Exception(f'Insufficient values of distinct EM Values ({len(EXPTIME_NONLIN)}) in non-linearity')
+    if np.sum(np.array(EXPTIME_NONLIN) == EXPTIME_NONLIN[-1]) != 2:
+        raise Exception('Last exposure time must be repeated once')
+    if len(set(EXPTIME_NONLIN)) != len(EXPTIME_NONLIN) - 1:
+        raise Exception('Only one exposure time can be repeated in non-linearity')
+    if EXPTIME_NONLIN[-1] in EXPTIME_NONLIN[0:5] is False:
+        raise Exception('The last exposure time must be present at the beginning of the exposure times in non-linearity')
+    if np.all(np.sign(np.diff(EXPTIME_NONLIN[:-1])) == 1) is False:
+        raise Exception('Exposure times in Non-linearity must be monotonic but for the last value')
+    
+    # Notice the pairing between unity and non-unity gain frames
+    EM_EMGAIN=[1.000, 1.000, 1.007, 1.015, 1.024, 1.035, 1.047, 1.060, 1.076, 1.094,
+        1.115, 1.138, 1.165, 1.197, 1.234, 1.276, 1.325, 1.385, 1.453, 1.534, 1.633,
+        1.749, 1.890, 2.066, 2.278, 2.541, 2.873, 3.308, 3.858, 4.581, 5.577, 6.189,
+        6.906, 7.753, 8.757, 9.955, 11.392, 13.222, 15.351, 17.953, 21.157, 25.128,
+        30.082, 36.305, 44.621, 54.768, 67.779, 84.572, 106.378, 134.858, 172.244,
+        224.385, 290.538, 378.283, 494.762, 649.232, 853.428]
+    EXPTIME_EMGAIN_SEC=[5, 10, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 10, 10,
+        10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
+    NFRAMES_EMGAIN=[3, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+        3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 5, 5, 5,
+        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+    # Checks
+    if len(EM_EMGAIN) < 56:
+        raise Exception(f'Insufficient number of EM gain values ({len(EM_EMGAIN)}) in EM-gain vs DAC')
+    if len(EXPTIME_EMGAIN_SEC) != len(EM_EMGAIN):
+        raise Exception(f'Inconsistent number of sets in EM-gain vs DAC')
+    if len(EXPTIME_EMGAIN_SEC) != len(NFRAMES_EMGAIN):
+        raise Exception(f'Inconsistent number of sets in EM-gain vs DAC')
+    
+    # Test data: Consider two possible scenarios: identical exposure times among the
+    # different subsets of non-unity gain used to calibrate non-linearity or different
+    # values of exposure times
+    
+    # Values for mean frame
+    cmdgain_mean_frame, exptime_mean_frame = get_cmdgain_exptime_mean_frame(
+        exptime_sec=EXPTIME_MEAN_FRAME,
+        nframes=NFRAMES_MEAN_FRAME,
         )
-    filename_list += [filename]
-    idx_frame += 1
-# K-gain
-print('Generating frames for k-gain')
-for i_f in range(n_kgain_total):
-    filename = make_minimal_image(
-        cmdgain=cmdgain_kgain[i_f],
-        exptime_sec=exptime_kgain[i_f],
-        frameid=idx_frame,
+    
+    if len(cmdgain_mean_frame) != len(exptime_mean_frame):
+        raise Exception('Inconsistent lengths in the mean frame')
+    # Total number of frames
+    n_mean_frame_total = len(cmdgain_mean_frame)
+    
+    # Values for K-gain
+    cmdgain_kgain, exptime_kgain = get_cmdgain_exptime_kgain(
+        exptime_sec=EXPTIME_KGAIN,
+        nframes=NFRAMES_KGAIN,
         )
-    filename_list += [filename]
-    idx_frame += 1
-# EM-gain
-print('Generating frames for em-gain')
-for i_f in range( n_emgain_total):
-    filename = make_minimal_image(
-        cmdgain=cmdgain_emgain[i_f],
-        exptime_sec=exptime_emgain[i_f],
-        frameid=idx_frame,
+    if len(cmdgain_kgain) != len(exptime_kgain):
+        raise Exception('Inconsistent lengths in k-gain')
+    # Total number of frames
+    n_kgain_total = len(cmdgain_kgain)
+    
+    # Values for Non-linearity
+    cmdgain_nonlin_wo_change, exptime_nonlin_wo_change = get_cmdgain_exptime_nonlin(
+        exptime_sec=EXPTIME_NONLIN,
+        nonunity_em=CMDGAIN_NONLIN,
+        change_exptime=False,
         )
-    filename_list += [filename]
-    idx_frame += 1
-# Non-linearity (two cases)
-print('Generating frames for non-linearity')
-filename_wo_change_list = copy.deepcopy(filename_list)
-for i_f in range(n_nonlin_wo_change_total):
-    filename = make_minimal_image(
-        cmdgain=cmdgain_nonlin_wo_change[i_f],
-        exptime_sec=exptime_nonlin_wo_change[i_f],
-        frameid=idx_frame,
+    if len(cmdgain_nonlin_wo_change) != len(exptime_nonlin_wo_change):
+        raise Exception('Inconsistent lengths in non-linearity')
+    # Total number of frames
+    n_nonlin_wo_change_total = len(cmdgain_nonlin_wo_change)
+    
+    cmdgain_nonlin_w_change, exptime_nonlin_w_change = get_cmdgain_exptime_nonlin(
+        exptime_sec=EXPTIME_NONLIN,
+        nonunity_em=CMDGAIN_NONLIN,
+        change_exptime=True,
         )
-    filename_wo_change_list += [filename]
-    idx_frame += 1
-
-filename_w_change_list = copy.deepcopy(filename_list)
-for i_f in range(n_nonlin_w_change_total):
-    filename = make_minimal_image(
-        cmdgain=cmdgain_nonlin_wo_change[i_f],
-        exptime_sec=exptime_nonlin_wo_change[i_f],
-        frameid=idx_frame,
+    if len(cmdgain_nonlin_w_change) != len(exptime_nonlin_w_change):
+        raise Exception('Inconsistent lengths in non-linearity')
+    # Total number of frames
+    n_nonlin_w_change_total = len(cmdgain_nonlin_w_change)
+    
+    # Values for EM-gain vs DAC
+    cmdgain_emgain, exptime_emgain = get_cmdgain_exptime_emgain(
+        em_emgain = EM_EMGAIN,
+        exptime_emgain_sec = EXPTIME_EMGAIN_SEC,
+        nframes = NFRAMES_EMGAIN,
         )
-    filename_w_change_list += [filename]
-    idx_frame += 1
-
-# Shuffle file order randomnly
-random.shuffle(filename_wo_change_list)
-random.shuffle(filename_w_change_list)
-
-# Create datasets
-dataset_wo_change = data.Dataset(filename_wo_change_list)
-dataset_w_change = data.Dataset(filename_w_change_list)
-
-# Delete temporary test FITS 
-for filepath in filename_wo_change_list:
-    os.remove(filepath)
-for filepath in filename_w_change_list:
-    # Delete remaining non-linearity FITS
-    try:
+    if len(cmdgain_emgain) != len(exptime_emgain):
+        raise Exception(f'Inconsistent lengths in em-gain vs dac')
+    # Total number of frames
+    n_emgain_total = len(cmdgain_emgain)
+    
+    # DRP Dataset
+    # Create directory for temporary data files (not tracked by git)
+    if not os.path.exists(Path('simdata')):
+        os.mkdir(Path('simdata'))
+    
+    idx_frame = 0
+    filename_list = []
+    # Mean frame
+    print('Generating frames for mean frame')
+    for i_f in range(n_mean_frame_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_mean_frame[i_f],
+            exptime_sec=exptime_mean_frame[i_f],
+            frameid=idx_frame,
+            )
+        filename_list += [filename]
+        idx_frame += 1
+    # K-gain
+    print('Generating frames for k-gain')
+    for i_f in range(n_kgain_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_kgain[i_f],
+            exptime_sec=exptime_kgain[i_f],
+            frameid=idx_frame,
+            )
+        filename_list += [filename]
+        idx_frame += 1
+    # EM-gain
+    print('Generating frames for em-gain')
+    for i_f in range( n_emgain_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_emgain[i_f],
+            exptime_sec=exptime_emgain[i_f],
+            frameid=idx_frame,
+            )
+        filename_list += [filename]
+        idx_frame += 1
+    # Non-linearity (two cases)
+    print('Generating frames for non-linearity')
+    filename_wo_change_list = copy.deepcopy(filename_list)
+    for i_f in range(n_nonlin_wo_change_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_nonlin_wo_change[i_f],
+            exptime_sec=exptime_nonlin_wo_change[i_f],
+            frameid=idx_frame,
+            )
+        filename_wo_change_list += [filename]
+        idx_frame += 1
+    
+    filename_w_change_list = copy.deepcopy(filename_list)
+    for i_f in range(n_nonlin_w_change_total):
+        filename = make_minimal_image(
+            cmdgain=cmdgain_nonlin_wo_change[i_f],
+            exptime_sec=exptime_nonlin_wo_change[i_f],
+            frameid=idx_frame,
+            )
+        filename_w_change_list += [filename]
+        idx_frame += 1
+    
+    # Shuffle file order randomnly
+    random.shuffle(filename_wo_change_list)
+    random.shuffle(filename_w_change_list)
+    
+    # Create datasets
+    dataset_wo_change = data.Dataset(filename_wo_change_list)
+    dataset_w_change = data.Dataset(filename_w_change_list)
+    
+    # Delete temporary test FITS 
+    for filepath in filename_wo_change_list:
         os.remove(filepath)
-    except:
-        pass
+    for filepath in filename_w_change_list:
+        # Delete remaining non-linearity FITS
+        try:
+            os.remove(filepath)
+        except:
+            pass
 
 def test_kgain_sorting():
     """

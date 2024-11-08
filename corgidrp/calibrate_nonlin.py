@@ -867,8 +867,7 @@ def nonlin_dataset_2_stack(dataset):
                 if frame.ext_hdr['CMDGAIN'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-            else:
-                breakpoint()
+            elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
                 len_cal_frames += 1
                 sub_stack.append(frame.data)
                 exp_time = frame.ext_hdr['EXPTIME']
@@ -891,9 +890,13 @@ def nonlin_dataset_2_stack(dataset):
                         except: # use commanded gain otherwise
                             gains.append(frame.ext_hdr['CMDGAIN'])
                     record_gain = False
+            else:
+                raise Exception('OBSTYPE can only be MNFRAME or NONLIN in non-linearity')
+        
         # First layer (array of unique EM values)
-        stack.append(np.stack(sub_stack))
-        len_sstack.append(len_cal_frames)
+        if len(substack):
+            stack.append(np.stack(sub_stack))
+            len_sstack.append(len_cal_frames)
 
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
