@@ -470,6 +470,9 @@ def test_nonlin_sorting_wo_change():
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
             cmdgain_nonlin_list += [frame.ext_hdr['CMDGAIN']]
+        # Testing only non-unity gain frames for Non-linearity
+        elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
+            pass
         else:
             try:
                 raise Exception((f'Frame #{idx_frame}: Misidentified calibration' +
@@ -530,6 +533,9 @@ def test_nonlin_sorting_w_change():
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
             cmdgain_nonlin_list += [frame.ext_hdr['CMDGAIN']]
+        # Testing only non-unity gain frames for Non-linearity
+        elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
+            pass
         else:
             try:
                 raise Exception((f'Frame #{idx_frame}: Misidentified calibration' +
