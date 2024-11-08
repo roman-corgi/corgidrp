@@ -185,7 +185,6 @@ def sort_pupilimg_frames(
 
     # Non-unity gain frames for Non-linearity
     if cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
-        print('Considering Non-linearity:')
         # Non-unity gain frames
         split_cmdgain[0].remove(split_cmdgain[0][idx_unity])
         split_cmdgain[1].remove(split_cmdgain[1][idx_unity])
