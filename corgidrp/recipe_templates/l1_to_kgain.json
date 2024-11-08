@@ -8,6 +8,11 @@
     "inputs" : [],
     "outputdir" : "",
     "steps" : [
+        {   "name" : "sort_pupilimg_frames",
+              "keywords" : {
+                "cal_type" : "k-gain"
+              }
+        },
         {
             "name" : "prescan_biassub",
             "keywords" : {
@@ -39,11 +44,6 @@
                 "KGain" : "AUTOMATIC, OPTIONAL"
 	    }
 	},
-        {   "name" : "sort_pupilimg_frames",
-              "keywords" : {
-                "cal_type" : "k-gain"
-              }
-        },
 	{
 	    "name" : "calibrate_kgain",
 	    "keywords" : {
