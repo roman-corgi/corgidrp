@@ -109,8 +109,9 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     ####### Run the DRP walker
     print('Running walker')
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
-    kgain_file = os.path.join(kgain_outputdir, os.path.split(ordered_filelist[0])[1][:-5]+'_kgain.fits') #"CGI_EXCAM_L1_0000051731_kgain.fits")
-
+    breakpoint()
+    # TODO: Read kgain calibration file (not from the original ordered_filelist that may change when sorting)
+    
     kgain = data.KGain(kgain_file)
     
     ##### compare II&T ("TVAC") results with DRP results

@@ -40,7 +40,7 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-def get_drp_nonlin_filename(directory_path):
+def get_drp_cal_filename(directory_path):
     """ Function that finds the output DRP FITS file with the Non-linearity table.
 
     Args:
@@ -142,7 +142,7 @@ def test_nonlin_cal_e2e(
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
-    nonlin_drp_filename = get_drp_nonlin_filename(e2eoutput_path)
+    nonlin_drp_filename = get_drp_cal_filename(e2eoutput_path)
     nonlin_out = fits.open(os.path.join(e2eoutput_path, nonlin_drp_filename))
     nonlin_out_table = nonlin_out[1].data
     n_emgain = nonlin_out_table.shape[1]
