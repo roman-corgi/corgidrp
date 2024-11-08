@@ -63,7 +63,7 @@ def test_nonlin_cal_e2e(
     nonlin_l1_datadir = os.path.join(tvacdata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
     tvac_caldir = os.path.join(tvacdata_path, 'TV-36_Coronagraphic_Data', 'Cals')
-    e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_l2a_output')
+    e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_nonlin_output')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
@@ -116,9 +116,10 @@ def test_nonlin_cal_e2e(
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
     possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NonLinearityCalibration.fits'))
-    nonlin_drp_filename = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
+    nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
+    nonlin_drp_filename = nonlin_drp_filepath.split(os.path.sep)[-1]
 
-    nonlin_out = fits.open(os.path.join(e2eoutput_path, nonlin_drp_filename))
+    nonlin_out = fits.open(nonlin_drp_filepath)
     nonlin_out_table = nonlin_out[1].data
     n_emgain = nonlin_out_table.shape[1]
 
@@ -145,7 +146,7 @@ def test_nonlin_cal_e2e(
         fontsize=14)
     plt.legend()
     plt.grid()
-    plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]))
+    plt.savefig(os.path.join(e2eoutput_path,nonlin_drp_filename[:-5]+".png"))
     print(f'NL differences wrt ENG/TVAC delivered code ({nonlin_table_from_eng}): ' +
         f'max={np.abs(rel_out_tvac_perc).max():1.1e} %, ' + 
         f'rms={np.std(rel_out_tvac_perc):1.1e} %')
