@@ -44,11 +44,11 @@ def get_drp_nonlin_filename(directory_path):
     """ Function that finds the output DRP FITS file with the Non-linearity table.
 
     Args:
-      e2eoutput_path (str): Location of the output products: recipe, non-linearity
+      directory_path (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
             coefficients for different values of DN and EM is stored.
     Returns:
-      filename (str): filename of the output DRP FITS file with the Non-linearity table.
+      most_recent_file (str): filename of the output DRP FITS file with the Non-linearity table.
     """
     most_recent_file = None
     most_recent_time = 0
@@ -150,7 +150,13 @@ def test_nonlin_cal_e2e(
     nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
     nonlin_tvac_table = nonlin_tvac[1].data
 
-    rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:n_emgain]/nonlin_tvac_table[1:,1:n_emgain]-1)
+    # Check
+    if (nonlin_out_table.shape[0] != nonlin_tvac_table.shape[0] or
+        n_emgain != nonlin_tvac_table.shape[1]):
+        raise ValueError('Non-linearity table from CORGI DRP has a different',
+            'format than the one from TVAC')
+
+    rel_out_tvac_perc = 100*(nonlin_out_table[1:,1:]/nonlin_tvac_table[1:,1:]-1)
 
     # Summary figure
     plt.figure(figsize=(10,6))
