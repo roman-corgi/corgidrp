@@ -832,3 +832,32 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02):
     dataset = data.Dataset(frames)
 
     return dataset
+
+def create_not_normalized_dataset(filedir=None, numfiles=10):
+    """
+    Create simulated data not normalized for the exposure time.
+
+    Args:
+        fieldir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset. Default is 10.
+
+    Returns:
+        corgidrp.data.Dataset:
+            the simulated dataset
+    """
+    filepattern = "simcall_not_normalized_{0:04d}.fits"
+    frames = []
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+
+        sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024,1024)), dtype=float)
+        sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024,1024)), dtype=float)
+        sim_dq = np.asarray(np.zeros((1024,1024)), dtype=int)
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr, err=sim_err, dq=sim_dq)
+        # frame = data.Image(sim_data, pri_hdr = prihdr, ext_hdr = exthdr, err = sim_err, dq = sim_dq)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
+    dataset = data.Dataset(frames)
+
+    return dataset
