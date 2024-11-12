@@ -81,5 +81,8 @@ def test_ops_produces_expected_file():
     for output_file in output_filelist:
         assert os.path.exists(output_file), f"Expected output file {output_file} does not exist."
 
+    ### Clean up
+    mycaldb.remove_entry(new_nonlinearity)
+
 if __name__ == "__main__":#
     test_ops_produces_expected_file()
