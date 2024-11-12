@@ -21,7 +21,7 @@ def test_exptime_normalization():
         os.mkdir(datadir)
     
     #create simulated data
-    not_normalized_dataset = mocks.create_not_normalized_files(filedir=datadir)
+    not_normalized_dataset = mocks.create_not_normalized_dataset(filedir=datadir)
 
     # extract the exposure time from each Image and check that it is >0
     exposure_times = np.zeros(len(not_normalized_dataset.frames))
