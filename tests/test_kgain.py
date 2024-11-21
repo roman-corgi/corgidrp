@@ -84,6 +84,9 @@ def test_kgain():
     assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].ext_hdr["KGAIN"] == k_gain
+    assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error
+    assert gain_dataset[0].ext_hdr["RN"] > 0
+    assert gain_dataset[0].ext_hdr["RN_ERR"] > 0
     assert("converted" in str(gain_dataset[0].ext_hdr["HISTORY"]))
 
 if __name__ == "__main__":

@@ -251,13 +251,17 @@ def convert_to_electrons(input_dataset, k_gain):
     kgain_error = kgain_dataset.all_err
 
     kgain = k_gain.value #extract from caldb
+    kgainerr = k_gain.error[0]
     kgain_cube *= kgain
-    kgain_error *= kgain
-
+    kgain_err_up = kgain_error*(kgain+kgainerr)
+    kgain_err_low = kgain_error*(kgain-kgainerr)
+    kgain_error = np.max([kgain_err_up - kgain, kgain - kgain_err_low], axis=0)
+    
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
-    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain})
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain, 
+                                                                                                                                "KGAIN_ER": k_gain.error[0], "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
     return kgain_dataset
 
 def em_gain_division(input_dataset):

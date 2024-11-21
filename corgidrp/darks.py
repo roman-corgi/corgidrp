@@ -111,7 +111,7 @@ def mean_combine(image_list, bpmap_list, err=False):
     # Divide sum_im by map_im only where map_im is not equal to 0 (i.e.,
     # not masked).
     # Where map_im is equal to 0, set combined_im to zero
-    comb_image = np.divide(sum_im, map_im, out=np.zeros_like(sum_im),
+    comb_image = np.divide(sum_im, np.sqrt(map_im), out=np.zeros_like(sum_im),
                             where=map_im != 0)
 
     # Mask any value that was never mapped (aka masked in every frame)
