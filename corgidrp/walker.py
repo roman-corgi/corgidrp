@@ -11,6 +11,7 @@ import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.photon_counting
 import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
 import corgidrp.detector
@@ -41,7 +42,8 @@ all_steps = {
     "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
-    "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames
+    "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
+    "get_pc_mean" : corgidrp.photon_counting.get_pc_mean
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
