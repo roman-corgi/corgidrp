@@ -8,10 +8,13 @@ import os
 
 def test_northup(save_derot_dataset=False):
     """
-    test northup.py
+    unit test of the northup function
+
+    Args:
+	save_derot_dataset (optional): if you want to save the derotated file at the input directory, turn True
 
     Returns:
-    Fits containing the original mock image and the derotated image, with the roll angle recorded
+	Fits containing the original mock image and the derotated image, with the roll angle recorded
     """
     
     dirname = 'test_data/'
@@ -36,6 +39,12 @@ def test_northup(save_derot_dataset=False):
     return output_hdu
 
 def compare_northup(output_hdu):
+    """
+    Save the comparison figure of the original mock data and the derotated data
+
+    Returns:
+    	the comparison figure
+    """
     im_input = output_hdu.data[0]
     im_derot = output_hdu.data[1]
     roll_angle = output_hdu.header['ROLL']
