@@ -81,7 +81,7 @@ def calculate_band_flux(filter_curve, calspec_flux, filter_wavelength):
     """
     multi_flux = calspec_flux * filter_curve * filter_wavelength
     multi_band = filter_curve * filter_wavelength
-    aver_flux = integrate.simpson(multi_flux, filter_wavelength)/integrate.simpson(multi_band, filter_wavelength)
+    aver_flux = integrate.simpson(multi_flux, x=filter_wavelength)/integrate.simpson(multi_band, x=filter_wavelength)
     
     return aver_flux
 
@@ -100,7 +100,7 @@ def calculate_effective_lambda(filter_curve, calspec_flux, filter_wavelength):
     """
     multi_flux = calspec_flux * filter_curve * np.square(filter_wavelength)
     multi_band = calspec_flux * filter_curve * filter_wavelength
-    eff_lambda = integrate.simpson(multi_flux, filter_wavelength)/integrate.simpson(multi_band, filter_wavelength)
+    eff_lambda = integrate.simpson(multi_flux, x=filter_wavelength)/integrate.simpson(multi_band, x=filter_wavelength)
     
     return eff_lambda
 
@@ -117,7 +117,7 @@ def calculate_pivot_lambda(filter_curve, filter_wavelength):
     """
     multi_flux = filter_curve * filter_wavelength
     multi_band = filter_curve / filter_wavelength
-    piv_lambda = np.sqrt(integrate.simpson(multi_flux, filter_wavelength)/integrate.simpson(multi_band, filter_wavelength))
+    piv_lambda = np.sqrt(integrate.simpson(multi_flux, x=filter_wavelength)/integrate.simpson(multi_band, x=filter_wavelength))
     
     return piv_lambda
 
@@ -150,8 +150,8 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
     flux_ref_lambda_ref = np.interp(wave_ref, filter_wavelength, flux_ref)
 
     # compute the top and bottom integrals
-    int_source = integrate.simpson(filter_wavelength * filter_curve * flux_source / flux_source_lambda_ref, filter_wavelength)
-    int_ref = integrate.simpson(filter_wavelength * filter_curve * flux_ref / flux_ref_lambda_ref, filter_wavelength)
+    int_source = integrate.simpson(filter_wavelength * filter_curve * flux_source / flux_source_lambda_ref, x=filter_wavelength)
+    int_ref = integrate.simpson(filter_wavelength * filter_curve * flux_ref / flux_ref_lambda_ref, x=filter_wavelength)
 
     return int_source / int_ref
 
