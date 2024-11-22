@@ -41,7 +41,7 @@ def read_filter_curve(filter_filename):
 
 def read_cal_spec(calspec_filename, filter_wavelength):
     """
-    read the calspec flux density data interpolated on the wavelength of the transmission curve
+    read the calspec flux density data interpolated on the wavelength grid of the transmission curve
     Args:
         filename (str): file name of the CALSPEC fits file
         filter_wavelength (np.array): wavelength grid of the transmission curve in unit Angstroem
@@ -66,6 +66,7 @@ def read_cal_spec(calspec_filename, filter_wavelength):
 def calculate_band_flux(filter_curve, calspec_flux, filter_wavelength):
     """
     calculate the average band flux of a calspec source in the filter band, see convention A in Gordon et al. (2022)
+    TBC if needed at all
     Args:
         filter_curve (np.array): filter transmission curve over the filter_wavelength
         calspec_flux (np.array): converted flux in units of erg/(s*cm^2*AA) of the calpec source in the filter band
@@ -82,6 +83,7 @@ def calculate_band_flux(filter_curve, calspec_flux, filter_wavelength):
 def calculate_effective_lambda(filter_curve, calspec_flux, filter_wavelength):
     """
     calculate the effective wavelength of a calspec source in the filter band, see convention A in Gordon et al. (2022)
+    TBC if needed at all
     Args:
         filter_curve (np.array): filter transmission curve over the filter_wavelength
         calspec_flux (np.array): converted flux in units of the calpec source in the filter band
@@ -119,7 +121,7 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
     for a band by K.  Such color corrections are needed to compute the correct
     flux density at the reference wavelength for a source with the flux_source
     spectral shape in the photometric convention that provides the flux density
-    at a reference wavelength (convention B, see Gordon et al. 2022 for details).
+    at a reference wavelength (convention B, see Gordon et al. 2022, The Astronomical Journal 163:267, for details).
     Thus the flux density value found by applying the calibration factor on the found DN/s 
     of an arbitrary source should be divided by K (for the appropriate filter and spectral shape) 
     to produce the flux density at the reference wavelength of the filter. 
