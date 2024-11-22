@@ -136,16 +136,11 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
     with the current source, which results in the correct flux density at the reference wavelength.
 
     Args:
-    filter_curve(np.array): 
-        transmission of the filter bandpass
-    filter_wavelength (np.array):
-       the wavelengths of the filter bandpass, flux_ref, and flux_source in unit Angstroem
-    flux_ref (np.array):
-        reference flux density F(lambda) as a function of wavelength
-    wave_ref : float
-        reference wavelength in unit Angstroem
-    flux_source (np.array):
-        source flux density F(lambda) as a function of wavelength in CALSPEC unit erg/(s * cm^2 * AA)
+    filter_curve(np.array): transmission of the filter bandpass
+    filter_wavelength (np.array): the wavelengths of the filter bandpass, flux_ref, and flux_source in unit Angstroem
+    flux_ref (np.array): reference flux density F(lambda) as a function of wavelength
+    wave_ref (float): reference wavelength in unit Angstroem
+    flux_source (np.array): source flux density F(lambda) as a function of wavelength in CALSPEC unit erg/(s * cm^2 * AA)
     
     Returns:
         float: color correction factor K
