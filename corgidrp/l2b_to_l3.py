@@ -43,6 +43,7 @@ def determine_color_cor(input_dataset, calspec_filepath, source_filepath):
         calspec_filepath (str): file name of the known reference flux (usually CALSPEC)
         source_filepath (str): file name of the flux model of the observed source in 
                                CALSPEC units (erg/(s * cm^2 * AA) and format
+    
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with updated header including 
                               the reference wavelength and the color correction factor
@@ -66,6 +67,7 @@ def determine_color_cor(input_dataset, calspec_filepath, source_filepath):
     history_msg = "the color correction is calculated and added to the header {0}".format(str(k))
     # update the header of the output dataset and update the history
     color_dataset.update_after_processing_step(history_msg, header_entries = {"LAM_REF": lambda_ref, "COL_COR": k})
+    
     return color_dataset
 
 def update_to_l3(input_dataset):
