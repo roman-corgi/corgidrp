@@ -18,7 +18,9 @@ dataset=Dataset([image1, image2])
 calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "bd_75d325_stis_006.fits")
 
 def test_get_filter_name():
-    """test that the correct filter curve file is selected"""
+    """
+    test that the correct filter curve file is selected
+    """
     global wave
     global transmission
     filepath = fluxcal.get_filter_name(dataset)
@@ -30,7 +32,9 @@ def test_get_filter_name():
     assert np.any(transmission < 1.)
 
 def test_flux_calc():
-    """test that the calspec data is read correctly"""
+    """
+    test that the calspec data is read correctly
+    """
     calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
     assert calspec_flux[0] == pytest.approx(2e-13, 1e-15) 
     
@@ -39,7 +43,10 @@ def test_flux_calc():
     assert eff_lambda == pytest.approx((wave[0]+wave[-1])/2., 3)
     
 def test_colorcor():
-    """test that the pivot reference wavelengths is close to the center of the bandpass"""
+    """
+    test that the pivot reference wavelengths is close to the center of the bandpass
+    """
+    
     lambda_piv = fluxcal.calculate_pivot_lambda(transmission, wave)
     assert lambda_piv == pytest.approx((wave[0]+wave[-1])/2., 0.3)
     

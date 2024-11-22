@@ -45,7 +45,7 @@ def determine_color_cor(input_dataset, calspec_filepath, source_filepath):
                                CALSPEC units (erg/(s * cm^2 * AA) and format
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with updated header including 
-        the reference wavelength and the color correction factor
+                              the reference wavelength and the color correction factor
     """
     color_dataset = input_dataset.copy()
     # get the filter name from the header keyword 'CFAMNAME'
