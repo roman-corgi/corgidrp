@@ -1871,6 +1871,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         exptime (float): exposure time (in s)
         cosmic_rate (float) : simulated cosmic rays incidence, hits/cm^2/s
         full_frame (bool) : If True, simulated frames are SCI full frames.  If False, 5x5 images are simulated.  Defaults to True.
+    
     Returns:
         dataset (corgidrp.data.Dataset): Dataset containing both the illuminated and dark frames
         ill_mean (float): mean electron count value simulated in the illuminated frames
