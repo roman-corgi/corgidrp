@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_l2b_pc",
+    "name" : "l2a_to_l2b_pc",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false

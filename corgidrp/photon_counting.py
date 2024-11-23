@@ -134,14 +134,20 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
     ill_dataset = datasets[1-vals.index('DARK')]
     
     pc_means = []
+    ups = []
+    lows = []
+    t = []
     errs = []
     dqs = []
+    pc_means_up = []
+    pc_means_low = []
     for dataset in [ill_dataset, dark_dataset]:
         # getting number of read noise standard deviations at which to set the
         # photon-counting threshold
         T_factor = detector_params.params['T_factor']
         # now get threshold to use for photon-counting
-        thresh = T_factor*dataset.frames[0].ext_hdr['RN']
+        read_noise = dataset.frames[0].ext_hdr['RN']
+        thresh = T_factor*read_noise
         if thresh < 0:
             raise PhotonCountException('thresh must be nonnegative')
         if not isinstance(niter, (int, np.integer)) or niter < 1:
@@ -157,41 +163,58 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
         if thresh >= em_gain:
             warnings.warn('thresh should be less than em_gain for effective '
             'photon counting')
+        if np.average(dataset.all_data) > 0.1:
+            warnings.warn('average # of photons/pixel is > 0.1.  Decrease frame '
+            'time to get lower average # of photons/pixel.')
+        if read_noise <=0:
+            warnings.warn('read noise should be greater than 0 for effective '
+            'photon counting')
+        if thresh < 4*read_noise:
+            warnings.warn('thresh should be at least 4 or 5 times read_noise for '
+            'accurate photon counting')
 
         # Photon count stack of frames
         frames_pc = photon_count(dataset.all_data, thresh)
-        # frames_pc = np.array([photon_count(frame, thresh) for frame in dataset.all_data]) XXX
         bool_map = dataset.all_dq.astype(bool).astype(float)
         bool_map[bool_map > 0] = np.nan
         bool_map[bool_map == 0] = 1
         nframes = np.nansum(bool_map, axis=0)
+        # upper and lower bounds for PC (for getting accurate err)
+        frames_pc_up = photon_count(dataset.all_data+dataset.all_err[:,0], thresh)
+        frames_pc_low = photon_count(dataset.all_data-dataset.all_err[:,0], thresh)
         frames_pc_masked = frames_pc * bool_map
+        frames_pc_masked_up = frames_pc_up * bool_map
+        frames_pc_masked_low = frames_pc_low * bool_map
         # Co-add frames
         frame_pc_coadded = np.nansum(frames_pc_masked, axis=0)
+        frame_pc_coadded_up = np.nansum(frames_pc_masked_up, axis=0)
+        frame_pc_coadded_low = np.nansum(frames_pc_masked_low, axis=0)
         
         # Correct for thresholding and coincidence loss; any pixel masked all the 
-        # way through the stack will give NaN
+        # way through the stack may give NaN, but it should be masked in lam_newton_fit(); 
+        # and it doesn't matter anyways since its DQ value will be 1 (it will be masked when the 
+        # bad pixel correction is run, which comes after this photon-counting step)
         mean_expected = corr_photon_count(frame_pc_coadded, nframes, thresh,
                                             em_gain, niter)
-      
-        ##### error calculation
-        # combine all err frames to get standard error, which is due to inherent error in
-        # in the data before any photon counting is done
-        err_sum = np.sum(dataset.all_err**2, axis=0)
-        bool_map_sum = np.nansum(bool_map, axis=0)
-        comb_err = np.divide(np.sqrt(err_sum), np.sqrt(bool_map_sum), out=np.zeros_like(err_sum), 
-                            where=bool_map_sum != 0)
-        # expected error from photon counting
+        mean_expected_up = corr_photon_count(frame_pc_coadded_up, nframes, thresh,
+                                            em_gain, niter)
+        mean_expected_low = corr_photon_count(frame_pc_coadded_low, nframes, thresh,
+                                            em_gain, niter)
+        ##### error calculation: accounts for err coming from input dataset and 
+        # statistical error from the photon-counting and photometric correction process. 
+        # expected error from photon counting (biggest source from the actual values, not 
+        # mean_expected_up or mean_expected_low):
         pc_variance = varL23(em_gain,mean_expected,thresh,nframes)
-        # now combine this error with the statistical error coming from the process of photon counting 
-        total_err = np.sqrt(comb_err**2 + pc_variance)
-        total_dq = (bool_map_sum == 0).astype(int) # 1 where flagged, 0 otherwise
+        up = mean_expected_up +  pc_variance
+        low = mean_expected_low -  pc_variance
+        errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
+        dq = (nframes == 0).astype(int) 
         pc_means.append(mean_expected)
-        errs.append(total_err)
-        dqs.append(total_dq)
+        dqs.append(dq)
     
     # now subtract the dark PC mean
     combined_pc_mean = pc_means[0] - pc_means[1]
+    combined_pc_mean[combined_pc_mean<0] = 0
     combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
     combined_dq = np.bitwise_or(dqs[0], dqs[1])
     pri_hdr = ill_dataset[0].pri_hdr.copy()
@@ -205,7 +228,7 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
     new_image.filename = ill_dataset[0].filename.split('.')[0]+'_pc.fits'
     new_image._record_parent_filenames(input_dataset)   
     pc_dataset = data.Dataset([new_image])
-    pc_dataset.update_after_processing_step("Photon-counted {0} frames using T_factor = {1} and niter={2}".format(len(input_dataset), T_factor, niter))
+    pc_dataset.update_after_processing_step("Photon-counted {0} frames using T_factor={1} and niter={2}".format(len(input_dataset), T_factor, niter))
 
     return pc_dataset
 
@@ -215,11 +238,11 @@ def corr_photon_count(nobs, nfr, t, g, niter=2):
     Parameters
     ----------
     nobs : array_like
-        Number of observations (Co-added photon counted frame).
+        Number of observations (Co-added photon-counted frame).
     nfr : int
-        Number of coadded frames.
+        Number of coadded frames, accounting for masked pixels in the frames.
     t : float
-        Photon counting threshold.
+        Photon-counting threshold.
     g : float
         EM gain.
     niter : int, optional
@@ -228,7 +251,7 @@ def corr_photon_count(nobs, nfr, t, g, niter=2):
     Returns
     -------
     lam : array_like
-        Mean expeted detected electrons per pixel (lambda).
+        Mean expeted electrons per pixel (lambda).
 
     """
     # Get an approximate value of lambda for the first guess of the Newton fit
@@ -261,7 +284,7 @@ def calc_lam_approx(nobs, nfr, t, g):
     Returns
     -------
     array_like
-        Mean expeted (lambda).
+        Mean expected (lambda).
 
     """
     # First step of equation (before taking log)
@@ -302,12 +325,12 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
     Returns
     -------
     lam : array_like
-        Mean expeted (lambda).
+        Mean expected (lambda).
 
     """
     # Mask out zero values to avoid divide by zero
-    lam_est_m = np.ma.masked_where(lam0 == 0, lam0)
-    nobs_m = np.ma.masked_where(nobs == 0, nobs)
+    lam_est_m = np.ma.masked_array(lam0, mask=(lam0==0))
+    nobs_m = np.ma.masked_array(nobs, mask=(nobs==0))
 
     # Iterate Newton's method
     for i in range(niter):
@@ -315,7 +338,7 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
         dfunc = _calc_dfunc(nfr, t, g, lam_est_m)
         lam_est_m -= func / dfunc
 
-    if lam_est_m.min() < 0:
+    if np.nanmin(lam_est_m.data) < 0:
         raise PhotonCountException('negative number of photon counts; '
         'try decreasing the frametime')
 
@@ -327,42 +350,25 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
 
 def _calc_func(nobs, nfr, t, g, lam):
     """Objective function for lambda."""
-    e_thresh = (
-        np.exp(-t/g)
-        * (
-            t**2 * lam**2
-            + 2*g * t * lam * (3 + lam)
-            + 2*g**2 * (6 + 3*lam + lam**2)
-        )
-        / (2*g**2 * (6 + 3*lam + lam**2))
-    )
+    epsilon_prime = (lam*(2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + 
+            lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam))))
 
-    e_coinloss = (1 - np.exp(-lam)) / lam
-
-    #if (lam * nfr * e_thresh * e_coinloss).any() > nobs.any():
+    #if (nfr * epsilon_prime).any() > nobs.any():
     #    warnings.warn('Input photon flux is too high; decrease frametime')
     # This warning isn't necessary; could have a negative func but still
     # close enough to 0 for Newton's method
-    func = lam * nfr * e_thresh * e_coinloss - nobs
+    func = nfr * epsilon_prime - nobs
 
     return func
 
 
 def _calc_dfunc(nfr, t, g, lam):
     """Derivative wrt lambda of objective function."""
-    dfunc = (
-        (np.exp(-t/g - lam) * nfr)
-        / (2 * g**2 * (6 + 3*lam + lam**2)**2)
-        * (
-            2*g**2 * (6 + 3*lam + lam**2)**2
-            + t**2 * lam * (
-                -12 + 3*lam + 3*lam**2 + lam**3 + 3*np.exp(lam)*(4 + lam)
-                )
-            + 2*g*t * (
-                -18 + 6*lam + 15*lam**2 + 6*lam**3 + lam**4
-                + 6*np.exp(lam)*(3 + 2*lam)
-                )
-        )
-    )
+    dfunc = (lam*nfr*(2*g**2*(3 + 2*lam) + 2*g*lam*t + 2*g*(3 + lam)*t + 
+            2*lam*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam)))) - (lam*(6 + 
+            lam*(3 + lam) + lam*(3 + 2*lam))*nfr*
+         (2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + 
+        lam*(6 + lam*(3 + lam)))**2) + (nfr*(2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + 
+        lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam))))
 
     return dfunc
