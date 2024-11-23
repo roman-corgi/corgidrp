@@ -10,16 +10,14 @@ def varL23(g, L, T, N):
     '''Expected variance after photometric correction.  
     See https://doi.org/10.1117/1.JATIS.9.4.048006 for details.
     
-    Parameters
-    ----------
-    g (scalar): EM gain
-    L (2-D array): mean expected number of electrons
-    T (scalar): threshold 
-    N (2-D array): number of frames
+    Args:
+        g (scalar): EM gain
+        L (2-D array): mean expected number of electrons
+        T (scalar): threshold 
+        N (2-D array): number of frames
 
-    Returns 
-    -------
-    variance from photon counting and the photometric correction
+    Returns:
+        (float): variance from photon counting and the photometric correction
 
     '''
     Const = 6/(6 + L*(6 + L*(3 + L)))
@@ -39,18 +37,13 @@ class PhotonCountException(Exception):
 def photon_count(e_image, thresh):
     """Convert an analog image into a photon-counted image.
 
-    Parameters
-    ----------
-    e_image : array_like, float
-        Analog image (e-).
-    thresh : float
-        Photon counting threshold (e-). Values > thresh will be assigned a 1,
-        values <= thresh will be assigned a 0.
+    Args: 
+        e_image (array_like, float): Analog image (e-).
+        thresh (float): Photon counting threshold (e-). Values > thresh will be assigned a 1,
+            values <= thresh will be assigned a 0.
 
-    Returns
-    -------
-    pc_image : array_like, float
-        Output digital image in units of photons.
+    Returns:
+        pc_image (array_like, float): Output digital image in units of photons.
 
     B Nemati and S Miller - UAH - 06-Aug-2018
 
@@ -96,23 +89,17 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
     determined by "T_factor" stored in DetectorParams. The dark mean expected array
     is then subtracted from the illuminated mean expected array.
 
-    Parameters
-    ----------
-    input_dataset (corgidrp.data.Dataset):
-        This is an instance of corgidrp.data.Dataset containing the  
-        photon-counted illuminated frames as well as the 
-        photon-counted dark frames, and all the frames must have the same 
-        exposure time, EM gain, k gain, and read noise.
-    detector_params: (corgidrp.data.DetectorParams)
-        A calibration file storing detector calibration values.
-    niter : int, optional
-        Number of Newton's method iterations (used for photometric 
-        correction). Defaults to 2.
+    Args:
+        input_dataset (corgidrp.data.Dataset): This is an instance of corgidrp.data.Dataset containing the 
+            photon-counted illuminated frames as well as the 
+            photon-counted dark frames, and all the frames must have the same 
+            exposure time, EM gain, k gain, and read noise.
+        detector_params (corgidrp.data.DetectorParams): A calibration file storing detector calibration values.
+        niter (int, optional): Number of Newton's method iterations (used for photometric 
+            correction). Defaults to 2.
 
-    Returns
-    -------
-    mean_expected : array_like
-        Mean expected photoelectron array (dark-subtracted)
+    Returns:
+        pc_dataset (corgidrp.data.Dataset): Contains mean expected photoelectron array (dark-subtracted)
 
     References
     ----------
@@ -134,13 +121,8 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
     ill_dataset = datasets[1-vals.index('DARK')]
     
     pc_means = []
-    ups = []
-    lows = []
-    t = []
     errs = []
     dqs = []
-    pc_means_up = []
-    pc_means_low = []
     for dataset in [ill_dataset, dark_dataset]:
         # getting number of read noise standard deviations at which to set the
         # photon-counting threshold
@@ -235,23 +217,15 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
 def corr_photon_count(nobs, nfr, t, g, niter=2):
     """Correct photon counted images.
 
-    Parameters
-    ----------
-    nobs : array_like
-        Number of observations (Co-added photon-counted frame).
-    nfr : int
-        Number of coadded frames, accounting for masked pixels in the frames.
-    t : float
-        Photon-counting threshold.
-    g : float
-        EM gain.
-    niter : int, optional
-        Number of Newton's method iterations. Defaults to 2.
+    Args:
+        nobs (array_like): Number of observations (Co-added photon-counted frame).
+        nfr (int): Number of coadded frames, accounting for masked pixels in the frames.
+        t (float): Photon-counting threshold.
+        g (float): EM gain.
+        niter (int, optional): Number of Newton's method iterations. Defaults to 2.
 
-    Returns
-    -------
-    lam : array_like
-        Mean expeted electrons per pixel (lambda).
+    Returns:
+        lam (array_like): Mean expeted electrons per pixel (lambda).
 
     """
     # Get an approximate value of lambda for the first guess of the Newton fit
@@ -270,21 +244,14 @@ def calc_lam_approx(nobs, nfr, t, g):
     that are out of bounds (e.g. from statistical fluctuations) it will revert
     to the zeroth order.
 
-    Parameters
-    ----------
-    nobs : array_like
-        Number of observations (Co-added photon counted frame).
-    nfr : int
-        Number of coadded frames.
-    t : float
-        Photon counting threshold.
-    g : float
-        EM gain used when taking images.
+    Args:
+        nobs (array_like): Number of observations (Co-added photon counted frame).
+        nfr (int): Number of coadded frames.
+        t (float): Photon counting threshold.
+        g (float): EM gain used when taking images.
 
-    Returns
-    -------
-    array_like
-        Mean expected (lambda).
+    Returns:
+        lam1 (array_like): Mean expected (lambda).
 
     """
     # First step of equation (before taking log)
@@ -307,25 +274,16 @@ def calc_lam_approx(nobs, nfr, t, g):
 def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
     """Newton fit for finding lambda.
 
-    Parameters
-    ----------
-    nobs : array_like
-        Number of observations (Co-added photon counted frame).
-    nfr : int
-        Number of coadded frames.
-    t : float
-        Photon counting threshold.
-    g : float
-        EM gain used when taking images.
-    lam0 : array_like
-        Initial guess for lambda.
-    niter : int
-        Number of Newton's fit iterations to take.
+    Args:
+        nobs (array_like): Number of observations (Co-added photon counted frame).
+        nfr (int): Number of coadded frames.
+        t (float): Photon counting threshold.
+        g (float): EM gain used when taking images.
+        lam0 (array_like): Initial guess for lambda.
+        niter (int): Number of Newton's fit iterations to take.
 
-    Returns
-    -------
-    lam : array_like
-        Mean expected (lambda).
+    Returns:
+        lam (array_like): Mean expected (lambda).
 
     """
     # Mask out zero values to avoid divide by zero
@@ -349,7 +307,19 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
 
 
 def _calc_func(nobs, nfr, t, g, lam):
-    """Objective function for lambda."""
+    """Objective function for lambda for Newton's method for all applying photometric correction.
+    
+    Args:
+        nobs (array-like): number of frames per pixel that passed the threshold
+        nfr (array-like): number of unmasked frames per pixel total
+        t (float): threshold for photon counting
+        g (float): EM gain
+        lam (array-like): estimated mean expected electron count
+
+    Returns:
+        func (array-like): objective function
+
+    """
     epsilon_prime = (lam*(2*g**2*(6 + lam*(3 + lam)) + 2*g*lam*(3 + lam)*t + 
             lam**2*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam))))
 
@@ -363,7 +333,17 @@ def _calc_func(nobs, nfr, t, g, lam):
 
 
 def _calc_dfunc(nfr, t, g, lam):
-    """Derivative wrt lambda of objective function."""
+    """Derivative with respect to lambda of objective function.
+    
+    Args:
+        nfr (array-like): number of unmasked frames per pixel total
+        t (float): threshold for photon counting
+        g (float): EM gain
+        lam (array-like): estimated mean expected electron count
+    
+    Returns:
+        dfunc (array-like): derivative with respect to lambda of objective function
+    """
     dfunc = (lam*nfr*(2*g**2*(3 + 2*lam) + 2*g*lam*t + 2*g*(3 + lam)*t + 
             2*lam*t**2))/(2.*np.e**(t/g)*g**2*(6 + lam*(6 + lam*(3 + lam)))) - (lam*(6 + 
             lam*(3 + lam) + lam*(3 + 2*lam))*nfr*
