@@ -105,14 +105,14 @@ def mean_combine(image_list, bpmap_list, err=False):
             sum_im += masked
         map_im += (im_m.mask == False).astype(int)
 
-    if err: # sqrt of sum of sigma**2 terms
-        sum_im = np.sqrt(sum_im)
-
     # Divide sum_im by map_im only where map_im is not equal to 0 (i.e.,
     # not masked).
     # Where map_im is equal to 0, set combined_im to zero
-    comb_image = np.divide(sum_im, np.sqrt(map_im), out=np.zeros_like(sum_im),
+    comb_image = np.divide(sum_im, map_im, out=np.zeros_like(sum_im),
                             where=map_im != 0)
+   
+    if err: # (sqrt of sum of sigma**2 terms)/sqrt(n)
+        comb_image = np.sqrt(comb_image)
 
     # Mask any value that was never mapped (aka masked in every frame)
     comb_bpmap = (map_im == 0).astype(int)
@@ -329,7 +329,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         output Dark's dq after assigning these pixels a flag value of 256.
         They should have large err values.
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 4 (or less) are assigned a flag value of
+        but 3 (or less) are assigned a flag value of
         1, which falls under the category of "Bad pixel - unspecified reason".
         These pixels would have no reliability for dark subtraction.
 
@@ -415,7 +415,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         output Dark's dq after assigning these pixels a flag value of 256.
         They should have large err values.
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 4 (or less) are assigned a flag value of
+        but 3 (or less) are assigned a flag value of
         1, which falls under the category of "Bad pixel - unspecified reason".
         These pixels would have no reliability for dark subtraction.
     FPN_std_map : array-like (full frame)
@@ -522,7 +522,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # flag value of 256; unreliable pixels, large err
     output_dq = (unreliable_pix_map >= len(datasets)-3).astype(int)*256
     # flag value of 1 for those that are masked all the way through for all
-    # but 4 (or less) stacks; this overwrites the flag value of 256 that was assigned to
+    # but 3 (or less) stacks; this overwrites the flag value of 256 that was assigned to
     # these pixels in previous line
     unfittable_ind = np.where(unfittable_pix_map >= len(datasets)-3)
     output_dq[unfittable_ind] = 1
@@ -577,7 +577,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # input data error comes from .err arrays; could use this for error bars
     # in input data for weighted least squares, but we'll just simply get the
     # std error and add it in quadrature to least squares fit standard dev
-    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0))/len(mean_err_stack)
+    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0)/len(mean_err_stack))
 
     # matrix to be used for least squares and covariance matrix
     X = np.array([np.ones([len(EMgain_arr)]), EMgain_arr, EMgain_arr*exptime_arr]).T

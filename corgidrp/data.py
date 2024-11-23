@@ -104,6 +104,8 @@ class Dataset():
             if new_all_err.shape[-2:] != self.all_err.shape[-2:] or new_all_err.shape[0] != self.all_err.shape[0]:
                 raise ValueError("The shape of new_all_err is {0}, whereas we are expecting {1}".format(new_all_err.shape, self.all_err.shape))
             self.all_err = new_all_err
+            for i in range(len(self.frames)):
+                self.frames[i].err = self.all_err[i]
         if new_all_dq is not None:
             if new_all_dq.shape != self.all_dq.shape:
                 raise ValueError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))

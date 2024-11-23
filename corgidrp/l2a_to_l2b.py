@@ -248,14 +248,13 @@ def convert_to_electrons(input_dataset, k_gain):
    # you should make a copy the dataset to start
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
-    kgain_error = kgain_dataset.all_err
 
     kgain = k_gain.value #extract from caldb
     kgainerr = k_gain.error[0]
+    # x = c*kgain, where c (counts beforehand) and kgain both have error, so do propogation of error due to the product of 2 independent sources
+    #[:,0:1,:,:] to get same dimensions as input_dataset.all_err
+    kgain_error = (np.abs(kgain_cube*kgain)*np.sqrt((kgain_dataset.all_err/kgain_cube)**2 + (kgainerr/kgain)**2))[:,0:1,:,:]
     kgain_cube *= kgain
-    kgain_err_up = kgain_error*(kgain+kgainerr)
-    kgain_err_low = kgain_error*(kgain-kgainerr)
-    kgain_error = np.max([kgain_err_up - kgain, kgain - kgain_err_low], axis=0)
     
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 

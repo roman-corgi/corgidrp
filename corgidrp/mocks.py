@@ -167,7 +167,7 @@ def create_synthesized_master_dark_calib(detector_areas):
     # image area, including "shielded" rows and cols:
     imrows, imcols, imr0c0 = imaging_area_geom('SCI', detector_areas)
     prerows, precols, prer0c0 = unpack_geom('SCI', 'prescan', detector_areas)
-
+    np.random.seed(4567)
     frame_list = []
     for i in range(len(EMgain_arr)):
         for l in range(N): #number of frames to produce
@@ -1859,7 +1859,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 else:
                     hdul.writeto(filename, overwrite = True)
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.1, cosmic_rate=0):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.1, cosmic_rate=0, full_frame=True):
     '''This creates mock Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -1870,12 +1870,13 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         kgain (float): k gain (e-/DN)
         exptime (float): exposure time (in s)
         cosmic_rate (float) : simulated cosmic rays incidence, hits/cm^2/s
-
+        full_frame (bool) : If True, simulated frames are SCI full frames.  If False, 5x5 images are simulated.  Defaults to True.
     Returns:
         dataset (corgidrp.data.Dataset): Dataset containing both the illuminated and dark frames
         ill_mean (float): mean electron count value simulated in the illuminated frames
         dark_mean (float): mean electron count value simulated in the dark frames
     '''
+    np.random.seed(1234)
     pix_row = 1024 #number of rows and number of columns
     fluxmap = np.ones((pix_row,pix_row)) #photon flux map, photons/s
 
@@ -1886,7 +1887,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         dark_current=8.33e-4,  # e-/pix/s
         cic=0.01,  # e-/pix/frame
         read_noise=100.,  # e-/pix/frame
-        bias=0,  # e-; 0 for simplicity
+        bias=2000,  # e-
         qe=0.9,  # quantum efficiency, e-/photon
         cr_rate=cosmic_rate,  # cosmic rays incidence, hits/cm^2/s
         pixel_pitch=13e-6,  # m
@@ -1919,7 +1920,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
     prihdr, exthdr = create_default_headers()
     for i in range(Nbrights):
         # Simulate bright
-        frame_dn = emccd.sim_full_frame(fluxmap, exptime)
+        if full_frame:
+            frame_dn = emccd.sim_full_frame(fluxmap, exptime)
+        else:
+            frame_dn = emccd.sim_sub_frame(fluxmap[:5,:5], exptime)
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['CMDGAIN'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
@@ -1928,7 +1932,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
 
     for i in range(Ndarks):
         # Simulate dark
-        frame_dn_dark = emccd.sim_full_frame(np.zeros_like(fluxmap), exptime)
+        if full_frame:
+            frame_dn_dark = emccd.sim_full_frame(np.zeros_like(fluxmap), exptime)
+        else:
+            frame_dn_dark = emccd.sim_sub_frame(np.zeros_like(fluxmap[:5,:5]), exptime)
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['CMDGAIN'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
