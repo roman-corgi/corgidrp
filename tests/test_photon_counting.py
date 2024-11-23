@@ -34,6 +34,7 @@ def test_expected_results():
         if this_caldb._db['Type'][i] == 'KGain':
             this_caldb._db = this_caldb._db.drop(i)
     this_caldb.save()
+
     # KGain
     kgain_val = 7 # default value used in mocks.create_photon_countable_frames()
     pri_hdr, ext_hdr = mocks.create_default_headers()
@@ -62,6 +63,22 @@ def test_expected_results():
     noise_map.save(filedir=outputdir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
+    # Make a non-linearity correction calibration file
+    input_non_linearity_filename = "nonlin_table_TVAC.txt"
+    input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
+    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+    nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+    tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
+
+    pri_hdr, ext_hdr = mocks.create_default_headers()
+    new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
+    new_nonlinearity.filename = nonlin_fits_filepath
+    # fake the headers because this frame doesn't have the proper headers
+    new_nonlinearity.pri_hdr = pri_hdr
+    new_nonlinearity.ext_hdr = ext_hdr
+    this_caldb.create_entry(new_nonlinearity)
+
+
     walker.walk_corgidrp(l1_data_filelist, '', outputdir, template="l1_to_l2b_pc.json")
     # get photon-counted frame
     for f in os.listdir(outputdir):
@@ -78,6 +95,9 @@ def test_expected_results():
     assert pc_frame_err.min() >= 0
     assert pc_frame_err[0][3,3] >= 0
 
+    this_caldb.remove_entry(kgain)
+    this_caldb.remove_entry(noise_map)
+    this_caldb.remove_entry(new_nonlinearity)
 
 def test_negative():
     """Values at or below the 
