@@ -253,7 +253,7 @@ def convert_to_electrons(input_dataset, k_gain):
     kgainerr = k_gain.error[0]
     # x = c*kgain, where c (counts beforehand) and kgain both have error, so do propogation of error due to the product of 2 independent sources
     #[:,0:1,:,:] to get same dimensions as input_dataset.all_err
-    kgain_error = (np.abs(kgain_cube*kgain)*np.sqrt((kgain_dataset.all_err/kgain_cube)**2 + (kgainerr/kgain)**2))[:,0:1,:,:]
+    kgain_error = (np.sqrt((kgain*kgain_dataset.all_err)**2 + (kgain_cube*kgainerr)**2))[:,0:1,:,:]
     kgain_cube *= kgain
     
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
