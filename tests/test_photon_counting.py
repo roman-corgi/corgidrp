@@ -63,6 +63,10 @@ def test_expected_results():
     noise_map.save(filedir=outputdir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
+    # Nonlinearity calibration
+    ### Create a dummy non-linearity file ####
+    #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
+    dummy_dataset = mocks.create_prescan_files()
     # Make a non-linearity correction calibration file
     input_non_linearity_filename = "nonlin_table_TVAC.txt"
     input_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", input_non_linearity_filename)
