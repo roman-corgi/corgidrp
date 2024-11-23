@@ -8,6 +8,7 @@ import numpy as np
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.data as data
+import corgidrp.detector as detector
 from corgidrp.photon_counting import get_pc_mean, photon_count, PhotonCountException
 
 detector_params = data.DetectorParams({})
@@ -46,6 +47,21 @@ def test_expected_results():
     kgain.ext_hdr['RN_ERR'] = 0
     kgain.save(filedir=outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
+
+    # NoiseMap
+    noise_map_dat = np.zeros((3, detector.detector_areas['SCI']['frame_rows'], detector.detector_areas['SCI']['frame_cols']))
+    noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
+    noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electrons'
+    ext_hdr['B_O'] = 0
+    ext_hdr['B_O_ERR'] = 0
+    noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+                                    input_dataset=mock_input_dataset, err=noise_map_noise,
+                                    dq = noise_map_dq, err_hdr=err_hdr)
+    noise_map.save(filedir=outputdir, filename="mock_detnoisemaps.fits")
+    this_caldb.create_entry(noise_map)
+
     walker.walk_corgidrp(l1_data_filelist, '', outputdir, template="l1_to_l2b_pc.json")
     # get photon-counted frame
     for f in os.listdir(outputdir):
