@@ -15,7 +15,7 @@ detector_params = data.DetectorParams({})
 
 def test_expected_results():
     '''Results are as expected theoretically.  Also runs raw frames through pre-processing pipeline.'''
-    dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=20, Ndarks=30, cosmic_rate=0)
+    dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=5, Ndarks=6, cosmic_rate=0)
     thisfile_dir = os.path.dirname(__file__) # this file's folder
     outputdir = os.path.join(thisfile_dir, 'simdata', 'pc_test_data')
     if not os.path.exists(outputdir):
@@ -82,7 +82,6 @@ def test_expected_results():
     new_nonlinearity.ext_hdr = ext_hdr
     this_caldb.create_entry(new_nonlinearity)
 
-
     walker.walk_corgidrp(l1_data_filelist, '', outputdir, template="l1_to_l2b_pc.json")
     # get photon-counted frame
     for f in os.listdir(outputdir):
@@ -114,12 +113,14 @@ def test_negative():
 def test_masking_increases_err():
     '''Test that a pixel that is masked heavily (reducing the number of usable frames for that pixel) has a bigger err than the average pixel.
     And if masking is all the way through for a certain pixel, that pixel will 
-    be flagged in the DQ. Also, make sure there is failure when niter<1.'''
+    be flagged in the DQ. Also, make sure there is failure when niter<1. Also, very good agreement with theoretically expected value since we use more frames.'''
     # exposure time too long to get reasonable photon-counted result (after photometric correction)
-    dataset_err, _, _ = mocks.create_photon_countable_frames(Nbrights=60, Ndarks=60, cosmic_rate=0, full_frame=False) 
+    dataset_err, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=60, Ndarks=60, cosmic_rate=0, full_frame=False) 
     # instead of running through walker, just do the pre-processing steps simply
-    # using kgain=7 and bias=2000 and read noise = 100, from mocks.create_photon_countable_frames()
-    dataset_err.all_data = dataset_err.all_data.astype(float)*7 - 2000.
+    # using kgain=7 and bias=2000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
+    for f in dataset_err.frames:
+        f.data = f.data.astype(float)*7 - 2000.
+    
     # masked for half of the bright and half of the dark frames
     dataset_err.all_dq[30:90,3,3] = 1
     dataset_err.all_dq[:, 2, 2] = 1 #masked all the way through for (2,2)
@@ -127,6 +128,7 @@ def test_masking_increases_err():
         f.ext_hdr['RN'] = 100
         f.ext_hdr['KGAIN'] = 7
     pc_dataset_err = get_pc_mean(dataset_err, detector_params)
+    assert np.isclose(pc_dataset_err.all_data.mean(), ill_mean - dark_mean, rtol=0.001) 
     # the DQ for that pixel should be 1
     assert pc_dataset_err[0].dq[2,2] == 1
     # err for (3,3) is above the 95th percentile of error: 

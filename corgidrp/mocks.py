@@ -1870,7 +1870,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         kgain (float): k gain (e-/DN)
         exptime (float): exposure time (in s)
         cosmic_rate: (float) simulated cosmic rays incidence, hits/cm^2/s
-        full_frame: (bool) If True, simulated frames are SCI full frames.  If False, 5x5 images are simulated.  Defaults to True.
+        full_frame: (bool) If True, simulated frames are SCI full frames.  If False, 50x50 images are simulated.  Defaults to True.
     
     Returns:
         dataset (corgidrp.data.Dataset): Dataset containing both the illuminated and dark frames
@@ -1924,7 +1924,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         if full_frame:
             frame_dn = emccd.sim_full_frame(fluxmap, exptime)
         else:
-            frame_dn = emccd.sim_sub_frame(fluxmap[:5,:5], exptime)
+            frame_dn = emccd.sim_sub_frame(fluxmap[:50,:50], exptime)
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['CMDGAIN'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
@@ -1936,7 +1936,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         if full_frame:
             frame_dn_dark = emccd.sim_full_frame(np.zeros_like(fluxmap), exptime)
         else:
-            frame_dn_dark = emccd.sim_sub_frame(np.zeros_like(fluxmap[:5,:5]), exptime)
+            frame_dn_dark = emccd.sim_sub_frame(np.zeros_like(fluxmap[:50,:50]), exptime)
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['CMDGAIN'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
