@@ -305,7 +305,6 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
 
     return lam
 
-
 def _calc_func(nobs, nfr, t, g, lam):
     """Objective function for lambda for Newton's method for all applying photometric correction.
     
