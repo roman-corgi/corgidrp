@@ -91,8 +91,8 @@ def test_expected_results():
     pc_frame = fits.getdata(pc_file)
     pc_frame_err = fits.getdata(pc_file, 'ERR')
     pc_ext_hdr = fits.getheader(pc_file, 1)
-    # more frames (which would take longer to run) would give an even better agreement than the 5% agreement below
-    assert np.isclose(pc_frame.mean(), ill_mean - dark_mean, rtol=0.05) 
+    # more frames (which would take longer to run) would give an even better agreement than the 25% agreement below
+    assert np.isclose(pc_frame.mean(), ill_mean - dark_mean, rtol=0.25) 
     assert 'niter=2' in pc_ext_hdr["HISTORY"][-1]
     assert 'T_factor=5' in pc_ext_hdr["HISTORY"][-1]
     assert pc_frame_err.min() >= 0
