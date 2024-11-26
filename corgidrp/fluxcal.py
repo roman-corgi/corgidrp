@@ -19,11 +19,18 @@ def get_filter_name(dataset):
     filters = os.path.join(datadir, "*.csv")
     filter = dataset[0].ext_hdr['CFAMNAME']
     filter_names = os.listdir(datadir)
+    f_avail = False
     for name in filter_names:
         if filter in name:
-            return os.path.join(datadir, name)
+            f_avail = True
+            filter_name= os.path.join(datadir, name)
+            break
         else:
             pass
+    if f_avail:
+        return filter_name
+    else:
+        raise Exception("there is no filter available with name {0}".format(filter))
 
 def read_filter_curve(filter_filename):
     """

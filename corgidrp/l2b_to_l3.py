@@ -1,6 +1,4 @@
 # A file that holds the functions that transmogrify l2b data to l3 data 
-import corgidrp.fluxcal as fluxcal
-
 
 def create_wcs(input_dataset):
     """
@@ -31,44 +29,6 @@ def divide_by_exptime(input_dataset):
     """
 
     return input_dataset.copy()
-
-def determine_color_cor(input_dataset, calspec_filepath, source_filepath):
-    """
-    determine the color correction factor of the observed source
-    at the reference wavelength of the used filter band and put it into the header.
-    We assume that each frame in the dataset was observed with the same color filter.
-    
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
-        calspec_filepath (str): file name of the known reference flux (usually CALSPEC)
-        source_filepath (str): file name of the flux model of the observed source in 
-                               CALSPEC units (erg/(s * cm^2 * AA) and format
-    
-    Returns:
-        corgidrp.data.Dataset: a version of the input dataset with updated header including 
-                              the reference wavelength and the color correction factor
-    """
-    color_dataset = input_dataset.copy()
-    # get the filter name from the header keyword 'CFAMNAME'
-    filter_name = fluxcal.get_filter_name(color_dataset)
-    # read the transmission curve from the color filter file
-    wave, filter_trans = fluxcal.read_filter_curve(filter_name)
-    # calculate the reference wavelength of the color filter
-    lambda_ref = fluxcal.calculate_pivot_lambda(filter_trans, wave)
-    # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
-    flux_ref = fluxcal.read_cal_spec(calspec_filepath, wave)
-    # we assume that the source spectrum is a calspec standard or its 
-    # model data is in a file with the same format and unit as the calspec data
-    source_sed = fluxcal.read_cal_spec(source_filepath, wave)
-    #Calculate the color correction factor
-    k = fluxcal.compute_color_cor(filter_trans, wave, flux_ref, lambda_ref, source_sed)
-    
-    # write the reference wavelength and the color correction factor to the header (keyword names tbd)
-    history_msg = "the color correction is calculated and added to the header {0}".format(str(k))
-    # update the header of the output dataset and update the history
-    color_dataset.update_after_processing_step(history_msg, header_entries = {"LAM_REF": lambda_ref, "COL_COR": k})
-    
-    return color_dataset
 
 def update_to_l3(input_dataset):
     """
