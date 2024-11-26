@@ -4,7 +4,7 @@ import numpy as np
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
 import corgidrp.fluxcal as fluxcal
-import corgidrp.l2b_to_l3 as l2b_to_l3
+import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
 import astropy.units as u
 
@@ -30,6 +30,15 @@ def test_get_filter_name():
     
     assert np.any(wave>=7130)
     assert np.any(transmission < 1.)
+    
+    #test a wrong filter name
+    image3 = image1.copy()
+    image3.ext_hdr["CFAMNAME"] = '5C'
+    dataset2 = ([image3, image3])
+    with pytest.raises(Exception):
+        filepath = pytest.fluxcal.get_filter_name(dataset2)
+        pass
+    
 
 def test_flux_calc():
     """
@@ -65,7 +74,7 @@ def test_colorcor():
     assert K == 1 
 
     #test the corresponding pipeline step
-    output_dataset = l2b_to_l3.determine_color_cor(dataset, calspec_filepath, calspec_filepath)
+    output_dataset = l4_to_tda.determine_color_cor(dataset, calspec_filepath, calspec_filepath)
     assert output_dataset[0].ext_hdr['LAM_REF'] == lambda_piv
     assert output_dataset[0].ext_hdr['COL_COR'] == K
 
