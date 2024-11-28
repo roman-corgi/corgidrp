@@ -4,6 +4,53 @@ import os
 import numpy as np
 from astropy.io import fits, ascii
 from scipy import integrate
+import urllib
+
+
+# Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
+calspec_names= {
+# bright standards
+'109 Vir': '109vir_stis_005.fits',
+'Vega': 'alpha_lyr_stis_011.fits',
+'Eta Uma': 'etauma_stis_008.fits',
+'Lam Lep': 'lamlep_stis_008.fits',
+'KSI2 CETI': 'ksi2ceti_stis_008.fits',
+# dim standards
+'TYC 4433-1800-1': '1808347_stiswfc_006.fits',
+'TYC 4205-1677-1': '1812095_stisnic_008.fits',
+'TYC 4212-455-1': '1757132_stiswfc_006.fits',
+'TYC 4209-1396-1': '1805292_stisnic_008.fits',
+'TYC 4413-304-1': 'p041c_stisnic_010.fits',
+'UCAC3 313-62260': 'kf08t3_stisnic_005.fits',
+'BPS BS 17447-0067': '1802271_stiswfcnic_006.fits',
+'TYC 4424-1286-1': '1732526_stisnic_009.fits',
+'GSC 02581-02323': 'p330e_stiswfcnic_007.fits',
+'TYC 4207-219-1': '1740346_stisnic_005.fits'
+}
+
+calspec_url = 'https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_calspec/'
+
+def get_calspec_file(star_name):
+    """
+    download the corresponding CALSPEC fits file and return the file path
+    Args:
+        star_name (str): 
+    Returns:
+        str: file path
+    """
+    if star_name not in calspec_names:
+        raise ValueError('{0} is not in list of anticipated standard stars {1}, please check naming'.format(star_name, calspec_names.keys()) )
+    fits_name = calspec_names.get(star_name)
+    # TODO: be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
+    fits_url = calspec_url + fits_name
+    try:
+        calspec_dir = os.path.join(os.path.dirname(__file__), "calspec_data")
+        if not os.path.exists(calspec_dir):
+            os.mkdir(calspec_dir)
+        file_name, headers = urllib.request.urlretrieve(fits_url, filename =  os.path.join(calspec_dir, fits_name))
+    except:
+        raise Exception("cannot access CALSPEC archive web page and/or download {0}".fits_name)
+    return file_name
 
 def get_filter_name(dataset):
     """
@@ -128,6 +175,22 @@ def calculate_pivot_lambda(filter_curve, filter_wavelength):
     
     return piv_lambda
 
+def calculate_flux_ref(filter_wavelength, calspec_flux, wave_ref):
+    """
+    calculate the flux at the reference wavelength of the filter band
+    
+    Args:
+        filter_wavelength (np.array): wavelengths in unit Angstroem in the filter band 
+        calspec_flux (np.array): converted flux in units of the calpec source in the filter band
+        wave_ref (float): reference wavelength in unit Angstroem
+     Returns:
+        float: flux at reference wavelength in unit erg/(s*cm^2*AA)
+    """
+    
+    flux_ref = np.interp(wave_ref, filter_wavelength, calspec_flux)
+    return flux_ref
+
+
 def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux_source):
     """
     Compute the color correction factor K given the filter bandpass, reference spectrum (CALSPEC),
@@ -136,7 +199,7 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
     flux density at the reference wavelength for a source with the flux_source
     spectral shape in the photometric convention that provides the flux density
     at a reference wavelength (convention B, see Gordon et al. 2022, The Astronomical Journal 163:267, for details).
-    Thus the flux density value found by applying the calibration factor on the found DN/s 
+    Thus the flux density value found by applying the calibration factor on the found detected electrons 
     of an arbitrary source should be divided by K (for the appropriate filter and spectral shape) 
     to produce the flux density at the reference wavelength of the filter. 
     The color correction adjusts the calibration factor to align the reference spectral shape 
@@ -153,12 +216,11 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
         float: color correction factor K
     """
     # get the flux densities at the reference wavelength
-    flux_source_lambda_ref = np.interp(wave_ref, filter_wavelength, flux_source)
-    flux_ref_lambda_ref = np.interp(wave_ref, filter_wavelength, flux_ref)
+    flux_source_lambda_ref = calculate_flux_ref(filter_wavelength, flux_source, wave_ref)
+    flux_ref_lambda_ref = calculate_flux_ref(filter_wavelength, flux_ref, wave_ref)
 
     # compute the top and bottom integrals
     int_source = integrate.simpson(filter_wavelength * filter_curve * flux_source / flux_source_lambda_ref, x=filter_wavelength)
     int_ref = integrate.simpson(filter_wavelength * filter_curve * flux_ref / flux_ref_lambda_ref, x=filter_wavelength)
 
     return int_source / int_ref
-

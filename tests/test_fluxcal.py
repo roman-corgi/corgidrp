@@ -77,11 +77,23 @@ def test_colorcor():
     output_dataset = l4_to_tda.determine_color_cor(dataset, calspec_filepath, calspec_filepath)
     assert output_dataset[0].ext_hdr['LAM_REF'] == lambda_piv
     assert output_dataset[0].ext_hdr['COL_COR'] == K
+    
+def test_calspec_download():
+    """
+    test the download of a calspec fits file
+    """
+    filepath = fluxcal.get_calspec_file('Vega')
+    assert os.path.exists(filepath)
+    os.remove(filepath)
+    with pytest.raises(ValueError):
+        filepath = fluxcal.get_calspec_file('Todesstern')
+    
 
 if __name__ == '__main__':
     test_get_filter_name()
     test_flux_calc()
     test_colorcor()
+    test_calspec_download()
 
 
 
