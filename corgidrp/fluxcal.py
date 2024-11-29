@@ -33,8 +33,10 @@ calspec_url = 'https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_ca
 def get_calspec_file(star_name):
     """
     download the corresponding CALSPEC fits file and return the file path
+    
     Args:
         star_name (str): 
+    
     Returns:
         str: file path
     """

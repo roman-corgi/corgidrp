@@ -1,7 +1,7 @@
 # A file that holds the functions that transmogrify l4 data to TDA (Technical Demo Analysis) data 
 import corgidrp.fluxcal as fluxcal
 
-def determine_color_cor(input_dataset, calspec_filepath, source_filepath):
+def determine_color_cor(input_dataset, ref_star, source_star):
     """
     determine the color correction factor of the observed source
     at the reference wavelength of the used filter band and put it into the header.
@@ -9,9 +9,10 @@ def determine_color_cor(input_dataset, calspec_filepath, source_filepath):
     
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
-        calspec_filepath (str): file name of the known reference flux (usually CALSPEC)
-        source_filepath (str): file name of the flux model of the observed source in 
-                               CALSPEC units (erg/(s * cm^2 * AA) and format
+        ref_star (str): either the fits file path of the known reference flux (usually CALSPEC),
+                        or the (SIMBAD) name of a CALSPEC star
+        source_star (str): either the fits file path of the flux model of the observed source in 
+                           CALSPEC units (erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
     
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with updated header including 
@@ -24,6 +25,17 @@ def determine_color_cor(input_dataset, calspec_filepath, source_filepath):
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
     # calculate the reference wavelength of the color filter
     lambda_ref = fluxcal.calculate_pivot_lambda(filter_trans, wave)
+    
+    # ref_star/source_star is either the star name or the file path to fits file
+    if ref_star.split(".")[-1] == "fits":
+        calspec_filepath = ref_star
+    else:
+        calspec_filepath = fluxcal.get_calspec_file(ref_star)
+    if source_star.split(".")[-1] == "fits":
+        source_filepath = source_star
+    else:
+        source_filepath = fluxcal.get_calspec_file(source_star)
+    
     # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
     flux_ref = fluxcal.read_cal_spec(calspec_filepath, wave)
     # we assume that the source spectrum is a calspec standard or its 
