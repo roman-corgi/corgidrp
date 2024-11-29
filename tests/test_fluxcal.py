@@ -69,12 +69,17 @@ def test_colorcor():
     flux_source = BlackBody(scale = bbscale, temperature=100. * u.K)
     K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave))
     assert K_bb > 2
-    #sanity check
+    # sanity check
     K = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, calspec_flux)
     assert K == 1 
 
-    #test the corresponding pipeline step
+    # test the corresponding pipeline step
     output_dataset = l4_to_tda.determine_color_cor(dataset, calspec_filepath, calspec_filepath)
+    assert output_dataset[0].ext_hdr['LAM_REF'] == lambda_piv
+    assert output_dataset[0].ext_hdr['COL_COR'] == K
+    # test it with star names
+    calspec_name = 'Vega'
+    output_dataset = l4_to_tda.determine_color_cor(dataset, calspec_name, calspec_name)
     assert output_dataset[0].ext_hdr['LAM_REF'] == lambda_piv
     assert output_dataset[0].ext_hdr['COL_COR'] == K
     
