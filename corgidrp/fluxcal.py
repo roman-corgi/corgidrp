@@ -185,7 +185,8 @@ def calculate_flux_ref(filter_wavelength, calspec_flux, wave_ref):
         filter_wavelength (np.array): wavelengths in unit Angstroem in the filter band 
         calspec_flux (np.array): converted flux in units of the calpec source in the filter band
         wave_ref (float): reference wavelength in unit Angstroem
-     Returns:
+    
+    Returns:
         float: flux at reference wavelength in unit erg/(s*cm^2*AA)
     """
     
