@@ -46,7 +46,7 @@ def get_calspec_file(star_name):
     # TODO: be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
     fits_url = calspec_url + fits_name
     try:
-        calspec_dir = os.path.join(os.path.dirname(__file__), "calspec_data")
+        calspec_dir = os.path.join(os.path.dirname(__file__), "data", "calspec_data")
         if not os.path.exists(calspec_dir):
             os.mkdir(calspec_dir)
         file_name, headers = urllib.request.urlretrieve(fits_url, filename =  os.path.join(calspec_dir, fits_name))
