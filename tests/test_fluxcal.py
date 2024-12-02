@@ -79,9 +79,10 @@ def test_colorcor():
     assert output_dataset[0].ext_hdr['COL_COR'] == K
     # test it with star names
     calspec_name = 'Vega'
-    output_dataset = l4_to_tda.determine_color_cor(dataset, calspec_name, calspec_name)
+    source_name = 'TYC 4424-1286-1'
+    output_dataset = l4_to_tda.determine_color_cor(dataset, calspec_name, source_name)
     assert output_dataset[0].ext_hdr['LAM_REF'] == lambda_piv
-    assert output_dataset[0].ext_hdr['COL_COR'] == K
+    assert output_dataset[0].ext_hdr['COL_COR'] == pytest.approx(1,1e-2) 
     
 def test_calspec_download():
     """
@@ -90,6 +91,10 @@ def test_calspec_download():
     filepath = fluxcal.get_calspec_file('Vega')
     assert os.path.exists(filepath)
     os.remove(filepath)
+    filepath = fluxcal.get_calspec_file('TYC 4424-1286-1')
+    assert os.path.exists(filepath)
+    os.remove(filepath)
+    
     with pytest.raises(ValueError):
         filepath = fluxcal.get_calspec_file('Todesstern')
     
