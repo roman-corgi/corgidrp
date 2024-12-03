@@ -6,28 +6,32 @@ import numpy as np
 import glob
 import os
 
-def test_northup(save_derot_dataset=False):
+def test_northup(save_derot_dataset=False,save_comp_figure=False):
     """
     unit test of the northup function
 
     Args:
-	save_derot_dataset (optional): if you want to save the derotated file at the input directory, turn True
+        save_derot_dataset (optional): if you want to save the derotated file at the input directory, turn True
+        save_comp_figure (optional): if you want to save a comparison figure of the original mock data and the derotated data
 
     Returns:
-	Fits containing the original mock image and the derotated image, with the roll angle recorded
+        Fits containing the original mock image and the derotated image, with the roll angle recorded
     """
-    
+
+    # read mock file
     dirname = 'test_data/'
     mockname = 'mock_northup.fits'
 
     mockfilepath = glob.glob(dirname+mockname)
     if not mockfilepath:
         raise FileNotFoundError(f"No mock data found at {dirname+mockname}")
-    
+
+    # running northup function
     input_dataset = data.Dataset(mockfilepath)
     derot_dataset = northup(input_dataset)
+    # save fits file
     if save_derot_dataset is True:
-    	derot_dataset.save(dirname,[mockname.split('.fits')[0]+'_derotated.fits'])
+        derot_dataset.save(dirname,[mockname.split('.fits')[0]+'_derotated.fits'])
 
     im_input = input_dataset[0].data
     roll_angle = input_dataset[0].pri_hdr['ROLL']
@@ -36,37 +40,25 @@ def test_northup(save_derot_dataset=False):
     output_data = np.array([im_input,im_derot])
     output_hdu = fits.PrimaryHDU(output_data)
     output_hdu.header['ROLL'] = roll_angle
+
+    # save comparison figure
+    if save_comp_figure is True:
+
+        fig, (ax0, ax1) = plt.subplots(nrows=1, ncols=2, sharex=True, figsize=(8,5))
+
+        ax0.set_title('Original Mock Data')
+        ax0.imshow(im_input,origin='lower')
+
+        ax1.set_title(f'Derotated Mock Data\n by {-roll_angle}deg counterclockwise')
+        ax1.imshow(im_derot,origin='lower')
+
+        outfilename = 'compare_northup.png'
+
+        plt.savefig(os.path.join(os.path.join(os.path.dirname(__file__),dirname),outfilename))
+
+        print(f"Comparison figure saved at {dirname+outfilename}")
+
     return output_hdu
 
-def compare_northup(output_hdu):
-    """
-    Save the comparison figure of the original mock data and the derotated data
-
-    Returns:
-    	the comparison figure
-    """
-    im_input = output_hdu.data[0]
-    im_derot = output_hdu.data[1]
-    roll_angle = output_hdu.header['ROLL']
-    
-    fig, (ax0, ax1) = plt.subplots(nrows=1, ncols=2, sharex=True, figsize=(8,5))
-    
-    ax0.set_title('Original Mock Data')
-    ax0.imshow(im_input,origin='lower')
-
-    ax1.set_title(f'Derotated Mock Data\n by {-roll_angle}deg counterclockwise')
-    ax1.imshow(im_derot,origin='lower')
-
-    outdir = 'test_data/'
-    outfilename = 'compare_northup.png'
-
-    if not os.path.isdir(outdir):
-        os.mkdir(outdir)
-    
-    plt.savefig(outdir+outfilename) 
-    
-    print(f"Comparison figure saved at {outdir+outfilename}")
-
 if __name__ == "__main__":
-    output_hdu = test_northup()
-    compare_northup(output_hdu)
+    test_northup()
