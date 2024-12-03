@@ -90,8 +90,6 @@ def northup(input_dataset,correct_wcs=False):
             astr_hdr = None 
         else:
             astr_hdr = None # hardcoded now, no WCS information in the header
-        #else:
-        #   astr_hdr = None
 
         # derotate
         im_derot = rotate(im_data,-roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
