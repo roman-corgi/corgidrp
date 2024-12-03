@@ -4,6 +4,7 @@ from astropy.io import fits
 from matplotlib import pyplot as plt
 import numpy as np
 import os
+from glob import glob
 
 def test_northup(save_derot_dataset=False,save_comp_figure=False):
     """
@@ -21,7 +22,7 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
     dirname = 'test_data/'
     mockname = 'mock_northup.fits'
 
-    mockfilepath = os.path.join(os.path.join(os.path.dirname(__file__),dirname),mockname)
+    mockfilepath = glob(dirname+mockname)
     if not mockfilepath:
         raise FileNotFoundError(f"No mock data found at {dirname+mockname}")
 
