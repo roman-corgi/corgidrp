@@ -2,6 +2,8 @@
 
 from pyklip.klip import rotate
 from corgidrp import data
+from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
+from scipy.ndimage import shift
 import numpy as np
 import glob
 
@@ -57,6 +59,7 @@ def northup(input_dataset,correct_wcs=False):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+	correct_wcs: if you want to correct WCS solutions after rotation, set True. Now hardcoded with not using astr_hdr.
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
@@ -74,16 +77,19 @@ def northup(input_dataset,correct_wcs=False):
         ## image extension ##
         im_hd = processed_data.ext_hdr
         im_data = processed_data.data
+        ylen, xlen = im_data.shape
 
         # define the center for rotation
         try: 
-            xcen, ycen = im_hd['PSFCENTX'], im_hd['PSFCENTY']
+            xcen, ycen = im_hd['PSFCENTX'], im_hd['PSFCENTY'] # TBU, after concluding the header keyword
         except KeyError:
-            xcen, ycen = im_data.shape[1]/2, im_data.shape[0]/2
+            xcen, ycen = xlen/2, ylen/2
     
         # look for WCS solutions
-        if correct_wcs is False: # hardcoded now, no WCS information
+        if correct_wcs is False: 
             astr_hdr = None 
+        else:
+            astr_hdr = None # hardcoded now, no WCS information in the header
         #else:
         #   astr_hdr = None
 
@@ -99,8 +105,28 @@ def northup(input_dataset,correct_wcs=False):
         #############
 
         ## HDU DQ ##
+	# all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
-        dq_derot = rotate(dq_data,-roll_angle,(xcen,ycen))
+        if xcen != xlen/2 or ycen != ylen/2: 
+                # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
+                # calculate shift values
+                xshift = xcen-xlen/2; yshift = ycen-ylen/2
+		
+                # pad and shift
+                pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
+                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=np.nan)
+                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=np.nan)
+
+                # define slices for cropping
+                crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
+
+                # rotate, re-shift, and crop
+                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan),\
+                 (yshift,xshift),order=0,mode='constant',cval=np.nan)[crop_y,crop_x]
+        else: 
+                # simply rotate 
+                dq_derot = rotate_scipy(dq_data, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan)
+        	
         new_all_dq.append(dq_derot)
         ############
 
