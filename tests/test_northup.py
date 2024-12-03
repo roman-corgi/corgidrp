@@ -19,15 +19,16 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
     """
 
     # read mock file
-    dirname = 'test_data/'
+    dirname = 'test_data'
     mockname = 'mock_northup.fits'
 
-    mockfilepath = glob(dirname+mockname)
+    mockfilepath = os.path.join(os.path.dirname(__file__),dirname,mockname)
+    print(mockfilepath)
     if not mockfilepath:
-        raise FileNotFoundError(f"No mock data found at {dirname+mockname}")
+        raise FileNotFoundError(f"No mock data {mockname} found")
 
     # running northup function
-    input_dataset = data.Dataset(mockfilepath)
+    input_dataset = data.Dataset(glob(mockfilepath))
     derot_dataset = northup(input_dataset)
     # save fits file
     if save_derot_dataset is True:
@@ -52,9 +53,11 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
         ax1.set_title(f'Derotated Mock Data\n by {-roll_angle}deg counterclockwise')
         ax1.imshow(im_derot,origin='lower')
 
+        outdir = os.path.join(os.path.dirname(__file__),dirname)
+        os.makedirs(outdir, exist_ok=True)
         outfilename = 'compare_northup.png'
-
-        plt.savefig(os.path.join(os.path.join(os.path.dirname(__file__),dirname),outfilename))
+        
+        plt.savefig(os.path.join(outdir,outfilename))
 
         print(f"Comparison figure saved at {dirname+outfilename}")
 
