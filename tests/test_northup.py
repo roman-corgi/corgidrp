@@ -23,7 +23,6 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
     mockname = 'mock_northup.fits'
 
     mockfilepath = os.path.join(os.path.dirname(__file__),dirname,mockname)
-    print(mockfilepath)
     if not mockfilepath:
         raise FileNotFoundError(f"No mock data {mockname} found")
 
@@ -34,13 +33,24 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
     if save_derot_dataset is True:
         derot_dataset.save(dirname,[mockname.split('.fits')[0]+'_derotated.fits'])
 
+    # read the original mock file and derotated file
     im_input = input_dataset[0].data
     roll_angle = input_dataset[0].pri_hdr['ROLL']
     im_derot = derot_dataset[0].data
+    dq_input = input_dataset[0].dq
+    dq_derot = derot_dataset[0].dq
+    # the location for test, where the mock file has 1 in DQ
+    x_value1 = input_dataset[0].dq_hdr['X_1VAL']
+    y_value1 = input_dataset[0].dq_hdr['Y_1VAL']
 
-    output_data = np.array([im_input,im_derot])
-    output_hdu = fits.PrimaryHDU(output_data)
-    output_hdu.header['ROLL'] = roll_angle
+    # check if rotation works properly
+    assert(im_input[y_value1,x_value1] != im_derot[y_value1,x_value1])
+    assert(dq_input[y_value1,x_value1] != dq_derot[y_value1,x_value1])
+    
+    # check if the derotated DQ frame has no integer values (except NaN)
+    non_integer_mask = (~np.isnan(dq_derot)) & (dq_derot % 1 != 0)
+    non_integer_indices = np.argwhere(non_integer_mask)
+    assert(len(non_integer_indices) == 0)
 
     # save comparison figure
     if save_comp_figure is True:
@@ -60,8 +70,6 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
         plt.savefig(os.path.join(outdir,outfilename))
 
         print(f"Comparison figure saved at {dirname+outfilename}")
-
-    return output_hdu
 
 if __name__ == "__main__":
     test_northup()
