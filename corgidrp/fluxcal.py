@@ -5,7 +5,8 @@ import numpy as np
 from astropy.io import fits, ascii
 from scipy import integrate
 import urllib
-
+import corgidrp
+import re
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
 calspec_names= {
@@ -46,7 +47,7 @@ def get_calspec_file(star_name):
     # TODO: be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
     fits_url = calspec_url + fits_name
     try:
-        calspec_dir = os.path.join(os.path.dirname(__file__), "data", "calspec_data")
+        calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
         if not os.path.exists(calspec_dir):
             os.mkdir(calspec_dir)
         file_name, headers = urllib.request.urlretrieve(fits_url, filename =  os.path.join(calspec_dir, fits_name))
@@ -68,18 +69,12 @@ def get_filter_name(dataset):
     filters = os.path.join(datadir, "*.csv")
     filter = dataset[0].ext_hdr['CFAMNAME']
     filter_names = os.listdir(datadir)
-    f_avail = False
-    for name in filter_names:
-        if filter in name:
-            f_avail = True
-            filter_name= os.path.join(datadir, name)
-            break
-        else:
-            pass
-    if f_avail:
-        return filter_name
+
+    filter_name = [name for name in filter_names if filter in name]
+    if filter_name == []:
+        raise ValueError("there is no filter available with name {0}".format(filter))
     else:
-        raise Exception("there is no filter available with name {0}".format(filter))
+        return os.path.join(datadir,filter_name[0])
 
 def read_filter_curve(filter_filename):
     """

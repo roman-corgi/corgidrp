@@ -35,8 +35,8 @@ def test_get_filter_name():
     image3 = image1.copy()
     image3.ext_hdr["CFAMNAME"] = '5C'
     dataset2 = Dataset([image3, image3])
-    with pytest.raises(Exception):
-        filepath = pytest.fluxcal.get_filter_name(dataset2)
+    with pytest.raises(ValueError):
+        filepath = fluxcal.get_filter_name(dataset2)
         pass
     
 
