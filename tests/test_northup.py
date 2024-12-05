@@ -14,8 +14,6 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
         save_derot_dataset (optional): if you want to save the derotated file at the input directory, turn True
         save_comp_figure (optional): if you want to save a comparison figure of the original mock data and the derotated data
 
-    Returns:
-        Fits containing the original mock image and the derotated image, with the roll angle recorded
     """
 
     # read mock file
@@ -47,7 +45,7 @@ def test_northup(save_derot_dataset=False,save_comp_figure=False):
     assert(im_input[y_value1,x_value1] != im_derot[y_value1,x_value1])
     assert(dq_input[y_value1,x_value1] != dq_derot[y_value1,x_value1])
     
-    # check if the derotated DQ frame has no integer values (except NaN)
+    # check if the derotated DQ frame has no non-integer values (except NaN)
     non_integer_mask = (~np.isnan(dq_derot)) & (dq_derot % 1 != 0)
     non_integer_indices = np.argwhere(non_integer_mask)
     assert(len(non_integer_indices) == 0)
