@@ -6,7 +6,6 @@ from astropy.io import fits, ascii
 from scipy import integrate
 import urllib
 import corgidrp
-import re
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
 calspec_names= {
@@ -52,7 +51,7 @@ def get_calspec_file(star_name):
             os.mkdir(calspec_dir)
         file_name, headers = urllib.request.urlretrieve(fits_url, filename =  os.path.join(calspec_dir, fits_name))
     except:
-        raise Exception("cannot access CALSPEC archive web page and/or download {0}".fits_name)
+        raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(fits_name))
     return file_name
 
 def get_filter_name(dataset):
