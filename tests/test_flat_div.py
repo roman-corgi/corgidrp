@@ -77,9 +77,25 @@ def test_flat_div():
     print("Error estimated:",err_estimated)
     assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-2))
     
-    print(flatdivided_dataset[0].ext_hdr)
+    # print(flatdivided_dataset[0].ext_hdr)
     corgidrp.track_individual_errors = old_err_tracking
     
+
+    ### Check to make sure DQ gets set when flatfield zero. ###
+
+    ## Injected some 0s. 
+    pixel_list = [[110,120],[50,50], [100,100]]
+    for pixel in pixel_list:
+        flatfield.data[pixel[0],pixel[1]] = 0.
+    
+    ## Perform flat division
+    flatdivided_dataset_w_zeros = l2a_to_l2b.flat_division(simflat_dataset, flatfield)
+
+    ## Check that all the pixels that were zeroed out have the DQ flag set to 4. 
+    for pixel in pixel_list:
+        for i in range(len(simdata_filenames)):
+            assert np.bitwise_and(flatdivided_dataset_w_zeros.all_dq[i,pixel[0],pixel[1]],4)
+
     
 if __name__ == "__main__":
     test_flat_div()
