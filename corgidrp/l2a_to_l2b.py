@@ -133,7 +133,7 @@ def flat_division(input_dataset, flat_field):
     where_zero = np.where(flat_field.data == 0)
     flatdiv_dq = copy.deepcopy(flatdiv_dataset.all_dq)
     for i in range(len(flatdiv_dataset)):
-       flatdiv_dq[i].dq[where_zero] = np.bitwise_or(flatdiv_dataset[i].dq[where_zero], 4)
+       flatdiv_dq[i][where_zero] = np.bitwise_or(flatdiv_dataset[i].dq[where_zero], 4)
 
     # propagate the error of the master flat frame
     if hasattr(flat_field, "err"):
