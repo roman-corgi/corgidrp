@@ -2,7 +2,7 @@
 import corgidrp.fluxcal as fluxcal
 import numpy as np
 
-def determine_app_mag(input_dataset, source_star):
+def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     """
     determine the apparent Vega magnitude of the observed source
     in the used filter band and put it into the header.
@@ -12,6 +12,9 @@ def determine_app_mag(input_dataset, source_star):
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
         source_star (str): either the fits file path of the flux model of the observed source in 
                            CALSPEC units (erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
+        scale_factor (float): factor applied to the flux of the calspec standard source, so that you can apply it 
+                              if you have a different source with similiar spectral type, but no calspec standard.
+                              Defaults to 1.
     
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with updated header including 
@@ -32,7 +35,7 @@ def determine_app_mag(input_dataset, source_star):
     
     # calculate the flux of VEGA and the source star from the user given CALSPEC file binned on the wavelength grid of the filter
     vega_sed = fluxcal.read_cal_spec(vega_filepath, wave)
-    source_sed = fluxcal.read_cal_spec(source_filepath, wave)
+    source_sed = fluxcal.read_cal_spec(source_filepath, wave) * scale_factor
     #Calculate the irradiance of vega and the source star in the filter band
     vega_irr = fluxcal.calculate_band_irradiance(filter_trans, vega_sed, wave)
     source_irr = fluxcal.calculate_band_irradiance(filter_trans, source_sed, wave)
