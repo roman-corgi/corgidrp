@@ -1,4 +1,6 @@
 # Functions related with Core Throughout and off-axis PSF
+import numpy as np
+
 
 # CTC requirements
 """
@@ -37,6 +39,49 @@ See: https://wiki.jpl.nasa.gov/display/CGIfocus8/13-TDD%3A+Tech+Demo+Data+FDD
 
 """
 
+def get_psf_pix(
+    dataset,
+    method='max',
+    ):
+    """ Estimate the PSF positions of a set of PSF images. 
+ 
+    Args:
+      dataset (Dataset): a collection of off-axis PSFs.
+      
+      method (string): the method used to estimate the PSF positions. Default:
+        'max'.
+
+    Returns:
+      Array of pair of values with PSFs position in (fractional) EXCAM pixels
+      with respect to the pixel (0,0) in the PSF images
+    """ 
+
+
+    # TODO: Debugging
+    psf_pix = 0
+    return psf_pix
+
+def get_psf_ct(
+    dataset,
+    method='max',
+    ):
+    """ Estimate the core throughput of a set of PSF images.
+
+    Args:
+      dataset (Dataset): a collection of off-axis PSFs.
+
+      method (string): the method used to estimate the PSF core throughput.
+        Default: 'box'.
+
+    Returns:
+      Array of pair of values with PSFs position in (fractional) EXCAM pixels
+      with respect to the pixel (0,0) in the PSF images
+    """
+
+
+    # TODO: Debugging
+    psf_ct = 0
+    return psf_ct
 
 def estimate_psf_pix_and_ct(
     dataset_in,
@@ -56,7 +101,7 @@ def estimate_psf_pix_and_ct(
 
         The first PSF must be the unocculted PSF.
 
-      fsm_pos (array): Array with FSM positions. Units: TBD
+      fsm_pos (array): Array with FSM positions for the off-axis psfs. Units: TBD
         
 
     Returns:
@@ -68,8 +113,28 @@ def estimate_psf_pix_and_ct(
     """
     dataset = dataset_in.copy()
 
-    # check that the first psf is unocculted (by checking max value across all psfs)
- 
+    # check that the first psf is unocculted
+    psf_max_list = []
+    for psf in dataset:
+        psf_max_list += [psf.data.max()]
+    if np.argmax(psf_max_list) != 0:
+        raise Exception(('The first PSF of the dataset does not seem to be the'
+            ' unocculted PSF'))
+    # check that fsm_pos is a list of pair of values for each off-axis psf
+    if type(fsm_pos) != list:
+        raise Exception('FSM positions are not a list')
+    if len(fsm_pos) != len(dataset) - 1:
+        raise Exception(('The number of FSM positions is different to the number'
+            ' of off-axis PSFs'))
+    for pos in fsm_pos:
+        if len(pos) != 2:
+            raise Exception('The number of dimensions in the FSM position is not 2') 
+
+    # Find the PSF positions
+    psf_pix = get_psf_pix(dataset)
+
+    # Find the PSF corethroughput
+    psf_ct = get_psf_ct(dataset)
 
     return psf_pix, psf_ct
 
