@@ -36,8 +36,12 @@ def divide_by_exptime(input_dataset):
 
         data.frames[i].data = data.frames[i].data / exposure_time
         # data.frames[i].err = data.frames[i].err / exposure_time
+        scale_factor = (1/exposure_time) * np.ones([data.frames[i].err.shape[1], data.frames[i].err.shape[2]])
         # print(data.frames[i].err.shape)
-        data.frames[i].rescale_error(data.frames[i].err, 'normalized by the exposure time')
+        # print(data.frames[i].err[0])
+        # print(scale_factor.shape)
+        #data.frames[i].rescale_error(data.frames[i].err, 'normalized by the exposure time')
+        data.frames[i].rescale_error(scale_factor, 'normalized by the exposure time')
 
         all_data_new[i] = data.frames[i].data
         all_err_new[i] = data.frames[i].err
