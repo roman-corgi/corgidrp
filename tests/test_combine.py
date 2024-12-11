@@ -102,7 +102,7 @@ def test_mean_combine_subexposures_with_bad():
 
 def test_median_combine_subexposures():
     """
-    Test median combine of subexposures. And tests defualt case wihere num_frames_per_group isn't specified. 
+    Test median combine of subexposures. And tests default case where num_frames_per_group isn't specified. 
     """
 
     image1 = data.Image(img1, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
