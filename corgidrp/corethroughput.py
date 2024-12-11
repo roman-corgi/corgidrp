@@ -1,5 +1,6 @@
 # Functions related with Core Throughout and off-axis PSF
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 # CTC requirements
@@ -55,10 +56,14 @@ def get_psf_pix(
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
       with respect to the pixel (0,0) in the PSF images
     """ 
+    if method.lower() == 'max':
+        psf_pix = []
+        for psf in dataset:
+            psf_pix += [np.unravel_index(psf.data.argmax(), psf.data.shape)]
+        psf_pix = np.array(psf_pix)
+    else:
+        raise Exception('Method to estimate PSF pixels unrecognized')
 
-
-    # TODO: Debugging
-    psf_pix = 0
     return psf_pix
 
 def get_psf_ct(
@@ -77,15 +82,19 @@ def get_psf_ct(
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
       with respect to the pixel (0,0) in the PSF images
     """
+    if method.lower() == 'box':
+        psf_ct = np.array([0])
+    else:
+        raise Exception('Method to estimate PSF pixels unrecognized')
 
-
-    # TODO: Debugging
-    psf_ct = 0
     return psf_ct
 
 def estimate_psf_pix_and_ct(
     dataset_in,
-    fsm_pos):
+    fsm_pos,
+    pix_method=None,
+    ct_method=None,
+    ):
     """
     1090881 - Given a core throughput dataset consisting of M clean frames
     (nominally 1024x1024) taken at different FSM positions, the CTC GSW shall
@@ -102,7 +111,12 @@ def estimate_psf_pix_and_ct(
         The first PSF must be the unocculted PSF.
 
       fsm_pos (array): Array with FSM positions for the off-axis psfs. Units: TBD
-        
+
+      pix_method (string): the method used to estimate the PSF positions.
+        Default: 'max'.
+
+      ct_method (string): the method used to estimate the PSF core throughput.
+        Default: 'box'.        
 
     Returns:
       psf_pix (array): Array with PSF's pixel positions. Units: EXCAM pixels
@@ -112,6 +126,12 @@ def estimate_psf_pix_and_ct(
         dimensionless (Values must be within 0 and 1).
     """
     dataset = dataset_in.copy()
+
+    # Default methods
+    if pix_method is None:
+        pix_method = 'max'
+    if ct_method is None:
+        ct_method = 'box'
 
     # check that the first psf is unocculted
     psf_max_list = []
@@ -130,11 +150,11 @@ def estimate_psf_pix_and_ct(
         if len(pos) != 2:
             raise Exception('The number of dimensions in the FSM position is not 2') 
 
-    # Find the PSF positions
-    psf_pix = get_psf_pix(dataset)
+    # Find the PSF positions of the off-axis PSFs
+    psf_pix = get_psf_pix(dataset[1:], pix_method)
 
-    # Find the PSF corethroughput
-    psf_ct = get_psf_ct(dataset)
+    # Find the PSF corethroughput of the off-axis PSFs
+    psf_ct = get_psf_ct(dataset[1:], ct_method)
 
     return psf_pix, psf_ct
 
