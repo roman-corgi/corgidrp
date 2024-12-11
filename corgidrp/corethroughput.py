@@ -83,7 +83,8 @@ def get_psf_ct(
       with respect to the pixel (0,0) in the PSF images
     """
     if method.lower() == 'box':
-        psf_ct = np.array([0])
+        #TODO: replace by CT box method
+        psf_ct = np.array([0]*len(dataset))
     else:
         raise Exception('Method to estimate PSF pixels unrecognized')
 
@@ -150,11 +151,16 @@ def estimate_psf_pix_and_ct(
         if len(pos) != 2:
             raise Exception('The number of dimensions in the FSM position is not 2') 
 
-    # Find the PSF positions of the off-axis PSFs
+    # find the PSF positions of the off-axis PSFs
     psf_pix = get_psf_pix(dataset[1:], pix_method)
 
-    # Find the PSF corethroughput of the off-axis PSFs
+    # find the PSF corethroughput of the off-axis PSFs
     psf_ct = get_psf_ct(dataset[1:], ct_method)
+
+
+    # same number of estimates. One per PSF 
+    if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset[1:]):
+        raise Exception('PSF positions and CT values are inconsistent')
 
     return psf_pix, psf_ct
 
