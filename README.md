@@ -209,6 +209,9 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
+**v1.1.1**
+ * Fix unit test that wasn't cleaning up environment properly
+
 **v1.1**
  * Bug fix so that corgidrp classes can be pickled
  * New corgidrp.ops interface
