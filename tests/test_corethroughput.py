@@ -31,6 +31,8 @@ def setup_module():
     # fsm positions for the off-axis psfs
     global fsm_pos
     fsm_pos = [[1,1]]*len(psf_position_x[1:])
+    global idx_os11
+    idx_os11 = 8
 
     data_unocc = np.zeros([1024, 1024])
     # unocculted PSF
@@ -49,7 +51,7 @@ def setup_module():
     occ_psf_filepath = os.path.join(ct_filepath, 'hlc_os11_psfs_oversampled.fits')
     occ_psf = fits.getdata(occ_psf_filepath)
     for i_psf, _ in enumerate(psf_position_x[1:]):
-        psf_tmp = occ_psf[0, 10+i_psf]
+        psf_tmp = occ_psf[0, idx_os11+i_psf]
         # re-sample to EXCAM's pixel pitch: os11 off-axis psf is 5x oversampled
         psf_tmp_red = block_reduce(psf_tmp, block_size=(5,5), func=np.mean)
         data_tmp = np.zeros([1024, 1024])
@@ -104,8 +106,16 @@ def test_psf_pix_and_ct():
     with pytest.raises(Exception):
         corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos, pix_method='bad')
 
+    with pytest.raises(Exception):
+        corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos, ct_method='bad')
 
     psf_pix, ct = corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos)
+
+    # Read OS11 PSF offsets (l/D=50.19mas=2.3 EXCAM pix, 1 EXCAM pix=0.4347825 l/D, 1 EXCAM pix=21.8213 mas)
+    r_off = fits.getdata(os.path.join(ct_filepath, 'hlc_os11_psfs_radial_offsets.fits'))
+    r_off_pix = r_off[idx_os11:idx_os11+len(psf_pix)] * 2.3
+
+    breakpoint()
     
 if __name__ == '__main__':
 
