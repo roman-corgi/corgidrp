@@ -72,7 +72,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         num_frames_per_group = len(input_dataset)
 
     if len(input_dataset) % num_frames_per_group != 0:
-        raise ValueError("Input dataset of lenght {0} cannot be grouped in sets of {1}".format(len(input_dataset, num_frames_per_group)))
+        raise ValueError("Input dataset of length {0} cannot be grouped in sets of {1}".format(len(input_dataset, num_frames_per_group)))
     
     if collapse.lower() not in ["mean", "median"]:
         raise ValueError("combine_subexposures can only collapse with mean or median")
