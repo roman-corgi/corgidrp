@@ -808,8 +808,7 @@ def calibrate_nonlin(dataset_nl,
     prhd = dataset_nl.frames[0].pri_hdr
     exthd = dataset_nl.frames[0].ext_hdr
     exthd['HISTORY'] = f"Non-linearity calibration derived from a set of frames on {exthd['DATETIME']}"
-    # Just for the purpose of getting the instance created. NEED to clarify the
-    # role of nonlin_arr3 and headers compared to data.NonLinearityCalibration.data
+    # Just for the purpose of getting the instance created
     nonlin = data.NonLinearityCalibration(nonlin_data,
         pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_nl)
     
@@ -867,7 +866,8 @@ def nonlin_dataset_2_stack(dataset):
                 if frame.ext_hdr['CMDGAIN'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-            else:
+            elif (frame.pri_hdr['OBSTYPE'] == 'KGAIN' or
+                frame.pri_hdr['OBSTYPE'] == 'NONLIN'):
                 len_cal_frames += 1
                 sub_stack.append(frame.data)
                 exp_time = frame.ext_hdr['EXPTIME']
@@ -877,6 +877,7 @@ def nonlin_dataset_2_stack(dataset):
                     raise Exception('Exposure times must be positive')
                 exp_times.append(exp_time)
                 datetime = frame.ext_hdr['DATETIME']
+                
                 if isinstance(datetime, str) is False:
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
@@ -889,9 +890,13 @@ def nonlin_dataset_2_stack(dataset):
                         except: # use commanded gain otherwise
                             gains.append(frame.ext_hdr['CMDGAIN'])
                     record_gain = False
+            else:
+                raise Exception('OBSTYPE can only be MNFRAME or NONLIN in non-linearity')
+        
         # First layer (array of unique EM values)
-        stack.append(np.stack(sub_stack))
-        len_sstack.append(len_cal_frames)
+        if len(sub_stack):
+            stack.append(np.stack(sub_stack))
+            len_sstack.append(len_cal_frames)
 
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):

@@ -15,6 +15,7 @@ import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
 import corgidrp.detector
 import corgidrp.darks
+import corgidrp.sorting
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -39,7 +40,8 @@ all_steps = {
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
     "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
-    "build_trad_dark" : corgidrp.darks.build_trad_dark
+    "build_trad_dark" : corgidrp.darks.build_trad_dark,
+    "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -53,28 +55,42 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
         filelist (list of str): list of filepaths to files
         CPGS_XML_filepath (str): path to CPGS XML file for this set of files in filelist
         outputdir (str): output directory folderpath
-        template (str or json): custom template. either the full json file, or a filename of
-                                a template that's already in the recipe_templates folder
+        template (str or json): custom template. It can be one of three things
+                                  * the full json object, 
+                                  * a filename of a template that's already in the recipe_templates folder
+                                  * a filepath to a template on disk somewhere
+                                
 
     Returns:
-        json: the JSON recipe that was used for processing
+        json or list: the JSON recipe (or list of JSON recipes) that was used for processing
     """
     if isinstance(template, str):
-        recipe_filepath = os.path.join(recipe_dir, template)
+        if os.path.sep not in template:
+            # this is just a template name in the recipe_templates folder
+            recipe_filepath = os.path.join(recipe_dir, template)
+        else:
+            recipe_filepath = template
+        
         template = json.load(open(recipe_filepath, 'r'))
 
     # generate recipe
-    recipe = autogen_recipe(filelist, outputdir, template=template)
+    recipes = autogen_recipe(filelist, outputdir, template=template)
 
-    # process_recipe
-    run_recipe(recipe)
+    # process recipe
+    if isinstance(recipes, list):
+        # if multiple recipes
+        for recipe in recipes:
+            run_recipe(recipe)
+    else:
+        # process single recipe
+        run_recipe(recipes)
 
-    return recipe
-
+    return recipes
 
 def autogen_recipe(filelist, outputdir, template=None):
     """
-    Automatically creates a recipe by identifyng and populating a template
+    Automatically creates a recipe (or recipes) by identifyng and populating a template.
+    Returns a single recipe unless there are multiple recipes that should be produced.
 
     Args:
         filelist (list of str): list of filepaths to files
@@ -82,7 +98,7 @@ def autogen_recipe(filelist, outputdir, template=None):
         template (json): enables passing in of custom template, if desired
 
     Returns:
-        json: the JSON recipe to process the filelist
+        json list: the JSON recipe (or list of recipes) that the input filelist will be processed with
     """
     # Handle the case where filelist is empty
     if not filelist:
@@ -97,36 +113,56 @@ def autogen_recipe(filelist, outputdir, template=None):
     if template is None:
         recipe_filename = guess_template(dataset)
 
-        # load the template recipe
-        recipe_filepath = os.path.join(recipe_dir, recipe_filename)
-        template = json.load(open(recipe_filepath, 'r'))
+        # handle it as a list moving forward
+        if isinstance(recipe_filename, list):
+            recipe_filename_list = recipe_filename
+        else:
+            recipe_filename_list = [recipe_filename]
 
-    # create the personalized recipe
-    recipe = template.copy()
-    recipe["template"] = False
+        recipe_template_list = []
+        for recipe_filename in recipe_filename_list:
+            # load the template recipe
+            recipe_filepath = os.path.join(recipe_dir, recipe_filename)
+            template = json.load(open(recipe_filepath, 'r'))
+            recipe_template_list.append(template)
+    else:
+        # user passed in a single template
+        recipe_template_list = [template]
 
-    for filename in filelist:
-        recipe["inputs"].append(filename)
+    recipe_list = []
+    for template in recipe_template_list:
+        # create the personalized recipe
+        recipe = template.copy()
+        recipe["template"] = False
 
-    recipe["outputdir"] = outputdir
+        for filename in filelist:
+            recipe["inputs"].append(filename)
 
-    ## Populate default values
-    ## This includes calibration files that need to be automatically determined
-    ## This also includes the dark subtraction outputdir for synthetic darks
-    this_caldb = caldb.CalDB()
-    for step in recipe["steps"]:
-        # by default, identify all the calibration files needed, unless jit setting is turned on
-        # two cases where we should be identifying the calibration recipes now
-        if "jit_calib_id" in recipe['drpconfig'] and (not recipe['drpconfig']["jit_calib_id"]):
-            _fill_in_calib_files(step, this_caldb, first_frame)
-        elif ("jit_calib_id" not in recipe['drpconfig']) and (not corgidrp.jit_calib_id):
-            _fill_in_calib_files(step, this_caldb, first_frame)
+        recipe["outputdir"] = outputdir
 
-        if step["name"].lower() == "dark_subtraction":
-            if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
-                step["keywords"]["outputdir"] = recipe["outputdir"]
+        ## Populate default values
+        ## This includes calibration files that need to be automatically determined
+        ## This also includes the dark subtraction outputdir for synthetic darks
+        this_caldb = caldb.CalDB()
+        for step in recipe["steps"]:
+            # by default, identify all the calibration files needed, unless jit setting is turned on
+            # two cases where we should be identifying the calibration recipes now
+            if "jit_calib_id" in recipe['drpconfig'] and (not recipe['drpconfig']["jit_calib_id"]):
+                _fill_in_calib_files(step, this_caldb, first_frame)
+            elif ("jit_calib_id" not in recipe['drpconfig']) and (not corgidrp.jit_calib_id):
+                _fill_in_calib_files(step, this_caldb, first_frame)
 
-    return recipe
+            if step["name"].lower() == "dark_subtraction":
+                if step["keywords"]["outputdir"].upper() == "AUTOMATIC":
+                    step["keywords"]["outputdir"] = recipe["outputdir"]
+
+        recipe_list.append(recipe)
+    
+    # if only a single recipe, return the recipe. otherwise return list
+    if len(recipe_list) > 1:
+        return recipe_list
+    else:
+        return recipe_list[0]
 
 def _fill_in_calib_files(step, this_caldb, ref_frame):
     """
@@ -183,37 +219,29 @@ def guess_template(dataset):
         dataset (corgidrp.data.Dataset): a Dataset to process
 
     Returns:
-        str: the best template filename
+        str or list: the best template filename or a list of multiple template filenames
     """
     image = dataset[0] # first image for convenience
     if image.ext_hdr['DATA_LEVEL'] == "L1":
-        if image.pri_hdr['OBSTYPE'] == "ENG":
+        if 'VISTYPE' not in image.pri_hdr:
+            # this is probably IIT test data. Do generic processing
+            recipe_filename = "l1_to_l2b.json"
+        elif image.pri_hdr['VISTYPE'][:3] == "ENG":
+            # first three letters are ENG
+            # for either ENGPUPIL or ENGIMGAGE
             recipe_filename = "l1_to_l2a_eng.json"
-        elif image.pri_hdr['OBSTYPE'] == "ASTROM":
+        elif image.pri_hdr['VISTYPE'] == "BORESITE":
             recipe_filename = "l1_to_boresight.json"
-        elif image.pri_hdr['OBSTYPE'] == "FLT":
+        elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
-        elif image.pri_hdr['OBSTYPE'] == "NONLIN":
-            recipe_filename = "l1_to_l2a_nonlin.json"
-        elif image.pri_hdr['OBSTYPE'] == "KGAIN":
-            recipe_filename = "l1_to_kgain.json"
-        elif image.pri_hdr['OBSTYPE'] == "DARK":
+        elif image.pri_hdr['VISTYPE'] == "DARK":
             recipe_filename = "l1_to_l2a_noisemap.json"
-        elif image.pri_hdr['OBSTYPE'] == "MNFRAME":
-            # Disambiguate between NONLIN and KGAIN
-            for data in dataset:
-                if data.pri_hdr['OBSTYPE'] == "NONLIN":
-                    recipe_filename = "l1_to_l2a_nonlin.json" 
-                    break
-                elif data.pri_hdr['OBSTYPE'] == "KGAIN":
-                    recipe_filename = "l1_to_kgain.json"
-                    break
-                else:
-                    raise ValueError(f"Define recipe for {data.pri_hdr['OBSTYPE']}")
+        elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
+            recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
             recipe_filename = "l1_to_l2b.json"
     elif image.ext_hdr['DATA_LEVEL'] == "L2a":
-        if image.pri_hdr['OBSTYPE'] == "DARK":
+        if image.pri_hdr['VISTYPE'] == "DARK":
             recipe_filename = "l2a_to_l2a_noisemap.json"
         else:
             raise NotImplementedError()

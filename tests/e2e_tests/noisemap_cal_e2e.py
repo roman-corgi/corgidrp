@@ -27,11 +27,11 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 def set_obstype_for_darks(
     list_of_fits,
     ):
-    """ Adds proper values to OBSTYPE for the NoiseMap calibration: DARKS
+    """ Adds proper values to VISTYPE for the NoiseMap calibration: DARKS
     (data used to calibrate the dark noise sources).
 
     This function is unnecessary with future data because data will have
-    the proper values in OBSTYPE. 
+    the proper values in VISTYPE. 
 
     Args:
     list_of_fits (list): list of FITS files that need to be updated.
@@ -41,7 +41,7 @@ def set_obstype_for_darks(
     for file in list_of_fits:
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
-        prihdr['OBSTYPE'] = 'DARK'
+        prihdr['VISTYPE'] = 'DARK'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -153,7 +153,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     #Since the walker updates to L2a and the filename accordingly:
     output_filename = output_filenamel1.replace('L1','L2a',1)
 
-    # Update OBSTYPE to "DARKS" for DRP run
+    # Update VISTYPE to "DARK" for DRP run
     set_obstype_for_darks(stack_arr_files)
 
     ####### Run the DRP walker
@@ -169,6 +169,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
 
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
+    this_caldb.remove_entry(corgidrp_noisemap)
 
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
@@ -332,7 +333,7 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     kgain.save(filedir=noisemap_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
 
-    # Update OBSTYPE to "DARKS" for DRP run
+    # Update VISTPYE to "DARK" for DRP run
     set_obstype_for_darks(l2a_filepaths)
 
     ####### Run the DRP walker

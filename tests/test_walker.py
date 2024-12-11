@@ -519,6 +519,37 @@ def test_jit_calibs():
     corgidrp.jit_calib_id = old_setting
 
 
+
+def test_generate_multiple_recipes():
+    """
+    Tests that we can generate multiple recipes when passing in a dataset
+    """
+    # create dirs
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    outputdir = os.path.join(os.path.dirname(__file__), "walker_output")
+    if not os.path.exists(outputdir):
+        os.mkdir(outputdir)
+    # Make a non-linearity correction calibration file
+    input_non_linearity_filename = "nonlin_table_TVAC.txt"
+    test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
+    test_non_linearity_path = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
+
+    dataset = mocks.create_nonlinear_dataset(test_non_linearity_path, filedir=datadir)
+    # add vistype
+    for frame in dataset:
+        frame.pri_hdr['VISTYPE'] = "PUPILIMG"
+    dataset.save()
+    filelist = [frame.filepath for frame in dataset]
+
+    recipes = walker.autogen_recipe(filelist, outputdir)
+
+    assert len(recipes) == 2
+
+
+
+
 if __name__ == "__main__":#
     test_autoreducing()
     test_auto_template_identification()
@@ -526,6 +557,7 @@ if __name__ == "__main__":#
     test_skip_missing_calib()
     test_skip_missing_optional_calib()
     test_jit_calibs()
+    test_generate_multiple_recipes()
 
 
 
