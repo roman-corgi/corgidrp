@@ -25,6 +25,7 @@ def setup_module():
     global dataset_psf, dataset_psf_rev
     # arbitrary set of PSF positions to be tested in EXCAM pixels referred to (0,0)
     global psf_position_x, psf_position_y
+    # Some arbitrary shifts
     psf_position_x = [512, 522, 532, 542, 552, 562, 522, 532, 542, 552, 562]
     psf_position_y = [512, 522, 532, 542, 552, 562, 502, 492, 482, 472, 462]
     # fsm positions for the off-axis psfs
@@ -48,7 +49,7 @@ def setup_module():
     occ_psf_filepath = os.path.join(ct_filepath, 'hlc_os11_psfs_oversampled.fits')
     occ_psf = fits.getdata(occ_psf_filepath)
     for i_psf, _ in enumerate(psf_position_x[1:]):
-        psf_tmp = occ_psf[0, i_psf]
+        psf_tmp = occ_psf[0, 10+i_psf]
         # re-sample to EXCAM's pixel pitch: os11 off-axis psf is 5x oversampled
         psf_tmp_red = block_reduce(psf_tmp, block_size=(5,5), func=np.mean)
         data_tmp = np.zeros([1024, 1024])
@@ -76,7 +77,7 @@ def test_fsm_pos():
     # do not pass if fsm_pos has more elements
     with pytest.raises(Exception):
         corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos+[[1,1]])
-    # Do not pass if fsm_pos is not a list of paired values
+    # do not pass if fsm_pos is not a list of paired values
     fsm_pos_bad = [[1,1]]*(len(psf_position_x[1:]) - 1)
     fsm_pos_bad += [[1]]
     with pytest.raises(Exception):
@@ -98,6 +99,11 @@ def test_psf_pix_and_ct():
     NOTE: the list of M clean frames may be a subset of the frames collected during
     core throughput data collection, to allow for the removal of outliers.
     """
+
+    # do not pass if setting a method that does not exist
+    with pytest.raises(Exception):
+        corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos, pix_method='bad')
+
 
     psf_pix, ct = corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos)
     
