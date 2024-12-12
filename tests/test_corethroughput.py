@@ -1,11 +1,9 @@
-# Use
-# assert A == pytest.approx(min, max)
-
 import os
 import pytest
 import numpy as np
 from astropy.io import fits
 from skimage.measure import block_reduce
+import matplotlib.pyplot as plt
 
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
@@ -33,6 +31,8 @@ def setup_module():
     fsm_pos = [[1,1]]*len(psf_position_x[1:])
     global idx_os11
     idx_os11 = 8
+    global ct_os11
+    ct_os11 = []
 
     data_unocc = np.zeros([1024, 1024])
     # unocculted PSF
@@ -55,12 +55,13 @@ def setup_module():
         # re-sample to EXCAM's pixel pitch: os11 off-axis psf is 5x oversampled
         psf_tmp_red = block_reduce(psf_tmp, block_size=(5,5), func=np.mean)
         data_tmp = np.zeros([1024, 1024])
-        idx_0_0 = psf_position_x[i_psf] - psf_tmp_red.shape[0]
+        idx_0_0 = psf_position_x[i_psf+1] - psf_tmp_red.shape[0] // 2
         idx_0_1 = idx_0_0 + psf_tmp_red.shape[0]
-        idx_1_0 = psf_position_y[i_psf] - psf_tmp_red.shape[1]
+        idx_1_0 = psf_position_y[i_psf+1] - psf_tmp_red.shape[1] // 2
         idx_1_1 = idx_1_0 + psf_tmp_red.shape[1]
         data_tmp[idx_0_0:idx_0_1, idx_1_0:idx_1_1] = psf_tmp_red
         data_psf += [Image(data_tmp,pri_hdr = prhd, ext_hdr = exthd, err = err)]
+        ct_os11 += [psf_tmp[psf_tmp > psf_tmp.max()/2].sum()/5/unocc_psf.sum()]
 
     dataset_psf = Dataset(data_psf)
     data_psf.reverse()
@@ -114,8 +115,16 @@ def test_psf_pix_and_ct():
     # Read OS11 PSF offsets (l/D=50.19mas=2.3 EXCAM pix, 1 EXCAM pix=0.4347825 l/D, 1 EXCAM pix=21.8213 mas)
     r_off = fits.getdata(os.path.join(ct_filepath, 'hlc_os11_psfs_radial_offsets.fits'))
     r_off_pix = r_off[idx_os11:idx_os11+len(psf_pix)] * 2.3
+    # Difference between expected and retrieved positions
+    diff_pix_x = psf_position_x[1:] - psf_pix[:,0]
+    # os11 azimuthal axis
+    assert diff_pix_x == pytest.approx(0)
+    # os11 radial axis
+    diff_pix_y = psf_position_y[1:] + r_off_pix - psf_pix[:,1] 
+    assert diff_pix_y == pytest.approx(0, abs=0.75)
 
-    breakpoint()
+    assert np.all(ct) > 0
+    assert ct == pytest.approx(np.array(ct_os11), abs=0.01)
     
 if __name__ == '__main__':
 
