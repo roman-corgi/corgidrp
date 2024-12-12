@@ -68,25 +68,38 @@ def get_psf_pix(
 
 def get_psf_ct(
     dataset,
+    unocc_psf_norm=1,
     method='max',
     ):
     """ Estimate the core throughput of a set of PSF images.
 
+    Definition of core throughput: divide the summed intensity counts of the
+      region with intensity >= 50% of the peak by the summed intensity counts
+      w/o any masks.
+
     Args:
       dataset (Dataset): a collection of off-axis PSFs.
 
+      unocc_psf_norm (float): sum of the 2-d array corresponding to the
+        unocculted psf.
+
       method (string): the method used to estimate the PSF core throughput.
-        Default: 'box'.
+        Default: 'direct'. This method finds the set of EXCAM pixels that
+        satisfy the condition to derive the core throughput with no approximations.
 
     Returns:
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
       with respect to the pixel (0,0) in the PSF images
     """
-    if method.lower() == 'box':
-        #TODO: replace by CT box method
-        psf_ct = np.array([0]*len(dataset))
+    if method.lower() == 'direct':
+        psf_ct = []
+        for psf in dataset:
+            #psf_ct += [psf.data[psf.data >= psf.data.max()/2].sum()/unocc_psf_norm]
+            # NOTE: if I use instead psf.data.sum(), I do get the expected 3.5%
+            psf_ct += [psf.data.sum()/unocc_psf_norm]
+        psf_ct = np.array(psf_ct)
     else:
-        raise Exception('Method to estimate PSF pixels unrecognized')
+        raise Exception('Method to estimate core throughput unrecognized')
 
     return psf_ct
 
@@ -117,7 +130,7 @@ def estimate_psf_pix_and_ct(
         Default: 'max'.
 
       ct_method (string): the method used to estimate the PSF core throughput.
-        Default: 'box'.        
+        Default: 'direct'.        
 
     Returns:
       psf_pix (array): Array with PSF's pixel positions. Units: EXCAM pixels
@@ -132,7 +145,7 @@ def estimate_psf_pix_and_ct(
     if pix_method is None:
         pix_method = 'max'
     if ct_method is None:
-        ct_method = 'box'
+        ct_method = 'direct'
 
     # check that the first psf is unocculted
     psf_max_list = []
@@ -152,11 +165,13 @@ def estimate_psf_pix_and_ct(
             raise Exception('The number of dimensions in the FSM position is not 2') 
 
     # find the PSF positions of the off-axis PSFs
-    psf_pix = get_psf_pix(dataset[1:], pix_method)
+    psf_pix = get_psf_pix(dataset[1:],
+        method=pix_method)
 
     # find the PSF corethroughput of the off-axis PSFs
-    psf_ct = get_psf_ct(dataset[1:], ct_method)
-
+    psf_ct = get_psf_ct(dataset[1:],
+        unocc_psf_norm = np.sum(dataset[0].data),
+        method=ct_method)
 
     # same number of estimates. One per PSF 
     if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset[1:]):
