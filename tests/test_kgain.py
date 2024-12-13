@@ -17,6 +17,8 @@ def test_kgain():
     dat = np.ones([1024,1024]) * 2
     err = np.ones([1,1024,1024]) * 0.5
     ptc = np.ones([2,1024])
+    exthd["RN"] = 100
+    exthd["RN_ERR"] = 2
     ptc_hdr = fits.Header()
     image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
     image2 = image1.copy()
@@ -84,6 +86,9 @@ def test_kgain():
     assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].ext_hdr["KGAIN"] == k_gain
+    assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error[0]
+    assert gain_dataset[0].ext_hdr["RN"] > 0
+    assert gain_dataset[0].ext_hdr["RN_ERR"] > 0
     assert("converted" in str(gain_dataset[0].ext_hdr["HISTORY"]))
 
 if __name__ == "__main__":
