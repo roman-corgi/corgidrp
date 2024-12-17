@@ -19,7 +19,8 @@
         {
             "name" : "detect_cosmic_rays",
             "calibs" : {
-                "DetectorParams" : "AUTOMATIC"
+                "DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
             }
         },
         {
@@ -92,7 +93,7 @@
             "name" : "boresight_calibration",
             "keywords" : {
                 "frames_to_combine" : 24,
-                "find_threshold" : 9
+                "find_threshold" : 5
             }
         },
         {
