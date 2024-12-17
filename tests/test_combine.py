@@ -61,6 +61,51 @@ def test_mean_combine_subexposures():
     assert combined_dataset_2[0].ext_hdr['FILE2'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
     assert combined_dataset_2[0].ext_hdr['FILE3'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
 
+def test_mean_combine_subexposures_without_scaling():
+    """
+    Test mean combine of subexposures for case where num_frames_scaling=False
+    """
+
+    image1 = data.Image(img1, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
+    image1.filename = "1.fits"
+    image2 = image1.copy()
+    image2.filename = "2.fits"
+    image3 = image1.copy()
+    image3.filename = "3.fits"
+    image4 = image1.copy()
+    image4.filename = "4.fits"
+
+    dataset = data.Dataset([image1, image2, image3, image4])
+
+    combined_dataset = combine.combine_subexposures(dataset, 2, num_frames_scaling=False)
+
+    assert(len(combined_dataset) == 2)
+    assert(np.all(combined_dataset[0].data == 1))
+    assert(np.all(combined_dataset[0].err == pytest.approx(1/np.sqrt(2))))
+    assert(np.all(combined_dataset[0].dq == 0))
+
+    assert combined_dataset[0].ext_hdr['DRPNFILE'] == 2
+    assert combined_dataset[0].ext_hdr['FILE0'] in ["2.fits", "1.fits"]
+    assert combined_dataset[0].ext_hdr['FILE1'] in ["2.fits", "1.fits"]
+
+    assert combined_dataset[1].ext_hdr['DRPNFILE'] == 2
+    assert combined_dataset[1].ext_hdr['FILE0'] in ["3.fits", "4.fits"]
+    assert combined_dataset[1].ext_hdr['FILE1'] in ["3.fits", "4.fits"]
+
+    # combine again
+    combined_dataset_2 = combine.combine_subexposures(combined_dataset, 2, num_frames_scaling=False)
+     
+    assert(len(combined_dataset_2) == 1)
+    assert(np.all(combined_dataset_2[0].data == 1))
+    assert(np.all(combined_dataset_2[0].err == pytest.approx((1/np.sqrt(2))/np.sqrt(2))))
+    assert(np.all(combined_dataset_2[0].dq == 0))
+
+    assert combined_dataset_2[0].ext_hdr['DRPNFILE'] == 4
+    assert combined_dataset_2[0].ext_hdr['FILE0'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
+    assert combined_dataset_2[0].ext_hdr['FILE1'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
+    assert combined_dataset_2[0].ext_hdr['FILE2'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
+    assert combined_dataset_2[0].ext_hdr['FILE3'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
+
 
 def test_mean_combine_subexposures_with_bad():
     """
