@@ -15,7 +15,15 @@ That configuration directory will be used to locate things on your computer such
 
 ### For Developers
 
-Large binary files (used in tests) are stored in Git LFS. You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
+Large binary files (used in tests) are stored in Git LFS. [Install Git LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage) if it isn't already installed.  You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
+
+To run the existing end-to-end tests, you also need the II&T code, which is used directly for comparing results. This also requires Git LFS to be installed first. Then install the II&T code by doing the following while in the top-level folder:
+
+```
+pip install -r requirements_e2etests.txt corgidrp
+```
+
+This will install the II&T repositories `cal` and `proc_cgi_frame`.  
 
 ### Troubleshooting
 
@@ -120,7 +128,7 @@ End-to-end testing refers to processing data as one would when we get the real d
   1. Write a recipe that produces the desired processed data product starting from L1 data. You will need to determine the series of step functions that need to be run, and what kind of arguments should be modified (e.g., whether prescan columns pixels should be cropped). Refer to the existing recipes in `corgidrp/recipe_templates` as examples and double check all the necessary steps in the FDD. 
   2. Obtain TVAC L1 data from our Box folder (ask Alex Greenbaum or Jason if you don't have access). For some situations (e.g., boresight), there may not be appropriate TVAC data. In those cases, write a piece of code that uses the images from TVAC to provide realistic noise and add it to mock data (i.e., the ones generated for the unit testing) to create mock L1 data.
   3. Write an end-to-end test that processes the L1 data through the new recipe you created using the corgidrp.walker framework
-      - You will probably need to modify the `corgidrp.walker.guess_template()` function to add logic for determining when to use your recipe based on header keywords (e.g., OBSTYPE). Ask Jason, who developed this framework, if it is not clear what should be done. 
+      - You will probably need to modify the `corgidrp.walker.guess_template()` function to add logic for determining when to use your recipe based on header keywords (e.g., VISTYPE). Ask Jason, who developed this framework, if it is not clear what should be done. 
       - Your recipe may require other calibratio files. For now, create them as part of the setup process during the script (see `tests/e2e_tests/l1_to_l2b_e2e.py` for examples of how to do this for each type of calibration)
       - if you need to create mock L1 data, please do it in the script as well. 
       - See the existing tests in `tests/e2e_tests/` for how to structure this script. You should only need to write a single script.
@@ -171,6 +179,16 @@ Before creating a pull request, review the design Principles below. Use the Gith
     * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
   * Can I create new data classes?
     * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
+    * You do not necessarily need to write a copy function for subclasses of the `Image` class. If you need to copy calibration objects at all you can import and apply the copy module of python, see
+      example: 
+      ```
+      import copy
+      flatfield = data.Flatfield('flatfield.fits')
+      #reference copy
+      flatfield_copy = copy.copy(flatfield)
+      #deep data copy
+      flatfield_copy = copy.deepcopy(flatfield)
+      ```
 
 * What python version should I develop in?
   * Python 3.12
@@ -191,7 +209,20 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
-**v1.0** (To be released..)
+**v1.1.2**
+ * Flat field correction marks pixels divided by 0 as bad
+
+**v1.1.1**
+ * Fix unit test that wasn't cleaning up environment properly
+
+**v1.1**
+ * Bug fix so that corgidrp classes can be pickled
+ * New corgidrp.ops interface
+ * Improved agreement with II&T pipeline in updated e2e tests
+ * Ability to embed just the illuminated part of the detector back into a full engineering frame 
+ * Updated DRP throughout to handle recently updated data header specification
+
+**v1.0** 
  * First official pipeline release!
  * Step functions to produce the necessary calibration files for analog L1 to L2b step functions implemented and tested
  * Step function to produce boresight calibration implemented and tested

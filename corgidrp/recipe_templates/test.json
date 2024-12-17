@@ -1,0 +1,53 @@
+{
+    "name" : "l1_to_l2a_nonlin",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "prescan_biassub",
+              "keywords" : {
+                "return_full_frame" : true,
+                "detector_regions" : {
+                    "SCI" : {
+                        "frame_rows" : 1200,
+                        "frame_cols" : 2200,
+                        "prescan" : {
+                            "rows": 1200,
+                            "cols": 1088,
+                            "r0c0": [0, 0],
+                            "col_start": 799,
+                            "col_end": 1000
+                              },
+                        "prescan_reliable" : {
+                            "rows": 1200,
+                            "cols": 201,
+                            "r0c0": [0, 799]
+                              }
+                            }
+                    }
+                }
+        },
+        {
+            "name" : "detect_cosmic_rays",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
+            }
+        },
+        {   "name" : "sort_pupilimg_frames",
+              "keywords" : {
+                "cal_type" : "non-lin"
+              }
+        },
+        {
+            "name" : "calibrate_nonlin"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

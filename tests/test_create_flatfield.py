@@ -1,5 +1,6 @@
 import os
 import glob
+import pickle
 import pytest
 import numpy as np
 import corgidrp
@@ -53,8 +54,13 @@ def test_create_flatfield_neptune():
     onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=1024, N=1, rad_mask=1.26,  planet_rad=50, n_pix=165, n_pad=0)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
+    assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels
     
-    
+    # check the flat can be pickled (for CTC operations)
+    pickled = pickle.dumps(onskyflat_field)
+    pickled_flat = pickle.loads(pickled)
+    assert np.all(onskyflat_field.data == pickled_flat.data)
+
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     
     flat_filename = "sim_flatfield_"+str(planet)+"_"+str(band)+".fits"
@@ -67,6 +73,10 @@ def test_create_flatfield_neptune():
     flat_filepath = os.path.join(calibdir, flat_filename)
     onsky_flatfield = data.FlatField(flat_filepath)
 
+    # check the flat can be pickled (for CTC operations)
+    pickled = pickle.dumps(onskyflat_field)
+    pickled_flat = pickle.loads(pickled)
+    assert np.all(onskyflat_field.data == pickled_flat.data)
     
     flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset,onsky_flatfield)
     print(flatdivided_dataset[0].ext_hdr["HISTORY"])
@@ -122,7 +132,7 @@ def test_create_flatfield_uranus():
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
     data_set = data.Dataset(filenames)
     planet='uranus'; band='4'
-    mocks.create_onsky_rasterscans(data_set,filedir=file_dir,planet='uranus',band='4',im_size=1024,d=65, n_dith=2,radius=90,snr=250,snr_constant=9.66)
+    mocks.create_onsky_rasterscans(data_set,filedir=file_dir,planet='uranus',band='4',im_size=1024,d=65, n_dith=3,radius=90,snr=250,snr_constant=9.66)
     
     ####### create flat field
     flat_dataset=[]
@@ -136,6 +146,7 @@ def test_create_flatfield_uranus():
     onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=1024, N=1, rad_mask=1.75,  planet_rad=65, n_pix=165)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
+    assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels
     
     
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
