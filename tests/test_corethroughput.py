@@ -63,6 +63,8 @@ def setup_module():
         data_psf += [Image(data_tmp,pri_hdr = prhd, ext_hdr = exthd, err = err)]
         ct_os11 += [psf_tmp[psf_tmp > psf_tmp.max()/2].sum()/unocc_psf.sum()]
 
+    dataset_psf = Dataset(data_psf)
+
 def test_fsm_pos():
     """ Test FSM positions are a list of N pairs of values, where N is the number
         of off-axis psfs.
