@@ -158,7 +158,7 @@ def test_median_combine_subexposures():
 
 def test_median_combine_subexposures_with_bad():
     """
-    Test median combine of subexposures with bad pixels
+    Test median combine of subexposures with bad pixels over multiple combinations
     """
     # use copies since we are going to modify their values
     image1 = data.Image(np.copy(img1), err=np.copy(err1), dq=np.copy(dq), 
