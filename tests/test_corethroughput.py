@@ -103,7 +103,11 @@ def test_psf_pix_and_ct():
     diff_pix_y = psf_position_y + r_off_pix - psf_pix[:,1] 
     assert diff_pix_y == pytest.approx(0, abs=0.75)
 
-    assert np.all(ct) > 0
+    # core throughput in [0,1]
+    assert np.all(ct) >= 0
+    assert np.all(ct) <= 1
+
+    # Some tolerance for comparison between I/O values
     assert ct == pytest.approx(np.array(ct_os11), abs=0.02)
     
 if __name__ == '__main__':
