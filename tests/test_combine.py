@@ -213,6 +213,57 @@ def test_median_combine_subexposures_with_bad():
 
     assert(np.all(combined_dataset_2[0].dq == 0))
 
+def test_combine_different_values():
+    """
+    Test whether the function correctly combines different values.
+    """
+
+    image1 = data.Image(img1, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
+    image1.filename = "1.fits"
+    image2 = image1.copy()
+    image2.filename = "2.fits"
+    image3 = image1.copy()
+    image3.filename = "3.fits"
+    image4 = image1.copy()
+    image4.filename = "4.fits"
+
+    # (0,0) has different values in each frame. Some are bad pixels.
+    image1.data[0][0] = 5
+    image2.data[0][0] = 6
+    image3.data[0][0] = 9
+    image4.data[0][0] = 19
+
+    image2.dq[0][0] = 1
+    image4.dq[0][0] = 1
+
+    # (0,1) is a bad pixel in every frame
+    image1.dq[0][1] = 1
+    image2.dq[0][1] = 1
+    image3.dq[0][1] = 1
+    image4.dq[0][1] = 1
+
+    dataset = data.Dataset([image1, image2, image3, image4])
+
+    combined_dataset = combine.combine_subexposures(dataset, collapse="median")
+
+    assert(len(combined_dataset) == 1)
+
+    # Most pixels had good values of 1 in all frames
+    assert combined_dataset[0].data[0][2] == 4
+    assert combined_dataset[0].err[0][0][2] == pytest.approx(2*np.sqrt(np.pi/2))
+
+    # (0,0) has a different median value calculated ignoring nans
+    assert combined_dataset[0].data[0][0] == 7 * 4 # median value scaled by number of images
+    assert combined_dataset[0].err[0][0][0] == pytest.approx(2 * np.sqrt(np.pi))
+
+    # (0,1) is a nan
+    assert np.isnan(combined_dataset[0].data[0][1])
+    assert np.isnan(combined_dataset[0].err[0][0][1])
+
+    # the updated bad pixel map only contains one bad pixel (i.e. the pixel for which there were no good values)
+    assert combined_dataset[0].dq[0][0] == 0
+    assert combined_dataset[0].dq[0][1] == 1
+
 def test_not_divisible():
     """
     Tests that function correctly fails when the length of the dataset is not divisible by num_frames_per_group.
@@ -252,4 +303,4 @@ def test_invalid_collapse():
         combined_dataset = combine.combine_subexposures(dataset, collapse="invalid_option")
 
 if __name__ == "__main__":
-    test_mean_combine_subexposures()
+    test_combine_different_values()
