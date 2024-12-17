@@ -4,7 +4,6 @@ import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
-import astropy.io.ascii as ascii
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -178,7 +177,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     assert dec == pytest.approx(target[1], abs=8.333e-7)
 
 if __name__ == "__main__":
-    tvacdata_dir = "/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
+    tvacdata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")
