@@ -156,6 +156,63 @@ def test_median_combine_subexposures():
     assert(np.all(combined_dataset[0].err == pytest.approx(np.sqrt(2*np.pi))))
     assert(np.all(combined_dataset[0].dq == 0))
 
+def test_median_combine_subexposures_with_bad():
+    """
+    Test median combine of subexposures with bad pixels
+    """
+    # use copies since we are going to modify their values
+    image1 = data.Image(np.copy(img1), err=np.copy(err1), dq=np.copy(dq), 
+                        pri_hdr = prhd, ext_hdr = exthd)
+    image1.filename = "1.fits"
+    image2 = image1.copy()
+    image2.filename = "2.fits"
+    image3 = image1.copy()
+    image3.filename = "3.fits"
+    image4 = image1.copy()
+    image4.filename = "4.fits"
+
+    # (0,0) has one bad frame
+    image1.dq[0][0] = 1
+    # (0,1) has both pixels bad
+    image1.dq[0][1] = 1
+    image2.dq[0][1] = 1
+
+    dataset = data.Dataset([image1, image2, image3, image4])
+
+    combined_dataset = combine.combine_subexposures(dataset, 2, collapse="median")
+
+    assert(len(combined_dataset) == 2)
+    # the pixel with one bad pixel should have same value but higher error. In both cases the error should be inflated by np.sqrt(np.pi/2) compared to mean error.
+    assert combined_dataset[0].data[0][0] == 2
+    assert combined_dataset[0].err[0][0][0] == pytest.approx(2 * np.sqrt(np.pi/2))
+    assert combined_dataset[0].dq[0][0] == 0 # 0 because one of the two frames had a good value
+    # compare against a pixel without any bad pixels
+    assert combined_dataset[1].data[0][0] == 2
+    assert combined_dataset[1].err[0][0][0] == pytest.approx(np.sqrt(2) * np.sqrt(np.pi/2))
+    assert combined_dataset[1].dq[0][0] == 0
+
+    # the pixel with two bad pixels should be nan
+    assert np.isnan(combined_dataset[0].data[0][1])
+    assert np.isnan(combined_dataset[0].err[0][0][1])
+    assert combined_dataset[0].dq[0][1] == 1
+
+    # combine again
+    combined_dataset_2 = combine.combine_subexposures(combined_dataset, 2, collapse="median")
+     
+    assert(len(combined_dataset_2) == 1)
+    assert(np.all(combined_dataset_2[0].data == 4))
+
+    # error for pixel with no bad pixels in original data (i.e. most pixels in data)
+    assert combined_dataset_2[0].err[0][5][0] == pytest.approx(np.pi)
+
+    # error for pixel with one bad pixel in original data
+    assert combined_dataset_2[0].err[0][0][0] == pytest.approx(0.5 * np.pi * np.sqrt(6))
+
+    # error for pixel with two bad pixel in original data
+    assert combined_dataset_2[0].err[0][0][1] == pytest.approx(np.pi * np.sqrt(2))
+
+    assert(np.all(combined_dataset_2[0].dq == 0))
+
 def test_not_divisible():
     """
     Tests that function correctly fails when the length of the dataset is not divisible by num_frames_per_group.
