@@ -29,7 +29,7 @@ one_fr_mask[0][single_mask_i[0], single_mask_i[1]] = 1
 
 
 def test_mean_im():
-    """Verify method calculates mean image and erorr term."""
+    """Verify method calculates mean image and error term."""
     tol = 1e-13
 
     check_combined_im = np.mean(check_ims, axis=0)
