@@ -205,10 +205,10 @@ def test_median_combine_subexposures_with_bad():
     # error for pixel with no bad pixels in original data (i.e. most pixels in data)
     assert combined_dataset_2[0].err[0][5][0] == pytest.approx(np.pi)
 
-    # error for pixel with one bad pixel in original data
+    # error for pixel with one bad pixel in original data (i.e. no nans after first combination)
     assert combined_dataset_2[0].err[0][0][0] == pytest.approx(0.5 * np.pi * np.sqrt(6))
 
-    # error for pixel with two bad pixel in original data
+    # error for pixel with two bad pixels in original data (i.e. 1 nan after first combination)
     assert combined_dataset_2[0].err[0][0][1] == pytest.approx(np.pi * np.sqrt(2))
 
     assert(np.all(combined_dataset_2[0].dq == 0))
