@@ -91,7 +91,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         pri_hdr = input_dataset[num_frames_per_group*i].pri_hdr.copy()
         ext_hdr = input_dataset[num_frames_per_group*i].ext_hdr.copy()
         err_hdr = input_dataset[num_frames_per_group*i].err_hdr.copy()
-        dq_hdr = input_dataset[num_frames_per_group*i].err_hdr.copy()
+        dq_hdr = input_dataset[num_frames_per_group*i].dq_hdr.copy()
         hdulist = input_dataset[num_frames_per_group*i].hdu_list.copy()
         new_image = data.Image(data_collapse, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err_collapse, dq=dq_collapse, err_hdr=err_hdr, 
                                 dq_hdr=dq_hdr, input_hdulist=hdulist)   
