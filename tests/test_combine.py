@@ -218,7 +218,9 @@ def test_combine_different_values():
     Test whether the function correctly combines different values.
     """
 
-    image1 = data.Image(img1, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
+    # use copies since we are going to modify their values
+    image1 = data.Image(np.copy(img1), err=np.copy(err1), dq=np.copy(dq), 
+                        pri_hdr = prhd, ext_hdr = exthd)
     image1.filename = "1.fits"
     image2 = image1.copy()
     image2.filename = "2.fits"
@@ -303,4 +305,4 @@ def test_invalid_collapse():
         combined_dataset = combine.combine_subexposures(dataset, collapse="invalid_option")
 
 if __name__ == "__main__":
-    test_combine_different_values()
+    test_mean_combine_subexposures()
