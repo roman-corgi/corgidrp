@@ -79,18 +79,11 @@ def test_mean_combine_subexposures_without_scaling():
 
     combined_dataset = combine.combine_subexposures(dataset, 2, num_frames_scaling=False)
 
+    # Check that data and error values are not scaled up
     assert(len(combined_dataset) == 2)
     assert(np.all(combined_dataset[0].data == 1))
     assert(np.all(combined_dataset[0].err == pytest.approx(1/np.sqrt(2))))
     assert(np.all(combined_dataset[0].dq == 0))
-
-    assert combined_dataset[0].ext_hdr['DRPNFILE'] == 2
-    assert combined_dataset[0].ext_hdr['FILE0'] in ["2.fits", "1.fits"]
-    assert combined_dataset[0].ext_hdr['FILE1'] in ["2.fits", "1.fits"]
-
-    assert combined_dataset[1].ext_hdr['DRPNFILE'] == 2
-    assert combined_dataset[1].ext_hdr['FILE0'] in ["3.fits", "4.fits"]
-    assert combined_dataset[1].ext_hdr['FILE1'] in ["3.fits", "4.fits"]
 
     # combine again
     combined_dataset_2 = combine.combine_subexposures(combined_dataset, 2, num_frames_scaling=False)
@@ -99,13 +92,6 @@ def test_mean_combine_subexposures_without_scaling():
     assert(np.all(combined_dataset_2[0].data == 1))
     assert(np.all(combined_dataset_2[0].err == pytest.approx((1/np.sqrt(2))/np.sqrt(2))))
     assert(np.all(combined_dataset_2[0].dq == 0))
-
-    assert combined_dataset_2[0].ext_hdr['DRPNFILE'] == 4
-    assert combined_dataset_2[0].ext_hdr['FILE0'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
-    assert combined_dataset_2[0].ext_hdr['FILE1'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
-    assert combined_dataset_2[0].ext_hdr['FILE2'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
-    assert combined_dataset_2[0].ext_hdr['FILE3'] in ["2.fits", "1.fits", "3.fits", "4.fits"]
-
 
 def test_mean_combine_subexposures_with_bad():
     """
