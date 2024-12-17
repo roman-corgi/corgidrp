@@ -721,6 +721,105 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
+def compute_distortion(input_image, source_matches, cal_properties, fitorder=3, position_error=None):
+    """ 
+    Function that computes the legendre coefficients that describe the image distortion
+    
+    Inputs:
+        input_image (np.ndarray): 2D image to extract distortion maps from
+        source_matches (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
+        cal_properties (tuple):
+            (float): Platescale
+            (float): North Angle
+        fitorder (int): The order of polynomials to fit to data (default: 3)
+        position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
+                        Should be changed later to accept non-uniform errors
+        
+    Returns:
+        coeffs (tuple): The legendre coefficients and polynomial order 
+                
+    """
+    ## CREATE BINARY STAR LISTS
+    # define a place for all the lists
+    offsets, errs, first_stars, true_offsets = [], [], [], []
+
+    # separate by x, y for formatting reasons
+    dxs, dys = [], []
+    xerrs, yerrs = [], []
+    firstxs, firstys = [], []
+    seps, pas = [], []
+    
+    # create all possible combinations of the given stars
+    combo_list = np.array(list(compute_combinations(source_matches)))
+    skycoords = SkyCoord(ra= source_matches['RA'], dec= source_matches['DEC'], unit='deg', frame='icrs')
+
+    for pair_ind in combo_list:
+        # get the pixel offset
+        first = pair_ind[0]
+        second = pair_ind[1]
+        
+        star1 = source_matches[first][['x','y']]
+        star2 = source_matches[second][['x','y']]
+
+        x_guess = star2[0] - star1[0]
+        y_guess = star2[1] - star1[1]
+    
+        (dx, dy), (data, model, residual), (xfit_err, yfit_err, _), (x1, y1) = measure_offset(input_image, star1[0], star1[1], x_guess, y_guess, guessflux=1)
+
+        # get the true sky offset [mas]
+        true1 = skycoords[first]
+        true2 = skycoords[second]
+    
+        # get true sky separation and position angle
+        true_sep = true1.separation(true2).mas
+        true_pa = true1.position_angle(true2).deg
+        
+        dxs.append(dx)
+        dys.append(dy)
+        firstxs.append(star1['x'])
+        firstys.append(star1['y'])
+        seps.append(true_sep)
+        pas.append(true_pa)
+
+        if type(position_error) == type(None):
+            xerrs.append(xfit_err)
+            yerrs.append(yfit_err)
+        else:
+            xerrs.append(position_error)
+            yerrs.append(position_error)
+
+    dxs = np.array(dxs)
+    dys = np.array(dys)
+    firstxs = np.array(firstxs)
+    firstys = np.array(firstys)
+    xerrs = np.array(xerrs)
+    yerrs = np.array(yerrs)
+    seps = np.array(seps)
+    pas = np.array(pas)
+    
+    true_offsets.append((seps, pas))
+    offsets.append((dxs, dys))
+    first_stars.append((firstxs, firstys))
+    errs.append((xerrs, yerrs))
+
+    ## SET FITTING PARAMS
+    # center around image center
+    x0 = np.shape(input_image)[1] // 2
+    y0 = np.shape(input_image)[0] // 2
+    
+    # define fitting params            
+    fitparams = (fitorder + 1)**2
+    the_platescale = cal_properties[0]
+    the_rotangle = cal_properties[1]
+    
+    # initial guesses for the legendre coeffs
+    guess_leg = [0 for _ in range(fitorder+1)] + [500,] + [0 for _ in range(fitparams - fitorder - 2)] + [0,500] + [0 for _ in range(fitparams-2)]
+
+    ## OPTIMIZE 
+    (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, guess_leg)
+
+    return distortion_coeffs
+
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, frames_to_combine=None):
     """
     Perform the boresight calibration of a dataset.
