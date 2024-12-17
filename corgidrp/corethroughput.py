@@ -81,7 +81,8 @@ def get_psf_ct(
       dataset (Dataset): a collection of off-axis PSFs.
 
       unocc_psf_norm (float): sum of the 2-d array corresponding to the
-        unocculted psf.
+        unocculted psf. Default: off-axis PSF are normalized to the unocculted
+        PSF already. That is, unocc_psf_norm equals 1.
 
       method (string): the method used to estimate the PSF core throughput.
         Default: 'direct'. This method finds the set of EXCAM pixels that
@@ -104,6 +105,7 @@ def get_psf_ct(
 def estimate_psf_pix_and_ct(
     dataset_in,
     fsm_pos,
+    unocc_psf_norm=1,
     pix_method=None,
     ct_method=None,
     ):
@@ -123,6 +125,10 @@ def estimate_psf_pix_and_ct(
         The first PSF must be the unocculted PSF.
 
       fsm_pos (array): Array with FSM positions for the off-axis psfs. Units: TBD
+
+      unocc_psf_norm (float): sum of the 2-d array corresponding to the
+        unocculted psf. Default: off-axis PSF are normalized to the unocculted
+        PSF already. That is, unocc_psf_norm equals 1.
 
       pix_method (string): the method used to estimate the PSF positions.
         Default: 'max'.
@@ -148,7 +154,7 @@ def estimate_psf_pix_and_ct(
     # check that fsm_pos is a list of pair of values for each off-axis psf
     if type(fsm_pos) != list:
         raise Exception('FSM positions are not a list')
-    if len(fsm_pos) != len(dataset) - 1:
+    if len(fsm_pos) != len(dataset):
         raise Exception(('The number of FSM positions is different to the number'
             ' of off-axis PSFs'))
     for pos in fsm_pos:
@@ -156,16 +162,16 @@ def estimate_psf_pix_and_ct(
             raise Exception('The number of dimensions in the FSM position is not 2') 
 
     # find the PSF positions of the off-axis PSFs
-    psf_pix = get_psf_pix(dataset[1:],
+    psf_pix = get_psf_pix(dataset,
         method=pix_method)
 
     # find the PSF corethroughput of the off-axis PSFs
-    psf_ct = get_psf_ct(dataset[1:],
-        unocc_psf_norm = np.sum(dataset[0].data),
+    psf_ct = get_psf_ct(dataset,
+        unocc_psf_norm = 1,
         method=ct_method)
 
     # same number of estimates. One per PSF 
-    if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset[1:]):
+    if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset):
         raise Exception('PSF positions and CT values are inconsistent')
 
     return psf_pix, psf_ct
