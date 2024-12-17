@@ -82,7 +82,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     for i in range(num_groups):
         data_subset = np.copy(input_dataset.all_data[num_frames_per_group*i:num_frames_per_group*(i+1)])
         err_subset = np.copy(input_dataset.all_err[num_frames_per_group*i:num_frames_per_group*(i+1)])
-        dq_subset = input_dataset.all_dq[num_frames_per_group*i:num_frames_per_group*(i+1)]
+        dq_subset = np.copy(input_dataset.all_dq[num_frames_per_group*i:num_frames_per_group*(i+1)])
 
         data_collapse, err_collapse, dq_collapse = combine_images(data_subset, err_subset, dq_subset, collapse=collapse, 
                                                                   num_frames_scaling=num_frames_scaling)
