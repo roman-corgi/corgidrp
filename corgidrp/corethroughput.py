@@ -94,9 +94,7 @@ def get_psf_ct(
     if method.lower() == 'direct':
         psf_ct = []
         for psf in dataset:
-            #psf_ct += [psf.data[psf.data >= psf.data.max()/2].sum()/unocc_psf_norm]
-            # NOTE: if I use instead psf.data.sum(), I do get the expected 3.5%
-            psf_ct += [psf.data.sum()/unocc_psf_norm]
+            psf_ct += [psf.data[psf.data >= psf.data.max()/2].sum()/unocc_psf_norm]
         psf_ct = np.array(psf_ct)
     else:
         raise Exception('Method to estimate core throughput unrecognized')
@@ -147,13 +145,6 @@ def estimate_psf_pix_and_ct(
     if ct_method is None:
         ct_method = 'direct'
 
-    # check that the first psf is unocculted
-    psf_max_list = []
-    for psf in dataset:
-        psf_max_list += [psf.data.max()]
-    if np.argmax(psf_max_list) != 0:
-        raise Exception(('The first PSF of the dataset does not seem to be the'
-            ' unocculted PSF'))
     # check that fsm_pos is a list of pair of values for each off-axis psf
     if type(fsm_pos) != list:
         raise Exception('FSM positions are not a list')

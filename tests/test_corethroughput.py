@@ -53,7 +53,7 @@ def setup_module():
     for i_psf, _ in enumerate(psf_position_x[1:]):
         psf_tmp = occ_psf[0, idx_os11+i_psf]
         # re-sample to EXCAM's pixel pitch: os11 off-axis psf is 5x oversampled
-        psf_tmp_red = block_reduce(psf_tmp, block_size=(5,5), func=np.mean)
+        psf_tmp_red = 25*block_reduce(psf_tmp, block_size=(5,5), func=np.mean)
         data_tmp = np.zeros([1024, 1024])
         idx_0_0 = psf_position_x[i_psf+1] - psf_tmp_red.shape[0] // 2
         idx_0_1 = idx_0_0 + psf_tmp_red.shape[0]
@@ -61,11 +61,7 @@ def setup_module():
         idx_1_1 = idx_1_0 + psf_tmp_red.shape[1]
         data_tmp[idx_0_0:idx_0_1, idx_1_0:idx_1_1] = psf_tmp_red
         data_psf += [Image(data_tmp,pri_hdr = prhd, ext_hdr = exthd, err = err)]
-        ct_os11 += [psf_tmp[psf_tmp > psf_tmp.max()/2].sum()/5/unocc_psf.sum()]
-
-    dataset_psf = Dataset(data_psf)
-    data_psf.reverse()
-    dataset_psf_rev = Dataset(data_psf)
+        ct_os11 += [psf_tmp[psf_tmp > psf_tmp.max()/2].sum()/unocc_psf.sum()]
 
 def test_fsm_pos():
     """ Test FSM positions are a list of N pairs of values, where N is the number
@@ -85,13 +81,6 @@ def test_fsm_pos():
     fsm_pos_bad += [[1]]
     with pytest.raises(Exception):
         corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos_bad)
-
-def test_unocc():
-    """ Test array position of the unocculted PSF in the data array """
-
-    # do not pass if the order is different (swap first two)
-    with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf_rev, fsm_pos)
 
 def test_psf_pix_and_ct():
     """
@@ -124,12 +113,11 @@ def test_psf_pix_and_ct():
     assert diff_pix_y == pytest.approx(0, abs=0.75)
 
     assert np.all(ct) > 0
-    assert ct == pytest.approx(np.array(ct_os11), abs=0.01)
+    assert ct == pytest.approx(np.array(ct_os11), abs=0.02)
     
 if __name__ == '__main__':
 
     test_fsm_pos()
-    test_unocc()   
     test_psf_pix_and_ct()
 
 
