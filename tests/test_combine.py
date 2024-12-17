@@ -122,9 +122,11 @@ def test_mean_combine_subexposures_with_bad():
     # the pixel with one bad pixel should have same value but higher error
     assert combined_dataset[0].data[0][0] == 2
     assert combined_dataset[0].err[0][0][0] == pytest.approx(2)
+    assert combined_dataset[0].dq[0][0] == 0 # 0 because one of the two frames had a good value
     # compare against a pixel without any bad pixels
     assert combined_dataset[1].data[0][0] == 2
     assert combined_dataset[1].err[0][0][0] == pytest.approx(np.sqrt(2))
+    assert combined_dataset[1].dq[0][0] == 0
 
     # the pixel with two bad pixels should be nan
     assert np.isnan(combined_dataset[0].data[0][1])
