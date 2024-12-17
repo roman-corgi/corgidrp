@@ -65,7 +65,10 @@
             }
         },
         {
-            "name" : "cti_correction"
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
         },
         {
             "name" : "flat_division",
@@ -88,7 +91,8 @@
         {
             "name" : "boresight_calibration",
             "keywords" : {
-                "frames_to_combine" : 10
+                "frames_to_combine" : 24,
+                "find_threshold" : 9
             }
         },
         {
