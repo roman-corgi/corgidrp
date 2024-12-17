@@ -437,6 +437,78 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
 
     return matched_image_to_field
 
+def fit_astrom_solution(params):
+    '''
+    Function used to fit the legendre polynomials for distortion mapping. Cannot be used outside of compute_distortion() function where most
+        hard-coded variables are defined.
+
+    *lmc_offset input assumes sep/ pa offsets in [mas] and [deg]
+    
+    '''
+    platescale, rotangle = the_platescale, the_rotangle
+
+    leg_params_x = np.array(params[:fitparams])  
+    leg_params_x = leg_params_x.reshape(fitorder+1, fitorder+1)
+
+    leg_params_y = np.array(params[fitparams:]) 
+    leg_params_y = leg_params_y.reshape(fitorder+1, fitorder+1)
+
+    total_orders = np.arange(fitorder+1)[:,None] + np.arange(fitorder+1)[None,:] 
+
+    leg_params_x = leg_params_x / 500**(total_orders)  
+    leg_params_y = leg_params_y / 500**(total_orders)
+
+    residuals = []
+
+    for i, (pos1, meas_offset, sky_offset, meas_errs) in enumerate(zip(first_stars, offsets, true_offsets, errs)):
+ 
+        binary_offsets = np.array([meas_offset[0], meas_offset[1]]).T
+        star1_pos = np.array([pos1[0], pos1[1]]).T
+        
+        # recenter to detector center
+        star1_pos[:,0] -= x0
+        star1_pos[:,1] -= y0
+
+        # derive star2 position
+        star2_pos = star1_pos + binary_offsets
+
+        # undistort x and y for both star positions
+        star1_pos_corr = np.copy(star1_pos)
+        star1_pos_corr[:,0] = np.polynomial.legendre.legval2d(star1_pos[:,0], star1_pos[:,1], leg_params_x)
+        star1_pos_corr[:,1] = np.polynomial.legendre.legval2d(star1_pos[:,0], star1_pos[:,1], leg_params_y)
+
+        star2_pos_corr = np.copy(star2_pos)
+        star2_pos_corr[:,0] = np.polynomial.legendre.legval2d(star2_pos[:,0], star2_pos[:,1], leg_params_x)
+        star2_pos_corr[:,1] = np.polynomial.legendre.legval2d(star2_pos[:,0], star2_pos[:,1], leg_params_y)
+
+        # translate offsets from [mas] sep, pa to [pixel] sep, pa
+        sky_sep = sky_offset[0]
+        sky_pa = sky_offset[1]
+        
+        true_offset_sep = sky_sep / platescale
+        true_offset_pa = sky_pa + rotangle
+
+        # translate star_pos_corr from x, y to sep, pa
+        corr_offset_x = star2_pos_corr[:,0] - star1_pos_corr[:,0]
+        corr_offset_y = star2_pos_corr[:,1] - star1_pos_corr[:,1]
+        
+        corr_offset_sep = np.sqrt(corr_offset_x**2 + corr_offset_y**2)
+        corr_offset_pa = np.degrees(np.arctan2(-corr_offset_x, corr_offset_y))
+        # ensuring the position angle is always positive
+        for i, pa in enumerate(corr_offset_pa):
+            if pa < 0:
+                corr_offset_pa[i] += 360
+
+        res_sep = corr_offset_sep - true_offset_sep
+        res_pa = corr_offset_pa - true_offset_pa
+        
+        res_sep /= meas_errs[0]
+        res_pa /= meas_errs[1]
+        
+        residuals = np.append(residuals, np.array([res_sep, res_pa]).ravel())
+
+    return residuals
+
 def compute_platescale_and_northangle(image, source_info, center_coord, center_radius=0.9):
     """
     Used to find the platescale and north angle of the image. Calculates the platescale for each pair of stars in the image
