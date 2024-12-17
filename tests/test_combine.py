@@ -142,6 +142,24 @@ def test_not_divisible():
     with pytest.raises(ValueError):
         combined_dataset = combine.combine_subexposures(dataset, 3) # Should fail as 4 % 3 != 0
 
+def test_invalid_collapse():
+    """
+    Tests that function correctly fails when collapse type is not valid.
+    """
+
+    image1 = data.Image(img1, err=err1, dq=dq, pri_hdr = prhd, ext_hdr = exthd)
+    image1.filename = "1.fits"
+    image2 = image1.copy()
+    image2.filename = "2.fits"
+    image3 = image1.copy()
+    image3.filename = "3.fits"
+    image4 = image1.copy()
+    image4.filename = "4.fits"
+
+    dataset = data.Dataset([image1, image2, image3, image4])
+
+    with pytest.raises(ValueError):
+        combined_dataset = combine.combine_subexposures(dataset, collapse="invalid_option")
 
 if __name__ == "__main__":
     test_mean_combine_subexposures()
