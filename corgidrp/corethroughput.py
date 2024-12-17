@@ -124,7 +124,8 @@ def estimate_psf_pix_and_ct(
 
         The first PSF must be the unocculted PSF.
 
-      fsm_pos (array): Array with FSM positions for the off-axis psfs. Units: TBD
+      fsm_pos (list): list of paired values of the FSM positions for the 
+        off-axis psfs. Units: mas
 
       unocc_psf_norm (float): sum of the 2-d array corresponding to the
         unocculted psf. Default: off-axis PSF are normalized to the unocculted
