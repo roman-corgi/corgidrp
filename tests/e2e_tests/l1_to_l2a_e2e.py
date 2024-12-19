@@ -31,7 +31,7 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
 
     # define the raw science data to process
 
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
+    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in ['CGI_0000000000000000000_20221004T2359351_L1_']] # use the updated mock L1
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
     tvac_l2a_filelist = [os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#"/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
+    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data/" #"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
