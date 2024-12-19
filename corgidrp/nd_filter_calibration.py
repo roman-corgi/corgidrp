@@ -38,7 +38,7 @@ def compute_centroid(image_data):
     (x_center, y_center) : (float, float)
         Estimated centroid of the star in pixel coordinates.
     """
-    # Placeholder centroid calculation (e.g., simple intensity-weighted centroid):
+    # Placeholder centroid calculation (simple intensity-weighted centroid):
     y_indices, x_indices = np.indices(image_data.shape)
     total_flux = np.sum(image_data)
     if total_flux <= 0:
@@ -49,6 +49,7 @@ def compute_centroid(image_data):
     return x_center, y_center
 
 def compute_flux_in_image(image_data, x_center, y_center, radius=5):
+    # is that pixel radius fine?
     """
     Compute the integrated flux in photoelectrons for the star near the given center.
 
@@ -67,9 +68,12 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5):
         The total flux in the defined aperture.
     """
     y_indices, x_indices = np.indices(image_data.shape)
+    print("here", x_indices, y_indices)
     r = np.sqrt((x_indices - x_center)**2 + (y_indices - y_center)**2)
     aperture_mask = (r <= radius)
     flux = np.sum(image_data[aperture_mask])
+
+    #need to do background subtraction for flux?
     return flux
 
 def compute_od(flux, flux_calibration):
@@ -134,10 +138,13 @@ def main(dataset_path, flux_calibration, output_file):
         sweet_spot_data[i, 1] = x_center
         sweet_spot_data[i, 2] = y_center
 
+    # Make sure all images are taken with the same ND filter and CFAM filter 
     # Save results as a FITS file with FPAM encoder position
     hdu = fits.PrimaryHDU(sweet_spot_data)
+    # figure out what header keywords need to be in the calibration products
     hdr = hdu.header
-    #hdr[fpam_keyword] = fpam_encoder_position
+    hdr['FPAM_H'] = fpam_h
+    hdr['FPAM_V'] = fpam_v
     hdul = fits.HDUList([hdu])
     hdul.writeto(output_file, overwrite=True)
     print(f"Sweet-spot dataset saved to {output_file}")
