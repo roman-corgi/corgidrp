@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import pytest
+import re
 import numpy as np
 from astropy.io import fits
 from corgidrp.nd_filter_calibration import main
@@ -79,7 +80,25 @@ def test_sweet_spot_dataset_run(input_dataset, tmp_path):
     Test running the sweet_spot_dataset main function on a mock dataset.
     """
     flux_calibration = 1.0
-    output_file = os.path.join(tmp_path, f"output_sweet_spot.fits")
+    visit_id = 'PPPPPCCAAASSSOOOVVV'
+
+    # Pattern to match the existing files in the directory
+    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_NDF_CAL\.fits")
+
+    max_serial = 0
+    for filename in os.listdir(tmp_path):
+        match = pattern.match(filename)
+        if match:
+            current_serial = int(match.group(1))
+            if current_serial > max_serial:
+                max_serial = current_serial
+
+    # Increment the serial number by 1, format to three digits if needed
+    serial_number = f"{max_serial + 1:03d}"
+
+    # Construct output filename with the new serial number
+    output_filename = f"CGI_{visit_id}_{serial_number}_NDF_CAL.fits"
+    output_file = os.path.join(tmp_path, output_filename)
 
     # Run the main function
     main(input_dataset, flux_calibration, str(output_file))
@@ -97,5 +116,5 @@ def test_sweet_spot_dataset_run(input_dataset, tmp_path):
 if __name__ == "__main__":
     print('Running test_nd_filter_calibration')
     dataset_filepaths = Dataset(mock_dataset_files('/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks'))
-    test_sweet_spot_dataset_run(dataset_filepaths, '/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/output')
+    test_sweet_spot_dataset_run(dataset_filepaths, '/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output')
     
