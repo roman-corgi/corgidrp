@@ -1238,7 +1238,7 @@ class DetectorParams(Image):
             exthdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
-            prihdr['OBSID'] = 0
+            prihdr['OBSNUM'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
             exthdr['CMDGAIN'] = 1.0
