@@ -1,5 +1,12 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
 
+from pyklip.klip import rotate
+from corgidrp import data
+from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
+from scipy.ndimage import shift
+import numpy as np
+import glob
+
 def distortion_correction(input_dataset, distortion_calibration):
     """
     
@@ -43,6 +50,90 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None):
     """
 
     return input_dataset.copy()
+
+def northup(input_dataset,correct_wcs=False):
+    """
+    Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
+    Now tentatively assuming 'ROLL' in the primary header incorporates all the angle offset, and the center of the FoV is the star position.
+    WCS correction is not yet implemented - TBD.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+	correct_wcs: if you want to correct WCS solutions after rotation, set True. Now hardcoded with not using astr_hdr.
+
+    Returns:
+        corgidrp.data.Dataset: North is up, East is left
+    
+    """
+    
+    # make a copy 
+    processed_dataset = input_dataset.copy()
+
+    new_all_data = []; new_all_err = []; new_all_dq = []
+    for processed_data in processed_dataset:
+        # read the roll angle parameter, assuming this info is recorded in the primary header as requested
+        roll_angle = processed_data.pri_hdr['ROLL']
+
+        ## image extension ##
+        im_hd = processed_data.ext_hdr
+        im_data = processed_data.data
+        ylen, xlen = im_data.shape
+
+        # define the center for rotation
+        try: 
+            xcen, ycen = im_hd['PSFCENTX'], im_hd['PSFCENTY'] # TBU, after concluding the header keyword
+        except KeyError:
+            xcen, ycen = xlen/2, ylen/2
+    
+        # look for WCS solutions
+        if correct_wcs is False: 
+            astr_hdr = None 
+        else:
+            astr_hdr = None # hardcoded now, no WCS information in the header
+
+        # derotate
+        im_derot = rotate(im_data,-roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
+        new_all_data.append(im_derot)
+        ##############
+
+        ## HDU ERR ##
+        err_data = processed_data.err
+        err_derot = np.expand_dims(rotate(err_data[0],-roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        new_all_err.append(err_derot)
+        #############
+
+        ## HDU DQ ##
+	# all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
+        dq_data = processed_data.dq
+        if xcen != xlen/2 or ycen != ylen/2: 
+                # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
+                # calculate shift values
+                xshift = xcen-xlen/2; yshift = ycen-ylen/2
+		
+                # pad and shift
+                pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
+                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=np.nan)
+                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=np.nan)
+
+                # define slices for cropping
+                crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
+
+                # rotate, re-shift, and crop
+                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan),\
+                 (yshift,xshift),order=0,mode='constant',cval=np.nan)[crop_y,crop_x]
+        else: 
+                # simply rotate 
+                dq_derot = rotate_scipy(dq_data, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan)
+        	
+        new_all_dq.append(dq_derot)
+        ############
+
+    hisotry_msg = f'FoV rotated by {-roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
+    
+    processed_dataset.update_after_processing_step(hisotry_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
+                                                   new_all_dq=np.array(new_all_dq))
+    
+    return processed_dataset
 
 def update_to_l4(input_dataset):
     """
