@@ -1,3 +1,10 @@
+import os
+import numpy as np
+from astropy.io import fits
+from corgidrp.data import Dataset
+from collections import defaultdict
+import re
+
 """
 From requirement 1090877:
 
@@ -12,7 +19,7 @@ This script computes a "sweet-spot dataset," which is an Mx3 matrix containing:
 
 It also stores the FPAM encoder position associated with this dataset.
 
-Note: 
+Note:
 - This dataset captures small-scale variation of focal-plane attenuation.
 - The FPAM encoder position should be stored with the dataset for future use.
 
@@ -20,131 +27,177 @@ Author: Julia Milton
 Date: 2024-12-09
 """
 
-import numpy as np
-from astropy.io import fits
-from corgidrp.data import Dataset 
-
 def compute_centroid(image_data):
-    """
-    Compute the centroid of the star in the given image.
-
-    Parameters
-    ----------
-    image_data : 2D np.ndarray
-        Science image data array.
-
-    Returns
-    -------
-    (x_center, y_center) : (float, float)
-        Estimated centroid of the star in pixel coordinates.
-    """
-    # Placeholder centroid calculation (simple intensity-weighted centroid):
     y_indices, x_indices = np.indices(image_data.shape)
     total_flux = np.sum(image_data)
     if total_flux <= 0:
-        # Handle edge case
         return np.nan, np.nan
     x_center = np.sum(x_indices * image_data) / total_flux
     y_center = np.sum(y_indices * image_data) / total_flux
     return x_center, y_center
 
 def compute_flux_in_image(image_data, x_center, y_center, radius=5):
-    # is that pixel radius fine?
-    """
-    Compute the integrated flux in photoelectrons for the star near the given center.
-
-    Parameters
-    ----------
-    image_data : 2D np.ndarray
-        The image data.
-    x_center, y_center : float
-        The centroid coordinates of the star.
-    radius : float
-        Aperture radius in pixels.
-
-    Returns
-    -------
-    flux : float
-        The total flux in the defined aperture.
-    """
     y_indices, x_indices = np.indices(image_data.shape)
-    print("here", x_indices, y_indices)
     r = np.sqrt((x_indices - x_center)**2 + (y_indices - y_center)**2)
     aperture_mask = (r <= radius)
     flux = np.sum(image_data[aperture_mask])
+    return flux  # Background subtraction could be added here if needed.
 
-    #need to do background subtraction for flux?
-    return flux
-
-def compute_od(flux, flux_calibration):
+def compute_expected_flux_synphot(star_name):
     """
-    Compute the OD (or attenuation factor) from the measured flux and the
-    known flux calibration value.
+    Placeholder function: Compute the expected flux using synphot.
+    This would depend on star's known SED, etc.
+    Currently returns a dummy value.
+    """
+    # Integrate synphot as needed.
+    return 1000.0  # placeholder
+
+def group_by_target(dataset_entries):
+    """
+    Group dataset files based on the 'TARGET' value in the FITS extension header.
 
     Parameters
     ----------
-    flux : float
-        Measured flux in photoelectrons.
-    flux_calibration : float
-        Absolute flux calibration factor.
+    dataset_entries : list
+        List of Dataset objects, each containing pri_hdr, ext_hdr, and data attributes.
 
     Returns
     -------
-    od : float
-        Computed optical density or attenuation metric.
+    grouped_files : dict
+        Dictionary where keys are unique TARGET values, and values are lists of dataset entries.
     """
-    # Placeholder:
-    od = flux * flux_calibration
-    return od
+    grouped_files = defaultdict(list)
 
-def main(dataset_path, flux_calibration, output_file):
+    for entry in dataset_entries:
+        try:
+            target_value = entry.ext_hdr.get('TARGET', None)
+            if target_value is not None:
+                grouped_files[target_value].append(entry)
+            else:
+                print(f"Warning: 'TARGET' not found in {entry}")
+        except Exception as e:
+            print(f"Error processing {entry}: {e}")
+
+    return grouped_files
+
+def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
     """
-    Main routine to compute the sweet-spot dataset.
+    Main routine:
+    1. Compute transmission efficiency from 10 dim stars (no ND filter).
+    2. Compute OD for bright stars with ND filter in a 3x3 raster.
+    3. Check OD uniformity and flag if needed.
+    4. Save results to FITS files.
 
     Parameters
     ----------
-    dataset_path : str
-        Path to input dataset.
-    flux_calibration : float
-        Absolute flux calibration value.
-    output_file : str
-        Name of the output FITS file for the sweet-spot dataset.
-    fpam_keyword : str
-        FITS header keyword for FPAM encoder position.
+    dim_stars_paths : list of Dataset entries
+        Paths (and loaded data) for the 10 dim star datasets.
+    bright_stars_paths : list of Dataset entries
+        Paths (and loaded data) for bright star raster datasets.
+    output_path : str
+        Directory where the output files will be saved.
+    threshold : float
+        Threshold for checking OD uniformity.
     """
 
-    M = len(dataset_path)
-    sweet_spot_data = np.zeros((M, 3))
+    # Step 1: Compute average dim star transmission efficiency
+    ratios = []
+    for entry in dim_stars_paths:
+        image_data = entry.data
+        ext_hdr = entry.ext_hdr
+        star_name = ext_hdr['TARGET']
 
-    for i in range(M):
-        # Open the FITS file
-        print(dataset_path[i])
-        image_data = dataset_path[i].data
-        pri_hdr = dataset_path[i].pri_hdr
-        ext_hdr = dataset_path[i].ext_hdr
-  
-        # Retrieve FPAM encoder position from the extension header
-        fpam_h = ext_hdr.get('FPAM_H')
-        fpam_v = ext_hdr.get('FPAM_V')
-        print(fpam_h, fpam_v)
+        x_center, y_center = compute_centroid(image_data)
+        measured_flux = compute_flux_in_image(image_data, x_center, y_center)
+        expected_flux = compute_expected_flux_synphot(star_name)
+        ratio = measured_flux / expected_flux
+        ratios.append(ratio)
 
-        # Perform processing (e.g., compute centroid, flux, etc.)
-        x_center, y_center = compute_centroid(image_data)  # Function to compute the centroid
-        flux = compute_flux_in_image(image_data, x_center, y_center)  # Function to compute flux
-        od = compute_od(flux, flux_calibration)  # Function to compute OD
+    avg_optical_efficiency = np.mean(ratios)
 
-        # Store results in the sweet-spot dataset
-        sweet_spot_data[i, 0] = od
-        sweet_spot_data[i, 1] = x_center
-        sweet_spot_data[i, 2] = y_center
+    # Step 2: Group bright star files by their target
+    grouped_files = group_by_target(bright_stars_paths)
+    print("Grouped bright star files:", grouped_files)
 
-    # Make sure all images are taken with the same ND filter and CFAM filter 
-    # Save results as a FITS file with FPAM encoder position
-    hdu = fits.PrimaryHDU(sweet_spot_data)
-    # figure out what header keywords need to be in the calibration products
-    hdr = hdu.header
-    hdr['FPAM_H'] = fpam_h
-    hdr['FPAM_V'] = fpam_v
-    hdul = fits.HDUList([hdu])
-    hdul.writeto(output_file, overwrite=True)
-    print(f"Sweet-spot dataset saved to {output_file}")
+    flux_results = {}
+
+    # Process each group (star)
+    for target, files in grouped_files.items():
+        print(f"Processing target: {target}")
+        od_values = []
+        x_values = []
+        y_values = []
+        fpam_h = fpam_v = None
+
+        for entry in files:
+            image_data = entry.data
+            ext_hdr = entry.ext_hdr
+            fpam_h = ext_hdr.get('FPAM_H', fpam_h)
+            fpam_v = ext_hdr.get('FPAM_V', fpam_v)
+
+            x_center, y_center = compute_centroid(image_data)
+            if np.isnan(x_center) or np.isnan(y_center):
+                print(f"Warning: Centroid could not be computed for {entry}")
+                continue
+
+            measured_flux = compute_flux_in_image(image_data, x_center, y_center)
+            expected_flux = compute_expected_flux_synphot(target)
+            od = measured_flux / (expected_flux * avg_optical_efficiency)
+            od_values.append(od)
+            x_values.append(x_center)
+            y_values.append(y_center)
+
+        od_values = np.array(od_values)
+        # Check if OD variation within threshold
+        star_flag = np.std(od_values) >= threshold
+        average_od = np.mean(od_values)
+
+        star_result = {
+            'od_values': od_values,
+            'average_od': average_od,
+            'fpam_h': fpam_h,
+            'fpam_v': fpam_v,
+            'flag': star_flag,
+            'x_values': x_values,
+            'y_values': y_values
+        }
+        flux_results[target] = star_result
+
+    # Step 3: Save the calibration products for each bright star
+    visit_id = 'PPPPPCCAAASSSOOOVVV'
+    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_NDF_CAL\.fits")
+
+    # Determine max serial number from existing files in output_path
+    max_serial = 0
+    for filename in os.listdir(output_path):
+        match = pattern.match(filename)
+        if match:
+            current_serial = int(match.group(1))
+            if current_serial > max_serial:
+                max_serial = current_serial
+
+    for star_name, star_data in flux_results.items():
+        od_values = star_data['od_values']
+        x_values = star_data['x_values']
+        y_values = star_data['y_values']
+        fpam_h = star_data['fpam_h']
+        fpam_v = star_data['fpam_v']
+
+        p = len(od_values)
+        sweet_spot_data = np.zeros((p, 3))
+        sweet_spot_data[:, 0] = od_values
+        sweet_spot_data[:, 1] = x_values
+        sweet_spot_data[:, 2] = y_values
+
+        hdu = fits.PrimaryHDU(sweet_spot_data)
+        hdr = hdu.header
+        hdr['FPAM_H'] = fpam_h
+        hdr['FPAM_V'] = fpam_v
+
+        serial_number = f"{max_serial + 1:03d}"
+        output_filename = f"CGI_{visit_id}_{serial_number}_NDF_CAL.fits"
+        output_file = os.path.join(output_path, output_filename)
+        fits.HDUList([hdu]).writeto(output_file, overwrite=True)
+
+        print(f"Sweet-spot dataset saved to {output_file}")
+        max_serial += 1
