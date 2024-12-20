@@ -117,7 +117,6 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
 
     # Step 2: Group bright star files by their target
     grouped_files = group_by_target(bright_stars_paths)
-    print("Grouped bright star files:", grouped_files)
 
     flux_results = {}
 
