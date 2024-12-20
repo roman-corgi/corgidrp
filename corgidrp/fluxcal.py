@@ -11,8 +11,6 @@ from photutils.aperture import CircularAperture
 from photutils.psf import fit_2dgaussian
 from scipy import integrate
 import urllib
-from pickle import NONE
-
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
 calspec_names= {
@@ -53,12 +51,12 @@ def get_calspec_file(star_name):
     # TODO: be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
     fits_url = calspec_url + fits_name
     try:
-        calspec_dir = os.path.join(os.path.dirname(__file__), "data", "calspec_data")
+        calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
         if not os.path.exists(calspec_dir):
             os.mkdir(calspec_dir)
         file_name, headers = urllib.request.urlretrieve(fits_url, filename =  os.path.join(calspec_dir, fits_name))
     except:
-        raise Exception("cannot access CALSPEC archive web page and/or download {0}".fits_name)
+        raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(fits_name))
     return file_name
 
 def get_filter_name(dataset):
@@ -75,18 +73,12 @@ def get_filter_name(dataset):
     filters = os.path.join(datadir, "*.csv")
     filter = dataset[0].ext_hdr['CFAMNAME']
     filter_names = os.listdir(datadir)
-    f_avail = False
-    for name in filter_names:
-        if filter in name:
-            f_avail = True
-            filter_name= os.path.join(datadir, name)
-            break
-        else:
-            pass
-    if f_avail:
-        return filter_name
+
+    filter_name = [name for name in filter_names if filter in name]
+    if filter_name == []:
+        raise ValueError("there is no filter available with name {0}".format(filter))
     else:
-        raise Exception("there is no filter available with name {0}".format(filter))
+        return os.path.join(datadir,filter_name[0])
 
 def read_filter_curve(filter_filename):
     """
@@ -234,6 +226,24 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
     int_ref = integrate.simpson(filter_wavelength * filter_curve * flux_ref / flux_ref_lambda_ref, x=filter_wavelength)
 
     return int_source / int_ref
+
+def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
+    """
+    calculate the integrated band flux, irradiance of a calspec source in the filter band
+    to determine the apparent magnitude
+    
+    Args:
+        filter_curve (np.array): filter transmission curve over the filter_wavelength
+        calspec_flux (np.array): converted flux in units of erg/(s*cm^2*AA) of the calpec source in the filter band
+        filter_wavelength (np.array): wavelengths in units Angstroem in the filter band 
+    
+    Returns:
+        float: band irradiance of the calspec star in unit erg/(s*cm^2)
+    """
+    multi_flux = calspec_flux * filter_curve
+    irrad = integrate.simpson(multi_flux, x=filter_wavelength)
+    
+    return irrad
 
 def aper_phot(image, encircled_radius, frac_enc_energy, method = 'exact', subpixels = 5):
     """

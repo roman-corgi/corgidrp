@@ -42,8 +42,8 @@ def test_get_filter_name():
     image3 = image1.copy()
     image3.ext_hdr["CFAMNAME"] = '5C'
     dataset2 = Dataset([image3, image3])
-    with pytest.raises(Exception):
-        filepath = pytest.fluxcal.get_filter_name(dataset2)
+    with pytest.raises(ValueError):
+        filepath = fluxcal.get_filter_name(dataset2)
         pass
     
 
@@ -104,7 +104,19 @@ def test_calspec_download():
     
     with pytest.raises(ValueError):
         filepath = fluxcal.get_calspec_file('Todesstern')
-    
+
+def test_app_mag():
+    """
+    test the calculation of the apparent Vega magnitude
+    """
+    # test the corresponding pipeline step
+    # sanity check
+    output_dataset = l4_to_tda.determine_app_mag(dataset, 'Vega')
+    assert output_dataset[0].ext_hdr['APP_MAG'] == 0.
+    output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath)
+    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(9.55, 0.3) 
+    output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath, scale_factor = 0.5)
+    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(9.55+-2.5*np.log10(0.5), 0.3)
 
 def test_abs_fluxcal():
     """ 
@@ -137,13 +149,14 @@ def test_abs_fluxcal():
     assert flux == pytest.approx(200, abs = 6)
     assert flux_err == pytest.approx(1, abs = 0.3)
     
+    
 if __name__ == '__main__':
     test_get_filter_name()
     test_flux_calc()
     test_colorcor()
     test_calspec_download()
+    test_app_mag()
     test_abs_fluxcal()
-
 
 
 
