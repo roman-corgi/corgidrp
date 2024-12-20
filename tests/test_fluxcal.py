@@ -8,12 +8,6 @@ import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
 import astropy.units as u
-from astropy import wcs
-from astropy.io.fits import file
-from photutils.aperture import CircularAperture
-from photutils.centroids import centroid_2dg
-from photutils import psf
-from astropy.coordinates import SkyCoord
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5

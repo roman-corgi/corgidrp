@@ -1262,6 +1262,141 @@ class TrapCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'TrapCalibration':
             raise ValueError("File that was loaded was not a TrapCalibration file.")
 
+class FluxcalFactors(Image):
+    """
+    Class containing the flux calibration factors (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
+
+    To create a new instance of FluxcalFactors, you only need to pass in the values you would like to change from default values:
+        new_valid_date = astropy.time.Time("2027-01-01")
+        new_det_params = FluxcalFactors({'1C' : [1.5e-3, 2e-6] }, date_valid=new_valid_date). 
+
+    Args:
+        data_or_filepath (dict or str): either a filepath string corresponding to an 
+                                        existing FluxcalFactors file saved to disk or a
+                                        dictionary of parameters to modify from default values
+        date_valid (astropy.time.Time): date after which these parameters are valid
+
+    Attributes:
+        params (dict): the values for various detector parameters specified here
+        default_values (dict): default values for detector parameters (fallback values)
+    """
+    # default fluxcal factors
+    default_values = {
+        '1A': [1,0],
+        '2A': [1,0],
+        '3A': [1,0],
+        '4A': [1,0],
+        '1B': [1,0],
+        '2B': [1,0],
+        '3B': [1,0],
+        '4B': [1,0],
+        '1C': [1,0],
+        '2C': [1,0],
+        '3C': [1,0],
+        '4C': [1,0],
+        '3D': [1,0],
+        '3E': [1,0],
+        '1F': [1,0],
+        '2F': [1,0],
+        '3F': [1,0],
+        '4F': [1,0],
+        '3G': [1,0]
+    }
+
+    def __init__(self, data_or_filepath, date_valid=None):
+        if date_valid is None:
+            date_valid = time.Time.now()
+        # if filepath passed in, just load in from disk as usual
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+
+            # double check that this is actually a DetectorParams file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError("File that was loaded was not a FluxcalFactors file.")
+            if self.ext_hdr['DATATYPE'] != 'FluxcalFactors':
+                raise ValueError("File that was loaded was not a FluxcalFactors file.")
+        else:
+            if not isinstance(data_or_filepath, dict):
+                raise ValueError("Input should either be a dictionary or a filepath string")
+            prihdr = fits.Header()
+            exthdr = fits.Header()
+            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
+            exthdr['DRPVERSN'] =  corgidrp.__version__
+            exthdr['DRPCTIME'] =  time.Time.now().isot
+
+            # fill caldb required keywords with dummy data
+            prihdr['OBSID'] = 0
+            exthdr["EXPTIME"] = 0
+            exthdr['OPMODE'] = ""
+            exthdr['CMDGAIN'] = 1.0
+            exthdr['EXCAMT'] = 40.0
+
+            # write default values to headers
+            for key in self.default_values:
+                if len(key) > 8:
+                    # to avoid VerifyWarning from fits
+                    exthdr['HIERARCH ' + key] = self.default_values[key]
+                else:
+                    exthdr[key] = self.default_values[key]
+            # overwrite default values
+            for key in data_or_filepath:
+                # to avoid VerifyWarning from fits
+                if len(key) > 8:
+                    exthdr['HIERARCH ' + key] = data_or_filepath[key]
+                else:
+                    exthdr[key] = data_or_filepath[key]
+
+            self.pri_hdr = prihdr
+            self.ext_hdr = exthdr
+            self.data = np.zeros([1,1])
+            self.dq = np.zeros([1,1])
+            self.err = np.zeros([1,1])
+
+            self.err_hdr = fits.Header()
+            self.dq_hdr = fits.Header()
+
+            self.hdu_list = fits.HDUList()
+
+        # make a dictionary that's easy to use
+        self.params = {}
+        # load back in all the values from the header
+        for key in self.default_values:
+            if len(key) > 8:
+                # to avoid VerifyWarning from fits
+                self.params[key] = self.ext_hdr['HIERARCH ' + key]
+            else:
+                self.params[key] = self.ext_hdr[key]
+
+
+        # if this is a new FluxcalFactors file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
+        if isinstance(data_or_filepath, dict):
+            self.ext_hdr['DATATYPE'] = 'FluxcalFactors' # corgidrp specific keyword for saving to disk
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "Flux calibration file created"
+
+            # use the start date for the filename by default
+            self.filedir = "."
+            self.filename = "FluxcalFactors_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+    def get_hash(self):
+        """
+        Computes the hash of the detector param values
+
+        Returns:
+            str: the hash of the flux calibration factors
+        """
+        hashing_str = "" # make a string that we can actually hash
+        for key in self.params:
+            hashing_str += str(self.params[key])
+
+        return str(hash(hashing_str))
+
+
+
 datatypes = { "Image" : Image,
              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -1271,7 +1406,8 @@ datatypes = { "Image" : Image,
               "FlatField" : FlatField,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
-              "TrapCalibration": TrapCalibration }
+              "TrapCalibration": TrapCalibration,
+              "FluxcalFactors": FluxcalFactors}
 
 def autoload(filepath):
     """
