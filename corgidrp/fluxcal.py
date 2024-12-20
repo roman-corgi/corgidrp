@@ -3,8 +3,15 @@ import glob
 import os
 import numpy as np
 from astropy.io import fits, ascii
+from astropy import wcs
+from astropy.io import fits, ascii
+from astropy.coordinates import SkyCoord
+import corgidrp
+from photutils.aperture import CircularAperture
+from photutils.psf import fit_2dgaussian
 from scipy import integrate
 import urllib
+from pickle import NONE
 
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
@@ -227,3 +234,64 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
     int_ref = integrate.simpson(filter_wavelength * filter_curve * flux_ref / flux_ref_lambda_ref, x=filter_wavelength)
 
     return int_source / int_ref
+
+def aper_phot(image, encircled_radius, frac_enc_energy, method = 'exact', subpixels = 5):
+    """
+    returns the flux in photo-electrons of a point source at the target Ra/Dec position
+    and using a circular aperture by applying aperture_photometry of photutils
+    
+    Args:
+        image (corgidrp.data.Image): filter transmission curve over the filter_wavelength
+        encircled_radius (float): pixel radius of the circular aperture to sum the flux
+        frac_enc_energy (float): fraction of encircled energy inside the encircled_radius of the PSF, inverse aperture correction, 0...1
+        method (str): {‘exact’, ‘center’, ‘subpixel’}, The method used to determine the overlap of the aperture on the pixel grid, 
+        default is 'exact'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
+        subpixels (int): For the 'subpixel' method, resample pixels by this factor in each dimension. That is, each pixel is divided 
+                         into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
+    Returns:
+        float: integrated flux of the point source in unit photo-electrons and corresponding error
+    """
+    #calculate the x and y pixel positions using the RA/Dec target position and applying WCS conversion
+    ra = image.pri_hdr['RA']
+    dec = image.pri_hdr['DEC']
+    
+    target_skycoord = SkyCoord(ra = ra, dec = dec, unit='deg')
+    w = wcs.WCS(image.ext_hdr)
+    pix = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin = 1)
+    aper = CircularAperture(pix, encircled_radius)
+    aperture_sums, aperture_sums_errs = \
+        aper.do_photometry(image.data, error = image.err[0], mask = image.dq.astype(bool), method = method, subpixels = subpixels)
+    return aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy
+
+def phot_by_gauss2d_fit(image, fwhm, fit_shape = None):
+    """
+    returns the flux in photo-electrons of a point source at the target Ra/Dec position
+    and using a circular aperture by applying aperture_photometry of photutils
+    
+    Args:
+        image (corgidrp.data.Image): filter transmission curve over the filter_wavelength
+        fwhm (float): estimated fwhm of the point source
+        fit_shape (int or tuple of two ints): optional
+            The shape of the fitting region. If a scalar, then it is assumed
+            to be a square. If `None`, then the shape of the input ``data``.
+            It must be an odd value and should be much bigger than fwhm.
+    Returns:
+        float: integrated flux of the Gaussian2d fit of the point source in unit photo-electrons and corresponding error
+    """
+    ra = image.pri_hdr['RA']
+    dec = image.pri_hdr['DEC']
+    
+    target_skycoord = SkyCoord(ra = ra, dec = dec, unit='deg')
+    w = wcs.WCS(image.ext_hdr)
+    pix = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin = 1)
+    # fit_2dgaussian: error weighting raises exception if error is zero
+    err = image.err[0]
+    err[err == 0] = np.finfo(np.float32).eps
+    
+    if fit_shape == None:
+        fit_shape = np.shape(image.data)[0] -1
+    
+    psf_phot = fit_2dgaussian(image.data, xypos = pix, fwhm = fwhm, fit_shape = fit_shape, mask = image.dq.astype(bool), error = err)
+    flux = psf_phot.results['flux_fit'][0]
+    flux_err = psf_phot.results['flux_err'][0]
+    return flux, flux_err

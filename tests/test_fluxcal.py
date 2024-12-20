@@ -2,11 +2,18 @@ import pytest
 import os
 import numpy as np
 from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_flux_image
 from corgidrp.data import Image, Dataset
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
 import astropy.units as u
+from astropy import wcs
+from astropy.io.fits import file
+from photutils.aperture import CircularAperture
+from photutils.centroids import centroid_2dg
+from photutils import psf
+from astropy.coordinates import SkyCoord
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5
@@ -99,11 +106,43 @@ def test_calspec_download():
         filepath = fluxcal.get_calspec_file('Todesstern')
     
 
+def test_abs_fluxcal():
+    """ 
+    Generate a simulated image and test the flux calibration computation.
+    
+    """
+    # create a simulated image with source guesses and true positions
+    # check that the simulated image folder exists and create if not
+    datadir = os.path.join(os.path.dirname(__file__), "test_data", "sim_fluxcal")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    #weakest star to be detected
+    flux = (30. * u.STmag).to(u.erg/u.s/u.cm**2/u.AA) 
+    fwhm = 3
+    #readnoise about 10
+    flux_image = create_flux_image(flux.value * 10, fwhm, flux.value/20, filedir=datadir, file_save=True)
+    assert type(flux_image) == Image
+    sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
+    radius = 3.* sigma
+        
+    flux, flux_err = fluxcal.aper_phot(flux_image, radius, 0.997)
+    assert flux == pytest.approx(200, abs = 6)
+    assert flux_err == pytest.approx(8,1)
+    
+    flux, flux_err = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm, fit_shape = 41)
+    assert flux == pytest.approx(200, abs = 6)
+    assert flux_err == pytest.approx(1, abs = 0.3)
+    
+    flux, flux_err = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm)
+    assert flux == pytest.approx(200, abs = 6)
+    assert flux_err == pytest.approx(1, abs = 0.3)
+    
 if __name__ == '__main__':
     test_get_filter_name()
     test_flux_calc()
     test_colorcor()
     test_calspec_download()
+    test_abs_fluxcal()
 
 
 

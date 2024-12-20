@@ -10,6 +10,7 @@ from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
 from astropy.table import Table
 from astropy.convolution import convolve_fft
+import astropy.units as u
 import photutils.centroids as centr
 import corgidrp.data as data
 from corgidrp.data import Image
@@ -1857,3 +1858,105 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                         hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
                 else:
                     hdul.writeto(filename, overwrite = True)
+
+
+def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, platescale=21.8, add_gauss_noise=True, file_save=False):
+    """
+    Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
+    and Gaussian noise
+
+    Args:
+        star_flux (float): flux of point source in erg/(s*cm^2*AA)
+        fwhm (float): FWHM of the centroid
+        cal_factor (float): calibration factor erg/(s*cm^2*AA)/electrons
+        filedir (str): (Optional) Full path to directory to save to.
+        platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
+        add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
+        file_save (boolean): save the simulated Image or not (default: False)
+
+    Returns:
+        corgidrp.data.Image:
+            The simulated image
+
+    """
+    # Make filedir if it does not exist
+    if (filedir is not None) and (not os.path.exists(filedir)):
+        os.mkdir(filedir)
+    
+    # hard coded image properties
+    size = (1024, 1024)
+    sim_data = np.zeros(size)
+    ny, nx = size
+    center = [nx //2, ny //2]
+    target = (80.553428801, -69.514096821)
+
+    new_hdr = {}
+
+    new_hdr['CRPIX1'] = center[0]
+    new_hdr['CRPIX2'] = center[1]
+
+    new_hdr['CTYPE1'] = 'RA---TAN'
+    new_hdr['CTYPE2'] = 'DEC--TAN'
+
+    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
+    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+
+    new_hdr['CRVAL1'] = target[0]
+    new_hdr['CRVAL2'] = target[1]
+
+    w = wcs.WCS(new_hdr)
+
+    xpos = center[0]
+    ypos = center[1]
+
+    #convert flux in calspec units to photo-electrons
+    flux = star_flux/cal_factor #in photo-electrons
+
+    # inject gaussian psf star
+    stampsize = int(np.ceil(3 * fwhm))
+    sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+    amplitude = flux/(2. * np.pi * sigma**2)
+    
+    # coordinate system
+    y, x = np.indices([stampsize, stampsize])
+    y -= stampsize // 2
+    x -= stampsize // 2
+    
+    # find nearest pixel
+    x_int = int(round(xpos))
+    y_int = int(round(ypos))
+    x += x_int
+    y += y_int
+    
+    xmin = x[0][0]
+    xmax = x[-1][-1]
+    ymin = y[0][0]
+    ymax = y[-1][-1]
+        
+    psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+
+    # inject the star into the image
+    sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
+
+    if add_gauss_noise:
+        # add Gaussian random noise
+        noise_rng = np.random.default_rng(10)
+        gain = 1
+        ref_flux = 10
+        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
+        sim_data = sim_data + noise
+    err = np.zeros(size)
+    err[:] = noise
+    # load as an image object
+    prihdr, exthdr = create_default_headers()
+    prihdr['VISTYPE'] = 'FLUXCAL'
+    prihdr['RA'] = target[0]
+    prihdr['DEC'] = target[1]
+
+    newhdr = fits.Header(new_hdr)
+    frame = data.Image(sim_data, err = err, pri_hdr= prihdr, ext_hdr= newhdr)
+    filename = "sim_fluxcal.fits"
+    if filedir is not None and file_save:
+        frame.save(filedir=filedir, filename=filename)
+
+    return frame
