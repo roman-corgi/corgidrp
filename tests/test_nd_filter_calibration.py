@@ -1,115 +1,168 @@
 import os
 from pathlib import Path
 import pytest
+import math
 import numpy as np
 from astropy.io import fits
 from corgidrp.nd_filter_calibration import main
-from corgidrp.data import Dataset
-from corgidrp.mocks import create_default_headers 
+from corgidrp.data import Dataset, Image
+from corgidrp.mocks import create_default_headers
+import astropy.units as u
 
-# @pytest.fixture
+# From fluxcal.py bright standards
+bright_stars = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep', 'KSI2 CETI']
+
+# From fluxcal.py dim standards
+dim_stars = [
+    'TYC 4433-1800-1',
+    'TYC 4205-1677-1',
+    'TYC 4212-455-1',
+    'TYC 4209-1396-1',
+    'TYC 4413-304-1',
+    'UCAC3 313-62260',
+    'BPS BS 17447-0067',
+    'TYC 4424-1286-1',
+    'GSC 02581-02323',
+    'TYC 4207-219-1'
+]
+
+def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
+    """
+    Create a mock image with a Gaussian source:
+    - flux: total flux (e.g. erg/s/cm^2/Å) or arbitrary units
+    - fwhm: full width at half maximum of the Gaussian source in pixels
+    - background: background level in the same units as flux
+    - nx, ny: image size in pixels
+
+    Returns:
+        Image: a corgidrp.data.Image object
+    """
+
+    # Create an empty image with background
+    data = np.full((ny, nx), background, dtype=float)
+
+    # Compute Gaussian parameters
+    x0 = nx/2
+    y0 = ny/2
+    sigma = fwhm / (2.0 * math.sqrt(2.0 * math.log(2.0)))
+
+    # Normalize Gaussian so that the integral over all pixels equals the desired total flux
+    # The integral of a 2D Gaussian = 2 * pi * sigma_x * sigma_y * peak
+    # Here sigma_x = sigma_y = sigma
+    # flux = peak * 2 * pi * sigma^2
+    # peak = flux / (2 * pi * sigma^2)
+    peak = flux / (2 * math.pi * sigma**2)
+
+    y_indices, x_indices = np.indices((ny, nx))
+    r2 = (x_indices - x0)**2 + (y_indices - y0)**2
+    gaussian = peak * np.exp(-r2/(2*sigma**2))
+    data += gaussian
+
+    # Create error and DQ arrays (if needed)
+    # For simplicity, set a uniform error and no data quality flags:
+    err = np.sqrt(np.abs(data))  # Poisson-like error
+    dq = np.zeros((ny, nx), dtype=int)
+
+    pri_hdr, ext_hdr = create_default_headers()
+    image = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq)
+
+    return image
+
+def save_image_to_fits(image, filename):
+    """
+    Save an Image object to a FITS file following the given recipe:
+    - Primary HDU with pri_hdr (no data)
+    - Second HDU as an ImageHDU with data and ext_hdr
+    """
+    primary_hdu = fits.PrimaryHDU(header=image.pri_hdr)
+    image_hdu = fits.ImageHDU(data=image.data, header=image.ext_hdr)
+
+    hdul = fits.HDUList([primary_hdu, image_hdu])
+    hdul.writeto(filename, overwrite=True)
+
+
+def mock_dim_dataset_files(output_path):
+    """
+    Create 10 dim star images using the names from dim_stars.
+    These are without ND filter and serve as calibration references.
+    """
+    if not os.path.exists(output_path):
+        os.makedirs(output_path, exist_ok=True)
+
+    # Simulate dim stars. Let's pick a faint flux:
+    star_flux = (30.0 * u.STmag).to(u.erg/u.s/u.cm**2/u.AA)
+    fwhm = 3
+    background = star_flux.value / 20
+
+    file_paths = []
+    for star_name in dim_stars:
+        flux_image = create_flux_image(star_flux.value, fwhm, background)
+        # Update headers
+        flux_image.ext_hdr['TARGET'] = star_name
+        flux_image.ext_hdr['CFAMNAME'] = '3C'  # filter name must match a known filter curve
+        flux_image.ext_hdr['FPAM_H'] = 3.0
+        flux_image.ext_hdr['FPAM_V'] = 2.5
+        flux_image.ext_hdr['EXPTIME'] = 10.0  # Example exposure time
+
+        filename = os.path.join(output_path, f"mock_dim_dataset_{star_name.replace(' ', '_')}.fits")
+        save_image_to_fits(flux_image, filename)
+        file_paths.append(str(filename))
+
+    return file_paths
+
 def mock_bright_dataset_files(output_path):
     """
-      - 4 sets of 9 files for bright stars (ND filter in)
+    Create 4 sets of 9 bright star images using the names from bright_stars.
+    We'll choose the first 4 from the bright_stars list.
+    Each star gets a 3x3 raster of images.
     """
-    width = 2200
-    height = 1200
+    if not os.path.exists(output_path):
+        os.makedirs(output_path, exist_ok=True)
 
-    # Simple 3x3 Gaussian spot
-    spot = np.array([
-        [1.0, 2.0, 1.0],
-        [2.0, 5.0, 2.0],
-        [1.0, 2.0, 1.0]
-    ])
+    # Simulate bright stars. Let's pick a brighter flux:
+    bright_star_flux = (20.0 * u.STmag).to(u.erg/u.s/u.cm**2/u.AA)
+    fwhm = 3
+    background = bright_star_flux.value / 20
 
-    base_x = 1100
-    base_y = 600
+    # Pick the first 4 bright standards
+    selected_bright_stars = bright_stars[:4]
     x_offsets = [-10, 0, 10]
     y_offsets = [-10, 0, 10]
 
     file_paths = []
-    star_names = ["Star1", "Star2", "Star3", "Star4"]
-
-    for star_name in star_names:
+    for star_name in selected_bright_stars:
         index = 1
         for dy in y_offsets:
             for dx in x_offsets:
-                image_data = np.zeros((height, width), dtype=float)
+                flux_image = create_flux_image(bright_star_flux.value * 10, fwhm, background)
+                flux_image.ext_hdr['TARGET'] = star_name
+                flux_image.ext_hdr['CFAMNAME'] = '3C'  # same filter as dim stars for consistency
+                flux_image.ext_hdr['FPAM_H'] = 3.0
+                flux_image.ext_hdr['FPAM_V'] = 2.5
+                flux_image.ext_hdr['FSM_X'] = dx
+                flux_image.ext_hdr['FSM_Y'] = dy
+                flux_image.ext_hdr['EXPTIME'] = 5.0  # shorter exposure for bright sources
 
-                x_center = base_x + dx
-                y_center = base_y + dy
-
-                y_min = y_center - 1
-                y_max = y_center + 2
-                x_min = x_center - 1
-                x_max = x_center + 2
-                image_data[y_min:y_max, x_min:x_max] = spot
-
-                pri_hdr, ext_hdr = create_default_headers()
-                # For demonstration, let's say these files are bright star files with ND filter:
-                ext_hdr['FPAM_H'] = 3.0
-                ext_hdr['FPAM_V'] = 2.5
-                ext_hdr['FSM_X'] = x_center
-                ext_hdr['FSM_Y'] = y_center
-                ext_hdr['TARGET'] = star_name
-
-                primary_hdu = fits.PrimaryHDU(header=pri_hdr)
-                image_hdu = fits.ImageHDU(data=image_data, header=ext_hdr)
-                hdul = fits.HDUList([primary_hdu, image_hdu])
-                filename = os.path.join(output_path, f"mock_bright_dataset_{star_name}_{index}.fits")
-                hdul.writeto(filename, overwrite=True)
-
+                filename = os.path.join(output_path, f"mock_bright_dataset_{star_name.replace(' ', '_')}_{index}.fits")
+                save_image_to_fits(flux_image, filename) 
                 file_paths.append(str(filename))
                 index += 1
 
     return file_paths
 
-def mock_dim_dataset_files(output_path):
-    width = 2200
-    height = 1200
-
-    # Simple 3x3 Gaussian spot
-    spot = np.array([
-        [1.0, 2.0, 1.0],
-        [2.0, 5.0, 2.0],
-        [1.0, 2.0, 1.0]
-    ])
-
-    x_center = 1100
-    y_center = 600
-
-    y_min = y_center - 1
-    y_max = y_center + 2
-    x_min = x_center - 1
-    x_max = x_center + 2
-
-    file_paths = []
-    for index in range(1,11):
-        image_data = np.zeros((height, width), dtype=float)
-        image_data[y_min:y_max, x_min:x_max] = spot
-
-        pri_hdr, ext_hdr = create_default_headers()
-
-        star_name = f"Star{index}"
-        ext_hdr['FPAM_H'] = 3.0
-        ext_hdr['FPAM_V'] = 2.5
-        ext_hdr['FSM_X'] = 0
-        ext_hdr['FSM_Y'] = 0
-        ext_hdr['TARGET'] = star_name
-
-        primary_hdu = fits.PrimaryHDU(header=pri_hdr)
-        image_hdu = fits.ImageHDU(data=image_data, header=ext_hdr)
-        hdul = fits.HDUList([primary_hdu, image_hdu])
-        filename = os.path.join(output_path, f"mock_dim_dataset_{star_name}.fits")
-        hdul.writeto(filename, overwrite=True)
-
-        file_paths.append(str(filename))
-    
-    return file_paths
-
 
 if __name__ == "__main__":
     print('Running test_nd_filter_calibration')
-    input_dim_dataset = Dataset(mock_dim_dataset_files('/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks'))
-    input_bright_dataset = Dataset(mock_bright_dataset_files('/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks'))
-    main(input_dim_dataset, input_bright_dataset,'/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output')
+    # Adjust paths as needed
+    dim_data_path = '/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_dim'
+    bright_data_path = '/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_bright'
+    output_path = '/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output'
+
+    dim_files = mock_dim_dataset_files(dim_data_path)
+    bright_files = mock_bright_dataset_files(bright_data_path)
+
+    input_dim_dataset = Dataset(dim_files)
+    input_bright_dataset = Dataset(bright_files)
+
+    # Run the main ND filter calibration routine
+    main(input_dim_dataset, input_bright_dataset, output_path)

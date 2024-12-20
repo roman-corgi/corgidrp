@@ -4,24 +4,13 @@ from astropy.io import fits
 from corgidrp.data import Dataset
 from collections import defaultdict
 import re
+import corgidrp.fluxcal as fluxcal
+from scipy import integrate
 
 """
-From requirement 1090877:
-
-Given:
-1) M sets of clean focal-plane images collected at different FSM positions on 
-   an unocculted spectrophotometric standard star with an ND filter in place.
-2) A single absolute flux calibration value for the same CFAM filter.
-
-This script computes a "sweet-spot dataset," which is an Mx3 matrix containing:
-   - OD (optical density or related attenuation metric) for each dither
-   - EXCAM (x,y) star center positions on the detector.
-
-It also stores the FPAM encoder position associated with this dataset.
-
-Note:
-- This dataset captures small-scale variation of focal-plane attenuation.
-- The FPAM encoder position should be stored with the dataset for future use.
+From requirement 1090877.
+Revised to compute a flux calibration factor from dim stars (no ND filter)
+and then use that factor to compute OD for bright stars observed with the ND filter.
 
 Author: Julia Milton
 Date: 2024-12-09
@@ -43,28 +32,47 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5):
     flux = np.sum(image_data[aperture_mask])
     return flux  # Background subtraction could be added here if needed.
 
-def compute_expected_flux_synphot(star_name):
+def compute_expected_flux(star_name, filter_name):
     """
-    Placeholder function: Compute the expected flux using synphot.
-    This would depend on star's known SED, etc.
-    Currently returns a dummy value.
+    Compute the expected absolute integrated flux of a star through a given filter.
+
+    Parameters
+    ----------
+    star_name : str
+        Name of the star, must be known in the fluxcal.calspec_names dict.
+    filter_name : str
+        Filter identifier (e.g., '3C') that corresponds to a known filter curve file.
+
+    Returns
+    -------
+    expected_flux : float
+        The expected integrated flux (erg/(s*cm^2)) over the filter band.
     """
-    # Integrate synphot as needed.
-    return 1000.0  # placeholder
+    # Get CALSPEC file for this star
+    calspec_filepath = fluxcal.get_calspec_file(star_name)
+
+    # Find matching filter curve
+    datadir = os.path.join(os.path.dirname(fluxcal.__file__), "data", "filter_curves")
+    filter_files = [f for f in os.listdir(datadir) if filter_name in f and f.endswith('.csv')]
+    if not filter_files:
+        raise ValueError(f"No filter curve available with name {filter_name}")
+    filter_filename = os.path.join(datadir, filter_files[0])
+
+    # Read filter curve
+    wave, transmission = fluxcal.read_filter_curve(filter_filename)
+
+    # Read CALSPEC and interpolate flux onto filter wavelengths
+    calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
+
+    # Calculate band irradiance (integrated flux over the band)
+    # This gives erg/(s*cm^2) when integrating flux density over wavelength
+    expected_flux = calculate_band_irradiance(transmission, calspec_flux, wave)
+
+    return expected_flux
 
 def group_by_target(dataset_entries):
     """
     Group dataset files based on the 'TARGET' value in the FITS extension header.
-
-    Parameters
-    ----------
-    dataset_entries : list
-        List of Dataset objects, each containing pri_hdr, ext_hdr, and data attributes.
-
-    Returns
-    -------
-    grouped_files : dict
-        Dictionary where keys are unique TARGET values, and values are lists of dataset entries.
     """
     grouped_files = defaultdict(list)
 
@@ -80,47 +88,83 @@ def group_by_target(dataset_entries):
 
     return grouped_files
 
-def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
+def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     """
-    Main routine:
-    1. Compute transmission efficiency from 10 dim stars (no ND filter).
-    2. Compute OD for bright stars with ND filter in a 3x3 raster.
-    3. Check OD uniformity and flag if needed.
-    4. Save results to FITS files.
+    Calculate the integrated flux (band irradiance) over the filter band.
+
+    This integrates calspec_flux * filter_curve over the wavelength range,
+    giving total flux in erg/(s*cm²) if calspec_flux is in erg/(s*cm²*Å).
+
+    Args:
+        filter_curve (np.array): Filter transmission curve over filter_wavelength
+        calspec_flux (np.array): Flux density of the CALSPEC star in erg/(s*cm²*Å)
+        filter_wavelength (np.array): Wavelengths in Å
+
+    Returns:
+        float: Integrated flux (band irradiance) in erg/(s*cm²)
+    """
+    # Integrate over wavelength:
+    # ∫ (calspec_flux(λ) * filter_curve(λ)) dλ
+    irrad = integrate.simpson(calspec_flux * filter_curve, x=filter_wavelength)
+    return irrad
+
+def compute_flux_calibration_factor(dim_stars_paths):
+    """
+    Compute the flux calibration factor C from dim stars (no ND filter).
+    C converts measured electrons per second to physical flux in erg/(s*cm^2).
+
+    C = expected_flux / (measured_electrons_per_second)
 
     Parameters
     ----------
-    dim_stars_paths : list of Dataset entries
-        Paths (and loaded data) for the 10 dim star datasets.
-    bright_stars_paths : list of Dataset entries
-        Paths (and loaded data) for bright star raster datasets.
-    output_path : str
-        Directory where the output files will be saved.
-    threshold : float
-        Threshold for checking OD uniformity.
-    """
+    dim_stars_paths : list of Dataset
+        List of datasets for dim stars with known flux (no ND filter).
 
-    # Step 1: Compute average dim star transmission efficiency
-    ratios = []
+    Returns
+    -------
+    calibration_factor : float
+        Average calibration factor derived from all dim stars.
+    """
+    factors = []
     for entry in dim_stars_paths:
         image_data = entry.data
         ext_hdr = entry.ext_hdr
         star_name = ext_hdr['TARGET']
+        filter_name = ext_hdr['CFAMNAME']
+        exptime = ext_hdr.get('EXPTIME', 1.0)  # ensure we have exposure time
 
         x_center, y_center = compute_centroid(image_data)
-        measured_flux = compute_flux_in_image(image_data, x_center, y_center)
-        expected_flux = compute_expected_flux_synphot(star_name)
-        ratio = measured_flux / expected_flux
-        ratios.append(ratio)
+        measured_electrons = compute_flux_in_image(image_data, x_center, y_center)
+        # Convert electrons to electrons per second
+        measured_electrons_per_s = measured_electrons / exptime
 
-    avg_optical_efficiency = np.mean(ratios)
+        expected_flux = compute_expected_flux(star_name, filter_name)  # erg/(s*cm^2)
+
+        # Compute factor: how to get from electrons/s to erg/(s*cm^2)
+        C = expected_flux / measured_electrons_per_s
+        factors.append(C)
+
+    # Average the calibration factors from all dim stars
+    calibration_factor = np.mean(factors)
+    return calibration_factor
+
+def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
+    """
+    Main routine:
+    1. Derive flux calibration factor from dim stars (no ND filter).
+    2. Use this factor to compute OD for bright stars with ND filter.
+    3. Check OD uniformity and flag if needed.
+    4. Save results to FITS files.
+    """
+
+    # Step 1: Compute flux calibration factor from dim stars
+    calibration_factor = compute_flux_calibration_factor(dim_stars_paths)
 
     # Step 2: Group bright star files by their target
     grouped_files = group_by_target(bright_stars_paths)
-
     flux_results = {}
 
-    # Process each group (star)
+    # Process each bright star group
     for target, files in grouped_files.items():
         print(f"Processing target: {target}")
         od_values = []
@@ -128,26 +172,42 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
         y_values = []
         fpam_h = fpam_v = None
 
+        # Assume all images for this target use the same filter?
+        # Perhaps need to check and handle that case.
+        if not files:
+            continue
+        first_hdr = files[0].ext_hdr
+        filter_name = first_hdr['CFAMNAME']
+
+        # Compute the expected flux without ND filter
+        expected_flux = compute_expected_flux(target, filter_name)
+
         for entry in files:
             image_data = entry.data
             ext_hdr = entry.ext_hdr
             fpam_h = ext_hdr.get('FPAM_H', fpam_h)
             fpam_v = ext_hdr.get('FPAM_V', fpam_v)
+            exptime = ext_hdr.get('EXPTIME', 1.0)
 
             x_center, y_center = compute_centroid(image_data)
             if np.isnan(x_center) or np.isnan(y_center):
                 print(f"Warning: Centroid could not be computed for {entry}")
                 continue
 
-            measured_flux = compute_flux_in_image(image_data, x_center, y_center)
-            expected_flux = compute_expected_flux_synphot(target)
-            od = measured_flux / (expected_flux * avg_optical_efficiency)
+            measured_electrons = compute_flux_in_image(image_data, x_center, y_center)
+            measured_electrons_per_s = measured_electrons / exptime
+
+            # Convert measured electrons/s to physical flux using calibration factor
+            measured_flux_physical = measured_electrons_per_s * calibration_factor  # erg/(s*cm^2)
+
+            # OD = ratio of the measured flux with ND to the expected flux without ND
+            od = measured_flux_physical / expected_flux
             od_values.append(od)
             x_values.append(x_center)
             y_values.append(y_center)
 
         od_values = np.array(od_values)
-        # Check if OD variation within threshold
+        # Check OD variation within threshold
         star_flag = np.std(od_values) >= threshold
         average_od = np.mean(od_values)
 
@@ -163,7 +223,8 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
         flux_results[target] = star_result
 
     # Step 3: Save the calibration products for each bright star
-    visit_id = 'PPPPPCCAAASSSOOOVVV'
+    visit_id = 'PPPPPCCAAASSSOOOVVV' 
+    # Above needs to be changed to visit_id = ext_hdr.get('VISID') when implemented in L1s
     pattern = re.compile(rf"CGI_{visit_id}_(\d+)_NDF_CAL\.fits")
 
     # Determine max serial number from existing files in output_path
