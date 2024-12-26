@@ -32,7 +32,7 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
     n_samples = np.sum(n_samples, axis=0)
     if collapse.lower() == "mean":
         data_collapse = np.nanmean(data_subset, axis=0)
-        err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) # not sure if this is correct, but good enough for now
+        err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) # correct assuming standard error propagation
     elif collapse.lower() == "median":
         data_collapse = np.nanmedian(data_subset, axis=0)
         err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) * np.sqrt(np.pi/2) # inflate median error
@@ -72,7 +72,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         num_frames_per_group = len(input_dataset)
 
     if len(input_dataset) % num_frames_per_group != 0:
-        raise ValueError("Input dataset of lenght {0} cannot be grouped in sets of {1}".format(len(input_dataset), num_frames_per_group))
+        raise ValueError("Input dataset of length {0} cannot be grouped in sets of {1}".format(len(input_dataset), num_frames_per_group))
     
     if collapse.lower() not in ["mean", "median"]:
         raise ValueError("combine_subexposures can only collapse with mean or median")
@@ -82,7 +82,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
     for i in range(num_groups):
         data_subset = np.copy(input_dataset.all_data[num_frames_per_group*i:num_frames_per_group*(i+1)])
         err_subset = np.copy(input_dataset.all_err[num_frames_per_group*i:num_frames_per_group*(i+1)])
-        dq_subset = input_dataset.all_dq[num_frames_per_group*i:num_frames_per_group*(i+1)]
+        dq_subset = np.copy(input_dataset.all_dq[num_frames_per_group*i:num_frames_per_group*(i+1)])
 
         data_collapse, err_collapse, dq_collapse = combine_images(data_subset, err_subset, dq_subset, collapse=collapse, 
                                                                   num_frames_scaling=num_frames_scaling)
