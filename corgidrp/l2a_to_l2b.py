@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
+import copy
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas
@@ -132,6 +133,12 @@ def flat_division(input_dataset, flat_field):
     #Divide by the master flat
     flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
 
+    #Find where the flat_field is 0 and set a DQ flag: 
+    where_zero = np.where(flat_field.data == 0)
+    flatdiv_dq = copy.deepcopy(flatdiv_dataset.all_dq)
+    for i in range(len(flatdiv_dataset)):
+       flatdiv_dq[i][where_zero] = np.bitwise_or(flatdiv_dataset[i].dq[where_zero], 4)
+
     # propagate the error of the master flat frame
     if hasattr(flat_field, "err"):
         flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
@@ -142,7 +149,7 @@ def flat_division(input_dataset, flat_field):
     history_msg = "Flat calibration done using Flat field {0}".format(flat_field.filename)
 
     # update the output dataset with this new flat calibrated data and update the history
-    flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube)
+    flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube, new_all_dq = flatdiv_dq)
 
     return flatdiv_dataset
 
