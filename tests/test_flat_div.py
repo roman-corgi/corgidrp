@@ -10,6 +10,7 @@ import corgidrp.l2a_to_l2b as l2a_to_l2b
 
 old_err_tracking = corgidrp.track_individual_errors
 
+np.random.seed(9292)
 def test_flat_div():
     """
     Generate mock input data and pass into flat division function
