@@ -48,37 +48,37 @@ def check_nonlin_params(
     ):
     """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
     if 'rowroi1' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'rowroi2' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'colroi1' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'colroi2' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'rowback11' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'rowback12' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'rowback21' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'rowback22' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'colback11' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'colback12' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'colback21' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'colback22' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'min_exp_time' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'num_bins' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'min_bin' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     if 'min_mask_factor' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter')
     
     if not isinstance(nonlin_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
@@ -124,7 +124,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=True, plot_outdir='figures', show_plot=False,
-                     verbose=False):
+                     verbose=False, nonlin_params=nonlin_params):
     """
     Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
     frames ranging over exposure time, each sub-stack having at least 1 illuminated 
@@ -211,6 +211,16 @@ def calibrate_nonlin(dataset_nl,
       show_plot (bool): (Optional) display the plots. Default is False.
       verbose (bool): (Optional) display various diagnostic print messages.
         Default is False.
+      nonlin_params (dict): (Optional) Dictionary of row and col specifications
+        for the region of interest (indicated by 'roi') where the frame is illuminated and for 
+        two background regions (indicated by 'back1' and 'back2') where the frame is not illuminated.  
+        Must contain 'rowroi1','rowroi2','colroi1','colroi2','rowback11','rowback12',
+        'rowback21','rowback22','colback11','colback12','colback21',and 'colback22'.
+        The 'roi' needs one square region specified, and 'back' needs two square regions, 
+        where a '1' ending indicates the smaller of two values, and a '2' ending indicates the larger 
+        of two values.  The coordinates of each square are specified by matching 
+        up as follows: (rowroi1, colroi1), (rowroi1, colroi2), (rowback11, colback11), 
+        (rowback11, colback12), etc. Defaults to nonlin_params specified in this file.
     
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values

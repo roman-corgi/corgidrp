@@ -34,25 +34,25 @@ def check_kgain_params(
     ):
     """ Checks integrity of kgain parameters in the dictionary kgain_params. """
     if 'offset_colroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'offset_colroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'rowroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'rowroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'colroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'colroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'rn_bins1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'rn_bins2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'max_DN_val' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
     if 'signal_bins_N' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter.')
 
     if not isinstance(kgain_params['offset_colroi1'], (float, int)):
         raise TypeError('offset_colroi1 is not a number')
@@ -281,7 +281,7 @@ def calibrate_kgain(dataset_kgain,
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=True,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
-                    verbose=False, detector_regions=None):
+                    verbose=False, detector_regions=None, kgain_params=kgain_params):
     """
     Given an array of frame stacks for various exposure times, each sub-stack
     having at least 5 illuminated pupil L1 SCI-size frames having the same 
@@ -343,6 +343,18 @@ def calibrate_kgain(dataset_kgain,
       detector_regions (dict): a dictionary of detector geometry properties.
         Keys should be as found in detector_areas in detector.py.  Defaults to
         that dictionary.
+      kgain_params (dict): (Optional) Dictionary containing row and col specifications
+        for the region of interest (indicated by 'rowroi1','rowroi2','colroi1',and 'colroi2').
+        The 'roi' needs one square region specified, and 'back' needs two square regions, 
+        where a '1' ending indicates the smaller of two values, and a '2' ending indicates the larger 
+        of two values.  The coordinates of the square region are specified by matching 
+        up as follows: (rowroi1, colroi1), (rowroi2, colroi1), etc. 
+        Also must contain:
+        'rn_bins1': lower bound of counts histogram for fitting or read noise
+        'rn_bins2': upper bound of counts histogram for fitting or read noise 
+        'max_DN_val': maximum DN value to be included in photon transfer curve (PTC)
+        'signal_bins_N': number of bins in the signal variables of PTC curve
+        Defaults to kgain_params included in this file.
     
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon

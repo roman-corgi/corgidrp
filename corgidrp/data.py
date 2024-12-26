@@ -623,7 +623,7 @@ class Dark(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this noise map (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
         err (np.array): the error array (required only if raw data is passed in)
         err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
         dq (np.array): the DQ array (required only if raw data is passed in)
@@ -640,7 +640,8 @@ class Dark(Image):
                 raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
             self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected electrons'
-
+            if 'PC_STAT' not in ext_hdr:
+                self.ext_hdr['PC_STAT'] = 'analog master dark'
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys() and input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
@@ -651,8 +652,15 @@ class Dark(Image):
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
-                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                self.filename = "{0}_dark.fits".format(orig_input_filename)
+                if self.ext_hdr['PC_STAT'] != 'photon-counted master dark':
+                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                    self.filename = "{0}_dark.fits".format(orig_input_filename)
+                else:
+                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                    self.filename = "{0}_pc_dark.fits".format(orig_input_filename)
+        
+        if 'PC_STAT' not in self.ext_hdr:
+            self.ext_hdr['PC_STAT'] = 'analog master dark'
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'detected electrons'
@@ -830,7 +838,8 @@ class NonLinearityCalibration(Image):
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
         if self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -1024,6 +1033,8 @@ class BadPixelMap(Image):
             raise ValueError("File that was loaded was not a BadPixelMap file.")
         if self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        self.err_hdr['COMMENT'] = 'err not meaningful for this calibration; just present for class consistency' 
 
     def copy(self, copy_data = True):
         """
@@ -1354,7 +1365,8 @@ class AstrometricCalibration(Image):
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
             raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
-        
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'     
+    
 class TrapCalibration(Image):
     """
 
@@ -1401,6 +1413,7 @@ class TrapCalibration(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'TrapCalibration':
             raise ValueError("File that was loaded was not a TrapCalibration file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
 
 datatypes = { "Image" : Image,
              "Dark" : Dark,

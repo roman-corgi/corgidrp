@@ -167,7 +167,7 @@ def create_synthesized_master_dark_calib(detector_areas):
     # image area, including "shielded" rows and cols:
     imrows, imcols, imr0c0 = imaging_area_geom('SCI', detector_areas)
     prerows, precols, prer0c0 = unpack_geom('SCI', 'prescan', detector_areas)
-    np.random.seed(4567)
+    
     frame_list = []
     for i in range(len(EMgain_arr)):
         for l in range(N): #number of frames to produce
@@ -235,7 +235,8 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
         exthdr['KGAIN'] = 7
-        np.random.seed(456+i); sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
+        #np.random.seed(456+i); 
+        sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
@@ -264,7 +265,8 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
         # generate images in normal distribution with mean 1 and std 0.01
-        np.random.seed(456+i); sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
+        #np.random.seed(456+i); 
+        sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
@@ -451,7 +453,8 @@ def create_flatfield_dummy(filedir=None, numfiles=2):
     frames=[]
     for i in range(numfiles):
         prihdr, exthdr = create_default_headers()
-        np.random.seed(456+i); sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
+        #np.random.seed(456+i); 
+        sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
@@ -490,7 +493,8 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
         data_range = np.linspace(800,65536,size)
         # Generate data for each row, where the mean increase from 10 to 65536
         for x in range(size):
-            np.random.seed(120+x); sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
+            #np.random.seed(120+x); 
+            sim_data[:, x] = np.random.poisson(data_range[x], size).astype(np.float64)
 
         non_linearity_correction = data.NonLinearityCalibration(nonlin_filepath)
 
@@ -543,7 +547,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
     im_width = dataset.all_data.shape[-1]
 
     # Overwrite dataset with a poisson distribution
-    np.random.seed(123)
+    #np.random.seed(123)
     dataset.all_data[:,:,:] = np.random.poisson(lam=150,size=dataset.all_data.shape).astype(np.float64)
 
     # Loop over images in dataset
@@ -554,7 +558,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
 
         # Pick random locations to add a cosmic ray
         for x in range(numCRs):
-            np.random.seed(123+x)
+            #np.random.seed(123+x)
             loc = np.round(np.random.uniform(0,im_width-1, size=2)).astype(int)
 
             # Add the CR plateau
@@ -1859,8 +1863,8 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 else:
                     hdul.writeto(filename, overwrite = True)
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.1, cosmic_rate=0, full_frame=True):
-    '''This creates mock Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True):
+    '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
     Args:
@@ -1873,11 +1877,11 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         full_frame: (bool) If True, simulated frames are SCI full frames.  If False, 50x50 images are simulated.  Defaults to True.
     
     Returns:
-        dataset (corgidrp.data.Dataset): Dataset containing both the illuminated and dark frames
+        ill_dataset (corgidrp.data.Dataset): Dataset containing the illuminated frames
+        dark_dataset (corgidrp.data.Dataset): Dataset containing the dark frames
         ill_mean (float): mean electron count value simulated in the illuminated frames
         dark_mean (float): mean electron count value simulated in the dark frames
     '''
-    np.random.seed(1234)
     pix_row = 1024 #number of rows and number of columns
     fluxmap = np.ones((pix_row,pix_row)) #photon flux map, photons/s
 
@@ -1888,7 +1892,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         dark_current=8.33e-4,  # e-/pix/s
         cic=0.01,  # e-/pix/frame
         read_noise=100.,  # e-/pix/frame
-        bias=2000,  # e-
+        bias=20000,  # e-
         qe=0.9,  # quantum efficiency, e-/photon
         cr_rate=cosmic_rate,  # cosmic rays incidence, hits/cm^2/s
         pixel_pitch=13e-6,  # m
@@ -1929,6 +1933,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.ext_hdr['CMDGAIN'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
         frame.pri_hdr["VISTYPE"] = "TDEMO"
+        frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
 
     for i in range(Ndarks):
@@ -1941,8 +1946,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark.ext_hdr['CMDGAIN'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
+        frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)
 
-    dataset = data.Dataset(frame_e_list+frame_e_dark_list)
+    ill_dataset = data.Dataset(frame_e_list)
+    dark_dataset = data.Dataset(frame_e_dark_list)
 
-    return dataset, ill_mean, dark_mean
+    return ill_dataset, dark_dataset, ill_mean, dark_mean
