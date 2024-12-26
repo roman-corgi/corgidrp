@@ -16,7 +16,6 @@ import corgidrp.detector as detector
 
 @pytest.mark.e2e
 def test_expected_results_e2e(file_dir):
-    '''Results are as expected theoretically.  Also runs raw frames through pre-processing pipeline.'''
     np.random.seed(1234)
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1)
     output_dir = os.path.join(file_dir, 'pc_sim_test_data')
