@@ -1,5 +1,5 @@
 {
-    "name" : "l1_to_l2b_pc",
+    "name" : "l1_to_l2b_pc_dark",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
@@ -43,10 +43,7 @@
             }
         },
         {
-            "name": "get_pc_mean",
-            "calibs" : {
-                "Dark" : "AUTOMATIC"
-            }
+            "name": "get_pc_mean"
         },
         {
             "name" : "save"

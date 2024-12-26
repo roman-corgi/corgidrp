@@ -4,6 +4,7 @@ count array with photometric corrections.
 """
 import warnings
 import numpy as np
+from astropy.io import fits
 import corgidrp.data as data
 
 def varL23(g, L, T, N):
@@ -59,12 +60,11 @@ def photon_count(e_image, thresh):
     return pc_image
 
 
-def get_pc_mean(input_dataset, detector_params, niter=2):
-    """Take a stack of images, illuminated and dark frames of the same exposure 
+def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max=None, niter=2, mask_filepath=None, safemode=True):
+    """Take a stack of images, frames of the same exposure 
     time, k gain, read noise, and EM gain, and return the mean expected value per 
     pixel. The frames are taken in photon-counting mode, which means high EM 
-    gain and very low exposure time.  The number of darks can be different from 
-    the number of illuminated frames.
+    gain and very low exposure time.  
 
     The frames in each stack should be SCI image (1024x1024) frames that have 
     had some of the L2b steps applied:
@@ -82,24 +82,44 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
     fixed-pattern noise, and read noise.  For such low-exposure frames, though,
     this really should not be a concern.
 
-    This algorithm will photon count each frame in each of the 2 sets (illuminated and dark) individually,
-    then co-add the photon counted frames. The co-added frame is then averaged
+    This algorithm will photon count each frame individually,
+    then co-add the photon-counted frames. The co-added frame is then averaged
     and corrected for thresholding and coincidence loss, returning the mean
-    expected array in units of photoelectrons.  The threshold is 
-    determined by "T_factor" stored in DetectorParams. The dark mean expected array
-    is then subtracted from the illuminated mean expected array.
+    expected array in units of photoelectrons if dark-subtracted (detected electrons 
+    if not dark-subtracted).  The threshold is determined by the input "T_factor", 
+    and the value stored in DetectorParams is used if this input is None. 
+    
+    This function can be used for photon-counting illuminated and dark datasets 
+    (see Args below). 
 
     Args:
         input_dataset (corgidrp.data.Dataset): This is an instance of corgidrp.data.Dataset containing the 
-            photon-counted illuminated frames as well as the 
-            photon-counted dark frames, and all the frames must have the same 
-            exposure time, EM gain, k gain, and read noise.
-        detector_params (corgidrp.data.DetectorParams): A calibration file storing detector calibration values.
+            frames to photon-count. All the frames must have the same 
+            exposure time, EM gain, k gain, and read noise.  If the input dataset's header key 'VISTYPE' is equal to 'DARK', a 
+            photon-counted master dark calibration product will be produced.  Otherwise, the input dataset is assumed to consist of illuminated 
+            frames intended for photon-counting.
+        pc_master_dark (corgidrp.data.Dark): Photon-counted master dark to be used for dark subtraction.  
+            If None, no dark subtraction is done.
+        T_factor (float): The number of read noise standard deviations at which to set the threshold for photon counting.  If None, the value is drawn from corgidrp.data.DetectorParams. 
+            Defaults to None.
+        pc_ecount_max (float): Maximum allowed electrons/pixel/frame for photon counting.  If None, the value is drawn from corgidrp.data.DetectorParams. 
+            Defaults to None.
         niter (int, optional): Number of Newton's method iterations (used for photometric 
             correction). Defaults to 2.
+        mask_filepath (str): Filepath to a .fits file with a pixel mask in the default HDU.  The mask should be an array of the same shape as that found in each frame of the input_dataset, and the mask 
+            should be 0 where the region of interest is and 1 for pixels to be masked (not considered).
+        safemode (bool): If False, the function does not halt due to an exception (useful for the iterative process of digging the dark hole).  
+            If True, the function halts with an exception if the mean intensity of the unmasked pixels (or all pixels if no mask provided) is greater than pc_ecount_max or if the minimum photon-counted pixel value is negative.
+            If False, the function gives a warning for these instead.
+            Defaults to True.
 
     Returns:
-        pc_dataset (corgidrp.data.Dataset): Contains mean expected photoelectron array (dark-subtracted)
+        corgidrp.data.Dataset or corgidrp.data.Dark: If If the input dataset's header key 'VISTYPE' is not equal to 'DARK', 
+            corgidrp.data.Dataset is the output type, and the output is the processed illuminated set, whether 
+            dark subtraction happened or not.  Contains mean expected array (detected electrons if not dark-subtracted, 
+            photoelectrons if dark-subtracted). 
+            If the input dataset's header key 'VISTYPE' is equal to 'DARK', corgidrp.data.Dark is the output type, and the output
+            is the processed dark set.  Contains mean expected array (detected electrons).
 
     References
     ----------
@@ -110,111 +130,164 @@ def get_pc_mean(input_dataset, detector_params, niter=2):
     Kevin Ludwick - UAH - 2023
 
     """
+    if not isinstance(niter, (int, np.integer)) or niter < 1:
+            raise PhotonCountException('niter must be an integer greater than '
+                                        '0')
     test_dataset, _ = input_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN', 'RN'])
     if len(test_dataset) > 1:
         raise PhotonCountException('All frames must have the same exposure time, '
                                    'commanded EM gain, and k gain.')
-    datasets, vals = test_dataset[0].split_dataset(prihdr_keywords=['VISTYPE'])
-    if len(vals) != 2:
-        raise PhotonCountException('There should only be 2 datasets, and one should have \'VISTYPE\' = \'DARK\'.')
-    dark_dataset = datasets[vals.index('DARK')]
-    ill_dataset = datasets[1-vals.index('DARK')]
+    datasets, val = test_dataset[0].split_dataset(prihdr_keywords=['VISTYPE'])
+    if len(val) != 1:
+        raise PhotonCountException('There should only be 1 \'VISTYPE\' value for the dataset.')
+    if val[0] == 'DARK':
+        if pc_master_dark is not None:
+            raise PhotonCountException('The input frames are \'VISTYPE\'=\'DARK\' frames, so no pc_master_dark should be provided.')
+
+    dataset = datasets[0]
     
     pc_means = []
     errs = []
     dqs = []
-    for dataset in [ill_dataset, dark_dataset]:
-        # getting number of read noise standard deviations at which to set the
-        # photon-counting threshold
+    # getting number of read noise standard deviations at which to set the
+    # photon-counting threshold
+    if T_factor is None:
+        detector_params = data.DetectorParams({})
         T_factor = detector_params.params['T_factor']
-        # now get threshold to use for photon-counting
-        read_noise = dataset.frames[0].ext_hdr['RN']
-        thresh = T_factor*read_noise
-        if thresh < 0:
-            raise PhotonCountException('thresh must be nonnegative')
-        if not isinstance(niter, (int, np.integer)) or niter < 1:
-            raise PhotonCountException('niter must be an integer greater than '
-                                        '0')
-        try: # if EM gain measured directly from frame TODO change hdr name if necessary
-            em_gain = dataset.frames[0].ext_hdr['EMGAIN_M']
-        except:
-            try: # use applied EM gain if available
-                em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']
-            except: # use commanded gain otherwise
-                em_gain = dataset.frames[0].ext_hdr['CMDGAIN']
-        if thresh >= em_gain:
+    # getting maximum allowed electrons/pixel/frame for photon counting
+    if pc_ecount_max is None:
+        detector_params = data.DetectorParams({})
+        pc_ecount_max = detector_params.params['pc_ecount_max']
+    if mask_filepath is None:
+        mask = np.zeros_like(dataset.frames[0].data)
+    else:
+        mask = fits.getdata(mask_filepath)
+    
+    considered_indices = (mask==0)
+
+    # now get threshold to use for photon-counting
+    read_noise = test_dataset[0].frames[0].ext_hdr['RN']
+    thresh = T_factor*read_noise
+    if thresh < 0:
+        raise PhotonCountException('thresh must be nonnegative')
+    
+    if 'EMGAIN_M' in dataset.frames[0].ext_hdr: # if EM gain measured directly from frame TODO change hdr name if necessary
+        em_gain = dataset.frames[0].ext_hdr['EMGAIN_M']
+    elif 'EMGAIN_A' in dataset.frames[0].ext_hdr: # use applied EM gain if available
+        em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']
+    elif 'CMDGAIN' in dataset.frames[0].ext_hdr: # use commanded gain otherwise
+        em_gain = dataset.frames[0].ext_hdr['CMDGAIN']
+
+    if thresh >= em_gain:
+        if safemode:
+            raise Exception('thresh should be less than em_gain for effective '
+            'photon counting')
+        else:
             warnings.warn('thresh should be less than em_gain for effective '
             'photon counting')
-        if np.average(dataset.all_data) > 0.1:
-            warnings.warn('average # of photons/pixel is > 0.1.  Decrease frame '
+    if np.nanmean(dataset.all_data[:, considered_indices]/em_gain) > pc_ecount_max:
+        if safemode:
+            raise Exception('average # of electrons/pixel is > pc_ecount_max, which means '
+            'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
             'time to get lower average # of photons/pixel.')
-        if read_noise <=0:
-            warnings.warn('read noise should be greater than 0 for effective '
-            'photon counting')
-        if thresh < 4*read_noise:
-            warnings.warn('thresh should be at least 4 or 5 times read_noise for '
-            'accurate photon counting')
+        else:
+            warnings.warn('average # of electrons/pixel is > pc_ecount_max, which means '
+            'the average # of photons/pixel may be > pc_ecount_max (depending on the QE).  Can decrease frame '
+            'time to get lower average # of photons/pixel.')
+    if read_noise <=0:
+        raise Exception('read noise should be greater than 0 for effective '
+        'photon counting')
+    if thresh < 4*read_noise: # leave as just a warning
+        warnings.warn('thresh should be at least 4 or 5 times read_noise for '
+        'accurate photon counting')
 
-        # Photon count stack of frames
-        frames_pc = photon_count(dataset.all_data, thresh)
-        bool_map = dataset.all_dq.astype(bool).astype(float)
-        bool_map[bool_map > 0] = np.nan
-        bool_map[bool_map == 0] = 1
-        nframes = np.nansum(bool_map, axis=0)
-        # upper and lower bounds for PC (for getting accurate err)
-        frames_pc_up = photon_count(dataset.all_data+dataset.all_err[:,0], thresh)
-        frames_pc_low = photon_count(dataset.all_data-dataset.all_err[:,0], thresh)
-        frames_pc_masked = frames_pc * bool_map
-        frames_pc_masked_up = frames_pc_up * bool_map
-        frames_pc_masked_low = frames_pc_low * bool_map
-        # Co-add frames
-        frame_pc_coadded = np.nansum(frames_pc_masked, axis=0)
-        frame_pc_coadded_up = np.nansum(frames_pc_masked_up, axis=0)
-        frame_pc_coadded_low = np.nansum(frames_pc_masked_low, axis=0)
-        
-        # Correct for thresholding and coincidence loss; any pixel masked all the 
-        # way through the stack may give NaN, but it should be masked in lam_newton_fit(); 
-        # and it doesn't matter anyways since its DQ value will be 1 (it will be masked when the 
-        # bad pixel correction is run, which comes after this photon-counting step)
-        mean_expected = corr_photon_count(frame_pc_coadded, nframes, thresh,
-                                            em_gain, niter)
-        mean_expected_up = corr_photon_count(frame_pc_coadded_up, nframes, thresh,
-                                            em_gain, niter)
-        mean_expected_low = corr_photon_count(frame_pc_coadded_low, nframes, thresh,
-                                            em_gain, niter)
-        ##### error calculation: accounts for err coming from input dataset and 
-        # statistical error from the photon-counting and photometric correction process. 
-        # expected error from photon counting (biggest source from the actual values, not 
-        # mean_expected_up or mean_expected_low):
-        pc_variance = varL23(em_gain,mean_expected,thresh,nframes)
-        up = mean_expected_up +  pc_variance
-        low = mean_expected_low -  pc_variance
-        errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
-        dq = (nframes == 0).astype(int) 
-        pc_means.append(mean_expected)
-        dqs.append(dq)
+    # Photon count stack of frames
+    frames_pc = photon_count(dataset.all_data, thresh)
+    bool_map = dataset.all_dq.astype(bool).astype(float)
+    bool_map[bool_map > 0] = np.nan
+    bool_map[bool_map == 0] = 1
+    nframes = np.nansum(bool_map, axis=0)
+    # upper and lower bounds for PC (for getting accurate err)
+    frames_pc_up = photon_count(dataset.all_data+dataset.all_err[:,0], thresh)
+    frames_pc_low = photon_count(dataset.all_data-dataset.all_err[:,0], thresh)
+    frames_pc_masked = frames_pc * bool_map
+    frames_pc_masked_up = frames_pc_up * bool_map
+    frames_pc_masked_low = frames_pc_low * bool_map
+    # Co-add frames
+    frame_pc_coadded = np.nansum(frames_pc_masked, axis=0)
+    frame_pc_coadded_up = np.nansum(frames_pc_masked_up, axis=0)
+    frame_pc_coadded_low = np.nansum(frames_pc_masked_low, axis=0)
     
+    # Correct for thresholding and coincidence loss; any pixel masked all the 
+    # way through the stack may give NaN, but it should be masked in lam_newton_fit(); 
+    # and it doesn't matter anyways since its DQ value will be 1 (it will be masked when the 
+    # bad pixel correction is run, which comes after this photon-counting step)
+    mean_expected = corr_photon_count(frame_pc_coadded, nframes, thresh,
+                                        em_gain, considered_indices, niter)
+    mean_expected_up = corr_photon_count(frame_pc_coadded_up, nframes, thresh,
+                                        em_gain, considered_indices, niter)
+    mean_expected_low = corr_photon_count(frame_pc_coadded_low, nframes, thresh,
+                                        em_gain, considered_indices, niter)
+    ##### error calculation: accounts for err coming from input dataset and 
+    # statistical error from the photon-counting and photometric correction process. 
+    # expected error from photon counting (biggest source from the actual values, not 
+    # mean_expected_up or mean_expected_low):
+    pc_variance = varL23(em_gain,mean_expected,thresh,nframes)
+    up = mean_expected_up +  pc_variance
+    low = mean_expected_low -  pc_variance
+    errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
+    dq = (nframes == 0).astype(int) 
+    pc_means.append(mean_expected)
+    dqs.append(dq)
+    
+    if pc_master_dark is not None:
+        if type(pc_master_dark) is not data.Dark:
+            raise Exception('Input type for pc_master_dark must be corgidrp.data.Dark.')
+        if 'PC_STAT' not in pc_master_dark.ext_hdr:
+            raise PhotonCountException('\'PC_STAT\' must be a key in the extension header of pc_master_dark.')
+        if pc_master_dark.ext_hdr['PC_STAT'] != 'photon-counted master dark':
+            raise PhotonCountException('pc_master_dark must be a photon-counted master dark (i.e., '
+                                       'the extension header key \'PC_STAT\' must be \'photon-counted master dark\').')
+        pc_means.append(pc_master_dark.data)
+        dqs.append(pc_master_dark.dq)
+        errs.append(pc_master_dark.err)
+        dark_sub = "yes"
+        filename_end = ''
+    else:
+        pc_means.append(np.zeros_like(pc_means[0]))
+        dqs.append(np.zeros_like(pc_means[0]).astype(int))
+        errs.append(np.zeros_like(pc_means[0]))
+        dark_sub = "no"
+        filename_end = '_no_ds'
+
     # now subtract the dark PC mean
     combined_pc_mean = pc_means[0] - pc_means[1]
     combined_pc_mean[combined_pc_mean<0] = 0
     combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
     combined_dq = np.bitwise_or(dqs[0], dqs[1])
-    pri_hdr = ill_dataset[0].pri_hdr.copy()
-    ext_hdr = ill_dataset[0].ext_hdr.copy()
-    err_hdr = ill_dataset[0].err_hdr.copy()
-    dq_hdr = ill_dataset[0].dq_hdr.copy()
-    hdulist = ill_dataset[0].hdu_list.copy()
-    new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
+    pri_hdr = dataset[0].pri_hdr.copy()
+    ext_hdr = dataset[0].ext_hdr.copy()
+    err_hdr = dataset[0].err_hdr.copy()
+    dq_hdr = dataset[0].dq_hdr.copy()
+    hdulist = dataset[0].hdu_list.copy()
+
+    if val[0] != "DARK":  
+        new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                             dq_hdr=dq_hdr, input_hdulist=hdulist) 
+        new_image.filename = dataset[0].filename.split('.')[0]+'_pc'+filename_end+'.fits'
+        new_image._record_parent_filenames(input_dataset) 
+        pc_ill_dataset = data.Dataset([new_image])
+        pc_ill_dataset.update_after_processing_step("Photon-counted {0} frames using T_factor={1} and niter={2}. Dark-subtracted: {3}.".format(len(input_dataset), T_factor, niter, dark_sub))
+        return pc_ill_dataset
+    else:
+        ext_hdr['PC_STAT'] = 'photon-counted master dark'
+        ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
+        ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
+        pc_dark = data.Dark(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, input_dataset=input_dataset)
+        return pc_dark
 
-    new_image.filename = ill_dataset[0].filename.split('.')[0]+'_pc.fits'
-    new_image._record_parent_filenames(input_dataset)   
-    pc_dataset = data.Dataset([new_image])
-    pc_dataset.update_after_processing_step("Photon-counted {0} frames using T_factor={1} and niter={2}".format(len(input_dataset), T_factor, niter))
 
-    return pc_dataset
-
-def corr_photon_count(nobs, nfr, t, g, niter=2):
+def corr_photon_count(nobs, nfr, t, g, mask_indices, niter=2):
     """Correct photon counted images.
 
     Args:
@@ -222,6 +295,7 @@ def corr_photon_count(nobs, nfr, t, g, niter=2):
         nfr (int): Number of coadded frames, accounting for masked pixels in the frames.
         t (float): Photon-counting threshold.
         g (float): EM gain.
+        mask_indices (array-like): indices of pixel positions to use.
         niter (int, optional): Number of Newton's method iterations. Defaults to 2.
 
     Returns:
@@ -232,7 +306,7 @@ def corr_photon_count(nobs, nfr, t, g, niter=2):
     lam0 = calc_lam_approx(nobs, nfr, t, g)
 
     # Use Newton's method to converge at a value for lambda
-    lam = lam_newton_fit(nobs, nfr, t, g, lam0, niter)
+    lam = lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices)
 
     return lam
 
@@ -271,7 +345,7 @@ def calc_lam_approx(nobs, nfr, t, g):
     return lam1
 
 
-def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
+def lam_newton_fit(nobs, nfr, t, g, lam0, niter, mask_indices):
     """Newton fit for finding lambda.
 
     Args:
@@ -281,6 +355,7 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
         g (float): EM gain used when taking images.
         lam0 (array_like): Initial guess for lambda.
         niter (int): Number of Newton's fit iterations to take.
+        mask_indices (array-like): indices of pixel positions to use.
 
     Returns:
         lam (array_like): Mean expected (lambda).
@@ -296,7 +371,7 @@ def lam_newton_fit(nobs, nfr, t, g, lam0, niter):
         dfunc = _calc_dfunc(nfr, t, g, lam_est_m)
         lam_est_m -= func / dfunc
 
-    if np.nanmin(lam_est_m.data) < 0:
+    if np.nanmin(lam_est_m.data[mask_indices]) < 0:
         raise PhotonCountException('negative number of photon counts; '
         'try decreasing the frametime')
 

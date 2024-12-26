@@ -1,7 +1,9 @@
 import pytest
+import numpy as np
 import corgidrp.mocks as mocks
 from corgidrp.l2a_to_l2b import frame_select
 
+np.random.seed(123)
 
 def test_no_selection():
     """

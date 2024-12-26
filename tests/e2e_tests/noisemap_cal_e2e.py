@@ -425,5 +425,5 @@ if __name__ == "__main__":
     args = ap.parse_args(args_here)
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
-    test_noisemap_calibration_from_l1(tvacdata_dir, outputdir)
+    #test_noisemap_calibration_from_l1(tvacdata_dir, outputdir)
     test_noisemap_calibration_from_l2a(tvacdata_dir, outputdir)

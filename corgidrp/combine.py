@@ -43,7 +43,7 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
     
     # dq collpase: keep all flags on
     dq_collapse = np.bitwise_or.reduce(dq_subset, axis=0)
-    # except those pixels that have been replaced 
+    # except those pixels that have not been replaced 
     dq_collapse[np.where((dq_collapse > 0) & (~np.isnan(data_collapse)))] = 0
 
     return data_collapse, err_collapse, dq_collapse
@@ -72,7 +72,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         num_frames_per_group = len(input_dataset)
 
     if len(input_dataset) % num_frames_per_group != 0:
-        raise ValueError("Input dataset of lenght {0} cannot be grouped in sets of {1}".format(len(input_dataset, num_frames_per_group)))
+        raise ValueError("Input dataset of lenght {0} cannot be grouped in sets of {1}".format(len(input_dataset), num_frames_per_group))
     
     if collapse.lower() not in ["mean", "median"]:
         raise ValueError("combine_subexposures can only collapse with mean or median")

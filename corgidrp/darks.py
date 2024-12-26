@@ -1,6 +1,7 @@
 import numpy as np
 import warnings
 from astropy.io import fits
+import os
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, detector_areas
 import corgidrp.check as check
@@ -577,7 +578,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # input data error comes from .err arrays; could use this for error bars
     # in input data for weighted least squares, but we'll just simply get the
     # std error and add it in quadrature to least squares fit standard dev
-    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0)/len(mean_err_stack))
+    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0)/np.sqrt(len(mean_err_stack)))
 
     # matrix to be used for least squares and covariance matrix
     X = np.array([np.ones([len(EMgain_arr)]), EMgain_arr, EMgain_arr*exptime_arr]).T
@@ -865,5 +866,5 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
 
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
-
+        
         return master_dark
