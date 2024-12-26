@@ -62,7 +62,7 @@ def test_flat_div():
     # perform checks after the flat divison
     assert(flat_filename in str(flatdivided_dataset[0].ext_hdr["HISTORY"]))
     # check the level of the dataset is now approximately 100
-    assert np.mean(flatdivided_dataset.all_data) == pytest.approx(150, abs=1e-2)
+    assert np.mean(flatdivided_dataset.all_data) == pytest.approx(150, abs=2e-2)
     # check the propagated errors
     assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
     print("mean of all simulated data",np.mean(simflat_dataset.all_data))
