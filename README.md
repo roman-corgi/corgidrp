@@ -209,6 +209,12 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
+**v1.1.2**
+ * Flat field correction marks pixels divided by 0 as bad
+
+**v1.1.1**
+ * Fix unit test that wasn't cleaning up environment properly
+
 **v1.1**
  * Bug fix so that corgidrp classes can be pickled
  * New corgidrp.ops interface
