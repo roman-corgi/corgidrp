@@ -126,54 +126,53 @@ def calibrate_nonlin(dataset_nl,
                      make_plot=True, plot_outdir='figures', show_plot=False,
                      verbose=False):
     """
-    Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
-    frames ranging over exposure time, each sub-stack having at least 1 illuminated 
-    pupil SCI-sized L1 frame for each exposure time, this function processes the 
-    frames to create a nonlinearity table. A mean pupil array is created from a 
-    separate stack of frames of constant exposure time and used to make a mask; 
-    the mask is used to select pixels in each frame in the large array of stacks 
-    in order to calculate its mean signal.
+    Function that derives the non-linearity calibration table for a set of DN
+    and EM values.
 
-    The frames are bias-subtracted.
-
-    Two sub-stacks/groups of frames at each EM gain value contain noncontiguous 
-    frames with the same (repeated) exposure time, taken near the start and end 
-    of the frame sequence. Their mean signals are computed and used to correct for 
-    illumination brightness/sensor sensitivity drifts for all the frames for a 
-    given EM gain, depending on when the frames were taken. The repeated exposure 
-    time frames should only be repeated once (as opposed to 3 times, etc) and 
-    other sets of exposure times for each EM gain should not be repeated.
-    Note, it is assumed that the frames for the large array of stacks are 
-    collected in a systematic way, such that frames having the same exposure 
-    time for a given EM gain are collected contiguously (with the exception of 
-    the repeated group of frames noted above). The frames within each EM gain 
-    group must also be time ordered. For best results, the mean signal in the 
-    pupil region for the longest exposure time at each EM gain setting should 
-    be between 8000 and 10000 DN.
-    A linear fit is applied to the corrected mean signals versus exposure time. 
-    Relative gain values are calculated from the ratio of the mean signals 
-    to the linear fit. Nonlinearity is then calculated from the inverse of
-    the relative gain and output as an array. The nonlinearity values, along with 
-    the actual EM gain for each column and mean counts in DN for each row, are 
-    returned as two arrays. One array contains the column headers with 
-    actual/measured EM gain, and the other array contains the means in DN and the 
-    nonlinearity values. The mean values start with min_write and run through 
-    max_write.
-    
     Args:
-      dataset_nl (corgidrp.Dataset): dataset, which is implicitly 
-        subdivided into smaller ranges of grouped frames. The frames are EXCAM 
-        illuminated pupil L1 SCI frames. There must be one or more unique EM 
-        gain values and at least 20 unique exposure times for each EM gain. The 
-        number of frames for each EM gain can vary. The size of dataset_cal is: 
-        Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having 
-        EM gain value g, and the sum is over g. Each substack of dataset_cal must
-        have a group of frames with a repeated exposure time. In addition, there's
-        a set of at least 30 frames used to generate a mean frame. These frames
-        have the same exp time, such that the mean signal in the pupil regions
-        is a few thousand DN, which helps identify the pixels containing the 
-        pupil image. They also have unity EM gain. These frames are
-        identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
+      dataset_nl (corgidrp.Dataset): The frames in the dataset are
+        bias-subtracted. The dataset contains frames belonging to two different
+        sets -- Mean frame, a large array of unity gain frames, and set with
+        non-unity gain frames.
+        Mean frame -- Unity gain frames with constant exposure time. These frames
+        are used to create a mean pupil image. The mean frame is used to select
+        pixels in each frame of the large array of unity gain frames (see next)
+        to calculate its mean signal. In general, it is expected that at least
+        30 frames or more will be taken for this set. In TVAC, 30 frames, each
+        with an exposure time of 5.0 sec were taken.
+        Large array of unity gain frames: Set of unity gain frames with subsets
+        of equal exposure times. Data for each subset should be taken sequentially:
+        Each subset must have at least 5 frames. All frames for a subset are taken
+        before moving to the next subset. Two of the subsets have the same (repeated)
+        exposure time. These two subsets are not contiguous: The first subset is
+        taken near the start of the data collection and the second one is taken
+        at the end of the data collection (see TVAC example below). The mean
+        signal of these two subsets is used to correct for illumination
+        brightness/sensor sensitivity drifts for all the frames in the whole set,
+        depending on when the frames were taken. There should be no other repeated
+        exposure time among the subsets. In TVAC, a total of 110 frames were taken
+        within this category. The 110 frames consisted of 22 subsets, each with
+        5 frames. All 5 frames had the same exposure time. The exposure times in
+        TVAC in seconds were, each repeated 5 times to collect 5 frames in each
+        subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
+        6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
+        13.846, 14.615, 15.385, and 1.538 (again).
+        Set with non-unity gain frames:: a set of subsets of frames. All frames
+        in each subset have a unique, non-unity EM gain. For instance, in TVAC,
+        11 subsets were considered with EM values (CMDGAIN): 1.65, 5.24, 8.60,
+        16.70, 27.50, 45.26, 87.50, 144.10, 237.26, 458.70 and 584.40. These
+        correspond to a range of actual EM gains from about 2 to 7000. Each subset
+        collects the same number of frames, which is at least 20 frames. In TVAC,
+        each non-unity EM value had 22 frames. In each subset, there are two
+        repeated exposure times: one near the start of the data collection and
+        one at the very end. The exposure times of the frames in each EM subset
+        do not need to be the same. For EM=1.65, the values of the exposure times
+        in seconds were: 0.076, 0.758, 1.515, 2.273, 3.031, 3.789, 4.546, 5.304,
+        6.062, 6.820, 7.577, 8.335, 9.093, 9.851, 10.608, 11.366, 12.124, 12.881,
+        13.639, 14.397, 15.155, and 1.515 (repeated). And for EM=5.24, the 22
+        values of the exposure times in seconds were: 0.070, 0.704, 1.408, 2.112,
+        2.816, 3.520, 4.225, 4.929, 5.633, 6.337, 7.041, 7.745, 8.449, 9.153,
+        9.857, 10.561, 11.265, 11.969, 12.674, 13.378, 14.082, and 1.408 (repeated).
       n_cal (int):
         Minimum number of sub-stacks used to calibrate Non-Linearity. The default
         value is 20.
@@ -246,15 +245,15 @@ def calibrate_nonlin(dataset_nl,
         raise TypeError('cal_arr must be an ndarray.')
     if np.ndim(cal_arr) != 3:
         raise CalNonlinException('cal_arr must be 3-D')
-    # mean_frame_arr must have at least 30 frames
-    if len(cal_arr) < n_cal:
-        raise Exception(f'mean_frame_arr must have at least {n_cal} frames')
-    if np.sum(len_list) != len(cal_arr):
-        raise CalNonlinException('Number of sub-stacks in cal_arr must '
-                'equal the sum of the elements in len_list')
     if len(len_list) < 1:
         raise CalNonlinException('Number of elements in len_list must '
                 'be greater than or equal to 1.')
+    if np.sum(len_list) != len(cal_arr):
+        raise CalNonlinException('Number of sub-stacks in cal_arr must '
+                'equal the sum of the elements in len_list')
+    # cal_arr must have at least 20 frames for each EM gain
+    if np.any(np.array(len_list) < n_cal):
+        raise Exception(f'cal_arr must have at least {n_cal} frames for each EM value')
     if len(np.unique(datetime_arr)) != len(datetime_arr):
         raise CalNonlinException('All elements of datetime_arr must be unique.')
     for g_index in range(len(len_list)):
@@ -274,6 +273,7 @@ def calibrate_nonlin(dataset_nl,
     if np.ndim(mean_frame_arr) != 3:
         raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
+    # mean_frame_arr must have at least 30 frames
     if len(mean_frame_arr) < n_mean:
         raise CalNonlinException(f'Number of frames in mean_frame_arr must '
                 'be at least {n_mean}.')
