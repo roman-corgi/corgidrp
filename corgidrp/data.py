@@ -7,7 +7,7 @@ import pandas as pd
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
 from astropy import wcs
-
+import copy
 import corgidrp
 
 class Dataset():
@@ -493,25 +493,12 @@ class Image():
             corgidrp.data.Image: a copy of this Image
         """
         if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-            new_hdulist = self.hdu_list.copy()
+            new_img = copy.deepcopy(self)
         else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-            new_hdulist = self.hdu_list
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, 
-                        input_hdulist = new_hdulist, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_img.filename = self.filename
-        new_img.filedir = self.filedir
-
+            new_img = copy.copy(self)
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+        new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+        new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img
 
@@ -661,37 +648,6 @@ class Dark(Image):
         if self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this Dark file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.NoiseMap): a copy of this Dark
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_dark = Dark(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_dark.filename = self.filename
-        new_dark.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_dark
 
 class FlatField(Image):
     """
@@ -912,40 +868,6 @@ class KGain(Image):
     @property
     def error(self):
         return self._kgain_error
-    
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this KGain file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.KGain: a copy of this KGain
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_ptc = np.copy(self.ptc)
-            new_err = np.copy(self.err)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_ptc = self.ptc
-            new_err = np.copy(self.err)
-        
-        new_kg = KGain(new_data, err = new_err, ptc = new_ptc, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err_hdr = self.err_hdr.copy(), ptc_hdr = self.ptc_hdr.copy())
-        
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_kg.filename = self.filename
-        new_kg.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-        
-        return new_kg
-
 
     def save(self, filedir=None, filename=None):
         """
@@ -1020,33 +942,6 @@ class BadPixelMap(Image):
         if self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
 
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this BadPixelMap file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.BadPixelMap: a copy of this BadPixelMap
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-        else:
-            new_data = self.data # this is just pointer referencing
-        new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-
-        # we got to manually update some parameters. Need to keep track of which ones to update
-        new_bp.filename = self.filename
-        new_bp.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_bp
 
 class DetectorNoiseMaps(Image):
     """
@@ -1126,39 +1021,6 @@ class DetectorNoiseMaps(Image):
         self.FPN_err = self.err[0][0]
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
-
-
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this DetectorNoiseMaps file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.DetectorNoiseMaps): a copy of this DetectorNoiseMaps
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_nm = DetectorNoiseMaps(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_nm.filename = self.filename
-        new_nm.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_nm
 
 class DetectorParams(Image):
     """
