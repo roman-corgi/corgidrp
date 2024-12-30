@@ -6,6 +6,8 @@ from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import numpy as np
 import glob
+import pyklip.rdi
+import os
 
 def distortion_correction(input_dataset, distortion_calibration):
     """
@@ -36,19 +38,59 @@ def find_star(input_dataset):
 
     return input_dataset.copy()
 
-def do_psf_subtraction(input_dataset, reference_star_dataset=None):
+def do_psf_subtraction(input_dataset, reference_star_dataset=None,
+                       mode=None, annuli=1,subsections=1,movement=1,
+                       numbasis = [1,4,8,16],outdir='KLIP_SUB',fileprefix=""
+                       ):
     """
     
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
-
+    TODO: Handle nans & propagate DQ array
+        Crop data to darkhole size ~(60x60) centered on nearest pixel
+        format output dataset as corgiDRP dataset
+        overwrite header kws related to psf/star centers
+        overwite KLIP mode headers 
+            which header kws are still relevant? 
+            which are new?
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
         reference_star_dataset (corgidrp.data.Dataset): a dataset of Images of the reference star [optional]
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied
+
     """
 
+    sci_dataset = input_dataset.copy()
+
+    assert len(sci_dataset) > 0, "Science dataset has no data."
+
+    pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=reference_star_dataset)
+
+    # Choose PSF subtraction mode if unspecified
+    if mode is None:
+        
+        if not reference_star_dataset is None and len(sci_dataset)==1:
+            mode = 'RDI' 
+        elif not reference_star_dataset is None:
+            mode = 'ADI+RDI'
+        else:
+            mode = 'ADI' 
+
+    else: assert mode in ['RDI','ADI+RDI','ADI'], f"Mode {mode} is not configured."
+
+    outdir = os.path.join(outdir,mode)
+
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
+    pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
+                              annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
+                              calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
+                              fileprefix=fileprefix)
+    
+
+    
     return input_dataset.copy()
 
 def northup(input_dataset,correct_wcs=False):
