@@ -1865,7 +1865,8 @@ CDELT2  =                  1.0 / Coordinate increment at reference point
 CRVAL1  =                  0.0 / Coordinate value at reference point            
 CRVAL2  =                  0.0 / Coordinate value at reference point            
 LATPOLE =                 90.0 / [deg] Native latitude of celestial pole        
-MJDREF  =                  0.0 / [d] MJD of fiducial time                       END"""
+MJDREF  =                  0.0 / [d] MJD of fiducial time
+"""
 
 def gaussian_array(array_size=50,sigma=5.,amp=1.):
     """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
@@ -1921,8 +1922,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
     if roll_angles is None:
         roll_angles = [0.] * (n_sci+n_ref)
 
-    mask_center = np.array(data_shape)/2
-    star_pos = mask_center
+    # mask_center = np.array(data_shape)/2
+    # star_pos = mask_center
     pixscale = 0.0218 # arcsec
 
     # Build each science/reference frame
@@ -1946,19 +1947,21 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         # Otherwise generate a 2D gaussian for a fake PSF
         else:
             fname = None
-            darkhole = gaussian_array()
-
-        # Darkhole image shape must be even
-        assert(np.all(np.array(darkhole.shape) % 2 == 0))
+            darkhole = gaussian_array(array_size=55)
 
         fill_value = np.nanmin(darkhole)
         img_data = np.full(data_shape,fill_value)
 
         # Overwrite center of array with the darkhole data
-        y_start,x_start = np.array(mask_center) - (np.array(darkhole.shape) / 2)
-        y_end,x_end = y_start+darkhole.shape[0], x_start+darkhole.shape[1]
+        cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
+        
+        full_arr_center = np.array(img_data.shape) // 2 
+        
+        start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
 
-        img_data[y_start:y_end,x_start:x_end] = darkhole
+        img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
+
+        psfcenty, psfcentx = cr_psf_pix + start_psf_ind
 
         # Add necessary header keys
         prihdr['TELESCOP'] = 'ROMAN'
@@ -1969,16 +1972,17 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr["MODE"] = 'HLC'
         prihdr["BAND"] = 1
 
-        exthdr['MASKLOCX'] = mask_center[1]
-        exthdr['MASKLOCY'] = mask_center[0]
-        exthdr['STARLOCX'] = star_pos[1]
-        exthdr['STARLOCY'] = star_pos[0]
+        exthdr['MASKLOCX'] = psfcentx
+        exthdr['MASKLOCY'] = psfcenty
+        exthdr['STARLOCX'] = psfcentx
+        exthdr['STARLOCY'] = psfcenty
         exthdr['PIXSCALE'] = pixscale
         exthdr["ROLL"] = roll_angles[i]
 
         # Add WCS header info, if provided
         if wcs_header is None:
             wcs_header = fits.header.Header.fromstring(default_wcs_string,sep='\n')
+            # wcs_header._cards = wcs_header._cards[-1]
         exthdr.extend(wcs_header)
 
         # Make a corgiDRP Image frame
