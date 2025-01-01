@@ -9,7 +9,8 @@ def make_test_dataset(shape=[100,100],centxy=None):
     Make 2D or 3D test data.
 
     Args:
-        shape (list, optional): _description_. Defaults to [100,100].
+        shape (arraylike, optional): data shape. Defaults to [100,100].
+        centxy (arraylike,optional): location of 4 pixel dot. Defaults to center of array.
     """
     shape = np.array(shape)
 
@@ -40,6 +41,8 @@ goal_rect_arr = np.zeros((10,20))
 goal_rect_arr[4:6,9:11] = 1
 
 def test_2d_square_center_crop():
+    """ Test cropping to the center of a square using the header keywords "STARLOCX/Y".
+    """
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
@@ -48,6 +51,8 @@ def test_2d_square_center_crop():
         raise Exception("Unexpected result for 2D square crop test.")
 
 def test_manual_center_crop():
+    """ Test overriding crop location using centerxy argument.
+    """
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[50.5,50.5])
@@ -59,6 +64,8 @@ def test_manual_center_crop():
         raise Exception("Unexpected result for manual crop test.")
 
 def test_2d_square_offcenter_crop():
+    """ Test cropping off-center square data.
+    """
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[24.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
@@ -67,15 +74,29 @@ def test_2d_square_offcenter_crop():
         raise Exception("Unexpected result for 2D square offcenter crop test.")
 
 def test_2d_rect_offcenter_crop():
-
+    """ Test cropping off-center non-square data.
+    """
     test_dataset = make_test_dataset(shape=[100,40],centxy=[24.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
 
     if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr):
         raise Exception("Unexpected result for 2D rect offcenter crop test.")
-    
-def test_edge_of_FOV():
 
+def test_3d_rect_offcenter_crop():
+    """ Test cropping 3D off-center non-square data.
+    """
+    test_dataset = make_test_dataset(shape=[3,100,40],centxy=[24.5,49.5])
+    cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
+
+    goal_rect_arr3d = np.array([goal_rect_arr,goal_rect_arr,goal_rect_arr])
+
+    if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr3d):
+        raise Exception("Unexpected result for 2D rect offcenter crop test.")
+
+
+def test_edge_of_FOV():
+    """ Test cropping right at the edge of the data array.
+    """
     test_dataset = make_test_dataset(shape=[100,100],centxy=[94.5,94.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
@@ -83,6 +104,8 @@ def test_edge_of_FOV():
         raise Exception("Unexpected result for edge of FOV crop test.")
 
 def test_outside_FOV():
+    """ Test cropping over the edge of the data array.
+    """
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[95.5,95.5])
 
@@ -90,6 +113,8 @@ def test_outside_FOV():
         _ = crop(test_dataset,sizexy=10,centerxy=None)
 
 def test_nonhalfinteger_centxy():
+    """ Test trying to center the crop not on a pixel intersection.
+    """
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[49.7,49.7])
 
@@ -97,6 +122,8 @@ def test_nonhalfinteger_centxy():
         raise Exception("Unexpected result for non half-integer crop test.")
 
 def test_header_updates():
+    """ Test that the header values are updated correctly.
+    """
     
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
     test_dataset[0].ext_hdr["MASKLOCX"] = 49.5
@@ -124,7 +151,12 @@ def test_header_updates():
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
         raise Exception("Frame header kw CRPIX2 not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["NAXIS1"] == 10:
+        raise Exception("Frame header kw NAXIS1 not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10:
+        raise Exception("Frame header kw NAXIS2 not updated correctly.")
     
+
 if __name__ == "__main__":
     test_2d_square_center_crop()
     test_2d_square_offcenter_crop()
