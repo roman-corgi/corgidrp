@@ -46,13 +46,14 @@ def crop(input_dataset,sizexy=60,centerxy=None):
     crops the last two indices.
 
     TODO: 
-        - Handle index errors if you try to crop outside the array
+        - Pad with nans if you try to crop outside the array (handle err & DQ too)
+        - Option to crop to an odd data array and center on a pixel?
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (any level)
-        size (int or array of int): desired frame size, if only one number is provided the 
-            desired shape is assumed to be square. Defaults to 60.
-        center (float or array of float): desired center, must be a pixel intersection (a.k.a 
+        sizexy (int or array of int): desired frame size, if only one number is provided the 
+            desired shape is assumed to be square, otherwise xy order. Defaults to 60.
+        centerxy (float or array of float): desired center (xy order), should be a pixel intersection (a.k.a 
             half-integer). Defaults to the "STARLOCX/Y" header values.
 
     Returns:
@@ -61,7 +62,10 @@ def crop(input_dataset,sizexy=60,centerxy=None):
 
     # Copy input dataset
     dataset = input_dataset.copy()
-    
+
+    # Require even data shape
+    if not np.all(np.array(sizexy)%2==0):
+        raise UserWarning('Even sizexy is required.')
     
     # Need to loop over frames and reinit dataset because array sizes change
     frames_out = []
