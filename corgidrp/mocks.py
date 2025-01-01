@@ -641,11 +641,26 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
         NAXIS2 = 2200
 
     # fill in prihdr
+    prihdr['AUXFILE'] = 'mock_auxfile.fits'
     prihdr['OBSID'] = 0
     prihdr['BUILD'] = 0
     # prihdr['OBSTYPE'] = arrtype
     prihdr['VISTYPE'] = vistype
     prihdr['MOCK'] = True
+    prihdr['INSTRUME'] = 'CGI'
+    prihdr['OBSNAME'] = 'MOCK'
+    prihdr['TARGET'] = 'MOCK'
+    prihdr['OBSNUM'] = '000'
+    prihdr['CAMPAIGN'] = '000'
+    prihdr['PROGNUM'] = '00000'
+    prihdr['SEGMENT'] = '000'
+    prihdr['VISNUM'] = '000'
+    prihdr['EXECNUM'] = '00'
+    prihdr['VISITID'] = prihdr['PROGNUM'] + prihdr['EXECNUM'] + prihdr['CAMPAIGN'] + prihdr['SEGMENT'] + prihdr['OBSNUM'] + prihdr['VISNUM']
+    prihdr['PSFREF'] = False
+    prihdr['SIMPLE'] = True
+    prihdr['NAXIS'] = 0
+        
 
     # fill in exthdr
     exthdr['NAXIS'] = 2
@@ -693,6 +708,7 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr['MISSING'] = False
 
     return prihdr, exthdr
+
 def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     """
     Create simulated bad pixel map data. Code value is 4.
@@ -1897,7 +1913,6 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                           outdir = None):
     """Generate a mock science and reference dataset ready for the PSF subtraction step.
     TODO: reference a central pixscale number, rather than hard code.
-    TODO: save default WCS header in a smarter way (dict?)
 
     Args:
         n_sci (int): number of science frames, must be >= 1.
@@ -1972,12 +1987,14 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr["MODE"] = 'HLC'
         prihdr["BAND"] = 1
 
+        exthdr['BUNIT'] = 'MJy/sr'
         exthdr['MASKLOCX'] = psfcentx
         exthdr['MASKLOCY'] = psfcenty
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PIXSCALE'] = pixscale
         exthdr["ROLL"] = roll_angles[i]
+        exthdr["HIERARCH DATA_LEVEL"] = 'L3'
 
         # Add WCS header info, if provided
         if wcs_header is None:
