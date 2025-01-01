@@ -4,6 +4,7 @@ from pyklip.klip import rotate
 from corgidrp import data
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
+import warnings
 import numpy as np
 import glob
 
@@ -35,6 +36,105 @@ def find_star(input_dataset):
     """
 
     return input_dataset.copy()
+
+def crop(input_dataset,sizexy=60,centerxy=None):
+    """
+    
+    Crop the Images in a Dataset to a desired field of view. Default behavior is to 
+    crop the image to the dark hole region, centered on the pixel intersection nearest 
+    to the star location. Assumes 3D Image data is a stack of 2D data arrays, so only 
+    crops the last two indices.
+
+    TODO: 
+        - Handle index errors if you try to crop outside the array
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (any level)
+        size (int or array of int): desired frame size, if only one number is provided the 
+            desired shape is assumed to be square. Defaults to 60.
+        center (float or array of float): desired center, must be a pixel intersection (a.k.a 
+            half-integer). Defaults to the "STARLOCX/Y" header values.
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset cropped to the desired FOV.
+    """
+
+    # Copy input dataset
+    dataset = input_dataset.copy()
+    
+    
+    # Need to loop over frames and reinit dataset because array sizes change
+    frames_out = []
+
+    for frame in dataset:
+        
+        # Assign new array sizes and center location
+        frame_shape = frame.data.shape
+        prihdr = frame.pri_hdr
+        exthdr = frame.ext_hdr
+        if isinstance(sizexy,int):
+            sizexy = [sizexy]*2
+        if isinstance(centerxy,float):
+            centerxy = [centerxy] * 2
+        elif centerxy is None:
+            if ("STARLOCX" in exthdr.keys()) and ("STARLOCY" in exthdr.keys()):
+                centerxy = np.array([exthdr["STARLOCX"],exthdr["STARLOCY"]])
+            else: raise ValueError('centerxy not provided but STARLOCX/Y are missing from image extension header.')
+        # Round to centerxy to nearest half-pixel
+        centerxy = np.array(centerxy)
+        if not np.all((centerxy-0.5)%1 == 0):
+            old_centerxy = centerxy.copy()
+            centerxy = np.round(old_centerxy-0.5)+0.5
+            warnings.warn(f'Desired center {old_centerxy} is not at the intersection of 4 pixels. Centering on the nearest intersection {centerxy}')
+            
+        # Crop the data
+        start_ind = (centerxy + 0.5 - np.array(sizexy)/2).astype(int)
+        end_ind = (centerxy + 0.5 + np.array(sizexy)/2).astype(int)
+        x1,y1 = start_ind
+        x2,y2 = end_ind
+
+        # Check if cropping outside the FOV
+        xleft_pad = -x1 if (x1<0) else 0
+        xrright_pad = x2-frame_shape[-1]+1 if (x2 > frame_shape[-1]) else 0
+        ybelow_pad = -y1 if (y1<0) else 0
+        yabove_pad = y2-frame_shape[-2]+1 if (y2 > frame_shape[-2]) else 0
+        
+        if np.any(np.array([xleft_pad,xrright_pad,ybelow_pad,yabove_pad])> 0) :
+            raise ValueError("Trying to crop to a region outside the input data array. Not yet configured.")
+
+        if frame.data.ndim == 2:
+            cropped_frame_data = frame.data[y1:y2,x1:x2]
+            cropped_frame_err = frame.err[:,y1:y2,x1:x2]
+            cropped_frame_dq = frame.dq[y1:y2,x1:x2]
+        elif frame.data.ndim == 3:
+            cropped_frame_data = frame.data[:,y1:y2,x1:x2]
+            cropped_frame_err = frame.err[:,:,y1:y2,x1:x2]
+            cropped_frame_dq = frame.dq[:,y1:y2,x1:x2]
+        else:
+            raise ValueError('Crop function only supports 2D or 3D frame data.')
+
+        # Update header
+        exthdr["NAXIS1"] = sizexy[0]
+        exthdr["NAXIS2"] = sizexy[1]
+        if ("STARLOCX" in exthdr.keys()):
+            exthdr["STARLOCX"] -= x1
+            exthdr["STARLOCY"] -= y1
+        if ("MASKLOCX" in exthdr.keys()):
+            exthdr["MASKLOCX"] -= x1
+            exthdr["MASKLOCY"] -= y1
+        if ("CRPIX1" in prihdr.keys()):
+            prihdr["CRPIX1"] -= x1
+            prihdr["CRPIX2"] -= y1
+        if ("PSFCENTX" in prihdr.keys()):
+            prihdr["PSFCENTX"] -= x1
+            prihdr["PSFCENTY"] -= y1
+
+        new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
+        frames_out.append(new_frame)
+
+    output_dataset = data.Dataset(frames_out)
+    
+    return output_dataset
 
 def do_psf_subtraction(input_dataset, reference_star_dataset=None):
     """
