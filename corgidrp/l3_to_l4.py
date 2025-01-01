@@ -8,6 +8,7 @@ import numpy as np
 import glob
 import pyklip.rdi
 import os
+from astropy.io import fits
 
 def distortion_correction(input_dataset, distortion_calibration):
     """
@@ -45,19 +46,20 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     """
     
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
-    TODO: Handle nans & propagate DQ array
-        Crop data to darkhole size ~(60x60) centered on nearest pixel
-        format output dataset as corgiDRP dataset
-        overwrite header kws related to psf/star centers
-        overwite KLIP mode headers 
-            which header kws are still relevant? 
-            which are new?
+    TODO: 
+        Handle nans & propagate DQ array
+        Crop data to darkhole size ~(60x60) centered on nearest pixel (waiting on crop step function)
+        Rotate north at the end
+        Do frame combine before PSF subtraction?
+        What info is missing from output dataset headers?
+        Add comments to new ext header cards
+
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
         reference_star_dataset (corgidrp.data.Dataset): a dataset of Images of the reference star [optional]
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied
+        corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
     """
 
@@ -84,14 +86,64 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
+    # TODO: Crop data (make sure psf center is updated)
+
+    # TODO: Mask data where DQ > 0, let pyklip deal with the nans
+
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
                               calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
                               fileprefix=fileprefix)
     
+    # Construct corgiDRP dataset from pyKLIP result
+    result_fpath = os.path.join(outdir,f'{fileprefix}-KLmodes-all.fits')   
+    pyklip_data = fits.getdata(result_fpath)
+    pyklip_hdr = fits.getheader(result_fpath)
 
+    frames = []
+    for i,frame_data in enumerate(pyklip_data):
+
+        # TODO: Handle DQ & errors correctly
+        err = np.zeros_like(frame_data)
+        dq = np.zeros_like(frame_data)
+
+        # Clean up primary header
+        pri_hdr = pyklip_hdr.copy()
+        naxis1 = pri_hdr['NAXIS1']
+        naxis2 = pri_hdr['NAXIS2']
+        del pri_hdr['NAXIS1']
+        del pri_hdr['NAXIS2']
+        del pri_hdr['NAXIS3']
+        pri_hdr['NAXIS'] = 0
+
+        # Add observation info from input dataset
+        pri_hdr['TELESCOP'] = input_dataset[0].pri_hdr['TELESCOP']
+        pri_hdr['INSTRUME'] = input_dataset[0].pri_hdr['INSTRUME']
+        pri_hdr['MODE'] = input_dataset[0].pri_hdr['MODE']
+        pri_hdr['BAND'] = input_dataset[0].pri_hdr['BAND']
+        pri_hdr['TELESCOP'] = input_dataset[0].pri_hdr['TELESCOP']
+
+        # Make extension header
+        ext_hdr = fits.Header()
+        ext_hdr['NAXIS'] = 2
+        ext_hdr['NAXIS1'] = naxis1
+        ext_hdr['NAXIS2'] = naxis2
+        ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
+        ext_hdr['PIXSCALE'] = input_dataset[0].ext_hdr['PIXSCALE']
+        ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
+        ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
+
+        frame = data.Image(frame_data,
+                                    pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                                    err=err, dq=dq)
+        
+        frames.append(frame)
     
-    return input_dataset.copy()
+    dataset_out = data.Dataset(frames)
+
+    # TODO: Update DQ to 1 where there are nans
+
+    return dataset_out
 
 def northup(input_dataset,correct_wcs=False):
     """
