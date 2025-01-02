@@ -71,11 +71,13 @@ def crop(input_dataset,sizexy=60,centerxy=None):
     frames_out = []
 
     for frame in dataset:
-        
-        # Assign new array sizes and center location
-        frame_shape = frame.data.shape
         prihdr = frame.pri_hdr
         exthdr = frame.ext_hdr
+        dqhdr = frame.dq_hdr
+        errhdr = frame.err_hdr
+
+        # Assign new array sizes and center location
+        frame_shape = frame.data.shape
         if isinstance(sizexy,int):
             sizexy = [sizexy]*2
         if isinstance(centerxy,float):
@@ -117,9 +119,14 @@ def crop(input_dataset,sizexy=60,centerxy=None):
         else:
             raise ValueError('Crop function only supports 2D or 3D frame data.')
 
-        # Update header
+        # Update headers
         exthdr["NAXIS1"] = sizexy[0]
         exthdr["NAXIS2"] = sizexy[1]
+        dqhdr["NAXIS1"] = sizexy[0]
+        dqhdr["NAXIS2"] = sizexy[1]
+        errhdr["NAXIS1"] = sizexy[0]
+        errhdr["NAXIS2"] = sizexy[1]
+        errhdr["NAXIS3"] = cropped_frame_err.shape[0]
         if ("STARLOCX" in exthdr.keys()):
             exthdr["STARLOCX"] -= x1
             exthdr["STARLOCY"] -= y1
