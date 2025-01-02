@@ -127,23 +127,32 @@ def crop(input_dataset,sizexy=60,centerxy=None):
         errhdr["NAXIS1"] = sizexy[0]
         errhdr["NAXIS2"] = sizexy[1]
         errhdr["NAXIS3"] = cropped_frame_err.shape[0]
+        updated_hdrs = []
         if ("STARLOCX" in exthdr.keys()):
             exthdr["STARLOCX"] -= x1
             exthdr["STARLOCY"] -= y1
+            updated_hdrs.append('STARLOCX/Y')
         if ("MASKLOCX" in exthdr.keys()):
             exthdr["MASKLOCX"] -= x1
             exthdr["MASKLOCY"] -= y1
+            updated_hdrs.append('MASKLOCX/Y')
         if ("CRPIX1" in prihdr.keys()):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
+            updated_hdrs.append('CRPIX1/2')
         if ("PSFCENTX" in prihdr.keys()):
             prihdr["PSFCENTX"] -= x1
             prihdr["PSFCENTY"] -= y1
-
+            updated_hdrs.append('PSFCENTX/Y')
         new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
         frames_out.append(new_frame)
 
     output_dataset = data.Dataset(frames_out)
+
+    history_msg = f"""Frames cropped to new shape {output_dataset[0].data.shape} on center {centerxy}.\
+             Updated header kws: {", ".join(updated_hdrs)}."""
+    
+    output_dataset.update_after_processing_step(history_msg)
     
     return output_dataset
 
