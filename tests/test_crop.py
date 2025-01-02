@@ -11,6 +11,9 @@ def make_test_dataset(shape=[100,100],centxy=None):
     Args:
         shape (arraylike, optional): data shape. Defaults to [100,100].
         centxy (arraylike,optional): location of 4 pixel dot. Defaults to center of array.
+
+    Returns:
+        corgidrp.data.Dataset: test data with a 2x2 "PSF" at location centxy.
     """
     shape = np.array(shape)
 
