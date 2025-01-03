@@ -1399,6 +1399,96 @@ class TrapCalibration(Image):
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'TrapCalibration':
             raise ValueError("File that was loaded was not a TrapCalibration file.")
+        
+
+class NDFilterCalibration(Image):
+    """
+    Class for an ND filter calibration product. Typically stores N×3 data:
+    [OD, x_center, y_center] for each measurement.
+
+    Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file 
+            to read in OR the 2D array of ND filter calibration data (N×3).
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if 
+            raw 2D data is passed in).
+        ext_hdr (astropy.io.fits.Header): the image extension header (required 
+            only if raw 2D data is passed in).
+        input_dataset (corgidrp.data.Dataset): the input dataset used to produce 
+            this calibration file (optional). If this is a new ND filter calibration, 
+            you should pass in the dataset so that the parent filenames can be 
+            recorded in the headers.
+        err (np.array): optional 3D error array for the data
+        dq (np.array): optional 2D data-quality mask for the data
+        err_hdr (astropy.io.fits.Header): optional error extension header
+
+    Attributes:
+        od_values (np.array): the array of OD measurements (length N).
+        x_values (np.array): the array of x-centroid positions (length N).
+        y_values (np.array): the array of y-centroid positions (length N).
+    """
+
+    def __init__(
+        self,
+        data_or_filepath,
+        pri_hdr=None,
+        ext_hdr=None,
+        input_dataset=None,
+        err=None,
+        dq=None,
+        err_hdr=None
+    ):
+        # Run the standard Image constructor
+        super().__init__(
+            data_or_filepath,
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
+            err=err,
+            dq=dq,
+            err_hdr=err_hdr
+        )
+
+        # 1. Check data shape: expect Nx3 for ND filter calibration
+        if self.data.ndim != 2 or self.data.shape[1] != 3:
+            raise ValueError(
+                "NDFilterCalibration data must be a 2D array of shape (N, 3). "
+                f"Received shape {self.data.shape}."
+            )
+
+        # 2. Parse columns to attributes for convenience
+        #    Column 0: OD, Column 1: x_center, Column 2: y_center
+        self.od_values = self.data[:, 0]
+        self.x_values = self.data[:, 1]
+        self.y_values = self.data[:, 2]
+
+        # 3. If this is a new NDFilterCalibration (i.e., ext_hdr was passed in),
+        #    record the metadata and set DATATYPE.
+        #    If reading from a file on disk, ext_hdr might already have DATATYPE set.
+        if ext_hdr is not None:
+            # If the user provided an input dataset, record the parent filenames
+            if input_dataset is not None:
+                self._record_parent_filenames(input_dataset)
+
+            # Mark it as an NDFilterCalibration product
+            self.ext_hdr['DATATYPE'] = 'NDFilterCalibration'
+
+            # TODO: store some summary metadata in the header?
+
+            # Add history
+            self.ext_hdr['HISTORY'] = (
+                f"NDFilterCalibration created from {self.ext_hdr.get('DRPNFILE','?')} frames"
+            )
+
+            # Give it a default filename if you like
+            if input_dataset is not None and len(input_dataset) > 0:
+                base_name = input_dataset[0].filename.split(".fits")[0]
+                self.filename = f"{base_name}_ndfcal.fits"
+            else:
+                self.filename = "NDFilterCalibration.fits"
+
+        # 4. If reading from a file, verify it’s actually an NDFilterCalibration
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterCalibration':
+            raise ValueError("File that was loaded is not labeled as an NDFilterCalibration file.")
+
 
 datatypes = { "Image" : Image,
              "Dark" : Dark,
@@ -1409,7 +1499,8 @@ datatypes = { "Image" : Image,
               "FlatField" : FlatField,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
-              "TrapCalibration": TrapCalibration }
+              "TrapCalibration": TrapCalibration,
+            "NDFilterCalibration": NDFilterCalibration}
 
 def autoload(filepath):
     """

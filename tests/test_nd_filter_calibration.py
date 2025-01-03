@@ -59,7 +59,7 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     data += gaussian
 
     # Create error and DQ arrays (if needed)
-    # For simplicity, set a uniform error and no data quality flags:
+    # For now, set a uniform error and no data quality flags:
     err = np.sqrt(np.abs(data))  # Poisson-like error
     dq = np.zeros((ny, nx), dtype=int)
 
@@ -83,13 +83,13 @@ def save_image_to_fits(image, filename):
 
 def mock_dim_dataset_files(output_path):
     """
-    Create 10 dim star images using the names from dim_stars.
+    Create 10 dim star images using the names from dim_stars in fluxcal.py
     These are without ND filter and serve as calibration references.
     """
     if not os.path.exists(output_path):
         os.makedirs(output_path, exist_ok=True)
 
-    # Simulate dim stars. Let's pick a faint flux:
+    # Simulate dim stars, pick a faint flux:
     star_flux = (30.0 * u.STmag).to(u.erg/u.s/u.cm**2/u.AA)
     fwhm = 3
     background = star_flux.value / 20
@@ -99,7 +99,7 @@ def mock_dim_dataset_files(output_path):
         flux_image = create_flux_image(star_flux.value, fwhm, background)
         # Update headers
         flux_image.ext_hdr['TARGET'] = star_name
-        flux_image.ext_hdr['CFAMNAME'] = '3C'  # filter name must match a known filter curve
+        flux_image.ext_hdr['CFAMNAME'] = '3C'  # filter name must match a known filter 
         flux_image.ext_hdr['FPAM_H'] = 3.0
         flux_image.ext_hdr['FPAM_V'] = 2.5
         flux_image.ext_hdr['EXPTIME'] = 10.0  # Example exposure time
@@ -113,13 +113,13 @@ def mock_dim_dataset_files(output_path):
 def mock_bright_dataset_files(output_path):
     """
     Create 4 sets of 9 bright star images using the names from bright_stars.
-    We'll choose the first 4 from the bright_stars list.
+    Choose the first 4 from the bright_stars list provided in fluxcal.py.
     Each star gets a 3x3 raster of images.
     """
     if not os.path.exists(output_path):
         os.makedirs(output_path, exist_ok=True)
 
-    # Simulate bright stars. Let's pick a brighter flux:
+    # Simulate bright stars. Pick a random bright flux for now:
     bright_star_flux = (20.0 * u.STmag).to(u.erg/u.s/u.cm**2/u.AA)
     fwhm = 3
     background = bright_star_flux.value / 20
@@ -153,7 +153,8 @@ def mock_bright_dataset_files(output_path):
 
 if __name__ == "__main__":
     print('Running test_nd_filter_calibration')
-    # Adjust paths as needed
+    
+    # User paths
     dim_data_path = '/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_dim'
     bright_data_path = '/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_bright'
     output_path = '/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output'

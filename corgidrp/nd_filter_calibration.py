@@ -6,6 +6,7 @@ from collections import defaultdict
 import re
 import corgidrp.fluxcal as fluxcal
 from scipy import integrate
+from corgidrp.data import NDFilterCalibration
 
 """
 From requirement 1090877.
@@ -25,12 +26,64 @@ def compute_centroid(image_data):
     y_center = np.sum(y_indices * image_data) / total_flux
     return x_center, y_center
 
-def compute_flux_in_image(image_data, x_center, y_center, radius=5):
+def compute_flux_in_image(image_data, x_center, y_center, radius=5, annulus_inner=7, annulus_outer=10):
+    """
+    Compute the flux of a source at (x_center, y_center) in image_data
+    by summing pixel values in an aperture of 'radius', and subtracting
+    the local background measured in an annulus between 'annulus_inner'
+    and 'annulus_outer'.
+
+    Parameters
+    ----------
+    image_data : 2D numpy.ndarray
+        The image from which to measure flux.
+    x_center : float
+        The x-coordinate of the star's centroid.
+    y_center : float
+        The y-coordinate of the star's centroid.
+    radius : float, optional
+        The aperture radius (in pixels).
+    annulus_inner : float, optional
+        Inner radius of the background annulus (in pixels).
+    annulus_outer : float, optional
+        Outer radius of the background annulus (in pixels).
+
+    Returns
+    -------
+    net_flux : float
+        The background-subtracted flux of the source in the aperture.
+        Returns NaN if there is an issue (e.g., invalid centroid).
+    """
+    # If centroid is NaN or out of image range, return NaN
+    if np.isnan(x_center) or np.isnan(y_center):
+        return np.nan
+    
+    # Compute distance of each pixel from the centroid
     y_indices, x_indices = np.indices(image_data.shape)
     r = np.sqrt((x_indices - x_center)**2 + (y_indices - y_center)**2)
+
+    # Define the aperture and annulus masks
     aperture_mask = (r <= radius)
-    flux = np.sum(image_data[aperture_mask])
-    return flux  # Background subtraction could be added here if needed.
+    annulus_mask = (r >= annulus_inner) & (r <= annulus_outer)
+
+    # Handle cases if the annulus region is too small or nonexistent:
+    if not np.any(annulus_mask):
+        print("Warning: No valid pixels in background annulus. Skipping background subtraction.")
+        background_level = 0.0
+    else:
+        # Here, use the median background in the annulus
+        background_level = np.median(image_data[annulus_mask])
+
+    # Total aperture flux
+    aperture_sum = np.sum(image_data[aperture_mask])
+
+    # Subtract background contribution
+    # (background_level * number_of_pixels_in_aperture)
+    background_total = background_level * np.count_nonzero(aperture_mask)
+    net_flux = aperture_sum - background_total
+
+    return net_flux
+
 
 def compute_expected_flux(star_name, filter_name):
     """
@@ -150,7 +203,7 @@ def compute_flux_calibration_factor(dim_stars_paths):
 
 def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
     """
-    Main routine:
+    Main function:
     1. Derive flux calibration factor from dim stars (no ND filter).
     2. Use this factor to compute OD for bright stars with ND filter.
     3. Check OD uniformity and flag if needed.
@@ -240,24 +293,37 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
         od_values = star_data['od_values']
         x_values = star_data['x_values']
         y_values = star_data['y_values']
-        fpam_h = star_data['fpam_h']
-        fpam_v = star_data['fpam_v']
-
-        p = len(od_values)
-        sweet_spot_data = np.zeros((p, 3))
+        
+        # Build Nx3 data array
+        sweet_spot_data = np.zeros((len(od_values), 3))
         sweet_spot_data[:, 0] = od_values
         sweet_spot_data[:, 1] = x_values
         sweet_spot_data[:, 2] = y_values
 
-        hdu = fits.PrimaryHDU(sweet_spot_data)
-        hdr = hdu.header
-        hdr['FPAM_H'] = fpam_h
-        hdr['FPAM_V'] = fpam_v
+        # 1) Create a minimal primary header
+        pri_hdr = fits.Header()
+        pri_hdr['SIMPLE'] = True   # The standard FITS 'SIMPLE' keyword
+        pri_hdr['BITPIX'] = 32
+        pri_hdr['COMMENT'] = "NDFilterCalibration primary header"
+        
+        # 2) Create/Update extension header
+        ext_hdr = fits.Header()
+        ext_hdr['FPAM_H'] = star_data['fpam_h']
+        ext_hdr['FPAM_V'] = star_data['fpam_v']
+        ext_hdr['HISTORY'] = f"NDFilterCalibration for {star_name}"
 
+        # 3) Construct NDFilterCalibration object 
+        ndcal_product = NDFilterCalibration(
+            data_or_filepath=sweet_spot_data,  # raw data
+            pri_hdr=pri_hdr,                  # primary header here
+            ext_hdr=ext_hdr,                  # extension header
+            input_dataset=bright_stars_paths  # or subset for just this star
+        )
+
+        # 4) Save the result
         serial_number = f"{max_serial + 1:03d}"
         output_filename = f"CGI_{visit_id}_{serial_number}_NDF_CAL.fits"
-        output_file = os.path.join(output_path, output_filename)
-        fits.HDUList([hdu]).writeto(output_file, overwrite=True)
+        ndcal_product.save(filedir=output_path, filename=output_filename)
 
-        print(f"Sweet-spot dataset saved to {output_file}")
+        print(f"ND Filter Calibration product saved to {output_filename}")
         max_serial += 1
