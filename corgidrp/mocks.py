@@ -647,6 +647,7 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
     # prihdr['OBSTYPE'] = arrtype
     prihdr['VISTYPE'] = vistype
     prihdr['MOCK'] = True
+    prihdr['TELESCOP'] = 'ROMAN'
     prihdr['INSTRUME'] = 'CGI'
     prihdr['OBSNAME'] = 'MOCK'
     prihdr['TARGET'] = 'MOCK'

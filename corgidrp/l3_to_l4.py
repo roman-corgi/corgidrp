@@ -9,6 +9,7 @@ import glob
 import pyklip.rdi
 import os
 from astropy.io import fits
+import warnings
 
 def distortion_correction(input_dataset, distortion_calibration):
     """
@@ -35,6 +36,7 @@ def find_star(input_dataset):
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the stars identified
+            in ext_hdr["STARLOCX/Y"]
     """
 
     return input_dataset.copy()
@@ -48,15 +50,23 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
         Handle nans & propagate DQ array
-        Crop data to darkhole size ~(60x60) centered on nearest pixel (waiting on crop step function)
+        Crop data to darkhole size ~(60x60) centered on nearest pixel (waiting on crop step function PR)
         Rotate north at the end
         Do frame combine before PSF subtraction?
         What info is missing from output dataset headers?
         Add comments to new ext header cards
+        Figure out output roll angle.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
         reference_star_dataset (corgidrp.data.Dataset): a dataset of Images of the reference star [optional]
+        mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously if not specified.
+        annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
+        subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
+        movement (int): KLIP movement parameter. Defaults to 1.
+        numbasis (int or list of int): number of KLIP modes to retain. Defaults to [1,4,8,16].
+        outdir (str or path): path to output directory. Defaults to "KLIP_SUB".
+        fileprefix (str): prefix of saved output files. Defaults to "".
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
@@ -64,25 +74,28 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     """
 
     sci_dataset = input_dataset.copy()
+    ref_dataset = reference_star_dataset.copy()
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
-
-    pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=reference_star_dataset)
 
     # Choose PSF subtraction mode if unspecified
     if mode is None:
         
-        if not reference_star_dataset is None and len(sci_dataset)==1:
+        if not ref_dataset is None and len(sci_dataset)==1:
             mode = 'RDI' 
-        elif not reference_star_dataset is None:
+        elif not ref_dataset is None:
             mode = 'ADI+RDI'
         else:
             mode = 'ADI' 
 
     else: assert mode in ['RDI','ADI+RDI','ADI'], f"Mode {mode} is not configured."
 
-    outdir = os.path.join(outdir,mode)
+    # Format numbases
+    if isinstance(numbasis,int):
+        numbasis = [numbasis]
 
+    # Set up outdir
+    outdir = os.path.join(outdir,mode)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -90,6 +103,8 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
 
     # TODO: Mask data where DQ > 0, let pyklip deal with the nans
 
+    # Run pyklip
+    pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
                               calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
@@ -121,18 +136,20 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         pri_hdr['INSTRUME'] = input_dataset[0].pri_hdr['INSTRUME']
         pri_hdr['MODE'] = input_dataset[0].pri_hdr['MODE']
         pri_hdr['BAND'] = input_dataset[0].pri_hdr['BAND']
-        pri_hdr['TELESCOP'] = input_dataset[0].pri_hdr['TELESCOP']
-
+        
         # Make extension header
         ext_hdr = fits.Header()
         ext_hdr['NAXIS'] = 2
         ext_hdr['NAXIS1'] = naxis1
         ext_hdr['NAXIS2'] = naxis2
-        ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
+        ext_hdr['BUNIT'] = input_dataset[0].ext_hdr['BUNIT']
         ext_hdr['PIXSCALE'] = input_dataset[0].ext_hdr['PIXSCALE']
+        ext_hdr['KLIP_ALG'] = mode
+        ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
         ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
         ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
-
+        ext_hdr['HISTORY'] = input_dataset[0].ext_hdr['HISTORY']
+        
         frame = data.Image(frame_data,
                                     pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                                     err=err, dq=dq)
@@ -141,6 +158,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     
     dataset_out = data.Dataset(frames)
 
+    history_msg = f'PSF subtracted via pyKLIP {mode}.'
+    
+    dataset_out.update_after_processing_step(history_msg)
+    
     # TODO: Update DQ to 1 where there are nans
 
     return dataset_out
@@ -175,8 +196,9 @@ def northup(input_dataset,correct_wcs=False):
 
         # define the center for rotation
         try: 
-            xcen, ycen = im_hd['PSFCENTX'], im_hd['PSFCENTY'] # TBU, after concluding the header keyword
+            xcen, ycen = im_hd['STARLOCX'], im_hd['STARLOCY'] 
         except KeyError:
+            warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             xcen, ycen = xlen/2, ylen/2
     
         # look for WCS solutions
