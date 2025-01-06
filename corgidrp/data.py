@@ -1262,7 +1262,7 @@ class TrapCalibration(Image):
 class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
-    
+    # TODO: Add more bandpasses, modes to self.wave_hlc
     """
     
     ####################
@@ -1277,27 +1277,22 @@ class PyKLIPDataset(pyKLIP_Data):
         """
         Initialize the pyKLIP instrument class for space telescope data.
         
-        Parameters
-        ----------
-        filepaths : 1D-array
-            Paths of the input science observations.
-        psflib_filepaths : 1D-array, optional
-            Paths of the input reference observations. The default is None.
-        center_include_offset : bool
-            Toggle as to whether the relative header offset values of each
-            image is applied during image centering. 
-        
-        Returns
-        -------
-        None.
-        
+        Args:
+            dataset (corgidrp.data.Dataset):
+                Dataset containing input science observations.
+            psflib_dataset (corgidrp.data.Dataset, optional):
+                Dataset containing input reference observations. The default is None.
+            highpass (bool, optional):
+                Toggle to do highpass filtering. Defaults fo False.
+            center_include_offset (bool, optional):
+                Toggle as to whether the relative header offset values of each
+                image is applied during image centering. Defaults to True.
         """
         
         # Initialize pyKLIP Data class.
         super(PyKLIPDataset, self).__init__()
 
         # Set filter wavelengths
-        # TODO: Add more bandpasses, modes
         self.wave_hlc = {1: 0.575} # micron
         
         # Optional variables
@@ -1468,13 +1463,15 @@ class PyKLIPDataset(pyKLIP_Data):
             filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             PAs_all += [shead['ROLL']] * NINTS
 
+            if TELESCOP != "ROMAN":
+                raise UserWarning('Data is not from Roman Space Telescope.')
             if INSTRUME == 'CGI':
                 if MODE == 'HLC':
                     CWAVEL = self.wave_hlc[phead['BAND']]
                 else:
                     raise UserWarning('Unknown Roman CGI instrument mode.')
             else:
-                raise UserWarning('Data originates from unknown Roman instrument')
+                raise UserWarning('Data originates from unknown Roman instrument.')
             wvs_all += [1e-6 * CWAVEL] * NINTS
 
             # TODO: Figure out actual WCS info
@@ -1482,9 +1479,10 @@ class PyKLIPDataset(pyKLIP_Data):
             for j in range(NINTS):
                 wcs_all += [wcs_hdr.deepcopy()]
 
-        input_all = np.concatenate(input_all)
-        if input_all.ndim != 3:
-            raise UserWarning('Some science files do not have matching image shapes')
+        try:
+            input_all = np.concatenate(input_all)
+        except ValueError:
+            raise UserWarning('Unable to concatenate images. Some science files do not have matching image shapes')
         centers_all = np.concatenate(centers_all).reshape(-1, 2)
         filenames_all = np.array(filenames_all)
         filenums_all = np.array(range(len(filenames_all)))
@@ -1539,7 +1537,6 @@ class PyKLIPDataset(pyKLIP_Data):
                 pix_scale = shead['PIXSCALE'] # arcsec
                 PIXSCALE += [pix_scale] 
 
-                # TODO: are centers xy or yx?
                 # Get centers.
                 if self.center_include_offset == True:
                     # Use the offset values from the header to adjust the center

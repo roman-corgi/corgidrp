@@ -1913,6 +1913,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=1.,xoffset=0.,yoffset=0.):
 def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
                           wcs_header = None,
                           data_shape = [60,60],
+                          centerxy = None,
                           outdir = None):
     """Generate a mock science and reference dataset ready for the PSF subtraction step.
     TODO: reference a central pixscale number, rather than hard code.
@@ -1963,7 +1964,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
             # Overwrite center of array with the darkhole data
             cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
-            full_arr_center = np.array(img_data.shape) // 2 
+            if centerxy is None:
+                full_arr_center = np.array(img_data.shape) // 2 
+            else:
+                full_arr_center = (centerxy[1],centerxy[0])
             start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
             img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
             psfcenty, psfcentx = cr_psf_pix + start_psf_ind
@@ -1977,7 +1981,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
             # Overwrite center of array with the darkhole data
             cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
-            full_arr_center = np.array(img_data.shape) // 2 
+            if centerxy is None:
+                full_arr_center = np.array(img_data.shape) // 2 
+            else:
+                full_arr_center = (centerxy[1],centerxy[0])
             start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
             img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
             psfcenty, psfcentx = cr_psf_pix + start_psf_ind
@@ -1986,9 +1993,17 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         else:
             label = 'ref' if i>= n_sci else 'sci'
             fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
-            img_data = gaussian_array(array_shape=data_shape)
-            psfcentx,psfcenty = np.array(img_data.shape) / 2 - 0.5
-
+            arr_center = np.array(data_shape) / 2 - 0.5
+            if centerxy is None:
+                psfcenty,psfcentx = arr_center
+            else:
+                psfcentx,psfcenty = centerxy
+            
+            psf_off_xy = (psfcentx-arr_center[1],psfcenty-arr_center[0])
+            img_data = gaussian_array(array_shape=data_shape,
+                                      xoffset=psf_off_xy[0],
+                                      yoffset=psf_off_xy[1])
+            
             # Add some noise
             rng = np.random.default_rng(seed=None)
             noise = rng.normal(0,1e-11,img_data.shape)
@@ -2001,8 +2016,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                 xoff,yoff = sep_pix * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
                 planet_psf = gaussian_array(array_shape=data_shape,
                                             amp=1e-6,
-                                            xoffset=xoff,
-                                            yoffset=yoff)
+                                            xoffset=xoff+psf_off_xy[0],
+                                            yoffset=yoff+psf_off_xy[1])
                 img_data += planet_psf
         
 
