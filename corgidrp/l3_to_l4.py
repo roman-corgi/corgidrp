@@ -2,6 +2,7 @@
 
 from pyklip.klip import rotate
 from corgidrp import data
+from corgidrp.detector import flag_nans,nan_flags
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import numpy as np
@@ -56,6 +57,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         What info is missing from output dataset headers?
         Add comments to new ext header cards
         Figure out output roll angle.
+        How to populate HISTORY header kw?
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
@@ -74,7 +76,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     """
 
     sci_dataset = input_dataset.copy()
-    ref_dataset = reference_star_dataset.copy()
+    if not reference_star_dataset is None:
+        ref_dataset = reference_star_dataset.copy()
+    else:
+        ref_dataset = None
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
 
@@ -101,10 +106,12 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
 
     # TODO: Crop data (make sure psf center is updated)
 
-    # TODO: Mask data where DQ > 0, let pyklip deal with the nans
+    # Mask data where DQ > 0, let pyklip deal with the nans
+    sci_dataset_masked = nan_flags(sci_dataset)
+    ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
 
     # Run pyklip
-    pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
+    pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
                               calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
@@ -120,7 +127,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
 
         # TODO: Handle DQ & errors correctly
         err = np.zeros_like(frame_data)
-        dq = np.zeros_like(frame_data)
+        dq = np.zeros_like(frame_data) # This will get filled out later
 
         # Clean up primary header
         pri_hdr = pyklip_hdr.copy()
@@ -132,23 +139,26 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         pri_hdr['NAXIS'] = 0
 
         # Add observation info from input dataset
-        pri_hdr['TELESCOP'] = input_dataset[0].pri_hdr['TELESCOP']
-        pri_hdr['INSTRUME'] = input_dataset[0].pri_hdr['INSTRUME']
-        pri_hdr['MODE'] = input_dataset[0].pri_hdr['MODE']
-        pri_hdr['BAND'] = input_dataset[0].pri_hdr['BAND']
+        pri_hdr['TELESCOP'] = sci_dataset[0].pri_hdr['TELESCOP']
+        pri_hdr['INSTRUME'] = sci_dataset[0].pri_hdr['INSTRUME']
+        pri_hdr['MODE'] = sci_dataset[0].pri_hdr['MODE']
+        pri_hdr['BAND'] = sci_dataset[0].pri_hdr['BAND']
         
         # Make extension header
         ext_hdr = fits.Header()
         ext_hdr['NAXIS'] = 2
         ext_hdr['NAXIS1'] = naxis1
         ext_hdr['NAXIS2'] = naxis2
-        ext_hdr['BUNIT'] = input_dataset[0].ext_hdr['BUNIT']
-        ext_hdr['PIXSCALE'] = input_dataset[0].ext_hdr['PIXSCALE']
+        ext_hdr['BUNIT'] = sci_dataset[0].ext_hdr['BUNIT']
+        ext_hdr['PIXSCALE'] = sci_dataset[0].ext_hdr['PIXSCALE']
         ext_hdr['KLIP_ALG'] = mode
         ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
         ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
         ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
-        ext_hdr['HISTORY'] = input_dataset[0].ext_hdr['HISTORY']
+        ext_hdr['PSFCENTX'] = pyklip_hdr['PSFCENTX']
+        ext_hdr['PSFCENTY'] = pyklip_hdr['PSFCENTY']
+        if "HISTORY" in sci_dataset[0].ext_hdr.keys():
+            ext_hdr['HISTORY'] = sci_dataset[0].ext_hdr['HISTORY']
         
         frame = data.Image(frame_data,
                                     pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
@@ -158,6 +168,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     
     dataset_out = data.Dataset(frames)
 
+    # Flag nans in the dq array and then add nans to the error array
+    dataset_out = flag_nans(dataset_out,flag_val=1)
+    dataset_out = nan_flags(dataset_out,threshold=1)
+    
     history_msg = f'PSF subtracted via pyKLIP {mode}.'
     
     dataset_out.update_after_processing_step(history_msg)
