@@ -1445,32 +1445,22 @@ class PyKLIPDataset(pyKLIP_Data):
             INSTRUME = phead['INSTRUME']
             MODE = phead['MODE']
             data = frame.data
-            try:
-                pxdq = frame.dq
-            except:
-                pxdq = np.zeros_like(data).astype('int')
             if data.ndim == 2:
                 data = data[np.newaxis, :]
-                pxdq = pxdq[np.newaxis, :]
             if data.ndim != 3:
                 raise UserWarning('Requires 2D/3D data cube')
             NINTS = data.shape[0]
             pix_scale = shead['PIXSCALE'] # arcsec
             PIXSCALE += [pix_scale] 
 
-            # TODO: Do we need to do this?
-            # Nan out non-science pixels.
-            # data[pxdq & 512 == 512] = np.nan
-            
-            # TODO: are centers xy or yx?
             # Get centers.
             if self.center_include_offset == True:
                 # Use the offset values from the header to adjust the center
-                centers = np.array([shead['STARLOCX'] - 1 + phead['XOFFSET'] / pix_scale, 
-                    shead['STARLOCY'] - 1 + phead['YOFFSET'] / pix_scale] * NINTS)
+                centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
+                    shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
             else:
                 # Assume the STARLOC define the correct center for each image
-                centers = np.array([shead['STARLOCX'] - 1, shead['STARLOCY'] - 1] * NINTS)
+                centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
 
             # Get metadata.
             input_all += [data]
@@ -1541,32 +1531,23 @@ class PyKLIPDataset(pyKLIP_Data):
                 shead = frame.ext_hdr
                     
                 data = frame.data
-                try:
-                    pxdq = frame.dq
-                except:
-                    pxdq = np.zeros_like(data).astype('int')
                 if data.ndim == 2:
                     data = data[np.newaxis, :]
-                    pxdq = pxdq[np.newaxis, :]
                 if data.ndim != 3:
                     raise UserWarning('Requires 2D/3D data cube')
                 NINTS = data.shape[0]
                 pix_scale = shead['PIXSCALE'] # arcsec
                 PIXSCALE += [pix_scale] 
 
-                # TODO: Do we need to do this?
-                # Nan out non-science pixels.
-                # data[pxdq & 512 == 512] = np.nan
-                
                 # TODO: are centers xy or yx?
                 # Get centers.
                 if self.center_include_offset == True:
                     # Use the offset values from the header to adjust the center
-                    centers = np.array([shead['STARLOCX'] - 1 + phead['XOFFSET'] / pix_scale, 
-                        shead['STARLOCY'] - 1 + phead['YOFFSET'] / pix_scale] * NINTS)
+                    centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
+                        shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
                 else:
                     # Assume the STARLOC define the correct center for each image
-                    centers = np.array([shead['STARLOCX'] - 1, shead['STARLOCY'] - 1] * NINTS)
+                    centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
 
                 psflib_data_all += [data]
                 psflib_centers_all += [centers]

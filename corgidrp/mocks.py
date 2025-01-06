@@ -1885,20 +1885,22 @@ LATPOLE =                 90.0 / [deg] Native latitude of celestial pole
 MJDREF  =                  0.0 / [d] MJD of fiducial time
 """
 
-def gaussian_array(array_size=50,sigma=5.,amp=1.):
+def gaussian_array(array_shape=[50,50],sigma=2.5,amp=1.,xoffset=0.,yoffset=0.):
     """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
 
     Args:
-        array_size (int, optional): Width of desired array in pixels. Defaults to 50.
+        array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
         sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
         amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
+        xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
+        yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
         
     Returns:
         np.array: 2D array of a gaussian surface.
     """
-    x, y = np.meshgrid(np.linspace(-array_size, array_size, array_size),
-                        np.linspace(-array_size, array_size, array_size))
-    dst = np.sqrt(x**2+y**2)
+    x, y = np.meshgrid(np.linspace(-array_shape[0]/2, array_shape[0]/2, array_shape[0]),
+                        np.linspace(-array_shape[1]/2, array_shape[1]/2, array_shape[1]))
+    dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
 
     # lower normal part of gaussian
     normal = 1/(2.0 * np.pi * sigma**2)
@@ -1910,7 +1912,7 @@ def gaussian_array(array_size=50,sigma=5.,amp=1.):
 
 def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
                           wcs_header = None,
-                          data_shape = [1024,1024],
+                          data_shape = [60,60],
                           outdir = None):
     """Generate a mock science and reference dataset ready for the PSF subtraction step.
     TODO: reference a central pixscale number, rather than hard code.
@@ -1955,29 +1957,54 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             fpath = darkhole_scifiles[i]
             _,fname = os.path.split(fpath)
             darkhole = fits.getdata(fpath)
+            
+            fill_value = np.nanmin(darkhole)
+            img_data = np.full(data_shape,fill_value)
+
+            # Overwrite center of array with the darkhole data
+            cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
+            full_arr_center = np.array(img_data.shape) // 2 
+            start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
+            img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
+            psfcenty, psfcentx = cr_psf_pix + start_psf_ind
+        
         elif i>=n_sci and not darkhole_reffiles is None:
             fpath = darkhole_reffiles[i-n_sci]
             _,fname = os.path.split(fpath)
             darkhole = fits.getdata(fpath)
+            fill_value = np.nanmin(darkhole)
+            img_data = np.full(data_shape,fill_value)
+
+            # Overwrite center of array with the darkhole data
+            cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
+            full_arr_center = np.array(img_data.shape) // 2 
+            start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
+            img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
+            psfcenty, psfcentx = cr_psf_pix + start_psf_ind
 
         # Otherwise generate a 2D gaussian for a fake PSF
         else:
-            fname = None
-            darkhole = gaussian_array(array_size=55)
+            label = 'ref' if i>= n_sci else 'sci'
+            fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
+            img_data = gaussian_array(array_shape=data_shape)
+            psfcentx,psfcenty = np.array(img_data.shape) / 2 - 0.5
 
-        fill_value = np.nanmin(darkhole)
-        img_data = np.full(data_shape,fill_value)
+            # Add some noise
+            rng = np.random.default_rng(seed=None)
+            noise = rng.normal(0,1e-11,img_data.shape)
+            img_data += noise
 
-        # Overwrite center of array with the darkhole data
-        cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
+            # Add fake planet to sci files
+            if i<n_sci:
+                pa_deg = -roll_angles[i]
+                sep_pix = 10
+                xoff,yoff = sep_pix * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
+                planet_psf = gaussian_array(array_shape=data_shape,
+                                            amp=1e-6,
+                                            xoffset=xoff,
+                                            yoffset=yoff)
+                img_data += planet_psf
         
-        full_arr_center = np.array(img_data.shape) // 2 
-        
-        start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
-
-        img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
-
-        psfcenty, psfcentx = cr_psf_pix + start_psf_ind
 
         # Add necessary header keys
         prihdr['TELESCOP'] = 'ROMAN'
@@ -1996,6 +2023,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['PIXSCALE'] = pixscale
         exthdr["ROLL"] = roll_angles[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
+        #exthdr["HISTORY"] = "" # This line keeps triggering an "illegal value" error
 
         # Add WCS header info, if provided
         if wcs_header is None:

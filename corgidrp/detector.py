@@ -818,7 +818,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     return(onsky_flatfield)
     
 def nan_flags(dataset,threshold=1):
-    """Replaces each DQ-flagged pixel (above the given threshold) in the dataset with np.nan.
+    """Replaces each DQ-flagged pixel (>= the given threshold) in the dataset with np.nan.
 
     Args:
         dataset (corgidrp.data.Dataset): input dataset.
@@ -828,7 +828,14 @@ def nan_flags(dataset,threshold=1):
         corgidrp.data.Dataset: dataset with flagged pixels replaced.
     """
 
-    return dataset
+    dataset_out = dataset.copy()
+
+    # mask bad pixels
+    bad = np.where(dataset_out.all_dq >= threshold)
+    dataset_out.all_data[bad] = np.nan
+    dataset_out.all_err[bad[0],:,bad[1],bad[2]] = np.nan
+
+    return dataset_out
 
 def flag_nans(dataset,flag_val=1):
     """Assigns a DQ flag to each nan pixel in the dataset.
@@ -840,4 +847,11 @@ def flag_nans(dataset,flag_val=1):
     Returns:
         corgidrp.data.Dataset: dataset with nan values flagged.
     """
-    return dataset
+
+    dataset_out = dataset.copy()
+
+    # mask bad pixels
+    bad = np.isnan(dataset_out.all_data)
+    dataset_out.all_dq[bad] = flag_val
+
+    return dataset_out
