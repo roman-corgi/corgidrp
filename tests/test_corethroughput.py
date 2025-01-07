@@ -9,8 +9,6 @@ from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
 import corgidrp.corethroughput as corethroughput
 
-# Comment test
-
 ct_filepath = os.path.join(os.path.dirname(__file__), 'test_data')
 # Mock error
 err = np.ones([1,1024,1024]) * 0.5
