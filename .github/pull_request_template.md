@@ -16,4 +16,4 @@ Please delete options that are not relevant (and this line).
 - [ ] I have linted my code
 - [ ] I have verified that all unit tests pass in a clean environment and added new unit tests, as needed
 - [ ] I have verified that all docstrings are properly formatted and added new documentation, as needed
-- [ ] I have filled out the Unit Test Definition Table on confluence and gotten my proposed unit tests approved by a DRP lead, a PS Team member and the VAP lead 
+- [ ] I have filled out the Unit Test Definition Table on confluence, as needed
