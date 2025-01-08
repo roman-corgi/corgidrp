@@ -3,11 +3,10 @@ import pytest
 import numpy as np
 from astropy.io import fits
 from skimage.measure import block_reduce
-import matplotlib.pyplot as plt
 
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
-import corgidrp.corethroughput as corethroughput
+from corgidrp import corethroughput
 
 ct_filepath = os.path.join(os.path.dirname(__file__), 'test_data')
 # Mock error
@@ -19,7 +18,6 @@ def setup_module():
     """
     Create a dataset with some representative psf responses. 
     """
-    # corgidrp dataset
     global dataset_psf
     # arbitrary set of PSF positions to be tested in EXCAM pixels referred to (0,0)
     global psf_position_x, psf_position_y
@@ -82,29 +80,28 @@ def test_psf_pix_and_ct():
     with pytest.raises(Exception):
         corethroughput.estimate_psf_pix_and_ct(dataset_psf, ct_method='bad')
 
-    psf_pix, ct = corethroughput.estimate_psf_pix_and_ct(dataset_psf)
+    psf_pix_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_psf)
 
     # Read OS11 PSF offsets (l/D=50.19mas=2.3 EXCAM pix, 1 EXCAM pix=0.4347825 l/D, 1 EXCAM pix=21.8213 mas)
     r_off = fits.getdata(os.path.join(ct_filepath, 'hlc_os11_psfs_radial_offsets.fits'))
-    r_off_pix = r_off[idx_os11:idx_os11+len(psf_pix)] * 2.3
+    r_off_pix = r_off[idx_os11:idx_os11+len(psf_pix_est)] * 2.3
     # Difference between expected and retrieved positions
-    diff_pix_x = psf_position_x - psf_pix[:,0]
+    diff_pix_x = psf_position_x - psf_pix_est[:,0]
     # os11 azimuthal axis
     assert diff_pix_x == pytest.approx(0)
     # os11 radial axis
-    diff_pix_y = psf_position_y + r_off_pix - psf_pix[:,1] 
+    diff_pix_y = psf_position_y + r_off_pix - psf_pix_est[:,1] 
     assert diff_pix_y == pytest.approx(0, abs=0.75)
 
     # core throughput in [0,1]
-    assert np.all(ct) >= 0
-    assert np.all(ct) <= 1
+    assert np.all(ct_est) >= 0
+    assert np.all(ct_est) <= 1
 
     # Some tolerance for comparison between I/O values. CT in [0,1]
-    assert ct == pytest.approx(np.array(ct_os11), abs=0.005)
+    assert ct_est == pytest.approx(np.array(ct_os11), abs=0.005)
 
 if __name__ == '__main__':
 
-    test_fsm_pos()
     test_psf_pix_and_ct()
 
 
