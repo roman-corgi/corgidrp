@@ -1,6 +1,7 @@
-# Functions related with Core Throughout and off-axis PSF
 import numpy as np
 import matplotlib.pyplot as plt
+
+from corgidrp.data import Dataset
 
 
 # CTC requirements
@@ -79,8 +80,7 @@ def get_psf_ct(
         satisfy the condition to derive the core throughput with no approximations.
 
     Returns:
-      Array of pair of values with PSFs position in (fractional) EXCAM pixels
-      with respect to the pixel (0,0) in the PSF images
+      Array of core throughput values between 0 and 1.
     """
     if method.lower() == 'direct':
         psf_ct = []
@@ -125,7 +125,7 @@ def estimate_psf_pix_and_ct(
       psf_ct (array): Array with PSF's core throughput values. Units:
         dimensionless (Values must be within 0 and 1).
     """
-    dataset = dataset_offaxis.copy()
+    dataset = dataset_in.copy()
 
     # default methods
     if pix_method is None:
@@ -133,29 +133,36 @@ def estimate_psf_pix_and_ct(
     if ct_method is None:
         ct_method = 'direct'
 
-    # find the total counts of the pupil image(s) of the unocculted source
-   
-    # identify the pupil images in the dataset
-
-    # mean combine them (do not forget to divide by the number of frames: mean)
-
-    # Sum up the total values (photo-electrons/sec)
-
-    unocc_psf_norm = 1 # Replace by the sum
+    # identify the pupil images in the dataset (pupil images are extended)
+    n_pix_up = [np.sum(np.where(frame.data > 3*frame.data.std())) for frame in dataset]
+    # frames are mostly off-axis PSFs
+    pupil_img_idx = np.where( n_pix_up > 10 * np.median(n_pix_up))[0]
+    print(f'Found {len(pupil_img_idx)} pupil images for the core throughput estimation') 
+    # mean combine the total values (photo-electrons/sec)
+    unocc_psf_norm = 0
+    for frame in dataset[pupil_img_idx]:
+        unocc_psf_norm += frame.data.sum()
+    unocc_psf_norm /= len(pupil_img_idx)
+    # Remove pupil frames
+    offaxis_frames = []
+    for i_f, frame in enumerate(dataset):
+        if i_f not in pupil_img_idx:
+            offaxis_frames += [frame]
+    dataset_offaxis = Dataset(offaxis_frames)
 
     # find the PSF positions of the off-axis PSFs
     psf_pix = get_psf_pix(
-        dataset,
-        unocc_psf_norm = unocc_psf_norm,
+        dataset_offaxis,
         method=pix_method)
 
     # find the PSF corethroughput of the off-axis PSFs
-    psf_ct = get_psf_ct(dataset,
+    psf_ct = get_psf_ct(
+        dataset_offaxis,
         unocc_psf_norm = unocc_psf_norm,
         method=ct_method)
 
     # same number of estimates. One per PSF 
-    if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset):
+    if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset_offaxis):
         raise Exception('PSF positions and CT values are inconsistent')
 
     return psf_pix, psf_ct

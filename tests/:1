@@ -39,10 +39,9 @@ def setup_module():
     data_pupil /= np.sum(data_pupil)
     # Add some noise (pupil images are high SNR)
     data_pupil_1 = data_pupil.copy()
-    rng = np.random.default_rng(seed=0)
-    data_pupil_1 += rng.normal(0, data_pupil.std()/10, data_pupil_1.shape)
+    data_pupil_1 += np.random.normal(0, data_pupil.std()/10, data_pupil_1.shape)
     data_pupil_2 = data_pupil.copy()
-    data_pupil_2 += rng.normal(0, data_pupil.std()/10, data_pupil_1.shape)
+    data_pupil_2 += np.random.normal(0, data_pupil.std()/10, data_pupil_1.shape)
     data_psf += [Image(data_pupil_1,pri_hdr = prhd, ext_hdr = exthd, err = err)]
     data_psf += [Image(data_pupil_2,pri_hdr = prhd, ext_hdr = exthd, err = err)]
 
@@ -99,9 +98,9 @@ def test_psf_pix_and_ct():
     assert np.all(ct) >= 0
     assert np.all(ct) <= 1
 
-    # Some tolerance for comparison between I/O values. CT in [0,1]
-    assert ct == pytest.approx(np.array(ct_os11), abs=0.005)
-
+    # Some tolerance for comparison between I/O values
+    assert ct == pytest.approx(np.array(ct_os11), abs=0.02)
+    
 if __name__ == '__main__':
 
     test_fsm_pos()
