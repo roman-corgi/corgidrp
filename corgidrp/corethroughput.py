@@ -28,16 +28,6 @@ shall compute a 2D floating-point interpolated core throughput map.
 coordinates, in units of EXCAM pixels, which fall within the area covered by the
 core throughput dataset, the CTC GSW shall produce a 1024x1024xN cube of PSF
 images best centered at each set of coordinates.
-
-1077737 - Given one or more level L3 EXCAM data frames of target and/or reference
-stars at one or more roll angles intended for PSF-subtraction, CTC GSW shall
-apply the "L3 → L4" pipeline for "TTR5 Analog PSF-subtracted on-sky data" as
-described the table "Imaging Data Processing Pipelines" in D-105748 TDD FDD.
-
-Note: Any data analysis marked above as "Same as L3 → L4 pipeline used for TTR5
-Analog PSF-subtracted on-sky data"" will also use this pipeline.
-See: https://wiki.jpl.nasa.gov/display/CGIfocus8/13-TDD%3A+Tech+Demo+Data+FDD
-
 """
 
 def get_psf_pix(
@@ -103,8 +93,7 @@ def get_psf_ct(
     return psf_ct
 
 def estimate_psf_pix_and_ct(
-    dataset_in,
-    fsm_pos,
+    dataset_offaxis,
     unocc_psf_norm=1,
     pix_method=None,
     ct_method=None,
@@ -118,18 +107,13 @@ def estimate_psf_pix_and_ct(
     core throughput data collection, to allow for the removal of outliers.
 
     Args:
-      dataset_in (corgidrp.Dataset): A core throughput dataset consisting of
-        M clean frames (nominally 1024x1024) taken at different FSM positions.
+      dataset_offaxis (corgidrp.Dataset): A core throughput dataset consisting of
+        some clean frames (nominally 1024x1024) taken at different FSM positions.
         Units: photoelectrons / second / pixel.
 
-        The first PSF must be the unocculted PSF.
-
-      fsm_pos (list): list of paired values of the FSM positions for the 
-        off-axis psfs. Units: mas
-
       unocc_psf_norm (float): sum of the 2-d array corresponding to the
-        unocculted psf. Default: off-axis PSF are normalized to the unocculted
-        PSF already. That is, unocc_psf_norm equals 1.
+        unocculted psf. Default: 1. That is, off-axis PSF are normalized to the
+        unocculted PSF already
 
       pix_method (string): the method used to estimate the PSF positions.
         Default: 'max'.
@@ -144,7 +128,7 @@ def estimate_psf_pix_and_ct(
       psf_ct (array): Array with PSF's core throughput values. Units:
         dimensionless (Values must be within 0 and 1).
     """
-    dataset = dataset_in.copy()
+    dataset = dataset_offaxis.copy()
 
     # Default methods
     if pix_method is None:
@@ -168,7 +152,7 @@ def estimate_psf_pix_and_ct(
 
     # find the PSF corethroughput of the off-axis PSFs
     psf_ct = get_psf_ct(dataset,
-        unocc_psf_norm = 1,
+        unocc_psf_norm = unocc_psf_norm,
         method=ct_method)
 
     # same number of estimates. One per PSF 
