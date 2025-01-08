@@ -20,22 +20,34 @@ def setup_module():
     Create a dataset with some representative psf responses. 
     """
     # corgidrp dataset
-    global dataset_psf, dataset_psf_rev
+    global dataset_psf
     # arbitrary set of PSF positions to be tested in EXCAM pixels referred to (0,0)
     global psf_position_x, psf_position_y
     # Some arbitrary shifts
     psf_position_x = [512, 522, 532, 542, 552, 562, 522, 532, 542, 552, 562]
     psf_position_y = [512, 522, 532, 542, 552, 562, 502, 492, 482, 472, 462]
-    # fsm positions for the off-axis psfs
-    global fsm_pos
-    fsm_pos = [[1,1]]*len(psf_position_x)
     global idx_os11
     idx_os11 = 8
     global ct_os11
     ct_os11 = []
 
     data_psf = []
-    # oversampled os11 psfs
+    # add pupil image(s) of the unocculted source's observation
+    # To be replaced by pupil images
+    data_pupil = np.zeros([1024,1024])
+    data_pupil[300:500,300:500] = 1
+    # Normalize to 1 since OS11 off-axis PSFs are already normalized to the
+    # unocculted response
+    data_pupil /= np.sum(data_pupil)
+    # Add some noise (pupil images are high SNR)
+    data_pupil_1 = data_pupil.copy()
+    data_pupil_1 += np.random.normal(0, 0.00001, data_pupil_1.shape)
+    data_pupil_2 = data_pupil.copy()
+    data_pupil_2 += np.random.normal(0, 0.00001, data_pupil_1.shape)
+
+    breakpoint()
+    
+    # add os11 psfs
     occ_psf_filepath = os.path.join(ct_filepath, 'hlc_os11_psfs_oversampled.fits')
     occ_psf = fits.getdata(occ_psf_filepath)
     for i_psf, _ in enumerate(psf_position_x):
@@ -54,25 +66,6 @@ def setup_module():
 
     dataset_psf = Dataset(data_psf)
 
-def test_fsm_pos():
-    """ Test FSM positions are a list of N pairs of values, where N is the number
-        of off-axis psfs.
-    """
-    # do not pass if fsm_pos is not a list
-    with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, np.array(fsm_pos))
-    # do not pass if fsm_pos has less elements
-    with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos[1:])
-    # do not pass if fsm_pos has more elements
-    with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos+[[1,1]])
-    # do not pass if fsm_pos is not a list of paired values
-    fsm_pos_bad = [[1,1]]*(len(psf_position_x) - 1)
-    fsm_pos_bad += [[1]]
-    with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos_bad)
-
 def test_psf_pix_and_ct():
     """
     Test 1090881 - Given a core throughput dataset consisting of M clean frames
@@ -85,12 +78,12 @@ def test_psf_pix_and_ct():
 
     # do not pass if setting a method that does not exist
     with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos, pix_method='bad')
+        corethroughput.estimate_psf_pix_and_ct(dataset_psf, pix_method='bad')
 
     with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos, ct_method='bad')
+        corethroughput.estimate_psf_pix_and_ct(dataset_psf, ct_method='bad')
 
-    psf_pix, ct = corethroughput.estimate_psf_pix_and_ct(dataset_psf, fsm_pos)
+    psf_pix, ct = corethroughput.estimate_psf_pix_and_ct(dataset_psf)
 
     # Read OS11 PSF offsets (l/D=50.19mas=2.3 EXCAM pix, 1 EXCAM pix=0.4347825 l/D, 1 EXCAM pix=21.8213 mas)
     r_off = fits.getdata(os.path.join(ct_filepath, 'hlc_os11_psfs_radial_offsets.fits'))

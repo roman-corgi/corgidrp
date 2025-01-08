@@ -93,8 +93,7 @@ def get_psf_ct(
     return psf_ct
 
 def estimate_psf_pix_and_ct(
-    dataset_offaxis,
-    unocc_psf_norm=1,
+    dataset_in,
     pix_method=None,
     ct_method=None,
     ):
@@ -107,13 +106,11 @@ def estimate_psf_pix_and_ct(
     core throughput data collection, to allow for the removal of outliers.
 
     Args:
-      dataset_offaxis (corgidrp.Dataset): A core throughput dataset consisting of
-        some clean frames (nominally 1024x1024) taken at different FSM positions.
+      dataset_in (corgidrp.Dataset): A core throughput dataset consisting of
+        M clean frames (nominally 1024x1024) taken at different FSM positions.
         Units: photoelectrons / second / pixel.
 
-      unocc_psf_norm (float): sum of the 2-d array corresponding to the
-        unocculted psf. Default: 1. That is, off-axis PSF are normalized to the
-        unocculted PSF already
+        NOTE: the dataset contains the pupil image(s) of the unocculted source.
 
       pix_method (string): the method used to estimate the PSF positions.
         Default: 'max'.
@@ -130,24 +127,26 @@ def estimate_psf_pix_and_ct(
     """
     dataset = dataset_offaxis.copy()
 
-    # Default methods
+    # default methods
     if pix_method is None:
         pix_method = 'max'
     if ct_method is None:
         ct_method = 'direct'
 
-    # check that fsm_pos is a list of pair of values for each off-axis psf
-    if type(fsm_pos) != list:
-        raise Exception('FSM positions are not a list')
-    if len(fsm_pos) != len(dataset):
-        raise Exception(('The number of FSM positions is different to the number'
-            ' of off-axis PSFs'))
-    for pos in fsm_pos:
-        if len(pos) != 2:
-            raise Exception('The number of dimensions in the FSM position is not 2') 
+    # find the total counts of the pupil image(s) of the unocculted source
+   
+    # identify the pupil images in the dataset
+
+    # mean combine them (do not forget to divide by the number of frames: mean)
+
+    # Sum up the total values (photo-electrons/sec)
+
+    unocc_psf_norm = 1 # Replace by the sum
 
     # find the PSF positions of the off-axis PSFs
-    psf_pix = get_psf_pix(dataset,
+    psf_pix = get_psf_pix(
+        dataset,
+        unocc_psf_norm = unocc_psf_norm,
         method=pix_method)
 
     # find the PSF corethroughput of the off-axis PSFs
