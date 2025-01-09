@@ -93,11 +93,11 @@ def test_psf_pix_and_ct():
     diff_pix_y = psf_position_y + r_off_pix - psf_pix_est[:,1] 
     assert diff_pix_y == pytest.approx(0, abs=0.75)
 
-    # core throughput in [0,1]
+    # core throughput in (0,1]
     assert np.all(ct_est) >= 0
     assert np.all(ct_est) <= 1
 
-    # Some tolerance for comparison between I/O values. CT in [0,1]
+    # Some tolerance for comparison between I/O values. CT in (0,1]
     assert ct_est == pytest.approx(np.array(ct_os11), abs=0.005)
 
 def test_ct_map():
@@ -112,41 +112,75 @@ def test_ct_map():
     fpam_pix = np.array([513,515])
     target_pix = np.array([520, 520])
 
-    # If FPAM position is outside a reasonable range, the function must fail
-    # with pytest.raises(Exception):   
- 
-    # If target positions are the same as the reference ones, the core throughput
-    # must be the same
-    # with pytest.raises(Exception):
+    # If FPAM position is not a 2-dimensional array, the function must fail
+    with pytest.raises(TypeError):
+        corethroughput.ct_map(psf_pix, fpam_pix[0], ct_os11, target_pix)
 
-    # If the psf positions have different number of elements, the function must
-    # fail
-    # with pytest.raises(Exception):
-    
+    # If FPAM position is outside a reasonable range, the function must fail
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([1000,512]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([512,1000]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([1000,1000]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([100,512]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([512,100]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([100,100]), ct_os11, target_pix)    
+
+    # If the psf positions is not a 2-dimensional array, the function must fail
+    with pytest.raises(TypeError):
+        corethroughput.ct_map(psf_pix[0,:], fpam_pix, ct_os11, target_pix)
+    # There must be more than one PSF to be able to interpolate
+    with pytest.raises(IndexError):
+        corethroughput.ct_map(psf_pix[:,0], fpam_pix, ct_os11, target_pix)
     # If the number of core throughput values is different than the number of
     # PSFs, the function must fails
-    # with pytest.raises(Exception):
-
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix[:,0:-1], fpam_pix, ct_os11, target_pix)
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11[0:-1], target_pix)
     # If ct is > 1 or < 0, the function must fail
-    # with pytest.raises(Exception):
-
+    ct_os11_wrong = ct_os11.copy()
+    ct_os11_wrong[0] = 1.2
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11_wrong, target_pix)
+    ct_os11_wrong[0] = 0
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11_wrong, target_pix)
+    ct_os11_wrong[0] = -0.1
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11_wrong, target_pix)
     # If the target pixels are outside the range of the original data, the
     # function must fail
-    # with pytest.raises(Exception):
-
-    # If all the conditions are met, the function must return a set of interpolated
-    # core throughput values within [0,1]
     target_pix_x = [531.8, 541.6, 551.4, 560, 521.4, 532, 542,
         552, 562]
     target_pix_y = [530.4, 540, 550.3, 561.2, 500.6, 492.6, 482.8,
         474, 476]
     target_pix = np.array([target_pix_x, target_pix_y])
-    breakpoint()
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, fpam_pix, ct_os11, target_pix)
+    # If target positions are the same as the reference ones, the core throughput
+    # must be the same
+    target_pix = psf_pix
+        
 
-    # core throughput in [0,1]
-    assert np.all(ct_est) >= 0
-    assert np.all(ct_est) <= 1
-    
+    # If all the conditions are met, the function must return a set of interpolated
+    # core throughput values within (0,1]
+    target_pix_x = [531.8, 541.6, 551.4, 512, 519.4, 532, 542,
+        552, 562]
+    target_pix_y = [530.4, 540, 550.3, 512, 512.6, 492.6, 482.8,
+        474, 476]
+    target_pix = np.array([target_pix_x, target_pix_y])
+    ct_map = corethroughput.ct_map(psf_pix, fpam_pix, ct_os11, target_pix)
+    # core throughput in (0,1]
+    assert np.all(ct_map[-1]) > 0
+    assert np.all(ct_map[-1]) <= 1
+    # Add some numerical comparison based on expected changes of core throughput
+    assert np.all(ct_map[-1] < np.mean(ct_os11) + 2*np.std(ct_os11))
+    assert np.all(ct_map[-1] > np.mean(ct_os11) - 2*np.std(ct_os11))
 
 if __name__ == '__main__':
 
