@@ -1,5 +1,5 @@
 import numpy as np
-import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
 
 from corgidrp.data import Dataset
 
@@ -166,4 +166,45 @@ def estimate_psf_pix_and_ct(
         raise Exception('PSF positions and CT values are inconsistent')
 
     return psf_pix, psf_ct
+
+def ct_map(
+    psf_pix,
+    fpam_pix,
+    ct,
+    target_pix,
+    ):
+    """
+    Function satisfying CTC requirement 1090883.
+
+    Args:
+      psf_pix (array): Nx2 array containing the pixel positions for N PSFs in
+        EXCAM pixels with respect to (0,0).
+
+      fpam_pix (array): 2-dimensional array with the pixel location of the
+        center of the focal plane mask in EXCAM pixels with respect to (0,0).
+
+      ct (array): 1-dimensional array of core throughput values [0,1] associated
+        with each PSF.
+
+      target_pix (array): Mx2 array containing the pixel positions for M target
+        pixels where the core throughput will be derived by interpolation. the
+        target pixels are measured with respect the center of the focal plane
+        mask in (fractional) EXCAM pixels.
+
+    Returns:
+      Core throughput map: 3-dimensional array (x,y,ct_target) where (x,y) is
+      the position of each target pixel location and ct_target is the
+      interpolated core throughput value corresponding to each target pixel
+      location. 
+
+    """
+    
+    # Checks
+    # If FPAM center is close than 150 pixels to 1024x1024 boundaries
+    # len(PSF) = len(ct)
+    # ct b/w [0,1]
+    # Extrapolation with "fill_value"
+
+    # zi = griddata((x, y), z, (Xi, Yi), method='linear')
+
 
