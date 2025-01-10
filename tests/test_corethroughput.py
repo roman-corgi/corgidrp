@@ -94,7 +94,7 @@ def test_psf_pix_and_ct():
     assert diff_pix_y == pytest.approx(0, abs=0.75)
 
     # core throughput in (0,1]
-    assert np.all(ct_est) >= 0
+    assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
 
     # Some tolerance for comparison between I/O values. CT in (0,1]
