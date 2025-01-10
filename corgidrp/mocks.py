@@ -1891,7 +1891,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, platescale=21.8
     target = (80.553428801, -69.514096821)
 
     new_hdr = {}
-
+    new_hdr['TARGET'] = 'KSI2 CETI'
+    new_hdr['CFAMNAME'] = '3C'
     new_hdr['CRPIX1'] = center[0]
     new_hdr['CRPIX2'] = center[1]
 

@@ -3,7 +3,7 @@ import os
 import numpy as np
 from corgidrp.mocks import create_default_headers
 from corgidrp.mocks import create_flux_image
-from corgidrp.data import Image, Dataset
+from corgidrp.data import Image, Dataset, FluxcalFactors
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
@@ -13,6 +13,7 @@ data = np.ones([1024,1024]) * 2
 err = np.ones([1,1024,1024]) * 0.5
 prhd, exthd = create_default_headers()
 exthd["CFAMNAME"] = '3C'
+exthd["TARGET"] = 'VEGA'
 image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
 image2 = image1.copy()
 dataset=Dataset([image1, image2])
@@ -24,7 +25,7 @@ def test_get_filter_name():
     """
     global wave
     global transmission
-    filepath = fluxcal.get_filter_name(dataset)
+    filepath = fluxcal.get_filter_name(image1)
     assert filepath.split("/")[-1] == 'transmission_ID-21_3C_v0.csv'
     
     wave, transmission = fluxcal.read_filter_curve(filepath)
@@ -37,7 +38,7 @@ def test_get_filter_name():
     image3.ext_hdr["CFAMNAME"] = '5C'
     dataset2 = Dataset([image3, image3])
     with pytest.raises(ValueError):
-        filepath = fluxcal.get_filter_name(dataset2)
+        filepath = fluxcal.get_filter_name(image3)
         pass
     
 
@@ -143,6 +144,12 @@ def test_abs_fluxcal():
     assert flux == pytest.approx(200, abs = 6)
     assert flux_err == pytest.approx(1, abs = 0.3)
     
+    
+    #test the generation of the flux cal factors
+    fluxcal_factor = fluxcal.calibrate_fluxcal_aper(flux_image, radius, 0.997)
+    print(fluxcal_factor)
+    fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(flux_image, fwhm)
+    print (fluxcal_factor)
     
 if __name__ == '__main__':
     test_get_filter_name()

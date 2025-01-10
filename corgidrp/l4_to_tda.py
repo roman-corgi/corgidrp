@@ -22,7 +22,7 @@ def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     """
     mag_dataset = input_dataset.copy()
     # get the filter name from the header keyword 'CFAMNAME'
-    filter_name = fluxcal.get_filter_name(mag_dataset)
+    filter_name = fluxcal.get_filter_name(mag_dataset[0])
     # read the transmission curve from the color filter file
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
 
@@ -68,7 +68,7 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     """
     color_dataset = input_dataset.copy()
     # get the filter name from the header keyword 'CFAMNAME'
-    filter_name = fluxcal.get_filter_name(color_dataset)
+    filter_name = fluxcal.get_filter_name(color_dataset[0])
     # read the transmission curve from the color filter file
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
     # calculate the reference wavelength of the color filter

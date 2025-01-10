@@ -1277,8 +1277,8 @@ class FluxcalFactors(Image):
         date_valid (astropy.time.Time): date after which these parameters are valid
 
     Attributes:
-        params (dict): the values for various detector parameters specified here
-        default_values (dict): default values for detector parameters (fallback values)
+        params (dict): the values and errors of the flux cal factors for each band
+        default_values (dict): default values for flux cal factors (fallback values)
     """
     # default fluxcal factors
     default_values = {
@@ -1333,21 +1333,6 @@ class FluxcalFactors(Image):
             exthdr['CMDGAIN'] = 1.0
             exthdr['EXCAMT'] = 40.0
 
-            # write default values to headers
-            for key in self.default_values:
-                if len(key) > 8:
-                    # to avoid VerifyWarning from fits
-                    exthdr['HIERARCH ' + key] = self.default_values[key]
-                else:
-                    exthdr[key] = self.default_values[key]
-            # overwrite default values
-            for key in data_or_filepath:
-                # to avoid VerifyWarning from fits
-                if len(key) > 8:
-                    exthdr['HIERARCH ' + key] = data_or_filepath[key]
-                else:
-                    exthdr[key] = data_or_filepath[key]
-
             self.pri_hdr = prihdr
             self.ext_hdr = exthdr
             self.data = np.zeros([1,1])
@@ -1360,14 +1345,9 @@ class FluxcalFactors(Image):
             self.hdu_list = fits.HDUList()
 
         # make a dictionary that's easy to use
-        self.params = {}
-        # load back in all the values from the header
-        for key in self.default_values:
-            if len(key) > 8:
-                # to avoid VerifyWarning from fits
-                self.params[key] = self.ext_hdr['HIERARCH ' + key]
-            else:
-                self.params[key] = self.ext_hdr[key]
+        self.params = self.default_values
+        for key in data_or_filepath:
+            self.params[key] = data_or_filepath[key]
 
 
         # if this is a new FluxcalFactors file, we need to bookkeep it in the header
@@ -1398,7 +1378,7 @@ class FluxcalFactors(Image):
 
 
 datatypes = { "Image" : Image,
-             "Dark" : Dark,
+              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
               "KGain" : KGain,
               "BadPixelMap" : BadPixelMap,
