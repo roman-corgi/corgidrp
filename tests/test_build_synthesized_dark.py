@@ -4,7 +4,7 @@ import numpy as np
 
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.mocks import create_noise_maps, create_dark_calib_files
-from corgidrp.detector import unpack_geom, detector_areas
+from corgidrp.detector import unpack_geom, detector_areas, slice_section, embed
 
 im_rows, im_cols, _ = unpack_geom('SCI', 'image', detector_areas)
 rows = detector_areas['SCI']['frame_rows']
@@ -132,6 +132,23 @@ def main():
         assert('EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
         assert('exptime = '+str(t) in str(M_copy.ext_hdr['HISTORY']))
         pass
+        
+        # test ability to embed an image-area noisemap into full frame, as well as get an image-area master dark
+        embedded_maps = []
+        for map in [Fd, Cd, Dd]:
+            map_slice = slice_section(map, "SCI", 'image', detector_areas)
+            # now embed them back into full frames with zeros
+            embedded_map = embed(map_slice, 'SCI', 'image', 0)
+            embedded_maps.append(embedded_map)
+        embedded_maps = np.stack(embedded_maps)
+        noise_maps = create_noise_maps(embedded_maps[0], Ferr, Fdq, embedded_maps[1], Cerr, Cdq, 
+                          embedded_maps[2], Derr, Ddq)
+        dset = reset_g_t(dataset, g, t)
+        M_im = build_synthesized_dark(dset, noise_maps, full_frame=False)
+        assert(np.max(np.abs(M_im.data - slice_section(target, "SCI", 'image', detector_areas))) < tol)
+        assert(np.max(np.abs(M_im.err - slice_section(exp_err, "SCI", 'image', detector_areas))) < tol)
+        assert(np.max(np.abs(M_im.dq - slice_section(exp_dq, "SCI", 'image', detector_areas))) < tol)
+
 
     test_exact_case()
 

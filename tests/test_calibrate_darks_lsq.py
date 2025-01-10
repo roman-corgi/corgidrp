@@ -1,5 +1,6 @@
 import os
 import pytest
+import pickle
 import warnings
 import numpy as np
 
@@ -91,6 +92,11 @@ def test_expected_results_sub():
     # statistical error (std dev across frames), so skip the assertion for CIC here
     assert(np.nanmean(noise_maps.FPN_err) < np.nanmean(noise_maps.FPN_map))
 
+    # check the noisemap can be pickled (for CTC operations)
+    pickled = pickle.dumps(noise_maps)
+    pickled_noisemap = pickle.loads(pickled)
+    assert np.all((noise_maps.data == pickled_noisemap.data) | np.isnan(noise_maps.data))
+
     # save noise map
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     nm_filename = noise_maps.filename
@@ -99,6 +105,12 @@ def test_expected_results_sub():
     noise_maps.save(filedir=calibdir, filename=nm_filename)
     nm_filepath = os.path.join(calibdir, nm_filename)
     nm_f = DetectorNoiseMaps(nm_filepath)
+
+    # check the noisemap can be pickled (for CTC operations)
+    pickled = pickle.dumps(nm_f)
+    pickled_noisemap = pickle.loads(pickled)
+    assert np.all((noise_maps.data == pickled_noisemap.data) | np.isnan(noise_maps.data))
+
     # tests the copy method, from filepath way of creating class
     # instance, too
     nm_open = nm_f.copy()
@@ -107,15 +119,15 @@ def test_expected_results_sub():
     # check headers
     assert(noise_maps.data.ndim == 3)
     assert('DetectorNoiseMaps' in noise_maps.filename)
-    assert(noise_maps.ext_hdr["BUNIT"] == "detected EM electrons")
-    assert(noise_maps.err_hdr["BUNIT"] == "detected EM electrons")
+    assert(noise_maps.ext_hdr["BUNIT"] == "detected electrons")
+    assert(noise_maps.err_hdr["BUNIT"] == "detected electrons")
     assert("DetectorNoiseMaps" in str(noise_maps.ext_hdr["HISTORY"]))
     assert(noise_maps.ext_hdr['B_O_UNIT'] == 'DN')
 
     assert(nm_open.data.ndim == 3)
     assert('DetectorNoiseMaps' in nm_open.filename)
-    assert(nm_open.ext_hdr["BUNIT"] == "detected EM electrons")
-    assert(nm_open.err_hdr["BUNIT"] == "detected EM electrons")
+    assert(nm_open.ext_hdr["BUNIT"] == "detected electrons")
+    assert(nm_open.err_hdr["BUNIT"] == "detected electrons")
     assert("DetectorNoiseMaps" in str(nm_open.ext_hdr["HISTORY"]))
     assert(nm_open.ext_hdr['B_O_UNIT'] == 'DN')
 

@@ -4,7 +4,7 @@ import numpy.ma as ma
 import astropy.io.fits as fits
 import astropy.time as time
 import pandas as pd
-
+import copy
 import corgidrp
 
 class Dataset():
@@ -268,7 +268,7 @@ class Image():
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err = None, dq = None, err_hdr = None, dq_hdr = None, input_hdulist = None):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
-            with fits.open(data_or_filepath) as hdulist:
+            with fits.open(data_or_filepath, ignore_missing_simple=True) as hdulist:
                 
                 #Pop out the primary header
                 self.pri_hdr = hdulist.pop(0).header
@@ -312,10 +312,12 @@ class Image():
 
 
                 if input_hdulist is not None:
-                    self.hdu_list = input_hdulist
+                    this_hdu_list = [hdu.copy() for hdu in input_hdulist]
                 else: 
                     #After the data, err and dqs are popped out, the rest of the hdulist is stored in hdu_list
-                    self.hdu_list = hdulist
+                    this_hdu_list = [hdu.copy() for hdu in hdulist]
+                self.hdu_list = fits.HDUList(this_hdu_list)
+                
 
             # parse the filepath to store the filedir and filename
             filepath_args = data_or_filepath.split(os.path.sep)
@@ -363,7 +365,8 @@ class Image():
 
             #Take the input hdulist or make a blank one. 
             if input_hdulist is not None:
-                self.hdu_list = input_hdulist
+                this_hdu_list = [hdu.copy() for hdu in input_hdulist]
+                self.hdu_list = fits.HDUList(this_hdu_list)
                 #Keep track of the names 
                 for hdu in input_hdulist:
                     self.hdu_names.append(hdu.name)
@@ -400,6 +403,18 @@ class Image():
                 del self.err_hdr['Layer_{0}'.format(i + 2)]
             self.err = self.err[:1] # only save the total err, preserve 3-D shape
         self.err_hdr['TRK_ERRS'] = corgidrp.track_individual_errors # specify whether we are tracing errors
+
+        # the DRP needs to make sure certain keywords are set in its reduced products
+        # check those here, and if not, set them. 
+        # by default, assume desmear and CTI correction are not applied by default
+        # and they can be toggled to true after their step functions are run
+        if not 'DESMEAR' in self.ext_hdr:
+            self.ext_hdr.set('DESMEAR', False, "Was desmear applied to this frame?")
+        if not 'CTI_CORR' in self.ext_hdr:
+            self.ext_hdr.set('CTI_CORR', False, "Was CTI correction applied to this frame?")
+        if not 'IS_BAD' in self.ext_hdr:
+            self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
+
 
 
 
@@ -445,14 +460,25 @@ class Image():
         """
         Record what input dataset was used to create this Image.
         This assumes many Images were used to make this single Image.
+        Also tracks images that were used to make the images that make this image.
         Record is stored in the ext header.
 
         Args:
             input_dataset (corgidrp.data.Dataset): the input dataset that were combined together to make this image
         """
-        self.ext_hdr.set('DRPNFILE', len(input_dataset), "# of files used to create this processed frame")
-        for i, img in enumerate(input_dataset):
-            self.ext_hdr.set('FILE{0}'.format(i), img.filename, "File #{0} filename used to create this frame".format(i))
+
+        parent_filenames = set()
+        # go through filenames and also check each frames parents
+        for img in input_dataset:
+            parent_filenames.add(img.filename)
+            # also check if this frame has parent frames. keep trakc of them too
+            if 'DRPNFILE' in img.ext_hdr:
+                for j in range(img.ext_hdr['DRPNFILE']):
+                    parent_filenames.add(img.ext_hdr['FILE{0}'.format(j)])
+        
+        for i, filename in enumerate(parent_filenames):
+            self.ext_hdr.set('FILE{0}'.format(i), filename, "File #{0} filename used to create this frame".format(i))
+        self.ext_hdr.set('DRPNFILE', len(parent_filenames), "# of files used to create this processed frame")
 
     def copy(self, copy_data=True):
         """
@@ -467,25 +493,12 @@ class Image():
             corgidrp.data.Image: a copy of this Image
         """
         if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-            new_hdulist = self.hdu_list.copy()
+            new_img = copy.deepcopy(self)
         else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-            new_hdulist = self.hdu_list
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, 
-                        input_hdulist = new_hdulist, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_img.filename = self.filename
-        new_img.filedir = self.filedir
-
+            new_img = copy.copy(self)
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+        new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+        new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img
 
@@ -583,6 +596,7 @@ class Image():
         if name in self.hdu_names:
             raise ValueError("Extension name already exists in HDU list")
         else: 
+            self.hdu_names.append(name)
             self.hdu_list.append(new_hdu)
 
 
@@ -613,16 +627,17 @@ class Dark(Image):
             self.ext_hdr['BUNIT'] = 'detected electrons'
 
             # log all the data that went into making this calibration file
-            if 'DRPNFILE' not in ext_hdr.keys():
+            if 'DRPNFILE' not in ext_hdr.keys() and input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
+            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
-            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
-            self.filename = "{0}_dark.fits".format(orig_input_filename)
+            if input_dataset is not None:
+                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                self.filename = "{0}_dark.fits".format(orig_input_filename)
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'detected electrons'
@@ -634,37 +649,6 @@ class Dark(Image):
         if self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this Dark file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.NoiseMap): a copy of this Dark
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_dark = Dark(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_dark.filename = self.filename
-        new_dark.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_dark
 
 class FlatField(Image):
     """
@@ -717,9 +701,12 @@ class NonLinearityCalibration(Image):
      - Row headers (dn counts) must be monotonically increasing
      - Column headers (EM gains) must be monotonically increasing
      - Data columns (relative gain curves) must straddle 1
-     - The first row will provide the the Gain axis values (accesssed via gain_ax = non_lin_correction.data[0, 1:])
-     - The first column will provide the "count" axis value (accessed via count_ax = non_lin_correction.data[1:, 0])
-     - The rest of the array will be the calibration data (accessed via relgains = non_lin_correction.data[1:, 1:])
+     - The first row will provide the the Gain axis values (accesssed via 
+        gain_ax = non_lin_correction.data[0, 1:])
+     - The first column will provide the "count" axis value (accessed via 
+        count_ax = non_lin_correction.data[1:, 0])
+     - The rest of the array will be the calibration data (accessed via 
+     relgains = non_lin_correction.data[1:, 1:])
 
     For example:
     [
@@ -737,12 +724,18 @@ class NonLinearityCalibration(Image):
     [0.900, 0.910, 0.950, 1.000] is the first of the four relative gain curves.
 
      Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D calibration data. See above for the required format.
-        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
-        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this NonLinearityCalibration file (required only if raw 2D data is passed in)
+        data_or_filepath (str or np.array): either the filepath to the FITS file 
+        to read in OR the 2D calibration data. See above for the required format.
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if 
+        raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required 
+        only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined 
+        together to make this NonLinearityCalibration file (required only if 
+        raw 2D data is passed in)
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, 
+                 input_dataset=None):
 
         # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
@@ -751,21 +744,27 @@ class NonLinearityCalibration(Image):
         nonlin_raw = self.data
         if nonlin_raw.ndim < 2 or nonlin_raw.shape[0] < 2 or \
         nonlin_raw.shape[1] < 2:
-            raise ValueError('The non-linearity calibration array must be at least 2x2 (room for x '
-                                'and y axes and one data point)')
+            raise ValueError('The non-linearity calibration array must be at' 
+                             'least 2x2 (room for x and y axes and one data' 
+                             'point)')
         if not np.isnan(nonlin_raw[0, 0]):
-            raise ValueError('The first value of the non-linearity calibration array  (upper left) must be set to '
-                                '"nan"')
+            raise ValueError('The first value of the non-linearity calibration '
+                             'array  (upper left) must be set to "nan"')
 
 
         # additional bookkeeping for a calibration file
         # if this is a new calibration file, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new NonLinearityCalibration file
+        # b/c of logic in the super.__init__, we just need to check this to see if 
+        # it is a new NonLinearityCalibration file
         if ext_hdr is not None:
             if input_dataset is None:
                 # error check. this is required in this case
-                raise ValueError("This appears to be a new Non Linearity Correction. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this calibration file.")
-            self.ext_hdr['DATATYPE'] = 'NonLinearityCalibration' # corgidrp specific keyword for saving to disk
+                raise ValueError("This appears to be a new Non Linearity "
+                                 "Correction. The dataset of input files needs" 
+                                 "to be passed in to the input_dataset keyword" 
+                                 "to record history of this calibration file.")
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'NonLinearityCalibration' 
 
             # log all the data that went into making this calibration file
             self._record_parent_filenames(input_dataset)
@@ -853,7 +852,7 @@ class KGain(Image):
                 self.filename = "{0}_kgain.fits".format(orig_input_filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected EM electrons/DN'
+            self.ext_hdr['BUNIT'] = 'detected electrons/DN'
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
 
@@ -871,40 +870,6 @@ class KGain(Image):
     @property
     def error(self):
         return self._kgain_error
-    
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this KGain file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.KGain: a copy of this KGain
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_ptc = np.copy(self.ptc)
-            new_err = np.copy(self.err)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_ptc = self.ptc
-            new_err = np.copy(self.err)
-        
-        new_kg = KGain(new_data, err = new_err, ptc = new_ptc, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err_hdr = self.err_hdr.copy(), ptc_hdr = self.ptc_hdr.copy())
-        
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_kg.filename = self.filename
-        new_kg.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-        
-        return new_kg
-
 
     def save(self, filedir=None, filename=None):
         """
@@ -980,33 +945,6 @@ class BadPixelMap(Image):
         if self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
 
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this BadPixelMap file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.BadPixelMap: a copy of this BadPixelMap
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-        else:
-            new_data = self.data # this is just pointer referencing
-        new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-
-        # we got to manually update some parameters. Need to keep track of which ones to update
-        new_bp.filename = self.filename
-        new_bp.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_bp
 
 class DetectorNoiseMaps(Image):
     """
@@ -1053,7 +991,7 @@ class DetectorNoiseMaps(Image):
                 raise ValueError("This appears to be a new DetectorNoiseMaps instance. The dataset of input files needs to be passed in to the input_dataset keyword to record the history of the files that made the calibration products.")
 
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected EM electrons'
+            self.ext_hdr['BUNIT'] = 'detected electrons'
             # bias offset
             self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
 
@@ -1068,7 +1006,7 @@ class DetectorNoiseMaps(Image):
             self.filename = "{0}_DetectorNoiseMaps.fits".format(orig_input_filename)
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'detected EM electrons'
+            self.err_hdr['BUNIT'] = 'detected electrons'
 
         # double check that this is actually a DetectorNoiseMaps file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1087,46 +1025,18 @@ class DetectorNoiseMaps(Image):
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
 
-
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this DetectorNoiseMaps file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.DetectorNoiseMaps): a copy of this DetectorNoiseMaps
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_nm = DetectorNoiseMaps(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_nm.filename = self.filename
-        new_nm.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_nm
-
 class DetectorParams(Image):
     """
-    Class containing detector parameters that may change over time
+    Class containing detector parameters that may change over time. 
+
+    To create a new instance of DetectorParams, you only need to pass in the values you would like to change from default values:
+        new_valid_date = astropy.time.Time("2027-01-01")
+        new_det_params = DetectorParams({'gmax' : 7500.0 }, date_valid=new_valid_date). 
 
     Args:
-        data_or_filepath (dict or str): either a filepath string or a dictionary of
-                                        parameters to modify from default values
+        data_or_filepath (dict or str): either a filepath string corresponding to an 
+                                        existing DetectorParams file saved to disk or a
+                                        dictionary of parameters to modify from default values
         date_valid (astropy.time.Time): date after which these parameters are valid
 
     Attributes:
@@ -1263,7 +1173,7 @@ class AstrometricCalibration(Image):
     Class for astrometric calibration file. 
     
     Args:
-        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 2D image data
+        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 1D array of calibration measurements
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
@@ -1305,6 +1215,53 @@ class AstrometricCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
             raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
         
+class TrapCalibration(Image):
+    """
+
+    Class for data related to charge traps that cause charge transfer inefficiency. 
+    The calibration is generated by trap-pumped data. 
+
+    The format will be [n,10], where each entry will have: 
+    [row, column, sub-electrode location, index numnber of trap at this pixel/electrode, 
+    capture time constant, maximum amplitude of the dipole, energy level of hole, 
+    cross section for holes, R^2 value of fit, release time constant]
+
+     Args:
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make the trap calibration
+    """
+    def __init__(self,data_or_filepath, pri_hdr=None,ext_hdr=None, input_dataset=None):
+        # run the image class constructor
+        super().__init__(data_or_filepath,pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        
+        # if this is a new calibration, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new cal
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError("This appears to be a new TrapCalibration. The dataset of input files needs to be "
+                                 "passed in to the input_dataset keyword to record history of this TrapCalibration.")
+            self.ext_hdr['DATATYPE'] = 'TrapCalibration' # corgidrp specific keyword for saving to disk
+
+            # log all the data that went into making this dark
+            self._record_parent_filenames(input_dataset)
+
+            # add to history
+            self.ext_hdr['HISTORY'] = "TrapCalibration created from {0} frames".format(self.ext_hdr['DRPNFILE'])
+
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+            self.filename = "{0}_trapcal.fits".format(orig_input_filename)
+
+
+        # double check that this is actually a dark file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'TrapCalibration':
+            raise ValueError("File that was loaded was not a TrapCalibration file.")
+
 datatypes = { "Image" : Image,
              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -1313,7 +1270,8 @@ datatypes = { "Image" : Image,
               "DetectorNoiseMaps": DetectorNoiseMaps,
               "FlatField" : FlatField,
               "DetectorParams" : DetectorParams,
-              "AstrometricCalibration" : AstrometricCalibration }
+              "AstrometricCalibration" : AstrometricCalibration,
+              "TrapCalibration": TrapCalibration }
 
 def autoload(filepath):
     """

@@ -1,1 +1,6 @@
 tests/test_data/FluxMap1024.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-neptune_band_1.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-neptune_band_4.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-uranus_band_4.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/medcombined-uranus_band_1.fits filter=lfs diff=lfs merge=lfs -text
+tests/test_data/mock_northup.fits filter=lfs diff=lfs merge=lfs -text
