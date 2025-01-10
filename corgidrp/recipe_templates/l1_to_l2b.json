@@ -9,6 +9,9 @@
     "steps" : [
         {
             "name" : "prescan_biassub",
+            "calibs" : {
+                "DetectorNoiseMaps" : "AUTOMATIC"
+            },
             "keywords" : {
                 "return_full_frame" : false
             }
@@ -16,7 +19,8 @@
         {
             "name" : "detect_cosmic_rays",
             "calibs" : {
-                "DetectorParams" : "AUTOMATIC"
+                "DetectorParams" : "AUTOMATIC",
+                "KGain" : "AUTOMATIC, OPTIONAL"
             }
         },
         {
@@ -62,7 +66,10 @@
             }
         },
         {
-            "name" : "cti_correction"
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
         },
         {
             "name" : "flat_division",

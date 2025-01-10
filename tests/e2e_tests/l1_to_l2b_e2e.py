@@ -27,10 +27,10 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
-    dark_path = os.path.join(processed_cal_path, "Dark_map_240322.fits")
+    dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
-    fpn_path = os.path.join(processed_cal_path, "FPN_map_240318.fits")
-    cic_path = os.path.join(processed_cal_path, "CIC_map_240322.fits")
+    fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
+    cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
     # define the raw science data to process
@@ -80,7 +80,7 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/home/jwang/Jason/Documents/DataCopy/corgi/CGI_TVAC_Data/"
+    tvacdata_dir =  "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

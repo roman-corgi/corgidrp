@@ -12,7 +12,6 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from astropy.io import fits
 
 import test_check
 from corgidrp import check
@@ -99,7 +98,7 @@ for j in range(n_mean):
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
     # Temporary keyword value. Mean frame is TBD
-    image_sim.ext_hdr['OBSTYPE'] = 'MNFRAME'
+    image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
     frame_list.append(image_sim)
 
 index = 0
@@ -123,7 +122,7 @@ for j in range(len(exp_repeat_counts)):
                                divide_em=True)
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
         # OBSTYPE has no KGAIN value, but NONLIN
-        image_sim.ext_hdr['OBSTYPE'] = 'NONLIN'
+        image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
         frame_list.append(image_sim)
 dataset_kg = Dataset(frame_list)
 
