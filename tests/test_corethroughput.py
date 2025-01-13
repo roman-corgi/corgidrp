@@ -100,8 +100,26 @@ def test_psf_pix_and_ct():
     # Some tolerance for comparison between I/O values. CT in (0,1]
     assert ct_est == pytest.approx(np.array(ct_os11), abs=0.005)
 
+def test_fpm_pos():
+    """
+    Test 1090882 - Given 1) the location of the center of the FPM coronagraphic
+    mask in EXCAM pixels during the coronagraphic observing sequence and 2) the
+    FPAM and FSAM encoder positions during both the coronagraphic and core
+    throughput observing sequences, the CTC GSW shall compute the center of the
+    FPM coronagraphic mask during the core throughput observing sequence.
+    """
+    
+    # If the input FPM, FPAM or FSAM positions are not each a 2-dimensional
+    # array, the function must fail
+    with pytest.raises(IOError):
+        corethroughput.get_ct_fpm_center(np.array(1))   
+    
+
+
+
 if __name__ == '__main__':
 
     test_psf_pix_and_ct()
+    test_fpm_pos()
 
 

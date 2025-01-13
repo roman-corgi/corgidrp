@@ -167,3 +167,46 @@ def estimate_psf_pix_and_ct(
 
     return psf_pix, psf_ct
 
+def get_ct_fpm_center(
+    fpm_center_cor,
+    fpam_pos_cor=None,
+    fpam_pos_ct=None,
+    fsam_pos_cor=None,
+    fsam_pos_ct=None,
+    ):
+    """
+    1090882 - Given 1) the location of the center of the FPM coronagraphic mask
+    in EXCAM pixels during the coronagraphic observing sequence and 2) the FPAM
+    and FSAM encoder positions during both the coronagraphic and core throughput
+    observing sequences, the CTC GSW shall compute the center of the FPM
+    coronagraphic mask during the core throughput observing sequence.
+
+    Args:
+      fpm_center_cor (array): 2-dimensional array with the center of the focal
+        plane mask during coronagraphic observations. Units: EXAM pixels.
+      fpam_pos_cor (array): 2-dimensional array with the H/V values of the FPAM
+        positions during coronagraphic observations. Units: micrometers.
+      fpam_pos_ct (array): 2-dimensional array with the H/V values of the FPAM
+        positions during core throughput observations. Units: micrometers.
+      fsam_pos_cor (array): 2-dimensional array with the H/V values of the FSAM
+        positions during coronagraphic observations. Units: micrometers.
+      fsam_pos_ct (array): 2-dimensional array with the H/V values of the FSAM
+        positions during core throughput observations. Units: micrometers.
+
+    Returns:
+      New center of the focal plane mask during core throughput observations in
+      units of EXCAM pixels.
+    """
+    # Checks
+    try:
+        if (type(fpm_center_cor) != np.ndarray or len(fpm_center_cor) !=2 or
+            type(fpam_pos_cor) != np.ndarray or len(fpam_pos_cor) !=2 or 
+            type(fpam_pos_ct) != np.ndarray or len(fpam_pos_ct) !=2 or
+            type(fsam_pos_cor) != np.ndarray or len(fsam_pos_cor) !=2 or
+            type(fsam_pos_ct) != np.ndarray or len(fsam_pos_ct) !=2):
+            raise IOError('Input values are not 2-dimensional arrays')
+    except:
+        raise IOError('Input values are not 2-dimensional arrays')
+
+
+
