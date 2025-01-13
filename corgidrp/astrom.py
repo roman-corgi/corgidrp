@@ -793,7 +793,7 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
 
     return first_stars, offsets, true_offsets, errs
 
-def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, fitorder=3):
+def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale, northangle, fitorder=3):
     ''' 
     Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
 
@@ -803,6 +803,8 @@ def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, 
         offsets (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
         true_offsets (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
         errs (np.array): 2D array of the (x_err, y_err) error in the measured pixel positions
+        platescale (float): Platescale value to use in computing distortion
+        northangle (float): Northangle value to use in computing distortion 
         fitorder (int): The order of legendre polynomial to fit to the image distortion (default: 3)
 
     Returns:
@@ -812,23 +814,28 @@ def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, 
 
     ## SET FITTING PARAMS
     # center around image center
+    # assume all images in dataset have the same shape
+    input_image = input_dataset[0].data
     x0 = np.shape(input_image)[1] // 2
     y0 = np.shape(input_image)[0] // 2
     
     # define fitting params            
     fitparams = (fitorder + 1)**2
-    the_platescale = cal_properties[0]
-    the_rotangle = cal_properties[1]
+    the_platescale = platescale
+    the_rotangle = northangle
     
     # initial guesses for the legendre coeffs
     guess_leg = [0 for _ in range(fitorder+1)] + [500,] + [0 for _ in range(fitparams - fitorder - 2)] + [0,500] + [0 for _ in range(fitparams-2)]
-
+    
     ## OPTIMIZE 
     (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, guess_leg)
 
-    return distortion_coeffs
-
-def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, frames_to_combine=None):
+    return (distortion_coeffs, fitorder)
+  
+  
+def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
+                          comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
+                          frames_to_combine=None, find_distortion=True, fitorder=3, position_error=None):
     """
     Perform the boresight calibration of a dataset.
     
