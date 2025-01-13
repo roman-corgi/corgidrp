@@ -1327,8 +1327,8 @@ class AstrometricCalibration(Image):
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # File format checks
-        if self.data.shape != (4,):
-            raise ValueError("The AstrometricCalibration data should be a 1D array of four values")
+        if len(self.data) != 4:
+            raise ValueError("The AstrometricCalibration data should be a list of four calibration measurements")
         else:
             self.boresight = self.data[0]
             self.platescale = self.data[1]
