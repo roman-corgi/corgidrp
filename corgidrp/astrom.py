@@ -721,86 +721,94 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def compute_distortion(input_image, source_matches, cal_properties, fitorder=3, position_error=None):
-    """ 
-    Function that computes the legendre coefficients that describe the image distortion
+def format_distortion_inputs(input_dataset, source_matches, position_error=None):
+    ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
     
     Inputs:
-        input_image (np.ndarray): 2D image to extract distortion maps from
-        source_matches (astropy.table.Table): Astropy table with columns 'x','y','RA', 'DEC' as pixel locations and corresponding sky positons
-        cal_properties (tuple):
-            (float): Platescale
-            (float): North Angle
-        fitorder (int): The order of polynomials to fit to data (default: 3)
+        input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
+        source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
                         Should be changed later to accept non-uniform errors
         
     Returns:
-        coeffs (tuple): The legendre coefficients and polynomial order 
-                
-    """
-    ## CREATE BINARY STAR LISTS
-    # define a place for all the lists
-    offsets, errs, first_stars, true_offsets = [], [], [], []
+        first_stars (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
+        offsets (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
+        true_offsets (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
+        errs (np.array): 2D array of the (x_err, y_err) error in the measured pixel positions
+    '''
+    ## Create arrays to store values in
+    dxs, dys = np.array([]), np.array([])
+    xerrs, yerrs = np.array([]), np.array([])
+    firstxs, firstys = np.array([]), np.array([])
+    seps, pas = np.array([]), np.array([])
 
-    # separate by x, y for formatting reasons
-    dxs, dys = [], []
-    xerrs, yerrs = [], []
-    firstxs, firstys = [], []
-    seps, pas = [], []
+    ## Loop over every frame in the dataset
+    for frame_ind in range(len(input_dataset)):
+        input_image = input_dataset[frame_ind].data
+
+        # create all possible combinations of the given stars
+        combo_list = np.array(list(compute_combinations(source_matches[frame_ind])))
+        skycoords = SkyCoord(ra= source_matches[frame_ind]['RA'], dec= source_matches[frame_ind]['DEC'], unit='deg', frame='icrs')
     
-    # create all possible combinations of the given stars
-    combo_list = np.array(list(compute_combinations(source_matches)))
-    skycoords = SkyCoord(ra= source_matches['RA'], dec= source_matches['DEC'], unit='deg', frame='icrs')
-
-    for pair_ind in combo_list:
-        # get the pixel offset
-        first = pair_ind[0]
-        second = pair_ind[1]
+        for pair_ind in combo_list:
+            # get the pixel offset
+            first = pair_ind[0]
+            second = pair_ind[1]
+            
+            star1 = source_matches[frame_ind][first][['x','y']]
+            star2 = source_matches[frame_ind][second][['x','y']]
+    
+            x_guess = star2[0] - star1[0]
+            y_guess = star2[1] - star1[1]
         
-        star1 = source_matches[first][['x','y']]
-        star2 = source_matches[second][['x','y']]
-
-        x_guess = star2[0] - star1[0]
-        y_guess = star2[1] - star1[1]
+            (dx, dy), (data, model, residual), (xfit_err, yfit_err, _), (x1, y1) = measure_offset(input_image, star1[0], star1[1], x_guess, y_guess, guessflux=1)
     
-        (dx, dy), (data, model, residual), (xfit_err, yfit_err, _), (x1, y1) = measure_offset(input_image, star1[0], star1[1], x_guess, y_guess, guessflux=1)
-
-        # get the true sky offset [mas]
-        true1 = skycoords[first]
-        true2 = skycoords[second]
-    
-        # get true sky separation and position angle
-        true_sep = true1.separation(true2).mas
-        true_pa = true1.position_angle(true2).deg
+            # get the true sky offset [mas]
+            true1 = skycoords[first]
+            true2 = skycoords[second]
         
-        dxs.append(dx)
-        dys.append(dy)
-        firstxs.append(star1['x'])
-        firstys.append(star1['y'])
-        seps.append(true_sep)
-        pas.append(true_pa)
-
-        if type(position_error) == type(None):
-            xerrs.append(xfit_err)
-            yerrs.append(yfit_err)
-        else:
-            xerrs.append(position_error)
-            yerrs.append(position_error)
-
-    dxs = np.array(dxs)
-    dys = np.array(dys)
-    firstxs = np.array(firstxs)
-    firstys = np.array(firstys)
-    xerrs = np.array(xerrs)
-    yerrs = np.array(yerrs)
-    seps = np.array(seps)
-    pas = np.array(pas)
+            # get true sky separation and position angle
+            true_sep = true1.separation(true2).mas
+            true_pa = true1.position_angle(true2).deg
+            
+            dxs = np.append(dxs, dx)
+            dys = np.append(dys, dy)
+            firstxs = np.append(firstxs, star1['x'])
+            firstys = np.append(firstys, star1['y'])
+            seps = np.append(seps, true_sep)
+            pas = np.append(pas, true_pa)
     
-    true_offsets.append((seps, pas))
-    offsets.append((dxs, dys))
-    first_stars.append((firstxs, firstys))
-    errs.append((xerrs, yerrs))
+            if type(position_error) == type(None):
+                xerrs = np.append(xerrs, xfit_err)
+                yerrs = np.append(yerrs, yfit_err)
+            else:
+                xerrs = np.append(xerrs, position_error)
+                yerrs = np.append(yerrs, position_error)
+   
+    # join arrays and reshape to (1, 2, N)
+    offsets = np.array([[dxs, dys]])
+    first_stars = np.array([[firstxs, firstys]])
+    true_offsets = np.array([[seps, pas]])
+    errs = np.array([[xerrs, yerrs]])
+
+    return first_stars, offsets, true_offsets, errs
+
+def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, fitorder=3):
+    ''' 
+    Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): corgidrp dataset object with images to compute the distortion from
+        first_stars (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
+        offsets (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
+        true_offsets (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
+        errs (np.array): 2D array of the (x_err, y_err) error in the measured pixel positions
+        fitorder (int): The order of legendre polynomial to fit to the image distortion (default: 3)
+
+    Returns:
+        distortion_coeffs (tuple): The legendre coefficients (np.array) and polynomial order used for the fit (int)
+
+    '''
 
     ## SET FITTING PARAMS
     # center around image center
