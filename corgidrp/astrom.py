@@ -842,7 +842,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
         field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
-        field_matches (str): Full path to file with calibration field matches to the image sources (x, y, ra, dec), if None, automated source matching is used (default: None)
+        field_matches (list of str): List of full paths to files with calibration field matches for each image in the dataset (x, y, ra, dec), if None, automated source matching is used (default: None)
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
@@ -852,6 +852,9 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
         center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 0.9 -- ie: 90% of the image is used)
         frames_to_combine (int): The number of frames to combine in a dataset (default: None)
+        find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: True)
+        fitorder (int): The order of legendre polynomials used to fit the distortion map (default: 3)
+        position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -861,9 +864,12 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     dataset = input_dataset.copy()
 
     # load in the source matches if automated source finder is not being used
+    matched_sources_multiframe = []
     if field_matches is not None:
-        matched_sources = ascii.read(field_matches)
-
+        for i in range(len(input_dataset)):
+            matched_sources = ascii.read(field_matches[i])
+            matched_sources_multiframe.append(matched_sources)
+        
     # load in field data to refer to
     if field_path == 'JWST_CALFIELD2020.csv':
         full_field_path = os.path.join(os.path.dirname(__file__), "data", field_path)
@@ -905,6 +911,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         if field_matches is None:
             found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
             matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
+            matched_sources_multiframe.append(matched_sources)
 
         # compute the calibration properties
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
@@ -921,13 +928,22 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     avg_platescale = np.mean([astro.platescale for astro in astroms])
     avg_northangle = np.mean([astro.northangle for astro in astroms])
 
-    avg_data = np.array([avg_ra, avg_dec, avg_platescale, avg_northangle])
+    # compute the distortion map coeffs
+    if find_distortion:
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, position_error=position_error)
+        distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder)
+    else:
+        distortion_coeffs = np.nan
+
+    astromcal_data = [np.array([avg_ra, avg_dec]), avg_platescale, avg_northangle, distortion_coeffs]
     astroms_dataset = corgidrp.data.Dataset(astroms)
-    avg_cal = corgidrp.data.AstrometricCalibration(avg_data, pri_hdr=input_dataset[0].pri_hdr, ext_hdr=input_dataset[0].ext_hdr, input_dataset=astroms_dataset)
+    avg_cal = corgidrp.data.AstrometricCalibration(astromcal_data, pri_hdr=input_dataset[0].pri_hdr, ext_hdr=input_dataset[0].ext_hdr, input_dataset=astroms_dataset)
         
     # update the history
     history_msg = "Boresight calibration completed"
     astrom_cal_dataset = corgidrp.data.Dataset([avg_cal])
     astrom_cal_dataset.update_after_processing_step(history_msg)
+    ## history message should be added to the input dataset(?)
+    input_dataset.update_after_processing_step(history_msg)
 
-    return astrom_cal
+    return avg_cal
