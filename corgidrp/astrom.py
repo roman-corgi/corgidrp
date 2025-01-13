@@ -442,9 +442,13 @@ def fit_astrom_solution(params):
     Function used to fit the legendre polynomials for distortion mapping. Cannot be used outside of compute_distortion() function where most
         hard-coded variables are defined.
 
-    *lmc_offset input assumes sep/ pa offsets in [mas] and [deg]
-    
+    Args:
+        params (list): List of the x and y legendre polynomial coefficients
+
+    Returns:
+        residuals (list): List of residuals between true and measured star positions
     '''
+
     platescale, rotangle = the_platescale, the_rotangle
 
     leg_params_x = np.array(params[:fitparams])  
@@ -724,7 +728,7 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 def format_distortion_inputs(input_dataset, source_matches, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
     
-    Inputs:
+    Args:
         input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
