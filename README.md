@@ -95,11 +95,11 @@ def example_step(dataset, calib_data, tuneable_arg=1, another_arg="test"):
 
 Inside the function can be nearly anything you want, but the function signature and start/end of the function should follow a few rules.
 
-  * Each function should include a docstring that descibes what the function is doing, what the inputs (including units if appropriate) are and what the outputs (also with units). The dosctrings should be [goggle style docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). 
+  * Each function should include a docstring that describes what the function is doing, what the inputs (including units if appropriate) are and what the outputs (also with units). The dosctrings should be [google style docstrings](https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html). 
   * The input dataset should always be the first input
   * Additional arguments and keywords exist only if you need them--many relevant parameters might already by in Dataset headers. A pipeline step can only have a single argument (the input dataset) if needed.
   * All additional function arguments/keywords should only consist of the following types: int, float, str, or a class defined in corgidrp.Data. 
-    * (Long explaination for the curious: The reason for this is that pipeline steps can be written out as text files. Int/float/str are easily represented succinctly by textfiles. All classes in corgidrp.Data can be created simply by passing in a filepath. Therefore, all pipeline steps have easily recordable arguments for easy reproducibility.)
+    * (Long explanation for the curious: The reason for this is that pipeline steps can be written out as text files. Int/float/str are easily represented succinctly by textfiles. All classes in corgidrp.Data can be created simply by passing in a filepath. Therefore, all pipeline steps have easily recordable arguments for easy reproducibility.)
   * The first line of the function generally should be creating a copy of the dataset (which will be the output dataset). This way, the output dataset is not the same instance as the input dataset. This will make it easier to ensure reproducibility. 
   * The function should always end with updating the header and (typically) the data of the output dataset. The history of running this pipeline step should be recorded in the header. 
 
@@ -133,7 +133,7 @@ End-to-end testing refers to processing data as one would when we get the real d
       - if you need to create mock L1 data, please do it in the script as well. 
       - See the existing tests in `tests/e2e_tests/` for how to structure this script. You should only need to write a single script.
   4. Test that the script runs successfully on your local machine and produces the expected output. Debug as necessary. When appropriate, test your results against those obtained from the II&T/TVAC pipeline using the same input data. 
-  5. Determine how resource intensive your recipe is. There are many ways to do this, but Linux users can run `/usr/bin/time -v python your_e2e_test.py` and Mac userse can run `/usr/bin/time -l -h -p python <your_e2e_test.py>`. Record elapsed (wall clock) time, the percent of CPU this job got (only if parallelization was used), and total memory used (labelled "Maximum resident set size"). 
+  5. Determine how resource intensive your recipe is. There are many ways to do this, but Linux users can run `/usr/bin/time -v python your_e2e_test.py` and Mac users can run `/usr/bin/time -l -h -p python <your_e2e_test.py>`. Record elapsed (wall clock) time, the percent of CPU this job got (only if parallelization was used), and total memory used (labelled "Maximum resident set size"). 
   6. Document your recipe on the "Corgi-DRP Implementation Document" on Confluence (see the big table in Section 2.0). You should fill out an entire row with your recipe. Under addition notes, note if your recipe took significant run time (> 1 minute) and significant memory (> 1 GB). 
   7. PR! 
 
@@ -175,21 +175,11 @@ Before creating a pull request, review the design Principles below. Use the Gith
 
 ## FAQ
 
-  * Does my pipeline function need to save files?
-    * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
-  * Can I create new data classes?
-    * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
-    * You do not necessarily need to write a copy function for subclasses of the `Image` class. If you need to copy calibration objects at all you can import and apply the copy module of python, see
-      example: 
-      ```
-      import copy
-      flatfield = data.Flatfield('flatfield.fits')
-      #reference copy
-      flatfield_copy = copy.copy(flatfield)
-      #deep data copy
-      flatfield_copy = copy.deepcopy(flatfield)
-      ```
-
+* Does my pipeline function need to save files?
+  * Files will be saved by a higher level pipeline code. As long as you output an object that's an instance of a `corgidrp.Data` class, it will have a `save()` function that will be used.
+* Can I create new data classes?
+  * Yes, you can feel free to make new data classes. Generally, they should be a subclass of the `Image` class, and you can look at the `Dark` class as an example. Each calibration type should have its own `Image` subclass defined. Talk with Jason and Max to discuss how your class should be implemented!
+  * You do not necessarily need to write a copy function for subclasses of the `Image` class. If you need to copy calibration objects at all, you can use the copy function of the Image class.
 * What python version should I develop in?
   * Python 3.12
     
@@ -208,6 +198,9 @@ Before creating a pull request, review the design Principles below. Use the Gith
   * If they are larger than 1 MB, they should be stored using `git lfs`. Ask Jason about setting up git lfs (as of writing, we have not set up git lfs yet).
  
 ## Change Log
+
+**v1.1.2**
+ * Flat field correction marks pixels divided by 0 as bad
 
 **v1.1.1**
  * Fix unit test that wasn't cleaning up environment properly
