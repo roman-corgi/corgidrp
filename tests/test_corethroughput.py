@@ -113,12 +113,78 @@ def test_fpm_pos():
     # array, the function must fail
     with pytest.raises(IOError):
         corethroughput.get_ct_fpm_center(np.array(1))   
-    
+        corethroughput.get_ct_fpm_center(np.array([1]))
 
+    # FPM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    EXCAM_center_pos_pix = np.array([512,512])
+    # EXCAM's pixel pitch and theoretical values for mas/um for FPAM and FSAM
+    FPAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.67
+    FSAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.10
+    for row in range(2):
+        for pix in [15, 1015]:
+            if row:
+                center_pix = np.array([pix, EXCAM_center_pos_pix[1] ])
+            else:
+                center_pix = np.array([EXCAM_center_pos_pix[0], pix])
+            with pytest.raises(ValueError):
+                corethroughput.get_ct_fpm_center(center_pix,
+                    fpam_pos_cor=FPAM_center_pos_um,
+                    fpam_pos_ct=FPAM_center_pos_um,
+                    fsam_pos_cor=FSAM_center_pos_um,
+                    fsam_pos_ct=FSAM_center_pos_um)
+    # FPAM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    for row in range(2):
+        for um in [122, 8287]:
+            if row:
+                center_um = np.array([um, FPAM_center_pos_um[1]])
+            else:
+                center_um = np.array([FPAM_center_pos_um[0], um])
+            with pytest.raises(ValueError):
+                corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                    fpam_pos_cor=center_um,
+                    fpam_pos_ct=FPAM_center_pos_um,
+                    fsam_pos_cor=FSAM_center_pos_um,
+                    fsam_pos_ct=FSAM_center_pos_um)
+                corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                    fpam_pos_cor=FPAM_center_pos_um,
+                    fpam_pos_ct=center_um,
+                    fsam_pos_cor=FSAM_center_pos_um,
+                    fsam_pos_ct=FSAM_center_pos_um)
+    # FSAM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    for row in range(2):
+        for um in [156, 10537]:
+            if row:
+                center_um = np.array([um, FSAM_center_pos_um[1]])
+            else:
+                center_um = np.array([FSAM_center_pos_um[0], um])
+            with pytest.raises(ValueError):
+                corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                    fpam_pos_cor=FPAM_center_pos_um,
+                    fpam_pos_ct=FPAM_center_pos_um,
+                    fsam_pos_cor=center_um,
+                    fsam_pos_ct=FSAM_center_pos_um)
+                corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                    fpam_pos_cor=FPAM_center_pos_um,
+                    fpam_pos_ct=FPAM_center_pos_um,
+                    fsam_pos_cor=FSAM_center_pos_um,
+                    fsam_pos_ct=center_um)
+     
+    # Using values within the range should return a meaningful value
+    fpm_center_ct_pix = corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+        fpam_pos_cor=FPAM_center_pos_um,
+        fpam_pos_ct=FPAM_center_pos_um,
+        fsam_pos_cor=FSAM_center_pos_um,
+        fsam_pos_ct=FSAM_center_pos_um)
 
+    assert(np.all(fpm_center_ct_pix == EXCAM_center_pos_pix))
 
 if __name__ == '__main__':
-
     test_psf_pix_and_ct()
     test_fpm_pos()
 

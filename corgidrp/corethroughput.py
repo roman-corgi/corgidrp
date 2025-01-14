@@ -167,6 +167,44 @@ def estimate_psf_pix_and_ct(
 
     return psf_pix, psf_ct
 
+def fpam_mum2pix(
+    fpam_pos_um,
+    excam_pix_mas=None,
+    ):
+    """ Translate FPAM positions in micrometers to EXCAM pixels.
+    Args:
+      fpam_pos_um (array): Value of the FPAM position in units of micrometers.
+      excam_pix_mas (float): Value of EXCAM's pixel pitch. Best value from
+      TVAC is 21.8 mas, same as as-designed.
+    Returns:
+      Value of the FPAM position in units of EXCAM pixels
+    """
+    if excam_pix_mas == None:
+        # Best known value (TVAC, same as design)
+        excam_pix_mas = 21.8
+    # Theoretical value. Replace by measured value during TVAC
+    fpam_mum2mas = 2.67
+    return fpam_pos_um * fpam_mum2mas / excam_pix_mas
+
+def fsam_mum2pix(
+    fsam_pos_um,
+    excam_pix_mas=None,
+    ):
+    """ Translate FSAM positions in micrometers to EXCAM pixels.
+    Args:
+      fsam_pos_um (array): Value of the FSAM position in units of micrometers.
+      excam_pix_mas (float): Value of EXCAM's pixel pitch. Best value from
+      TVAC is 21.8 mas, same as as-designed.
+    Returns:
+      Value of the FSAM position in units of EXCAM pixels
+    """
+    if excam_pix_mas == None:
+        # Best known value (TVAC, same as design)
+        excam_pix_mas = 21.8
+    # Theoretical value. Replace by measured value during TVAC
+    fsam_mum2mas = 2.10
+    return fsam_pos_um * fsam_mum2mas / excam_pix_mas
+
 def get_ct_fpm_center(
     fpm_center_cor,
     fpam_pos_cor=None,
@@ -207,6 +245,50 @@ def get_ct_fpm_center(
             raise IOError('Input values are not 2-dimensional arrays')
     except:
         raise IOError('Input values are not 2-dimensional arrays')
+    # FPM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    if (np.any(fpm_center_cor <= 23) or np.any(fpm_center_cor >= 1000)):
+      raise ValueError("Inout focal plane mask's center is too close to the edges")
 
+    # Translate FPAM positions into EXCAM pixels
+    fpam_pos_cor_px = fpam_mum2pix(fpam_pos_cor)
+    fpam_pos_ct_px = fpam_mum2pix(fpam_pos_ct)
+    # FPAM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    if (np.any(fpam_pos_cor_px <= 23) or np.any(fpam_pos_cor_px >= 1000)):
+      raise ValueError("Input FPAM's center is too close to the edges")
+    # Translate FSAM positions into EXCAM pixels
+    fsam_pos_cor_px = fsam_mum2pix(fsam_pos_cor)
+    fsam_pos_ct_px = fsam_mum2pix(fsam_pos_ct)
+    print(fpam_pos_cor_px, fpam_pos_ct_px)
+    print(fsam_pos_cor_px, fsam_pos_ct_px)    
+    # FSAM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    if (np.any(fsam_pos_cor_px <= 23) or np.any(fsam_pos_cor_px >= 1000)):
+      raise ValueError("Input FSAM's center is too close to the edges")
+    # FPAM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    if (np.any(fpam_pos_ct_px <= 23) or np.any(fpam_pos_ct_px >= 1000)):
+      raise ValueError("New FPAM's center is too close to the edges")
+    # FSAM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    if (np.any(fsam_pos_ct_px <= 23) or np.any(fsam_pos_ct_px >= 1000)):
+      raise ValueError("New FSAM's center is too close to the edges")
 
+    # New FPM center in units of EXCAM pixels
+    delta_fpm_ct_cor_px = 0.5*((fpam_pos_ct_px - fpam_pos_cor_px) +
+        (fsam_pos_ct_px - fsam_pos_cor_px))
+    fpm_center_ct_px = fpm_center_cor + delta_fpm_ct_cor_px
+    # FPM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels
+    if (np.any(fpm_center_ct_px <= 23) or np.any(fpm_center_ct_px >= 1000)):
+      raise ValueError("New focal plane mask's center is too close to the edges")
+
+    return fpm_center_ct_px
 
