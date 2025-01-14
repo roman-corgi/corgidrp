@@ -78,7 +78,7 @@ def crop(input_dataset,sizexy=60,centerxy=None):
         errhdr = frame.err_hdr
 
         # Require that mode is HLC for now
-        if not exthdr['MODE'] == 'HLC':
+        if not prihdr['MODE'] == 'HLC':
             raise UserWarning('Crop function is currently only configured for mode HLC.')
 
         # Assign new array sizes and center location

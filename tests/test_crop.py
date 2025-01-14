@@ -26,6 +26,11 @@ def make_test_dataset(shape=[100,100],centxy=None):
     prihdr,exthdr = create_default_headers()
     exthdr['STARLOCX'] = cent[1]
     exthdr['STARLOCY'] = cent[0]
+    exthdr['MASKLOCX'] = cent[1]
+    exthdr['MASKLOCY'] = cent[0]
+    exthdr['CRPIX1'] = cent[1] + 1
+    exthdr['CRPIX2'] = cent[0] + 1
+    prihdr['MODE'] = 'HLC'
     
     if len(shape) == 2:
         test_arr[int(cent[0]-0.5):int(cent[0]+1.5),int(cent[1]-0.5):int(cent[1]+1.5)] = 1
@@ -124,15 +129,13 @@ def test_nonhalfinteger_centxy():
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
         raise Exception("Unexpected result for non half-integer crop test.")
 
-def test_header_updates():
+def test_header_updates_2d():
     """ Test that the header values are updated correctly.
     """
     
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
     test_dataset[0].ext_hdr["MASKLOCX"] = 49.5
     test_dataset[0].ext_hdr["MASKLOCY"] = 49.5
-    test_dataset[0].pri_hdr["PSFCENTX"] = 49.5
-    test_dataset[0].pri_hdr["PSFCENTY"] = 49.5
     test_dataset[0].pri_hdr["CRPIX1"] = 50.5
     test_dataset[0].pri_hdr["CRPIX2"] = 50.5
     
@@ -146,10 +149,6 @@ def test_header_updates():
         raise Exception("Frame header kw MASKLOCX not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["MASKLOCY"] == 4.5:
         raise Exception("Frame header kw MASKLOCY not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["PSFCENTX"] == 4.5:
-        raise Exception("Frame header kw PSFCENTX not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["PSFCENTY"] == 4.5:
-        raise Exception("Frame header kw PSFCENTY not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 5.5:
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
@@ -158,8 +157,58 @@ def test_header_updates():
         raise Exception("Frame header kw NAXIS1 not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10:
         raise Exception("Frame header kw NAXIS2 not updated correctly.")
+    if not cropped_test_dataset[0].err_hdr["NAXIS1"] == 10:
+        raise Exception("Frame err header kw NAXIS1 not updated correctly.")
+    if not cropped_test_dataset[0].err_hdr["NAXIS2"] == 10:
+        raise Exception("Frame err header kw NAXIS2 not updated correctly.")
+    if not cropped_test_dataset[0].dq_hdr["NAXIS1"] == 10:
+        raise Exception("Frame dq header kw NAXIS1 not updated correctly.")
+    if not cropped_test_dataset[0].dq_hdr["NAXIS2"] == 10:
+        raise Exception("Frame dq header kw NAXIS2 not updated correctly.")
     
+def test_header_updates_3d():
+    """ Test that the header values are updated correctly.
+    """
+    
+    test_dataset = make_test_dataset(shape=[3,100,100],centxy=[49.5,49.5])
+    test_dataset[0].ext_hdr["MASKLOCX"] = 49.5
+    test_dataset[0].ext_hdr["MASKLOCY"] = 49.5
+    test_dataset[0].pri_hdr["CRPIX1"] = 50.5
+    test_dataset[0].pri_hdr["CRPIX2"] = 50.5
+    
+    cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
+    if not cropped_test_dataset[0].ext_hdr["STARLOCX"] == 4.5:
+        raise Exception("Frame header kw STARLOCX not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["STARLOCY"] == 4.5:
+        raise Exception("Frame header kw STARLOCY not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["MASKLOCX"] == 4.5:
+        raise Exception("Frame header kw MASKLOCX not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["MASKLOCY"] == 4.5:
+        raise Exception("Frame header kw MASKLOCY not updated correctly.")
+    if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 5.5:
+        raise Exception("Frame header kw CRPIX1 not updated correctly.")
+    if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
+        raise Exception("Frame header kw CRPIX2 not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["NAXIS1"] == 10:
+        raise Exception("Frame header kw NAXIS1 not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10:
+        raise Exception("Frame header kw NAXIS2 not updated correctly.")
+    if not cropped_test_dataset[0].ext_hdr["NAXIS3"] == 3:
+        raise Exception("Frame header kw NAXIS3 not updated correctly.")
+    if not cropped_test_dataset[0].dq_hdr["NAXIS1"] == 10:
+        raise Exception("Frame dq header kw NAXIS1 not updated correctly.")
+    if not cropped_test_dataset[0].dq_hdr["NAXIS2"] == 10:
+        raise Exception("Frame dq header kw NAXIS2 not updated correctly.")
+    if not cropped_test_dataset[0].dq_hdr["NAXIS3"] == 3:
+        raise Exception("Frame dq header kw NAXIS3 not updated correctly.")
+    if not cropped_test_dataset[0].err_hdr["NAXIS1"] == 10:
+        raise Exception("Frame err header kw NAXIS1 not updated correctly.")
+    if not cropped_test_dataset[0].err_hdr["NAXIS2"] == 10:
+        raise Exception("Frame err header kw NAXIS2 not updated correctly.")
+    if not cropped_test_dataset[0].err_hdr["NAXIS3"] == 3:
+        raise Exception("Frame err header kw NAXIS3 not updated correctly.")
+    
 if __name__ == "__main__":
     test_2d_square_center_crop()
     test_2d_square_offcenter_crop()
@@ -167,4 +216,5 @@ if __name__ == "__main__":
     test_edge_of_FOV()
     test_outside_FOV()
     test_nonhalfinteger_centxy()
-    test_header_updates()
+    test_header_updates_2d()
+    test_header_updates_3d()
