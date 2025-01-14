@@ -97,14 +97,26 @@ def test_calspec_download():
     
     with pytest.raises(ValueError):
         filepath = fluxcal.get_calspec_file('Todesstern')
-    
 
+def test_app_mag():
+    """
+    test the calculation of the apparent Vega magnitude
+    """
+    # test the corresponding pipeline step
+    # sanity check
+    output_dataset = l4_to_tda.determine_app_mag(dataset, 'Vega')
+    assert output_dataset[0].ext_hdr['APP_MAG'] == 0.
+    output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath)
+    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(9.55, 0.3) 
+    output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath, scale_factor = 0.5)
+    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(9.55+-2.5*np.log10(0.5), 0.3)
+    
 if __name__ == '__main__':
     test_get_filter_name()
     test_flux_calc()
     test_colorcor()
     test_calspec_download()
-
+    test_app_mag()
 
 
 
