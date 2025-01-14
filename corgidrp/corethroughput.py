@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import griddata
 import matplotlib.pyplot as plt
 
 from corgidrp.data import Dataset
@@ -291,4 +292,84 @@ def get_ct_fpm_center(
       raise ValueError("New focal plane mask's center is too close to the edges")
 
     return fpm_center_ct_px
+
+def ct_map(
+    psf_pix,
+    fpam_pix,
+    ct,
+    target_pix,
+    ):
+    """
+    Function satisfying CTC requirement 1090883.
+
+    Args:
+      psf_pix (array): Nx2 array containing the pixel positions for N PSFs in
+        EXCAM pixels with respect to (0,0).
+
+      fpam_pix (array): 2-dimensional array with the pixel location of the
+        center of the focal plane mask in EXCAM pixels with respect to (0,0).
+
+      ct (array): 1-dimensional array of core throughput values (0,1] associated
+        with each PSF.
+
+      target_pix (array): Mx2 array containing the pixel positions for M target
+        pixels where the core throughput will be derived by interpolation. the
+        target pixels are measured with respect the center of the focal plane
+        mask in (fractional) EXCAM pixels.
+
+    Returns:
+      Core throughput map: 3-dimensional array (x,y,ct_target) where (x,y) is
+      the position of each target pixel location and ct_target is the
+      interpolated core throughput value corresponding to each target pixel
+      location. 
+
+    """
+    # Checks
+    # FPAM
+    if fpam_pix.shape != (2,):
+        raise TypeError('FPAM input must be a two-dimensional array')
+    # FPAM center cannnot be closer than 150 pixels to the 1024x1024 boundaries
+    fpam_rad_pix = 150
+    if ((fpam_pix[0] < fpam_rad_pix) or (1023-fpam_pix[0] < fpam_rad_pix)
+      or (fpam_pix[1] < fpam_rad_pix) or (1023-fpam_pix[1] < fpam_rad_pix)):
+        raise ValueError(f'FPAM position cannot be closer than {fpam_rad_pix}' + 
+            'pixels from the edges of the image')
+    # PSF positions must be a 2-dimensional array
+    if psf_pix.shape[0] != 2:
+      raise TypeError('PSF positions must be a 2-dimensional array')
+    # There must be more than one PSF to be able to interpolate
+    if psf_pix.shape[1] < 2:
+      raise IndexError('There must be at least two PSF positions to ' +
+          'construct a ct map')
+    # Same number of PSF positions as ct values
+    if psf_pix.shape[1] != len(ct):
+      raise ValueError('The number of PSF positions and core throughput ' +
+          'values must be equal')     
+    # ct b/w (0,1]
+    if np.any(np.array(ct) <= 0):
+      raise ValueError('Core throughput must be positive')
+    if np.any(np.array(ct) > 1):
+      raise ValueError('Core throughput cannot be greater than 1')
+    
+    # Use linear interpolation
+    ct_interp = griddata((psf_pix[0], psf_pix[1]), ct, (target_pix[0],
+        target_pix[1]), method='linear')
+    # Check if any PSF position was out of the range for interpolation
+    if np.any(np.isnan(ct_interp)):
+        # Find where the issue is
+        isnan = np.where(np.isnan(ct_interp))[0]
+        # Optional diagnosis plot
+        if False:
+            plt.plot(psf_pix[0], psf_pix[1], 'k+', label='PSF locations')
+            plt.plot(target_pix[0], target_pix[1], 'g+', label='Target locations')
+            for bad in isnan:
+                plt.plot(target_pix[0, bad], target_pix[1, bad], 'rx')
+            plt.title('Red crosses indicate target locations that failed')
+            plt.legend()
+            plt.grid()
+            plt.show()
+        raise ValueError(f'Target positions at {isnan} gave NaN. Are ' + 
+            'this/these position/s within the range of input PSF locations?') 
+
+    return np.array([target_pix[0], target_pix[1], ct_interp])
 
