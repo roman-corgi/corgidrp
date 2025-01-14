@@ -43,7 +43,7 @@ def crop(input_dataset,sizexy=60,centerxy=None):
     Crop the Images in a Dataset to a desired field of view. Default behavior is to 
     crop the image to the dark hole region, centered on the pixel intersection nearest 
     to the star location. Assumes 3D Image data is a stack of 2D data arrays, so only 
-    crops the last two indices.
+    crops the last two indices. Currently only configured for HLC mode.
 
     TODO: 
         - Pad with nans if you try to crop outside the array (handle err & DQ too)
@@ -54,7 +54,8 @@ def crop(input_dataset,sizexy=60,centerxy=None):
         sizexy (int or array of int): desired frame size, if only one number is provided the 
             desired shape is assumed to be square, otherwise xy order. Defaults to 60.
         centerxy (float or array of float): desired center (xy order), should be a pixel intersection (a.k.a 
-            half-integer). Defaults to the "STARLOCX/Y" header values.
+            half-integer) otherwise the function rounds to the nearest intersection. Defaults to the 
+            "STARLOCX/Y" header values.
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset cropped to the desired FOV.
@@ -66,7 +67,7 @@ def crop(input_dataset,sizexy=60,centerxy=None):
     # Require even data shape
     if not np.all(np.array(sizexy)%2==0):
         raise UserWarning('Even sizexy is required.')
-    
+       
     # Need to loop over frames and reinit dataset because array sizes change
     frames_out = []
 
@@ -75,6 +76,10 @@ def crop(input_dataset,sizexy=60,centerxy=None):
         exthdr = frame.ext_hdr
         dqhdr = frame.dq_hdr
         errhdr = frame.err_hdr
+
+        # Require that mode is HLC for now
+        if not exthdr['MODE'] == 'HLC':
+            raise UserWarning('Crop function is currently only configured for mode HLC.')
 
         # Assign new array sizes and center location
         frame_shape = frame.data.shape
@@ -86,6 +91,7 @@ def crop(input_dataset,sizexy=60,centerxy=None):
             if ("STARLOCX" in exthdr.keys()) and ("STARLOCY" in exthdr.keys()):
                 centerxy = np.array([exthdr["STARLOCX"],exthdr["STARLOCY"]])
             else: raise ValueError('centerxy not provided but STARLOCX/Y are missing from image extension header.')
+        
         # Round to centerxy to nearest half-pixel
         centerxy = np.array(centerxy)
         if not np.all((centerxy-0.5)%1 == 0):
@@ -126,7 +132,12 @@ def crop(input_dataset,sizexy=60,centerxy=None):
         dqhdr["NAXIS2"] = sizexy[1]
         errhdr["NAXIS1"] = sizexy[0]
         errhdr["NAXIS2"] = sizexy[1]
-        errhdr["NAXIS3"] = cropped_frame_err.shape[0]
+        errhdr["NAXIS3"] = cropped_frame_err.shape[-3]
+        if frame.data.ndim == 3:
+            exthdr["NAXIS3"] = frame.data.shape[0]
+            dqhdr["NAXIS3"] = frame.dq.shape[0]
+            errhdr["NAXIS4"] = frame.err.shape[0]
+        
         updated_hdrs = []
         if ("STARLOCX" in exthdr.keys()):
             exthdr["STARLOCX"] -= x1
