@@ -151,10 +151,6 @@ def crop(input_dataset,sizexy=60,centerxy=None):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
             updated_hdrs.append('CRPIX1/2')
-        if ("PSFCENTX" in prihdr.keys()):
-            prihdr["PSFCENTX"] -= x1
-            prihdr["PSFCENTY"] -= y1
-            updated_hdrs.append('PSFCENTX/Y')
         new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
         frames_out.append(new_frame)
 
