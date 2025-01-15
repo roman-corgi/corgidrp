@@ -100,8 +100,155 @@ def test_psf_pix_and_ct():
     # Some tolerance for comparison between I/O values. CT in (0,1]
     assert ct_est == pytest.approx(np.array(ct_os11), abs=0.005)
 
-if __name__ == '__main__':
+def test_fpm_pos():
+    """
+    Test 1090882 - Given 1) the location of the center of the FPM coronagraphic
+    mask in EXCAM pixels during the coronagraphic observing sequence and 2) the
+    FPAM and FSAM encoder positions during both the coronagraphic and core
+    throughput observing sequences, the CTC GSW shall compute the center of the
+    FPM coronagraphic mask during the core throughput observing sequence.
+    """
+    
+    # If the input FPM, FPAM or FSAM positions are not each a 2-dimensional
+    # array, the function must fail
+    with pytest.raises(OSError):
+        corethroughput.get_ct_fpm_center(np.array(1))   
+        corethroughput.get_ct_fpm_center(np.array([1]))
 
+    # FPM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    EXCAM_center_pos_pix = np.array([512,512])
+    # EXCAM's pixel pitch and theoretical values for mas/um for FPAM and FSAM
+    FPAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.67
+    FSAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.10
+    if False:
+        for row in range(2):
+            for pix in [15, 1015]:
+                if row:
+                    center_pix = np.array([pix, EXCAM_center_pos_pix[1] ])
+                else:
+                    center_pix = np.array([EXCAM_center_pos_pix[0], pix])
+                with pytest.raises(ValueError):
+                    corethroughput.get_ct_fpm_center(center_pix,
+                        fpam_pos_cor=FPAM_center_pos_um,
+                        fpam_pos_ct=FPAM_center_pos_um,
+                        fsam_pos_cor=FSAM_center_pos_um,
+                        fsam_pos_ct=FSAM_center_pos_um)
+    
+        # If we parse a file for the rotation matrix that does not exist, the function
+        # must fail
+        with pytest.raises(OSError):
+            corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                        fpam_pos_cor=FPAM_center_pos_um,
+                        fpam_pos_ct=FPAM_center_pos_um,
+                        fsam_pos_cor=FSAM_center_pos_um,
+                        fsam_pos_ct=FSAM_center_pos_um,
+                        fpam2excam_matrix='bad_file.fits')
+        with pytest.raises(OSError):
+            corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                        fpam_pos_cor=FPAM_center_pos_um,
+                        fpam_pos_ct=FPAM_center_pos_um,
+                        fsam_pos_cor=FSAM_center_pos_um,
+                        fsam_pos_ct=FSAM_center_pos_um,
+                        fsam2excam_matrix='bad_file.fits')
+     
+    # Using values within the range should return a meaningful value
+    # Shifting the FPM by (+1,+1) EXCAM pixels -using approx. values
+    fpm_center_ct_pix = corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+        fpam_pos_cor=FPAM_center_pos_um,
+        fpam_pos_ct=FPAM_center_pos_um + np.array([-1,1])*21.8/2.67,
+        fsam_pos_cor=FSAM_center_pos_um,
+        fsam_pos_ct=FSAM_center_pos_um + np.array([-1,-1])*21.8/2.10)
+
+    assert (fpm_center_ct_pix - np.array([1,1]) ==
+        pytest.approx(EXCAM_center_pos_pix, abs=0.05))
+
+def test_ct_map():
+    """ 
+    Test 1090883 - Given 1) an array of PSF pixel locations and 2) the location
+    of the center of the FPAM coronagraphic mask in EXCAM pixels during core
+    throughput calibrations, and 3) corresponding core throughputs for each PSF,
+    the CTC GSW shall compute a 2D floating-point interpolated core throughput
+    map.
+    """
+    psf_pix = np.array([psf_position_x, psf_position_y])
+    fpam_pix = np.array([513,515])
+    target_pix = np.array([520, 520])
+
+    # If FPAM position is not a 2-dimensional array, the function must fail
+    with pytest.raises(TypeError):
+        corethroughput.ct_map(psf_pix, fpam_pix[0], ct_os11, target_pix)
+
+    # If FPAM position is outside a reasonable range, the function must fail
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([1000,512]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([512,1000]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([1000,1000]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([100,512]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([512,100]), ct_os11, target_pix)
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, np.array([100,100]), ct_os11, target_pix)    
+
+    # If the psf positions is not a 2-dimensional array, the function must fail
+    with pytest.raises(TypeError):
+        corethroughput.ct_map(psf_pix[0,:], fpam_pix, ct_os11, target_pix)
+    # There must be more than one PSF to be able to interpolate
+    with pytest.raises(IndexError):
+        corethroughput.ct_map(psf_pix[:,0], fpam_pix, ct_os11, target_pix)
+    # If the number of core throughput values is different than the number of
+    # PSFs, the function must fails
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix[:,0:-1], fpam_pix, ct_os11, target_pix)
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11[0:-1], target_pix)
+    # If ct is > 1 or < 0, the function must fail
+    ct_os11_wrong = ct_os11.copy()
+    ct_os11_wrong[0] = 1.2
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11_wrong, target_pix)
+    ct_os11_wrong[0] = 0
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11_wrong, target_pix)
+    ct_os11_wrong[0] = -0.1
+    with pytest.raises(ValueError):
+         corethroughput.ct_map(psf_pix, fpam_pix, ct_os11_wrong, target_pix)
+    # If the target pixels are outside the range of the original data, the
+    # function must fail
+    target_pix_x = [531.8, 541.6, 551.4, 560, 521.4, 532, 542,
+        552, 562]
+    target_pix_y = [530.4, 540, 550.3, 561.2, 500.6, 492.6, 482.8,
+        474, 476]
+    target_pix = np.array([target_pix_x, target_pix_y])
+    with pytest.raises(ValueError):
+        corethroughput.ct_map(psf_pix, fpam_pix, ct_os11, target_pix)
+    # If target positions are the same as the reference ones, the core throughput
+    # must be the same
+    target_pix = psf_pix
+        
+
+    # If all the conditions are met, the function must return a set of interpolated
+    # core throughput values within (0,1]
+    target_pix_x = [531.8, 541.6, 551.4, 512, 519.4, 532, 542,
+        552, 562]
+    target_pix_y = [530.4, 540, 550.3, 512, 512.6, 492.6, 482.8,
+        474, 476]
+    target_pix = np.array([target_pix_x, target_pix_y])
+    ct_map = corethroughput.ct_map(psf_pix, fpam_pix, ct_os11, target_pix)
+    # core throughput in (0,1]
+    assert np.all(ct_map[-1]) > 0
+    assert np.all(ct_map[-1]) <= 1
+    # Add some numerical comparison based on expected changes of core throughput
+    assert np.all(ct_map[-1] < np.mean(ct_os11) + 2*np.std(ct_os11))
+    assert np.all(ct_map[-1] > np.mean(ct_os11) - 2*np.std(ct_os11))
+
+if __name__ == '__main__':
     test_psf_pix_and_ct()
+    test_fpm_pos()
+    test_ct_map()
 
 
