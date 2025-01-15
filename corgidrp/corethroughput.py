@@ -1,9 +1,12 @@
+import os
 import numpy as np
 from scipy.interpolate import griddata
+from astropy.io import fits
 import matplotlib.pyplot as plt
 
 from corgidrp.data import Dataset
 
+here = os.path.abspath(os.path.dirname(__file__))
 
 # CTC requirements
 """
@@ -167,6 +170,136 @@ def estimate_psf_pix_and_ct(
         raise Exception('PSF positions and CT values are inconsistent')
 
     return psf_pix, psf_ct
+
+def fpam_mum2pix(
+    delta_fpam_pos_um,
+    fpam2excam_matrix=None,
+    ):
+    """ Translate FPAM delta positions in micrometers to EXCAM pixels.
+    Args:
+      delta_fpam_pos_um (array): Value of the FPAM delta positions in units of
+        micrometers.
+      fpam2excam_matrix (string): FITS file with full path included that contains
+        the rotation matrix from delta FPAM positions in mum to EXCAM pixels.
+    Returns:
+      Value of the FPAM delta position in units of EXCAM pixels
+    """
+    if fpam2excam_matrix == None:
+         fpam2excam_matrix = os.path.join(here, 'data', 'fpm_matrices',
+           'fpam_to_excam_modelbased.fits')
+    try:
+        rot_matrix = fits.getdata(fpam2excam_matrix)
+    except:
+        raise OSError('The rotation matrix for FPAM could not be loaded.')
+
+    return (rot_matrix @ delta_fpam_pos_um)
+
+def fsam_mum2pix(
+    delta_fsam_pos_um,
+    fsam2excam_matrix=None,
+    ):
+    """ Translate FSAM delta positions in micrometers to EXCAM pixels.
+    Args:
+      delta_fsam_pos_um (array): Value of the FSAM delta positions in units of
+        micrometers.
+      fsam2excam_matrix (string): FITS file with full path included that contains
+        the rotation matrix from delta FSAM positions in mum to EXCAM pixels.
+    Returns:
+      Value of the FSAM delta position in units of EXCAM pixels
+    """
+    if fsam2excam_matrix == None:
+         fsam2excam_matrix = os.path.join(here, 'data', 'fpm_matrices',
+           'fsam_to_excam_modelbased.fits')
+    try:
+        rot_matrix = fits.getdata(fsam2excam_matrix)
+    except:
+        raise OSError('The rotation matrix for FSAM could not be loaded.')
+
+    return (rot_matrix @ delta_fsam_pos_um)
+
+def get_ct_fpm_center(
+    fpm_center_cor,
+    fpam_pos_cor=None,
+    fpam_pos_ct=None,
+    fsam_pos_cor=None,
+    fsam_pos_ct=None,
+    fpam2excam_matrix=None,
+    fsam2excam_matrix=None,
+    ):
+    """
+    1090882 - Given 1) the location of the center of the FPM coronagraphic mask
+    in EXCAM pixels during the coronagraphic observing sequence and 2) the FPAM
+    and FSAM encoder positions during both the coronagraphic and core throughput
+    observing sequences, the CTC GSW shall compute the center of the FPM
+    coronagraphic mask during the core throughput observing sequence.
+
+    Args:
+      fpm_center_cor (array): 2-dimensional array with the center of the focal
+        plane mask during coronagraphic observations. Units: EXAM pixels.
+      fpam_pos_cor (array): 2-dimensional array with the [H,V] values of the FPAM
+        positions during coronagraphic observations. Units: micrometers.
+      fpam_pos_ct (array): 2-dimensional array with the [H,V] values of the FPAM
+        positions during core throughput observations. Units: micrometers.
+      fsam_pos_cor (array): 2-dimensional array with the [H,V] values of the FSAM
+        positions during coronagraphic observations. Units: micrometers.
+      fsam_pos_ct (array): 2-dimensional array with the [H,V] values of the FSAM
+        positions during core throughput observations. Units: micrometers.
+      fpam2excam_matrix (string): FITS file with full path included that contains
+        the rotation matrix from delta FPAM positions in mum to EXCAM pixels.
+      fsam2excam_matrix (string): FITS file with full path included that contains
+        the rotation matrix from delta FSAM positions in mum to EXCAM pixels.
+
+        Note: the use of the delta FPAM/FSAM positions and the rotation matrices
+        is based on the prescription provided by E. Cady on 1/14/25:
+        "H/V values to EXCAM row/column pixels"
+
+          delta_pam = np.array([[dh], [dv]]) # fill these in
+          M = np.array([[ 0.        ,  0.12285012],
+              [-0.12285012, -0.        ]], dtype=float32)
+          delta_pix = M @ delta_pam
+
+    Returns:
+      New center of the focal plane mask during core throughput observations in
+      units of EXCAM pixels.
+    """
+    # Checks
+    try:
+        if (type(fpm_center_cor) != np.ndarray or len(fpm_center_cor) !=2 or
+            type(fpam_pos_cor) != np.ndarray or len(fpam_pos_cor) !=2 or 
+            type(fpam_pos_ct) != np.ndarray or len(fpam_pos_ct) !=2 or
+            type(fsam_pos_cor) != np.ndarray or len(fsam_pos_cor) !=2 or
+            type(fsam_pos_ct) != np.ndarray or len(fsam_pos_ct) !=2):
+            raise OSError('Input values are not 2-dimensional arrays')
+    except:
+        raise OSError('Input values are not 2-dimensional arrays')
+    # FPM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    if (np.any(fpm_center_cor <= 23) or np.any(fpm_center_cor >= 1000)):
+      raise ValueError("Input focal plane mask's center is too close to the edges")
+
+    # Translate FPAM delta positions into EXCAM delta pixels
+    delta_fpam_pos_um = np.array([[fpam_pos_ct[0]-fpam_pos_cor[0]],
+         [fpam_pos_ct[1]-fpam_pos_cor[1]]])
+    delta_fpam_pos_px = fpam_mum2pix(delta_fpam_pos_um,
+        fpam2excam_matrix=fpam2excam_matrix)
+
+    # Translate FSAM positions into EXCAM pixels
+    delta_fsam_pos_um = np.array([[fsam_pos_ct[0]-fsam_pos_cor[0]],
+         [fsam_pos_ct[1]-fsam_pos_cor[1]]])
+    delta_fsam_pos_px = fsam_mum2pix(delta_fsam_pos_um,
+        fsam2excam_matrix=fsam2excam_matrix)
+
+    # New FPM center in units of EXCAM pixels
+    delta_fpm_px = 0.5*(delta_fpam_pos_px + delta_fsam_pos_px)
+    fpm_center_ct = fpm_center_cor + delta_fpm_px.transpose()[0]
+    # FPM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels
+    if (np.any(fpm_center_ct <= 23) or np.any(fpm_center_ct >= 1000)):
+      raise ValueError("New focal plane mask's center is too close to the edges")
+
+    return fpm_center_ct
 
 def ct_map(
     psf_pix,
