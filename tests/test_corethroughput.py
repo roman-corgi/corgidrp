@@ -100,6 +100,70 @@ def test_psf_pix_and_ct():
     # Some tolerance for comparison between I/O values. CT in (0,1]
     assert ct_est == pytest.approx(np.array(ct_os11), abs=0.005)
 
+def test_fpm_pos():
+    """
+    Test 1090882 - Given 1) the location of the center of the FPM coronagraphic
+    mask in EXCAM pixels during the coronagraphic observing sequence and 2) the
+    FPAM and FSAM encoder positions during both the coronagraphic and core
+    throughput observing sequences, the CTC GSW shall compute the center of the
+    FPM coronagraphic mask during the core throughput observing sequence.
+    """
+    
+    # If the input FPM, FPAM or FSAM positions are not each a 2-dimensional
+    # array, the function must fail
+    with pytest.raises(OSError):
+        corethroughput.get_ct_fpm_center(np.array(1))   
+        corethroughput.get_ct_fpm_center(np.array([1]))
+
+    # FPM center must be within EXCAM boundaries and with enough space to
+    # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
+    # EXCAM pixels)
+    EXCAM_center_pos_pix = np.array([512,512])
+    # EXCAM's pixel pitch and theoretical values for mas/um for FPAM and FSAM
+    FPAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.67
+    FSAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.10
+    if False:
+        for row in range(2):
+            for pix in [15, 1015]:
+                if row:
+                    center_pix = np.array([pix, EXCAM_center_pos_pix[1] ])
+                else:
+                    center_pix = np.array([EXCAM_center_pos_pix[0], pix])
+                with pytest.raises(ValueError):
+                    corethroughput.get_ct_fpm_center(center_pix,
+                        fpam_pos_cor=FPAM_center_pos_um,
+                        fpam_pos_ct=FPAM_center_pos_um,
+                        fsam_pos_cor=FSAM_center_pos_um,
+                        fsam_pos_ct=FSAM_center_pos_um)
+    
+        # If we parse a file for the rotation matrix that does not exist, the function
+        # must fail
+        with pytest.raises(OSError):
+            corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                        fpam_pos_cor=FPAM_center_pos_um,
+                        fpam_pos_ct=FPAM_center_pos_um,
+                        fsam_pos_cor=FSAM_center_pos_um,
+                        fsam_pos_ct=FSAM_center_pos_um,
+                        fpam2excam_matrix='bad_file.fits')
+        with pytest.raises(OSError):
+            corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+                        fpam_pos_cor=FPAM_center_pos_um,
+                        fpam_pos_ct=FPAM_center_pos_um,
+                        fsam_pos_cor=FSAM_center_pos_um,
+                        fsam_pos_ct=FSAM_center_pos_um,
+                        fsam2excam_matrix='bad_file.fits')
+     
+    # Using values within the range should return a meaningful value
+    # Shifting the FPM by (+1,+1) EXCAM pixels -using approx. values
+    fpm_center_ct_pix = corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
+        fpam_pos_cor=FPAM_center_pos_um,
+        fpam_pos_ct=FPAM_center_pos_um + np.array([-1,1])*21.8/2.67,
+        fsam_pos_cor=FSAM_center_pos_um,
+        fsam_pos_ct=FSAM_center_pos_um + np.array([-1,-1])*21.8/2.10)
+
+    assert (fpm_center_ct_pix - np.array([1,1]) ==
+        pytest.approx(EXCAM_center_pos_pix, abs=0.05))
+
 def test_ct_map():
     """ 
     Test 1090883 - Given 1) an array of PSF pixel locations and 2) the location
@@ -183,8 +247,8 @@ def test_ct_map():
     assert np.all(ct_map[-1] > np.mean(ct_os11) - 2*np.std(ct_os11))
 
 if __name__ == '__main__':
-
     test_psf_pix_and_ct()
+    test_fpm_pos()
     test_ct_map()
 
 
