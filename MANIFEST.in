@@ -6,3 +6,5 @@ include tests/test_data/metadata_eng.yaml
 include tests/test_data/nonlin_sample.csv
 include tests/test_data/nonlin_sample.fits
 include corgidrp/data/JWST_CALFIELD2020.csv
+include corgidrp/data/fpm_matrices/fpam_to_excam_modelbased.fits
+include corgidrp/data/fpm_matrices/fsam_to_excam_modelbased.fits
