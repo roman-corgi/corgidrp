@@ -1860,7 +1860,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     hdul.writeto(filename, overwrite = True)
 
 
-def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, platescale=21.8, add_gauss_noise=True, file_save=False):
+def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = None, platescale=21.8, add_gauss_noise=True, file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
     and Gaussian noise
@@ -1870,6 +1870,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, platescale=21.8
         fwhm (float): FWHM of the centroid
         cal_factor (float): calibration factor erg/(s*cm^2*AA)/electrons
         filedir (str): (Optional) Full path to directory to save to.
+        color_cor (float): (Optional) the color correction factor
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
         add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
         file_save (boolean): save the simulated Image or not (default: False)
@@ -1891,8 +1892,10 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, platescale=21.8
     target = (80.553428801, -69.514096821)
 
     new_hdr = {}
-    new_hdr['TARGET'] = 'KSI2 CETI'
+    new_hdr['TARGET'] = 'Vega'
     new_hdr['CFAMNAME'] = '3C'
+    if color_cor is not None:
+        new_hdr['COL_COR'] = color_cor
     new_hdr['CRPIX1'] = center[0]
     new_hdr['CRPIX2'] = center[1]
 

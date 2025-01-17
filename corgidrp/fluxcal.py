@@ -247,7 +247,8 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
 def aper_phot(image, encircled_radius, frac_enc_energy, method = 'exact', subpixels = 5):
     """
     returns the flux in photo-electrons of a point source at the target Ra/Dec position
-    and using a circular aperture by applying aperture_photometry of photutils
+    and using a circular aperture by applying aperture_photometry of photutils.
+    We assume that background subtraction is already done.
     
     Args:
         image (corgidrp.data.Image): combined source exposure image
@@ -276,6 +277,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape = None):
     """
     returns the flux in photo-electrons of a point source at the target Ra/Dec position
     and using a circular aperture by applying aperture_photometry of photutils
+    We assume that background subtraction is already done.
     
     Args:
         image (corgidrp.data.Image): combined source exposure image
@@ -322,7 +324,7 @@ def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy, method = 'e
                          into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
     
     Returns:
-        dict: dictionary filled with the value and error of the corresponding band
+        corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
     """
     star_name = image.ext_hdr["TARGET"]
     
@@ -342,7 +344,8 @@ def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy, method = 'e
     fluxcal_fac = flux/ap_sum
     fluxcal_fac_err = flux/ap_sum**2 * ap_sum_err
     
-    fluxcal = {filter_name : [fluxcal_fac, fluxcal_fac_err]}
+    dataset = corgidrp.data.Dataset([image])
+    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
     
     return fluxcal
     
@@ -355,7 +358,6 @@ def calibrate_fluxcal_gauss2d(image, fwhm, fit_shape = None):
     
     Args:
         image (corgidrp.data.Image): combined source exposure image
-        fluxcal_factors (corgidrp.data.FluxcalFactors): initial cal file
         fwhm (float): estimated fwhm of the point source
         fit_shape (int or tuple of two ints): optional
             The shape of the fitting region. If a scalar, then it is assumed
@@ -363,7 +365,7 @@ def calibrate_fluxcal_gauss2d(image, fwhm, fit_shape = None):
             It must be an odd value and should be much bigger than fwhm.
     
     Returns:
-        dict: dictionary filled with the value and error of the corresponding band
+        corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
     """
     star_name = image.ext_hdr["TARGET"]
     filter_name = image.ext_hdr["CFAMNAME"]
@@ -382,6 +384,7 @@ def calibrate_fluxcal_gauss2d(image, fwhm, fit_shape = None):
     fluxcal_fac = flux/flux_sum
     fluxcal_fac_err = flux/flux_sum**2 * flux_sum_err
     
-    fluxcal = {filter_name : [fluxcal_fac, fluxcal_fac_err]}
+    dataset = corgidrp.data.Dataset([image])
+    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
     
     return fluxcal

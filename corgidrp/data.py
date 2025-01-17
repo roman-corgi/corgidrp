@@ -1165,7 +1165,7 @@ class DetectorParams(Image):
         hashing_str = "" # make a string that we can actually hash
         for key in self.params:
             hashing_str += str(self.params[key])
-
+        new_valid_date = astropy.time.Time("2027-01-01")
         return str(hash(hashing_str))
 
 class AstrometricCalibration(Image):
@@ -1262,119 +1262,80 @@ class TrapCalibration(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'TrapCalibration':
             raise ValueError("File that was loaded was not a TrapCalibration file.")
 
-class FluxcalFactors(Image):
+class FluxcalFactor(Image):
     """
-    Class containing the flux calibration factors (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
+    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
 
-    To create a new instance of FluxcalFactors, you only need to pass in the values you would like to change from default values:
-        new_valid_date = astropy.time.Time("2027-01-01")
-        new_det_params = FluxcalFactors({'1C' : [1.5e-3, 2e-6] }, date_valid=new_valid_date). 
+    To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
     Args:
         data_or_filepath (dict or str): either a filepath string corresponding to an 
-                                        existing FluxcalFactors file saved to disk or a
-                                        dictionary of parameters to modify from default values
-        date_valid (astropy.time.Time): date after which these parameters are valid
+                                        existing FluxcalFactor file saved to disk or the data and error values of the
+                                        flux cal factor of a certain filter defined in the header
 
     Attributes:
-        params (dict): the values and errors of the flux cal factors for each band
-        default_values (dict): default values for flux cal factors (fallback values)
+        filter (str): used filter name
+        fluxcal_fac (float): the value of the flux cal factor for the corresponding filter
+        fluxcal_err (float): the error of the flux cal factor for the corresponding filter
     """
-    # default fluxcal factors
-    default_values = {
-        '1A': [1,0],
-        '2A': [1,0],
-        '3A': [1,0],
-        '4A': [1,0],
-        '1B': [1,0],
-        '2B': [1,0],
-        '3B': [1,0],
-        '4B': [1,0],
-        '1C': [1,0],
-        '2C': [1,0],
-        '3C': [1,0],
-        '4C': [1,0],
-        '3D': [1,0],
-        '3E': [1,0],
-        '1F': [1,0],
-        '2F': [1,0],
-        '3F': [1,0],
-        '4F': [1,0],
-        '3G': [1,0]
-    }
-
-    def __init__(self, data_or_filepath, date_valid=None):
-        if date_valid is None:
-            date_valid = time.Time.now()
+    def __init__(self, data_or_filepath, err = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
         # if filepath passed in, just load in from disk as usual
-        if isinstance(data_or_filepath, str):
-            # run the image class contructor
-            super().__init__(data_or_filepath)
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The FluxcalFactor calibration data should be just one float value')
+        
+        if self.ext_hdr['CFAMNAME'] is not None:
+            self.filter = self.ext_hdr['CFAMNAME']
+        else:
+            raise ValueError('The FluxcalFactor calibration has no filter keyword CFAMNAME in the header')
 
-            # double check that this is actually a DetectorParams file that got read in
+        if isinstance(data_or_filepath, str):
+            # double check that this is actually a FluxcalFactor file that got read in
             # since if only a filepath was passed in, any file could have been read in
             if 'DATATYPE' not in self.ext_hdr:
-                raise ValueError("File that was loaded was not a FluxcalFactors file.")
-            if self.ext_hdr['DATATYPE'] != 'FluxcalFactors':
-                raise ValueError("File that was loaded was not a FluxcalFactors file.")
+                raise ValueError("File that was loaded was not a FluxcalFactor file.")
+            if self.ext_hdr['DATATYPE'] != 'FluxcalFactor':
+                raise ValueError("File that was loaded was not a FluxcalFactor file.")
         else:
-            if not isinstance(data_or_filepath, dict):
-                raise ValueError("Input should either be a dictionary or a filepath string")
-            prihdr = fits.Header()
-            exthdr = fits.Header()
-            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
-            exthdr['DRPVERSN'] =  corgidrp.__version__
-            exthdr['DRPCTIME'] =  time.Time.now().isot
-
-            # fill caldb required keywords with dummy data
-            prihdr['OBSID'] = 0
-            exthdr["EXPTIME"] = 0
-            exthdr['OPMODE'] = ""
-            exthdr['CMDGAIN'] = 1.0
-            exthdr['EXCAMT'] = 40.0
-
-            self.pri_hdr = prihdr
-            self.ext_hdr = exthdr
-            self.data = np.zeros([1,1])
-            self.dq = np.zeros([1,1])
-            self.err = np.zeros([1,1])
-
-            self.err_hdr = fits.Header()
-            self.dq_hdr = fits.Header()
-
-            self.hdu_list = fits.HDUList()
-
-        # make a dictionary that's easy to use
-        self.params = self.default_values
-        for key in data_or_filepath:
-            self.params[key] = data_or_filepath[key]
-
+            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            
+        # make some attributes to be easier to use
+        self.fluxcal_fac = self.data[0,0]
+        self.fluxcal_err =  self.err[0,0,0]
 
         # if this is a new FluxcalFactors file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
-        if isinstance(data_or_filepath, dict):
-            self.ext_hdr['DATATYPE'] = 'FluxcalFactors' # corgidrp specific keyword for saving to disk
+ 
+        if ext_hdr is not None:
+            if input_dataset is None:
+                if 'DRPNFILE' not in ext_hdr:
+                    # error check. this is required in this case
+                    raise ValueError("This appears to be a new FluxcalFactor. The dataset of input files needs to be passed \
+                                     in to the input_dataset keyword to record history of this FluxcalFactor file.")
+                else:
+                    pass
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+  
 
+            # double check that this is actually a FluxcalFactor file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "FluxcalFactors_{0}.fits".format(self.ext_hdr['SCTSRT'])
-
-    def get_hash(self):
-        """
-        Computes the hash of the detector param values
-
-        Returns:
-            str: the hash of the flux calibration factors
-        """
-        hashing_str = "" # make a string that we can actually hash
-        for key in self.params:
-            hashing_str += str(self.params[key])
-
-        return str(hash(hashing_str))
-
+            self.filename = "{0}_FluxcalFactor_{1}.fits".format(orig_input_filename, self.filter)
 
 
 datatypes = { "Image" : Image,
@@ -1387,7 +1348,7 @@ datatypes = { "Image" : Image,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration": TrapCalibration,
-              "FluxcalFactors": FluxcalFactors}
+              "FluxcalFactor": FluxcalFactor}
 
 def autoload(filepath):
     """

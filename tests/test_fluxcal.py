@@ -1,9 +1,10 @@
 import pytest
 import os
 import numpy as np
+import corgidrp
 from corgidrp.mocks import create_default_headers
 from corgidrp.mocks import create_flux_image
-from corgidrp.data import Image, Dataset, FluxcalFactors
+from corgidrp.data import Image, Dataset, FluxcalFactor
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
@@ -17,7 +18,7 @@ exthd["TARGET"] = 'VEGA'
 image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
 image2 = image1.copy()
 dataset=Dataset([image1, image2])
-calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "bd_75d325_stis_006.fits")
+calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
 
 def test_get_filter_name():
     """
@@ -46,8 +47,9 @@ def test_flux_calc():
     """
     test that the calspec data is read correctly
     """
+    global band_flux
     calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
-    assert calspec_flux[0] == pytest.approx(2e-13, 1e-15) 
+    assert calspec_flux[0] == pytest.approx(1.6121e-09, 1e-15) 
     
     band_flux = fluxcal.calculate_band_flux(transmission, calspec_flux, wave)
     eff_lambda = fluxcal.calculate_effective_lambda(transmission, calspec_flux, wave)
@@ -70,7 +72,7 @@ def test_colorcor():
     
     flux_source = BlackBody(scale = bbscale, temperature=100. * u.K)
     K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave))
-    assert K_bb > 2
+    assert K_bb > 2#weakest star to be detected
     # sanity check
     K = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, calspec_flux)
     assert K == 1 
@@ -109,9 +111,36 @@ def test_app_mag():
     output_dataset = l4_to_tda.determine_app_mag(dataset, 'Vega')
     assert output_dataset[0].ext_hdr['APP_MAG'] == 0.
     output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath)
-    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(9.55, 0.3) 
+    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(0.0, 0.03) 
     output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath, scale_factor = 0.5)
-    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(9.55+-2.5*np.log10(0.5), 0.3)
+    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(0.+-2.5*np.log10(0.5), 0.03)
+    output_dataset = l4_to_tda.determine_app_mag(dataset, '109 Vir')
+    assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(3.72, 0.05)
+
+def test_fluxcal_file():
+    """ 
+    Generate a mock fluxcal factor cal object and test the content and functionality.
+    """
+    fluxcal_factor = np.array([[2e-12]])
+    fluxcal_factor_error = np.array([[[1e-14]]])
+    fluxcal_fac = FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    assert fluxcal_fac.filter == '3C'
+    assert fluxcal_fac.fluxcal_fac == fluxcal_factor[0,0]
+    assert fluxcal_fac.fluxcal_err == fluxcal_factor_error[0,0,0]
+    
+    calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    filename = fluxcal_fac.filename
+    if not os.path.exists(calibdir):
+        os.mkdir(calibdir)
+    fluxcal_fac.save(filedir=calibdir, filename=filename)        
+        
+    fluxcal_filepath = os.path.join(calibdir, filename)
+
+    fluxcal_fac_file = FluxcalFactor(fluxcal_filepath)
+    assert fluxcal_fac_file.filter == '3C'
+    assert fluxcal_fac_file.fluxcal_fac == fluxcal_factor[0,0]
+    assert fluxcal_fac_file.fluxcal_err == fluxcal_factor_error[0,0,0]
+    assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/electron'
 
 def test_abs_fluxcal():
     """ 
@@ -123,40 +152,67 @@ def test_abs_fluxcal():
     datadir = os.path.join(os.path.dirname(__file__), "test_data", "sim_fluxcal")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
-    #weakest star to be detected
-    flux = (30. * u.STmag).to(u.erg/u.s/u.cm**2/u.AA) 
+    
     fwhm = 3
-    #readnoise about 10
-    flux_image = create_flux_image(flux.value * 10, fwhm, flux.value/20, filedir=datadir, file_save=True)
+    color_cor = 0.9
+    flux_image = create_flux_image(band_flux, fwhm, band_flux/200, color_cor = color_cor, filedir=datadir, file_save=True)
     assert type(flux_image) == Image
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
     radius = 3.* sigma
         
-    flux, flux_err = fluxcal.aper_phot(flux_image, radius, 0.997)
-    assert flux == pytest.approx(200, abs = 6)
-    assert flux_err == pytest.approx(8,1)
+    flux_el_ap, flux_err_ap = fluxcal.aper_phot(flux_image, radius, 0.997)
+    assert flux_el_ap == pytest.approx(200, abs = 6)
+    assert flux_err_ap == pytest.approx(8,1)
     
-    flux, flux_err = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm, fit_shape = 41)
-    assert flux == pytest.approx(200, abs = 6)
-    assert flux_err == pytest.approx(1, abs = 0.3)
+    flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm, fit_shape = 41)
+    assert flux_el_gauss == pytest.approx(200, abs = 6)
+    assert flux_err_gauss == pytest.approx(1, abs = 0.3)
     
-    flux, flux_err = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm)
-    assert flux == pytest.approx(200, abs = 6)
-    assert flux_err == pytest.approx(1, abs = 0.3)
+    flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm)
+    assert flux_el_gauss == pytest.approx(200, abs = 6)
+    assert flux_err_gauss == pytest.approx(1, abs = 0.3)
     
-    
-    #test the generation of the flux cal factors
+    #test the generation of the flux cal factors cal file
     fluxcal_factor = fluxcal.calibrate_fluxcal_aper(flux_image, radius, 0.997)
-    print(fluxcal_factor)
+    assert fluxcal_factor.filter == '3C'
+    assert fluxcal_factor.fluxcal_fac == pytest.approx(band_flux/200, abs = 0.3e-12)
+    assert fluxcal_factor.fluxcal_err == pytest.approx(3.1e-13, abs = 0.1e-13)
+    assert fluxcal_factor.filename == 'sim_fluxcal_FluxcalFactor_3C.fits'
     fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(flux_image, fwhm)
-    print (fluxcal_factor)
+    assert fluxcal_factor.filter == '3C'
+    assert fluxcal_factor.fluxcal_fac == pytest.approx(band_flux/200, abs =  0.3e-12)
+    assert fluxcal_factor.fluxcal_err == pytest.approx(4.5e-14, abs = 0.1e-14)
     
+    #test the flux conversion computation.
+    corgidrp.track_individual_errors = True
+    flux_dataset = Dataset([flux_image, flux_image])
+    output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
+    assert len(output_dataset) == 2
+    assert output_dataset[0].ext_hdr['BUNIT'] == "erg/(s*cm^2*AA)"
+    assert output_dataset[0].ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
+    assert "fluxcal_factor" in str(output_dataset[0].ext_hdr['HISTORY'])
+    output_dataset[0].save(filename = "test.fits")
+    
+    el_cen = flux_dataset[0].data[512,512]
+    amplitude = band_flux/(2. * np.pi * sigma**2)
+    data_cen = output_dataset[0].data[512, 512]
+    assert data_cen == pytest.approx(amplitude, rel = 0.04)
+    assert output_dataset[0].err_hdr["LAYER_2"] == "fluxcal_error"
+    flux_err_cen = flux_dataset[0].err[0,512,512]
+    err_layer2 = fluxcal_factor.fluxcal_err/color_cor * el_cen
+    err_comb = np.sqrt((flux_err_cen/color_cor * fluxcal_factor.fluxcal_fac)**2 + err_layer2**2)
+    assert output_dataset[0].err[0,512, 512] == err_comb
+    assert output_dataset[0].err[1,512, 512] == err_layer2
+    
+    corgidrp.track_individual_errors = False
+
 if __name__ == '__main__':
     test_get_filter_name()
     test_flux_calc()
     test_colorcor()
     test_calspec_download()
     test_app_mag()
+    test_fluxcal_file()
     test_abs_fluxcal()
 
 
