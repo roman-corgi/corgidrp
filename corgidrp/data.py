@@ -1165,7 +1165,7 @@ class DetectorParams(Image):
         hashing_str = "" # make a string that we can actually hash
         for key in self.params:
             hashing_str += str(self.params[key])
-        new_valid_date = astropy.time.Time("2027-01-01")
+        new_valid_date = time.Time("2027-01-01")
         return str(hash(hashing_str))
 
 class AstrometricCalibration(Image):
