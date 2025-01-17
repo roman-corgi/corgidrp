@@ -258,6 +258,7 @@ def aper_phot(image, encircled_radius, frac_enc_energy, method = 'exact', subpix
         default is 'exact'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
         subpixels (int): For the 'subpixel' method, resample pixels by this factor in each dimension. That is, each pixel is divided 
                          into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
+    
     Returns:
         float: integrated flux of the point source in unit photo-electrons and corresponding error
     """
@@ -286,6 +287,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape = None):
             The shape of the fitting region. If a scalar, then it is assumed
             to be a square. If `None`, then the shape of the input ``data``.
             It must be an odd value and should be much bigger than fwhm.
+    
     Returns:
         float: integrated flux of the Gaussian2d fit of the point source in unit photo-electrons and corresponding error
     """
