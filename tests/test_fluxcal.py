@@ -184,6 +184,7 @@ def test_abs_fluxcal():
     assert fluxcal_factor.fluxcal_err == pytest.approx(4.5e-14, abs = 0.1e-14)
     
     #test the flux conversion computation.
+    old_ind = corgidrp.track_individual_errors
     corgidrp.track_individual_errors = True
     flux_dataset = Dataset([flux_image, flux_image])
     output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
@@ -191,7 +192,6 @@ def test_abs_fluxcal():
     assert output_dataset[0].ext_hdr['BUNIT'] == "erg/(s*cm^2*AA)"
     assert output_dataset[0].ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
     assert "fluxcal_factor" in str(output_dataset[0].ext_hdr['HISTORY'])
-    output_dataset[0].save(filename = "test.fits")
     
     el_cen = flux_dataset[0].data[512,512]
     amplitude = band_flux/(2. * np.pi * sigma**2)
@@ -204,7 +204,7 @@ def test_abs_fluxcal():
     assert output_dataset[0].err[0,512, 512] == err_comb
     assert output_dataset[0].err[1,512, 512] == err_layer2
     
-    corgidrp.track_individual_errors = False
+    corgidrp.track_individual_errors = old_ind
 
 if __name__ == '__main__':
     test_get_filter_name()

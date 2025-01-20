@@ -244,7 +244,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     
     return irrad
 
-def aper_phot(image, encircled_radius, frac_enc_energy, method = 'exact', subpixels = 5):
+def aper_phot(image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5):
     """
     returns the flux in photo-electrons of a point source at the target Ra/Dec position
     and using a circular aperture by applying aperture_photometry of photutils.
@@ -263,6 +263,8 @@ def aper_phot(image, encircled_radius, frac_enc_energy, method = 'exact', subpix
         float: integrated flux of the point source in unit photo-electrons and corresponding error
     """
     #calculate the x and y pixel positions using the RA/Dec target position and applying WCS conversion
+    if frac_enc_energy <=0 or frac_enc_energy > 1:
+        raise ValueError("frac_enc_energy {0} should be within 0 < fee <= 1".format(str(frac_enc_energy)))
     ra = image.pri_hdr['RA']
     dec = image.pri_hdr['DEC']
     
@@ -309,7 +311,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape = None):
     flux_err = psf_phot.results['flux_err'][0]
     return flux, flux_err
 
-def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy, method = 'exact', subpixels = 5):
+def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5):
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by aperture photometry.
