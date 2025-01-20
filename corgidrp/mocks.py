@@ -1025,7 +1025,7 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     Create simulated data not normalized for the exposure time.
 
     Args:
-        fieldir (str): (Optional) Full path to directory to save to.
+        filedir (str): (Optional) Full path to directory to save to.
         numfiles (int): Number of files in dataset. Default is 10.
 
     Returns:
