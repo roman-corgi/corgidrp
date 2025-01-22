@@ -125,10 +125,11 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
     ### Fit the PSF to the data ###
     popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux), maxfev=2000)
     tinyoffsets = popt[0:2]
+    fit_errs = np.sqrt([pcov[0,0], pcov[1,1], pcov[2,2]])
 
     binary_offset = [xoffset_guess - tinyoffsets[0], yoffset_guess - tinyoffsets[1]]
 
-    return binary_offset
+    return binary_offset, fit_errs
 
 def compute_combinations(iteration, r=2):
     """ 
