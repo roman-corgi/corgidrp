@@ -825,14 +825,16 @@ def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, 
     
     # define fitting params            
     fitparams = (fitorder + 1)**2
-    the_platescale = platescale
-    the_rotangle = northangle
     
     # initial guesses for the legendre coeffs
     guess_leg = [0 for _ in range(fitorder+1)] + [500,] + [0 for _ in range(fitparams - fitorder - 2)] + [0,500] + [0 for _ in range(fitparams-2)]
     
     ## OPTIMIZE 
-    (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, guess_leg)
+    # first_stars_, offsets_, true_offsets_, errs_ = first_stars, offsets, true_offsets, errs
+    (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, guess_leg, 
+                                              args=(fitparams, fitorder, platescale, 
+                                                northangle, first_stars, offsets, 
+                                                true_offsets, errs, x0, y0))
 
     return (distortion_coeffs, fitorder)
   
