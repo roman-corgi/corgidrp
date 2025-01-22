@@ -583,7 +583,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
         xguess = star2['x'] - star1['x']
         yguess = star2['y'] - star1['y']
         
-        xoff, yoff = measure_offset(image, xstar_guess=star1['x'], ystar_guess=star1['y'], xoffset_guess= xguess, yoffset_guess= yguess)
+        (xoff, yoff), _ = measure_offset(image, xstar_guess=star1['x'], ystar_guess=star1['y'], xoffset_guess= xguess, yoffset_guess= yguess)
 
         pixsep = np.sqrt(np.power(xoff,2) + np.power(yoff,2))
         pixseps[i] = pixsep
@@ -765,7 +765,7 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
             x_guess = star2[0] - star1[0]
             y_guess = star2[1] - star1[1]
         
-            (dx, dy), (data, model, residual), (xfit_err, yfit_err, _), (x1, y1) = measure_offset(input_image, star1[0], star1[1], x_guess, y_guess, guessflux=1)
+            (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star1[0], star1[1], x_guess, y_guess, guessflux=1)
     
             # get the true sky offset [mas]
             true1 = skycoords[first]
