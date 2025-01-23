@@ -138,11 +138,14 @@ def estimate_psf_pix_and_ct(
         ct_method = 'direct'
 
     # identify the pupil images in the dataset (pupil images are extended)
-    n_pix_up = [np.sum(np.where(frame.data > 3*frame.data.std())) for frame in dataset]
+    n_pix_up = [np.sum(frame.data > 3*frame.data.std()) for frame in dataset]
     # frames are mostly off-axis PSFs
-    pupil_img_idx = np.where( n_pix_up > 10 * np.median(n_pix_up))[0]
-    print(f'Found {len(pupil_img_idx)} pupil images for the core throughput estimation') 
-    # mean combine the total values (photo-electrons/sec)
+    pupil_img_idx = np.where(n_pix_up > 10 * np.median(n_pix_up))[0]
+    if len(pupil_img_idx):
+        print(f'Found {len(pupil_img_idx)} pupil images for the core throughput estimation.') 
+    else:
+        raise Exception('No pupil image found. At least there must be one pupil image.')
+    # mean combine the total values (photo-electrons/sec) of the pupil images
     unocc_psf_norm = 0
     for frame in dataset[pupil_img_idx]:
         unocc_psf_norm += frame.data.sum()
