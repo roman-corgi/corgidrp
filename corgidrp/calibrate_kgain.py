@@ -283,36 +283,37 @@ def calibrate_kgain(dataset_kgain,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
                     verbose=False, detector_regions=None, kgain_params=kgain_params):
     """
-    Given an array of frame stacks for various exposure times, each sub-stack
-    having at least 5 illuminated pupil L1 SCI-size frames having the same 
-    exposure time. The frames are bias-subtracted, and in addition, if EM gain
-    is >1 for the input data for calibrate_kgain, EM gain division is also needed.
-    It also creates a mean pupil array from a separate stack of
-    frames of uniform exposure time. The mean pupil array is scaled to the mean
-    of each stack and statistics (mean and std dev) are calculated for bins from
-    the frames in it. kgain (e-/DN) is calculated from the means and variances
+    kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
     is plotted from the std dev and mean values from the bins. 
-    
+
     Args:
-      dataset_kgain (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
-        pupil L1 SCI frames (counts in DN) having a range of exp times.
-        datset_cal contains a set of subset of frames, and all subsets must have
-        the same number of frames, which is a minimum of 5. The frames in a subset
-        must all have the same exposure time. There must be at least 10 subsets 
-        (More than 20 sub-stacks recommended. The mean signal in the pupil region should 
-        span from about 100 to about 10000 DN.
-        In addition, dataset_kgain contains a set of at least 30 frames used to
-        build a mean frame. All the frames must have the same exposure time,
-        such that the net mean counts in the pupil region is a few thousand DN
-        (2000 to 4000 DN recommended;
-        notice that unity EM gain is recommended when k-gain is the primary desired
-        product, since it is known more accurately than non-unity values. This
-        mean frame is used to select pixels with similar illumination for
-        calculating variances (since the pupil illumination is not perfectly uniform).
-        All data must be obtained under the same positioning of the pupil
-        relative to the detector. These frames are identified with the kewyord
-        'OBSTYPE'='MNFRAME' (TBD). 
+      dataset_kgain (corgidrp.Dataset): The frames in the dataset are
+        bias-subtracted. The dataset contains frames belonging to two different
+        sets -- Mean frame and a large array of unity gain frames.
+        Mean frame: Unity gain frames with constant exposure time. These frames
+        are used to create a mean pupil image. The mean frame is used to select
+        pixels in each frame of the large array of unity gain frames (see next)
+        to calculate its mean signal. In general, it is expected that at least
+        30 frames or more will be taken for this set. In TVAC, 30 frames, each
+        with an exposure time of 5.0 sec were taken.
+        Large array of unity gain frames: Set of unity gain frames with subsets
+        of equal exposure times. Data for each subset should be taken sequentially:
+        Each subset must have at least 5 frames. All frames for a subset are taken
+        before moving to the next subset. Two of the subsets have the same (repeated)
+        exposure time. These two subsets are not contiguous: The first subset is
+        taken near the start of the data collection and the second one is taken
+        at the end of the data collection (see TVAC example below). The mean
+        signal of these two subsets is used to correct for illumination
+        brightness/sensor sensitivity drifts for all the frames in the whole set,
+        depending on when the frames were taken. There should be no other repeated
+        exposure time among the subsets. In TVAC, a total of 110 frames were taken
+        within this category. The 110 frames consisted of 22 subsets, each with
+        5 frames. All 5 frames had the same exposure time. The exposure times in
+        TVAC in seconds were, each repeated 5 times to collect 5 frames in each
+        subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
+        6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
+        13.846, 14.615, 15.385, and 1.538 (again).
       n_cal (int):
         Minimum number of sub-stacks used to calibrate K-Gain. The default value
         is 10.
