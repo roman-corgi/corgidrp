@@ -48,37 +48,37 @@ def check_nonlin_params(
     ):
     """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
     if 'rowroi1' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  rowroi2.')
     if 'colroi1' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  colroi1.')
     if 'colroi2' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  colroi2.')
     if 'rowback11' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  rowback11.')
     if 'rowback12' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  rowback12.')
     if 'rowback21' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  rowback21.')
     if 'rowback22' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  rowback22.')
     if 'colback11' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  colback11.')
     if 'colback12' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  colback12.')
     if 'colback21' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  colback21.')
     if 'colback22' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  colback22.')
     if 'min_exp_time' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  min_exp_time.')
     if 'num_bins' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  num_bins.')
     if 'min_bin' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  min_bin.')
     if 'min_mask_factor' not in nonlin_params:
-        raise ValueError('Missing parameter')
+        raise ValueError('Missing parameter:  min_mask_factor.')
     
     if not isinstance(nonlin_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')

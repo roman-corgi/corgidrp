@@ -17,7 +17,10 @@
             }
         },
         {
-            "name": "get_pc_mean"
+            "name": "get_pc_mean",
+            "keywords" : {
+                "inputmode" : "darks"
+            }
         },
         {
             "name" : "save"

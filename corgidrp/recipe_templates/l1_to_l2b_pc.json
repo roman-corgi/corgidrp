@@ -49,6 +49,33 @@
             }
         },
         {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
+        },
+        {
+            "name" : "flat_division",
+            "calibs" : {
+                "FlatField" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "correct_bad_pixels",
+            "calibs" : {
+                "BadPixelMap" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2b"
+        },
+        {
             "name" : "save"
         }
     ]

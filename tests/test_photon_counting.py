@@ -20,14 +20,36 @@ def test_negative():
     
 
 def test_pc():
-    '''Test that a pixel that is masked heavily (reducing the number of usable frames for that pixel) has a bigger err than the average pixel.
-    And if masking is all the way through for a certain pixel, that pixel will 
-    be flagged in the DQ. Also, make sure there is failure when niter<1 and threshold<0, and test other built-in catches.
-    Test safemode. Test mask_filepath to ensure failure for bright pixels outside region of interest when no mask used 
-    and success when mask used to mask those bright pixels.'''
+    '''
+    Tests that a pixel that is masked heavily (reducing the number of usable frames for that pixel) has a bigger err than the average pixel.
+
+    Tests that if masking is all the way through for a certain pixel, that pixel will 
+    be flagged in the DQ. 
+    
+    Make sure there is failure when the number of iterations niter<1.
+
+    Tests that the use of a mask to mask out bright pixels when photon-counting, to ensure failure for bright pixels outside region of interest when no mask used
+    and success when mask used to mask those bright pixels.
+
+    Tests safemode, which makes the function issue warnings instead of crashing (useful for HOWFSC's iterative digging of dark holes).
+
+    Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='DARK' while also inputting a photon-counted master dark raises exception, exception raised when 'CMDGAIN' not the same for all frames.
+
+    Checks various metadata changes: the expected filename and history edit for the output is done (for case of dark subtraction and the case of no dark subtraction), the master dark is indicated as such via a header keyword 'PC_STAT'.
+
+    Tests that output average value of the photon-counted frames agrees with what was simulated (for the case of dark subtraction and no dark subtraction).
+
+    Tests that if 'ISPC' is in image header and if it is False, get_pc_mean() raises an exception.
+
+    Tests that an exception occurs if the user input "inputmode" is inconsistent with the input dataset type.
+
+    Tests that an exception occurs if the photon-counted master dark does not have the header 'PCTHRESH'.
+
+    Tests that an exception occurs if the photon-counted master dark has a 'PCTHRESH' value than the one to be used on the illuminated dataset.
+    '''
     # exposure time too long to get reasonable photon-counted result (after photometric correction)
     np.random.seed(555)
-    dataset_err, dark_dataset_err, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=160, cosmic_rate=0, full_frame=False) 
+    dataset_err, dark_dataset_err, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=160, cosmic_rate=0, full_frame=False, smear=False) 
     # instead of running through walker, just do the pre-processing steps simply
     # using EM gain=5000 and kgain=7 and bias=20000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
     for f in dataset_err.frames:
@@ -47,7 +69,7 @@ def test_pc():
         f.ext_hdr['RN'] = 100
         f.ext_hdr['KGAIN'] = 7
     # process the frames to make PC dark
-    pc_dark = get_pc_mean(dark_dataset_err)
+    pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
     assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
     # now process illuminated frames and subtract the PC dark
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)
@@ -72,14 +94,26 @@ def test_pc():
     # when thresh>=em_gain, exception
     with pytest.raises(Exception):
         get_pc_mean(dataset_err, T_factor=50, niter=2)
-    # can't provide Dark class instance while "VISTYPE" of input dataset is 'DARK'
+    # can't provide master dark while "VISTYPE" of input dataset is 'DARK'
     with pytest.raises(PhotonCountException):
-        get_pc_mean(dark_dataset_err, pc_master_dark=pc_dark)
+        get_pc_mean(dark_dataset_err, pc_master_dark=pc_dark, inputmode='darks')
     # must have same 'CMDGAIN' and other header values throughout input dataset
     dark_dataset_err.frames[0].ext_hdr['CMDGAIN'] = 4999
     with pytest.raises(PhotonCountException):
-        get_pc_mean(dark_dataset_err, pc_master_dark=pc_dark)
+        get_pc_mean(dark_dataset_err, inputmode='dark')
+    # change back:
+    dark_dataset_err.frames[0].ext_hdr['CMDGAIN'] = 5000
 
+    # test to make sure PC dark's threshold matches the one used for illuminated frames 
+    with pytest.raises(PhotonCountException):
+        pc_dark.ext_hdr['PCTHRESH'] = 499
+        get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='illuminated')
+    # PC dark should have header 'PCTHRESH'
+    with pytest.raises(PhotonCountException):
+        pc_dark.ext_hdr.pop("PCTHRESH")
+        get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='illuminated')
+    # set it back:
+    pc_dark.ext_hdr['PCTHRESH'] = 500
     # to trigger pc_ecount_max error
     for f in dataset_err.frames[:-2]: #all but 2 of the frames
         f.data[22:40,23:49] = np.abs(f.data.astype(float)[22:40,23:49]*3000)
@@ -111,6 +145,17 @@ def test_pc():
     # test safemode=False: should get warning instead of exception
     with pytest.warns(UserWarning):
         get_pc_mean(dataset_err, safemode=False)
+    # test ISPC header value
+    with pytest.raises(PhotonCountException):
+        dataset_err.frames[0].ext_hdr['ISPC'] = False
+        get_pc_mean(dataset_err, pc_master_dark=pc_dark)
+    # set to True now
+    dataset_err.frames[0].ext_hdr['ISPC'] = True
+    # test inputmode's compatibility with dataset type
+    with pytest.raises(PhotonCountException):
+        get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='darks')
+    with pytest.raises(PhotonCountException):
+        get_pc_mean(dark_dataset_err, inputmode='illuminated')
 
 if __name__ == '__main__':
     test_pc()

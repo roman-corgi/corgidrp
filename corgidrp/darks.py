@@ -1,7 +1,6 @@
 import numpy as np
 import warnings
 from astropy.io import fits
-import os
 
 from corgidrp.detector import slice_section, imaging_slice, imaging_area_geom, detector_areas
 import corgidrp.check as check
@@ -134,12 +133,13 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have been desmeared if desmearing is appropriate.  Under normal
-    circumstances, darks should not be desmeared.  The only time desmearing
-    would be useful is in the unexpected case that, for example,
-    dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge, 
-    fixed-pattern noise, and read noise.
+    - have NOT been desmeared. Darks should not be desmeared.  The only component 
+    of dark frames that would be subject to a smearing effect is dark current 
+    since it linearly increases with time, so the extra row read time affects 
+    the dark current per pixel.  However, illuminated images
+    would also contain this smeared dark current, so dark subtraction should 
+    remove this smeared dark current (and then desmearing may be applied to the 
+    processed image if appropriate).  
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -269,12 +269,13 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have been desmeared if desmearing is appropriate.  Under normal
-    circumstances, darks should not be desmeared.  The only time desmearing
-    would be useful is in the unexpected case that, for example,
-    dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge, 
-    fixed-pattern noise, and read noise.
+    - have NOT been desmeared. Darks should not be desmeared.  The only component 
+    of dark frames that would be subject to a smearing effect is dark current 
+    since it linearly increases with time, so the extra row read time affects 
+    the dark current per pixel.  However, illuminated images
+    would also contain this smeared dark current, so dark subtraction should 
+    remove this smeared dark current (and then desmearing may be applied to the 
+    processed image if appropriate).  
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the

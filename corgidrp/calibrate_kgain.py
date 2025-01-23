@@ -34,25 +34,25 @@ def check_kgain_params(
     ):
     """ Checks integrity of kgain parameters in the dictionary kgain_params. """
     if 'offset_colroi1' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  offset_colroi1.')
     if 'offset_colroi2' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  offset_colroi2.')
     if 'rowroi1' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  rowroi2.')
     if 'colroi1' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  colroi1.')
     if 'colroi2' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  colroi2.')
     if 'rn_bins1' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  rn_bins1.')
     if 'rn_bins2' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  rn_bins2.')
     if 'max_DN_val' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  max_DN_val.')
     if 'signal_bins_N' not in kgain_params:
-        raise ValueError('Missing parameter.')
+        raise ValueError('Missing parameter:  signal_bins_N.')
 
     if not isinstance(kgain_params['offset_colroi1'], (float, int)):
         raise TypeError('offset_colroi1 is not a number')

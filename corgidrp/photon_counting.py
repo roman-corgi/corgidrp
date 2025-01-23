@@ -60,7 +60,7 @@ def photon_count(e_image, thresh):
     return pc_image
 
 
-def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max=None, niter=2, mask_filepath=None, safemode=True):
+def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max=None, niter=2, mask_filepath=None, safemode=True, inputmode='illuminated'):
     """Take a stack of images, frames of the same exposure 
     time, k gain, read noise, and EM gain, and return the mean expected value per 
     pixel. The frames are taken in photon-counting mode, which means high EM 
@@ -74,13 +74,6 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     - have been corrected for nonlinearity (These first 3 steps make the frames L2a.)
     - have been frame-selected (to weed out bad frames)
     - have been converted from DN to e-
-    - have been desmeared if desmearing is appropriate.  Under normal
-    circumstances, these frames should not be desmeared.  The only time desmearing
-    would be useful is in the unexpected case that, for example,
-    dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge, 
-    fixed-pattern noise, and read noise.  For such low-exposure frames, though,
-    this really should not be a concern.
 
     This algorithm will photon count each frame individually,
     then co-add the photon-counted frames. The co-added frame is then averaged
@@ -112,6 +105,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             If True, the function halts with an exception if the mean intensity of the unmasked pixels (or all pixels if no mask provided) is greater than pc_ecount_max or if the minimum photon-counted pixel value is negative.
             If False, the function gives a warning for these instead.
             Defaults to True.
+        inputmode (str):  If 'illuminated', the frames are assumed to be illuminated frames.  If 'darks', frames are assumed to be dark frames input for creation of a photon-counted master dark. 
+            This flag shows the user's intention with the input, and this input is checked against the file type of the dataset for compatibility (e.g., if this input is 'darks' while 'VISTYPE' is not equal 
+            to 'DARK', an exception is raised).
 
     Returns:
         corgidrp.data.Dataset or corgidrp.data.Dark: If If the input dataset's header key 'VISTYPE' is not equal to 'DARK', 
@@ -141,8 +137,16 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     if len(val) != 1:
         raise PhotonCountException('There should only be 1 \'VISTYPE\' value for the dataset.')
     if val[0] == 'DARK':
+        if inputmode != 'darks':
+            raise PhotonCountException('Inputmode is not \'darks\', but the input dataset has \'VISTYPE\' = \'DARK\'.')
         if pc_master_dark is not None:
             raise PhotonCountException('The input frames are \'VISTYPE\'=\'DARK\' frames, so no pc_master_dark should be provided.')
+    if val[0] != 'DARK':
+        if inputmode != 'illuminated':
+            raise PhotonCountException('Inputmode is not \'illuminated\', but the input dataset has \'VISTYPE\' not equal to \'DARK\'.')
+    if 'ISPC' in datasets[0].frames[0].ext_hdr:
+        if datasets[0].frames[0].ext_hdr['ISPC'] != True:
+            raise PhotonCountException('\'ISPC\' header value must be True if these frames are to be photon-counted.')
 
     dataset = datasets[0]
     
@@ -248,6 +252,10 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if pc_master_dark.ext_hdr['PC_STAT'] != 'photon-counted master dark':
             raise PhotonCountException('pc_master_dark must be a photon-counted master dark (i.e., '
                                        'the extension header key \'PC_STAT\' must be \'photon-counted master dark\').')
+        if 'PCTHRESH' not in pc_master_dark.ext_hdr:
+            raise PhotonCountException('Threshold should be stored under the header \'PCTHRESH\'.')
+        if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
+            raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
         pc_means.append(pc_master_dark.data)
         dqs.append(pc_master_dark.dq)
         errs.append(pc_master_dark.err)
@@ -275,6 +283,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                             dq_hdr=dq_hdr, input_hdulist=hdulist) 
         new_image.filename = dataset[0].filename.split('.')[0]+'_pc'+filename_end+'.fits'
+        new_image.ext_hdr['PCTHRESH'] = thresh
         new_image._record_parent_filenames(input_dataset) 
         pc_ill_dataset = data.Dataset([new_image])
         pc_ill_dataset.update_after_processing_step("Photon-counted {0} frames using T_factor={1} and niter={2}. Dark-subtracted: {3}.".format(len(input_dataset), T_factor, niter, dark_sub))
@@ -283,6 +292,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         ext_hdr['PC_STAT'] = 'photon-counted master dark'
         ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
         ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
+        ext_hdr['PCTHRESH'] = thresh
         pc_dark = data.Dark(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, input_dataset=input_dataset)
         return pc_dark
 
