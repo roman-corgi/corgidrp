@@ -863,6 +863,13 @@ class KGain(Image):
        # run the image class contructor
         super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
 
+        # initialize these headers that have been recently added so that older calib files still contain this keyword when initialized and allow for tests that don't require 
+        # these values to run smoothly; if these values are actually required for 
+        # a particular process, the user would be alerted since these values below would result in an error as they aren't numerical
+        if 'RN' not in self.ext_hdr:
+            self.ext_hdr['RN'] = ''
+        if 'RN_ERR' not in self.ext_hdr:
+            self.ext_hdr['RN_ERR'] = ''
         # File format checks
         if self.data.shape != (1,1):
             raise ValueError('The KGain calibration data should be just one float value')

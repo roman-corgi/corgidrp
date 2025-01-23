@@ -15,9 +15,13 @@ import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 
 @pytest.mark.e2e
-def test_expected_results_e2e(file_dir):
+def test_expected_results_e2e(tvacdata_dir, file_dir):
+    processed_cal_path = os.path.join(tvacdata_dir, "TV-36_Coronagraphic_Data", "Cals")
+    flat_path = os.path.join(processed_cal_path, "flat.fits")
+    bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
+
     np.random.seed(1234)
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
     output_dir = os.path.join(file_dir, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
@@ -102,15 +106,29 @@ def test_expected_results_e2e(file_dir):
     new_nonlinearity.pri_hdr = pri_hdr
     new_nonlinearity.ext_hdr = ext_hdr
     this_caldb.create_entry(new_nonlinearity)
+
+    ## Flat field
+    with fits.open(flat_path) as hdulist:
+        flat_dat = hdulist[0].data
+    flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    flat.save(filedir=output_dir, filename="mock_flat.fits")
+    this_caldb.create_entry(flat)
+
+    # bad pixel map
+    with fits.open(bp_path) as hdulist:
+        bp_dat = hdulist[0].data
+    bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
+    bp_map.save(filedir=output_dir, filename="mock_bpmap.fits")
+    this_caldb.create_entry(bp_map)
+
     # make PC dark
     walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir, template="l1_to_l2b_pc_dark.json")
     for f in os.listdir(output_dir):
         if f.endswith('_pc_dark.fits'):
             pc_dark_filename = f
-    # add the Dark to the Caldb for processing the illuminated
+    # calDB was just updated with the PC Dark that was created with the walker above
     pc_dark_file = os.path.join(output_dir, pc_dark_filename)
-    dark_entry = data.Dark(pc_dark_file)
-    this_caldb.create_entry(dark_entry)
+
     # make PC illuminated, subtracting the PC dark
     walker.walk_corgidrp(l1_data_ill_filelist, '', output_dir, template="l1_to_l2b_pc.json")
     # get photon-counted frame
@@ -129,9 +147,16 @@ def test_expected_results_e2e(file_dir):
     assert pc_frame_err.min() >= 0
     assert pc_dark_frame_err.min() >= 0
 
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(noise_map)
-    this_caldb.remove_entry(new_nonlinearity)
+    # load in CalDB again to reflect the PC Dark that was implicitly added in (but not found in this_caldb, which was loaded before the Dark was created)
+    post_caldb = caldb.CalDB()
+    post_caldb.remove_entry(kgain)
+    post_caldb.remove_entry(noise_map)
+    post_caldb.remove_entry(new_nonlinearity)
+    post_caldb.remove_entry(flat)
+    post_caldb.remove_entry(bp_map)
+    for i in range(len(post_caldb._db['Type'])):
+        if post_caldb._db['Type'][i] == 'Dark':
+            post_caldb._db = post_caldb._db.drop(i)
 
 
 if __name__ == "__main__":
@@ -142,10 +167,13 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
+    tvacdata_dir =  "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
-    ap = argparse.ArgumentParser(description="run the l1->l2b PC end-to-end test")
+    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
+    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
-    test_expected_results_e2e(outputdir)
+    test_expected_results_e2e(tvacdata_dir, outputdir)

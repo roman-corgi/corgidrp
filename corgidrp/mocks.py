@@ -17,6 +17,7 @@ from corgidrp.data import Image
 import corgidrp.detector as detector
 from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
+from corgidrp.data import DetectorParams
 
 from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
@@ -1863,7 +1864,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 else:
                     hdul.writeto(filename, overwrite = True)
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -1875,6 +1876,8 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         exptime (float): exposure time (in s)
         cosmic_rate: (float) simulated cosmic rays incidence, hits/cm^2/s
         full_frame: (bool) If True, simulated frames are SCI full frames.  If False, 50x50 images are simulated.  Defaults to True.
+        smear: (bool) If True, smear is simulated.  Defaults to True.
+        flux: (float) Number of photons/s per pixel desired.  Defaults to 1.
     
     Returns:
         ill_dataset (corgidrp.data.Dataset): Dataset containing the illuminated frames
@@ -1883,7 +1886,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         dark_mean (float): mean electron count value simulated in the dark frames
     '''
     pix_row = 1024 #number of rows and number of columns
-    fluxmap = np.ones((pix_row,pix_row)) #photon flux map, photons/s
+    fluxmap = flux*np.ones((pix_row,pix_row)) #photon flux map, photons/s
 
     emccd = EMCCDDetect(
         em_gain=EMgain,
@@ -1919,6 +1922,20 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
     ill_mean = avg_ph_flux*emccd.qe*exptime + emccd.dark_current*exptime + emccd.cic
     # theoretical electron flux for darks
     dark_mean = emccd.dark_current*exptime + emccd.cic
+
+    if smear:
+        #simulate smear to fluxmap
+        detector_params = DetectorParams({})
+        rowreadtime = detector_params.params['rowreadtime']
+        smear = np.zeros_like(fluxmap)
+        m = len(smear)
+        for r in range(m):
+            columnsum = 0
+            for i in range(r+1):
+                columnsum = columnsum + rowreadtime*fluxmap[i,:]
+            smear[r,:] = columnsum
+        
+        fluxmap = fluxmap + smear/exptime
     
     frame_e_list = []
     frame_e_dark_list = []
