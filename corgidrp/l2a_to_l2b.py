@@ -1,22 +1,33 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
+from scipy.interpolate import interp1d
+
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas
+from corgidrp.detector import ENF
 
-def add_photon_noise(input_dataset):
+def add_photon_noise(input_dataset, kgain, detector_params):
     """
     Propagate the photon/shot noise determined from the image signal to the error map. 
 
     Args:
        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
+       kgain (corgidrp.data.KGain): kgain calibration object
+       detector_params (corgidrp.data.DetectorParams): detector parameters calibration object
 
     Returns:
         corgidrp.data.Dataset: photon noise propagated to the image error extensions of the input dataset
     """
     # you should make a copy the dataset to start
-    phot_noise_dataset = input_dataset.copy() # necessary at all?
-
+    phot_noise_dataset = input_dataset.copy()
+    
+    #get the noise from the ptc curve
+    ptc = kgain.ptc
+    #better say shot noise?
+    #should we also add the read noise as error layer?
+    nem = detector_params.params['Nem']
+    
     for i, frame in enumerate(phot_noise_dataset.frames):
         try: # use measured gain if available TODO change hdr name if necessary
             em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
@@ -25,10 +36,15 @@ def add_photon_noise(input_dataset):
                 em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_A"]
             except: # otherwise use commanded EM gain
                 em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
-        phot_err = np.sqrt(frame.data)
+        #estimate of photon/shot noise by interpolation of the photon transfer curve
+        interp_func = interp1d(ptc[:,0], ptc[:,1], kind='linear', fill_value='extrapolate')
+
+        phot_err = interp_func(frame.data)
+        #phot_err = np.sqrt(frame.data), simple first estimate of photon noise, which is only true for high signals
         #add excess noise in case of em_gain
         if em_gain > 1:
-            phot_err *= np.sqrt(2)           
+            nem = detector_params.params['Nem']
+            phot_err *= ENF(em_gain, nem)           
         frame.add_error_term(phot_err, "photnoise_error")
     
     new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
@@ -250,11 +266,11 @@ def convert_to_electrons(input_dataset, k_gain):
     kgain_cube = kgain_dataset.all_data
 
     kgain = k_gain.value #extract from caldb
-    error_frame = kgain_dataset[0].data * k_gain.error
+    error_frame = kgain_dataset[0].data * k_gain.error #kgain_cube * error?
     kgain_cube *= kgain
     
-    #scale also the old error with kgain and propagate the error of 
-    kgain_dataset.rescale_error(kgain, "kgain")
+    #scale also the old error with kgain and propagate the error 
+    kgain_dataset.rescale_error(kgain, "kgain") #should be 2/3 dim?
     kgain_dataset.add_error_term(error_frame, "kgain_error")
 
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))

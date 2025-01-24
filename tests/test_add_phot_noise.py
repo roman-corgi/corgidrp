@@ -2,8 +2,9 @@ import os
 import numpy as np
 import corgidrp
 from corgidrp.mocks import create_default_headers
-from corgidrp.data import Image, Dataset
+from corgidrp.data import Image, Dataset, DetectorParams, KGain
 from corgidrp.l2a_to_l2b import add_photon_noise
+from corgidrp.detector import ENF
 import pytest
 
 old_err_tracking = corgidrp.track_individual_errors
@@ -21,19 +22,27 @@ def test_add_phot_noise():
     image2 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err, dq = dq)
     
     dataset = Dataset([image1, image2])
-    dataset_add = add_photon_noise(dataset)
+    
+    detector_params = DetectorParams({})
+    gain_value = np.array([[8.7]])
+    signal_array = np.linspace(0, 50)
+    noise_array = np.sqrt(signal_array)
+    ptc = np.column_stack([signal_array, noise_array])
+    kgain = KGain(gain_value, ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+ 
+    dataset_add = add_photon_noise(dataset, kgain, detector_params)
     all_err = dataset.all_err
     all_err1 = dataset_add.all_err
     assert not np.array_equal(all_err, all_err1)
-    assert np.array_equal(all_err1[0,1], np.sqrt(data))
-    assert np.allclose(all_err1[0,0], np.sqrt(data + np.square(err)))
+    assert np.allclose(all_err1[0,1], np.sqrt(data), rtol = 0.01)
+    assert np.allclose(all_err1[0,0], np.sqrt(data + np.square(err)), rtol = 0.01)
     assert "noise" in str(dataset_add.frames[0].ext_hdr["HISTORY"])
     assert "photnoise_error" == dataset_add.frames[0].err_hdr["Layer_2"]
     #check that excess noise is applied
     dataset[0].ext_hdr["CMDGAIN"] = 3000
-    dataset_add1 = add_photon_noise(dataset)
+    dataset_add1 = add_photon_noise(dataset, kgain, detector_params)
     all_err2 = dataset_add1.all_err
-    assert np.array_equal(all_err2[0,1], np.sqrt(data)*np.sqrt(2))
+    assert np.allclose(all_err2[0,1], np.sqrt(data)*ENF(3000, 604), rtol =0.01)
     
     corgidrp.track_individual_errors = old_err_tracking
     

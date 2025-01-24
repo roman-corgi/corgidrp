@@ -816,4 +816,18 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     onsky_flatfield.err=raster_com[1]
     
     return(onsky_flatfield)
+
+def ENF(g, Nem):
+    """Returns the extra-noise function (ENF).
     
+    Args:
+        g : float 
+        EM gain.  >= 1.
+    Nem : int
+        Number of gain register cells.
+    
+    Returns
+        ENF : float, extra-noise function
+    """
+    return np.sqrt(2*(g-1)*g**(-(Nem+1)/Nem) + 1/g) 
+
