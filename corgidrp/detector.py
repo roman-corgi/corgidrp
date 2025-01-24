@@ -824,7 +824,7 @@ def ENF(g, Nem):
         g (float): EM gain.  >= 1.
         Nem (int): Number of gain register cells.
     
-    Returns
+    Returns:
         float : ENF, extra-noise function
     """
     return np.sqrt(2*(g-1)*g**(-(Nem+1)/Nem) + 1/g) 
