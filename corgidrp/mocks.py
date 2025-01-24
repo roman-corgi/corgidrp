@@ -1894,6 +1894,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = Non
     new_hdr = {}
     new_hdr['TARGET'] = 'Vega'
     new_hdr['CFAMNAME'] = '3C'
+    new_hdr['FPAMNAME'] = 'ND475'
     if color_cor is not None:
         new_hdr['COL_COR'] = color_cor
     new_hdr['CRPIX1'] = center[0]
