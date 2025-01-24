@@ -1275,6 +1275,7 @@ class FluxcalFactor(Image):
 
     Attributes:
         filter (str): used filter name
+        nd_filter (str): used neutral density filter or "No"
         fluxcal_fac (float): the value of the flux cal factor for the corresponding filter
         fluxcal_err (float): the error of the flux cal factor for the corresponding filter
     """
@@ -1286,10 +1287,24 @@ class FluxcalFactor(Image):
         if self.data.shape != (1,1):
             raise ValueError('The FluxcalFactor calibration data should be just one float value')
         
-        if self.ext_hdr['CFAMNAME'] is not None:
+        #TBC
+        self.nd_filter = "ND0" #no neutral density filter in beam
+        if 'FPAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FPAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        elif 'FSAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FSAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        else:
+            raise ValueError('The FluxcalFactor calibration has no keyword FPAMNAME or FSAMNAME in the header')
+        
+        if 'CFAMNAME' in self.ext_hdr:
             self.filter = self.ext_hdr['CFAMNAME']
         else:
             raise ValueError('The FluxcalFactor calibration has no filter keyword CFAMNAME in the header')
+
 
         if isinstance(data_or_filepath, str):
             # double check that this is actually a FluxcalFactor file that got read in
@@ -1335,7 +1350,7 @@ class FluxcalFactor(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "{0}_FluxcalFactor_{1}.fits".format(orig_input_filename, self.filter)
+            self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
 
 
 datatypes = { "Image" : Image,

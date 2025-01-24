@@ -14,6 +14,7 @@ data = np.ones([1024,1024]) * 2
 err = np.ones([1,1024,1024]) * 0.5
 prhd, exthd = create_default_headers()
 exthd["CFAMNAME"] = '3C'
+exthd["FPAMNAME"] = 'ND475'
 exthd["TARGET"] = 'VEGA'
 image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
 image2 = image1.copy()
@@ -177,7 +178,7 @@ def test_abs_fluxcal():
     assert fluxcal_factor.filter == '3C'
     assert fluxcal_factor.fluxcal_fac == pytest.approx(band_flux/200, abs = 0.3e-12)
     assert fluxcal_factor.fluxcal_err == pytest.approx(3.1e-13, abs = 0.1e-13)
-    assert fluxcal_factor.filename == 'sim_fluxcal_FluxcalFactor_3C.fits'
+    assert fluxcal_factor.filename == 'sim_fluxcal_FluxcalFactor_3C_ND475.fits'
     fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(flux_image, fwhm)
     assert fluxcal_factor.filter == '3C'
     assert fluxcal_factor.fluxcal_fac == pytest.approx(band_flux/200, abs =  0.3e-12)
