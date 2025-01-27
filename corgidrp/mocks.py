@@ -1885,7 +1885,7 @@ LATPOLE =                 90.0 / [deg] Native latitude of celestial pole
 MJDREF  =                  0.0 / [d] MJD of fiducial time
 """
 
-def gaussian_array(array_shape=[50,50],sigma=2.5,amp=1.,xoffset=0.,yoffset=0.):
+def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.):
     """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
 
     Args:
@@ -1914,7 +1914,11 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                           wcs_header = None,
                           data_shape = [60,60],
                           centerxy = None,
-                          outdir = None):
+                          outdir = None,
+                          noise_amp = 1e-11,
+                          ref_psf_spread=1. ,
+                          pl_contrast=1e-5
+                          ):
     """Generate a mock science and reference dataset ready for the PSF subtraction step.
     TODO: reference a central pixscale number, rather than hard code.
 
@@ -1991,7 +1995,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Otherwise generate a 2D gaussian for a fake PSF
         else:
+            sci_sigma = 2.5
+            ref_sigma = sci_sigma * ref_psf_spread
+            amp = 100
+            pl_amp = amp * pl_contrast
+
             label = 'ref' if i>= n_sci else 'sci'
+            sigma = ref_sigma if i>= n_sci else sci_sigma
             fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
             arr_center = np.array(data_shape) / 2 - 0.5
             if centerxy is None:
@@ -2002,11 +2012,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             psf_off_xy = (psfcentx-arr_center[1],psfcenty-arr_center[0])
             img_data = gaussian_array(array_shape=data_shape,
                                       xoffset=psf_off_xy[0],
-                                      yoffset=psf_off_xy[1])
+                                      yoffset=psf_off_xy[1],
+                                      sigma=sigma,
+                                      amp=amp)
             
             # Add some noise
-            rng = np.random.default_rng(seed=None)
-            noise = rng.normal(0,1e-11,img_data.shape)
+            rng = np.random.default_rng(seed=123+2*i)
+            noise = rng.normal(0,noise_amp,img_data.shape)
             img_data += noise
 
             # Add fake planet to sci files
@@ -2015,7 +2027,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                 sep_pix = 10
                 xoff,yoff = sep_pix * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
                 planet_psf = gaussian_array(array_shape=data_shape,
-                                            amp=1e-6,
+                                            amp=pl_amp,
                                             xoffset=xoff+psf_off_xy[0],
                                             yoffset=yoff+psf_off_xy[1])
                 img_data += planet_psf
