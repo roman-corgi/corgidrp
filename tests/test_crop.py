@@ -30,7 +30,7 @@ def make_test_dataset(shape=[100,100],centxy=None):
     exthdr['MASKLOCY'] = cent[0]
     exthdr['CRPIX1'] = cent[1] + 1
     exthdr['CRPIX2'] = cent[0] + 1
-    prihdr['MODE'] = 'HLC'
+    prihdr['LSAMNAME'] = 'NFOV'
     
     if len(shape) == 2:
         test_arr[int(cent[0]-0.5):int(cent[0]+1.5),int(cent[1]-0.5):int(cent[1]+1.5)] = 1
@@ -101,8 +101,7 @@ def test_3d_rect_offcenter_crop():
     if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr3d):
         raise Exception("Unexpected result for 2D rect offcenter crop test.")
 
-
-def test_edge_of_FOV():
+def test_edge_of_detector():
     """ Test cropping right at the edge of the data array.
     """
     test_dataset = make_test_dataset(shape=[100,100],centxy=[94.5,94.5])
@@ -111,7 +110,7 @@ def test_edge_of_FOV():
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
         raise Exception("Unexpected result for edge of FOV crop test.")
 
-def test_outside_FOV():
+def test_outside_detector_edge():
     """ Test cropping over the edge of the data array.
     """
 
@@ -209,12 +208,25 @@ def test_header_updates_3d():
     if not cropped_test_dataset[0].err_hdr["NAXIS3"] == 3:
         raise Exception("Frame err header kw NAXIS3 not updated correctly.")
     
+def test_non_nfov_input():
+    """ Test cropping to the center of a square using the header keywords "STARLOCX/Y".
+    """
+
+    test_dataset = make_test_dataset(shape=[100,100],centxy=[50.5,50.5])
+    for frame in test_dataset:
+        frame.pri_hdr['LSAMNAME'] = 'WFOV'
+
+    with pytest.raises(UserWarning):
+        _ = crop(test_dataset,sizexy=None,centerxy=None)
+
+
 if __name__ == "__main__":
     test_2d_square_center_crop()
     test_2d_square_offcenter_crop()
     test_2d_rect_offcenter_crop()
-    test_edge_of_FOV()
-    test_outside_FOV()
+    test_edge_of_detector()
+    test_outside_detector_edge()
     test_nonhalfinteger_centxy()
     test_header_updates_2d()
     test_header_updates_3d()
+    test_non_nfov_input()
