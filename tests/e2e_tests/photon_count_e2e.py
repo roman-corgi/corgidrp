@@ -154,9 +154,8 @@ def test_expected_results_e2e(tvacdata_dir, file_dir):
     post_caldb.remove_entry(new_nonlinearity)
     post_caldb.remove_entry(flat)
     post_caldb.remove_entry(bp_map)
-    for i in range(len(post_caldb._db['Type'])):
-        if post_caldb._db['Type'][i] == 'Dark':
-            post_caldb._db = post_caldb._db.drop(i)
+    pc_dark = data.Dark(pc_dark_file)
+    post_caldb.remove_entry(pc_dark)
 
 
 if __name__ == "__main__":
