@@ -80,7 +80,7 @@ def test_2d_square_offcenter_crop():
         raise Exception("Unexpected result for 2D square offcenter crop test.")
 
 def test_2d_rect_offcenter_crop():
-    """ Test cropping off-center non-square data.
+    """ Tests cropping off-center non-square data.
     """
     test_dataset = make_test_dataset(shape=[100,40],centxy=[24.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
@@ -89,7 +89,7 @@ def test_2d_rect_offcenter_crop():
         raise Exception("Unexpected result for 2D rect offcenter crop test.")
 
 def test_3d_rect_offcenter_crop():
-    """ Test cropping 3D off-center non-square data.
+    """ Tests cropping 3D off-center non-square data.
     """
     test_dataset = make_test_dataset(shape=[3,100,40],centxy=[24.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
@@ -100,7 +100,8 @@ def test_3d_rect_offcenter_crop():
         raise Exception("Unexpected result for 2D rect offcenter crop test.")
 
 def test_edge_of_detector():
-    """ Test cropping right at the edge of the data array.
+    """ Tests that trying to crop a region right at the edge of the 
+    detector succeeds.
     """
     test_dataset = make_test_dataset(shape=[100,100],centxy=[94.5,94.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
@@ -109,7 +110,7 @@ def test_edge_of_detector():
         raise Exception("Unexpected result for edge of FOV crop test.")
 
 def test_outside_detector_edge():
-    """ Test cropping over the edge of the data array.
+    """ Tests that trying to crop a region outside the detector fails.
     """
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[95.5,95.5])
@@ -118,7 +119,8 @@ def test_outside_detector_edge():
         _ = crop(test_dataset,sizexy=10,centerxy=None)
 
 def test_nonhalfinteger_centxy():
-    """ Test trying to center the crop not on a pixel intersection.
+    """ Tests that trying to crop data to a center that is not at the intersection 
+    of 4 pixels results in centering on the nearest pixel intersection.
     """
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[49.7,49.7])
@@ -127,7 +129,8 @@ def test_nonhalfinteger_centxy():
         raise Exception("Unexpected result for non half-integer crop test.")
 
 def test_header_updates_2d():
-    """ Test that the header values are updated correctly.
+    """ Tests that cropping works, and updates header values related to 
+    pixel positions and data shapes correctly, for 3D data.
     """
     
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
@@ -164,7 +167,8 @@ def test_header_updates_2d():
         raise Exception("Frame dq header kw NAXIS2 not updated correctly.")
     
 def test_header_updates_3d():
-    """ Test that the header values are updated correctly.
+    """ Tests that cropping works, and updates header values related to pixel 
+    positions and data shapes correctly, for 3D data.
     """
     
     test_dataset = make_test_dataset(shape=[3,100,100],centxy=[49.5,49.5])
@@ -207,13 +211,21 @@ def test_header_updates_3d():
         raise Exception("Frame err header kw NAXIS3 not updated correctly.")
     
 def test_non_nfov_input():
-    """ Test cropping to the center of a square using the header keywords "STARLOCX/Y".
+    """ Crop function is not configured for non-NFOV observations and should
+    fail if the Lyot stop is not in the narrow FOV position, unless the desired
+    image size is provided manually.
     """
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[50.5,50.5])
     for frame in test_dataset:
         frame.pri_hdr['LSAMNAME'] = 'WFOV'
 
+    try:
+        _ = crop(test_dataset,sizexy=20,centerxy=None)
+    except:
+        raise ValueError('Cropping a non-NFOV observation failed even though sizexy was provided')
+    
+    
     with pytest.raises(UserWarning):
         _ = crop(test_dataset,sizexy=None,centerxy=None)
 
@@ -222,6 +234,7 @@ if __name__ == "__main__":
     test_2d_square_center_crop()
     test_2d_square_offcenter_crop()
     test_2d_rect_offcenter_crop()
+    test_3d_rect_offcenter_crop()
     test_edge_of_detector()
     test_outside_detector_edge()
     test_nonhalfinteger_centxy()
