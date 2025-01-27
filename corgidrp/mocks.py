@@ -43,11 +43,6 @@ detector_areas_test= {
             'col_end': 108, #100
         }, 
 
-        'parallel_overscan' : {
-            'rows': 14,
-            'cols': 107,
-            'r0c0': [106, 108]
-            },
         'serial_overscan' : {
             'rows': 120,
             'cols': 5,
