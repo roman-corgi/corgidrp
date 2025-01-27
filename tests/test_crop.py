@@ -28,8 +28,6 @@ def make_test_dataset(shape=[100,100],centxy=None):
     exthdr['STARLOCY'] = cent[0]
     exthdr['MASKLOCX'] = cent[1]
     exthdr['MASKLOCY'] = cent[0]
-    exthdr['CRPIX1'] = cent[1] + 1
-    exthdr['CRPIX2'] = cent[0] + 1
     prihdr['LSAMNAME'] = 'NFOV'
     
     if len(shape) == 2:
