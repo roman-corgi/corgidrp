@@ -37,7 +37,7 @@ def find_star(input_dataset):
 
     return input_dataset.copy()
 
-def crop(input_dataset,sizexy=60,centerxy=None):
+def crop(input_dataset,sizexy=None,centerxy=None):
     """
     
     Crop the Images in a Dataset to a desired field of view. Default behavior is to 
@@ -52,7 +52,8 @@ def crop(input_dataset,sizexy=60,centerxy=None):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (any level)
         sizexy (int or array of int): desired frame size, if only one number is provided the 
-            desired shape is assumed to be square, otherwise xy order. Defaults to 60.
+            desired shape is assumed to be square, otherwise xy order. If not provided, 
+            defaults to 60 for NFOV (narrow field-of-view) observations. Defaults to None.
         centerxy (float or array of float): desired center (xy order), should be a pixel intersection (a.k.a 
             half-integer) otherwise the function rounds to the nearest intersection. Defaults to the 
             "STARLOCX/Y" header values.
@@ -65,7 +66,7 @@ def crop(input_dataset,sizexy=60,centerxy=None):
     dataset = input_dataset.copy()
 
     # Require even data shape
-    if not np.all(np.array(sizexy)%2==0):
+    if not sizexy is None and not np.all(np.array(sizexy)%2==0):
         raise UserWarning('Even sizexy is required.')
        
     # Need to loop over frames and reinit dataset because array sizes change
@@ -77,9 +78,12 @@ def crop(input_dataset,sizexy=60,centerxy=None):
         dqhdr = frame.dq_hdr
         errhdr = frame.err_hdr
 
-        # Require that mode is HLC for now
-        if not prihdr['MODE'] == 'HLC':
-            raise UserWarning('Crop function is currently only configured for mode HLC.')
+        # Pick default crop size based on the size of the effective field of view (determined by the Lyot stop)
+        if sizexy is None:
+            if prihdr['LSAMNAME'] == 'NFOV':
+                sizexy = 60
+            else:
+                raise UserWarning('Crop function is currently only configured for NFOV (narrow field-of-view) observations if sizexy is not provided.')
 
         # Assign new array sizes and center location
         frame_shape = frame.data.shape
