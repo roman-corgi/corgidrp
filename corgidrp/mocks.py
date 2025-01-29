@@ -1860,7 +1860,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     hdul.writeto(filename, overwrite = True)
 
 
-def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = None, platescale=21.8, add_gauss_noise=True, file_save=False):
+def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
     and Gaussian noise
@@ -1872,7 +1872,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = Non
         filedir (str): (Optional) Full path to directory to save to.
         color_cor (float): (Optional) the color correction factor
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
-        add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
+        add_gauss_noise (boolean): Argument to determine if Gaussian noise should be added to the data (default: True)
+        noise_scale (float): spread of the Gaussian noise
         file_save (boolean): save the simulated Image or not (default: False)
 
     Returns:
@@ -1895,8 +1896,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = Non
     new_hdr['TARGET'] = 'Vega'
     new_hdr['CFAMNAME'] = '3C'
     new_hdr['FPAMNAME'] = 'ND475'
-    if color_cor is not None:
-        new_hdr['COL_COR'] = color_cor
+    new_hdr['COL_COR'] = color_cor
     new_hdr['CRPIX1'] = center[0]
     new_hdr['CRPIX2'] = center[1]
 
@@ -1915,7 +1915,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = Non
     ypos = center[1]
 
     #convert flux in calspec units to photo-electrons
-    flux = star_flux/cal_factor #in photo-electrons
+    flux = star_flux/cal_factor/color_cor #in photo-electrons
 
     # inject gaussian psf star
     stampsize = int(np.ceil(3 * fwhm))
@@ -1946,12 +1946,10 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = Non
     if add_gauss_noise:
         # add Gaussian random noise
         noise_rng = np.random.default_rng(10)
-        gain = 1
-        ref_flux = 10
-        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
+        noise = noise_rng.normal(scale= noise_scale, size= size)
         sim_data = sim_data + noise
     err = np.zeros(size)
-    err[:] = noise
+    err[:] = noise_scale
     # load as an image object
     prihdr, exthdr = create_default_headers()
     prihdr['VISTYPE'] = 'FLUXCAL'

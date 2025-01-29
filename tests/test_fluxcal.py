@@ -155,34 +155,47 @@ def test_abs_fluxcal():
         os.mkdir(datadir)
     
     fwhm = 3
-    color_cor = 0.9
-    flux_image = create_flux_image(band_flux, fwhm, band_flux/200, color_cor = color_cor, filedir=datadir, file_save=True)
+    cal_factor = band_flux/200
+    #create a simulated mock image with a central point source + noise that has a flux band_flux 
+    #and a flux calibration factor band_flux/200
+    #that results in a total extracted count of 200 photo electrons
+    flux_image = create_flux_image(band_flux, fwhm, cal_factor, filedir=datadir, file_save=True)
     assert type(flux_image) == Image
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
     radius = 3.* sigma
-        
-    flux_el_ap, flux_err_ap = fluxcal.aper_phot(flux_image, radius, 0.997)
-    assert flux_el_ap == pytest.approx(200, abs = 6)
-    assert flux_err_ap == pytest.approx(8,1)
     
+    #The error of one pixel is 1, so the error of the aperture sum should be: 
+    error_sum = np.sqrt(np.pi * radius * radius)
+    flux_el_ap, flux_err_ap = fluxcal.aper_phot(flux_image, radius, 0.997)
+    #200 is the input count of photo electrons
+    assert flux_el_ap == pytest.approx(200, rel = 0.05)
+    assert flux_err_ap == pytest.approx(error_sum, rel = 0.05)
+    
+    #The error of one pixel is 1, so the error of a circular aperture with radius of 2 sigma should be about:
+    error_gauss = np.sqrt(np.pi * 4 * sigma * sigma)
     flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm, fit_shape = 41)
-    assert flux_el_gauss == pytest.approx(200, abs = 6)
-    assert flux_err_gauss == pytest.approx(1, abs = 0.3)
+    assert flux_el_gauss == pytest.approx(200, rel = 0.05)
+    assert flux_err_gauss == pytest.approx(error_gauss, rel = 0.05)
     
     flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm)
-    assert flux_el_gauss == pytest.approx(200, abs = 6)
-    assert flux_err_gauss == pytest.approx(1, abs = 0.3)
-    
+    assert flux_el_gauss == pytest.approx(200, rel = 0.05)
+    assert flux_err_gauss == pytest.approx(error_gauss, rel = 0.05)
     #test the generation of the flux cal factors cal file
-    fluxcal_factor = fluxcal.calibrate_fluxcal_aper(flux_image, radius, 0.997)
+    dataset = Dataset([flux_image])
+    fluxcal_factor = fluxcal.calibrate_fluxcal_aper(dataset, radius, 0.997)
     assert fluxcal_factor.filter == '3C'
-    assert fluxcal_factor.fluxcal_fac == pytest.approx(band_flux/200, abs = 0.3e-12)
-    assert fluxcal_factor.fluxcal_err == pytest.approx(3.1e-13, abs = 0.1e-13)
+    #band_flux/200 was the input calibration factor cal_factor of the simulated mock image
+    assert fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor, rel = 0.05)
+    #divisive error propagation of the aperture phot error
+    err_fluxcal_ap = band_flux/flux_el_ap**2*flux_err_ap
+    assert fluxcal_factor.fluxcal_err == pytest.approx(err_fluxcal_ap)
     assert fluxcal_factor.filename == 'sim_fluxcal_FluxcalFactor_3C_ND475.fits'
-    fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(flux_image, fwhm)
+    fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(dataset, fwhm)
     assert fluxcal_factor.filter == '3C'
-    assert fluxcal_factor.fluxcal_fac == pytest.approx(band_flux/200, abs =  0.3e-12)
-    assert fluxcal_factor.fluxcal_err == pytest.approx(4.5e-14, abs = 0.1e-14)
+    assert fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor,rel = 0.05)
+    #divisive error propagation of the 2D Gaussian fit phot error
+    err_fluxcal_gauss = band_flux/flux_el_gauss**2*flux_err_gauss
+    assert fluxcal_factor.fluxcal_err == pytest.approx(err_fluxcal_gauss)
     
     #test the flux conversion computation.
     old_ind = corgidrp.track_individual_errors
@@ -194,16 +207,20 @@ def test_abs_fluxcal():
     assert output_dataset[0].ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
     assert "fluxcal_factor" in str(output_dataset[0].ext_hdr['HISTORY'])
     
+    #this is the amplitude of the simulated 2D Gaussian mock image in the center
+    #it should be close to the value in the output image center
     el_cen = flux_dataset[0].data[512,512]
-    amplitude = band_flux/(2. * np.pi * sigma**2)
+    amplitude = el_cen * fluxcal_factor.fluxcal_fac
     data_cen = output_dataset[0].data[512, 512]
-    assert data_cen == pytest.approx(amplitude, rel = 0.04)
+    assert data_cen == pytest.approx(amplitude)
     assert output_dataset[0].err_hdr["LAYER_2"] == "fluxcal_error"
+    #this is the error propagation of the multiplication with the flux calibration factor
+    #and should agree with the value of the output image
     flux_err_cen = flux_dataset[0].err[0,512,512]
-    err_layer2 = fluxcal_factor.fluxcal_err/color_cor * el_cen
-    err_comb = np.sqrt((flux_err_cen/color_cor * fluxcal_factor.fluxcal_fac)**2 + err_layer2**2)
-    assert output_dataset[0].err[0,512, 512] == err_comb
-    assert output_dataset[0].err[1,512, 512] == err_layer2
+    err_layer2 = fluxcal_factor.fluxcal_err * el_cen
+    err_comb = np.sqrt((flux_err_cen * fluxcal_factor.fluxcal_fac)**2 + err_layer2**2)
+    assert output_dataset[0].err[0,512, 512] == pytest.approx(err_comb)
+    assert output_dataset[0].err[1,512, 512] == pytest.approx(err_layer2)
     
     corgidrp.track_individual_errors = old_ind
 
