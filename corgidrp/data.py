@@ -1165,7 +1165,7 @@ class DetectorParams(Image):
         hashing_str = "" # make a string that we can actually hash
         for key in self.params:
             hashing_str += str(self.params[key])
-        new_valid_date = time.Time("2027-01-01")
+
         return str(hash(hashing_str))
 
 class AstrometricCalibration(Image):
@@ -1323,7 +1323,6 @@ class FluxcalFactor(Image):
 
         # if this is a new FluxcalFactors file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
- 
         if ext_hdr is not None:
             if input_dataset is None:
                 if 'DRPNFILE' not in ext_hdr:
@@ -1339,9 +1338,6 @@ class FluxcalFactor(Image):
                 # strip off everything starting at .fits
                 orig_input_filename = input_dataset[0].filename.split(".fits")[0]
   
-
-            # double check that this is actually a FluxcalFactor file that got read in
-            # since if only a filepath was passed in, any file could have been read in
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
             self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'

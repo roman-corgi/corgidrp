@@ -129,7 +129,7 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     
     #scale also the old error with the flux_factor and propagate the error 
     # err = sqrt(err_flux^2 * flux_fac^2 + fluxfac_err^2 * flux^2)
-    factor_2d = np.ones(np.shape(flux_dataset[0].data)) * factor
+    factor_2d = np.ones(np.shape(flux_dataset[0].data)) * factor #TODO 2D should not be necessary anymore after improve_err is merged
     flux_dataset.rescale_error(factor_2d, "fluxcal_factor")
     flux_dataset.add_error_term(error_frame, "fluxcal_error")
 

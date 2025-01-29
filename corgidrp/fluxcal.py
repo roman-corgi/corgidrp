@@ -311,7 +311,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape = None):
     flux_err = psf_phot.results['flux_err'][0]
     return flux, flux_err
 
-def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5):
+def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5):
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by aperture photometry.
@@ -319,7 +319,7 @@ def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy = 1., method
     Propagates also errors to flux calibration factor calfile.
     
     Args:
-        image (corgidrp.data.Image): combined source exposure image
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
         encircled_radius (float): pixel radius of the circular aperture to sum the flux
         frac_enc_energy (float): fraction of encircled energy inside the encircled_radius of the PSF, inverse aperture correction, 0...1
         method (str): {‘exact’, ‘center’, ‘subpixel’}, The method used to determine the overlap of the aperture on the pixel grid, 
@@ -330,6 +330,12 @@ def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy = 1., method
     Returns:
         corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
     """
+    if isinstance(dataset_or_image, corgidrp.data.Dataset):
+        image = dataset_or_image[0]
+        dataset = dataset_or_image
+    else:
+        image = dataset_or_image
+        dataset = corgidrp.data.Dataset([image])
     star_name = image.ext_hdr["TARGET"]
     
     filter_name = image.ext_hdr["CFAMNAME"]
@@ -348,12 +354,11 @@ def calibrate_fluxcal_aper(image, encircled_radius, frac_enc_energy = 1., method
     fluxcal_fac = flux/ap_sum
     fluxcal_fac_err = flux/ap_sum**2 * ap_sum_err
     
-    dataset = corgidrp.data.Dataset([image])
     fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
     
     return fluxcal
     
-def calibrate_fluxcal_gauss2d(image, fwhm, fit_shape = None):
+def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None):
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by fitting a 2D Gaussian.
@@ -361,7 +366,7 @@ def calibrate_fluxcal_gauss2d(image, fwhm, fit_shape = None):
     Propagates also errors to flux calibration factor calfile.
     
     Args:
-        image (corgidrp.data.Image): combined source exposure image
+        dataset_or_image corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
         fwhm (float): estimated fwhm of the point source
         fit_shape (int or tuple of two ints): optional
             The shape of the fitting region. If a scalar, then it is assumed
@@ -371,6 +376,12 @@ def calibrate_fluxcal_gauss2d(image, fwhm, fit_shape = None):
     Returns:
         corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
     """
+    if isinstance(dataset_or_image, corgidrp.data.Dataset):
+        image = dataset_or_image[0]
+        dataset = dataset_or_image
+    else:
+        image = dataset_or_image
+        dataset = corgidrp.data.Dataset([image])
     star_name = image.ext_hdr["TARGET"]
     filter_name = image.ext_hdr["CFAMNAME"]
     filter_file = get_filter_name(image)
@@ -388,7 +399,6 @@ def calibrate_fluxcal_gauss2d(image, fwhm, fit_shape = None):
     fluxcal_fac = flux/flux_sum
     fluxcal_fac_err = flux/flux_sum**2 * flux_sum_err
     
-    dataset = corgidrp.data.Dataset([image])
     fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
     
     return fluxcal
