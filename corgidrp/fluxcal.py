@@ -366,7 +366,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None):
     Propagates also errors to flux calibration factor calfile.
     
     Args:
-        dataset_or_image corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
         fwhm (float): estimated fwhm of the point source
         fit_shape (int or tuple of two ints): optional
             The shape of the fitting region. If a scalar, then it is assumed
