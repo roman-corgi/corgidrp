@@ -366,7 +366,7 @@ def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy =
     ap_sum_err = aper_phot_result[1]
     exthdr = image.ext_hdr
     if background_sub:
-        exthdr['BACK'] = aper_phot_result[2]
+        exthdr['LOCBACK'] = aper_phot_result[2]
     fluxcal_fac = flux/ap_sum
     fluxcal_fac_err = flux/ap_sum**2 * ap_sum_err
     
