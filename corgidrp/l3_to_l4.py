@@ -270,18 +270,24 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         pri_hdr['NAXIS'] = 0
 
         # Add observation info from input dataset
-        pri_hdr['TELESCOP'] = sci_dataset[0].pri_hdr['TELESCOP']
-        pri_hdr['INSTRUME'] = sci_dataset[0].pri_hdr['INSTRUME']
-        pri_hdr['MODE'] = sci_dataset[0].pri_hdr['MODE']
-        pri_hdr['BAND'] = sci_dataset[0].pri_hdr['BAND']
+        pri_hdr_keys = ['TELESCOP','INSTRUME']
+        for kw in pri_hdr_keys:
+            pri_hdr[kw] = sci_dataset[0].pri_hdr[kw]
         
         # Make extension header
         ext_hdr = fits.Header()
         ext_hdr['NAXIS'] = 2
         ext_hdr['NAXIS1'] = naxis1
         ext_hdr['NAXIS2'] = naxis2
-        ext_hdr['BUNIT'] = sci_dataset[0].ext_hdr['BUNIT']
-        ext_hdr['PIXSCALE'] = sci_dataset[0].ext_hdr['PIXSCALE']
+
+        # Add info from input dataset
+        ext_hdr_keys = ['BUNIT','PIXSCALE','CFAMNAME',
+                        'DPAMNAME','FPAMNAME','FSAMNAME',
+                        'LSAMNAME','SPAMNAME']
+        for kw in ext_hdr_keys:
+            ext_hdr[kw] = sci_dataset[0].ext_hdr[kw]
+
+        # Add info from pyklip
         ext_hdr['KLIP_ALG'] = mode
         ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
         ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
@@ -291,9 +297,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         if "HISTORY" in sci_dataset[0].ext_hdr.keys():
             ext_hdr['HISTORY'] = sci_dataset[0].ext_hdr['HISTORY']
         
+        # Construct Image object and add to list
         frame = data.Image(frame_data,
-                                    pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
-                                    err=err, dq=dq)
+                           pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                           err=err, dq=dq)
         
         frames.append(frame)
     

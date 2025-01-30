@@ -8,7 +8,7 @@ def test_pyklipdata_ADI():
 
     rolls = [0,90]
     # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,centerxy=(30.5,30.5))
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
@@ -32,7 +32,7 @@ def test_pyklipdata_RDI():
 
     rolls = [45,180]
     # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,centerxy=(30.5,30.5))
+    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
@@ -53,7 +53,7 @@ def test_pyklipdata_ADIRDI():
 
     rolls = [45,-45,180]
     # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,centerxy=(30.5,30.5))
+    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
@@ -84,9 +84,9 @@ def test_pyklipdata_badinstrument():
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
 
-def test_pyklipdata_badcgimode():
+def test_pyklipdata_badcfamname():
     mock_sci,mock_ref = create_psfsub_dataset(1,1,[0,0])
-    mock_sci[0].pri_hdr['MODE'] = "SPC"
+    mock_sci[0].ext_hdr['CFAMNAME'] = "BAD"
 
     with pytest.raises(UserWarning):
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
@@ -225,7 +225,7 @@ if __name__ == '__main__':
     test_pyklipdata_ADIRDI()
     test_pyklipdata_badtelescope()
     test_pyklipdata_badinstrument()
-    test_pyklipdata_badcgimode()
+    test_pyklipdata_badcfamname()
     test_pyklipdata_notdataset()
     test_pyklipdata_badimgshapes()
     test_pyklipdata_multiplepixscales()
