@@ -1376,6 +1376,10 @@ class PyKLIPDataset(pyKLIP_Data):
                  center_include_offset=True):
         """
         Initialize the pyKLIP instrument class for space telescope data.
+        # TODO: Figure out how to input and test WCS data
+                Determine inner working angle based on PAM positions
+                    - Inner working angle based on Focal plane mask (starts with HLC) + color filter ('1F') for primary mode
+                    - Outer working angle based on field stop? (should be R1C1 or R1C3 for primary mode)
         
         Args:
             dataset (corgidrp.data.Dataset):
@@ -1393,7 +1397,7 @@ class PyKLIPDataset(pyKLIP_Data):
         super(PyKLIPDataset, self).__init__()
 
         # Set filter wavelengths
-        self.wave_hlc = {1: 0.575} # micron
+        self.wave_hlc = {'1F': 0.575} # micron
         
         # Optional variables
         self.center_include_offset = center_include_offset
@@ -1536,7 +1540,7 @@ class PyKLIPDataset(pyKLIP_Data):
                 
             TELESCOP = phead['TELESCOP']
             INSTRUME = phead['INSTRUME']
-            MODE = phead['MODE']
+            CFAMNAME = shead['CFAMNAME']
             data = frame.data
             if data.ndim == 2:
                 data = data[np.newaxis, :]
@@ -1561,18 +1565,16 @@ class PyKLIPDataset(pyKLIP_Data):
             filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             PAs_all += [shead['ROLL']] * NINTS
 
-            if TELESCOP != "ROMAN":
-                raise UserWarning('Data is not from Roman Space Telescope.')
-            if INSTRUME == 'CGI':
-                if MODE == 'HLC':
-                    CWAVEL = self.wave_hlc[phead['BAND']]
-                else:
-                    raise UserWarning('Unknown Roman CGI instrument mode.')
-            else:
-                raise UserWarning('Data originates from unknown Roman instrument.')
+            if TELESCOP != "ROMAN" or INSTRUME != "CGI":
+                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
+            
+            # Get center wavelengths
+            try:
+                CWAVEL = self.wave_hlc[CFAMNAME]
+            except:
+                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
             wvs_all += [1e-6 * CWAVEL] * NINTS
 
-            # TODO: Figure out actual WCS info
             wcs_hdr = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
             for j in range(NINTS):
                 wcs_all += [wcs_hdr.deepcopy()]
@@ -1590,10 +1592,7 @@ class PyKLIPDataset(pyKLIP_Data):
         PIXSCALE = np.unique(np.array(PIXSCALE))
         if len(PIXSCALE) != 1:
             raise UserWarning('Some science files do not have matching pixel scales')
-        if TELESCOP == 'ROMAN' and INSTRUME == 'CGI' and MODE == 'HLC':
-            iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. / PIXSCALE[0]  # pix
-        else:
-            iwa_all = 1.  # pix
+        iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. / PIXSCALE[0]  # pix
         owa_all = np.sum(np.array(input_all.shape[1:]) / 2.)  # pix
 
         # Recenter science images so that the star is at the center of the array.
