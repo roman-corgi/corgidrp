@@ -1,8 +1,48 @@
 from corgidrp.mocks import create_psfsub_dataset
 from corgidrp.l3_to_l4 import do_psf_subtraction
 from corgidrp.data import PyKLIPDataset
+from scipy.ndimage import shift, rotate
 import pytest
 import numpy as np
+
+## Helper functions/quantities
+
+def create_circular_mask(h, w, center=None, r=None):
+    """Creates a circular mask
+
+    Args:
+        h (int): array height
+        w (int): array width
+        center (list of float, optional): Center of mask. Defaults to the 
+            center of the array.
+        r (float, optional): radius of mask. Defaults to the minimum distance 
+            from the center to the edge of the array.
+
+    Returns:
+        np.array: boolean array with True inside the circle, False outside.
+    """
+
+    if center is None: # use the middle of the image
+        center = (w/2, h/2)
+    if r is None: # use the smallest distance between the center and image walls
+        r = min(center[0], center[1], w-center[0], h-center[1])
+
+    Y, X = np.ogrid[:h, :w]
+    dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
+
+    mask = dist_from_center <= r
+    return mask
+
+iwa_lod = 3.
+owa_lod = 9.7
+d = 2.36 #m
+lam = 573.8e-9 #m
+pixscale_arcsec = 0.0218
+
+iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
+owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
+
+## pyKLIP data class tests
 
 def test_pyklipdata_ADI():
 
@@ -83,7 +123,6 @@ def test_pyklipdata_badinstrument():
     with pytest.raises(UserWarning):
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
-
 def test_pyklipdata_badcfamname():
     mock_sci,mock_ref = create_psfsub_dataset(1,1,[0,0])
     mock_sci[0].ext_hdr['CFAMNAME'] = "BAD"
@@ -102,7 +141,6 @@ def test_pyklipdata_notdataset():
     with pytest.raises(UserWarning):
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
-
 def test_pyklipdata_badimgshapes():
     mock_sci,mock_ref = create_psfsub_dataset(2,0,[0,0])
     
@@ -117,33 +155,56 @@ def test_pyklipdata_multiplepixscales():
     with pytest.raises(UserWarning):
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
-def test_psf_sub_ADI():
+## PSF subtraction step tests
 
-    numbasis = [1,2,4]
+def test_psf_sub_ADI_nocrop():
+
+    numbasis = [1]
     rolls = [270+13,270-13]
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls)
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
 
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
-                                fileprefix='test_ADI')
+                                fileprefix='test_ADI',
+                                do_crop=False)
+
+    analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+                              [0.5,0.5],
+                              cval=np.nan)
     
     for i,frame in enumerate(result):
 
         # import matplotlib.pyplot as plt
-        # plt.imshow(frame.data,origin='lower')
-        # plt.colorbar()
-        # plt.title(f'{frame.ext_hdr["KLIP_ALG"]}, {frame.ext_hdr["KLMODES"]} KL MODE(S)')
-        # plt.scatter(frame.ext_hdr['PSFCENTX'],frame.ext_hdr['PSFCENTY'])
+
+        # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+        # im0 = axes[0].imshow(frame.data,origin='lower')
+        # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes)')
+
+        # im1 = axes[1].imshow(analytical_result,origin='lower')
+        # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+        # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[1].set_title('Analytical result')
+
+        # im2 = axes[2].imshow(frame.data - analytical_result,origin='lower')
+        # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+        # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[2].set_title('Difference')
+
+        # fig.suptitle('ADI')
+
         # plt.show()
         # plt.close()
     
         # Overall counts should decrease        
         if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
-            print(f'sum input: {np.sum(mock_sci[0].data)}')
-            print(f'sum output: {np.sum(frame.data)}')
-            
             raise Exception(f"ADI subtraction resulted in increased counts for frame {i}.")
                 
+        # Result should match analytical result        
+        if np.nanmax(np.abs(frame.data - analytical_result)) > 1e-5:
+            raise Exception(f"Absolute difference between ADI result and analytical result is greater then 1e-5.")
+        
         if not frame.ext_hdr['KLIP_ALG'] == 'ADI':
             raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
 
@@ -151,56 +212,112 @@ def test_psf_sub_ADI():
     expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
-         
-def test_psf_sub_RDI():
 
-    numbasis=[1,2,4]
-    rolls = [13,0,90]
-    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls)
+def test_psf_sub_RDI_nocrop(): 
+
+    numbasis = [1]
+    rolls = [13,0]
+    noise_amp=1e-8
+    pl_contrast=1e-3
+    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,ref_psf_spread=1.,
+                                pl_contrast=pl_contrast,
+                                noise_amp=noise_amp)
 
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
-                                fileprefix='test_RDI')
+                                fileprefix='test_RDI',
+                                do_crop=False
+                                )
+    analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
     
     for i,frame in enumerate(result):
 
+        mask = create_circular_mask(*frame.data.shape,r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        masked_frame = np.where(mask,np.nan,frame.data)
+
         # import matplotlib.pyplot as plt
-        # plt.imshow(frame.data,origin='lower')
-        # plt.colorbar()
-        # plt.title(f'{frame.ext_hdr["KLIP_ALG"]}, {frame.ext_hdr["KLMODES"]} KL MODE(S)')
-        # plt.scatter(frame.ext_hdr['PSFCENTX'],frame.ext_hdr['PSFCENTY'])
+
+        # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+        # im0 = axes[0].imshow(frame.data - np.nanmedian(frame.data),origin='lower')
+        # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes, Median Subtracted)')
+
+        # im1 = axes[1].imshow(analytical_result,origin='lower')
+        # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+        # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[1].set_title('Analytical result')
+
+        # im2 = axes[2].imshow(masked_frame - np.nanmedian(frame.data) - analytical_result,origin='lower')
+        # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+        # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[2].set_title('Difference')
+
+        # fig.suptitle('RDI')
+
         # plt.show()
         # plt.close()
         
         # Overall counts should decrease        
         if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
             raise Exception(f"RDI subtraction resulted in increased counts for frame {i}.")
-           
+        
+        # The step should choose mode RDI based on having 1 roll and 1 reference.
         if not frame.ext_hdr['KLIP_ALG'] == 'RDI':
             raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'RDI' mode when provided 1 science image and 1 reference.")
+        
+        # Frame should match analytical result outside of the IWA (after correcting for the median offset)
+        if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_result)) < 1e-5:
+            raise Exception("RDI subtraction did not produce expected analytical result.")
     
     # Check expected data shape
     expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after RDI subtraction.")
     
-def test_psf_sub_ADIRDI():
+def test_psf_sub_ADIRDI_nocrop():
 
-    numbasis = [1,2,4]
-    rolls = [13,-13,0,0]
-    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls)
+    numbasis = [1,2]
+    rolls = [13,-13,0]
+    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+                                pl_contrast=1e-3)
+    
 
+    analytical_result1 = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+    analytical_result2 = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2                         
+    analytical_results = [analytical_result1,analytical_result2]
+    
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
-                                fileprefix='test_ADI+RDI')
+                                fileprefix='test_ADI+RDI',
+                                do_crop=False)
     
     for i,frame in enumerate(result):
 
+        
+        mask = create_circular_mask(*frame.data.shape,r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        masked_frame = np.where(mask,np.nan,frame.data)
+
         # import matplotlib.pyplot as plt
-        # plt.imshow(frame.data,origin='lower')
-        # plt.colorbar()
-        # plt.title(f'{frame.ext_hdr["KLIP_ALG"]}, {frame.ext_hdr["KLMODES"]} KL MODE(S)')
-        # plt.scatter(frame.ext_hdr['PSFCENTX'],frame.ext_hdr['PSFCENTY'])
+
+        # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+        # im0 = axes[0].imshow(frame.data - np.nanmedian(frame.data),origin='lower')
+        # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes, Median Subtracted)')
+
+        # im1 = axes[1].imshow(analytical_results[i],origin='lower')
+        # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+        # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[1].set_title('Analytical result')
+
+        # im2 = axes[2].imshow(masked_frame - np.nanmedian(frame.data) - analytical_results[i],origin='lower')
+        # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+        # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+        # axes[2].set_title('Difference')
+
+        # fig.suptitle('ADI+RDI')
+
         # plt.show()
         # plt.close()
 
@@ -208,18 +325,46 @@ def test_psf_sub_ADIRDI():
         if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
             raise Exception(f"ADI+RDI subtraction resulted in increased counts for frame {i}.")
         
+        # Corgidrp should know to choose ADI+RDI mode
         if not frame.ext_hdr['KLIP_ALG'] == 'ADI+RDI':
             raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 1 reference.")
+        
+        # Frame should match analytical result outside of the IWA (after correcting for the median offset) for KL mode 1
+        if i==0:
+            if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_results[i])) < 1e-5:
+                raise Exception("ADI+RDI subtraction did not produce expected analytical result.")
                 
     # Check expected data shape
     expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI+RDI subtraction.")
 
+def test_psf_sub_withcrop():
+
+    numbasis = [1,2]
+    rolls = [270+13,270-13]
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
+
+    result = do_psf_subtraction(mock_sci,mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_withcrop')
+
+    for i,frame in enumerate(result):
+    
+        # Overall counts should decrease        
+        if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
+            raise Exception(f"ADI subtraction resulted in increased counts for frame {i}.")
+
+    # Check expected data shape
+    expected_data_shape = (len(numbasis),60,60)
+    if not result.all_data.shape == expected_data_shape:
+        raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
+
 if __name__ == '__main__':                                      
-    test_psf_sub_ADI()
-    test_psf_sub_RDI()
-    test_psf_sub_ADIRDI()
+    test_psf_sub_ADI_nocrop()
+    test_psf_sub_RDI_nocrop()
+    test_psf_sub_ADIRDI_nocrop()
+    test_psf_sub_withcrop()
     test_pyklipdata_ADI()
     test_pyklipdata_RDI()
     test_pyklipdata_ADIRDI()
