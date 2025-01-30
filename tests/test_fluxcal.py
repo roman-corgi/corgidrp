@@ -164,13 +164,20 @@ def test_abs_fluxcal():
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
     radius = 3.* sigma
     
+    #Test the aperture photometry
     #The error of one pixel is 1, so the error of the aperture sum should be: 
     error_sum = np.sqrt(np.pi * radius * radius)
-    flux_el_ap, flux_err_ap = fluxcal.aper_phot(flux_image, radius, 0.997)
+    [flux_el_ap, flux_err_ap] = fluxcal.aper_phot(flux_image, radius, 0.997)
     #200 is the input count of photo electrons
     assert flux_el_ap == pytest.approx(200, rel = 0.05)
     assert flux_err_ap == pytest.approx(error_sum, rel = 0.05)
     
+    #Test the optional background subtraction
+    [flux_back, flux_err_back, back] = fluxcal.aper_phot(flux_image, radius, background_sub = True)
+    assert back == pytest.approx(0, abs = 0.03)
+    assert flux_back == pytest.approx(flux_el_ap - back, abs = 1)
+    
+    #Test the 2D Gaussian fit photometry
     #The error of one pixel is 1, so the error of a circular aperture with radius of 2 sigma should be about:
     error_gauss = np.sqrt(np.pi * 4 * sigma * sigma)
     flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm, fit_shape = 41)
