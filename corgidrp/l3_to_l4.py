@@ -269,10 +269,12 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         pri_hdr = pyklip_hdr.copy()
         naxis1 = pri_hdr['NAXIS1']
         naxis2 = pri_hdr['NAXIS2']
-        del pri_hdr['NAXIS1']
-        del pri_hdr['NAXIS2']
-        del pri_hdr['NAXIS3']
         pri_hdr['NAXIS'] = 0
+
+        remove_kws = ['NAXIS1','NAXIS2','NAXIS3',
+                      'CRPIX1','CRPIX2']
+        for kw in remove_kws:
+            del pri_hdr[kw]
 
         # Add observation info from input dataset
         pri_hdr_keys = ['TELESCOP','INSTRUME']
@@ -297,8 +299,6 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
         ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
         ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
-        ext_hdr['PSFCENTX'] = pyklip_hdr['PSFCENTX']
-        ext_hdr['PSFCENTY'] = pyklip_hdr['PSFCENTY']
         if "HISTORY" in sci_dataset[0].ext_hdr.keys():
             history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
             ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
