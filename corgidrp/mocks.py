@@ -705,6 +705,15 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr['CFAM_V'] = 1.0
     exthdr['DPAM_H'] = 1.0
     exthdr['DPAM_V'] = 1.0
+    exthdr['CFAMNAME'] = '1F' # Color filter for band 1
+    exthdr['DPAMNAME'] = 'IMAGING' 
+    exthdr['FPAMNAME'] = 'HLC12_C2R1' # Focal plane mask for NFOV
+    exthdr['FSAMNAME'] = 'R1C1' # Circular field stop for NFOV
+    exthdr['LSAMNAME'] = 'NFOV' # Lyot stop for NFOV observations
+    exthdr['SPAMNAME'] = 'OPEN' # Used for NFOV observations
+    
+
+
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
     exthdr['HIERARCH DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
@@ -2144,9 +2153,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['XOFFSET'] = 0.0
         prihdr['YOFFSET'] = 0.0
         prihdr['FILENAME'] = fname
-        prihdr["MODE"] = 'HLC'
-        prihdr["BAND"] = 1
-
+        
         exthdr['BUNIT'] = 'MJy/sr'
         exthdr['MASKLOCX'] = psfcentx
         exthdr['MASKLOCY'] = psfcenty
