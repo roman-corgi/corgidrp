@@ -1,6 +1,7 @@
 # A file that holds the functions that transmogrify l4 data to TDA (Technical Demo Analysis) data 
 import corgidrp.fluxcal as fluxcal
 import numpy as np
+import warnings
 
 def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     """
@@ -22,7 +23,7 @@ def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     """
     mag_dataset = input_dataset.copy()
     # get the filter name from the header keyword 'CFAMNAME'
-    filter_name = fluxcal.get_filter_name(mag_dataset)
+    filter_name = fluxcal.get_filter_name(mag_dataset[0])
     # read the transmission curve from the color filter file
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
 
@@ -68,7 +69,7 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     """
     color_dataset = input_dataset.copy()
     # get the filter name from the header keyword 'CFAMNAME'
-    filter_name = fluxcal.get_filter_name(color_dataset)
+    filter_name = fluxcal.get_filter_name(color_dataset[0])
     # read the transmission curve from the color filter file
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
     # calculate the reference wavelength of the color filter
@@ -98,6 +99,45 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     color_dataset.update_after_processing_step(history_msg, header_entries = {"LAM_REF": lambda_ref, "COL_COR": k})
     
     return color_dataset
+
+
+def convert_to_flux(input_dataset, fluxcal_factor):
+    """
+
+    Convert the data from electron unit to flux unit erg/(s * cm^2 * AA).
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images
+        fluxcal_factor (corgidrp.data.FluxcalFactor): flux calibration file
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with the data in flux units
+    """
+   # you should make a copy the dataset to start
+    flux_dataset = input_dataset.copy()
+    flux_cube = flux_dataset.all_data
+    flux_error = flux_dataset.all_err
+    if "COL_COR" in flux_dataset[0].ext_hdr:
+        color_cor_fac = flux_dataset[0].ext_hdr['COL_COR']
+    else: 
+        warnings.warn("There is no COL_COR keyword in the header, color correction was not done, it is set to 1")
+        color_cor_fac = 1
+    factor = fluxcal_factor.fluxcal_fac/color_cor_fac
+    factor_error = fluxcal_factor.fluxcal_err/color_cor_fac
+    error_frame = flux_cube * factor_error
+    flux_cube *= factor
+    
+    #scale also the old error with the flux_factor and propagate the error 
+    # err = sqrt(err_flux^2 * flux_fac^2 + fluxfac_err^2 * flux^2)
+    factor_2d = np.ones(np.shape(flux_dataset[0].data)) * factor #TODO 2D should not be necessary anymore after improve_err is merged
+    flux_dataset.rescale_error(factor_2d, "fluxcal_factor")
+    flux_dataset.add_error_term(error_frame, "fluxcal_error")
+
+    history_msg = "data converted to flux unit erg/(s * cm^2 * AA) by fluxcal_factor {0} plus color correction".format(fluxcal_factor.fluxcal_fac)
+
+    # update the output dataset with this converted data and update the history
+    flux_dataset.update_after_processing_step(history_msg, new_all_data=flux_cube, header_entries = {"BUNIT":"erg/(s*cm^2*AA)", "FLUXFAC":fluxcal_factor.fluxcal_fac})
+    return flux_dataset
 
 def update_to_tda(input_dataset):
     """
