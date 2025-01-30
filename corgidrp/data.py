@@ -648,7 +648,6 @@ class Dark(Image):
         if self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
-
 class FlatField(Image):
     """
     Master flat generated from raster scan of uranus or Neptune.
@@ -941,7 +940,6 @@ class BadPixelMap(Image):
             raise ValueError("File that was loaded was not a BadPixelMap file.")
         if self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
-
 
 class DetectorNoiseMaps(Image):
     """
@@ -1345,11 +1343,26 @@ class FluxcalFactor(Image):
             self.filedir = "."
             self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
 
-
 class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
+
     # TODO: Add more bandpasses, modes to self.wave_hlc
+    #       Clarify attribute descriptions
+
+    Attrs:
+        input: Input corgiDRP dataset.
+        centers: PSF center locations (double check this).
+        filenums: file numbers.
+        filenames: file names.
+        PAs: position angles.
+        wvs: wavelengths.
+        wcs: WCS header information.
+        IWA: inner working angle.
+        OWA: outer working angle.
+        psflib: corgiDRP dataset containing reference PSF observations.
+        output: PSF subtracted pyKLIP dataset
+
     """
     
     ####################
@@ -1482,15 +1495,13 @@ class PyKLIPDataset(pyKLIP_Data):
         """
         Read the input science observations.
         
-        Parameters
-        ----------
-        filepaths : 1D-array
-            Paths of the input science observations.
-        
-        Returns
-        -------
-        None.
-        
+        Args:
+            dataset (corgidrp.data.Dataset):
+                Dataset containing input science observations.
+            psflib_dataset (corgidrp.data.Dataset, optional):
+                Dataset containing input reference observations. The default is None.
+            highpass (bool, optional):
+                Toggle to do highpass filtering. Defaults fo False.
         """
         
         # Check input.
@@ -1681,28 +1692,22 @@ class PyKLIPDataset(pyKLIP_Data):
         Function to save the data products that will be called internally by
         pyKLIP.
         
-        Parameters
-        ----------
-        filepath : path
-            Path of the output FITS file.
-        data : 3D-array
-            KLIP-subtracted data of shape (nkl, ny, nx).
-        klipparams : str, optional
-            PyKLIP keyword arguments used for the KLIP subtraction. The default
-            is None.
-        filetype : str, optional
-            Data type of the pyKLIP product. The default is ''.
-        zaxis : list, optional
-            List of KL modes used for the KLIP subtraction. The default is
-            None.
-        more_keywords : dict, optional
-            Dictionary of additional header keywords to be written to the
-            output FITS file. The default is None.
-        
-        Returns
-        -------
-        None.
-        
+        Args:
+            filepath (path): 
+                Path of the output FITS file.
+            data (3D-array): 
+                KLIP-subtracted data of shape (nkl, ny, nx).
+            klipparams (str, optional): 
+                PyKLIP keyword arguments used for the KLIP subtraction. The default
+                is None.
+            filetype (str, optional): 
+                Data type of the pyKLIP product. The default is ''.
+            zaxis (list, optional): 
+                List of KL modes used for the KLIP subtraction. The default is
+                None.
+            more_keywords (dict, optional): 
+                Dictionary of additional header keywords to be written to the
+                output FITS file. The default is None.
         """
         
         # Make FITS file.

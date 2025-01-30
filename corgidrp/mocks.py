@@ -2026,12 +2026,12 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
 
 def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
                           wcs_header = None,
-                          data_shape = [60,60],
+                          data_shape = [100,100],
                           centerxy = None,
                           outdir = None,
                           noise_amp = 1e-11,
                           ref_psf_spread=1. ,
-                          pl_contrast=1e-5
+                          pl_contrast=1e-3
                           ):
     """Generate a mock science and reference dataset ready for the PSF subtraction step.
     TODO: reference a central pixscale number, rather than hard code.
@@ -2041,15 +2041,25 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         n_ref (int): nummber of reference frames, must be >= 0.
         roll_angles (list-like): list of the roll angles of each science and reference 
             frame, with the science frames listed first. 
-        darkhole_scifiles (list of str, optional): Filepaths to the darkhole science frames. If not provided, 
-            a noisy 2D gaussian will be used instead. Defaults to None.
-        darkhole_reffiles (list of str, optional): Filepaths to the darkhole reference frames. If not provided, 
-            a noisy 2D gaussian will be used instead. Defaults to None.
-        wcs_header (astropy.fits.Header, optional): Fits header object containing WCS information. If not provided, 
-            a mock header will be created. Defaults to None.
-        data_shape (list-like): desired shape of data array. Must have length 2. Defaults to [1024,1024].
-        outdir (str, optional): Desired output directory. If not provided, data will not be saved. Defaults to None.
+        darkhole_scifiles (list of str, optional): Filepaths to the darkhole science frames. 
+            If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
+        darkhole_reffiles (list of str, optional): Filepaths to the darkhole reference frames. 
+            If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
+        wcs_header (astropy.fits.Header, optional): Fits header object containing WCS 
+            information. If not provided, a mock header will be created. Defaults to None.
+        data_shape (list of int): desired shape of data array. Must have length 2. Defaults to 
+            [1024,1024].
+        centerxy (list of float): Desired PSF center in xy order. Must have length 2. Defaults 
+            to image center.
+        outdir (str, optional): Desired output directory. If not provided, data will not be 
+            saved. Defaults to None.
+        noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1e-11.
+        ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
+            reference PSFs. Defaults to 1.
+        pl_contrast (float): Flux ratio between planet and starlight incident on the detector. 
+            Defaults to 1e-3.
 
+        
     Returns:
         tuple: corgiDRP science Dataset object and reference Dataset object.
     """
