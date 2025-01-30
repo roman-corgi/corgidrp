@@ -84,9 +84,9 @@ def crop(input_dataset,sizexy=None,centerxy=None):
         dqhdr = frame.dq_hdr
         errhdr = frame.err_hdr
 
-        # Pick default crop size based on the size of the effective field of view (determined by the Lyot stop)
+        # Pick default crop size based on the size of the effective field of view
         if sizexy is None:
-            if prihdr['LSAMNAME'] == 'NFOV':
+            if exthdr['LSAMNAME'] == 'NFOV':
                 sizexy = 60
             else:
                 raise UserWarning('Crop function is currently only configured for NFOV (narrow field-of-view) observations if sizexy is not provided.')
@@ -166,40 +166,42 @@ def crop(input_dataset,sizexy=None,centerxy=None):
 
     output_dataset = data.Dataset(frames_out)
 
-    history_msg = f"""Frames cropped to new shape {output_dataset[0].data.shape} on center {centerxy}.\
-             Updated header kws: {", ".join(updated_hdrs)}."""
-    
-    output_dataset.update_after_processing_step(history_msg)
+    history_msg1 = f"""Frames cropped to new shape {list(output_dataset[0].data.shape)} on center {list(centerxy)}. Updated header kws: {", ".join(updated_hdrs)}."""
+    output_dataset.update_after_processing_step(history_msg1)
     
     return output_dataset
 
 def do_psf_subtraction(input_dataset, reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
-                       numbasis = [1,4,8,16],outdir='KLIP_SUB',fileprefix=""
+                       numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
+                       do_crop=True,
+                       crop_sizexy=None
                        ):
     """
     
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
         Handle nans & propagate DQ array
-        Crop data to darkhole size ~(60x60) centered on nearest pixel (waiting on crop step function PR)
         Rotate north at the end
-        Do frame combine before PSF subtraction?
         What info is missing from output dataset headers?
         Add comments to new ext header cards
-        Figure out output roll angle.
         How to populate HISTORY header kw?
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        reference_star_dataset (corgidrp.data.Dataset): a dataset of Images of the reference star [optional]
-        mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously if not specified.
-        annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
-        subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
-        movement (int): KLIP movement parameter. Defaults to 1.
-        numbasis (int or list of int): number of KLIP modes to retain. Defaults to [1,4,8,16].
-        outdir (str or path): path to output directory. Defaults to "KLIP_SUB".
-        fileprefix (str): prefix of saved output files. Defaults to "".
+        reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
+            star [optional]
+        mode (str, optional): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously 
+            if not specified.
+        annuli (int, optional): number of concentric annuli to run separate subtractions on. Defaults to 1.
+        subsections (int, optional): number of angular subsections to run separate subtractions on. Defaults to 1.
+        movement (int, optional): KLIP movement parameter. Defaults to 1.
+        numbasis (int or list of int, optional): number of KLIP modes to retain. Defaults to [1,4,8,16].
+        outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
+        fileprefix (str, optional): prefix of saved output files. Defaults to "".
+        do_crop (bool): whether to crop data before PSF subtraction. Defaults to True.
+        crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
+            None, which results in the step choosing a crop size based on the imaging mode. 
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
@@ -235,7 +237,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
-    # TODO: Crop data (make sure psf center is updated)
+    # Crop data
+    if do_crop:
+        sci_dataset = crop(sci_dataset,sizexy=crop_sizexy)
+        ref_dataset = None if ref_dataset is None else crop(ref_dataset,sizexy=crop_sizexy) 
 
     # Mask data where DQ > 0, let pyklip deal with the nans
     sci_dataset_masked = nan_flags(sci_dataset)
@@ -295,7 +300,8 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         ext_hdr['PSFCENTX'] = pyklip_hdr['PSFCENTX']
         ext_hdr['PSFCENTY'] = pyklip_hdr['PSFCENTY']
         if "HISTORY" in sci_dataset[0].ext_hdr.keys():
-            ext_hdr['HISTORY'] = sci_dataset[0].ext_hdr['HISTORY']
+            history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
+            ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
         
         # Construct Image object and add to list
         frame = data.Image(frame_data,
