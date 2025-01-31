@@ -271,26 +271,30 @@ def aper_phot(image, encircled_radius, frac_enc_energy = 1., method = 'exact', s
         raise ValueError("frac_enc_energy {0} should be within 0 < fee <= 1".format(str(frac_enc_energy)))
     ra = image.pri_hdr['RA']
     dec = image.pri_hdr['DEC']
+    dat = image.data.copy()
     
     target_skycoord = SkyCoord(ra = ra, dec = dec, unit='deg')
     w = wcs.WCS(image.ext_hdr)
     pix = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin = 1)
+    if background_sub:
+        #This is essentially the median in a circular annulus 
+        bkg = LocalBackground(r_in, r_out)
+        back = bkg(dat, pix[0], pix[1], mask = image.dq.astype(bool))
+        dat -= back
+    
     aper = CircularAperture(pix, encircled_radius)
     aperture_sums, aperture_sums_errs = \
-        aper.do_photometry(image.data, error = image.err[0], mask = image.dq.astype(bool), method = method, subpixels = subpixels)
+        aper.do_photometry(dat, error = image.err[0], mask = image.dq.astype(bool), method = method, subpixels = subpixels)
     if background_sub:
-        bkg = LocalBackground(r_in, r_out)
-        back = bkg(image.data, pix[0], pix[1], mask = image.dq.astype(bool))
-        aperture_sums[0] -= back
         return [aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy, back]
     else:
         return [aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy]
 
-def phot_by_gauss2d_fit (image, fwhm, fit_shape = None):
+def phot_by_gauss2d_fit (image, fwhm, fit_shape = None, background_sub = False, r_in = 5 , r_out = 10):
     """
     returns the flux in photo-electrons of a point source at the target Ra/Dec position
     and using a circular aperture by applying aperture_photometry of photutils
-    We assume that background subtraction is already done.
+    Background subtraction can be done optionally using a user defined circular annulus.
     
     Args:
         image (corgidrp.data.Image): combined source exposure image
@@ -299,27 +303,39 @@ def phot_by_gauss2d_fit (image, fwhm, fit_shape = None):
             The shape of the fitting region. If a scalar, then it is assumed
             to be a square. If `None`, then the shape of the input ``data``.
             It must be an odd value and should be much bigger than fwhm.
-    
+            background_sub (boolean): background can be determine from a circular annulus (default: False).
+            r_in (float): inner radius of circular annulus in pixels, (default: 5)
+            r_out (float): outer radius of circular annulus in pixels, (default: 10)
     Returns:
-        float: integrated flux of the Gaussian2d fit of the point source in unit photo-electrons and corresponding error
+        list: integrated flux of the Gaussian2d fit of the point source in unit photo-electrons and corresponding error and optional local background value
     """
     ra = image.pri_hdr['RA']
     dec = image.pri_hdr['DEC']
+    dat = image.data.copy()
     
     target_skycoord = SkyCoord(ra = ra, dec = dec, unit='deg')
     w = wcs.WCS(image.ext_hdr)
     pix = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin = 1)
+    if background_sub:
+        #This is essentially the median in a circular annulus 
+        bkg = LocalBackground(r_in, r_out)
+        back = bkg(dat, pix[0], pix[1], mask = image.dq.astype(bool))
+        dat -= back
+    
     # fit_2dgaussian: error weighting raises exception if error is zero
     err = image.err[0]
     err[err == 0] = np.finfo(np.float32).eps
     
     if fit_shape == None:
-        fit_shape = np.shape(image.data)[0] -1
+        fit_shape = np.shape(dat)[0] -1
     
-    psf_phot = fit_2dgaussian(image.data, xypos = pix, fwhm = fwhm, fit_shape = fit_shape, mask = image.dq.astype(bool), error = err)
+    psf_phot = fit_2dgaussian(dat, xypos = pix, fwhm = fwhm, fit_shape = fit_shape, mask = image.dq.astype(bool), error = err)
     flux = psf_phot.results['flux_fit'][0]
     flux_err = psf_phot.results['flux_err'][0]
-    return flux, flux_err
+    if background_sub:
+        return [flux, flux_err, back]
+    else:
+        return [flux, flux_err]
 
 def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5, background_sub = False, r_in = 5 , r_out = 10):
     """
@@ -327,6 +343,7 @@ def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy =
     calculates the flux calibration factors by aperture photometry.
     The band flux values are divided by the found photoelectrons.
     Propagates also errors to flux calibration factor calfile.
+    Background subtraction can be done optionally using a user defined circular annulus.
     
     Args:
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
@@ -375,12 +392,13 @@ def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy =
     
     return fluxcal
     
-def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None):
+def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None, background_sub = False, r_in = 5 , r_out = 10):
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by fitting a 2D Gaussian.
     The band flux values are divided by the found photoelectrons.
     Propagates also errors to flux calibration factor calfile.
+    Background subtraction can be done optionally using a user defined circular annulus.
     
     Args:
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
@@ -389,7 +407,10 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None):
             The shape of the fitting region. If a scalar, then it is assumed
             to be a square. If `None`, then the shape of the input ``data``.
             It must be an odd value and should be much bigger than fwhm.
-    
+        background_sub (boolean): background can be determine from a circular annulus (default: False).
+        r_in (float): inner radius of circular annulus in pixels, (default: 5)
+        r_out (float): outer radius of circular annulus in pixels, (default: 10)
+        
     Returns:
         corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
     """
@@ -411,12 +432,14 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None):
     flux_ref = read_cal_spec(calspec_filepath, wave)
     flux = calculate_band_flux(filter_trans, flux_ref, wave)
     
-    flux_sum, flux_sum_err = phot_by_gauss2d_fit(image, fwhm, fit_shape = fit_shape)
+    flux_sum = phot_by_gauss2d_fit(image, fwhm, fit_shape = fit_shape, background_sub = background_sub, r_in = r_in, r_out = r_out)
     
-    fluxcal_fac = flux/flux_sum
-    fluxcal_fac_err = flux/flux_sum**2 * flux_sum_err
+    fluxcal_fac = flux/flux_sum[0]
+    fluxcal_fac_err = flux/flux_sum[0]**2 * flux_sum[1]
     
     exthdr = image.ext_hdr
+    if background_sub:
+        exthdr['LOCBACK'] = flux_sum[2]
     exthdr['HISTORY'] = "Flux calibration factor was determined by a Gaussian 2D fit photometry"
     fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = exthdr, input_dataset = dataset)
     

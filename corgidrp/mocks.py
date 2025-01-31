@@ -1860,7 +1860,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     hdul.writeto(filename, overwrite = True)
 
 
-def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., file_save=False):
+def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., background = 0., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
     and Gaussian noise
@@ -1874,6 +1874,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
         add_gauss_noise (boolean): Argument to determine if Gaussian noise should be added to the data (default: True)
         noise_scale (float): spread of the Gaussian noise
+        background (float): optional additive background value
         file_save (boolean): save the simulated Image or not (default: False)
 
     Returns:
@@ -1943,6 +1944,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     # inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
+    #add a background
+    sim_data += background
     if add_gauss_noise:
         # add Gaussian random noise
         noise_rng = np.random.default_rng(10)
