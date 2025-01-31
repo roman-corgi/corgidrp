@@ -21,7 +21,7 @@ Date: 2024-12-09
 def compute_centroid(image_data):
     """Compute the centroid (x, y) of an image based on its flux distribution.
 
-    Parameters:
+    Args:
         image_data : numpy.ndarray. A 2D array containing the image data from 
             which to compute the centroid.
 
@@ -44,7 +44,7 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
     summing pixel values in an aperture of `radius` and subtracting the local
     background measured in an annulus between `annulus_inner` and `annulus_outer`.
 
-    Parameters:
+    Args:
         image_data : numpy.ndarray. A 2D array containing the image data 
             from which to measure flux.
         x_center : float. The x-coordinate of the star's centroid.
@@ -91,7 +91,7 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
 def compute_expected_flux(star_name, filter_name):
     """ Compute the expected absolute integrated flux of a star through a given filter.
 
-    Parameters:
+    Args:
         star_name : str. Name of the star. Must be recognized by `fluxcal.get_calspec_file`.
         filter_name : str. Filter identifier (e.g., '3C') that corresponds to a 
             known filter curve file.
@@ -127,7 +127,7 @@ def group_by_target(dataset_entries):
     """
     Group dataset objects by the 'TARGET' keyword in their FITS extension headers.
 
-    Parameters:
+    Args:
         dataset_entries : list. A list of dataset objects, each containing an
             'ext_hdr' attribute with FITS header information.
 
@@ -156,7 +156,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
         ∫(calspec_flux(λ) * filter_curve(λ)) dλ
         over the wavelength range provided in `filter_wavelength`.
 
-    Parameters:
+    Args:
         filter_curve : numpy.ndarray. Filter transmission curve values.
         calspec_flux : numpy.ndarray. Flux density of the CALSPEC star
             (erg / (s * cm^2 * Å)).
@@ -176,7 +176,7 @@ def compute_flux_calibration_factor(dim_stars_paths):
         (erg / (s * cm^2)) using the relation:
         C = expected_flux / (measured_electrons_per_second)
 
-    Parameters:
+    Args:
         dim_stars_paths : list. List of dataset objects for dim stars with known
             flux (no ND filter).
 
@@ -219,7 +219,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
     4. Check OD uniformity and set a flag if standard deviation >= threshold.
     5. Save ND filter calibration results to FITS files.
 
-    Parameters:
+    Args:
         dim_stars_paths : list
             List of dataset objects for dim stars with known flux.
         bright_stars_paths : list

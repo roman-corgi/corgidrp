@@ -33,7 +33,7 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     background. The Gaussian is centered in the image, and its parameters are
     chosen such that the integrated flux equals the specified flux.
 
-    Parameters:
+    Args:
         flux : float
             The total flux of the Gaussian source (in erg/s/cm^2/Å or
             arbitrary units).
@@ -88,7 +88,7 @@ def save_image_to_fits(image, filename):
     (but no data) and a secondary ImageHDU that contains the image
     data and its extension header.
 
-    Parameters:
+    Args:
         image : Image
             A `corgidrp.data.Image` object to be saved.
         filename : str
@@ -111,7 +111,7 @@ def mock_dim_dataset_files(output_path):
     created, its headers are updated with calibration metadata, and the image
     is saved to a FITS file in the specified output directory.
 
-    Parameters:
+    Args:
         output_path : str
             The directory where the mock dim star FITS files will be saved.
 
@@ -156,7 +156,7 @@ def mock_bright_dataset_files(output_path):
     offsets. Each image is saved as a FITS file with updated calibration
     headers.
 
-    Parameters:
+    Args:
         output_path : str
             The directory where the mock bright star FITS files will be saved.
 
