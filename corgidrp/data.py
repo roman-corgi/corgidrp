@@ -1449,9 +1449,9 @@ datatypes = { "Image" : Image,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration": TrapCalibration,
-              "FluxcalFactor": FluxcalFactor}
+              "FluxcalFactor": FluxcalFactor,
               "TrapCalibration": TrapCalibration,
-             "NDFilterCalibration": NDFilterCalibration}
+              "NDFilterCalibration": NDFilterCalibration}
 
 def autoload(filepath):
     """
