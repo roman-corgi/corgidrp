@@ -221,3 +221,21 @@ def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux
     int_ref = integrate.simpson(filter_wavelength * filter_curve * flux_ref / flux_ref_lambda_ref, x=filter_wavelength)
 
     return int_source / int_ref
+
+def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
+    """
+    calculate the integrated band flux, irradiance of a calspec source in the filter band
+    to determine the apparent magnitude
+    
+    Args:
+        filter_curve (np.array): filter transmission curve over the filter_wavelength
+        calspec_flux (np.array): converted flux in units of erg/(s*cm^2*AA) of the calpec source in the filter band
+        filter_wavelength (np.array): wavelengths in units Angstroem in the filter band 
+    
+    Returns:
+        float: band irradiance of the calspec star in unit erg/(s*cm^2)
+    """
+    multi_flux = calspec_flux * filter_curve
+    irrad = integrate.simpson(multi_flux, x=filter_wavelength)
+    
+    return irrad
