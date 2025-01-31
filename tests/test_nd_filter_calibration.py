@@ -1,6 +1,4 @@
 import os
-from pathlib import Path
-import pytest
 import math
 import numpy as np
 from astropy.io import fits
@@ -26,6 +24,7 @@ dim_stars = [
     'TYC 4207-219-1'
 ]
 
+
 def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     """
     Create a mock image with a Gaussian source:
@@ -46,7 +45,8 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     y0 = ny/2
     sigma = fwhm / (2.0 * math.sqrt(2.0 * math.log(2.0)))
 
-    # Normalize Gaussian so that the integral over all pixels equals the desired total flux
+    # Normalize Gaussian so that the integral over all pixels equals the
+    # desired total flux
     # The integral of a 2D Gaussian = 2 * pi * sigma_x * sigma_y * peak
     # Here sigma_x = sigma_y = sigma
     # flux = peak * 2 * pi * sigma^2
@@ -67,6 +67,7 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     image = Image(data, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err, dq=dq)
 
     return image
+
 
 def save_image_to_fits(image, filename):
     """
@@ -99,16 +100,18 @@ def mock_dim_dataset_files(output_path):
         flux_image = create_flux_image(star_flux.value, fwhm, background)
         # Update headers
         flux_image.ext_hdr['TARGET'] = star_name
-        flux_image.ext_hdr['CFAMNAME'] = '3C'  # filter name must match a known filter 
+        flux_image.ext_hdr['CFAMNAME'] = '3C'  # name must match a known filter
         flux_image.ext_hdr['FPAM_H'] = 3.0
         flux_image.ext_hdr['FPAM_V'] = 2.5
         flux_image.ext_hdr['EXPTIME'] = 10.0  # Example exposure time
 
-        filename = os.path.join(output_path, f"mock_dim_dataset_{star_name.replace(' ', '_')}.fits")
+        filename = os.path.join(output_path, f"mock_dim_dataset_{
+            star_name.replace(' ', '_')}.fits")
         save_image_to_fits(flux_image, filename)
         file_paths.append(str(filename))
 
     return file_paths
+
 
 def mock_bright_dataset_files(output_path):
     """
@@ -134,17 +137,21 @@ def mock_bright_dataset_files(output_path):
         index = 1
         for dy in y_offsets:
             for dx in x_offsets:
-                flux_image = create_flux_image(bright_star_flux.value * 10, fwhm, background)
+                flux_image = create_flux_image(bright_star_flux.value
+                                               * 10, fwhm, background)
                 flux_image.ext_hdr['TARGET'] = star_name
-                flux_image.ext_hdr['CFAMNAME'] = '3C'  # same filter as dim stars for consistency
+                # same filter as dim stars
+                flux_image.ext_hdr['CFAMNAME'] = '3C'
                 flux_image.ext_hdr['FPAM_H'] = 3.0
                 flux_image.ext_hdr['FPAM_V'] = 2.5
                 flux_image.ext_hdr['FSM_X'] = dx
                 flux_image.ext_hdr['FSM_Y'] = dy
-                flux_image.ext_hdr['EXPTIME'] = 5.0  # shorter exposure for bright sources
+                # short exp for bright stars
+                flux_image.ext_hdr['EXPTIME'] = 5.0
 
-                filename = os.path.join(output_path, f"mock_bright_dataset_{star_name.replace(' ', '_')}_{index}.fits")
-                save_image_to_fits(flux_image, filename) 
+                filename = os.path.join(output_path, f"mock_bright_dataset_{
+                    star_name.replace(' ', '_')}_{index}.fits")
+                save_image_to_fits(flux_image, filename)
                 file_paths.append(str(filename))
                 index += 1
 
@@ -153,11 +160,14 @@ def mock_bright_dataset_files(output_path):
 
 if __name__ == "__main__":
     print('Running test_nd_filter_calibration')
-    
+
     # User paths
-    dim_data_path = '/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_dim'
-    bright_data_path = '/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_bright'
-    output_path = '/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output'
+    dim_data_path = ('/Users/jmilton/Github/corgidrp/corgidrp/data/'
+                     'nd_filter_mocks_dim')
+    bright_data_path = ('/Users/jmilton/Github/corgidrp/corgidrp/data/'
+                        'nd_filter_mocks_bright')
+    output_path = ('/Users/jmilton/Github/corgidrp/tests/e2e_tests/'
+                   'nd_filter_output')
 
     dim_files = mock_dim_dataset_files(dim_data_path)
     bright_files = mock_bright_dataset_files(bright_data_path)
