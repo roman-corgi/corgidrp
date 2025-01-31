@@ -49,7 +49,7 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
 
     Returns
     -------
-    Image
+    image : Image
         A `corgidrp.data.Image` object containing the generated image, error,
         and data quality arrays.
     """
@@ -124,7 +124,7 @@ def mock_dim_dataset_files(output_path):
 
     Returns
     -------
-    list of str
+    file_paths : list of str
         A list of file paths to the generated FITS files.
     """
     if not os.path.exists(output_path):
@@ -171,7 +171,7 @@ def mock_bright_dataset_files(output_path):
 
     Returns
     -------
-    list of str
+    file_paths : list of str
         A list of file paths to the generated FITS files.
     """
     if not os.path.exists(output_path):
