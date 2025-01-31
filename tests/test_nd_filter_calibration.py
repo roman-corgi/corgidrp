@@ -33,8 +33,7 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     background. The Gaussian is centered in the image, and its parameters are
     chosen such that the integrated flux equals the specified flux.
 
-    Parameters
-    ----------
+    Parameters:
     flux : float
         The total flux of the Gaussian source (in erg/s/cm^2/Å or
         arbitrary units).
@@ -47,8 +46,7 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     ny : int, optional
         The number of pixels along the y-axis. Default is 1024.
 
-    Returns
-    -------
+    Returns:
     image : Image
         A `corgidrp.data.Image` object containing the generated image, error,
         and data quality arrays.
@@ -90,16 +88,14 @@ def save_image_to_fits(image, filename):
     (but no data) and a secondary ImageHDU that contains the image
     data and its extension header.
 
-    Parameters
-    ----------
+    Parameters:
     image : Image
         A `corgidrp.data.Image` object to be saved.
     filename : str
         The output filename (including path) where the FITS file will
         be written.
 
-    Returns
-    -------
+    Returns:
     None
     """
     primary_hdu = fits.PrimaryHDU(header=image.pri_hdr)
@@ -117,13 +113,11 @@ def mock_dim_dataset_files(output_path):
     created, its headers are updated with calibration metadata, and the image
     is saved to a FITS file in the specified output directory.
 
-    Parameters
-    ----------
+    Parameters:
     output_path : str
         The directory where the mock dim star FITS files will be saved.
 
-    Returns
-    -------
+    Returns:
     file_paths : list of str
         A list of file paths to the generated FITS files.
     """
@@ -164,13 +158,11 @@ def mock_bright_dataset_files(output_path):
     offsets. Each image is saved as a FITS file with updated calibration
     headers.
 
-    Parameters
-    ----------
+    Parameters:
     output_path : str
         The directory where the mock bright star FITS files will be saved.
 
-    Returns
-    -------
+    Returns:
     file_paths : list of str
         A list of file paths to the generated FITS files.
     """

@@ -22,13 +22,11 @@ def compute_centroid(image_data):
     """
     Compute the centroid (x, y) of an image based on its flux distribution.
 
-    Parameters
-    ----------
+    Parameters:
     image_data : numpy.ndarray
         A 2D array containing the image data from which to compute the centroid.
 
-    Returns
-    -------
+    Returns:
     x_center, y_center : tuple of float
         (x_center, y_center). If the total flux is zero or negative,
         returns (np.nan, np.nan).
@@ -49,8 +47,7 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
     summing pixel values in an aperture of `radius` and subtracting the local
     background measured in an annulus between `annulus_inner` and `annulus_outer`.
 
-    Parameters
-    ----------
+    Parameters:
     image_data : numpy.ndarray
         A 2D array containing the image data from which to measure flux.
     x_center : float
@@ -64,8 +61,7 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
     annulus_outer : float, optional
         Outer radius of the background annulus (in pixels). Default is 10.
 
-    Returns
-    -------
+    Returns:
     net_flux : float
         The background-subtracted flux of the source in the aperture. If the
         centroid is invalid (NaN) or out of range, returns np.nan.
@@ -103,15 +99,13 @@ def compute_expected_flux(star_name, filter_name):
     """
     Compute the expected absolute integrated flux of a star through a given filter.
 
-    Parameters
-    ----------
+    Parameters:
     star_name : str
         Name of the star. Must be recognized by `fluxcal.get_calspec_file`.
     filter_name : str
         Filter identifier (e.g., '3C') that corresponds to a known filter curve file.
 
-    Returns
-    -------
+    Returns:
     expected_flux : float
         The expected integrated flux (erg / (s * cm^2)) over the filter band.
     """
@@ -142,14 +136,12 @@ def group_by_target(dataset_entries):
     """
     Group dataset objects by the 'TARGET' keyword in their FITS extension headers.
 
-    Parameters
-    ----------
+    Parameters:
     dataset_entries : list
         A list of dataset objects, each containing an 'ext_hdr' attribute with
         FITS header information.
 
-    Returns
-    -------
+    Returns:
     grouped_files : dict
         A dictionary where each key is a target name, and each value is a list
         of dataset entries that match that target.
@@ -177,8 +169,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     ∫(calspec_flux(λ) * filter_curve(λ)) dλ
     over the wavelength range provided in `filter_wavelength`.
 
-    Parameters
-    ----------
+    Parameters:
     filter_curve : numpy.ndarray
         Filter transmission curve values.
     calspec_flux : numpy.ndarray
@@ -186,8 +177,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     filter_wavelength : numpy.ndarray
         Wavelengths corresponding to the filter curve in Å.
 
-    Returns
-    -------
+    Returns:
     irrad : float
         Integrated flux (band irradiance) in erg / (s * cm^2).
     """
@@ -203,13 +193,11 @@ def compute_flux_calibration_factor(dim_stars_paths):
     (erg / (s * cm^2)) using the relation:
         C = expected_flux / (measured_electrons_per_second)
 
-    Parameters
-    ----------
+    Parameters:
     dim_stars_paths : list
         List of dataset objects for dim stars with known flux (no ND filter).
 
-    Returns
-    -------
+    Returns:
     calibration_factor : float
         The average calibration factor derived from all dim star observations.
     """
@@ -249,8 +237,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
     4. Check OD uniformity and set a flag if standard deviation >= threshold.
     5. Save ND filter calibration results to FITS files.
 
-    Parameters
-    ----------
+    Parameters:
     dim_stars_paths : list
         List of dataset objects for dim stars with known flux.
     bright_stars_paths : list
@@ -260,8 +247,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
     threshold : float, optional
         Standard deviation threshold for OD uniformity checks. Default is 0.1.
 
-    Returns
-    -------
+    Returns:
     None
     """
     # Step 1: Flux calibration factor
