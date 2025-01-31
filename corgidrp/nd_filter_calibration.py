@@ -29,7 +29,7 @@ def compute_centroid(image_data):
 
     Returns
     -------
-    tuple of float
+    x_center, y_center : tuple of float
         (x_center, y_center). If the total flux is zero or negative,
         returns (np.nan, np.nan).
     """
@@ -66,7 +66,7 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
 
     Returns
     -------
-    float
+    net_flux : float
         The background-subtracted flux of the source in the aperture. If the
         centroid is invalid (NaN) or out of range, returns np.nan.
     """
@@ -112,7 +112,7 @@ def compute_expected_flux(star_name, filter_name):
 
     Returns
     -------
-    float
+    expected_flux : float
         The expected integrated flux (erg / (s * cm^2)) over the filter band.
     """
     # Get the CALSPEC reference file for this star
@@ -150,7 +150,7 @@ def group_by_target(dataset_entries):
 
     Returns
     -------
-    dict
+    grouped_files : dict
         A dictionary where each key is a target name, and each value is a list
         of dataset entries that match that target.
     """
@@ -188,7 +188,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
 
     Returns
     -------
-    float
+    irrad : float
         Integrated flux (band irradiance) in erg / (s * cm^2).
     """
     irrad = integrate.simpson(calspec_flux * filter_curve, x=filter_wavelength)
@@ -210,7 +210,7 @@ def compute_flux_calibration_factor(dim_stars_paths):
 
     Returns
     -------
-    float
+    calibration_factor : float
         The average calibration factor derived from all dim star observations.
     """
     factors = []
