@@ -4,7 +4,7 @@ import numpy.ma as ma
 import astropy.io.fits as fits
 import astropy.time as time
 import pandas as pd
-
+import copy
 import corgidrp
 
 class Dataset():
@@ -493,25 +493,12 @@ class Image():
             corgidrp.data.Image: a copy of this Image
         """
         if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-            new_hdulist = self.hdu_list.copy()
+            new_img = copy.deepcopy(self)
         else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-            new_hdulist = self.hdu_list
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, 
-                        input_hdulist = new_hdulist, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_img.filename = self.filename
-        new_img.filedir = self.filedir
-
+            new_img = copy.copy(self)
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+        new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+        new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img
 
@@ -662,37 +649,6 @@ class Dark(Image):
         if self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this Dark file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.NoiseMap): a copy of this Dark
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_dark = Dark(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_dark.filename = self.filename
-        new_dark.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_dark
 
 class FlatField(Image):
     """
@@ -914,40 +870,6 @@ class KGain(Image):
     @property
     def error(self):
         return self._kgain_error
-    
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this KGain file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.KGain: a copy of this KGain
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_ptc = np.copy(self.ptc)
-            new_err = np.copy(self.err)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_ptc = self.ptc
-            new_err = np.copy(self.err)
-        
-        new_kg = KGain(new_data, err = new_err, ptc = new_ptc, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err_hdr = self.err_hdr.copy(), ptc_hdr = self.ptc_hdr.copy())
-        
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_kg.filename = self.filename
-        new_kg.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-        
-        return new_kg
-
 
     def save(self, filedir=None, filename=None):
         """
@@ -1023,33 +945,6 @@ class BadPixelMap(Image):
         if self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
 
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this BadPixelMap file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.BadPixelMap: a copy of this BadPixelMap
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-        else:
-            new_data = self.data # this is just pointer referencing
-        new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-
-        # we got to manually update some parameters. Need to keep track of which ones to update
-        new_bp.filename = self.filename
-        new_bp.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_bp
 
 class DetectorNoiseMaps(Image):
     """
@@ -1129,39 +1024,6 @@ class DetectorNoiseMaps(Image):
         self.FPN_err = self.err[0][0]
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
-
-
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this DetectorNoiseMaps file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.DetectorNoiseMaps): a copy of this DetectorNoiseMaps
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_nm = DetectorNoiseMaps(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_nm.filename = self.filename
-        new_nm.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_nm
 
 class DetectorParams(Image):
     """
@@ -1490,8 +1352,95 @@ class NDFilterCalibration(Image):
             raise ValueError("File that was loaded is not labeled as an NDFilterCalibration file.")
 
 
+class FluxcalFactor(Image):
+    """
+    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
+
+    To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
+
+    Args:
+        data_or_filepath (dict or str): either a filepath string corresponding to an 
+                                        existing FluxcalFactor file saved to disk or the data and error values of the
+                                        flux cal factor of a certain filter defined in the header
+
+    Attributes:
+        filter (str): used filter name
+        nd_filter (str): used neutral density filter or "No"
+        fluxcal_fac (float): the value of the flux cal factor for the corresponding filter
+        fluxcal_err (float): the error of the flux cal factor for the corresponding filter
+    """
+    def __init__(self, data_or_filepath, err = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
+        # if filepath passed in, just load in from disk as usual
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The FluxcalFactor calibration data should be just one float value')
+        
+        #TBC
+        self.nd_filter = "ND0" #no neutral density filter in beam
+        if 'FPAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FPAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        elif 'FSAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FSAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        else:
+            raise ValueError('The FluxcalFactor calibration has no keyword FPAMNAME or FSAMNAME in the header')
+        
+        if 'CFAMNAME' in self.ext_hdr:
+            self.filter = self.ext_hdr['CFAMNAME']
+        else:
+            raise ValueError('The FluxcalFactor calibration has no filter keyword CFAMNAME in the header')
+
+
+        if isinstance(data_or_filepath, str):
+            # double check that this is actually a FluxcalFactor file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError("File that was loaded was not a FluxcalFactor file.")
+            if self.ext_hdr['DATATYPE'] != 'FluxcalFactor':
+                raise ValueError("File that was loaded was not a FluxcalFactor file.")
+        else:
+            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            
+        # make some attributes to be easier to use
+        self.fluxcal_fac = self.data[0,0]
+        self.fluxcal_err =  self.err[0,0,0]
+
+        # if this is a new FluxcalFactors file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                if 'DRPNFILE' not in ext_hdr:
+                    # error check. this is required in this case
+                    raise ValueError("This appears to be a new FluxcalFactor. The dataset of input files needs to be passed \
+                                     in to the input_dataset keyword to record history of this FluxcalFactor file.")
+                else:
+                    pass
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+  
+            self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
+            # add to history
+            self.ext_hdr['HISTORY'] = "Flux calibration file created"
+
+            # use the start date for the filename by default
+            self.filedir = "."
+            self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
+
+
 datatypes = { "Image" : Image,
-             "Dark" : Dark,
+              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
               "KGain" : KGain,
               "BadPixelMap" : BadPixelMap,
@@ -1500,7 +1449,9 @@ datatypes = { "Image" : Image,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration": TrapCalibration,
-            "NDFilterCalibration": NDFilterCalibration}
+              "FluxcalFactor": FluxcalFactor}
+              "TrapCalibration": TrapCalibration,
+             "NDFilterCalibration": NDFilterCalibration}
 
 def autoload(filepath):
     """
