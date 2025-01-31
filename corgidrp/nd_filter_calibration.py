@@ -19,17 +19,15 @@ Date: 2024-12-09
 
 
 def compute_centroid(image_data):
-    """
-    Compute the centroid (x, y) of an image based on its flux distribution.
+    """Compute the centroid (x, y) of an image based on its flux distribution.
 
     Parameters:
-    image_data : numpy.ndarray
-        A 2D array containing the image data from which to compute the centroid.
+        image_data : numpy.ndarray. A 2D array containing the image data from 
+            which to compute the centroid.
 
     Returns:
-    x_center, y_center : tuple of float
-        (x_center, y_center). If the total flux is zero or negative,
-        returns (np.nan, np.nan).
+        x_center, y_center : tuple of float. (x_center, y_center). If the total 
+            flux is zero or negative, returns (np.nan, np.nan).
     """
     y_indices, x_indices = np.indices(image_data.shape)
     total_flux = np.sum(image_data)
@@ -42,29 +40,24 @@ def compute_centroid(image_data):
 
 def compute_flux_in_image(image_data, x_center, y_center, radius=5,
                           annulus_inner=7, annulus_outer=10):
-    """
-    Compute the flux of a source at (x_center, y_center) in `image_data` by
+    """Compute the flux of a source at (x_center, y_center) in `image_data` by
     summing pixel values in an aperture of `radius` and subtracting the local
     background measured in an annulus between `annulus_inner` and `annulus_outer`.
 
     Parameters:
-        image_data : numpy.ndarray
-            A 2D array containing the image data from which to measure flux.
-        x_center : float
-            The x-coordinate of the star's centroid.
-        y_center : float
-            The y-coordinate of the star's centroid.
-        radius : float, optional
-            The aperture radius (in pixels). Default is 5.
-        annulus_inner : float, optional
-            Inner radius of the background annulus (in pixels). Default is 7.
-        annulus_outer : float, optional
-            Outer radius of the background annulus (in pixels). Default is 10.
+        image_data : numpy.ndarray. A 2D array containing the image data 
+            from which to measure flux.
+        x_center : float. The x-coordinate of the star's centroid.
+        y_center : float. The y-coordinate of the star's centroid.
+        radius : float, optional. The aperture radius (in pixels). Default is 5.
+        annulus_inner : float, optional. Inner radius of the background annulus
+            (in pixels). Default is 7.
+        annulus_outer : float, optional. Outer radius of the background annulus
+            (in pixels). Default is 10.
 
     Returns:
-        net_flux : float
-            The background-subtracted flux of the source in the aperture. If the
-            centroid is invalid (NaN) or out of range, returns np.nan.
+        net_flux : float. The background-subtracted flux of the source in the 
+            aperture. If the centroid is invalid (NaN) or out of range, returns np.nan.
     """
     if np.isnan(x_center) or np.isnan(y_center):
         return np.nan
@@ -96,18 +89,16 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
 
 
 def compute_expected_flux(star_name, filter_name):
-    """
-    Compute the expected absolute integrated flux of a star through a given filter.
+    """ Compute the expected absolute integrated flux of a star through a given filter.
 
     Parameters:
-        star_name : str
-            Name of the star. Must be recognized by `fluxcal.get_calspec_file`.
-        filter_name : str
-            Filter identifier (e.g., '3C') that corresponds to a known filter curve file.
+        star_name : str. Name of the star. Must be recognized by `fluxcal.get_calspec_file`.
+        filter_name : str. Filter identifier (e.g., '3C') that corresponds to a 
+            known filter curve file.
 
     Returns:
-        expected_flux : float
-            The expected integrated flux (erg / (s * cm^2)) over the filter band.
+        expected_flux : float. The expected integrated flux (erg / (s * cm^2))
+            over the filter band.
     """
     # Get the CALSPEC reference file for this star
     calspec_filepath = fluxcal.get_calspec_file(star_name)
@@ -137,14 +128,12 @@ def group_by_target(dataset_entries):
     Group dataset objects by the 'TARGET' keyword in their FITS extension headers.
 
     Parameters:
-        dataset_entries : list
-            A list of dataset objects, each containing an 'ext_hdr' attribute with
-            FITS header information.
+        dataset_entries : list. A list of dataset objects, each containing an
+            'ext_hdr' attribute with FITS header information.
 
     Returns:
-        grouped_files : dict
-            A dictionary where each key is a target name, and each value is a list
-            of dataset entries that match that target.
+        grouped_files : dict. A dictionary where each key is a target name, and
+            each value is a list of dataset entries that match that target.
     """
     grouped_files = defaultdict(list)
 
@@ -162,44 +151,38 @@ def group_by_target(dataset_entries):
 
 
 def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
-    """
-    Calculate the integrated flux (band irradiance) over the filter band.
-
-    This performs the numerical integration of:
-    ∫(calspec_flux(λ) * filter_curve(λ)) dλ
-    over the wavelength range provided in `filter_wavelength`.
+    """ Calculate the integrated flux (band irradiance) over the filter band.
+        This performs the numerical integration of:
+        ∫(calspec_flux(λ) * filter_curve(λ)) dλ
+        over the wavelength range provided in `filter_wavelength`.
 
     Parameters:
-        filter_curve : numpy.ndarray
-            Filter transmission curve values.
-        calspec_flux : numpy.ndarray
-            Flux density of the CALSPEC star (erg / (s * cm^2 * Å)).
-        filter_wavelength : numpy.ndarray
-            Wavelengths corresponding to the filter curve in Å.
+        filter_curve : numpy.ndarray. Filter transmission curve values.
+        calspec_flux : numpy.ndarray. Flux density of the CALSPEC star
+            (erg / (s * cm^2 * Å)).
+        filter_wavelength : numpy.ndarray. Wavelengths corresponding to the
+            filter curve in Å.
 
     Returns:
-        irrad : float
-            Integrated flux (band irradiance) in erg / (s * cm^2).
+        irrad : float. Integrated flux (band irradiance) in erg / (s * cm^2).
     """
     irrad = integrate.simpson(calspec_flux * filter_curve, x=filter_wavelength)
     return irrad
 
 
 def compute_flux_calibration_factor(dim_stars_paths):
-    """
-    Compute the flux calibration factor (C) from dim stars observed without an ND filter.
-
-    The factor C converts measured electrons per second into physical flux units
-    (erg / (s * cm^2)) using the relation:
+    """Compute the flux calibration factor (C) from dim stars observed without an ND filter. 
+        The factor C converts measured electrons per second into physical flux units
+        (erg / (s * cm^2)) using the relation:
         C = expected_flux / (measured_electrons_per_second)
 
     Parameters:
-        dim_stars_paths : list
-            List of dataset objects for dim stars with known flux (no ND filter).
+        dim_stars_paths : list. List of dataset objects for dim stars with known
+            flux (no ND filter).
 
     Returns:
-        calibration_factor : float
-            The average calibration factor derived from all dim star observations.
+        calibration_factor : float. The average calibration factor derived from all dim
+            star observations.
     """
     factors = []
     for entry in dim_stars_paths:
@@ -226,8 +209,7 @@ def compute_flux_calibration_factor(dim_stars_paths):
 
 
 def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
-    """
-    Derive flux calibration factors from dim stars, then compute ND filter calibration.
+    """ Derive flux calibration factors from dim stars, then compute ND filter calibration.
 
     Steps
     -----
