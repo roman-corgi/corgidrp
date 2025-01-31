@@ -19,6 +19,20 @@ Date: 2024-12-09
 
 
 def compute_centroid(image_data):
+    """
+    Compute the centroid (x, y) of an image based on its flux distribution.
+
+    Parameters
+    ----------
+    image_data : 2D numpy.ndarray
+        The image from which to compute the centroid.
+
+    Returns
+    -------
+    tuple of (float, float)
+        The computed (x_center, y_center). If total flux is zero or negative,
+        returns (NaN, NaN).
+    """
     y_indices, x_indices = np.indices(image_data.shape)
     total_flux = np.sum(image_data)
     if total_flux <= 0:
@@ -32,7 +46,7 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
                           annulus_inner=7, annulus_outer=10):
     """
     Compute the flux of a source at (x_center, y_center) in image_data
-    by summing pixel values in an aperture of 'radius', and subtracting
+    by summing pixel values in an aperture of 'radius' and subtracting
     the local background measured in an annulus between 'annulus_inner'
     and 'annulus_outer'.
 
@@ -45,17 +59,17 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
     y_center : float
         The y-coordinate of the star's centroid.
     radius : float, optional
-        The aperture radius (in pixels).
+        The aperture radius (in pixels). Default is 5.
     annulus_inner : float, optional
-        Inner radius of the background annulus (in pixels).
+        Inner radius of the background annulus (in pixels). Default is 7.
     annulus_outer : float, optional
-        Outer radius of the background annulus (in pixels).
+        Outer radius of the background annulus (in pixels). Default is 10.
 
     Returns
     -------
     net_flux : float
         The background-subtracted flux of the source in the aperture.
-        Returns NaN if there is an issue (e.g., invalid centroid).
+        Returns NaN if the centroid is invalid.
     """
     # If centroid is NaN or out of image range, return NaN
     if np.isnan(x_center) or np.isnan(y_center):
@@ -70,7 +84,7 @@ def compute_flux_in_image(image_data, x_center, y_center, radius=5,
 
     # Handle cases if the annulus region is too small or nonexistent:
     if not np.any(annulus_mask):
-        print("Warning: No valid pixels in background annulus. Skipping"
+        print("Warning: No valid pixels in background annulus. Skipping "
               "background subtraction.")
         background_level = 0.0
     else:
@@ -125,7 +139,6 @@ def compute_expected_flux(star_name, filter_name):
     calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
 
     # Calculate band irradiance (integrated flux over the band)
-    # This gives erg/(s*cm^2) when integrating flux density over wavelength
     expected_flux = calculate_band_irradiance(transmission, calspec_flux, wave)
 
     return expected_flux
@@ -135,6 +148,18 @@ def group_by_target(dataset_entries):
     """
     Group dataset files based on the 'TARGET' value in the FITS
     extension header.
+
+    Parameters
+    ----------
+    dataset_entries : list
+        A list of dataset objects, each containing an 'ext_hdr' attribute with
+        FITS header information.
+
+    Returns
+    -------
+    dict
+        A dictionary where the keys are target values and the values are lists
+        of dataset entries corresponding to that target.
     """
     grouped_files = defaultdict(list)
 
@@ -158,15 +183,19 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     This integrates calspec_flux * filter_curve over the wavelength range,
     giving total flux in erg/(s*cm²) if calspec_flux is in erg/(s*cm²*Å).
 
-    Args:
-        filter_curve (np.array): Filter transmission curve over
-        filter_wavelength
-        calspec_flux (np.array): Flux density of the CALSPEC star in
-        erg/(s*cm²*Å)
-        filter_wavelength (np.array): Wavelengths in Å
+    Parameters
+    ----------
+    filter_curve : np.ndarray
+        Filter transmission curve values.
+    calspec_flux : np.ndarray
+        Flux density of the CALSPEC star in erg/(s*cm²*Å).
+    filter_wavelength : np.ndarray
+        Wavelengths corresponding to the filter curve in Å.
 
-    Returns:
-        float: Integrated flux (band irradiance) in erg/(s*cm²)
+    Returns
+    -------
+    float
+        Integrated flux (band irradiance) in erg/(s*cm²).
     """
     # Integrate over wavelength:
     # ∫ (calspec_flux(λ) * filter_curve(λ)) dλ
@@ -183,8 +212,8 @@ def compute_flux_calibration_factor(dim_stars_paths):
 
     Parameters
     ----------
-    dim_stars_paths : list of Dataset
-        List of datasets for dim stars with known flux (no ND filter).
+    dim_stars_paths : list
+        List of dataset objects for dim stars with known flux (no ND filter).
 
     Returns
     -------
@@ -218,13 +247,32 @@ def compute_flux_calibration_factor(dim_stars_paths):
 
 def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
     """
-    Main function:
-    1. Derive flux calibration factor from dim stars (no ND filter).
-    2. Use this factor to compute OD for bright stars with ND filter.
-    3. Check OD uniformity and flag if needed.
-    4. Save results to FITS files.
-    """
+    Main function to derive flux calibration factors and compute ND
+    filter calibration.
 
+    This function performs the following steps:
+        1. Derives the flux calibration factor from dim stars (no ND filter).
+        2. Groups bright star files by target.
+        3. Computes the optical density (OD) for bright stars using the
+        calibration factor.
+        4. Checks OD uniformity and flags stars if needed.
+        5. Saves the calibration products to FITS files.
+
+    Parameters
+    ----------
+    dim_stars_paths : list
+        List of dataset objects for dim stars with known flux.
+    bright_stars_paths : list
+        List of dataset objects for bright stars observed with the ND filter.
+    output_path : str
+        Directory path where the output FITS files will be saved.
+    threshold : float, optional
+        The standard deviation threshold for OD uniformity. Default is 0.1.
+
+    Returns
+    -------
+    None
+    """
     # Step 1: Compute flux calibration factor from dim stars
     cal_factor = compute_flux_calibration_factor(dim_stars_paths)
 
@@ -240,8 +288,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
         y_values = []
         fpam_h = fpam_v = None
 
-        # Assume all images for this target use the same filter?
-        # Perhaps need to check and handle that case.
+        # Assume all images for this target use the same filter
         if not files:
             continue
         first_hdr = files[0].ext_hdr
