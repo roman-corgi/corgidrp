@@ -306,6 +306,7 @@ def phot_by_gauss2d_fit (image, fwhm, fit_shape = None, background_sub = False, 
             background_sub (boolean): background can be determine from a circular annulus (default: False).
             r_in (float): inner radius of circular annulus in pixels, (default: 5)
             r_out (float): outer radius of circular annulus in pixels, (default: 10)
+    
     Returns:
         list: integrated flux of the Gaussian2d fit of the point source in unit photo-electrons and corresponding error and optional local background value
     """
