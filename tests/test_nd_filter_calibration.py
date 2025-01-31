@@ -34,22 +34,19 @@ def create_flux_image(flux, fwhm, background, nx=1024, ny=1024):
     chosen such that the integrated flux equals the specified flux.
 
     Args:
-        flux : float
-            The total flux of the Gaussian source (in erg/s/cm^2/Å or
+        flux (float): The total flux of the Gaussian source (in erg/s/cm^2/Å or
             arbitrary units).
-        fwhm : float
-            The full width at half maximum (FWHM) of the Gaussian source in pixels.
-        background : float
-            The background level to fill the image.
-        nx : int, optional
-            The number of pixels along the x-axis. Default is 1024.
-        ny : int, optional
-            The number of pixels along the y-axis. Default is 1024.
+        fwhm (float): The full width at half maximum (FWHM) of the Gaussian 
+            source in pixels.
+        background (float): The background level to fill the image.
+        nx (int, optional): The number of pixels along the x-axis. Default 
+            is 1024.
+        ny (int, optional): The number of pixels along the y-axis. Default 
+            is 1024.
 
     Returns:
-        image : Image
-            A `corgidrp.data.Image` object containing the generated image, error,
-            and data quality arrays.
+        image (Image): A `corgidrp.data.Image` object containing the generated 
+            image, error, and data quality arrays.
     """
     # Create an empty image with the background level
     data = np.full((ny, nx), background, dtype=float)
@@ -89,11 +86,9 @@ def save_image_to_fits(image, filename):
     data and its extension header.
 
     Args:
-        image : Image
-            A `corgidrp.data.Image` object to be saved.
-        filename : str
-            The output filename (including path) where the FITS file will
-            be written.
+        image (Image):A `corgidrp.data.Image` object to be saved.
+        filename (str): The output filename (including path) where the 
+            FITS file will be written.
 
     """
     primary_hdu = fits.PrimaryHDU(header=image.pri_hdr)
@@ -112,12 +107,11 @@ def mock_dim_dataset_files(output_path):
     is saved to a FITS file in the specified output directory.
 
     Args:
-        output_path : str
-            The directory where the mock dim star FITS files will be saved.
+        output_path (str): The directory where the mock dim star FITS files 
+            will be saved.
 
     Returns:
-        file_paths : list of str
-            A list of file paths to the generated FITS files.
+        file_paths (str): A list of file paths to the generated FITS files.
     """
     if not os.path.exists(output_path):
         os.makedirs(output_path, exist_ok=True)
@@ -157,12 +151,11 @@ def mock_bright_dataset_files(output_path):
     headers.
 
     Args:
-        output_path : str
-            The directory where the mock bright star FITS files will be saved.
+        output_path (str): The directory where the mock bright star FITS files
+            will be saved.
 
     Returns:
-        file_paths : list of str
-            A list of file paths to the generated FITS files.
+        file_paths (str): A list of file paths to the generated FITS files.
     """
     if not os.path.exists(output_path):
         os.makedirs(output_path, exist_ok=True)
