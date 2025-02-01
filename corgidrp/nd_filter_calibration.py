@@ -6,9 +6,10 @@ import re
 import corgidrp.fluxcal as fluxcal
 from scipy import integrate
 from corgidrp.data import NDFilterCalibration
+import math
 
 """
-From requirement 1090877.
+From requirement 1090876.
 Revised to compute a flux calibration factor from dim stars (no ND filter)
 and then use that factor to compute OD for bright stars observed with the
 ND filter.
@@ -170,14 +171,16 @@ def compute_flux_calibration_factor(dim_stars_paths):
         ext_hdr = entry.ext_hdr
         star_name = ext_hdr['TARGET']
         filter_name = ext_hdr['CFAMNAME']
-        exptime = ext_hdr.get('EXPTIME', 1.0)
+        exptime = ext_hdr['EXPTIME']
 
         # Measure flux in electrons
         x_center, y_center = compute_centroid(image_data)
         measured_electrons = compute_flux_in_image(image_data, x_center,
                                                    y_center)
 
+        # for next iteration: figure out what to do with exposure times
         measured_electrons_per_s = measured_electrons / exptime
+        
         expected_flux = compute_expected_flux(star_name, filter_name)
 
         # Flux calibration factor
@@ -235,10 +238,13 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
         for entry in files:
             image_data = entry.data
             ext_hdr = entry.ext_hdr
-            fpam_h = ext_hdr.get('FPAM_H', fpam_h)
-            fpam_v = ext_hdr.get('FPAM_V', fpam_v)
-            exptime = ext_hdr.get('EXPTIME', 1.0)
+            star_name = ext_hdr['TARGET']
+            fpam_h = ext_hdr['FPAM_H']
+            fpam_v = ext_hdr['FPAM_V']
+            exptime = ext_hdr['EXPTIME']
             filter = ext_hdr['CFAMNAME']
+            fsm_x = ext_hdr['FSM_X']
+            fsm_y = ext_hdr['FSM_Y']
 
             x_center, y_center = compute_centroid(image_data)
             if np.isnan(x_center) or np.isnan(y_center):
@@ -253,8 +259,9 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
             # Convert to physical flux using cal_factor
             measured_flux_physical = measured_electrons_per_s * cal_factor
 
-            # OD = (flux with ND) / (expected flux without ND)
-            od = measured_flux_physical / expected_flux
+            # transmission = (flux with ND) / (expected flux without ND)
+            transmission = measured_flux_physical / expected_flux
+            od = -math.log10(transmission)
             od_values.append(od)
             x_values.append(x_center)
             y_values.append(y_center)
@@ -275,7 +282,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
 
     # Step 3: Save results
     visit_id = 'PPPPPCCAAASSSOOOVVV'  # Placeholder
-    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_NDF_CAL\.fits")
+    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_FilterBand_.*_NDF_CAL\.fits")
 
     # Find current maximum serial number
     max_serial = 0
