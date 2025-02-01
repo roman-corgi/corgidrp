@@ -111,6 +111,9 @@ def mock_dim_dataset_files(output_path, dim_exptime, filter):
     Args:
         output_path (str): The directory where the mock dim star FITS files 
             will be saved.
+        dim_exptime (float): Exposure time the dim star dataset files
+            would be taken at.
+        filter (str): The CFAM filter used.
 
     Returns:
         file_paths (str): A list of file paths to the generated FITS files.
@@ -160,6 +163,10 @@ def mock_bright_dataset_files(output_path, bright_exptime, filter, OD):
     Args:
         output_path (str): The directory where the mock bright star FITS files
             will be saved.
+        bright_exptime (float): Exposure time the bright star dataset files
+            would be taken at.
+        filter (str): The CFAM filter used.
+        OD: The optical density of the ND filter.
 
     Returns:
         file_paths (str): A list of file paths to the generated FITS files.
