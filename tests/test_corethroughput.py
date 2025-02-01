@@ -2,7 +2,7 @@ import os
 import pytest
 import numpy as np
 from astropy.io import fits
-from skimage.measure import block_reduce
+from scipy.signal import decimate
 
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
@@ -20,10 +20,7 @@ def setup_module():
     """
     global dataset_psf
     # arbitrary set of PSF positions to be tested in EXCAM pixels referred to (0,0)
-    global psf_position_x, psf_position_y
-    # Some arbitrary shifts
-    psf_position_x = [512, 522, 532, 542, 552, 562, 522, 532, 542, 552, 562]
-    psf_position_y = [512, 522, 532, 542, 552, 562, 502, 492, 482, 472, 462]
+    global psf_position_max
     global idx_os11
     idx_os11 = 8
     global ct_os11
@@ -43,14 +40,20 @@ def setup_module():
     data_pupil_2 += rng.normal(0, data_pupil.std()/10, data_pupil_1.shape)
     data_psf += [Image(data_pupil_1,pri_hdr = prhd, ext_hdr = exthd, err = err)]
     data_psf += [Image(data_pupil_2,pri_hdr = prhd, ext_hdr = exthd, err = err)]
+    # Total counts from the pupil images
+    unocc_psf_norm = (data_pupil_1.sum()+data_pupil_2.sum())/2
 
     # add os11 psfs
     occ_psf_filepath = os.path.join(ct_filepath, 'hlc_os11_psfs_oversampled.fits')
     occ_psf = fits.getdata(occ_psf_filepath)
+    # Some arbitrary shifts
+    psf_position_x = [512, 522, 532, 542, 552, 562, 522, 532, 542, 552, 562]
+    psf_position_y = [512, 522, 532, 542, 552, 562, 502, 492, 482, 472, 462]
+    psf_position_max = []
     for i_psf, _ in enumerate(psf_position_x):
         psf_tmp = occ_psf[0, idx_os11+i_psf]
         # re-sample to EXCAM's pixel pitch: os11 off-axis psf is 5x oversampled
-        psf_tmp_red = 25*block_reduce(psf_tmp, block_size=(5,5), func=np.mean)
+        psf_tmp_red = 25*decimate(decimate(psf_tmp, 5, axis=0), 5, axis=1)
         data_tmp = np.zeros([1024, 1024])
         idx_0_0 = psf_position_x[i_psf] - psf_tmp_red.shape[0] // 2
         idx_0_1 = idx_0_0 + psf_tmp_red.shape[0]
@@ -58,10 +61,11 @@ def setup_module():
         idx_1_1 = idx_1_0 + psf_tmp_red.shape[1]
         data_tmp[idx_0_0:idx_0_1, idx_1_0:idx_1_1] = psf_tmp_red
         data_psf += [Image(data_tmp,pri_hdr = prhd, ext_hdr = exthd, err = err)]
-        # normalized to 1 if there were no masks
-        ct_os11 += [psf_tmp[psf_tmp > psf_tmp.max()/2].sum()]
+        psf_position_max += [np.unravel_index(data_tmp.argmax(), data_tmp.shape)]
+        ct_os11 += [data_tmp[data_tmp >= data_tmp.max()/2].sum()/unocc_psf_norm]
 
     dataset_psf = Dataset(data_psf)
+    psf_position_max = np.array(psf_position_max)
 
 def test_psf_pix_and_ct():
     """
@@ -80,25 +84,22 @@ def test_psf_pix_and_ct():
     with pytest.raises(Exception):
         corethroughput.estimate_psf_pix_and_ct(dataset_psf, ct_method='bad')
 
-    psf_pix_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_psf)
+    psf_pix_est_max, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_psf)
 
-    # Read OS11 PSF offsets (l/D=50.19mas=2.3 EXCAM pix, 1 EXCAM pix=0.4347825 l/D, 1 EXCAM pix=21.8213 mas)
-    r_off = fits.getdata(os.path.join(ct_filepath, 'hlc_os11_psfs_radial_offsets.fits'))
-    r_off_pix = r_off[idx_os11:idx_os11+len(psf_pix_est)] * 2.3
-    # Difference between expected and retrieved positions
-    diff_pix_x = psf_position_x - psf_pix_est[:,0]
+    # Difference between expected and retrieved positions for the max (peak) method
+    diff_pix_x = psf_position_max[:,0] - psf_pix_est_max[:,0]
     # os11 azimuthal axis
     assert diff_pix_x == pytest.approx(0)
     # os11 radial axis
-    diff_pix_y = psf_position_y + r_off_pix - psf_pix_est[:,1] 
-    assert diff_pix_y == pytest.approx(0, abs=0.75)
+    diff_pix_y = psf_position_max[:,1] - psf_pix_est_max[:,1] 
+    assert diff_pix_y == pytest.approx(0)
 
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
 
-    # Some tolerance for comparison between I/O values. CT in (0,1]
-    assert ct_est == pytest.approx(np.array(ct_os11), abs=0.005)
+    # comparison between I/O values
+    assert ct_est == pytest.approx(np.array(ct_os11))
 
 def test_fpm_pos():
     """
@@ -172,7 +173,7 @@ def test_ct_map():
     the CTC GSW shall compute a 2D floating-point interpolated core throughput
     map.
     """
-    psf_pix = np.array([psf_position_x, psf_position_y])
+    psf_pix = np.array(psf_position_max[:,0], psf_position_max[:,1])
     fpam_pix = np.array([513,515])
     target_pix = np.array([520, 520])
 
