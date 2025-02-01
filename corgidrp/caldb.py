@@ -148,8 +148,12 @@ class CalDB:
             drp_version = entry.ext_hdr["DRPVERSN"]
         else:
             drp_version = ""
+        
+        # trying to find out which files don't have obsid in them.
+        print(f"Debug: Reading file {entry.filepath} ...")
 
         obsid = entry.pri_hdr["OBSID"]
+        print(obsid)
 
         hash_val = entry.get_hash()
 
@@ -341,7 +345,7 @@ class CalDB:
             # if we don't wnat to look in subdirs now, we should break
             if not look_in_subfolders:
                 break
-
+        
         # load all these files into the caldb
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
