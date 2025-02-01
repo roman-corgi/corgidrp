@@ -1,8 +1,8 @@
 import os
 import numpy as np
-from scipy.interpolate import griddata
 from astropy.io import fits
 import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
 
 from corgidrp.data import Dataset
 
@@ -24,15 +24,14 @@ def get_psf_pix(
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
       with respect to the pixel (0,0) in the PSF images
     """ 
+    psf_pix = []
     if method.lower() == 'max':
-        psf_pix = []
         for psf in dataset:
             psf_pix += [np.unravel_index(psf.data.argmax(), psf.data.shape)]
-        psf_pix = np.array(psf_pix)
     else:
         raise Exception('Method to estimate PSF pixels unrecognized')
 
-    return psf_pix
+    return np.array(psf_pix)
 
 def get_psf_ct(
     dataset,
@@ -41,9 +40,19 @@ def get_psf_ct(
     ):
     """ Estimate the core throughput of a set of PSF images.
 
-    Definition of core throughput: divide the summed intensity counts of the
-      region with intensity >= 50% of the peak by the summed intensity counts
-      w/o any masks.
+    Definition of core throughput: The numerator in CT (counts above 50% peak)
+    is measured with pupil masks (Lyot stop, SPC pupil mask) in place, DMs at
+    dark hole solution, but no FPM.  The denominator (total stellar flux) is
+    measured without any masks in place and an infinite aperture.
+
+    NOTE: The FPM are kept in place while measuring the CT because near the
+    region of 6 lam/D, the FPM effects are negligible and the CT data set allows
+    one to quantify the effect of the FPM in other areas, near the IWA and OWA,
+    respectively.
+
+    See  Journal of Astronomical Telescopes, Instruments, and Systems, Vol. 9,
+    Issue 4, 045002 (October 2023). https://doi.org/10.1117/1.JATIS.9.4.045002
+    and figures 9-13 for details.
 
     Args:
       dataset (Dataset): a collection of off-axis PSFs.
@@ -115,7 +124,7 @@ def estimate_psf_pix_and_ct(
     # frames are mostly off-axis PSFs
     pupil_img_idx = np.where(n_pix_up > 10 * np.median(n_pix_up))[0]
     if len(pupil_img_idx):
-        print(f'Found {len(pupil_img_idx)} pupil images for the core throughput estimation.') 
+        print(f'Found {len(pupil_img_idx)} pupil images for the core throughput estimation.')
     else:
         raise Exception('No pupil image found. At least there must be one pupil image.')
     # mean combine the total values (photo-electrons/sec) of the pupil images
@@ -226,7 +235,7 @@ def get_ct_fpm_center(
         the rotation matrix from delta FSAM positions in mum to EXCAM pixels.
 
         Note: the use of the delta FPAM/FSAM positions and the rotation matrices
-        is based on the prescription provided by E. Cady on 1/14/25:
+        is based on the prescription provided on 1/14/25:
         "H/V values to EXCAM row/column pixels"
 
           delta_pam = np.array([[dh], [dv]]) # fill these in
