@@ -2,10 +2,12 @@ import os
 import math
 import numpy as np
 from astropy.io import fits
+from corgidrp.nd_filter_calibration import compute_expected_flux
 from corgidrp.nd_filter_calibration import main
 from corgidrp.data import Dataset, Image
 from corgidrp.mocks import create_default_headers
 import astropy.units as u
+import matplotlib.pyplot as plt
 
 # From fluxcal.py bright standards
 bright_stars = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep', 'KSI2 CETI']
@@ -98,7 +100,7 @@ def save_image_to_fits(image, filename):
     hdul.writeto(filename, overwrite=True)
 
 
-def mock_dim_dataset_files(output_path):
+def mock_dim_dataset_files(output_path, dim_exptime, filter):
     """
     Create FITS files for dim star images to serve as calibration references.
 
@@ -116,24 +118,25 @@ def mock_dim_dataset_files(output_path):
     if not os.path.exists(output_path):
         os.makedirs(output_path, exist_ok=True)
 
-    # Simulate dim stars using a faint flux.
-    star_flux = (30.0 * u.STmag).to(u.erg / u.s / u.cm**2 / u.AA)
-    fwhm = 3
-    background = star_flux.value / 20
-
     file_paths = []
     for star_name in dim_stars:
-        flux_image = create_flux_image(star_flux.value, fwhm, background)
+        # Simulate dim stars using a faint flux.
+        star_flux = compute_expected_flux(star_name, filter)
+        total_dim_flux = star_flux * dim_exptime
+        fwhm = 3
+        background = total_dim_flux / 20
+
+        flux_image = create_flux_image(total_dim_flux, fwhm, background)
         # Update headers with calibration metadata.
         flux_image.pri_hdr['RA'] = 0
         flux_image.pri_hdr['DEC'] = 0
         flux_image.ext_hdr['TARGET'] = star_name
-        flux_image.ext_hdr['CFAMNAME'] = '3C'  # Must match a known filter.
+        flux_image.ext_hdr['CFAMNAME'] = filter  # Must match a known filter.
         flux_image.ext_hdr['FPAM_H'] = 3.0
         flux_image.ext_hdr['FPAM_V'] = 2.5
         flux_image.ext_hdr['FSM_X'] = 0
         flux_image.ext_hdr['FSM_Y'] = 0
-        flux_image.ext_hdr['EXPTIME'] = 10.0  # Example exposure time.
+        flux_image.ext_hdr['EXPTIME'] = dim_exptime  # Example exposure time.
 
         # Remove spaces from the star name for filename safety.
         safe_star_name = star_name.replace(' ', '_')
@@ -145,7 +148,7 @@ def mock_dim_dataset_files(output_path):
     return file_paths
 
 
-def mock_bright_dataset_files(output_path):
+def mock_bright_dataset_files(output_path, bright_exptime, filter, OD):
     """
     Create FITS files for bright star images arranged in a raster pattern.
 
@@ -164,11 +167,8 @@ def mock_bright_dataset_files(output_path):
     if not os.path.exists(output_path):
         os.makedirs(output_path, exist_ok=True)
 
-    # Simulate bright stars using a relatively high flux.
-    bright_star_flux = (20.0 * u.STmag).to(u.erg / u.s / u.cm**2 / u.AA)
-    fwhm = 3
-    background = bright_star_flux.value / 20
-
+    ND_transmission = 10**(-OD)
+    
     # Pick the first 4 bright standards.
     selected_bright_stars = bright_stars[:4]
     x_offsets = [-10, 0, 10]
@@ -179,19 +179,25 @@ def mock_bright_dataset_files(output_path):
         index = 1
         for dy in y_offsets:
             for dx in x_offsets:
-                # Multiply flux by 10 for bright stars.
-                flux_image = create_flux_image(bright_star_flux.value * 10,
+                bright_star_flux = compute_expected_flux(star_name, filter)
+                total_bright_flux = bright_star_flux * bright_exptime
+                attenuated_flux = total_bright_flux * ND_transmission
+                
+                fwhm = 3
+                background = total_bright_flux / 20
+
+                flux_image = create_flux_image(attenuated_flux,
                                                fwhm, background)
                 flux_image.pri_hdr['RA'] = 0
                 flux_image.pri_hdr['DEC'] = 0
                 flux_image.ext_hdr['TARGET'] = star_name
-                flux_image.ext_hdr['CFAMNAME'] = '3C'
+                flux_image.ext_hdr['CFAMNAME'] = filter
                 flux_image.ext_hdr['FPAM_H'] = 3.0
                 flux_image.ext_hdr['FPAM_V'] = 2.5
                 flux_image.ext_hdr['FSM_X'] = dx
                 flux_image.ext_hdr['FSM_Y'] = dy
                 # Shorter exposure for bright stars.
-                flux_image.ext_hdr['EXPTIME'] = 5.0
+                flux_image.ext_hdr['EXPTIME'] = bright_exptime
 
                 safe_star_name = star_name.replace(' ', '_')
                 filename = os.path.join(
@@ -218,11 +224,20 @@ if __name__ == "__main__":
         '/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output'
     )
 
-    dim_files = mock_dim_dataset_files(dim_data_path)
-    bright_files = mock_bright_dataset_files(bright_data_path)
+    # Observation settings
+    dim_exptime = 10.0
+    bright_exptime = 5.0
+    filter = '3C'
+    OD = 2.75
+
+    dim_files = mock_dim_dataset_files(dim_data_path, dim_exptime, filter)
+    bright_files = mock_bright_dataset_files(bright_data_path, bright_exptime,
+                                             filter, OD)
 
     input_dim_dataset = Dataset(dim_files)
     input_bright_dataset = Dataset(bright_files)
 
     # Run the main ND filter calibration routine.
     main(input_dim_dataset, input_bright_dataset, output_path)
+
+   
