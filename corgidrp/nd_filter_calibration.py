@@ -119,7 +119,7 @@ def compute_expected_flux(star_name, filter_name):
     calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
 
     # Calculate integrated flux
-    expected_flux = calculate_band_irradiance(transmission, calspec_flux, wave)
+    expected_flux = fluxcal.calculate_band_irradiance(transmission, calspec_flux, wave)
     return expected_flux
 
 
@@ -148,26 +148,6 @@ def group_by_target(dataset_entries):
             print(f"Error processing {entry}: {e}")
 
     return grouped_files
-
-
-def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
-    """ Calculate the integrated flux (band irradiance) over the filter band.
-        This performs the numerical integration of:
-        ∫(calspec_flux(λ) * filter_curve(λ)) dλ
-        over the wavelength range provided in `filter_wavelength`.
-
-    Args:
-        filter_curve (numpy.ndarray): Filter transmission curve values.
-        calspec_flux (numpy.ndarray): Flux density of the CALSPEC star
-            (erg / (s * cm^2 * Å)).
-        filter_wavelength (numpy.ndarray): Wavelengths corresponding to the
-            filter curve in Å.
-
-    Returns:
-        irrad (float): Integrated flux (band irradiance) in erg / (s * cm^2).
-    """
-    irrad = integrate.simpson(calspec_flux * filter_curve, x=filter_wavelength)
-    return irrad
 
 
 def compute_flux_calibration_factor(dim_stars_paths):
@@ -321,6 +301,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
         pri_hdr = fits.Header()
         pri_hdr['SIMPLE'] = True
         pri_hdr['BITPIX'] = 32
+        pri_hdr['OBSID'] = 0000
         pri_hdr['COMMENT'] = "NDFilterCalibration primary header"
 
         # Extension header
