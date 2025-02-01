@@ -210,7 +210,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
     """
     # Step 1: Flux calibration factor
     cal_factor = compute_flux_calibration_factor(dim_stars_paths)
-
+    
     # Step 2: Group bright star files
     grouped_files = group_by_target(bright_stars_paths)
     flux_results = {}
@@ -238,6 +238,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
             fpam_h = ext_hdr.get('FPAM_H', fpam_h)
             fpam_v = ext_hdr.get('FPAM_V', fpam_v)
             exptime = ext_hdr.get('EXPTIME', 1.0)
+            filter = ext_hdr['CFAMNAME']
 
             x_center, y_center = compute_centroid(image_data)
             if np.isnan(x_center) or np.isnan(y_center):
@@ -318,7 +319,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
         )
 
         serial_number = f"{max_serial + 1:03d}"
-        output_filename = f"CGI_{visit_id}_{serial_number}_NDF_CAL.fits"
+        output_filename = f"CGI_{visit_id}_{serial_number}_FilterBand_{filter}_NDF_CAL.fits"
         ndcal_product.save(filedir=output_path, filename=output_filename)
 
         print(f"ND Filter Calibration product saved to {output_filename}")

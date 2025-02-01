@@ -125,10 +125,14 @@ def mock_dim_dataset_files(output_path):
     for star_name in dim_stars:
         flux_image = create_flux_image(star_flux.value, fwhm, background)
         # Update headers with calibration metadata.
+        flux_image.pri_hdr['RA'] = 0
+        flux_image.pri_hdr['DEC'] = 0
         flux_image.ext_hdr['TARGET'] = star_name
         flux_image.ext_hdr['CFAMNAME'] = '3C'  # Must match a known filter.
         flux_image.ext_hdr['FPAM_H'] = 3.0
         flux_image.ext_hdr['FPAM_V'] = 2.5
+        flux_image.ext_hdr['FSM_X'] = 0
+        flux_image.ext_hdr['FSM_Y'] = 0
         flux_image.ext_hdr['EXPTIME'] = 10.0  # Example exposure time.
 
         # Remove spaces from the star name for filename safety.
@@ -178,6 +182,8 @@ def mock_bright_dataset_files(output_path):
                 # Multiply flux by 10 for bright stars.
                 flux_image = create_flux_image(bright_star_flux.value * 10,
                                                fwhm, background)
+                flux_image.pri_hdr['RA'] = 0
+                flux_image.pri_hdr['DEC'] = 0
                 flux_image.ext_hdr['TARGET'] = star_name
                 flux_image.ext_hdr['CFAMNAME'] = '3C'
                 flux_image.ext_hdr['FPAM_H'] = 3.0
