@@ -38,8 +38,15 @@ def setup_module():
     data_pupil_1 += rng.normal(0, data_pupil.std()/10, data_pupil_1.shape)
     data_pupil_2 = data_pupil.copy()
     data_pupil_2 += rng.normal(0, data_pupil.std()/10, data_pupil_1.shape)
-    data_psf += [Image(data_pupil_1,pri_hdr = prhd, ext_hdr = exthd, err = err)]
-    data_psf += [Image(data_pupil_2,pri_hdr = prhd, ext_hdr = exthd, err = err)]
+    # Add specific values for pupil images:
+    # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+    exthd_pupil = exthd.copy()
+    exthd_pupil['DPAMNAME'] = 'PUPIL'
+    exthd_pupil['LSAMNAME'] = 'OPEN'
+    exthd_pupil['FSAMNAME'] = 'OPEN'
+    exthd_pupil['FPAMNAME'] = 'OPEN_12'
+    data_psf += [Image(data_pupil_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+    data_psf += [Image(data_pupil_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     # Total counts from the pupil images
     unocc_psf_norm = (data_pupil_1.sum()+data_pupil_2.sum())/2
 
@@ -250,6 +257,6 @@ def test_ct_map():
 if __name__ == '__main__':
     test_psf_pix_and_ct()
     test_fpm_pos()
-    test_ct_map()
+#    test_ct_map()
 
 
