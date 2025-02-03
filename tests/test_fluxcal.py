@@ -59,6 +59,7 @@ def test_flux_calc():
 def test_colorcor():
     """
     test that the pivot reference wavelengths is close to the center of the bandpass
+    and the color correction is calculated correctly
     """
     
     lambda_piv = fluxcal.calculate_pivot_lambda(transmission, wave)
@@ -164,13 +165,16 @@ def test_abs_fluxcal():
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
     radius = 3.* sigma
     
+    #Test the aperture photometry
     #The error of one pixel is 1, so the error of the aperture sum should be: 
     error_sum = np.sqrt(np.pi * radius * radius)
-    flux_el_ap, flux_err_ap = fluxcal.aper_phot(flux_image, radius, 0.997)
+    [flux_el_ap, flux_err_ap] = fluxcal.aper_phot(flux_image, radius, 0.997)
     #200 is the input count of photo electrons
     assert flux_el_ap == pytest.approx(200, rel = 0.05)
     assert flux_err_ap == pytest.approx(error_sum, rel = 0.05)
     
+    
+    #Test the 2D Gaussian fit photometry
     #The error of one pixel is 1, so the error of a circular aperture with radius of 2 sigma should be about:
     error_gauss = np.sqrt(np.pi * 4 * sigma * sigma)
     flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm, fit_shape = 41)
@@ -190,12 +194,12 @@ def test_abs_fluxcal():
     err_fluxcal_ap = band_flux/flux_el_ap**2*flux_err_ap
     assert fluxcal_factor.fluxcal_err == pytest.approx(err_fluxcal_ap)
     assert fluxcal_factor.filename == 'sim_fluxcal_FluxcalFactor_3C_ND475.fits'
-    fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(dataset, fwhm)
-    assert fluxcal_factor.filter == '3C'
-    assert fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor,rel = 0.05)
+    fluxcal_factor_gauss = fluxcal.calibrate_fluxcal_gauss2d(dataset, fwhm)
+    assert fluxcal_factor_gauss.filter == '3C'
+    assert fluxcal_factor_gauss.fluxcal_fac == pytest.approx(cal_factor,rel = 0.05)
     #divisive error propagation of the 2D Gaussian fit phot error
     err_fluxcal_gauss = band_flux/flux_el_gauss**2*flux_err_gauss
-    assert fluxcal_factor.fluxcal_err == pytest.approx(err_fluxcal_gauss)
+    assert fluxcal_factor_gauss.fluxcal_err == pytest.approx(err_fluxcal_gauss)
     
     #test the flux conversion computation.
     old_ind = corgidrp.track_individual_errors
@@ -222,7 +226,33 @@ def test_abs_fluxcal():
     assert output_dataset[0].err[0,512, 512] == pytest.approx(err_comb)
     assert output_dataset[0].err[1,512, 512] == pytest.approx(err_layer2)
     
+    #Test the optional background subtraction#
+    flux_image_back = create_flux_image(band_flux, fwhm, cal_factor, background = 3, filedir=datadir, file_save=True)
+    
+    [flux_back, flux_err_back, back] = fluxcal.aper_phot(flux_image_back, radius, background_sub = True)
+    #calculated median background should be close to the input
+    assert back == pytest.approx(3, abs = 0.03)
+    #the found values should be close to the ones without background subtraction
+    assert flux_back == pytest.approx(flux_el_ap, abs = 1)
+    assert flux_err_back == pytest.approx(flux_err_ap, abs = 0.03)
+
+    [flux_back, flux_err_back, back] = fluxcal.phot_by_gauss2d_fit(flux_image_back, fwhm, background_sub = True)
+    #calculated median background should be close to the input
+    assert back == pytest.approx(3, abs = 0.03)
+    #the found values should be close to the ones without background subtraction
+    assert flux_back == pytest.approx(flux_el_gauss, abs = 1)
+    assert flux_err_back == pytest.approx(flux_err_gauss, abs = 0.03)
+    
+    #Also test again the generation of the cal file now with a background subtraction
+    fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, radius, 0.997, background_sub = True)
+    assert fluxcal_factor_back.fluxcal_fac == pytest.approx(fluxcal_factor.fluxcal_fac)
+    assert fluxcal_factor_back.ext_hdr["LOCBACK"] == back
+    fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, fwhm, background_sub = True)
+    assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
+    assert fluxcal_factor_back_gauss.ext_hdr["LOCBACK"] == back
+    
     corgidrp.track_individual_errors = old_ind
+
 
 if __name__ == '__main__':
     test_get_filter_name()
