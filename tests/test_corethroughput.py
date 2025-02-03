@@ -184,7 +184,7 @@ def test_ct_map():
     the CTC GSW shall compute a 2D floating-point interpolated core throughput
     map.
     """
-    psf_pix = np.array(psf_position_max[:,0], psf_position_max[:,1])
+    psf_pix = psf_position_max.transpose()
     fpam_pix = np.array([513,515])
     target_pix = np.array([520, 520])
 
@@ -229,11 +229,11 @@ def test_ct_map():
     ct_os11_wrong[0] = -0.1
     with pytest.raises(ValueError):
          corethroughput.ct_map(psf_pix, fpam_pix, ct_os11_wrong, target_pix)
-    # If the target pixels are outside the range of the original data, the
+    # If all the target pixels are outside the range of the original data, the
     # function must fail
-    target_pix_x = [531.8, 541.6, 551.4, 560, 521.4, 532, 542,
-        552, 562]
-    target_pix_y = [530.4, 540, 550.3, 561.2, 500.6, 492.6, 482.8,
+    target_pix_x = [331.8, 141.6, 851.4, 560, 521.4, 532, 542,
+        752, 362]
+    target_pix_y = [830.4, 540, 550.3, 361.2, 210.6, 920.6, 382.8,
         474, 476]
     target_pix = np.array([target_pix_x, target_pix_y])
     with pytest.raises(ValueError):
@@ -250,6 +250,7 @@ def test_ct_map():
     target_pix_y = [530.4, 540, 550.3, 512, 512.6, 492.6, 482.8,
         474, 476]
     target_pix = np.array([target_pix_x, target_pix_y])
+    
     ct_map = corethroughput.ct_map(psf_pix, fpam_pix, ct_os11, target_pix)
     # core throughput in (0,1]
     assert np.all(ct_map[-1]) > 0
