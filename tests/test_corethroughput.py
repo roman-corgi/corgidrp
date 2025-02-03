@@ -26,6 +26,8 @@ def setup_module():
     global ct_os11
     ct_os11 = []
 
+    # All frames are taken with the same cfam filter
+    exthd['CFAMNAME'] = '1F'
     data_psf = []
     # add pupil image(s) of the unocculted source's observation
     data_pupil = fits.getdata(os.path.join(ct_filepath, 'pupil_image_0000094916.fits'))
@@ -49,6 +51,8 @@ def setup_module():
     data_psf += [Image(data_pupil_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     # Total counts from the pupil images
     unocc_psf_norm = (data_pupil_1.sum()+data_pupil_2.sum())/2
+    # Adjust for pupil vs. direct imaging lens transmission
+    unocc_psf_norm *= corethroughput.di_over_pil_transmission(filter=exthd['CFAMNAME'])
 
     # add os11 psfs
     occ_psf_filepath = os.path.join(ct_filepath, 'hlc_os11_psfs_oversampled.fits')
