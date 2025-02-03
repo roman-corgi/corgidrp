@@ -454,22 +454,11 @@ def ct_map(
     # Use linear interpolation
     ct_interp = griddata((psf_pix[0], psf_pix[1]), ct, (target_pix[0],
         target_pix[1]), method='linear')
-    # Check if any PSF position was out of the range for interpolation
-    if np.any(np.isnan(ct_interp)):
-        # Find where the issue is
-        isnan = np.where(np.isnan(ct_interp))[0]
-        # Optional diagnosis plot
-        if False:
-            plt.plot(psf_pix[0], psf_pix[1], 'k+', label='PSF locations')
-            plt.plot(target_pix[0], target_pix[1], 'g+', label='Target locations')
-            for bad in isnan:
-                plt.plot(target_pix[0, bad], target_pix[1, bad], 'rx')
-            plt.title('Red crosses indicate target locations that failed')
-            plt.legend()
-            plt.grid()
-            plt.show()
-        raise ValueError(f'Target positions at {isnan} gave NaN. Are ' + 
-            'this/these position/s within the range of input PSF locations?') 
+    # Check if all PSF positions fall out of the range of the input PSFs
+    if np.all(np.isnan(ct_interp)):
+        raise ValueError('There are no valid target positions within the ' + 
+            'range of input PSF locations') 
 
-    return np.array([target_pix[0], target_pix[1], ct_interp])
+    isvalid = np.where(np.isnan(ct_interp) == False)[0]
+    return np.array([target_pix[0][isvalid], target_pix[1][isvalid], ct_interp[isvalid]])
 
