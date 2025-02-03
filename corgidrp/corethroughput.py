@@ -8,6 +8,63 @@ from corgidrp.data import Dataset
 
 here = os.path.abspath(os.path.dirname(__file__))
 
+def di_over_pil_transmission(
+    band='1F',
+    version=0,
+    ):
+    """ Derives the relative transmission between the pupil lens and the imaging
+      lens: trans_lens/trans_pupil.
+ 
+      Multiplying the counts of the pupil image by this factor translates them
+      into equivalent counts of the direct imaging lens.
+ 
+    Args:
+      band (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+        Default: '1F'.
+      version (int): version number of the filters
+    """
+    # Read pupil and direct imaging lenses
+    try:
+        breakpoint()
+        lambda_pupil_A, trans_pupil = np.loadtxt('corgidrp/data/pupil_lens.txt',
+            delimiter=',', unpack=True)
+        lambda_pupil_nm = lambda_pupil_A / 10
+    except:
+        raise Exception('* File with the transmission of the pupil lens not found')
+ 
+    try:
+        lambda_imaging_A, trans_imaging = np.loadtxt('input/imaging_lens.txt',
+            delimiter=',', unpack=True)
+        lambda_imaging_nm = lambda_imaging_A / 10
+    except:
+        raise Exception('* File with the transmission of the imaging lens not found')
+ 
+    # Q&D: https://roman.ipac.caltech.edu/sims/Param_db.html
+    if band.lower() == '1f':
+        # Central wavelength Band 1: 573.8 nm
+        lambda_c_nm = 573.8
+        # FWHM: 56.5 nm
+        lambda_fwhm_nm = 56.5
+ 
+    lambda_nm_min = lambda_c_nm - lambda_fwhm_nm / 2
+    lambda_nm_max = lambda_c_nm + lambda_fwhm_nm / 2
+    lambda_nm_band = np.linspace(lambda_nm_min, lambda_nm_max, 100)
+    # Linear interpolation
+    trans_lambda_pupil_band = np.interp(
+        lambda_nm_band,
+        lambda_pupil_nm,
+        trans_pupil)
+ 
+    trans_lambda_imaging_band = np.interp(
+        lambda_nm_band,
+        lambda_imaging_nm,
+        trans_imaging)
+    # Ratio of both transmissions:
+    ratio_imaging_pupil_trans = \
+        np.sum(trans_lambda_imaging_band)/np.sum(trans_lambda_pupil_band)
+ 
+    return ratio_imaging_pupil_trans
+
 def get_psf_pix(
     dataset,
     method='max',
@@ -37,6 +94,7 @@ def get_psf_ct(
     dataset,
     unocc_psf_norm=1,
     method='max',
+    band='1F',
     ):
     """ Estimate the core throughput of a set of PSF images.
 
@@ -65,6 +123,9 @@ def get_psf_ct(
         Default: 'direct'. This method finds the set of EXCAM pixels that
         satisfy the condition to derive the core throughput with no approximations.
 
+      band (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+        Default: '1F'.      
+
     Returns:
       Array of core throughput values between 0 and 1.
     """
@@ -82,6 +143,7 @@ def estimate_psf_pix_and_ct(
     dataset_in,
     pix_method=None,
     ct_method=None,
+    band=None,
     ):
     """
     1090881 - Given a core throughput dataset consisting of M clean frames
@@ -91,18 +153,22 @@ def estimate_psf_pix_and_ct(
     NOTE: the list of M clean frames may be a subset of the frames collected during
     core throughput data collection, to allow for the removal of outliers.
 
+    Some of the images are pupil images of the unocculted source.
+
     Args:
       dataset_in (corgidrp.Dataset): A core throughput dataset consisting of
         M clean frames (nominally 1024x1024) taken at different FSM positions.
+        It includes some pupil images of the unocculted source.
         Units: photoelectrons / second / pixel.
 
-        NOTE: the dataset contains the pupil image(s) of the unocculted source.
-
-      pix_method (string): the method used to estimate the PSF positions.
+      pix_method (string): The method used to estimate the PSF positions.
         Default: 'max'.
 
-      ct_method (string): the method used to estimate the PSF core throughput.
+      ct_method (string): The method used to estimate the PSF core throughput.
         Default: 'direct'.        
+
+      band (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+        Default: '1F'.
 
     Returns:
       psf_pix (array): Array with PSF's pixel positions. Units: EXCAM pixels
@@ -118,27 +184,43 @@ def estimate_psf_pix_and_ct(
         pix_method = 'max'
     if ct_method is None:
         ct_method = 'direct'
+    if band is None:
+        band = '1F'
 
-    # identify the pupil images in the dataset (pupil images are extended)
-    n_pix_up = [np.sum(frame.data > 3*frame.data.std()) for frame in dataset]
-    # frames are mostly off-axis PSFs
-    pupil_img_idx = np.where(n_pix_up > 10 * np.median(n_pix_up))[0]
-    if len(pupil_img_idx):
-        print(f'Found {len(pupil_img_idx)} pupil images for the core throughput estimation.')
+    # identify the pupil images in the dataset
+    pupil_img_frames = []
+    for frame in dataset:
+        try:
+        # Pupil images of the unocculted source satisfy:
+        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+            exthd = frame.ext_hdr
+            if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
+                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
+                pupil_img_frames += [frame]
+        except:
+            pass
+  
+    
+    if len(pupil_img_frames):
+        print(f'Found {len(pupil_img_frames)} pupil images for the core throughput estimation.')
     else:
         raise Exception('No pupil image found. At least there must be one pupil image.')
     # mean combine the total values (photo-electrons/sec) of the pupil images
     unocc_psf_norm = 0
-    for frame in dataset[pupil_img_idx]:
+    for frame in pupil_img_frames:
         unocc_psf_norm += frame.data.sum()
-    unocc_psf_norm /= len(pupil_img_idx)
+    unocc_psf_norm /= len(pupil_img_frames)
     # Remove pupil frames
     offaxis_frames = []
-    for i_f, frame in enumerate(dataset):
-        if i_f not in pupil_img_idx:
+    for frame in dataset:
+        if frame not in pupil_img_frames:
             offaxis_frames += [frame]
     dataset_offaxis = Dataset(offaxis_frames)
-
+    if len(dataset_offaxis):
+        print(f'Found {len(dataset_offaxis)} off-axis PSFs for the core throughput estimation.')
+    else:
+        raise Exception('No off-axis PSF found. At least there must be one off-axis PSF.')
+    
     # find the PSF positions of the off-axis PSFs
     psf_pix = get_psf_pix(
         dataset_offaxis,
@@ -148,7 +230,8 @@ def estimate_psf_pix_and_ct(
     psf_ct = get_psf_ct(
         dataset_offaxis,
         unocc_psf_norm = unocc_psf_norm,
-        method=ct_method)
+        method=ct_method,
+        band=band)
 
     # same number of estimates. One per PSF 
     if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset_offaxis):

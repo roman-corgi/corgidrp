@@ -9,3 +9,5 @@ include corgidrp/data/JWST_CALFIELD2020.csv
 include corgidrp/data/hlc_os11_psfs_azimuth_offsets.fits
 include corgidrp/data/hlc_os11_psfs_oversampled.fits
 include corgidrp/data/hlc_os11_psfs_radial_offsets.fits
+include corgidrp/data/filter_curves/pupil_lens_v0.txt
+include corgidrp/data/filter_curves/imaging_lens_v0.txt
