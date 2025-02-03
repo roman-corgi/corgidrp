@@ -1863,7 +1863,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
 def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., background = 0., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
-    and Gaussian noise
+    and Gaussian noise and a background.
 
     Args:
         star_flux (float): flux of point source in erg/(s*cm^2*AA)
