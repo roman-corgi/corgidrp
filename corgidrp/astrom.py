@@ -796,19 +796,20 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
 
     return first_stars, offsets, true_offsets, errs
 
-def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale, northangle, fitorder=3):
+def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, platescale, northangle, fitorder=3, initial_guess=None):
     ''' 
     Function that computes the legendre polynomial coefficients that describe the image distortion map * must run format_disotrtio_inputs() first *
 
     Args:
         input_dataset (corgidrp.data.Dataset): corgidrp dataset object with images to compute the distortion from
-        first_stars (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
-        offsets (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
-        true_offsets (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
-        errs (np.array): 2D array of the (x_err, y_err) error in the measured pixel positions
+        pos1 (np.array): 2D array of the (x, y) pixel positions for the first star in every star pair
+        meas_offset (np.array): 2D array of the (delta_x, delta_y) values for each star from the first star position
+        sky_offset (np.array): 2D array of the (delta_ra, delta_dec) offsets between the matched stars in the reference field
+        meas_errs (np.array): 2D array of the (x_err, y_err) error in the measured pixel positions
         platescale (float): Platescale value to use in computing distortion
         northangle (float): Northangle value to use in computing distortion 
         fitorder (int): The order of legendre polynomial to fit to the image distortion (default: 3)
+        initial_guess (np.array): Initial guess of fitting parameters (legendre coefficients) length based on fitorder (2 * (fitorder+1)**2), (default: None)
 
     Returns:
         distortion_coeffs (tuple): The legendre coefficients (np.array) and polynomial order used for the fit (int)
@@ -816,7 +817,6 @@ def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, 
     '''
 
     ## SET FITTING PARAMS
-    # center around image center
     # assume all images in dataset have the same shape
     input_image = input_dataset[0].data
     x0 = np.shape(input_image)[1] // 2
@@ -825,15 +825,16 @@ def compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, 
     # define fitting params            
     fitparams = (fitorder + 1)**2
     
-    # initial guesses for the legendre coeffs
-    guess_leg = [0 for _ in range(fitorder+1)] + [500,] + [0 for _ in range(fitparams - fitorder - 2)] + [0,500] + [0 for _ in range(fitparams-2)]
+    # initial guesses for the legendre coeffs if none are passed
+    if initial_guess is None:
+        initial_guess = [0 for _ in range(fitorder+1)] + [500,] + [0 for _ in range(fitparams - fitorder - 2)] + [0,500] + [0 for _ in range(fitparams-2)]
     
     ## OPTIMIZE 
     # first_stars_, offsets_, true_offsets_, errs_ = first_stars, offsets, true_offsets, errs
-    (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, guess_leg, 
-                                              args=(fitparams, fitorder, platescale, 
-                                                northangle, first_stars, offsets, 
-                                                true_offsets, errs, x0, y0))
+    (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, initial_guess, 
+                                              args=(fitorder, platescale, 
+                                                northangle, pos1, meas_offset, 
+                                                sky_offset, meas_errs, x0, y0))
 
     return (distortion_coeffs, fitorder)
   
