@@ -351,8 +351,8 @@ def get_ct_fpm_center(
           delta_pix = M @ delta_pam
 
     Returns:
-      New center of the focal plane mask during core throughput observations in
-      units of EXCAM pixels.
+      New center of the FPAM and FSAM mask during core throughput observations
+      in units of EXCAM pixels.
     """
     # Checks
     try:
@@ -374,24 +374,26 @@ def get_ct_fpm_center(
     delta_fpam_pos_um = np.array([[fpam_pos_ct[0]-fpam_pos_cor[0]],
          [fpam_pos_ct[1]-fpam_pos_cor[1]]])
     delta_fpam_pos_px = fpam_mum2pix(delta_fpam_pos_um,
-        fpam2excam_matrix=fpam2excam_matrix)
+        fpam2excam_matrix=fpam2excam_matrix).transpose()[0]
 
     # Translate FSAM positions into EXCAM pixels
     delta_fsam_pos_um = np.array([[fsam_pos_ct[0]-fsam_pos_cor[0]],
          [fsam_pos_ct[1]-fsam_pos_cor[1]]])
     delta_fsam_pos_px = fsam_mum2pix(delta_fsam_pos_um,
-        fsam2excam_matrix=fsam2excam_matrix)
+        fsam2excam_matrix=fsam2excam_matrix).transpose()[0]
 
     # New FPM center in units of EXCAM pixels
-    delta_fpm_px = 0.5*(delta_fpam_pos_px + delta_fsam_pos_px)
-    fpm_center_ct = fpm_center_cor + delta_fpm_px.transpose()[0]
+    fpam_center_ct = fpm_center_cor + delta_fpam_pos_px
+    fsam_center_ct = fpm_center_cor + delta_fsam_pos_px
     # FPM center must be within EXCAM boundaries and with enough space to
     # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
     # EXCAM pixels
-    if (np.any(fpm_center_ct <= 23) or np.any(fpm_center_ct >= 1000)):
-      raise ValueError("New focal plane mask's center is too close to the edges")
+    if (np.any(fpam_center_ct <= 23) or np.any(fpam_center_ct >= 1000)):
+      raise ValueError("New FPAM mask's center is too close to the edges")
+    if (np.any(fsam_center_ct <= 23) or np.any(fsam_center_ct >= 1000)):
+      raise ValueError("New FSAM mask's center is too close to the edges")
 
-    return fpm_center_ct
+    return fpam_center_ct, fsam_center_ct
 
 def ct_map(
     psf_pix,
