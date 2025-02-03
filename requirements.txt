@@ -4,7 +4,7 @@ numpy
 pandas
 pytest
 scipy
-photutils
+photutils >= 2.0.0
 statsmodels
 pyklip
 emccd-detect
