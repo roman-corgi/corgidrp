@@ -1060,6 +1060,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfi
     newhdr = fits.Header(new_hdr)
     frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
     filename = "simcal_astrom.fits"
+    guessname = "guesses.csv"
     if filedir is not None:
         # save source SkyCoord locations and pixel location estimates
         guess = Table()
@@ -1067,7 +1068,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfi
         guess['y'] = [y for y in ypix]
         guess['RA'] = ras.ra
         guess['DEC'] = decs.dec
-        ascii.write(guess, filedir+'/guesses.csv', overwrite=True)
+        guess['VMAG'] = subfield['VMAG'][pix_inds]
+        ascii.write(guess, filedir+'/'+guessname, overwrite=True)
 
         frame.save(filedir=filedir, filename=filename)
 
