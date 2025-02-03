@@ -6,6 +6,7 @@ import re
 import corgidrp.fluxcal as fluxcal
 from scipy import integrate
 from corgidrp.data import NDFilterCalibration
+from corgidrp.astrom import centroid
 import math
 
 """
@@ -17,26 +18,6 @@ ND filter.
 Author: Julia Milton
 Date: 2024-12-09
 """
-
-
-def compute_centroid(image_data):
-    """Compute the centroid (x, y) of an image based on its flux distribution.
-
-    Args:
-        image_data (numpy.ndarray.): A 2D array containing the image data from 
-            which to compute the centroid.
-
-    Returns:
-        x_center, y_center : tuple of float. (x_center, y_center). If the total 
-            flux is zero or negative, returns (np.nan, np.nan).
-    """
-    y_indices, x_indices = np.indices(image_data.shape)
-    total_flux = np.sum(image_data)
-    if total_flux <= 0:
-        return np.nan, np.nan
-    x_center = np.sum(x_indices * image_data) / total_flux
-    y_center = np.sum(y_indices * image_data) / total_flux
-    return x_center, y_center
 
 
 def compute_flux_in_image(image_data, x_center, y_center, radius=5,
@@ -174,7 +155,7 @@ def compute_flux_calibration_factor(dim_stars_paths):
         exptime = ext_hdr['EXPTIME']
 
         # Measure flux in electrons
-        x_center, y_center = compute_centroid(image_data)
+        x_center, y_center = centroid(image_data)
         measured_electrons = compute_flux_in_image(image_data, x_center,
                                                    y_center)
 
@@ -246,7 +227,7 @@ def main(dim_stars_paths, bright_stars_paths, output_path, threshold=0.1):
             fsm_x = ext_hdr['FSM_X']
             fsm_y = ext_hdr['FSM_Y']
 
-            x_center, y_center = compute_centroid(image_data)
+            x_center, y_center = centroid(image_data)
             if np.isnan(x_center) or np.isnan(y_center):
                 print(f"Warning: Centroid could not be computed for {entry}")
                 continue
