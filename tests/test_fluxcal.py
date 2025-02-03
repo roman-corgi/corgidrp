@@ -59,6 +59,7 @@ def test_flux_calc():
 def test_colorcor():
     """
     test that the pivot reference wavelengths is close to the center of the bandpass
+    and the color correction is calculated correctly
     """
     
     lambda_piv = fluxcal.calculate_pivot_lambda(transmission, wave)
