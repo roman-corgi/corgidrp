@@ -725,12 +725,13 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
 
     return image_center_RA, image_center_DEC
 
-def format_distortion_inputs(input_dataset, source_matches, position_error=None):
+def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
     
     Args:
         input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
+        ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference star to compute pairs with
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
                         Should be changed later to accept non-uniform errors
         
@@ -750,26 +751,24 @@ def format_distortion_inputs(input_dataset, source_matches, position_error=None)
     for frame_ind in range(len(input_dataset)):
         input_image = input_dataset[frame_ind].data
 
-        # create all possible combinations of the given stars
-        combo_list = np.array(list(compute_combinations(source_matches[frame_ind])))
+        # create all combinations of the target star with all others
+        combo_list = range(len(source_matches[frame_ind]))
         skycoords = SkyCoord(ra= source_matches[frame_ind]['RA'], dec= source_matches[frame_ind]['DEC'], unit='deg', frame='icrs')
+        target_coord = SkyCoord(ra= ref_star_pos[frame_ind]['RA'], dec= ref_star_pos[frame_ind]['DEC'], unit='deg', frame='icrs')
     
         for pair_ind in combo_list:
             # get the pixel offset
-            first = pair_ind[0]
-            second = pair_ind[1]
-            
-            star1 = source_matches[frame_ind][first][['x','y']]
-            star2 = source_matches[frame_ind][second][['x','y']]
+            star1 = ref_star_pos[frame_ind]
+            star2 = source_matches[frame_ind][pair_ind]
     
-            x_guess = star2[0] - star1[0]
-            y_guess = star2[1] - star1[1]
+            x_guess = star2['x'] - star1['x']
+            y_guess = star2['y'] - star1['y']
         
-            (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star1[0], star1[1], x_guess, y_guess, guessflux=1)
+            (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star1['x'], star1['y'], x_guess, y_guess, guessflux=10000)
     
             # get the true sky offset [mas]
-            true1 = skycoords[first]
-            true2 = skycoords[second]
+            true1 = target_coord
+            true2 = skycoords[pair_ind]
         
             # get true sky separation and position angle
             true_sep = true1.separation(true2).mas
