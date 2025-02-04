@@ -438,18 +438,28 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
 
     return matched_image_to_field
 
-def fit_astrom_solution(params, fitparams, fitorder, platescale, rotangle, first_stars, offsets, true_offsets, errs, x0, y0):
+def fit_astrom_solution(params, fitorder, platescale, rotangle, pos1, meas_offset, sky_offset, meas_errs, x0, y0):
     '''
-    Function used to fit the legendre polynomials for distortion mapping. Cannot be used outside of compute_distortion() function where most
-        hard-coded variables are defined.
+    Cost function used to fit the legendre polynomials for distortion mapping.
 
     Args:
         params (list): List of the x and y legendre polynomial coefficients
+        fitorder (int): The degree of legendre polynomial being used
+        platescale (float): The platescale of the image
+        rotangle (float): The north angle of the image
+        pos1 (np.array): A (2 x N) array of (x, y) pixel positions for the first star in N pairs
+        meas_offset (np.array): A (2 x N) array of (x, y) pixel offset from the first star position for N star pairs
+        sky_offset (np.array): A (2 x N) array of (sep, pa) true sky offsets in [mas] and [deg] from the first star position for N pairs 
+        meas_errs (np.array): A (2 x N) array of (x, y) pixel errors in measured offsets from the first star position for N pairs
+        x0 (int): The x pixel value for the center of the image/ detector
+        y0 (int): The y pixel value for the center of the image/ detector
 
     Returns:
         residuals (list): List of residuals between true and measured star positions
     '''
-
+    
+    fitparams = (fitorder + 1)**2
+    
     leg_params_x = np.array(params[:fitparams])  # the first half of params are for x fitting
     leg_params_x = leg_params_x.reshape(fitorder+1, fitorder+1)
 
@@ -463,53 +473,50 @@ def fit_astrom_solution(params, fitparams, fitorder, platescale, rotangle, first
 
     residuals = []
 
-    for i, (pos1, meas_offset, sky_offset, meas_errs) in enumerate(zip(first_stars, offsets, true_offsets, errs)):
+    binary_offsets = meas_offset.T
+    star1_pos = pos1.T
+    
+    # derive star2 position
+    star2_pos = star1_pos + binary_offsets
 
-        binary_offsets = meas_offset.T
-        star1_pos = pos1.T
-        
-        # recenter to detector center
-        star1_pos[:,0] -= x0
-        star1_pos[:,1] -= y0
+    # undistort x and y for both star positions
+    star1_pos_corr = np.copy(star1_pos)
+    star1_pos_corr[:,0] = np.polynomial.legendre.legval2d(star1_pos[:,0], star1_pos[:,1], leg_params_x)
+    star1_pos_corr[:,1] = np.polynomial.legendre.legval2d(star1_pos[:,0], star1_pos[:,1], leg_params_y)
+    star2_pos_corr = np.copy(star2_pos)
+    star2_pos_corr[:,0] = np.polynomial.legendre.legval2d(star2_pos[:,0], star2_pos[:,1], leg_params_x)
+    star2_pos_corr[:,1] = np.polynomial.legendre.legval2d(star2_pos[:,0], star2_pos[:,1], leg_params_y)
 
-        # derive star2 position
-        star2_pos = star1_pos + binary_offsets
+    # translate offsets from [mas] sep, pa to [pixel] sep, pa
+    sky_sep = sky_offset[0]
+    sky_pa = sky_offset[1]
+    
+    true_offset_sep = sky_sep / platescale
+    true_offset_pa = sky_pa - rotangle
+    
+    # translate star_pos_corr from x, y to sep, pa
+    corr_offset_x = star2_pos_corr[:,0] - star1_pos_corr[:,0]
+    corr_offset_y = star2_pos_corr[:,1] - star1_pos_corr[:,1]
+    
+    corr_offset_sep = np.sqrt(corr_offset_x**2 + corr_offset_y**2)
+    corr_offset_pa = np.degrees(np.arctan2(-corr_offset_x, corr_offset_y))
+    
+    # ensuring the position angle is always positive
+    for i, pa in enumerate(corr_offset_pa):
+        if pa < 0:
+            corr_offset_pa[i] += 360
 
-        # undistort x and y for both star positions
-        star1_pos_corr = np.copy(star1_pos)
-        star1_pos_corr[:,0] = np.polynomial.legendre.legval2d(star1_pos[:,0], star1_pos[:,1], leg_params_x)
-        star1_pos_corr[:,1] = np.polynomial.legendre.legval2d(star1_pos[:,0], star1_pos[:,1], leg_params_y)
+    res_sep = corr_offset_sep - true_offset_sep
+    res_pa = corr_offset_pa - true_offset_pa
 
-        star2_pos_corr = np.copy(star2_pos)
-        star2_pos_corr[:,0] = np.polynomial.legendre.legval2d(star2_pos[:,0], star2_pos[:,1], leg_params_x)
-        star2_pos_corr[:,1] = np.polynomial.legendre.legval2d(star2_pos[:,0], star2_pos[:,1], leg_params_y)
-
-        # translate offsets from [mas] sep, pa to [pixel] sep, pa
-        sky_sep = sky_offset[0]
-        sky_pa = sky_offset[1]
-        
-        true_offset_sep = sky_sep / platescale
-        true_offset_pa = sky_pa - rotangle
-
-        # translate star_pos_corr from x, y to sep, pa
-        corr_offset_x = star2_pos_corr[:,0] - star1_pos_corr[:,0]
-        corr_offset_y = star2_pos_corr[:,1] - star1_pos_corr[:,1]
-        
-        corr_offset_sep = np.sqrt(corr_offset_x**2 + corr_offset_y**2)
-        corr_offset_pa = np.degrees(np.arctan2(-corr_offset_x, corr_offset_y))
-        
-        # ensuring the position angle is always positive
-        for i, pa in enumerate(corr_offset_pa):
-            if pa < 0:
-                corr_offset_pa[i] += 360
-
-        res_sep = corr_offset_sep - true_offset_sep
-        res_pa = corr_offset_pa - true_offset_pa
-        
-        res_sep /= meas_errs[0] ## just assume 0.5 pixels
-        res_pa /= meas_errs[1]
-        
-        residuals = np.append(residuals, np.array([res_sep, res_pa]).ravel())
+    # translate pixel error in measurement to sep pa errs
+    sep_err = np.sqrt(meas_errs[0]**2 + meas_errs[1]**2)
+    pa_err = np.degrees(np.arctan2(-meas_errs[0],  meas_errs[1]))
+    
+    res_sep /= sep_err 
+    res_pa /= pa_err
+    
+    residuals = np.append(residuals, np.array([res_sep, res_pa]).ravel())
 
     return residuals
 
@@ -789,10 +796,10 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
                 yerrs = np.append(yerrs, position_error)
    
     # join arrays and reshape to (1, 2, N)
-    offsets = np.array([[dxs, dys]])
-    first_stars = np.array([[firstxs, firstys]])
-    true_offsets = np.array([[seps, pas]])
-    errs = np.array([[xerrs, yerrs]])
+    offsets = np.array([dxs, dys])
+    first_stars = np.array([firstxs, firstys])
+    true_offsets = np.array([seps, pas])
+    errs = np.array([xerrs, yerrs])
 
     return first_stars, offsets, true_offsets, errs
 
