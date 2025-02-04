@@ -30,7 +30,7 @@ def test_astrom():
     assert type(dataset[0]) == data.Image
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=100)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
 
     # the data was generated to have the following image properties
     expected_platescale = 21.8
