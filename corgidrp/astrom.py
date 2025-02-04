@@ -855,7 +855,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
         field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
-        field_matches (list of str): List of full paths to files with calibration field matches for each image in the dataset (x, y, ra, dec), if None, automated source matching is used (default: None)
+        field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if None, automated source matching is used (default: None)
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
@@ -879,9 +879,13 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     # load in the source matches if automated source finder is not being used
     matched_sources_multiframe = []
     if field_matches is not None:
-        for i in range(len(input_dataset)):
-            matched_sources = ascii.read(field_matches[i])
-            matched_sources_multiframe.append(matched_sources)
+        if type(field_matches[0]) == str:
+            for i in range(len(field_matches)):
+                matched_sources = ascii.read(field_matches[i])
+                matched_sources_multiframe.append(matched_sources)
+        else:
+            for i in range(len(field_matches)):
+                matched_sources_multiframe = field_matches
         
     # load in field data to refer to
     if field_path == 'JWST_CALFIELD2020.csv':
@@ -912,13 +916,21 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # create a place to store all the calibration measurements
     astroms = []
+    target_coord_tables = []
 
     for i in range(len(dataset)):
         in_dataset = corgidrp.data.Dataset([dataset[i]])
         image = dataset[i].data
+        matched_sources = matched_sources_multiframe[i]
 
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
+        target_coord_tab = astropy.table.Table()
+        target_coord_tab['x'] = [dataset[i].ext_hdr['CRPIX1']]
+        target_coord_tab['y'] = [dataset[i].ext_hdr['CRPIX2']]
+        target_coord_tab['RA'] = [dataset[i].ext_hdr['CRVAL1']]
+        target_coord_tab['DEC'] = [dataset[i].ext_hdr['CRVAL2']]
+        target_coord_tables.append(target_coord_tab)
 
         # run automated source finder if no matches are given
         if field_matches is None:
@@ -943,7 +955,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # compute the distortion map coeffs
     if find_distortion:
-        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, position_error=position_error)
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, ref_star_pos=target_coord_tables, position_error=position_error)
         distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder)
     else:
         distortion_coeffs = (np.array([np.nan]), np.nan)
