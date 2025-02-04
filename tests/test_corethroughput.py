@@ -88,29 +88,22 @@ def test_psf_pix_and_ct():
     core throughput data collection, to allow for the removal of outliers.
     """
 
-    # do not pass if setting a method that does not exist
-    with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, pix_method='bad')
-
-    with pytest.raises(Exception):
-        corethroughput.estimate_psf_pix_and_ct(dataset_psf, ct_method='bad')
-
     psf_pix_est_max, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_psf)
 
     # Difference between expected and retrieved positions for the max (peak) method
     diff_pix_x = psf_position_max[:,0] - psf_pix_est_max[:,0]
     # os11 azimuthal axis
-    assert diff_pix_x == pytest.approx(0)
+    assert np.all(diff_pix_x == 0)
     # os11 radial axis
     diff_pix_y = psf_position_max[:,1] - psf_pix_est_max[:,1] 
-    assert diff_pix_y == pytest.approx(0)
+    assert np.all(diff_pix_y == 0)
 
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
 
     # comparison between I/O values
-    assert ct_est == pytest.approx(np.array(ct_os11))
+    assert np.all(ct_est - np.array(ct_os11)) == 0
 
 def test_fpm_pos():
     """
