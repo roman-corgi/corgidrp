@@ -284,7 +284,16 @@ def fpam_mum2pix(
     except:
         raise OSError('The rotation matrix for FPAM could not be loaded.')
 
-    return (rot_matrix @ delta_fpam_pos_um)
+    # Enforce vertical array. Transpose if it is a horizontal array
+    try:
+        if delta_fpam_pos_um.shape != (2,1):
+            delta_fpam_pos_um = np.array([delta_fpam_pos_um]).transpose()
+            if delta_fpam_pos_um.shape != (2,1):
+                raise ValueError('Input delta FPAM must be a 2-1 array')
+    except:
+        raise ValueError('Input delta FPAM must be a 2-1 array')
+
+    return (rot_matrix @ delta_fpam_pos_um).transpose()[0]
 
 def fsam_mum2pix(
     delta_fsam_pos_um,
@@ -307,7 +316,16 @@ def fsam_mum2pix(
     except:
         raise OSError('The rotation matrix for FSAM could not be loaded.')
 
-    return (rot_matrix @ delta_fsam_pos_um)
+    # Enforce vertical array. Transpose if it is a horizontal array
+    try:
+        if delta_fsam_pos_um.shape != (2,1):
+            delta_fsam_pos_um = np.array([delta_fsam_pos_um]).transpose()
+            if delta_fsam_pos_um.shape != (2,1):
+                raise ValueError('Input delta FSAM must be a 2-1 array')
+    except:
+        raise ValueError('Input delta FSAM must be a 2-1 array')
+
+    return (rot_matrix @ delta_fsam_pos_um).transpose()[0]
 
 def get_ct_fpm_center(
     fpm_center_cor,
@@ -374,13 +392,13 @@ def get_ct_fpm_center(
     delta_fpam_pos_um = np.array([[fpam_pos_ct[0]-fpam_pos_cor[0]],
          [fpam_pos_ct[1]-fpam_pos_cor[1]]])
     delta_fpam_pos_px = fpam_mum2pix(delta_fpam_pos_um,
-        fpam2excam_matrix=fpam2excam_matrix).transpose()[0]
+        fpam2excam_matrix=fpam2excam_matrix)
 
     # Translate FSAM positions into EXCAM pixels
     delta_fsam_pos_um = np.array([[fsam_pos_ct[0]-fsam_pos_cor[0]],
          [fsam_pos_ct[1]-fsam_pos_cor[1]]])
     delta_fsam_pos_px = fsam_mum2pix(delta_fsam_pos_um,
-        fsam2excam_matrix=fsam2excam_matrix).transpose()[0]
+        fsam2excam_matrix=fsam2excam_matrix)
 
     # New FPM center in units of EXCAM pixels
     fpam_center_ct = fpm_center_cor + delta_fpam_pos_px

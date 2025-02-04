@@ -167,18 +167,20 @@ def test_fpm_pos():
                     fsam2excam_matrix='bad_file.fits')
      
     # Using values within the range should return a meaningful value
-    # Shifting the FPM by (+1,+1) EXCAM pixels *using approx. values*
+    delta_fpam = corethroughput.fpam_mum2pix(np.array([10,10]))
+    delta_fsam = corethroughput.fsam_mum2pix(np.array([10,10]))
     fpam_center_ct_pix, fsam_center_ct_pix = \
         corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
         fpam_pos_cor=FPAM_center_pos_um,
-        fpam_pos_ct=FPAM_center_pos_um + np.array([-1,1])*21.8/2.67,
+        fpam_pos_ct=FPAM_center_pos_um + delta_fpam,
         fsam_pos_cor=FSAM_center_pos_um,
-        fsam_pos_ct=FSAM_center_pos_um + np.array([-1,-1])*21.8/2.10)
+        fsam_pos_ct=FSAM_center_pos_um + delta_fsam)
 
-    assert (fpam_center_ct_pix - np.array([1,1]) ==
-        pytest.approx(EXCAM_center_pos_pix, abs=0.05))
-    assert (fsam_center_ct_pix - np.array([1,1]) ==
-        pytest.approx(EXCAM_center_pos_pix, abs=0.05))
+    # Pixel pitch of Roman CGI and conversion from um to mas as-designed
+    assert (fpam_center_ct_pix + delta_fpam[0]/21.8*2.67813262 ==
+        pytest.approx(EXCAM_center_pos_pix, abs=1e-9))
+    assert (fsam_center_ct_pix + delta_fsam[0]/21.8*2.073031542 ==
+        pytest.approx(EXCAM_center_pos_pix, abs=1e-9))
 
 def test_ct_map():
     """ 
