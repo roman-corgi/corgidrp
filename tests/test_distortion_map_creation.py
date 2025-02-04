@@ -8,6 +8,9 @@ import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.data as data
 
+import astropy
+from astropy.io import ascii
+
 def test_distortion():
     """ 
     Generate a simulated image and test the distortion map creation as part of the boresight calibration.
@@ -26,13 +29,17 @@ def test_distortion():
 
     image_path = os.path.join(datadir, 'simcal_astrom.fits')
     source_match_path = os.path.join(datadir, 'guesses.csv')
+    matches = ascii.read(source_match_path)
 
     # open the image
     dataset = data.Dataset([image_path])
 
     # perform the astrometric calibration
-    # feed in the correct matches
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, field_matches=[source_match_path])
+    # feed in the correct matches and use only ~100 randomly selected stars
+    rng = np.random.default_rng(seed=17)
+    select_stars = rng.choice(len(matches), size=150, replace=False)
+
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, field_matches=[matches[select_stars]])
 
     ## check that the distortion map does not create offsets greater than 4[mas]
         # compute the distortion maps created from the best fit coeffs
@@ -47,9 +54,9 @@ def test_distortion():
     xorig -= x0
 
         # get the number of fitting params from the order
-    fitorder = coeffs[1]
+    fitorder = int(coeffs[1])
     fitparams = (fitorder + 1)**2
-    true_fitorder = expected_coeffs[-1]
+    true_fitorder = int(expected_coeffs[-1])
     true_fitparams = (true_fitorder + 1)**2
 
         # reshape the coeff arrays
