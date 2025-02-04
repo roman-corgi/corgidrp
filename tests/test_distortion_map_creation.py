@@ -39,7 +39,7 @@ def test_distortion():
     rng = np.random.default_rng(seed=17)
     select_stars = rng.choice(len(matches), size=150, replace=False)
 
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, field_matches=[matches[select_stars]])
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, field_matches=[matches[select_stars]], find_distortion=True)
 
     ## check that the distortion map does not create offsets greater than 4[mas]
         # compute the distortion maps created from the best fit coeffs

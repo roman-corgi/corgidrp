@@ -848,7 +848,7 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
   
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
-                          frames_to_combine=None, find_distortion=True, fitorder=3, position_error=None):
+                          frames_to_combine=None, find_distortion=False, fitorder=3, position_error=None):
     """
     Perform the boresight calibration of a dataset.
     
@@ -865,7 +865,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         platescale_tol (float): A tolerance for finding source matches within a fraction of the initial plate scale guess (default: 0.1)
         center_radius (float): Percent of the image to compute plate scale and north angle from, centered around the image center (default: 0.9 -- ie: 90% of the image is used)
         frames_to_combine (int): The number of frames to combine in a dataset (default: None)
-        find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: True)
+        find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: False)
         fitorder (int): The order of legendre polynomials used to fit the distortion map (default: 3)
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
 
@@ -921,7 +921,6 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     for i in range(len(dataset)):
         in_dataset = corgidrp.data.Dataset([dataset[i]])
         image = dataset[i].data
-        matched_sources = matched_sources_multiframe[i]
 
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
@@ -932,11 +931,13 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         target_coord_tab['DEC'] = [dataset[i].ext_hdr['CRVAL2']]
         target_coord_tables.append(target_coord_tab)
 
-        # run automated source finder if no matches are given
-        if field_matches is None:
+        # run automated source finder if field_matches are passed but distortion is also being computed
+
+        if field_matches is not None and find_distortion is False:
+            matched_sources = matched_sources_multiframe[i]
+        else:
             found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
             matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
-            matched_sources_multiframe.append(matched_sources)
 
         # compute the calibration properties
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
