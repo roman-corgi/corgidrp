@@ -271,11 +271,11 @@ def convert_to_electrons(input_dataset, k_gain):
     kgain_cube = kgain_dataset.all_data
 
     kgain = k_gain.value #extract from caldb
-    error_frame = kgain_dataset[0].data * k_gain.error #kgain_cube * error?
+    error_frame = kgain_cube * k_gain.error
     kgain_cube *= kgain
     
     #scale also the old error with kgain and propagate the error 
-    kgain_dataset.rescale_error(kgain, "kgain") #should be 2/3 dim?
+    kgain_dataset.rescale_error(kgain, "kgain") 
     kgain_dataset.add_error_term(error_frame, "kgain_error")
 
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
