@@ -944,7 +944,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
 
         # return a single AstrometricCalibration data file
-        astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1], np.nan, np.nan])
+        astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1], np.inf, np.inf])
         astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=in_dataset)
         astroms.append(astrom_cal)
 
@@ -959,7 +959,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, ref_star_pos=target_coord_tables, position_error=position_error)
         distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder)
     else:
-        distortion_coeffs = (np.array([np.nan]), np.nan)
+        distortion_coeffs = (np.array([np.inf]), np.inf)
 
     astromcal_data = np.concatenate((np.array([avg_ra, avg_dec, avg_platescale, avg_northangle]), distortion_coeffs[0], np.array([distortion_coeffs[1]])), axis=0)
     astroms_dataset = corgidrp.data.Dataset(astroms)
