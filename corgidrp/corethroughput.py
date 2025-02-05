@@ -417,7 +417,11 @@ def ct_map(
     psf_pix,
     fpam_pix,
     ct,
-    target_pix,
+    target_pix=None,
+    x_range=None,
+    y_range=None,
+    n_gridx=None,
+    n_gridy=None,
     ):
     """
     Function satisfying CTC requirement 1090883.
@@ -435,7 +439,16 @@ def ct_map(
       target_pix (array): Mx2 array containing the pixel positions for M target
         pixels where the core throughput will be derived by interpolation. the
         target pixels are measured with respect the center of the focal plane
-        mask in (fractional) EXCAM pixels.
+        mask in (fractional) EXCAM pixels. Default is None. In this case, a
+        rectangular grid of pixel positions is used. See next options.
+
+      x_range (array): Two values [xmin, xmax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the center
+        of the FPM. Default values are [-23,23].
+
+      y_range (array): Two values [xmin, xmax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the center
+        of the FPM. Default values are [-23,23].
 
     Returns:
       Core throughput map: 3-dimensional array (x,y,ct_target) where (x,y) is
