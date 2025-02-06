@@ -6,9 +6,13 @@ import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas, ENF
 
-def add_photon_noise(input_dataset, kgain, detector_params):
+def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     """
-    Propagate the photon/shot noise determined from the image signal to the error map. 
+    Propagate the Poisson/shot noise determined from the image signal to the error map. 
+    Estimation of photon/poisson/shot noise by interpolation of the photon transfer curve,
+    added excess noise in case of em_gain > 1.
+    Especially useful when a dataset has very few frames so that the shot noise is not
+    accurately obtained by averaging the frames.
 
     Args:
        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2a-level)
@@ -16,7 +20,7 @@ def add_photon_noise(input_dataset, kgain, detector_params):
        detector_params (corgidrp.data.DetectorParams): detector parameters calibration object
 
     Returns:
-        corgidrp.data.Dataset: photon noise propagated to the image error extensions of the input dataset
+        corgidrp.data.Dataset: shot noise propagated to the image error extensions of the input dataset
     """
     # you should make a copy the dataset to start
     phot_noise_dataset = input_dataset.copy()
@@ -35,7 +39,7 @@ def add_photon_noise(input_dataset, kgain, detector_params):
                 em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_A"]
             except: # otherwise use commanded EM gain
                 em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
-        #estimate of photon/shot noise by interpolation of the photon transfer curve
+        #estimate of photon/poisson/shot noise by interpolation of the photon transfer curve
         interp_func = interp1d(ptc[:,0], ptc[:,1], kind='linear', fill_value='extrapolate')
 
         phot_err = interp_func(frame.data)
@@ -44,11 +48,11 @@ def add_photon_noise(input_dataset, kgain, detector_params):
         if em_gain > 1:
             nem = detector_params.params['Nem']
             phot_err *= ENF(em_gain, nem)           
-        frame.add_error_term(phot_err, "photnoise_error")
+        frame.add_error_term(phot_err, "shotnoise_error")
     
     new_all_err = np.array([frame.err for frame in phot_noise_dataset.frames])        
     
-    history_msg = "photon noise propagated to error map"
+    history_msg = "Poisson/shot noise propagated to error map"
     # update the output dataset
     phot_noise_dataset.update_after_processing_step(history_msg, new_all_err = new_all_err)
 

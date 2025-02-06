@@ -554,9 +554,7 @@ class Image():
         elif scale_factor.ndim != 2 or scale_factor.shape != self.data.shape:
             raise ValueError("we expect a 2-dimensional input array with dimensions {0} or a float value".format(self.data.shape))
 
-        #first layer is always the updated combined error
         self.err = self.err*scale_factor
-        #self.err_hdr["Layer_1"] = "combined_error"
 
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(scale_name)
