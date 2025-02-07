@@ -73,7 +73,7 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
 
     Returns:
         binary_offset (np.array): List of [x,y] offsets in respective directions
-        
+        fit_errs (np.array): Array of [x,y] fitting errors
     """
     #### Centroid on location of star ###
     yind = int(ystar_guess)
