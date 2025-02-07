@@ -1,9 +1,12 @@
 import os
 import pytest
 import numpy as np
+import astropy.time as time
 from astropy.io import fits
 from scipy.signal import decimate
 
+import corgidrp
+import corgidrp.data as data
 from corgidrp.mocks import create_default_headers
 from corgidrp.data import Image, Dataset
 from corgidrp import corethroughput
@@ -13,6 +16,11 @@ ct_filepath = os.path.join(os.path.dirname(__file__), 'test_data')
 err = np.ones([1,1024,1024]) * 0.5
 # Default headers
 prhd, exthd = create_default_headers()
+
+# Generate a calibration file with the FPAM and FSAM rotation matrices if it does not exist
+if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamRotMat_2024-02-10T00:00:00.000.fits")):
+    default_rot = data.FpamFsamRotMat([], date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
+    default_rot.save(filedir=corgidrp.default_cal_dir)
 
 def setup_module():
     """

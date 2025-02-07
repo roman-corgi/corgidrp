@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from astropy.io import fits, ascii
 from scipy.interpolate import griddata
 
+import corgidrp
 from corgidrp.data import Dataset
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -283,6 +284,8 @@ def fpam_mum2pix(
         rot_matrix = fits.getdata(fpam2excam_matrix)
     except:
         raise OSError('The rotation matrix for FPAM could not be loaded.')
+
+    breakpoint()
 
     # Enforce vertical array. Transpose if it is a horizontal array
     try:
