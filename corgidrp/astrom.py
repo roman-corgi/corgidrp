@@ -438,7 +438,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
 
     return matched_image_to_field
 
-def fit_astrom_solution(params, fitorder, platescale, rotangle, pos1, meas_offset, sky_offset, meas_errs, x0, y0):
+def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_offset, sky_offset, meas_errs, x0, y0):
     '''
     Cost function used to fit the legendre polynomials for distortion mapping.
 
@@ -838,7 +838,7 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
     
     ## OPTIMIZE 
     # first_stars_, offsets_, true_offsets_, errs_ = first_stars, offsets, true_offsets, errs
-    (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, initial_guess, 
+    (distortion_coeffs, _) = optimize.leastsq(fit_distortion_solution, initial_guess, 
                                               args=(fitorder, platescale, 
                                                 northangle, pos1, meas_offset, 
                                                 sky_offset, meas_errs, x0, y0))
