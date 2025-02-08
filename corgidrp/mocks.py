@@ -17,6 +17,7 @@ from corgidrp.data import Image
 import corgidrp.detector as detector
 from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
+from pyklip.instruments.utils.wcsgen import generate_wcs
 
 from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
@@ -2176,7 +2177,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Add WCS header info, if provided
         if wcs_header is None:
-            wcs_header = fits.header.Header.fromstring(default_wcs_string,sep='\n')
+            wcs_header = generate_wcs(roll_angles[i], 
+                                      [psfcentx,psfcenty],
+                                      platescale=0.0218).to_header()
+            
             # wcs_header._cards = wcs_header._cards[-1]
         exthdr.extend(wcs_header)
 

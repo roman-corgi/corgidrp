@@ -182,11 +182,9 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
         Handle nans & propagate DQ array
-        Rotate north at the end
         What info is missing from output dataset headers?
         Add comments to new ext header cards
-        How to populate HISTORY header kw?
-
+        
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
         reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
