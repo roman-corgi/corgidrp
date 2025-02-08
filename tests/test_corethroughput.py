@@ -127,8 +127,9 @@ def test_fpm_pos():
     # EXCAM's pixel pitch and theoretical values for mas/um for FPAM and FSAM
     FPAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.67
     FSAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.10
-    delta_fpam = corethroughput.fpam_mum2pix(np.array([10,10]))
-    delta_fsam = corethroughput.fsam_mum2pix(np.array([10,10]))
+    fpam2excam_matrix, fsam2excam_matrix = corethroughput.read_rot_matrix()
+    delta_fpam = corethroughput.pam_mum2pix(fpam2excam_matrix, np.array([10,10]))
+    delta_fsam = corethroughput.pam_mum2pix(fsam2excam_matrix, np.array([10,10]))
     fpam_center_ct_pix, fsam_center_ct_pix = \
         corethroughput.get_ct_fpm_center(EXCAM_center_pos_pix,
         fpam_pos_cor=FPAM_center_pos_um,
@@ -136,11 +137,10 @@ def test_fpm_pos():
         fsam_pos_cor=FSAM_center_pos_um,
         fsam_pos_ct=FSAM_center_pos_um + delta_fsam)
 
-    # Pixel pitch of Roman CGI and conversion from um to mas as-designed
-    assert (fpam_center_ct_pix + delta_fpam[0]/21.8*2.67813262 ==
-        pytest.approx(EXCAM_center_pos_pix, abs=1e-9))
-    assert (fsam_center_ct_pix + delta_fsam[0]/21.8*2.073031542 ==
-        pytest.approx(EXCAM_center_pos_pix, abs=1e-9))
+    assert np.all(fpam_center_ct_pix + delta_fpam[0]*np.abs(fpam2excam_matrix[0][1]) ==
+        EXCAM_center_pos_pix)
+    assert np.all(fsam_center_ct_pix + delta_fsam[0]*np.abs(fsam2excam_matrix[0][1]) ==
+        EXCAM_center_pos_pix)
 
 def test_ct_map():
     """ 

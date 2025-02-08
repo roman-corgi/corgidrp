@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+from astropy.time import Time
 from astropy.io import fits, ascii
 from scipy.interpolate import griddata
 
@@ -264,71 +265,50 @@ def estimate_psf_pix_and_ct(
 
     return psf_pix, psf_ct
 
-def fpam_mum2pix(
-    delta_fpam_pos_um,
-    fpam2excam_matrix=None,
-    ):
-    """ Translate FPAM delta positions in micrometers to EXCAM pixels.
-    Args:
-      delta_fpam_pos_um (array): Value of the FPAM delta positions in units of
-        micrometers.
-      fpam2excam_matrix (string): FITS file with full path included that contains
-        the rotation matrix from delta FPAM positions in mum to EXCAM pixels.
-    Returns:
-      Value of the FPAM delta position in units of EXCAM pixels
-    """
-    if fpam2excam_matrix == None:
-         fpam2excam_matrix = os.path.join(here, 'data', 'fpm_matrices',
-           'fpam_to_excam_modelbased.fits')
+def read_rot_matrix():
+    """ Read latest calibration file with the FPAM and FSAM rotation matrices."""
+
+    # Check for latest time with FPAM/FSAM rotation matrices
     try:
-        rot_matrix = fits.getdata(fpam2excam_matrix)
+        idx1 = len('FpamFsamRotMat')
+        for _, _, files in os.walk(corgidrp.default_cal_dir):
+            calfile_date = [Time(file[idx1+1:-5]) for file in files if 'FpamFsamRotMat' in file]
+        calfile_latest = np.array(calfile_date).max().value
+        rot_matrix = fits.getdata(os.path.join(corgidrp.default_cal_dir,
+            f'FpamFsamRotMat_{calfile_latest}.fits'))
+        try:
+            fpam2excam_matrix = rot_matrix[0]
+            fsam2excam_matrix = rot_matrix[1]
+        except:
+            raise ValueError(f'The data in {calfile_latest} does not have two (2x2) rotation matrices.')
     except:
-        raise OSError('The rotation matrix for FPAM could not be loaded.')
+        raise OSError('The rotation matrix for FPAM and FSAM could not be loaded.')
 
-    breakpoint()
+    return fpam2excam_matrix, fsam2excam_matrix
 
+def pam_mum2pix(
+    pam2excam_matrix,
+    delta_pam_pos_um,
+    ):
+    """ Translate PAM delta positions in micrometers to EXCAM pixels.
+    Args:
+      pam2excam_matrix (array): Rotation matrix to translate delta PAM positions
+        in micrometer to EXCAM (direct imaging) pixels
+      delta_pam_pos_um (array): Value of the PAM delta positions in units of
+        micrometer.
+    Returns:
+      Value of the PAM delta position in units of EXCAM (direct imaging) pixels
+    """
     # Enforce vertical array. Transpose if it is a horizontal array
     try:
-        if delta_fpam_pos_um.shape != (2,1):
-            delta_fpam_pos_um = np.array([delta_fpam_pos_um]).transpose()
-            if delta_fpam_pos_um.shape != (2,1):
-                raise ValueError('Input delta FPAM must be a 2-1 array')
+        if delta_pam_pos_um.shape != (2,1):
+            delta_pam_pos_um = np.array([delta_pam_pos_um]).transpose()
+            if delta_pam_pos_um.shape != (2,1):
+                raise ValueError('Input delta PAM must be a 2-1 array')
     except:
-        raise ValueError('Input delta FPAM must be a 2-1 array')
+        raise ValueError('Input delta PAM must be a 2-1 array')
 
-    return (rot_matrix @ delta_fpam_pos_um).transpose()[0]
-
-def fsam_mum2pix(
-    delta_fsam_pos_um,
-    fsam2excam_matrix=None,
-    ):
-    """ Translate FSAM delta positions in micrometers to EXCAM pixels.
-    Args:
-      delta_fsam_pos_um (array): Value of the FSAM delta positions in units of
-        micrometers.
-      fsam2excam_matrix (string): FITS file with full path included that contains
-        the rotation matrix from delta FSAM positions in mum to EXCAM pixels.
-    Returns:
-      Value of the FSAM delta position in units of EXCAM pixels
-    """
-    if fsam2excam_matrix == None:
-         fsam2excam_matrix = os.path.join(here, 'data', 'fpm_matrices',
-           'fsam_to_excam_modelbased.fits')
-    try:
-        rot_matrix = fits.getdata(fsam2excam_matrix)
-    except:
-        raise OSError('The rotation matrix for FSAM could not be loaded.')
-
-    # Enforce vertical array. Transpose if it is a horizontal array
-    try:
-        if delta_fsam_pos_um.shape != (2,1):
-            delta_fsam_pos_um = np.array([delta_fsam_pos_um]).transpose()
-            if delta_fsam_pos_um.shape != (2,1):
-                raise ValueError('Input delta FSAM must be a 2-1 array')
-    except:
-        raise ValueError('Input delta FSAM must be a 2-1 array')
-
-    return (rot_matrix @ delta_fsam_pos_um).transpose()[0]
+    return (pam2excam_matrix @ delta_pam_pos_um).transpose()[0]
 
 def get_ct_fpm_center(
     fpm_center_cor,
@@ -336,8 +316,6 @@ def get_ct_fpm_center(
     fpam_pos_ct=None,
     fsam_pos_cor=None,
     fsam_pos_ct=None,
-    fpam2excam_matrix=None,
-    fsam2excam_matrix=None,
     ):
     """
     1090882 - Given 1) the location of the center of the FPM coronagraphic mask
@@ -357,10 +335,9 @@ def get_ct_fpm_center(
         positions during coronagraphic observations. Units: micrometers.
       fsam_pos_ct (array): 2-dimensional array with the [H,V] values of the FSAM
         positions during core throughput observations. Units: micrometers.
-      fpam2excam_matrix (string): FITS file with full path included that contains
-        the rotation matrix from delta FPAM positions in mum to EXCAM pixels.
-      fsam2excam_matrix (string): FITS file with full path included that contains
-        the rotation matrix from delta FSAM positions in mum to EXCAM pixels.
+
+      FPAM and FSAM rotation matrices are read from a FpamFsamRotMat calibration
+      file with the date closest to the time of running this script.
 
         Note: the use of the delta FPAM/FSAM positions and the rotation matrices
         is based on the prescription provided on 1/14/25:
@@ -373,7 +350,7 @@ def get_ct_fpm_center(
 
     Returns:
       New center of the FPAM and FSAM mask during core throughput observations
-      in units of EXCAM pixels.
+      in units of EXCAM (direct imaging) pixels.
     """
     # Checks
     try:
@@ -391,17 +368,17 @@ def get_ct_fpm_center(
     if (np.any(fpm_center_cor <= 23) or np.any(fpm_center_cor >= 1000)):
       raise ValueError("Input focal plane mask's center is too close to the edges")
 
+    # Read FPAM and FSAM rotation matrices from their calibration file
+    fpam2excam_matrix, fsam2excam_matrix = read_rot_matrix()
     # Translate FPAM delta positions into EXCAM delta pixels
     delta_fpam_pos_um = np.array([[fpam_pos_ct[0]-fpam_pos_cor[0]],
          [fpam_pos_ct[1]-fpam_pos_cor[1]]])
-    delta_fpam_pos_px = fpam_mum2pix(delta_fpam_pos_um,
-        fpam2excam_matrix=fpam2excam_matrix)
+    delta_fpam_pos_px = pam_mum2pix(fpam2excam_matrix, delta_fpam_pos_um)
 
     # Translate FSAM positions into EXCAM pixels
     delta_fsam_pos_um = np.array([[fsam_pos_ct[0]-fsam_pos_cor[0]],
          [fsam_pos_ct[1]-fsam_pos_cor[1]]])
-    delta_fsam_pos_px = fsam_mum2pix(delta_fsam_pos_um,
-        fsam2excam_matrix=fsam2excam_matrix)
+    delta_fsam_pos_px = pam_mum2pix(fsam2excam_matrix, delta_fsam_pos_um)
 
     # New FPM center in units of EXCAM pixels
     fpam_center_ct = fpm_center_cor + delta_fpam_pos_px
