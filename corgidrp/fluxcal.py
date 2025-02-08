@@ -8,8 +8,10 @@ from astropy.io import fits, ascii
 from astropy.coordinates import SkyCoord
 import corgidrp
 from photutils.aperture import CircularAperture
+from photutils.background import LocalBackground
 from photutils.psf import fit_2dgaussian
 from scipy import integrate
+from corgidrp.astrom import centroid
 import urllib
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
@@ -244,37 +246,73 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     
     return irrad
 
-def aper_phot(image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5):
+def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', subpixels=5, 
+              background_sub = False, r_in = 5 , r_out = 10, centering_method='xy'):
     """
-    returns the flux in photo-electrons of a point source at the target Ra/Dec position
-    and using a circular aperture by applying aperture_photometry of photutils.
-    We assume that background subtraction is already done.
-    
+    Returns the flux in photo-electrons of a point source using aperture photometry,
+    either by using a provided x,y center or by converting WCS coordinates to pixel positions.
+    An option for background subtraction using an annulus is also available.
+
     Args:
-        image (corgidrp.data.Image): combined source exposure image
-        encircled_radius (float): pixel radius of the circular aperture to sum the flux
-        frac_enc_energy (float): fraction of encircled energy inside the encircled_radius of the PSF, inverse aperture correction, 0...1
-        method (str): {‘exact’, ‘center’, ‘subpixel’}, The method used to determine the overlap of the aperture on the pixel grid, 
-        default is 'exact'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
-        subpixels (int): For the 'subpixel' method, resample pixels by this factor in each dimension. That is, each pixel is divided 
-                         into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
-    
+        image (corgidrp.data.Image): Combined source exposure image.
+        x_center (float): The x-coordinate of the star's centroid.
+        y_center (float): The y-coordinate of the star's centroid.
+        encircled_radius (float): Pixel radius of the circular aperture to sum the flux.
+        frac_enc_energy (float): Fraction of encircled energy inside the aperture (0 < fee <= 1).
+        method (str): {‘exact’, ‘center’, ‘subpixel’}, method to determine the overlap of the aperture on the pixel grid.
+        subpixels (int): For the 'subpixel' method, number of subpixels per pixel in each dimension.
+        background_sub (boolean): background can be determine from a circular annulus (default: False).
+        r_in (float): inner radius of circular annulus in pixels, (default: 5)
+        r_out (float): outer radius of circular annulus in pixels, (default: 10)
+        centering_method (str): Method to use for centering the aperture. Options are:
+            'xy'  - Use the provided x_center and y_center.
+            'wcs' - Convert the RA/DEC (from image.pri_hdr) to pixel coordinates using WCS (from image.ext_hdr).
+
     Returns:
-        float: integrated flux of the point source in unit photo-electrons and corresponding error
+        tuple: (flux, flux_error) where both are background-subtracted values adjusted for the fraction of encircled energy.
     """
-    #calculate the x and y pixel positions using the RA/Dec target position and applying WCS conversion
-    if frac_enc_energy <=0 or frac_enc_energy > 1:
+    if frac_enc_energy <= 0 or frac_enc_energy > 1:
         raise ValueError("frac_enc_energy {0} should be within 0 < fee <= 1".format(str(frac_enc_energy)))
-    ra = image.pri_hdr['RA']
-    dec = image.pri_hdr['DEC']
     
-    target_skycoord = SkyCoord(ra = ra, dec = dec, unit='deg')
-    w = wcs.WCS(image.ext_hdr)
-    pix = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin = 1)
-    aper = CircularAperture(pix, encircled_radius)
-    aperture_sums, aperture_sums_errs = \
-        aper.do_photometry(image.data, error = image.err[0], mask = image.dq.astype(bool), method = method, subpixels = subpixels)
-    return aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy
+    dat = image.data.copy()
+
+    # Determine the center position based on the selected method.
+    if centering_method == 'wcs':
+        # Use WCS conversion: get RA/DEC from primary header and convert to pixel coordinates.
+        ra = image.pri_hdr['RA']
+        dec = image.pri_hdr['DEC']
+        target_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
+        w = wcs.WCS(image.ext_hdr)
+        pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
+    elif centering_method == 'xy':
+        # Use the provided centroid positions.
+        x_center, y_center = centroid(image.data)
+        pos = (x_center, y_center)
+    else:
+        raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
+    
+    if background_sub:
+        #This is essentially the median in a circular annulus 
+        bkg = LocalBackground(r_in, r_out)
+        back = bkg(dat, pos[0], pos[1], mask = image.dq.astype(bool))
+        dat -= back
+
+    # Create the circular aperture at the determined position.
+    aper = CircularAperture(pos, encircled_radius)
+    aperture_sums, aperture_sums_errs = aper.do_photometry(
+        image.data,
+        error=image.err[0],
+        mask=image.dq.astype(bool),
+        method=method,
+        subpixels=subpixels
+    )
+    
+    # Adjust for the fraction of encircled energy.
+    if background_sub:
+        return [aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy, back]
+    else:
+        return [aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy]
+
 
 def phot_by_gauss2d_fit(image, fwhm, fit_shape = None):
     """
@@ -311,7 +349,8 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape = None):
     flux_err = psf_phot.results['flux_err'][0]
     return flux, flux_err
 
-def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5):
+def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy = 1., method = 'subpixel', subpixels = 5,
+                           background_sub = False, r_in = 5 , r_out = 10, centering_method='xy'):
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by aperture photometry.
@@ -323,7 +362,7 @@ def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy =
         encircled_radius (float): pixel radius of the circular aperture to sum the flux
         frac_enc_energy (float): fraction of encircled energy inside the encircled_radius of the PSF, inverse aperture correction, 0...1
         method (str): {‘exact’, ‘center’, ‘subpixel’}, The method used to determine the overlap of the aperture on the pixel grid, 
-        default is 'exact'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
+        default is 'subpixel'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
         subpixels (int): For the 'subpixel' method, resample pixels by this factor in each dimension. That is, each pixel is divided 
                          into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
     
@@ -342,19 +381,30 @@ def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy =
     filter_file = get_filter_name(image)
     # read the transmission curve from the color filter file
     wave, filter_trans = read_filter_curve(filter_file)
-    
     calspec_filepath = get_calspec_file(star_name)
     
     # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
     flux_ref = read_cal_spec(calspec_filepath, wave)
     flux = calculate_band_flux(filter_trans, flux_ref, wave)
+
+    if background_sub:
+        ap_sum, ap_sum_err, back = aper_phot(image, encircled_radius, frac_enc_energy, method, subpixels, 
+              background_sub, r_in, r_out, centering_method)
+    else:
+        ap_sum, ap_sum_err = aper_phot(image, encircled_radius, frac_enc_energy, method, subpixels, 
+              background_sub, r_in, r_out, centering_method)
     
-    ap_sum, ap_sum_err = aper_phot(image, encircled_radius, frac_enc_energy, method = method, subpixels = subpixels)
+    # don't we need to do something with exposure here?
+    print("debugging, may need to add exposure time here")
     
     fluxcal_fac = flux/ap_sum
     fluxcal_fac_err = flux/ap_sum**2 * ap_sum_err
     
-    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
+    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), 
+                                          pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
+    
+    fluxcal.ext_hdr["TARGET"] = star_name
+    fluxcal.ext_hdr["CFAMNAME"] = filter_name
     
     return fluxcal
     
