@@ -1,4 +1,5 @@
 import os
+import warnings
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
@@ -6,6 +7,7 @@ import astropy.time as time
 import pandas as pd
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
+from pyklip.instruments.utils.wcsgen import generate_wcs
 from astropy import wcs
 import copy
 import corgidrp
@@ -1349,6 +1351,7 @@ class PyKLIPDataset(pyKLIP_Data):
 
     # TODO: Add more bandpasses, modes to self.wave_hlc
     #       Clarify attribute descriptions
+    #       Add wcs header info!
 
     Attrs:
         input: Input corgiDRP dataset.
@@ -1357,7 +1360,7 @@ class PyKLIPDataset(pyKLIP_Data):
         filenames: file names.
         PAs: position angles.
         wvs: wavelengths.
-        wcs: WCS header information.
+        wcs: WCS header information. Currently None.
         IWA: inner working angle.
         OWA: outer working angle.
         psflib: corgiDRP dataset containing reference PSF observations.
@@ -1376,8 +1379,7 @@ class PyKLIPDataset(pyKLIP_Data):
                  center_include_offset=True):
         """
         Initialize the pyKLIP instrument class for space telescope data.
-        # TODO: Figure out how to input and test WCS data
-                Determine inner working angle based on PAM positions
+        # TODO: Determine inner working angle based on PAM positions
                     - Inner working angle based on Focal plane mask (starts with HLC) + color filter ('1F') for primary mode
                     - Outer working angle based on field stop? (should be R1C1 or R1C3 for primary mode)
         
@@ -1575,10 +1577,15 @@ class PyKLIPDataset(pyKLIP_Data):
                 raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
             wvs_all += [1e-6 * CWAVEL] * NINTS
 
-            wcs_hdr = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
-            for j in range(NINTS):
-                wcs_all += [wcs_hdr.deepcopy()]
+            # pyklip will look for wcs.cd, so make sure that attribute exists
+            wcs_obj = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
 
+            if not hasattr(wcs_obj.wcs,'cd'):
+                wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
+            
+            for j in range(NINTS):
+                wcs_all += [wcs_obj.deepcopy()]
+                
         try:
             input_all = np.concatenate(input_all)
         except ValueError:
