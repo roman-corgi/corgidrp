@@ -2030,7 +2030,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                           data_shape = [100,100],
                           centerxy = None,
                           outdir = None,
-                          noise_amp = 1e-11,
+                          st_amp = 100.,
+                          noise_amp = 1.,
                           ref_psf_spread=1. ,
                           pl_contrast=1e-3
                           ):
@@ -2054,6 +2055,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             to image center.
         outdir (str, optional): Desired output directory. If not provided, data will not be 
             saved. Defaults to None.
+        st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 10000.
         noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1e-11.
         ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
             reference PSFs. Defaults to 1.
@@ -2122,8 +2124,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         else:
             sci_sigma = 2.5
             ref_sigma = sci_sigma * ref_psf_spread
-            amp = 100
-            pl_amp = amp * pl_contrast
+            pl_amp = st_amp * pl_contrast
 
             label = 'ref' if i>= n_sci else 'sci'
             sigma = ref_sigma if i>= n_sci else sci_sigma
@@ -2139,7 +2140,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                                       xoffset=psf_off_xy[0],
                                       yoffset=psf_off_xy[1],
                                       sigma=sigma,
-                                      amp=amp)
+                                      amp=st_amp)
             
             # Add some noise
             rng = np.random.default_rng(seed=123+2*i)
