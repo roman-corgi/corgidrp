@@ -1263,30 +1263,30 @@ class TrapCalibration(Image):
             raise ValueError("File that was loaded was not a TrapCalibration file.")
         
 
-class NDFilterCalibration(Image):
+class NDFilterSweetSpotDataset(Image):
     """
-    Class for an ND filter calibration product. Typically stores N×3 data:
-    [OD, x_center, y_center] for each measurement.
+    Class for an ND filter sweet spot dataset product.
+    Typically stores an N×3 array of data:
+      [OD, x_center, y_center] for each measurement.
 
     Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file 
-            to read in OR the 2D array of ND filter calibration data (N×3).
-        pri_hdr (astropy.io.fits.Header): the primary header (required only if 
+        data_or_filepath (str or np.array): Either the filepath to the FITS file 
+            to read in OR the 2D array of ND filter sweet-spot data (N×3).
+        pri_hdr (astropy.io.fits.Header): The primary header (required only if 
             raw 2D data is passed in).
-        ext_hdr (astropy.io.fits.Header): the image extension header (required 
+        ext_hdr (astropy.io.fits.Header): The image extension header (required 
             only if raw 2D data is passed in).
-        input_dataset (corgidrp.data.Dataset): the input dataset used to produce 
-            this calibration file (optional). If this is a new ND filter calibration, 
-            you should pass in the dataset so that the parent filenames can be 
-            recorded in the headers.
-        err (np.array): optional 3D error array for the data
-        dq (np.array): optional 2D data-quality mask for the data
-        err_hdr (astropy.io.fits.Header): optional error extension header
+        input_dataset (corgidrp.data.Dataset): The input dataset used to produce 
+            this calibration file (optional). If this is a new product, you should 
+            pass in the dataset so that the parent filenames can be recorded.
+        err (np.array): Optional 3D error array for the data.
+        dq (np.array): Optional 2D data-quality mask for the data.
+        err_hdr (astropy.io.fits.Header): Optional error extension header.
 
     Attributes:
-        od_values (np.array): the array of OD measurements (length N).
-        x_values (np.array): the array of x-centroid positions (length N).
-        y_values (np.array): the array of y-centroid positions (length N).
+        od_values (np.array): Array of OD measurements (length N).
+        x_values (np.array): Array of x-centroid positions (length N).
+        y_values (np.array): Array of y-centroid positions (length N).
     """
 
     def __init__(
@@ -1299,7 +1299,7 @@ class NDFilterCalibration(Image):
         dq=None,
         err_hdr=None
     ):
-        # Run the standard Image constructor
+        # Run the standard Image constructor.
         super().__init__(
             data_or_filepath,
             pri_hdr=pri_hdr,
@@ -1309,47 +1309,107 @@ class NDFilterCalibration(Image):
             err_hdr=err_hdr
         )
 
-        # 1. Check data shape: expect Nx3 for ND filter calibration
+        # 1. Check data shape: expect N×3 array for the sweet-spot dataset.
         if self.data.ndim != 2 or self.data.shape[1] != 3:
             raise ValueError(
-                "NDFilterCalibration data must be a 2D array of shape (N, 3). "
+                "NDFilterSweetSpotDataset data must be a 2D array of shape (N, 3). "
                 f"Received shape {self.data.shape}."
             )
 
-        # 2. Parse columns to attributes for convenience
-        #    Column 0: OD, Column 1: x_center, Column 2: y_center
+        # 2. Parse the columns into convenient attributes.
+        #    Column 0: OD, Column 1: x_center, Column 2: y_center.
         self.od_values = self.data[:, 0]
         self.x_values = self.data[:, 1]
         self.y_values = self.data[:, 2]
 
-        # 3. If this is a new NDFilterCalibration (i.e., ext_hdr was passed in),
-        #    record the metadata and set DATATYPE.
-        #    If reading from a file on disk, ext_hdr might already have DATATYPE set.
+        # 3. If creating a new product (i.e. ext_hdr was passed in), record metadata.
         if ext_hdr is not None:
-            # If the user provided an input dataset, record the parent filenames
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
-
-            # Mark it as an NDFilterCalibration product
-            self.ext_hdr['DATATYPE'] = 'NDFilterCalibration'
-
-            # TODO: store some summary metadata in the header?
-
-            # Add history
+            self.ext_hdr['DATATYPE'] = 'NDFilterSweetSpotDataset'
             self.ext_hdr['HISTORY'] = (
-                f"NDFilterCalibration created from {self.ext_hdr.get('DRPNFILE','?')} frames"
+                f"NDFilterSweetSpotDataset created from {self.ext_hdr.get('DRPNFILE','?')} frames"
             )
-
-            # Give it a default filename if you like
+            # Optionally, define a default filename.
             if input_dataset is not None and len(input_dataset) > 0:
                 base_name = input_dataset[0].filename.split(".fits")[0]
-                self.filename = f"{base_name}_ndfcal.fits"
+                self.filename = f"{base_name}_ndfsweet.fits"
             else:
-                self.filename = "NDFilterCalibration.fits"
+                self.filename = "NDFilterSweetSpotDataset.fits"
 
-        # 4. If reading from a file, verify it’s actually an NDFilterCalibration
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterCalibration':
-            raise ValueError("File that was loaded is not labeled as an NDFilterCalibration file.")
+        # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
+            raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
+
+
+class NDFilterOD(Image):
+    """
+    Class for an ND filter calibration product (expected OD for a given observation).
+    Typically stores a 1×1 array containing the expected optical density.
+
+    Args:
+        data_or_filepath (str or np.array): Either the filepath to the FITS file 
+            to read in OR a 2D array containing the expected OD (shape 1×1).
+        pri_hdr (astropy.io.fits.Header): The primary header (required only if 
+            raw 2D data is passed in).
+        ext_hdr (astropy.io.fits.Header): The image extension header (required 
+            only if raw 2D data is passed in).
+        input_dataset (corgidrp.data.Dataset): The input dataset used to produce 
+            this calibration file (optional).
+        err (np.array): Optional 3D error array for the data.
+        dq (np.array): Optional 2D data-quality mask for the data.
+        err_hdr (astropy.io.fits.Header): Optional error extension header.
+
+    Attributes:
+        expected_od (float): The computed expected optical density.
+    """
+
+    def __init__(
+        self,
+        data_or_filepath,
+        pri_hdr=None,
+        ext_hdr=None,
+        input_dataset=None,
+        err=None,
+        dq=None,
+        err_hdr=None
+    ):
+        # Run the standard Image constructor.
+        super().__init__(
+            data_or_filepath,
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
+            err=err,
+            dq=dq,
+            err_hdr=err_hdr
+        )
+
+        # 1. Check data shape: expect a 2D array of shape (1, 1).
+        if self.data.ndim != 2 or self.data.shape != (1, 1):
+            raise ValueError(
+                "NDFilterOD data must be a 2D array of shape (1, 1). "
+                f"Received shape {self.data.shape}."
+            )
+
+        # 2. Save the expected OD value as an attribute.
+        self.expected_od = self.data[0, 0]
+
+        # 3. If creating a new product, record metadata and mark the product type.
+        if ext_hdr is not None:
+            if input_dataset is not None:
+                self._record_parent_filenames(input_dataset)
+            self.ext_hdr['DATATYPE'] = 'NDFilterOD'
+            self.ext_hdr['HISTORY'] = "NDFilterOD created from expected OD computation."
+            # Optionally define a default filename.
+            if input_dataset is not None and len(input_dataset) > 0:
+                base_name = input_dataset[0].filename.split(".fits")[0]
+                self.filename = f"{base_name}_ndfcalprod.fits"
+            else:
+                self.filename = "NDFilterOD.fits"
+
+        # 4. Verify the file (if loaded) has the correct DATATYPE.
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterOD':
+            raise ValueError("File loaded is not labeled as an NDFilterOD file.")
 
 
 class FluxcalFactor(Image):
@@ -1450,7 +1510,8 @@ datatypes = { "Image" : Image,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration": TrapCalibration,
               "FluxcalFactor": FluxcalFactor,
-              "NDFilterCalibration": NDFilterCalibration}
+              "NDFilterSweetSpot": NDFilterSweetSpotDataset,
+              "NDFilterOD": NDFilterOD}
 
 def autoload(filepath):
     """
