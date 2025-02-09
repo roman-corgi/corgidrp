@@ -1399,7 +1399,7 @@ class PyKLIPDataset(pyKLIP_Data):
         super(PyKLIPDataset, self).__init__()
 
         # Set filter wavelengths
-        self.wave_hlc = {'1F': 0.575} # micron
+        self.wave_hlc = {'1F': 575e-9} # meters
         
         # Optional variables
         self.center_include_offset = center_include_offset
@@ -1575,7 +1575,9 @@ class PyKLIPDataset(pyKLIP_Data):
                 CWAVEL = self.wave_hlc[CFAMNAME]
             except:
                 raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
-            wvs_all += [1e-6 * CWAVEL] * NINTS
+            
+            # Rounding error introduced here?
+            wvs_all += [CWAVEL] * NINTS
 
             # pyklip will look for wcs.cd, so make sure that attribute exists
             wcs_obj = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
@@ -1594,7 +1596,7 @@ class PyKLIPDataset(pyKLIP_Data):
         filenames_all = np.array(filenames_all)
         filenums_all = np.array(range(len(filenames_all)))
         PAs_all = np.array(PAs_all)
-        wvs_all = np.array(wvs_all)
+        wvs_all = np.array(wvs_all).astype(np.float32)
         wcs_all = np.array(wcs_all)
         PIXSCALE = np.unique(np.array(PIXSCALE))
         if len(PIXSCALE) != 1:

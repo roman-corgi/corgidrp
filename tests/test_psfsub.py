@@ -4,6 +4,12 @@ from corgidrp.data import PyKLIPDataset
 from scipy.ndimage import shift, rotate
 import pytest
 import numpy as np
+import glob
+import os
+from astropy.io import fits
+from pyklip.instruments import Instrument
+from pyklip import parallelized
+from matplotlib.colors import LogNorm
 
 ## Helper functions/quantities
 
@@ -42,16 +48,21 @@ pixscale_arcsec = 0.0218
 iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
 owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
 
+st_amp = 100.
+noise_amp=1e-11
+pl_contrast=1e-4
+
 ## pyKLIP data class tests
 
 def test_pyklipdata_ADI():
 
     rolls = [0,90]
     # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,centerxy=(50.5,50.5))
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+                                              centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-
+    pass
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
 
@@ -59,23 +70,23 @@ def test_pyklipdata_ADI():
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
+        assert roll == rolls[r]
         assert pyklip_dataset._filenames[r] == f'MOCK_sci_roll{roll}.fits_INT1', f"Incorrect roll assignment for frame {r}."
     
-
     # Check ref library is None
     assert pyklip_dataset.psflib is None, "pyklip_dataset.psflib is not None, even though no reference dataset was provided."
 
 def test_pyklipdata_RDI():
-    # TODO: 
-        # checks for reference library
-        # what is pyklip_dataset.psflib.isgoodpsf for?
 
     rolls = [45,180]
+    n_sci = 1
+    n_ref = 1
     # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,centerxy=(50.5,50.5))
+    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-
+    pass
+    
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
 
@@ -83,31 +94,35 @@ def test_pyklipdata_RDI():
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
+        assert roll == rolls[r]
         assert pyklip_dataset._filenames[r] == f'MOCK_sci_roll{roll}.fits_INT1', f"Incorrect roll assignment for frame {r}."
     
-
-    # Check ref library
-    
+    # Check ref library shape
+    assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
+ 
 def test_pyklipdata_ADIRDI():
-    # TODO: checks for reference library
-
+    
     rolls = [45,-45,180]
+    n_sci = 2
+    n_ref = 1
     # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,centerxy=(50.5,50.5))
+    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,
+                                              centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-
-    # Check image is centered properly
+    pass
+    # Check image is recentered properly
     for i,image in enumerate(pyklip_dataset._input):
 
         assert mock_sci.all_data[i,1:,1:] == pytest.approx(image[:-1,:-1]), f"Frame {i} centered improperly."
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
+        assert roll == rolls[r]
         assert pyklip_dataset._filenames[r] == f'MOCK_sci_roll{roll}.fits_INT1', f"Incorrect roll assignment for frame {r}."
     
-
-    # Check ref library   
+    # Check ref library shape
+    assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
 
 def test_pyklipdata_badtelescope():
     mock_sci,mock_ref = create_psfsub_dataset(1,1,[0,0])
@@ -161,7 +176,10 @@ def test_psf_sub_ADI_nocrop():
 
     numbasis = [1]
     rolls = [270+13,270-13]
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
 
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
@@ -217,11 +235,13 @@ def test_psf_sub_RDI_nocrop():
 
     numbasis = [1]
     rolls = [13,0]
-    noise_amp=1e-8
-    pl_contrast=1e-3
+
     mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,ref_psf_spread=1.,
+                                centerxy=(49.5,49.5),
                                 pl_contrast=pl_contrast,
-                                noise_amp=noise_amp)
+                                noise_amp=noise_amp,
+                                st_amp=st_amp
+                                )
 
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
@@ -238,6 +258,24 @@ def test_psf_sub_RDI_nocrop():
         # import matplotlib.pyplot as plt
 
         # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+        # im0 = axes[0].imshow(mock_sci[0].data,origin='lower')
+        # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        # axes[0].scatter(mock_sci[0].ext_hdr['STARLOCX'],mock_sci[0].ext_hdr['STARLOCY'])
+        # axes[0].set_title(f'Sci Input')
+
+        # im1 = axes[1].imshow(mock_ref[0].data,origin='lower')
+        # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+        # axes[1].scatter(mock_ref[0].ext_hdr['STARLOCX'],mock_ref[0].ext_hdr['STARLOCY'])
+        # axes[1].set_title('Ref Input')
+
+        # im2 = axes[2].imshow(mock_sci[0].data - mock_ref[0].data,origin='lower')
+        # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+        # axes[2].scatter(mock_sci[0].ext_hdr['STARLOCX'],mock_sci[0].ext_hdr['STARLOCY'])
+        # axes[2].set_title('Difference')
+
+        # fig.suptitle('Inputs')
+
+        # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
         # im0 = axes[0].imshow(frame.data - np.nanmedian(frame.data),origin='lower')
         # plt.colorbar(im0,ax=axes[0],shrink=0.8)
         # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
@@ -248,12 +286,14 @@ def test_psf_sub_RDI_nocrop():
         # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[1].set_title('Analytical result')
 
-        # im2 = axes[2].imshow(masked_frame - np.nanmedian(frame.data) - analytical_result,origin='lower')
+        # norm = LogNorm(vmin=1e-8, vmax=1, clip=False)
+        # im2 = axes[2].imshow(frame.data - np.nanmedian(frame.data) - analytical_result,
+        #                      origin='lower',norm=None)
         # plt.colorbar(im2,ax=axes[2],shrink=0.8)
         # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[2].set_title('Difference')
 
-        # fig.suptitle('RDI')
+        # fig.suptitle('RDI Result')
 
         # plt.show()
         # plt.close()
@@ -277,10 +317,12 @@ def test_psf_sub_RDI_nocrop():
     
 def test_psf_sub_ADIRDI_nocrop():
 
-    numbasis = [1,2]
+    numbasis = [1,2,3,4]
     rolls = [13,-13,0]
     mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
-                                pl_contrast=1e-3)
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
     
 
     analytical_result1 = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
@@ -306,12 +348,12 @@ def test_psf_sub_ADIRDI_nocrop():
         # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes, Median Subtracted)')
 
-        # im1 = axes[1].imshow(analytical_results[i],origin='lower')
+        # im1 = axes[1].imshow(analytical_results[0],origin='lower')
         # plt.colorbar(im1,ax=axes[1],shrink=0.8)
         # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[1].set_title('Analytical result')
 
-        # im2 = axes[2].imshow(masked_frame - np.nanmedian(frame.data) - analytical_results[i],origin='lower')
+        # im2 = axes[2].imshow(masked_frame - np.nanmedian(frame.data) - analytical_results[0],origin='lower')
         # plt.colorbar(im2,ax=axes[2],shrink=0.8)
         # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[2].set_title('Difference')
@@ -353,18 +395,14 @@ def test_psf_sub_withcrop():
     
         # Overall counts should decrease        
         if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
-            raise Exception(f"ADI subtraction resulted in increased counts for frame {i}.")
+            raise Exception(f"PSF subtraction resulted in increased counts for frame {i}.")
 
     # Check expected data shape
     expected_data_shape = (len(numbasis),60,60)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
-if __name__ == '__main__':                                      
-    test_psf_sub_ADI_nocrop()
-    test_psf_sub_RDI_nocrop()
-    test_psf_sub_ADIRDI_nocrop()
-    test_psf_sub_withcrop()
+if __name__ == '__main__':  
     test_pyklipdata_ADI()
     test_pyklipdata_RDI()
     test_pyklipdata_ADIRDI()
@@ -374,3 +412,8 @@ if __name__ == '__main__':
     test_pyklipdata_notdataset()
     test_pyklipdata_badimgshapes()
     test_pyklipdata_multiplepixscales()
+    test_psf_sub_ADI_nocrop()
+    test_psf_sub_RDI_nocrop()
+    test_psf_sub_ADIRDI_nocrop()
+    test_psf_sub_withcrop()
+    
