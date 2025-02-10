@@ -369,7 +369,9 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
     initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
 
     # find pseudo north angle from difference in triangle rotations from the target value
-    rot_image = np.array([angle_between((image.ext_hdr['CRPIX1'], image.ext_hdr['CRPIX2']), (s['x'], s['y'])) for s in [source1, source2, source3]])
+    # assume target star is at the center of the image
+    ymid, xmid = image.data.shape
+    rot_image = np.array([angle_between((xmid //2, ymid //2), (s['x'], s['y'])) for s in [source1, source2, source3]])
     rot_field = np.array([target_skycoord.position_angle(t).deg for t in skycoords[[best_sky_ind]]])
 
     initial_northangle = np.abs(np.mean(rot_field - rot_image))
@@ -925,10 +927,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
         target_coord_tab = astropy.table.Table()
-        target_coord_tab['x'] = [dataset[i].ext_hdr['CRPIX1']]
-        target_coord_tab['y'] = [dataset[i].ext_hdr['CRPIX2']]
-        target_coord_tab['RA'] = [dataset[i].ext_hdr['CRVAL1']]
-        target_coord_tab['DEC'] = [dataset[i].ext_hdr['CRVAL2']]
+        # target_coord_tab['x'] = [dataset[i].ext_hdr['CRPIX1']]
+        # target_coord_tab['y'] = [dataset[i].ext_hdr['CRPIX2']]
+        # target_coord_tab['RA'] = [dataset[i].ext_hdr['CRVAL1']]
+        # target_coord_tab['DEC'] = [dataset[i].ext_hdr['CRVAL2']]
+        target_coord_tab['x'] = [image.shape[1] // 2]
+        target_coord_tab['y'] = [image.shape[0] // 2]
+        target_coord_tab['RA'] = [dataset[i].pri_hdr['RA']]  ## assume we are pointed at a target star
+        target_coord_tab['DEC'] = [dataset[i].pri_hdr['DEC']]
         target_coord_tables.append(target_coord_tab)
 
         # run automated source finder if field_matches are passed but distortion is also being computed
