@@ -3,9 +3,15 @@ import glob
 import os
 import numpy as np
 from astropy.io import fits, ascii
+from astropy import wcs
+from astropy.io import fits, ascii
+from astropy.coordinates import SkyCoord
+import corgidrp
+from photutils.aperture import CircularAperture
+from photutils.background import LocalBackground
+from photutils.psf import fit_2dgaussian
 from scipy import integrate
 import urllib
-import corgidrp
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
 calspec_names= {
@@ -54,19 +60,19 @@ def get_calspec_file(star_name):
         raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(fits_name))
     return file_name
 
-def get_filter_name(dataset):
+def get_filter_name(image):
     """
     return the name of the transmission curve csv file of used color filter
     
     Args:
-        dataset (corgidrp.Dataset): dataset of the observed calstar
+        image (corgidrp.image): image of the observed calstar
     
     Returns:
         str: filepath of the selected filter curve
     """
     datadir = os.path.join(os.path.dirname(__file__), "data", "filter_curves")
     filters = os.path.join(datadir, "*.csv")
-    filter = dataset[0].ext_hdr['CFAMNAME']
+    filter = image.ext_hdr['CFAMNAME']
     filter_names = os.listdir(datadir)
 
     filter_name = [name for name in filter_names if filter in name]
@@ -187,7 +193,6 @@ def calculate_flux_ref(filter_wavelength, calspec_flux, wave_ref):
     flux_ref = np.interp(wave_ref, filter_wavelength, calspec_flux)
     return flux_ref
 
-
 def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux_source):
     """
     Compute the color correction factor K given the filter bandpass, reference spectrum (CALSPEC),
@@ -239,3 +244,204 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     irrad = integrate.simpson(multi_flux, x=filter_wavelength)
     
     return irrad
+
+def aper_phot(image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5, background_sub = False, r_in = 5 , r_out = 10):
+    """
+    returns the flux in photo-electrons of a point source at the target Ra/Dec position
+    and using a circular aperture by applying aperture_photometry of photutils.
+    Background subtraction can be done optionally using a user defined circular annulus.
+    
+    Args:
+        image (corgidrp.data.Image): combined source exposure image
+        encircled_radius (float): pixel radius of the circular aperture to sum the flux
+        frac_enc_energy (float): fraction of encircled energy inside the encircled_radius of the PSF, inverse aperture correction, 0...1
+        method (str): {‘exact’, ‘center’, ‘subpixel’}, The method used to determine the overlap of the aperture on the pixel grid, 
+        default is 'exact'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
+        subpixels (int): For the 'subpixel' method, resample pixels by this factor in each dimension. That is, each pixel is divided 
+                         into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
+        background_sub (boolean): background can be determine from a circular annulus (default: False).
+        r_in (float): inner radius of circular annulus in pixels, (default: 5)
+        r_out (float): outer radius of circular annulus in pixels, (default: 10)
+    
+    Returns:
+        list: integrated flux of the point source in unit photo-electrons and corresponding error and optional local background value
+    """
+    #calculate the x and y pixel positions using the RA/Dec target position and applying WCS conversion
+    if frac_enc_energy <=0 or frac_enc_energy > 1:
+        raise ValueError("frac_enc_energy {0} should be within 0 < fee <= 1".format(str(frac_enc_energy)))
+    ra = image.pri_hdr['RA']
+    dec = image.pri_hdr['DEC']
+    dat = image.data.copy()
+    
+    target_skycoord = SkyCoord(ra = ra, dec = dec, unit='deg')
+    w = wcs.WCS(image.ext_hdr)
+    pix = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin = 1)
+    if background_sub:
+        #This is essentially the median in a circular annulus 
+        bkg = LocalBackground(r_in, r_out)
+        back = bkg(dat, pix[0], pix[1], mask = image.dq.astype(bool))
+        dat -= back
+    
+    aper = CircularAperture(pix, encircled_radius)
+    aperture_sums, aperture_sums_errs = \
+        aper.do_photometry(dat, error = image.err[0], mask = image.dq.astype(bool), method = method, subpixels = subpixels)
+    if background_sub:
+        return [aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy, back]
+    else:
+        return [aperture_sums[0]/frac_enc_energy, aperture_sums_errs[0]/frac_enc_energy]
+
+def phot_by_gauss2d_fit (image, fwhm, fit_shape = None, background_sub = False, r_in = 5 , r_out = 10):
+    """
+    returns the flux in photo-electrons of a point source at the target Ra/Dec position
+    and using a circular aperture by applying aperture_photometry of photutils
+    Background subtraction can be done optionally using a user defined circular annulus.
+    
+    Args:
+        image (corgidrp.data.Image): combined source exposure image
+        fwhm (float): estimated fwhm of the point source
+        fit_shape (int or tuple of two ints): optional
+            The shape of the fitting region. If a scalar, then it is assumed
+            to be a square. If `None`, then the shape of the input ``data``.
+            It must be an odd value and should be much bigger than fwhm.
+            background_sub (boolean): background can be determine from a circular annulus (default: False).
+            r_in (float): inner radius of circular annulus in pixels, (default: 5)
+            r_out (float): outer radius of circular annulus in pixels, (default: 10)
+    
+    Returns:
+        list: integrated flux of the Gaussian2d fit of the point source in unit photo-electrons and corresponding error and optional local background value
+    """
+    ra = image.pri_hdr['RA']
+    dec = image.pri_hdr['DEC']
+    dat = image.data.copy()
+    
+    target_skycoord = SkyCoord(ra = ra, dec = dec, unit='deg')
+    w = wcs.WCS(image.ext_hdr)
+    pix = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin = 1)
+    if background_sub:
+        #This is essentially the median in a circular annulus 
+        bkg = LocalBackground(r_in, r_out)
+        back = bkg(dat, pix[0], pix[1], mask = image.dq.astype(bool))
+        dat -= back
+    
+    # fit_2dgaussian: error weighting raises exception if error is zero
+    err = image.err[0]
+    err[err == 0] = np.finfo(np.float32).eps
+    
+    if fit_shape == None:
+        fit_shape = np.shape(dat)[0] -1
+    
+    psf_phot = fit_2dgaussian(dat, xypos = pix, fwhm = fwhm, fit_shape = fit_shape, mask = image.dq.astype(bool), error = err)
+    flux = psf_phot.results['flux_fit'][0]
+    flux_err = psf_phot.results['flux_err'][0]
+    if background_sub:
+        return [flux, flux_err, back]
+    else:
+        return [flux, flux_err]
+
+def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy = 1., method = 'exact', subpixels = 5, background_sub = False, r_in = 5 , r_out = 10):
+    """
+    fills the FluxcalFactors calibration product values for one filter band,
+    calculates the flux calibration factors by aperture photometry.
+    The band flux values are divided by the found photoelectrons.
+    Propagates also errors to flux calibration factor calfile.
+    Background subtraction can be done optionally using a user defined circular annulus.
+    
+    Args:
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
+        encircled_radius (float): pixel radius of the circular aperture to sum the flux
+        frac_enc_energy (float): fraction of encircled energy inside the encircled_radius of the PSF, inverse aperture correction, 0...1
+        method (str): {‘exact’, ‘center’, ‘subpixel’}, The method used to determine the overlap of the aperture on the pixel grid, 
+        default is 'exact'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
+        subpixels (int): For the 'subpixel' method, resample pixels by this factor in each dimension. That is, each pixel is divided 
+                         into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
+        background_sub (boolean): background can be determine from a circular annulus (default: False).
+        r_in (float): inner radius of circular annulus in pixels, (default: 5)
+        r_out (float): outer radius of circular annulus in pixels, (default: 10)
+    
+    Returns:
+        corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
+    """
+    if isinstance(dataset_or_image, corgidrp.data.Dataset):
+        image = dataset_or_image[0]
+        dataset = dataset_or_image
+    else:
+        image = dataset_or_image
+        dataset = corgidrp.data.Dataset([image])
+    star_name = image.ext_hdr["TARGET"]
+    
+    filter_name = image.ext_hdr["CFAMNAME"]
+    filter_file = get_filter_name(image)
+    # read the transmission curve from the color filter file
+    wave, filter_trans = read_filter_curve(filter_file)
+    
+    calspec_filepath = get_calspec_file(star_name)
+    
+    # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
+    flux_ref = read_cal_spec(calspec_filepath, wave)
+    flux = calculate_band_flux(filter_trans, flux_ref, wave)
+    aper_phot_result = aper_phot(image, encircled_radius, frac_enc_energy, method = method, subpixels = subpixels, background_sub = background_sub, r_in = r_in, r_out = r_out)
+    ap_sum = aper_phot_result[0]
+    ap_sum_err = aper_phot_result[1]
+    exthdr = image.ext_hdr
+    if background_sub:
+        exthdr['LOCBACK'] = aper_phot_result[2]
+    fluxcal_fac = flux/ap_sum
+    fluxcal_fac_err = flux/ap_sum**2 * ap_sum_err
+    
+    exthdr['HISTORY'] = "Flux calibration factor was determined by aperture photometry"
+    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = exthdr, input_dataset = dataset)
+    
+    return fluxcal
+    
+def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None, background_sub = False, r_in = 5 , r_out = 10):
+    """
+    fills the FluxcalFactors calibration product values for one filter band,
+    calculates the flux calibration factors by fitting a 2D Gaussian.
+    The band flux values are divided by the found photoelectrons.
+    Propagates also errors to flux calibration factor calfile.
+    Background subtraction can be done optionally using a user defined circular annulus.
+    
+    Args:
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
+        fwhm (float): estimated fwhm of the point source
+        fit_shape (int or tuple of two ints): optional
+            The shape of the fitting region. If a scalar, then it is assumed
+            to be a square. If `None`, then the shape of the input ``data``.
+            It must be an odd value and should be much bigger than fwhm.
+        background_sub (boolean): background can be determine from a circular annulus (default: False).
+        r_in (float): inner radius of circular annulus in pixels, (default: 5)
+        r_out (float): outer radius of circular annulus in pixels, (default: 10)
+        
+    Returns:
+        corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
+    """
+    if isinstance(dataset_or_image, corgidrp.data.Dataset):
+        image = dataset_or_image[0]
+        dataset = dataset_or_image
+    else:
+        image = dataset_or_image
+        dataset = corgidrp.data.Dataset([image])
+    star_name = image.ext_hdr["TARGET"]
+    filter_name = image.ext_hdr["CFAMNAME"]
+    filter_file = get_filter_name(image)
+    # read the transmission curve from the color filter file
+    wave, filter_trans = read_filter_curve(filter_file)
+    
+    calspec_filepath = get_calspec_file(star_name)
+    
+    # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
+    flux_ref = read_cal_spec(calspec_filepath, wave)
+    flux = calculate_band_flux(filter_trans, flux_ref, wave)
+    
+    flux_sum = phot_by_gauss2d_fit(image, fwhm, fit_shape = fit_shape, background_sub = background_sub, r_in = r_in, r_out = r_out)
+    
+    fluxcal_fac = flux/flux_sum[0]
+    fluxcal_fac_err = flux/flux_sum[0]**2 * flux_sum[1]
+    
+    exthdr = image.ext_hdr
+    if background_sub:
+        exthdr['LOCBACK'] = flux_sum[2]
+    exthdr['HISTORY'] = "Flux calibration factor was determined by a Gaussian 2D fit photometry"
+    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = exthdr, input_dataset = dataset)
+    
+    return fluxcal
