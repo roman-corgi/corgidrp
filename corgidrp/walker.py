@@ -224,6 +224,7 @@ def guess_template(dataset):
         str or list: the best template filename or a list of multiple template filenames
     """
     image = dataset[0] # first image for convenience
+    _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
     if image.ext_hdr['DATA_LEVEL'] == "L1":
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
@@ -237,14 +238,28 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
-            recipe_filename = "l1_to_l2a_noisemap.json"
+            if image.ext_hdr['ISPC']:
+                recipe_filename = "l1_to_l2b_pc_dark.json"
+            elif len(unique_vals) > 1: # darks for noisemap creation
+                recipe_filename = "l1_to_l2a_noisemap.json"
+            elif len(unique_vals) == 1: # traditional darks
+                recipe_filename = "build_trad_dark_image.json"
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
             recipe_filename = "l1_to_l2b.json"
+        if image.ext_hdr['ISPC'] and image.pri_hdr['VISTYPE'] != "DARK":
+            recipe_filename = "l1_to_l2b_pc.json"
     elif image.ext_hdr['DATA_LEVEL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
-            recipe_filename = "l2a_to_l2a_noisemap.json"
+            if image.ext_hdr['ISPC']:
+                recipe_filename = "l2a_to_l2b_pc_dark.json"
+            elif len(unique_vals) > 1: # darks for noisemap creation
+                recipe_filename = "l2a_to_l2a_noisemap.json"
+            elif len(unique_vals) == 1: # traditional darks
+                recipe_filename = "l2a_build_trad_dark_image.json"
+        if image.ext_hdr['ISPC'] and image.pri_hdr['VISTYPE'] != "DARK":
+            recipe_filename = "l2a_to_l2b_pc.json"
         else:
             raise NotImplementedError()
     else:

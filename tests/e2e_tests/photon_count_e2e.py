@@ -15,14 +15,14 @@ import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 
 @pytest.mark.e2e
-def test_expected_results_e2e(tvacdata_dir, file_dir):
-    processed_cal_path = os.path.join(tvacdata_dir, "TV-36_Coronagraphic_Data", "Cals")
+def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
+    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
     np.random.seed(1234)
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
-    output_dir = os.path.join(file_dir, 'pc_sim_test_data')
+    output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
     if not os.path.exists(output_dir):

@@ -129,6 +129,15 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
     this_caldb = caldb.CalDB() # connection to cal DB
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'Dark':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
+            this_caldb._db = this_caldb._db.drop(i)
+    this_caldb.save()
 
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
@@ -170,16 +179,15 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     ##### Check against II&T ("TVAC") data
     corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,output_filename)
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
-
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
-    this_caldb.remove_entry(corgidrp_noisemap)
-
+    
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
     assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
     pass
 
+    this_caldb.remove_entry(corgidrp_noisemap)
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
         # corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
         # iit_dat = detector.imaging_slice('SCI', iit_noisemap.__dict__[noise_ext])
@@ -437,5 +445,5 @@ if __name__ == "__main__":
     args = ap.parse_args(args_here)
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
-    #test_noisemap_calibration_from_l1(tvacdata_dir, outputdir)
+    test_noisemap_calibration_from_l1(tvacdata_dir, outputdir)
     test_noisemap_calibration_from_l2a(tvacdata_dir, outputdir)
