@@ -54,7 +54,7 @@ def create_wcs(input_dataset, astrom_calibration):
 
         # update the image header with wcs information
         for key, value in wcs_info.items():
-            im_data.ext_hdr[key] = value
+            image.ext_hdr[key] = value
 
     # update the dataset with new header entries an dhistory message
     history_msg = 'WCS created'
