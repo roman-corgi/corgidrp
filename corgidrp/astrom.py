@@ -848,7 +848,7 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
   
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
-                          frames_to_combine=None, find_distortion=False, fitorder=3, position_error=None):
+                          frames_to_combine=None, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None):
     """
     Perform the boresight calibration of a dataset.
     
@@ -868,6 +868,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: False)
         fitorder (int): The order of legendre polynomials used to fit the distortion map (default: 3)
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
+        initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -957,7 +958,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     # compute the distortion map coeffs
     if find_distortion:
         first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, ref_star_pos=target_coord_tables, position_error=position_error)
-        distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder)
+        distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         distortion_coeffs = (np.array([np.inf]), np.inf)
 
