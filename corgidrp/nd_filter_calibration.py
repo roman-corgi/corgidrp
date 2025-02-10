@@ -60,7 +60,7 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, flux_or_irr="
         ]
     elif phot_method == "PSF":
         cal_values = [
-            fluxcal.calibrate_fluxcal_aper(entry, flux_or_irr, phot_kwargs=calibrate_kwargs).fluxcal_fac
+            fluxcal.calibrate_fluxcal_gauss2d(entry, flux_or_irr, phot_kwargs=calibrate_kwargs).fluxcal_fac
             for entry in dim_stars_dataset
         ]
     else:
