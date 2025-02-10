@@ -39,26 +39,56 @@ def group_by_target(dataset):
     return groups
 
 
-def compute_avg_calibration_factor(dim_stars_dataset):
+def compute_avg_calibration_factor(dim_stars_dataset, phot_method, flux_or_irr="irr", calibrate_kwargs=None):
     """
     Compute the average flux calibration factor using dim stars (no ND filter).
+
+    Parameters:
+        dim_stars_dataset (iterable): Dataset containing dim star entries.
+        phot_method (str): Photometry method to use ("Aperture" or "PSF").
+        flux_or_irr (str): Whether flux ('flux') or in-band irradiance ('irr') should be used.
+        calibrate_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
+
+    Returns:
+        float: The average calibration factor.
     """
-    cal_values = [
-        fluxcal.calibrate_fluxcal_aper(entry, 5, frac_enc_energy=1., method='subpixel',
-                                       subpixels=5, background_sub=True, r_in=5,
-                                       r_out=10, centering_method='xy').fluxcal_fac
-        for entry in dim_stars_dataset
-    ]
+    # Compute calibration factors for each entry, using the provided (or default) keyword arguments.
+    if phot_method == "Aperture":
+        cal_values = [
+            fluxcal.calibrate_fluxcal_aper(entry, flux_or_irr, phot_kwargs=calibrate_kwargs).fluxcal_fac
+            for entry in dim_stars_dataset
+        ]
+    elif phot_method == "PSF":
+        cal_values = [
+            fluxcal.calibrate_fluxcal_aper(entry, flux_or_irr, phot_kwargs=calibrate_kwargs).fluxcal_fac
+            for entry in dim_stars_dataset
+        ]
+    else:
+        raise ValueError(f"Photometry method must be either Aperture or PSF.")
+    
     avg_factor = np.mean(cal_values)
-    print("Calibration factor:", avg_factor)
     return avg_factor
 
 
-def process_bright_target(target, files, cal_factor, threshold, phot_method = "Aperture"):
+def process_bright_target(target, files, cal_factor, threshold, phot_method="Aperture", phot_kwargs=None):
     """
     Process bright star files for one target to compute optical density (OD)
     and (x, y) centroids for each dithered observation.
     Checks that FPAM keywords are consistent across all files.
+    
+    Additional photometry options are passed via phot_kwargs.
+    This allows users to override default settings for functions like aper_phot.
+    
+    Parameters:
+        target (str): The target star name.
+        files (list): List of dataset entries (each with data, headers, etc.).
+        cal_factor (float): Calibration factor.
+        threshold (float): Threshold for flagging OD variations.
+        phot_method (str): Photometry method to use ("Aperture" or "PSF").
+        phot_kwargs (dict, optional): Dictionary of keyword arguments to forward to the photometry function.
+    
+    Returns:
+        dict: A dictionary containing computed OD values, centroids, and other metadata.
     """
     od_values = []
     x_values = []
@@ -66,53 +96,43 @@ def process_bright_target(target, files, cal_factor, threshold, phot_method = "A
     
     # Use the header from the first file as the common reference.
     first_hdr = files[0].ext_hdr
-    filter_name = first_hdr['CFAMNAME']
+    common_cfam_name = first_hdr['CFAMNAME']
     common_fpam_name = first_hdr.get('FPAMNAME')
     common_fpam_h = first_hdr.get('FPAM_H')
     common_fpam_v = first_hdr.get('FPAM_V')
     exptime = first_hdr.get('EXPTIME')
     
-    expected_irradiance_no_nd = compute_expected_band_irradiance(target, filter_name)
-    expected_flux = expected_irradiance_no_nd * exptime
-    print("expected flux", expected_flux)
-    print("if you multiply the bright expected flux by the ND you get: ", expected_flux*10**(-2.75))
+    expected_irradiance_no_nd = compute_expected_band_irradiance(target, common_cfam_name)
+    expected_flux = expected_irradiance_no_nd * exptime * cal_factor
     
+    # Process each file.
     for entry in files:
         hdr = entry.ext_hdr
         if (hdr.get('FPAMNAME') != common_fpam_name or 
             hdr.get('FPAM_H') != common_fpam_h or 
-            hdr.get('FPAM_V') != common_fpam_v):
+            hdr.get('FPAM_V') != common_fpam_v or
+            hdr.get('CFAMNAME') != common_cfam_name):
             raise ValueError(f"Inconsistent FPAM header values in target {target} for file {entry}!")
         
         image_data = entry.data
         exptime = hdr['EXPTIME']
         
+        # Compute centroid.
         x_center, y_center = centroid(image_data)
         if np.isnan(x_center) or np.isnan(y_center):
             print(f"Warning: Centroid could not be computed for {entry}")
             continue
 
+        # Call the appropriate photometry function using the passed keyword arguments.
         if phot_method == "Aperture":
-            phot_result = fluxcal.aper_phot(entry, encircled_radius=5, frac_enc_energy=1.,
-                                            method='subpixel', subpixels=5, 
-                                            background_sub=True, r_in=5,
-                                            r_out=10, centering_method='xy')
+            phot_result = fluxcal.aper_phot(entry, **phot_kwargs)
         elif phot_method == "PSF":
-            phot_result = fluxcal.phot_by_gauss2d_fit(entry, fwhm=3, fit_shape=None, 
-                                                      background_sub=True, r_in=5, 
-                                                      r_out=10, centering_method='xy')
+            phot_result = fluxcal.phot_by_gauss2d_fit(entry, **phot_kwargs)
         else:
-            raise ValueError(f"Must chose valid photometry method: Aperture or PSF.")
+            raise ValueError("Must choose a valid photometry method: Aperture or PSF.")
         
-        measured_electrons = phot_result[0]
-        measured_electrons_per_s = measured_electrons / exptime
-        measured_flux = measured_electrons_per_s * cal_factor
 
-        print("measured bright electrons", measured_electrons, "measured bright electrons/ exposure time", measured_electrons_per_s,
-              "measured_flux", measured_flux)
-
-        transmission = measured_flux / expected_flux
-        print("calculated transmission", transmission, "supposed to be transmission", 10**(-2.75))
+        transmission = phot_result[0] / expected_flux
         od = -math.log10(transmission)
         
         od_values.append(od)
@@ -126,13 +146,13 @@ def process_bright_target(target, files, cal_factor, threshold, phot_method = "A
     return {
         'od_values': od_array,
         'average_od': average_od,
-        'fpamname': common_fpam_name,
-        'fpam_h': common_fpam_h,
-        'fpam_v': common_fpam_v,
+        'FPAMNAME': common_fpam_name,
+        'FPAM_H': common_fpam_h,
+        'FPAM_V': common_fpam_v,
+        'CFAMNAME': common_cfam_name,
         'flag': star_flag,
         'x_values': x_values,
-        'y_values': y_values,
-        'filter_name': filter_name
+        'y_values': y_values
     }
 
 
@@ -140,7 +160,8 @@ def get_max_serial(output_path, visit_id):
     """
     Find the current maximum serial number in the output directory.
     """
-    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_FilterBand_.*_NDF_CAL\.fits")
+    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_FilterBand_.*_NDF_SWEETSPOT\.fits")
+
     max_serial = 0
     for filename in os.listdir(output_path):
         match = pattern.match(filename)
@@ -151,9 +172,6 @@ def get_max_serial(output_path, visit_id):
     return max_serial
 
 
-# ---------------------------------------------------------------------------
-# Updated Functions Using the New Data Classes
-# ---------------------------------------------------------------------------
 def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, visit_id, 
                                  current_max, output_path, save_to_disk=True):
     """
@@ -178,10 +196,10 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, vi
     pri_hdr['COMMENT'] = "Combined ND Filter Sweet Spot Dataset primary header"
     
     ext_hdr = fits.Header()
-    ext_hdr['FPAMNAME'] = common_metadata.get('fpamname')
-    ext_hdr['FPAM_H'] = common_metadata.get('fpam_h')
-    ext_hdr['FPAM_V'] = common_metadata.get('fpam_v')
-    ext_hdr['FILTER'] = common_metadata.get('filter_name')
+    ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
+    ext_hdr['FPAM_H'] = common_metadata.get('FPAM_H')
+    ext_hdr['FPAM_V'] = common_metadata.get('FPAM_V')
+    ext_hdr['CFAMNAME'] = common_metadata.get('CFAMNAME')
     ext_hdr['HISTORY'] = "Combined sweet-spot dataset from bright star observations"
     
     ndsweetspot_dataset = NDFilterSweetSpotDataset(
@@ -193,7 +211,7 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, vi
     
     if save_to_disk:
         serial_number = f"{current_max + 1:03d}"
-        output_filename = f"CGI_{visit_id}_{serial_number}_FilterBand_{common_metadata.get('filter_name')}_NDF_SWEET.fits"
+        output_filename = f"CGI_{visit_id}_{serial_number}_FilterBand_{ext_hdr['CFAMNAME']}_NDF_SWEETSPOT.fits"
         ndsweetspot_dataset.save(filedir=output_path, filename=output_filename)
         print(f"ND Filter Sweet Spot Dataset saved to {output_filename}")
     
@@ -233,25 +251,25 @@ def create_expected_od_calibration_product(clean_entry, sweet_spot_data, sweet_s
         NDFilterOD object representing the expected OD calibration product.
     """
     # --- Compute expected OD ---
-    # Compute the centroid of the clean image.
+    # 1. Compute the centroid of the clean image.
     x_clean, y_clean = centroid(clean_entry.data)
     hdr = clean_entry.ext_hdr
     clean_fpam_h = hdr.get('FPAM_H')
     clean_fpam_v = hdr.get('FPAM_V')
     
-    # Retrieve sweet-spot FPAM values.
-    sp_fpam_h = sweet_spot_metadata.get('fpam_h')
-    sp_fpam_v = sweet_spot_metadata.get('fpam_v')
+    # 2. Retrieve sweet-spot FPAM values.
+    sp_fpam_h = sweet_spot_metadata.get('FPAM_H')
+    sp_fpam_v = sweet_spot_metadata.get('FPAM_V')
     
-    # Compute the FPAM offset and transform it to EXCAM offset.
+    # 3. Compute the FPAM offset and 4. transform it to EXCAM offset.
     fpam_offset = np.array([clean_fpam_h - sp_fpam_h, clean_fpam_v - sp_fpam_v])
     excam_offset = transformation_matrix @ fpam_offset
     
-    # Adjust the clean image centroid.
+    # 5. Adjust the clean image centroid.
     x_adj = x_clean + excam_offset[0]
     y_adj = y_clean + excam_offset[1]
     
-    # Find the nearest sweet-spot point (columns 1 and 2 are x and y).
+    # 6. Find the nearest sweet-spot point (columns 1 and 2 are x and y).
     positions = sweet_spot_data[:, 1:3]
     diffs = positions - np.array([x_adj, y_adj])
     distances = np.linalg.norm(diffs, axis=1)
@@ -266,6 +284,7 @@ def create_expected_od_calibration_product(clean_entry, sweet_spot_data, sweet_s
     pri_hdr['COMMENT'] = "Expected ND filter OD for clean image (Requirement 1090877)"
     
     ext_hdr = fits.Header()
+    ext_hdr['FPAMNAME'] = hdr.get('FPAMNAME')
     # Store the clean image FPAM values.
     ext_hdr['FPAM_H'] = clean_fpam_h
     ext_hdr['FPAM_V'] = clean_fpam_v
@@ -273,14 +292,14 @@ def create_expected_od_calibration_product(clean_entry, sweet_spot_data, sweet_s
     ext_hdr['SPFPAM_H'] = sp_fpam_h
     ext_hdr['SPFPAM_V'] = sp_fpam_v
     # Record the filter name.
-    ext_hdr['CFAMNAME'] = sweet_spot_metadata.get('filter_name')
+    ext_hdr['CFAMNAME'] = sweet_spot_metadata.get('CFAMNAME')
     # Record the transformation matrix file used (basename only).
     ext_hdr['HISTORY'] = (
         f"Expected OD computed using sweet-spot dataset and transformation matrix file: "
         f"{os.path.basename(transformation_matrix_file)} (req. 1090877)"
     )
     
-    # --- Create the calibration product ---
+    # 7. Create the calibration product
     # Ensure the expected OD is stored as a numeric (float) array.
     data = np.array([[float(expected_od)]], dtype=float)
     
@@ -291,10 +310,11 @@ def create_expected_od_calibration_product(clean_entry, sweet_spot_data, sweet_s
         input_dataset=None
     )
     
+    # 8. Save to disk
     if save_to_disk:
         serial_number = f"{current_max + 1:03d}"
         output_filename = (
-            f"CGI_{visit_id}_{serial_number}_ExpectedOD_{sweet_spot_metadata.get('filter_name')}_NDF_CAL.fits"
+            f"CGI_{visit_id}_{serial_number}_FilterBand_{ext_hdr['CFAMNAME']}_NDF_ExpectedOD.fits"
         )
         nd_expected_product.save(filedir=output_path, filename=output_filename)
         print(f"Expected OD Calibration product saved to {output_filename}")
@@ -306,7 +326,7 @@ def get_max_serial_expected_od(output_path, visit_id):
     """
     Find the current maximum serial number for expected OD products.
     """
-    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_ExpectedOD_.*_NDF_CAL\.fits")
+    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_FilterBand_.*_NDF_ExpectedOD\.fits")
     max_serial = 0
     for filename in os.listdir(output_path):
         match = pattern.match(filename)
