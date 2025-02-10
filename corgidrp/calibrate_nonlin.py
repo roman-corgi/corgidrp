@@ -16,7 +16,7 @@ from corgidrp.mocks import create_default_headers
 from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
-nonlin_params = {
+nonlin_params_default = {
     # ROI constants
     'rowroi1': 305,
     'rowroi2': 736,
@@ -44,9 +44,12 @@ nonlin_params = {
     'min_mask_factor': 1.1,
     }
  
-def check_nonlin_params(
-    ):
-    """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
+def check_nonlin_params(nonlin_params):
+    """ Checks integrity of kgain parameters in the dictionary nonlin_params. 
+
+    Args:
+        nonlin_params (dict):  Dictionary of parameters used for calibrating nonlinearity.
+    """
     if 'rowroi1' not in nonlin_params:
         raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in nonlin_params:
@@ -124,7 +127,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=True, plot_outdir='figures', show_plot=False,
-                     verbose=False, nonlin_params=nonlin_params):
+                     verbose=False, nonlin_params=nonlin_params_default):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -227,6 +230,9 @@ def calibrate_nonlin(dataset_nl,
         input signal in DN is the first column. Signal values start with min_write
         and run through max_write in steps of 20 DN.
     """
+
+    check_nonlin_params(nonlin_params)
+
     # dataset_nl.all_data must be 3-D 
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
