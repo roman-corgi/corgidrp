@@ -12,7 +12,7 @@ from corgidrp.mocks import create_default_headers
 from corgidrp.detector import slice_section, detector_areas
 
 # Dictionary with constant kgain calibration parameters
-kgain_params= {
+kgain_params_default= {
 # ROI constants
 'rowroi1': 9,
 'rowroi2': 1000,
@@ -30,13 +30,13 @@ kgain_params= {
 'signal_bins_N': 400,
 }
 
-def check_kgain_params(
-    ):
-    """ Checks integrity of kgain parameters in the dictionary kgain_params. """
-    if 'offset_colroi1' not in kgain_params:
-        raise ValueError('Missing parameter:  offset_colroi1.')
-    if 'offset_colroi2' not in kgain_params:
-        raise ValueError('Missing parameter:  offset_colroi2.')
+def check_kgain_params(kgain_params):
+    """ Checks integrity of kgain parameters in the dictionary kgain_params. 
+    
+    Args:
+        kgain_params (dict):  Dictionary of parameters used for calibrating the k gain.
+    """
+    
     if 'rowroi1' not in kgain_params:
         raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in kgain_params:
@@ -54,10 +54,6 @@ def check_kgain_params(
     if 'signal_bins_N' not in kgain_params:
         raise ValueError('Missing parameter:  signal_bins_N.')
 
-    if not isinstance(kgain_params['offset_colroi1'], (float, int)):
-        raise TypeError('offset_colroi1 is not a number')
-    if not isinstance(kgain_params['offset_colroi2'], (float, int)):
-        raise TypeError('offset_colroi2 is not a number')
     if not isinstance(kgain_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
     if not isinstance(kgain_params['rowroi2'], (float, int)):
@@ -281,7 +277,7 @@ def calibrate_kgain(dataset_kgain,
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=True,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
-                    verbose=False, detector_regions=None, kgain_params=kgain_params):
+                    verbose=False, detector_regions=None, kgain_params=kgain_params_default):
     """
     kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
@@ -362,6 +358,9 @@ def calibrate_kgain(dataset_kgain,
         transfer curve (in e-/DN). The expected value of kgain for EXCAM with
         flight readout sequence should be between 8 and 9 e-/DN
     """
+
+    check_kgain_params(kgain_params)
+
     if detector_regions is None:
         detector_regions = detector_areas
 
