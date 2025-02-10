@@ -82,6 +82,7 @@ def mock_dim_dataset_files(output_path: str, dim_exptime: float, filter_used: st
         # Compute the expected flux for the dim star using the CALSPEC model.
         star_flux = compute_expected_band_irradiance(star_name, filter_used)
         total_dim_flux = star_flux * dim_exptime
+        print("og dim flux", star_flux, "flux*exposuretime ", total_dim_flux)
         fwhm = 3  # Full-width at half maximum for the point spread function
 
         flux_image = create_flux_image(
@@ -125,6 +126,7 @@ def mock_bright_dataset_files(output_path: str, bright_exptime: float, filter_us
                 bright_star_flux = compute_expected_band_irradiance(star_name, filter_used)
                 total_bright_flux = bright_star_flux * bright_exptime
                 attenuated_flux = total_bright_flux * ND_transmission
+                print("og bright flux, ", bright_star_flux, "flux*exposure time ", total_bright_flux, "what we're making the mocks with: attenuated flux*exposure time", attenuated_flux)
                 fwhm = 3
 
                 flux_image = create_flux_image(
@@ -192,6 +194,7 @@ def nd_calibration_workflow(
     """
     # Step 1: Compute the average calibration factor from the dim stars.
     cal_factor = compute_avg_calibration_factor(dim_stars_dataset)
+    print("calculated cal factor", cal_factor)
 
     # Step 2: Group bright star frames by target.
     grouped_files = group_by_target(bright_stars_dataset)
@@ -204,7 +207,7 @@ def nd_calibration_workflow(
             continue
 
         print(f"Processing target: {target}")
-        star_data = process_bright_target(target, files, cal_factor, threshold)
+        star_data = process_bright_target(target, files, cal_factor, threshold, "Aperture")
         flux_results[target] = star_data
 
         # Stack OD, x, and y values to form a sweet-spot dataset for this target.
@@ -382,7 +385,7 @@ def test_nd_filter_calibration_object():
 # Run tests if executed directly.
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
-    test_nd_filter_calibration_object()
-    test_output_filename_convention()
+    #test_nd_filter_calibration_object()
+    #test_output_filename_convention()
     test_average_od_within_tolerance()
     print("All tests passed.")

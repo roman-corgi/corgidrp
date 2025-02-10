@@ -54,7 +54,7 @@ def compute_avg_calibration_factor(dim_stars_dataset):
     return avg_factor
 
 
-def process_bright_target(target, files, cal_factor, threshold):
+def process_bright_target(target, files, cal_factor, threshold, phot_method = "Aperture"):
     """
     Process bright star files for one target to compute optical density (OD)
     and (x, y) centroids for each dithered observation.
@@ -70,8 +70,12 @@ def process_bright_target(target, files, cal_factor, threshold):
     common_fpam_name = first_hdr.get('FPAMNAME')
     common_fpam_h = first_hdr.get('FPAM_H')
     common_fpam_v = first_hdr.get('FPAM_V')
+    exptime = first_hdr.get('EXPTIME')
     
     expected_irradiance_no_nd = compute_expected_band_irradiance(target, filter_name)
+    expected_flux = expected_irradiance_no_nd * exptime
+    print("expected flux", expected_flux)
+    print("if you multiply the bright expected flux by the ND you get: ", expected_flux*10**(-2.75))
     
     for entry in files:
         hdr = entry.ext_hdr
@@ -88,15 +92,27 @@ def process_bright_target(target, files, cal_factor, threshold):
             print(f"Warning: Centroid could not be computed for {entry}")
             continue
 
-        aper_result = fluxcal.aper_phot(entry, 5, frac_enc_energy=1.,
-                                        method='subpixel', subpixels=5, 
-                                        background_sub=True, r_in=5,
-                                        r_out=10, centering_method='xy')
-        measured_electrons = aper_result[0]
+        if phot_method == "Aperture":
+            phot_result = fluxcal.aper_phot(entry, encircled_radius=5, frac_enc_energy=1.,
+                                            method='subpixel', subpixels=5, 
+                                            background_sub=True, r_in=5,
+                                            r_out=10, centering_method='xy')
+        elif phot_method == "PSF":
+            phot_result = fluxcal.phot_by_gauss2d_fit(entry, fwhm=3, fit_shape=None, 
+                                                      background_sub=True, r_in=5, 
+                                                      r_out=10, centering_method='xy')
+        else:
+            raise ValueError(f"Must chose valid photometry method: Aperture or PSF.")
+        
+        measured_electrons = phot_result[0]
         measured_electrons_per_s = measured_electrons / exptime
-        measured_flux_physical = measured_electrons_per_s * cal_factor
+        measured_flux = measured_electrons_per_s * cal_factor
 
-        transmission = measured_flux_physical / expected_irradiance_no_nd
+        print("measured bright electrons", measured_electrons, "measured bright electrons/ exposure time", measured_electrons_per_s,
+              "measured_flux", measured_flux)
+
+        transmission = measured_flux / expected_flux
+        print("calculated transmission", transmission, "supposed to be transmission", 10**(-2.75))
         od = -math.log10(transmission)
         
         od_values.append(od)
