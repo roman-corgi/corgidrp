@@ -1,18 +1,67 @@
+import numpy as np
+import astropy.wcs as wcs
+
 # A file that holds the functions that transmogrify l2b data to l3 data 
 
-def create_wcs(input_dataset):
+def create_wcs(input_dataset, astrom_calibration):
     """
     
     Create the WCS headers for the dataset.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
+        astrom_calibration (corgidrp.data.AstrometricCalibration): an astrometric calibration file for the input dataset
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
     """
+    updated_dataset = input_dataset.copy()
 
-    return input_dataset.copy()
+    northangle = astrom_calibration.northangle
+    platescale = astrom_calibration.platescale
+    center_coord = astrom_calibration.boresight
+
+    # create wcs for each image in the dataset
+    for image in updated_dataset:
+
+        im_data = image.data
+        image_shape = im_data.shape
+        center_pixel = [image_shape[1] // 2, image_shape[0] // 2]
+        roll_ang = image.pri_hdr['ROLL']
+
+        vert_ang = np.radians(northangle + roll_ang)  ## might be -roll_ang
+        pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+        cdmatrix = pc * (platescale * 0.001) / 3600.
+
+        # create dictionary with wcs information
+        wcs_info = {}
+        wcs_info['CD1_1'] = cdmatrix[0,0]
+        wcs_info['CD1_2'] = cdmatrix[0,1]
+        wcs_info['CD2_1'] = cdmatrix[1,0]
+        wcs_info['CD2_2'] = cdmatrix[1,1]
+
+        wcs_info['CRPIX1'] = center_pixel[0]
+        wcs_info['CRPIX2'] = center_pixel[1]
+
+        wcs_info['CTYPE1'] = 'RA---TAN'
+        wcs_info['CTYPE2'] = 'DEC--TAN'
+
+        wcs_info['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
+        wcs_info['CDELT2'] = (platescale * 0.001) / 3600
+
+        wcs_info['CRVAL1'] = center_coord[0]
+        wcs_info['CRVAL2'] = center_coord[1]
+
+        # update the image header with wcs information
+        for key, value in wcs_info.items():
+            im_data.ext_hdr[key] = value
+
+    # update the dataset with new header entries an dhistory message
+    history_msg = 'WCS created'
+
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset
 
 def divide_by_exptime(input_dataset):
     """
