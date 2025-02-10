@@ -1,121 +1,174 @@
 import os
 import re
-import math
-import tempfile
 from typing import List, Dict, Any, Optional
 
 import numpy as np
 from astropy.io import fits
 import pytest
 
-# Import helper functions and classes from calibration module
-from corgidrp.nd_filter_calibration import (
-    compute_expected_band_irradiance,
-    group_by_target,
-    compute_avg_calibration_factor,
-    process_bright_target,
-    create_nd_sweet_spot_dataset,
-    create_expected_od_calibration_product,
-    get_max_serial,
-    get_max_serial_expected_od
-)
-from corgidrp.data import Dataset, NDFilterSweetSpotDataset, NDFilterOD, Image
-from corgidrp.mocks import create_default_headers, create_flux_image
-from corgidrp.astrom import centroid
+import corgidrp.nd_filter_calibration as nd_filter_calibration
+from corgidrp.data import Dataset
+import corgidrp.mocks as mocks
 
 # ---------------------------------------------------------------------------
 # Global variables for test star names
 # ---------------------------------------------------------------------------
-BRIGHT_STARS = ['109 Vir']
-DIM_STARS = ['TYC 4433-1800-1']
+BRIGHT_STARS = ['109 Vir',
+                'Vega',
+                'Eta Uma',
+                'Lam Lep']
+DIM_STARS = ['TYC 4433-1800-1',
+             'TYC 4205-1677-1',
+             'TYC 4212-455-1',
+             'TYC 4209-1396-1',
+             'TYC 4413-304-1',
+             'UCAC3 313-62260',
+             'BPS BS 17447-0067',
+             'TYC 4424-1286-1',
+             'GSC 02581-02323',
+             'TYC 4207-219-1']
 
 # ---------------------------------------------------------------------------
-# Utility Function: Ensure output directory exists.
+# Global constants for saving mocks and calibration products
 # ---------------------------------------------------------------------------
-def ensure_directory_exists(path: str) -> None:
-    """Create the directory if it does not exist."""
-    os.makedirs(path, exist_ok=True)
+DEFAULT_BRIGHT_MOCKS_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_bright"
+DEFAULT_DIM_MOCKS_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks_dim"
+DEFAULT_CAL_PRODUCTS_OUTPUT_DIR = "/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output"
 
 # ---------------------------------------------------------------------------
-# Helper Function: Load a transformation matrix from a FITS file.
+# Global test parameters and constants
+# ---------------------------------------------------------------------------
+DIM_EXPTIME = 10.0
+BRIGHT_EXPTIME = 5.0
+FWHM = 3
+FILTER_USED = '3C'
+INPUT_OD = 2.75
+CAL_FACTOR = 0.8
+OD_RASTER_THRESHOLD = 0.1
+OD_TEST_TOLERANCE = 0.2
+VISIT_ID = 'PPPPPCCAAASSSOOOVVV'  # Update to pull from VISITID when available in L1s
+FILESAVE = True
+ADD_BACKGROUND = False
+PHOT_METHOD = "Aperture"
+FLUX_OR_IRR = 'irr'
+
+if PHOT_METHOD == "Aperture":
+    PHOT_ARGS = {
+        "encircled_radius": 7,       # Custom aperture radius
+        "frac_enc_energy": 1,        # Custom fraction of encircled energy
+        "method": "subpixel",        # Method for handling subpixel sampling
+        "subpixels": 10,             # Increase subpixel resolution
+        "background_sub": True,      # Enable background subtraction
+        "r_in": 5,                   # Custom inner annulus radius for background estimation
+        "r_out": 10,                 # Custom outer annulus radius for background estimation
+        "centering_method": "xy"     # Method of determining for star position ('xy' or 'wcs')
+    }
+elif PHOT_METHOD == "PSF":
+    PHOT_ARGS = {
+        "fwhm": 3,                  # Expected full width half maximum.
+        "fit_shape": None,          # Fitting region shape.
+        "background_sub": True,     # Enable background subtraction
+        "r_in": 5,                  # Custom inner annulus radius for background estimation
+        "r_out": 10,                # Custom outer annulus radius for background estimation
+        "centering_method": 'xy'    # Method of determining for star position ('xy' or 'wcs')
+    }
+
+# ---------------------------------------------------------------------------
+# Set-up and helper functions
 # ---------------------------------------------------------------------------
 def load_transformation_matrix_from_fits(file_path: str) -> np.ndarray:
     """
     Load a transformation matrix from a FITS file.
-
+    
     Parameters:
         file_path (str): Path to the FITS file containing the transformation matrix.
-
+    
     Returns:
         np.ndarray: The transformation matrix extracted from the FITS file.
     """
     with fits.open(file_path) as hdul:
-        # First try the primary HDU.
         data = hdul[0].data
         if data is None:
-            # If no data in primary, try extension 1.
             data = hdul[1].data
         return np.array(data)
 
-# ---------------------------------------------------------------------------
-# Mocks for creating test datasets
-# ---------------------------------------------------------------------------
-def mock_dim_dataset_files(output_path: str, dim_exptime: float, filter_used: str, cal_factor: float) -> List[Any]:
-    """
-    Create mock FITS files for dim stars (calibration references). Uses
-    create_flux_image from Mocks.py to do this, with the expected flux
-    from calspec files for that star.
 
+def mock_dim_dataset_files(dim_exptime: float, filter_used: str, cal_factor: float, 
+                           save_mocks: bool, output_path: Optional[str] = None,) -> List[Any]:
+    """
+    Create mock FITS files for dim stars (calibration references) using
+    create_flux_image from Mocks.py.
+    
     Parameters:
-        output_path (str): Directory where the files will be created.
-        dim_exptime (float): Exposure time for the dim stars.
-        filter_used (str): Filter identifier.
-        cal_factor (float): Calibration factor to apply.
+        dim_exptime (float): The exposure time (in seconds) for the mock dim star observations.
+        filter_used (str): The CFAM filter used.
+        cal_factor (float): A calibration factor used to scale the computed flux.
+        save_mocks (bool): If True, the generated mock FITS files are saved to disk.
+        output_path (Optional[str], optional): The directory where the generated mock FITS files 
+            will be saved. If None:
+                - When `save_mocks` is True, it defaults to `DEFAULT_DIM_MOCKS_DIR`.
+                - When `save_mocks` is False, it defaults to the current working directory.
+            Defaults to None.
 
     Returns:
-        List[Any]: List of mock FITS image objects.
+        List[Any]: A list containing the generated flux images for each dim star. The precise type
+            of each element depends on the implementation of `create_flux_image`.
+
     """
-    ensure_directory_exists(output_path)
+    if save_mocks:
+        output_path = output_path or DEFAULT_DIM_MOCKS_DIR
+    else:
+        output_path = output_path or os.getcwd()
+    os.makedirs(output_path, exist_ok=True)
+
     dim_star_images = []
-
     for star_name in DIM_STARS:
-        # Compute the expected flux for the dim star using the CALSPEC model.
-        star_flux = compute_expected_band_irradiance(star_name, filter_used)
+        star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
         total_dim_flux = star_flux * dim_exptime
-        print("og dim flux", star_flux, "flux*exposuretime ", total_dim_flux)
-        fwhm = 3  # Full-width at half maximum for the point spread function
-
-        flux_image = create_flux_image(
-            total_dim_flux, fwhm, cal_factor, filter_used, star_name,
+        flux_image = mocks.create_flux_image(
+            total_dim_flux, FWHM, cal_factor, filter_used, star_name,
             fsm_x=0, fsm_y=0, exptime=dim_exptime, filedir=output_path,
-            color_cor=1.0, platescale=21.8, add_gauss_noise=True, noise_scale=1.0,
-            file_save=False
+            color_cor=1.0, platescale=21.8, add_gauss_noise=ADD_BACKGROUND, 
+            noise_scale=1.0, file_save=True
         )
         dim_star_images.append(flux_image)
-
     return dim_star_images
 
-
-def mock_bright_dataset_files(output_path: str, bright_exptime: float, filter_used: str, OD: float, cal_factor: float) -> List[Any]:
+def mock_bright_dataset_files(bright_exptime: float, filter_used: str, OD: float, 
+                              cal_factor: float, save_mocks: bool, 
+                              output_path: Optional[str] = None) -> List[Any]:
     """
-    Create mock FITS files for bright stars observed with an ND filter.
-    Uses create_flux_image from Mocks.py to do this, with the expected flux
-    from calspec files for that star.
+    Create mock FITS files for bright stars observed with an ND filter using
+    create_flux_image from Mocks.py.
+    
+    If save_mocks is True and no output_path is provided, output_path is set
+    to DEFAULT_BRIGHT_MOCKS_DIR.
 
     Parameters:
-        output_path (str): Directory where the files will be created.
-        bright_exptime (float): Exposure time for bright stars.
-        filter_used (str): Filter identifier.
-        OD (float): Optical density for the ND filter.
-        cal_factor (float): Calibration factor to apply.
+        bright_exptime (float): The exposure time (in seconds) for the bright star observations.
+        filter_used (str): The CFAM filter used..
+        OD (float): The optical density of the ND filter. The ND transmission = 10^(-OD).
+        cal_factor (float): Calibration factor used to scale the computed flux.
+        save_mocks (bool): If True, the generated FITS files are saved to disk.
+        output_path (Optional[str], optional): The directory where the generated FITS files will
+            be saved. If None:
+                - When `save_mocks` is True, it defaults to `DEFAULT_BRIGHT_MOCKS_DIR`.
+                - When `save_mocks` is False, it defaults to the current working directory.
+            Defaults to None.
 
     Returns:
-        List[Any]: List of mock FITS image objects.
+        List[Any]: A list of the generated flux images for each bright star at various offsets.
+            The exact type of each element depends on the implementation of `create_flux_image`.
+
     """
-    ensure_directory_exists(output_path)
-    ND_transmission = 10 ** (-OD)  # Calculate transmission from optical density
-    # Limit to at most 4 bright stars if more are provided.
-    selected_bright_stars = BRIGHT_STARS[:4]
+    if save_mocks:
+        output_path = output_path or DEFAULT_BRIGHT_MOCKS_DIR
+    else:
+        output_path = output_path or os.getcwd()
+    os.makedirs(output_path, exist_ok=True)
+
+    ND_transmission = 10 ** (-OD)
+    selected_bright_stars = BRIGHT_STARS
     x_offsets = [-10, 0, 10]
     y_offsets = [-10, 0, 10]
 
@@ -123,42 +176,28 @@ def mock_bright_dataset_files(output_path: str, bright_exptime: float, filter_us
     for star_name in selected_bright_stars:
         for dy in y_offsets:
             for dx in x_offsets:
-                bright_star_flux = compute_expected_band_irradiance(star_name, filter_used)
+                bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
                 total_bright_flux = bright_star_flux * bright_exptime
                 attenuated_flux = total_bright_flux * ND_transmission
-                print("og bright flux, ", bright_star_flux, "flux*exposure time ", total_bright_flux, "what we're making the mocks with: attenuated flux*exposure time", attenuated_flux)
-                fwhm = 3
-
-                flux_image = create_flux_image(
-                    attenuated_flux, fwhm, cal_factor, filter_used, star_name,
-                    fsm_x=dx, fsm_y=dy, exptime=bright_exptime, filedir=output_path,
-                    color_cor=1.0, platescale=21.8, add_gauss_noise=True, noise_scale=1.0,
-                    file_save=False
+                flux_image = mocks.create_flux_image(
+                    attenuated_flux, FWHM, cal_factor, filter_used, star_name,
+                    dx, dy, bright_exptime, output_path,
+                    color_cor=1.0, platescale=21.8, add_gauss_noise=ADD_BACKGROUND, 
+                    noise_scale=1.0, file_save=True
                 )
                 bright_star_images.append(flux_image)
-
     return bright_star_images
 
-# ---------------------------------------------------------------------------
-# Global test parameters and constants
-# ---------------------------------------------------------------------------
-DIM_EXPTIME = 10.0
-BRIGHT_EXPTIME = 5.0
-FILTER_USED = '3C'
-INPUT_OD = 2.75
-CAL_FACTOR = 0.2
-THRESHOLD = 0.1
-VISIT_ID = 'PPPPPCCAAASSSOOOVVV'  # Must match the naming string used elsewhere
 
 # ---------------------------------------------------------------------------
-# Main workflow function: ND Filter Calibration Workflow
+# Main workflow function
 # ---------------------------------------------------------------------------
 def nd_calibration_workflow(
     dim_stars_dataset: Dataset,
     bright_stars_dataset: Dataset,
-    output_path: Optional[str] = None,
-    file_save: bool = False,
-    threshold: float = 0.1,
+    output_path: Optional[str] = DEFAULT_CAL_PRODUCTS_OUTPUT_DIR,
+    file_save: bool = FILESAVE,
+    threshold: float = OD_RASTER_THRESHOLD,
     clean_entry: Optional[Any] = None,
     transformation_matrix_file: Optional[str] = None
 ) -> Dict[str, Any]:
@@ -167,8 +206,8 @@ def nd_calibration_workflow(
 
     The workflow performs the following steps:
       1. Computes the average calibration factor from the dim stars dataset.
-      2. Groups the bright star frames by target and processes each group to extract
-         sweet-spot data.
+      2. Groups the bright star frames by target and processes each group to calculate
+         sweet-spot data at each.
       3. Combines the individual sweet-spot datasets into a single dataset, which is
          saved as an NDFilterSweetSpotDataset calibration product.
       4. Optionally saves the combined sweet-spot dataset to disk.
@@ -193,24 +232,25 @@ def nd_calibration_workflow(
             - 'expected_od': Computed expected OD (if applicable).
     """
     # Step 1: Compute the average calibration factor from the dim stars.
-    cal_factor = compute_avg_calibration_factor(dim_stars_dataset)
-    print("calculated cal factor", cal_factor)
+    print("Computing calibration factor with dim stars")
+    cal_factor = nd_filter_calibration.compute_avg_calibration_factor(dim_stars_dataset, PHOT_METHOD, FLUX_OR_IRR, 
+                                                calibrate_kwargs=None)
+    print("Computed calibration factor:", cal_factor)
 
-    # Step 2: Group bright star frames by target.
-    grouped_files = group_by_target(bright_stars_dataset)
-    flux_results = {}            # To hold processed results for each target.
-    aggregated_data_list = []    # To accumulate sweet-spot data arrays.
-    common_metadata = {}         # To store metadata that should be consistent across targets.
+    # Step 2: Group bright star frames by target and compute flux at each raster.
+    grouped_files = nd_filter_calibration.group_by_target(bright_stars_dataset)
+    flux_results = {}
+    aggregated_data_list = []
+    common_metadata = {}
 
     for target, files in grouped_files.items():
         if not files:
             continue
 
         print(f"Processing target: {target}")
-        star_data = process_bright_target(target, files, cal_factor, threshold, "Aperture")
+        star_data = nd_filter_calibration.process_bright_target(target, files, cal_factor, threshold, PHOT_METHOD, PHOT_ARGS)
         flux_results[target] = star_data
 
-        # Stack OD, x, and y values to form a sweet-spot dataset for this target.
         target_sweet_spot = np.column_stack((
             star_data['od_values'],
             star_data['x_values'],
@@ -218,60 +258,58 @@ def nd_calibration_workflow(
         ))
         aggregated_data_list.append(target_sweet_spot)
 
-        # On the first valid target, record the common metadata.
         if not common_metadata:
             common_metadata = {
-                'fpamname': star_data['fpamname'],
-                'fpam_h': star_data['fpam_h'],
-                'fpam_v': star_data['fpam_v'],
-                'filter_name': star_data['filter_name']
+                'FPAMNAME': star_data['FPAMNAME'],
+                'FPAM_H': star_data['FPAM_H'],
+                'FPAM_V': star_data['FPAM_V'],
+                'CFAMNAME': star_data['CFAMNAME']
             }
         else:
-            # Verify that subsequent targets share the same metadata.
-            if (common_metadata.get('fpamname') != star_data['fpamname'] or
-                common_metadata.get('fpam_h') != star_data['fpam_h'] or
-                common_metadata.get('fpam_v') != star_data['fpam_v'] or
-                common_metadata.get('filter_name') != star_data['filter_name']):
+            # Header info for all stars should match each other for FPAM and 
+            # CFAM filters, FPAM_H and FPAM_V can be within some tolerance
+            if (common_metadata.get('FPAMNAME') != star_data['FPAMNAME'] or
+                abs(common_metadata.get('FPAM_H') - star_data['FPAM_H']) >= 20 or
+                abs(common_metadata.get('FPAM_V') - star_data['FPAM_V']) >= 20 or
+                common_metadata.get('CFAMNAME') != star_data['CFAMNAME']):
                 raise ValueError("Inconsistent FPAM or filter metadata among bright star observations.")
 
-    # Step 3: Combine all sweet-spot datasets into a single dataset.
-    if aggregated_data_list:
-        combined_sweet_spot_data = np.vstack(aggregated_data_list)
-    else:
-        combined_sweet_spot_data = np.empty((0, 3))
-
-    # Compute overall average optical density (OD) from the targets.
-    od_list = [
-        data.get("average_od")
-        for data in flux_results.values()
-        if data.get("average_od") is not None
-    ]
+            
+    # Step 3: Combine all sweet-spot datasets into a single dataset, and
+    # Step 4: Optionally saves the sweet spot dataset calibration product to disk
+    combined_sweet_spot_data = np.vstack(aggregated_data_list) if aggregated_data_list else np.empty((0, 3))
+    od_list = [data.get("average_od") for data in flux_results.values() if data.get("average_od") is not None]
     overall_avg_od = np.mean(od_list) if od_list else None
-    print(f"Overall Average OD across bright targets: {overall_avg_od}")
+    print(f"Average calculated OD across bright targets: {overall_avg_od}")
+    max_serial = nd_filter_calibration.get_max_serial(output_path, VISIT_ID)
+    sweet_spot_cal = nd_filter_calibration.create_nd_sweet_spot_dataset(
+        combined_sweet_spot_data,
+        common_metadata,
+        VISIT_ID,
+        max_serial,
+        output_path,
+        save_to_disk=file_save
+        )
 
-    # Step 4: Save the combined sweet-spot dataset as an NDFilterSweetSpotDataset product if required.
-    if output_path is not None and file_save:
-        max_serial = get_max_serial(output_path, VISIT_ID)
-        create_nd_sweet_spot_dataset(
+    # Step 5: If a clean image entry and a transformation matrix FITS file are provided, computes 
+    # an expected OD product, which is saved as an NDFilterOD calibration product, and
+    # Step 6: Optionally saves the NDFilterOD calibration product to disk
+    expected_od = None
+    if clean_entry is not None and transformation_matrix_file is not None:
+        max_serial_exp = nd_filter_calibration.get_max_serial_expected_od(output_path, VISIT_ID)
+        transformation_matrix = load_transformation_matrix_from_fits(transformation_matrix_file)
+        expected_od_product = nd_filter_calibration.create_expected_od_calibration_product(
+            clean_entry,
             combined_sweet_spot_data,
             common_metadata,
+            transformation_matrix,
+            transformation_matrix_file,
             VISIT_ID,
-            max_serial,
+            max_serial_exp,
             output_path,
             save_to_disk=file_save
         )
-
-    # Step 5: If a clean image entry and a transformation matrix FITS file are provided, compute the expected OD product.
-    expected_od = None
-    if clean_entry is not None and transformation_matrix_file is not None:
-        max_serial_exp = get_max_serial_expected_od(output_path, VISIT_ID)
-        transformation_matrix = load_transformation_matrix_from_fits(transformation_matrix_file)
-        expected_od_product = create_expected_od_calibration_product(clean_entry, combined_sweet_spot_data, 
-                                           common_metadata, transformation_matrix, transformation_matrix_file,
-                                           VISIT_ID, max_serial_exp, output_path, save_to_disk=file_save)
-
         expected_od = expected_od_product.data
-        print(f"Expected OD for clean image: {expected_od}")
 
     return {
         'flux_results': flux_results,
@@ -280,112 +318,119 @@ def nd_calibration_workflow(
         'expected_od': expected_od
     }
 
+
 # ---------------------------------------------------------------------------
 # Test functions using pytest
 # ---------------------------------------------------------------------------
-def test_average_od_within_tolerance():
-    """
-    Test that the average OD computed for bright stars recovers the input OD within a specified tolerance.
-    """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create mock datasets.
-        dim_dataset_files = mock_dim_dataset_files(tmpdir, DIM_EXPTIME, FILTER_USED, CAL_FACTOR)
-        bright_dataset_files = mock_bright_dataset_files(tmpdir, BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR)
-        dim_dataset = Dataset(dim_dataset_files)
-        bright_dataset = Dataset(bright_dataset_files)
-
-        # Execute the calibration workflow.
-        results = nd_calibration_workflow(dim_dataset, bright_dataset, output_path=tmpdir, file_save=True, threshold=THRESHOLD)
-
-        # Validate that results are returned.
-        assert isinstance(results, dict) and results, "Results should be a non-empty dictionary."
-
-        # For each target, verify that the computed average OD is within tolerance.
-        tolerance = 0.5  # Tolerance for OD variation.
-        for target, data in results['flux_results'].items():
-            avg_od = data['average_od']
-            assert abs(avg_od - INPUT_OD) < tolerance, (
-                f"Target {target}: computed avg OD {avg_od} deviates more than {tolerance} from input OD {INPUT_OD}"
-            )
-            od_std = np.std(data['od_values'])
-            if od_std < THRESHOLD:
-                assert data['flag'] is False, f"Target {target}: low OD variation but flag is set"
-            else:
-                assert data['flag'] is True, f"Target {target}: high OD variation but flag is not set"
-
-
-def test_output_filename_convention():
-    """
-    Test that the output filenames adhere to the expected naming convention.
-    """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create mock datasets.
-        dim_dataset_files = mock_dim_dataset_files(tmpdir, DIM_EXPTIME, FILTER_USED, CAL_FACTOR)
-        bright_dataset_files = mock_bright_dataset_files(tmpdir, BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR)
-        dim_dataset = Dataset(dim_dataset_files)
-        bright_dataset = Dataset(bright_dataset_files)
-
-        # Run the workflow to generate output files.
-        nd_calibration_workflow(dim_dataset, bright_dataset, output_path=tmpdir, file_save=True, threshold=THRESHOLD)
-
-        # Check that at least one sweet-spot dataset file exists and follows the naming pattern.
-        pattern = re.compile(rf"CGI_{VISIT_ID}_(\d{{3}})_FilterBand_{FILTER_USED}_NDF_SWEET\.fits")
-        filenames = os.listdir(tmpdir)
-        sweet_files = [fn for fn in filenames if pattern.match(fn)]
-        assert sweet_files, "No NDFilterSweetSpotDataset files found matching the naming convention."
-        for fn in sweet_files:
-            match = pattern.match(fn)
-            serial = int(match.group(1))
-            assert serial >= 1, f"Serial number in filename {fn} is invalid."
-
-
-def test_nd_filter_calibration_object():
+def test_nd_filter_calibration_object(dim_dataset, bright_dataset):
     """
     Test that the ND filter OD calibration product generated is valid and contains the expected header keywords.
     Uses a FPAM-to-EXCAM transformation matrix FITS file and one of the bright star images as the clean entry.
+
+    Parameters:
+        dim_dataset (Dataset): dataset object of dim star images
+        bright_dataset (Dataset): dataset object of bright star images
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create mock datasets.
-        dim_dataset_files = mock_dim_dataset_files(tmpdir, DIM_EXPTIME, FILTER_USED, CAL_FACTOR)
-        bright_dataset_files = mock_bright_dataset_files(tmpdir, BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR)
-        dim_dataset = Dataset(dim_dataset_files)
-        bright_dataset = Dataset(bright_dataset_files)
+    print("**Testing ND filter OD calibration product generation and expected headers**")
 
-        # Use one of the bright star dataset files as the clean entry.
-        clean_entry = bright_dataset_files[0]
+    clean_entry = bright_dataset_files[0]
 
-        # Create a dummy transformation matrix FITS file with a 2x2 identity matrix.
-        transformation_matrix_file = os.path.join(tmpdir, "fpam_to_excam.fits")
-        dummy_matrix = np.eye(2)  # Use 2x2 if that matches the expected dimension
-        hdu = fits.PrimaryHDU(dummy_matrix)
-        hdu.writeto(transformation_matrix_file)
+    transformation_matrix_file = os.path.join(DEFAULT_CAL_PRODUCTS_OUTPUT_DIR, "fpam_to_excam.fits")
+    dummy_matrix = np.eye(2)
+    hdu = fits.PrimaryHDU(dummy_matrix)
+    hdu.writeto(transformation_matrix_file, overwrite=True)
 
-        # Call the workflow and pass the file path:
-        nd_calibration_workflow(
-            dim_dataset,
-            bright_dataset,
-            output_path=tmpdir,
-            file_save=True,
-            threshold=THRESHOLD,
-            clean_entry=clean_entry,
-            transformation_matrix_file=transformation_matrix_file
+    nd_calibration_workflow(dim_dataset, bright_dataset,
+                            output_path=DEFAULT_CAL_PRODUCTS_OUTPUT_DIR,
+                            file_save=FILESAVE, threshold=OD_RASTER_THRESHOLD,
+                            clean_entry=clean_entry,
+                            transformation_matrix_file=transformation_matrix_file)
+
+    nd_files = [fn for fn in os.listdir(DEFAULT_CAL_PRODUCTS_OUTPUT_DIR) if fn.endswith('_NDF_ExpectedOD.fits')]
+    assert nd_files, "No NDFilterOD files were generated."
+    file_path = os.path.join(DEFAULT_CAL_PRODUCTS_OUTPUT_DIR, nd_files[0])
+    with fits.open(file_path) as hdul:
+        primary_hdr = hdul[0].header
+        ext_hdr = hdul[1].header
+        assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE keyword is not True."
+        assert ext_hdr.get('FPAMNAME') is not None, "Extension header missing CFAMNAME keyword."
+        assert ext_hdr.get('FPAM_H') is not None, "Extension header missing FPAM_H keyword."
+        assert ext_hdr.get('FPAM_V') is not None, "Extension header missing FPAM_V keyword."
+        assert ext_hdr.get('CFAMNAME') is not None, "Extension header missing CFAMNAME keyword."
+
+
+def test_output_filename_convention(dim_dataset, bright_dataset):
+    """
+    Test that the output filenames adhere to the expected naming convention.
+
+    Parameters:
+        dim_dataset (Dataset): dataset object of dim star images
+        bright_dataset (Dataset): dataset object of bright star images
+    """
+    print("**Testing calibration product output filename naming conventions**")
+
+    nd_calibration_workflow(dim_dataset, bright_dataset,
+                            output_path=DEFAULT_CAL_PRODUCTS_OUTPUT_DIR,
+                            file_save=True, threshold=OD_RASTER_THRESHOLD)
+
+    pattern = re.compile(rf"CGI_{VISIT_ID}_(\d{{3}})_FilterBand_{FILTER_USED}_NDF_SWEETSPOT\.fits")
+    filenames = os.listdir(DEFAULT_CAL_PRODUCTS_OUTPUT_DIR)
+    sweet_spot_files = [fn for fn in filenames if pattern.match(fn)]
+    assert sweet_spot_files, "No NDFilterSweetSpotDataset files found matching the naming convention."
+    for fn in sweet_spot_files:
+        match = pattern.match(fn)
+        serial = int(match.group(1))
+        assert serial >= 1, f"Serial number in filename {fn} is invalid."
+
+
+def test_average_od_within_tolerance(dim_dataset, bright_dataset):
+    """
+    Test that the average OD computed for bright stars recovers the input OD within a specified tolerance.
+
+    Parameters:
+        dim_dataset (Dataset): dataset object of dim star images
+        bright_dataset (Dataset): dataset object of bright star images
+    """
+    print("**Testing that computed OD matches input OD to within tolerance**")
+
+    results = nd_calibration_workflow(dim_dataset, bright_dataset,
+                                      output_path=DEFAULT_CAL_PRODUCTS_OUTPUT_DIR,
+                                      file_save=True, threshold=OD_RASTER_THRESHOLD)
+    assert isinstance(results, dict) and results, "Results should be a non-empty dictionary."
+
+    for target, data in results['flux_results'].items():
+        avg_od = data['average_od']
+        assert abs(avg_od - INPUT_OD) < OD_TEST_TOLERANCE, (
+            f"Target {target}: computed avg OD {avg_od} deviates more than {OD_TEST_TOLERANCE} from input OD {INPUT_OD}"
         )
+        od_std = np.std(data['od_values'])
+        if od_std < OD_RASTER_THRESHOLD:
+            assert data['flag'] == False, f"Target {target}: low OD variation but flag is set"
+        else:
+            assert data['flag'] == True, f"Target {target}: high OD variation but flag is not set"
 
-        # Open one of the generated ND filter calibration FITS files.
-        nd_files = [fn for fn in os.listdir(tmpdir) if fn.endswith('_NDF_CAL.fits')]
-        assert nd_files, "No NDFilterOD files were generated."
-        file_path = os.path.join(tmpdir, nd_files[0])
-        with fits.open(file_path) as hdul:
-            primary_hdr = hdul[0].header
-            ext_hdr = hdul[1].header
-            assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE keyword is not True."
-            assert ext_hdr.get('FPAM_H') is not None, "Extension header missing FPAM_H keyword."
 
 # ---------------------------------------------------------------------------
-# Run tests if executed directly.
+# Run tests
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
-    #test_nd_filter_calibration_object()
-    #test_output_filename_convention()
-    test_average_od_within_tolerance()
+    dim_dataset_files = mock_dim_dataset_files(dim_exptime=DIM_EXPTIME,
+                                            filter_used=FILTER_USED,
+                                            cal_factor=CAL_FACTOR,
+                                            save_mocks=FILESAVE,
+                                            output_path=DEFAULT_DIM_MOCKS_DIR)
+    bright_dataset_files = mock_bright_dataset_files(bright_exptime=BRIGHT_EXPTIME,
+                                                     filter_used=FILTER_USED,
+                                                     OD=INPUT_OD,
+                                                     cal_factor=CAL_FACTOR,
+                                                     save_mocks=FILESAVE,
+                                                     output_path=DEFAULT_BRIGHT_MOCKS_DIR)
+    
+    dim_dataset = Dataset(dim_dataset_files)
+    bright_dataset = Dataset(bright_dataset_files)
+
+    # Uncomment the tests you want to run:
+    test_nd_filter_calibration_object(dim_dataset, bright_dataset)
+    test_output_filename_convention(dim_dataset, bright_dataset)
+    test_average_od_within_tolerance(dim_dataset, bright_dataset)
     print("All tests passed.")

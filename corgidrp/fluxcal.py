@@ -247,60 +247,53 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     return irrad
 
 
-def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', subpixels=5, 
+def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', subpixels=5,
               background_sub=False, r_in=5, r_out=10, centering_method='xy'):
     """
     Returns the flux in photo-electrons of a point source using aperture photometry,
-    either by using a provided x,y center or by converting WCS coordinates to pixel positions.
-    An option for background subtraction using an annulus is also available.
-
-    Args:
-        image (corgidrp.data.Image): Combined source exposure image.
-        encircled_radius (float): Pixel radius of the circular aperture to sum the flux.
-        frac_enc_energy (float): Fraction of encircled energy inside the aperture (0 < fee <= 1).
-        method (str): {'exact', 'center', 'subpixel'}, method to determine the overlap of the aperture on the pixel grid.
-        subpixels (int): For the 'subpixel' method, number of subpixels per pixel in each dimension.
-        background_sub (bool): If True, the background is determined from a circular annulus and subtracted.
-        r_in (float): Inner radius of the background annulus in pixels.
-        r_out (float): Outer radius of the background annulus in pixels.
-        centering_method (str): Method for centering. Options are:
-            'xy'  - Use centroiding (via the provided centroid function).
-            'wcs' - Convert RA/DEC (from image.pri_hdr) to pixel coordinates using WCS (from image.ext_hdr).
-
+    with an option for background subtraction via an annulus.
+    
+    Parameters:
+        image: corgidrp.data.Image – the source image.
+        encircled_radius (float): Radius for the aperture.
+        frac_enc_energy (float): Fraction of energy in the aperture.
+        method (str): Overlap method, e.g. 'subpixel'.
+        subpixels (int): Subpixel resolution.
+        background_sub (bool): If True, subtract background.
+        r_in (float): Inner annulus radius.
+        r_out (float): Outer annulus radius.
+        centering_method (str): 'xy' for centroiding or 'wcs' for WCS-based centering.
+    
     Returns:
-        tuple: (flux, flux_error) if background_sub is False;
-               (flux, flux_error, back) if background_sub is True, where back is the background value subtracted.
+        tuple: (flux, flux_err) or (flux, flux_err, back) if background_sub is True.
     """
     if frac_enc_energy <= 0 or frac_enc_energy > 1:
         raise ValueError("frac_enc_energy {0} should be within 0 < fee <= 1".format(str(frac_enc_energy)))
     
-    # Copy the data so that modifications (like background subtraction) do not affect the original image.
+    # Work on a copy so that background subtraction does not alter original data.
     dat = image.data.copy()
-
-    # Determine the center position based on the selected method.
+    
+    # Determine the center position using either WCS or centroid method.
     if centering_method == 'wcs':
-        # Use WCS conversion: get RA/DEC from primary header and convert to pixel coordinates.
         ra = image.pri_hdr['RA']
         dec = image.pri_hdr['DEC']
         target_skycoord = SkyCoord(ra=ra, dec=dec, unit='deg')
         w = wcs.WCS(image.ext_hdr)
         pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
     elif centering_method == 'xy':
-        # Use the centroid positions determined from the data.
         x_center, y_center = centroid(image.data)
         pos = (x_center, y_center)
     else:
         raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
     
+    # Optionally subtract the background.
     if background_sub:
-        # Estimate the background using an annulus and subtract it from the data copy.
         bkg = LocalBackground(r_in, r_out)
         back = bkg(dat, pos[0], pos[1], mask=image.dq.astype(bool))
         dat -= back
 
-    # Create the circular aperture at the determined position.
+    # Create the circular aperture and compute photometry.
     aper = CircularAperture(pos, encircled_radius)
-    # Use the modified data (dat) for the photometry.
     aperture_sums, aperture_sums_errs = aper.do_photometry(
         dat,
         error=image.err[0],
@@ -308,38 +301,35 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
         method=method,
         subpixels=subpixels
     )
-
-    # Adjust for the fraction of encircled energy.
+    
     flux = aperture_sums[0] / frac_enc_energy
     flux_err = aperture_sums_errs[0] / frac_enc_energy
-
+    
     if background_sub:
         return flux, flux_err, back
     else:
         return flux, flux_err
 
 
-def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=5, r_out=10, centering_method='xy'):
+def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=5,
+                        r_out=10, centering_method='xy'):
     """
-    Returns the flux in photo-electrons of a point source using a 2D Gaussian fit.
-    This updated function allows for optional background subtraction (using an annulus) and
-    choosing the method for star centering (either via centroiding or WCS conversion).
-
-    Args:
-        image (corgidrp.data.Image): Combined source exposure image.
-        fwhm (float): Estimated FWHM of the point source.
-        fit_shape (int or tuple of two ints, optional): The shape of the fitting region. If a scalar,
-            it is assumed to be a square. If None, then defaults to nearly the full image size.
-        background_sub (bool, optional): If True, subtract a local background determined via an annulus.
-        r_in (float, optional): Inner radius of the background annulus in pixels.
-        r_out (float, optional): Outer radius of the background annulus in pixels.
-        centering_method (str, optional): Method for determining the star center.
-            Options are 'xy' (use centroiding) or 'wcs' (use WCS conversion). Default is 'xy'.
-
+    Returns the flux in photo-electrons using a 2D Gaussian fit.
+    Allows optional background subtraction and selection of centering method.
+    
+    Parameters:
+        image: corgidrp.data.Image – the source image.
+        fwhm (float): Estimated full-width at half maximum.
+        fit_shape (int or tuple, optional): Fitting region shape.
+        background_sub (bool): If True, subtract background.
+        r_in (float): Inner annulus radius.
+        r_out (float): Outer annulus radius.
+        centering_method (str): 'xy' or 'wcs' centering.
+    
     Returns:
-        tuple: (flux, flux_err) where flux is the integrated flux from the Gaussian fit and flux_err is its error.
+        tuple: (flux, flux_err)
     """
-    # Determine the star center based on the selected centering method.
+    # Determine the star center via WCS or centroid method.
     if centering_method == 'wcs':
         ra = image.pri_hdr['RA']
         dec = image.pri_hdr['DEC']
@@ -347,62 +337,63 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=
         w = wcs.WCS(image.ext_hdr)
         pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
     elif centering_method == 'xy':
-        # Use a centroiding algorithm (imported from corgidrp.astrom)
         x_center, y_center = centroid(image.data)
         pos = (x_center, y_center)
     else:
         raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
 
-    # Create a copy of the data for fitting.
     data_for_fit = image.data.copy()
-
-    # Optionally subtract the local background using an annular estimate.
     if background_sub:
         bkg = LocalBackground(r_in, r_out)
         back = bkg(data_for_fit, pos[0], pos[1], mask=image.dq.astype(bool))
         data_for_fit = data_for_fit - back
 
-    # Prepare the error array; replace any zero values to avoid division errors.
     err = image.err[0].copy()
     err[err == 0] = np.finfo(np.float32).eps
 
-    # Determine the fitting region shape.
     if fit_shape is None:
         fit_shape = image.data.shape[0] - 1
 
-    # Perform the 2D Gaussian fit.
-    psf_phot = fit_2dgaussian(
-        data_for_fit,
-        xypos=pos,
-        fwhm=fwhm,
-        fit_shape=fit_shape,
-        mask=image.dq.astype(bool),
-        error=err
-    )
+    psf_phot = fit_2dgaussian(data_for_fit, xypos=pos, fwhm=fwhm, fit_shape=fit_shape,
+                              mask=image.dq.astype(bool), error=err)
     flux = psf_phot.results['flux_fit'][0]
     flux_err = psf_phot.results['flux_err'][0]
     return flux, flux_err
 
 
-def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy = 1., method = 'subpixel', subpixels = 5,
-                           background_sub = False, r_in = 5 , r_out = 10, centering_method='xy'):
+def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=None):
     """
-    fills the FluxcalFactors calibration product values for one filter band,
-    calculates the flux calibration factors by aperture photometry.
-    The band flux values are divided by the found photoelectrons.
-    Propagates also errors to flux calibration factor calfile.
+    Computes a flux calibration factor using aperture photometry.
     
-    Args:
-        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
-        encircled_radius (float): pixel radius of the circular aperture to sum the flux
-        frac_enc_energy (float): fraction of encircled energy inside the encircled_radius of the PSF, inverse aperture correction, 0...1
-        method (str): {‘exact’, ‘center’, ‘subpixel’}, The method used to determine the overlap of the aperture on the pixel grid, 
-        default is 'subpixel'. For detailed description see https://photutils.readthedocs.io/en/stable/api/photutils.aperture.CircularAnnulus.html
-        subpixels (int): For the 'subpixel' method, resample pixels by this factor in each dimension. That is, each pixel is divided 
-                         into subpixels**2 subpixels. This keyword is ignored unless method='subpixel', default is 5
+    The photometry parameters are controlled via the `phot_kwargs` dictionary.
+    Defaults are provided below if these parameters are not defined. 
+    Accepted keywords:
+        'encircled_radius' (float): The radius of the circular aperture used for photometry.
+        'frac_enc_energy' (float): The fraction of the total flux expected to be enclosed 
+            within the aperture. Must be in the range (0, 1].
+        'method' (str): The photometry method to use. For example, 'subpixel' indicates subpixel 
+            sampling for the aperture.
+        'subpixels' (int): The number of subpixels per pixel to use in the photometry calculation 
+            or improved resolution.
+        'background_sub' (bool): Flag indicating whether to subtract background using an annulus.
+        'r_in' (float): The inner radius of the annulus used for background estimation.
+        'r_out' (float): The outer radius of the annulus used for background estimation.
+        'centering_method' (str): The method for determining the star's center. Options include 
+            'xy' for centroiding or 'wcs' for WCS-based centering.
     
+    Parameters:
+        dataset_or_image:
+            A corgidrp.data.Dataset or a single corgidrp.data.Image from which to compute 
+            the calibration factor.
+        flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
+            be used.
+        phot_kwargs (dict, optional):
+            A dictionary of keyword arguments controlling the aperture photometry.
+
     Returns:
-        corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
+        FluxcalFactor:
+            A calibration object containing the computed flux calibration factor and its 
+            associated error.
     """
     if isinstance(dataset_or_image, corgidrp.data.Dataset):
         image = dataset_or_image[0]
@@ -410,63 +401,85 @@ def calibrate_fluxcal_aper(dataset_or_image, encircled_radius, frac_enc_energy =
     else:
         image = dataset_or_image
         dataset = corgidrp.data.Dataset([image])
+    
+    if phot_kwargs is None:
+        phot_kwargs = {
+            'encircled_radius': 5,
+            'frac_enc_energy': 1.0,
+            'method': 'subpixel',
+            'subpixels': 5,
+            'background_sub': False,
+            'r_in': 5,
+            'r_out': 10,
+            'centering_method': 'xy'
+        }
+    
     star_name = image.ext_hdr["TARGET"]
     exptime = image.ext_hdr["EXPTIME"]
-    
     filter_name = image.ext_hdr["CFAMNAME"]
     filter_file = get_filter_name(image)
-    # read the transmission curve from the color filter file
+    
+    # Read filter and CALSPEC data.
     wave, filter_trans = read_filter_curve(filter_file)
-    calspec_filepath = get_calspec_file(star_name)
-
-    calspec_flux = read_cal_spec(calspec_filepath, wave)
-    
-    # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
+    calspec_filepath = get_calspec_file(star_name) 
     flux_ref = read_cal_spec(calspec_filepath, wave)
-    flux2 = calculate_band_flux(filter_trans, flux_ref, wave)
-    flux = calculate_band_irradiance(filter_trans, calspec_flux, wave)
-
-    print("comparing the fluxes", flux, flux2)
-
-    if background_sub:
-        ap_sum, ap_sum_err, back = aper_phot(image, encircled_radius, frac_enc_energy, method, subpixels, 
-              background_sub, r_in, r_out, centering_method)
-    else:
-        ap_sum, ap_sum_err = aper_phot(image, encircled_radius, frac_enc_energy, method, subpixels, 
-              background_sub, r_in, r_out, centering_method)
     
-    # NOTE (JM): I think we need to factor in exposure time here 
-    print("flux*exptime by the fluxcal calculations", flux * exptime)
-    print("ap sum", ap_sum)
+    if flux_or_irr == 'flux':
+        flux = calculate_band_flux(filter_trans, flux_ref, wave)
+    elif flux_or_irr == 'irr':
+        flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
+    else:
+        raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
+    
+    result = aper_phot(image, **phot_kwargs)
+    if phot_kwargs.get('background_sub', False):
+        ap_sum, ap_sum_err, back = result
+    else:
+        ap_sum, ap_sum_err = result
+
     fluxcal_fac = (flux * exptime) / ap_sum
-    fluxcal_fac_err = (flux * exptime)/ap_sum**2 * ap_sum_err
+    fluxcal_fac_err = (flux * exptime) / ap_sum**2 * ap_sum_err
+
+    fluxcal_obj = corgidrp.data.FluxcalFactor(
+        np.array([[fluxcal_fac]]),
+        err=np.array([[[fluxcal_fac_err]]]),
+        pri_hdr=image.pri_hdr,
+        ext_hdr=image.ext_hdr,
+        input_dataset=dataset
+    )
+    fluxcal_obj.ext_hdr["TARGET"] = star_name
+    fluxcal_obj.ext_hdr["CFAMNAME"] = filter_name
     
-    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), 
-                                          pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
-    
-    fluxcal.ext_hdr["TARGET"] = star_name
-    fluxcal.ext_hdr["CFAMNAME"] = filter_name
-    
-    return fluxcal
-    
-def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None, background_sub=False, 
-                              r_in=5, r_out=10, centering_method='xy'):
+    return fluxcal_obj
+
+
+
+def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=None):
     """
-    fills the FluxcalFactors calibration product values for one filter band,
-    calculates the flux calibration factors by fitting a 2D Gaussian.
-    The band flux values are divided by the found photoelectrons.
-    Propagates also errors to flux calibration factor calfile.
-    
-    Args:
-        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): dataset with one image or image as combined source exposure
-        fwhm (float): estimated fwhm of the point source
-        fit_shape (int or tuple of two ints): optional
-            The shape of the fitting region. If a scalar, then it is assumed
-            to be a square. If `None`, then the shape of the input ``data``.
-            It must be an odd value and should be much bigger than fwhm.
-    
+    Computes a flux calibration factor using a 2D Gaussian fit.
+    All photometry settings are provided via the phot_kwargs dictionary.
+
+    Defaults are provided below if these parameters are not defined. 
+    Accepted keywords:
+        'fwhm' (float): The expected full width at half maximum.
+        'fit_shape' (int or tuple): Fitting region shape.
+        'background_sub' (bool): Flag indicating whether to subtract background using an annulus.
+        'r_in' (float): The inner radius of the annulus used for background estimation.
+        'r_out' (float): The outer radius of the annulus used for background estimation.
+        'centering_method' (str): The method for determining the star's center. Options include 
+            'xy' for centroiding or 'wcs' for WCS-based centering.
+
+    Parameters:
+    dataset_or_image:
+        A corgidrp.data.Dataset or a single corgidrp.data.Image from which to compute 
+        the calibration factor.
+    flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
+        be used.
+    phot_kwargs (dict, optional):
+        A dictionary of keyword arguments controlling the aperture photometry.
+            
     Returns:
-        corgidrp.data.FluxcalFactor: FluxcalFactor calibration object with the value and error of the corresponding filter
+        FluxcalFactor calibration object.
     """
     if isinstance(dataset_or_image, corgidrp.data.Dataset):
         image = dataset_or_image[0]
@@ -474,29 +487,44 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, fwhm, fit_shape = None, backgrou
     else:
         image = dataset_or_image
         dataset = corgidrp.data.Dataset([image])
+    
+    if phot_kwargs is None:
+        phot_kwargs = {
+        'fwhm': 3,
+        'fit_shape': None,
+        'background_sub': False,
+        'r_in': 5,
+        'r_out': 10,
+        'centering_method': 'xy'
+    }
+
     star_name = image.ext_hdr["TARGET"]
-    filter_name = image.ext_hdr["CFAMNAME"]
     exptime = image.ext_hdr["EXPTIME"]
     filter_file = get_filter_name(image)
-    # read the transmission curve from the color filter file
+    
     wave, filter_trans = read_filter_curve(filter_file)
-    
     calspec_filepath = get_calspec_file(star_name)
-    
-    # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
     flux_ref = read_cal_spec(calspec_filepath, wave)
-    flux = calculate_band_flux(filter_trans, flux_ref, wave)
     
-    flux_sum, flux_sum_err = phot_by_gauss2d_fit(image, fwhm, fit_shape, background_sub, 
-                                                 r_in, r_out, centering_method)
+    if flux_or_irr == 'flux':
+        flux = calculate_band_flux(filter_trans, flux_ref, wave)
+    elif flux_or_irr == 'irr':
+        flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
+    else:
+        raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
-    fluxcal_fac = flux/flux_sum
-    fluxcal_fac_err = flux/flux_sum**2 * flux_sum_err
-
-    # NOTE (JM): I think we need to factor in exposure time here 
+    flux_sum, flux_sum_err = phot_by_gauss2d_fit(image, **phot_kwargs)
+    
+    # Factor in exposure time.
     fluxcal_fac = (flux * exptime) / flux_sum
-    fluxcal_fac_err = (flux * exptime)/flux_sum**2 * flux_sum_err
+    fluxcal_fac_err = (flux * exptime) / flux_sum**2 * flux_sum_err
+
+    fluxcal_obj = corgidrp.data.FluxcalFactor(
+        np.array([[fluxcal_fac]]),
+        err=np.array([[[fluxcal_fac_err]]]),
+        pri_hdr=image.pri_hdr,
+        ext_hdr=image.ext_hdr,
+        input_dataset=dataset
+    )
     
-    fluxcal = corgidrp.data.FluxcalFactor(np.array([[fluxcal_fac]]), err = np.array([[[fluxcal_fac_err]]]), pri_hdr = image.pri_hdr, ext_hdr = image.ext_hdr, input_dataset = dataset)
-    
-    return fluxcal
+    return fluxcal_obj
