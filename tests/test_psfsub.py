@@ -55,6 +55,8 @@ pl_contrast=1e-4
 ## pyKLIP data class tests
 
 def test_pyklipdata_ADI():
+    """Tests that pyklip dataset centers frame, assigns rolls, and initializes PSF library properly for ADI data. 
+    """
 
     rolls = [0,90]
     # Init with center shifted by 1 pixel
@@ -77,7 +79,8 @@ def test_pyklipdata_ADI():
     assert pyklip_dataset.psflib is None, "pyklip_dataset.psflib is not None, even though no reference dataset was provided."
 
 def test_pyklipdata_RDI():
-
+    """Tests that pyklip dataset centers frame, assigns rolls, and initializes PSF library properly for RDI data. 
+    """
     rolls = [45,180]
     n_sci = 1
     n_ref = 1
@@ -101,7 +104,8 @@ def test_pyklipdata_RDI():
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
  
 def test_pyklipdata_ADIRDI():
-    
+    """Tests that pyklip dataset centers frame, assigns rolls, and initializes PSF library properly for ADI+RDI data. 
+    """
     rolls = [45,-45,180]
     n_sci = 2
     n_ref = 1
@@ -125,6 +129,8 @@ def test_pyklipdata_ADIRDI():
     assert pyklip_dataset._psflib.master_library.shape[0] == n_sci+n_ref
 
 def test_pyklipdata_badtelescope():
+    """Tests that pyklip data class initialization fails if data does not come from Roman.
+    """
     mock_sci,mock_ref = create_psfsub_dataset(1,1,[0,0])
     mock_sci[0].pri_hdr['TELESCOP'] = "HUBBLE"
 
@@ -132,6 +138,8 @@ def test_pyklipdata_badtelescope():
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
 def test_pyklipdata_badinstrument():
+    """Tests that pyklip data class initialization fails if data does not come from Coronagraph Instrument.
+    """
     mock_sci,mock_ref = create_psfsub_dataset(1,1,[0,0])
     mock_sci[0].pri_hdr['INSTRUME'] = "WFI"
 
@@ -139,6 +147,8 @@ def test_pyklipdata_badinstrument():
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
 def test_pyklipdata_badcfamname():
+    """Tests that pyklip data class raises an error if the CFAM position is not a valid position name.
+    """
     mock_sci,mock_ref = create_psfsub_dataset(1,1,[0,0])
     mock_sci[0].ext_hdr['CFAMNAME'] = "BAD"
 
@@ -146,6 +156,8 @@ def test_pyklipdata_badcfamname():
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
 def test_pyklipdata_notdataset():
+    """Tests that pyklip data class raises an error if the iput is not a corgidrp dataset object.
+    """
     mock_sci,mock_ref = create_psfsub_dataset(1,0,[0])
     mock_ref = []
     with pytest.raises(UserWarning):
@@ -157,6 +169,8 @@ def test_pyklipdata_notdataset():
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
 def test_pyklipdata_badimgshapes():
+    """Tests that pyklip data class enforces all data frames to have the same shape.
+    """
     mock_sci,mock_ref = create_psfsub_dataset(2,0,[0,0])
     
     mock_sci[0].data = np.zeros((5,5))
@@ -164,6 +178,8 @@ def test_pyklipdata_badimgshapes():
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
 def test_pyklipdata_multiplepixscales():
+    """Tests that pyklip data class enforces that each frame has the same pixel scale.
+    """
     mock_sci,mock_ref = create_psfsub_dataset(2,0,[0,0])
     
     mock_sci[0].ext_hdr["PIXSCALE"] = 10
@@ -173,6 +189,10 @@ def test_pyklipdata_multiplepixscales():
 ## PSF subtraction step tests
 
 def test_psf_sub_ADI_nocrop():
+    """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
+    that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
+    output data shape is correct.
+    """
 
     numbasis = [1]
     rolls = [270+13,270-13]
@@ -232,7 +252,10 @@ def test_psf_sub_ADI_nocrop():
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
 def test_psf_sub_RDI_nocrop(): 
-
+    """Tests that psf subtraction step correctly identifies an RDI dataset (single roll, 1 or more references), 
+    that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
+    output data shape is correct.
+    """
     numbasis = [1]
     rolls = [13,0]
 
@@ -316,6 +339,10 @@ def test_psf_sub_RDI_nocrop():
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after RDI subtraction.")
     
 def test_psf_sub_ADIRDI_nocrop():
+    """Tests that psf subtraction step correctly identifies an ADI+RDI dataset (multiple rolls, 1 or more references), 
+    that overall counts decrease, that the KLIP result matches the analytical expectation for 1 KL mode, and that the 
+    output data shape is correct.
+    """
 
     numbasis = [1,2,3,4]
     rolls = [13,-13,0]
@@ -382,6 +409,9 @@ def test_psf_sub_ADIRDI_nocrop():
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI+RDI subtraction.")
 
 def test_psf_sub_withcrop():
+    """Tests that psf subtraction step results in the correct data shape when 
+    cropping by default, and that overall counts decrease.
+    """
 
     numbasis = [1,2]
     rolls = [270+13,270-13]
