@@ -73,7 +73,7 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
 
     Returns:
         binary_offset (np.array): List of [x,y] offsets in respective directions
-        
+        fit_errs (np.array): Array of [x,y] fitting errors
     """
     #### Centroid on location of star ###
     yind = int(ystar_guess)
@@ -440,7 +440,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.007
 
     return matched_image_to_field
 
-def fit_astrom_solution(params, fitorder, platescale, rotangle, pos1, meas_offset, sky_offset, meas_errs, x0, y0):
+def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_offset, sky_offset, meas_errs, x0, y0):
     '''
     Cost function used to fit the legendre polynomials for distortion mapping.
 
@@ -840,7 +840,7 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
     
     ## OPTIMIZE 
     # first_stars_, offsets_, true_offsets_, errs_ = first_stars, offsets, true_offsets, errs
-    (distortion_coeffs, _) = optimize.leastsq(fit_astrom_solution, initial_guess, 
+    (distortion_coeffs, _) = optimize.leastsq(fit_distortion_solution, initial_guess, 
                                               args=(fitorder, platescale, 
                                                 northangle, pos1, meas_offset, 
                                                 sky_offset, meas_errs, x0, y0))
@@ -850,7 +850,7 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
   
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
                           comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
-                          frames_to_combine=None, find_distortion=False, fitorder=3, position_error=None):
+                          frames_to_combine=None, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None):
     """
     Perform the boresight calibration of a dataset.
     
@@ -870,6 +870,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         find_distortion (boolean): Used to determine if distortion map coeffs will be computed (default: False)
         fitorder (int): The order of legendre polynomials used to fit the distortion map (default: 3)
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
+        initial_dist_guess (np.array): An initial guess of legendre coefficients used for fitting distortion, if None will use coeffs associated with no distortion (default: None)
 
     Returns:
         corgidrp.data.AstrometricCalibration: Astrometric Calibration data object containing image center coords in (RA,DEC), platescale, and north angle
@@ -963,7 +964,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     # compute the distortion map coeffs
     if find_distortion:
         first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, ref_star_pos=target_coord_tables, position_error=position_error)
-        distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder)
+        distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         distortion_coeffs = (np.array([np.inf]), np.inf)
 
