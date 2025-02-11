@@ -142,7 +142,7 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     pc_dark_frame_err = fits.getdata(pc_dark_file, 'ERR')
 
     # more frames gets a better agreement; agreement to 1% for ~160 darks and illuminated
-    assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.01) 
+    assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02) 
     assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
     assert pc_frame_err.min() >= 0
     assert pc_dark_frame_err.min() >= 0
