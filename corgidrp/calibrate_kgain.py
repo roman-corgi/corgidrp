@@ -395,8 +395,8 @@ def calibrate_kgain(dataset_kgain,
                 'be equal to or greater than {n_mean}.')
 
     check.real_positive_scalar(actual_gain, 'actual_gain', TypeError)
-    if actual_gain < 1:
-        raise CalKgainException('Actual gain must be >= 1.')
+    if actual_gain != 1:
+        raise CalKgainException('Actual gain must equal 1.')
     check.positive_scalar_integer(min_val, 'min_val', TypeError)
     check.positive_scalar_integer(max_val, 'max_val', TypeError)
     if min_val >= max_val:
@@ -898,6 +898,6 @@ def kgain_dataset_2_list(dataset):
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
     # When measuring k_gain, there can only be one gain for all exposure times
-    actual_gain = np.mean(gains) # not actually used in k gain calibration since frames already gain-divided
+    actual_gain = np.mean(gains)
     
     return stack, mean_frame_stack, actual_gain
