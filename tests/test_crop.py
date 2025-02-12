@@ -218,7 +218,7 @@ def test_non_nfov_input():
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[50.5,50.5])
     for frame in test_dataset:
-        frame.pri_hdr['LSAMNAME'] = 'WFOV'
+        frame.ext_hdr['LSAMNAME'] = 'WFOV'
 
     try:
         _ = crop(test_dataset,sizexy=20,centerxy=None)

@@ -1,9 +1,14 @@
 import os
+import warnings
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
 import astropy.time as time
 import pandas as pd
+import pyklip
+from pyklip.instruments.Instrument import Data as pyKLIP_Data
+from pyklip.instruments.utils.wcsgen import generate_wcs
+from astropy import wcs
 import copy
 import corgidrp
 
@@ -233,9 +238,6 @@ class Dataset():
             split_datasets.append(sub_dataset)
 
         return split_datasets, unique_vals
-
-
-
 
 class Image():
     """
@@ -599,7 +601,6 @@ class Image():
             self.hdu_names.append(name)
             self.hdu_list.append(new_hdu)
 
-
 class Dark(Image):
     """
     Dark calibration frame for a given exposure time and EM gain.
@@ -649,7 +650,6 @@ class Dark(Image):
         if self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
 
-
 class FlatField(Image):
     """
     Master flat generated from raster scan of uranus or Neptune.
@@ -689,7 +689,6 @@ class FlatField(Image):
             raise ValueError("File that was loaded was not a FlatField file.")
         if self.ext_hdr['DATATYPE'] != 'FlatField':
             raise ValueError("File that was loaded was not a FlatField file.")
-
 
 class NonLinearityCalibration(Image):
     """
@@ -900,7 +899,6 @@ class KGain(Image):
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
-
 class BadPixelMap(Image):
     """
     Class for bad pixel map. The bad pixel map indicates which pixels are hot
@@ -944,7 +942,6 @@ class BadPixelMap(Image):
             raise ValueError("File that was loaded was not a BadPixelMap file.")
         if self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
-
 
 class DetectorNoiseMaps(Image):
     """
@@ -1348,6 +1345,433 @@ class FluxcalFactor(Image):
             self.filedir = "."
             self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
 
+class PyKLIPDataset(pyKLIP_Data):
+    """
+    A pyKLIP instrument class for Roman Coronagraph Instrument data.
+
+    # TODO: Add more bandpasses, modes to self.wave_hlc
+    #       Clarify attribute descriptions
+    #       Add wcs header info!
+
+    Attrs:
+        input: Input corgiDRP dataset.
+        centers: PSF center locations (double check this).
+        filenums: file numbers.
+        filenames: file names.
+        PAs: position angles.
+        wvs: wavelengths.
+        wcs: WCS header information. Currently None.
+        IWA: inner working angle.
+        OWA: outer working angle.
+        psflib: corgiDRP dataset containing reference PSF observations.
+        output: PSF subtracted pyKLIP dataset
+
+    """
+    
+    ####################
+    ### Constructors ###
+    ####################
+    
+    def __init__(self,
+                 dataset,
+                 psflib_dataset=None,
+                 highpass=False,
+                 center_include_offset=True):
+        """
+        Initialize the pyKLIP instrument class for space telescope data.
+        # TODO: Determine inner working angle based on PAM positions
+                    - Inner working angle based on Focal plane mask (starts with HLC) + color filter ('1F') for primary mode
+                    - Outer working angle based on field stop? (should be R1C1 or R1C3 for primary mode)
+        
+        Args:
+            dataset (corgidrp.data.Dataset):
+                Dataset containing input science observations.
+            psflib_dataset (corgidrp.data.Dataset, optional):
+                Dataset containing input reference observations. The default is None.
+            highpass (bool, optional):
+                Toggle to do highpass filtering. Defaults fo False.
+            center_include_offset (bool, optional):
+                Toggle as to whether the relative header offset values of each
+                image is applied during image centering. Defaults to True.
+        """
+        
+        # Initialize pyKLIP Data class.
+        super(PyKLIPDataset, self).__init__()
+
+        # Set filter wavelengths
+        self.wave_hlc = {'1F': 575e-9} # meters
+        
+        # Optional variables
+        self.center_include_offset = center_include_offset
+                
+        # Read science and reference files.
+        self.readdata(dataset, psflib_dataset, highpass)
+        
+        pass
+    
+    ################################
+    ### Instance Required Fields ###
+    ################################
+    
+    @property
+    def input(self):
+        return self._input
+    @input.setter
+    def input(self, newval):
+        self._input = newval
+    
+    @property
+    def centers(self):
+        return self._centers
+    @centers.setter
+    def centers(self, newval):
+        self._centers = newval
+    
+    @property
+    def filenums(self):
+        return self._filenums
+    @filenums.setter
+    def filenums(self, newval):
+        self._filenums = newval
+    
+    @property
+    def filenames(self):
+        return self._filenames
+    @filenames.setter
+    def filenames(self, newval):
+        self._filenames = newval
+    
+    @property
+    def PAs(self):
+        return self._PAs
+    @PAs.setter
+    def PAs(self, newval):
+        self._PAs = newval
+    
+    @property
+    def wvs(self):
+        return self._wvs
+    @wvs.setter
+    def wvs(self, newval):
+        self._wvs = newval
+    
+    @property
+    def wcs(self):
+        return self._wcs
+    @wcs.setter
+    def wcs(self, newval):
+        self._wcs = newval
+    
+    @property
+    def IWA(self):
+        return self._IWA
+    @IWA.setter
+    def IWA(self, newval):
+        self._IWA = newval
+    
+    @property
+    def OWA(self):
+        return self._OWA
+    @OWA.setter
+    def OWA(self, newval):
+        self._OWA = newval
+    
+    @property
+    def psflib(self):
+        return self._psflib
+    @psflib.setter
+    def psflib(self, newval):
+        self._psflib = newval
+    
+    @property
+    def output(self):
+        return self._output
+    @output.setter
+    def output(self, newval):
+        self._output = newval
+    
+    ###############
+    ### Methods ###
+    ###############
+    
+    def readdata(self,
+                 dataset,
+                 psflib_dataset,
+                 highpass=False):
+        """
+        Read the input science observations.
+        
+        Args:
+            dataset (corgidrp.data.Dataset):
+                Dataset containing input science observations.
+            psflib_dataset (corgidrp.data.Dataset, optional):
+                Dataset containing input reference observations. The default is None.
+            highpass (bool, optional):
+                Toggle to do highpass filtering. Defaults fo False.
+        """
+        
+        # Check input.
+        if not isinstance(dataset, corgidrp.data.Dataset):
+            raise UserWarning('Input dataset is not a corgidrp Dataset object.')
+        if len(dataset) == 0:
+            raise UserWarning('No science frames in the input dataset.')
+        
+        if not psflib_dataset is None:
+            if not isinstance(psflib_dataset, corgidrp.data.Dataset):
+                raise UserWarning('Input psflib_dataset is not a corgidrp Dataset object.')
+        
+        # Loop through frames.
+        input_all = []
+        centers_all = []  # pix
+        filenames_all = []
+        PAs_all = []  # deg
+        wvs_all = []  # m
+        wcs_all = []
+        PIXSCALE = []  # arcsec
+
+        psflib_data_all = []
+        psflib_centers_all = []  # pix
+        psflib_filenames_all = []
+
+        # Iterate over frames in dataset
+
+        for i, frame in enumerate(dataset):
+            
+            phead = frame.pri_hdr
+            shead = frame.ext_hdr
+                
+            TELESCOP = phead['TELESCOP']
+            INSTRUME = phead['INSTRUME']
+            CFAMNAME = shead['CFAMNAME']
+            data = frame.data
+            if data.ndim == 2:
+                data = data[np.newaxis, :]
+            if data.ndim != 3:
+                raise UserWarning('Requires 2D/3D data cube')
+            NINTS = data.shape[0]
+            pix_scale = shead['PIXSCALE'] # arcsec
+            PIXSCALE += [pix_scale] 
+
+            # Get centers.
+            if self.center_include_offset == True:
+                # Use the offset values from the header to adjust the center
+                centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
+                    shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
+            else:
+                # Assume the STARLOC define the correct center for each image
+                centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+
+            # Get metadata.
+            input_all += [data]
+            centers_all += [centers]
+            filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            PAs_all += [shead['ROLL']] * NINTS
+
+            if TELESCOP != "ROMAN" or INSTRUME != "CGI":
+                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
+            
+            # Get center wavelengths
+            try:
+                CWAVEL = self.wave_hlc[CFAMNAME]
+            except:
+                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
+            
+            # Rounding error introduced here?
+            wvs_all += [CWAVEL] * NINTS
+
+            # pyklip will look for wcs.cd, so make sure that attribute exists
+            wcs_obj = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
+
+            if not hasattr(wcs_obj.wcs,'cd'):
+                wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
+            
+            for j in range(NINTS):
+                wcs_all += [wcs_obj.deepcopy()]
+                
+        try:
+            input_all = np.concatenate(input_all)
+        except ValueError:
+            raise UserWarning('Unable to concatenate images. Some science files do not have matching image shapes')
+        centers_all = np.concatenate(centers_all).reshape(-1, 2)
+        filenames_all = np.array(filenames_all)
+        filenums_all = np.array(range(len(filenames_all)))
+        PAs_all = np.array(PAs_all)
+        wvs_all = np.array(wvs_all).astype(np.float32)
+        wcs_all = np.array(wcs_all)
+        PIXSCALE = np.unique(np.array(PIXSCALE))
+        if len(PIXSCALE) != 1:
+            raise UserWarning('Some science files do not have matching pixel scales')
+        iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. / PIXSCALE[0]  # pix
+        owa_all = np.sum(np.array(input_all.shape[1:]) / 2.)  # pix
+
+        # Recenter science images so that the star is at the center of the array.
+        new_center = (np.array(data.shape[1:])-1)/ 2.
+        new_center = new_center[::-1]
+        for i, image in enumerate(input_all):
+            recentered_image = pyklip.klip.align_and_scale(image, new_center=new_center, old_center=centers_all[i])
+            input_all[i] = recentered_image
+            centers_all[i] = new_center
+        
+        # Assign pyKLIP variables.
+        self._input = input_all
+        self._centers = centers_all
+        self._filenames = filenames_all
+        self._filenums = filenums_all
+        self._PAs = PAs_all
+        self._wvs = wvs_all
+        self._wcs = wcs_all
+        self._IWA = iwa_all
+        self._OWA = owa_all
+
+        # Prepare reference library
+        if not psflib_dataset is None:
+            psflib_data_all = []
+            psflib_centers_all = []  # pix
+            psflib_filenames_all = []
+
+            for i, frame in enumerate(psflib_dataset):
+                
+                phead = frame.pri_hdr
+                shead = frame.ext_hdr
+                    
+                data = frame.data
+                if data.ndim == 2:
+                    data = data[np.newaxis, :]
+                if data.ndim != 3:
+                    raise UserWarning('Requires 2D/3D data cube')
+                NINTS = data.shape[0]
+                pix_scale = shead['PIXSCALE'] # arcsec
+                PIXSCALE += [pix_scale] 
+
+                # Get centers.
+                if self.center_include_offset == True:
+                    # Use the offset values from the header to adjust the center
+                    centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
+                        shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
+                else:
+                    # Assume the STARLOC define the correct center for each image
+                    centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+
+                psflib_data_all += [data]
+                psflib_centers_all += [centers]
+                psflib_filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            
+            psflib_data_all = np.concatenate(psflib_data_all)
+            if psflib_data_all.ndim != 3:
+                raise UserWarning('Some reference files do not have matching image shapes')
+            psflib_centers_all = np.concatenate(psflib_centers_all).reshape(-1, 2)
+            psflib_filenames_all = np.array(psflib_filenames_all)
+            
+            # Recenter reference images.
+            new_center = (np.array(data.shape[1:])-1)/ 2.
+            new_center = new_center[::-1]
+            for i, image in enumerate(psflib_data_all):
+                recentered_image = pyklip.klip.align_and_scale(image, new_center=new_center, old_center=psflib_centers_all[i])
+                psflib_data_all[i] = recentered_image
+                psflib_centers_all[i] = new_center
+            
+            # Append science data.
+            psflib_data_all = np.append(psflib_data_all, self._input, axis=0)
+            psflib_centers_all = np.append(psflib_centers_all, self._centers, axis=0)
+            psflib_filenames_all = np.append(psflib_filenames_all, self._filenames, axis=0)
+            
+            # Initialize PSF library.
+            psflib = pyklip.rdi.PSFLibrary(psflib_data_all, new_center, psflib_filenames_all, compute_correlation=True, highpass=highpass)
+            
+            # Prepare PSF library.
+            psflib.prepare_library(self)
+            
+            # Assign pyKLIP variables.
+            self._psflib = psflib
+        
+        else:
+            self._psflib = None
+        
+        pass
+    
+    def savedata(self,
+                 filepath,
+                 data,
+                 klipparams=None,
+                 filetype='',
+                 zaxis=None,
+                 more_keywords=None):
+        """
+        Function to save the data products that will be called internally by
+        pyKLIP.
+        
+        Args:
+            filepath (path): 
+                Path of the output FITS file.
+            data (3D-array): 
+                KLIP-subtracted data of shape (nkl, ny, nx).
+            klipparams (str, optional): 
+                PyKLIP keyword arguments used for the KLIP subtraction. The default
+                is None.
+            filetype (str, optional): 
+                Data type of the pyKLIP product. The default is ''.
+            zaxis (list, optional): 
+                List of KL modes used for the KLIP subtraction. The default is
+                None.
+            more_keywords (dict, optional): 
+                Dictionary of additional header keywords to be written to the
+                output FITS file. The default is None.
+        """
+        
+        # Make FITS file.
+        hdul = fits.HDUList()
+        hdul.append(fits.PrimaryHDU(data))
+        
+        # Write all used files to header. Ignore duplicates.
+        filenames = np.unique(self.filenames)
+        Nfiles = np.size(filenames)
+        hdul[0].header['DRPNFILE'] = (Nfiles, 'Num raw files used in pyKLIP')
+        for i, filename in enumerate(filenames):
+            if i < 1000:
+                hdul[0].header['FILE_{0}'.format(i)] = filename + '.fits'
+            else:
+                print('WARNING: Too many files to be written to header, skipping')
+                break
+        
+        # Write PSF subtraction parameters and pyKLIP version to header.
+        try:
+            pyklipver = pyklip.__version__
+        except:
+            pyklipver = 'unknown'
+        hdul[0].header['PSFSUB'] = ('pyKLIP', 'PSF Subtraction Algo')
+        hdul[0].header.add_history('Reduced with pyKLIP using commit {0}'.format(pyklipver))
+        hdul[0].header['CREATOR'] = 'pyKLIP-{0}'.format(pyklipver)
+        hdul[0].header['pyklipv'] = (pyklipver, 'pyKLIP version that was used')
+        if klipparams is not None:
+            hdul[0].header['PSFPARAM'] = (klipparams, 'KLIP parameters')
+            hdul[0].header.add_history('pyKLIP reduction with parameters {0}'.format(klipparams))
+        
+        # Write z-axis units to header if necessary.
+        if zaxis is not None:
+            if 'KL Mode' in filetype:
+                hdul[0].header['CTYPE3'] = 'KLMODES'
+                for i, klmode in enumerate(zaxis):
+                    hdul[0].header['KLMODE{0}'.format(i)] = (klmode, 'KL Mode of slice {0}'.format(i))
+
+        # Write extra keywords to header if necessary.
+        if more_keywords is not None:
+            for hdr_key in more_keywords:
+                hdul[0].header[hdr_key] = more_keywords[hdr_key]
+        
+        # Update image center.
+        center = self.output_centers[0]
+        hdul[0].header.update({'PSFCENTX': center[0], 'PSFCENTY': center[1]})
+        hdul[0].header.update({'CRPIX1': center[0] + 1, 'CRPIX2': center[1] + 1})
+        hdul[0].header.add_history('Image recentered to {0}'.format(str(center)))
+        
+        # Write FITS file.
+        try:
+            hdul.writeto(filepath, overwrite=True)
+        except TypeError:
+            hdul.writeto(filepath, clobber=True)
+        hdul.close()
+        
+        pass
 
 datatypes = { "Image" : Image,
               "Dark" : Dark,
