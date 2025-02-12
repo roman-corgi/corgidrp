@@ -10,16 +10,17 @@ from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
 from astropy.table import Table
 from astropy.convolution import convolve_fft
+from astropy.modeling import models
 import astropy.units as u
 import photutils.centroids as centr
 import corgidrp.data as data
-from corgidrp.data import Image
+from corgidrp.data import Image, Dataset
 import corgidrp.detector as detector
 from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 
-from emccd_detect.emccd_detect import EMCCDDetect
-from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
+#from emccd_detect.emccd_detect import EMCCDDetect
+#from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
 
 detector_areas_test= {
 'SCI' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
@@ -1966,3 +1967,74 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
         frame.save(filedir=filedir, filename=filename)
 
     return frame
+
+def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
+    """
+    Create simulated data for core throughput calibration. This is a set of
+    individual, noiseless 2D Gaussians, one per image.  
+
+    Args:
+        fwhm_mas (float): PSF's FWHM in mas
+        cfam_name (str): CFAM filter name. Default is '1F'
+        n_psfs (int): (Optional) Number of simulated PSFs. Default s 10
+
+    Returns:
+        corgidrp.data.Image: The simulated PSF Images
+        np.array: PSF locations
+        np.array: PSF CT values
+    """
+    if cfam_name == None:
+        cfam_name = '1F'
+    if n_psfs == None:
+        n_psfs = 10
+
+    # Default headers
+    prhd, exthd = create_default_headers()
+    # cfam filter
+    exthd['CFAMNAME'] = cfam_name
+    # Mock error
+    err = np.ones([1,1024,1024])
+
+    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
+    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
+    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    y, x = np.indices(imshape)
+
+    # Following astropy documentation:
+    # Generate random source model list. Random amplitues and centers within a pixel
+    # PSF's final location on SCI frame is moved by more than one pixel below. This
+    # is the fractional part that only needs a smaller array of non-zero values
+    rng = np.random.default_rng(0)
+    model_params = [
+        dict(amplitude=rng.uniform(1,10),
+        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        x_stddev=fwhm_mas/21.8/2.335,
+        y_stddev=fwhm_mas/21.8/2.335)
+        for _ in range(n_psfs)]
+
+    model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
+
+    # Render models to image using full evaluation
+    psf_loc = []
+    half_psf = []
+    data_psf = []
+    for model in model_list:
+        psf = np.zeros(imshape)
+        model.bounding_box = None
+        model.render(psf)
+        # Insert PSF at random location within the SCI frame
+        image = np.zeros([1024, 1024])
+        y_image, x_image = rng.integers(100), rng.integers(100)
+        image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
+            512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
+        # List of known positions and list of known PSF volume
+        psf_loc += [[512+y_image+model.y_mean.value-imshape[0]//2,
+            512+x_image+model.x_mean.value-imshape[0]//2]]
+        # Add half PSF volume for 2D circular Gaussian (numerator of core throughput)
+        # TBD: use analytical value
+        half_psf += [model.amplitude.value*10/np.pi]
+        # Build up the Dataset
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
+
+    return data_psf, np.array(psf_loc), np.array(half_psf)
