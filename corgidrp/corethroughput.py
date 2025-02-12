@@ -76,7 +76,7 @@ def di_over_pil_transmission(
 
 def get_psf_pix(
     dataset,
-    method='max',
+    method='centroid',
     ):
     """ Estimate the PSF positions of a set of PSF images. 
  
@@ -84,16 +84,24 @@ def get_psf_pix(
       dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
       
       method (string): the method used to estimate the PSF positions. Default:
-        'max'.
+        'centroid'.
 
     Returns:
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
       with respect to the pixel (0,0) in the PSF images
     """ 
     psf_pix = []
-    if method.lower() == 'max':
+    if method.lower() == 'centroid':
+        # Find max first
         for psf in dataset:
-            psf_pix += [np.unravel_index(psf.data.argmax(), psf.data.shape)]
+            pix_max = np.unravel_index(psf.data.argmax(), psf.data.shape)
+            # Cut out PSF within +/- 3 pixels (+/- 1.3 l/D for band 1F)
+            psf_cent = psf.data[pix_max[0]-3:pix_max[0]+4, pix_max[1]-3:pix_max[1]+4]
+            y, x = np.indices(psf_cent.shape)
+            y_cent = (y*psf_cent).sum()/psf_cent.sum()
+            x_cent = (x*psf_cent).sum()/psf_cent.sum()
+            # Add centroid shift relative to maximum location
+            psf_pix += [[pix_max[0]+y_cent-3,pix_max[1]+x_cent-3]]
     else:
         raise Exception('Method to estimate PSF pixels unrecognized')
 
@@ -102,7 +110,7 @@ def get_psf_pix(
 def get_psf_ct(
     dataset,
     unocc_psf_norm=1,
-    method='max',
+    method='direct',
     filter='1F',
     ):
     """ Estimate the core throughput of a set of PSF images.
@@ -174,7 +182,7 @@ def estimate_psf_pix_and_ct(
         Units: photoelectrons / second / pixel.
 
       pix_method (string): The method used to estimate the PSF positions.
-        Default: 'max'.
+        Default: 'centroid'.
 
       ct_method (string): The method used to estimate the PSF core throughput.
         Default: 'direct'.        
@@ -193,7 +201,7 @@ def estimate_psf_pix_and_ct(
 
     # default methods
     if pix_method is None:
-        pix_method = 'max'
+        pix_method = 'centroid'
     if ct_method is None:
         ct_method = 'direct'
     if version is None:
@@ -221,7 +229,6 @@ def estimate_psf_pix_and_ct(
                 pupil_img_frames += [frame]
         except:
             pass
-  
     
     if len(pupil_img_frames):
         print(f'Found {len(pupil_img_frames)} pupil images for the core throughput estimation.')
@@ -344,8 +351,7 @@ def get_ct_fpm_center(
         "H/V values to EXCAM row/column pixels"
 
           delta_pam = np.array([[dh], [dv]]) # fill these in
-          M = np.array([[ 0.        ,  0.12285012],
-              [-0.12285012, -0.        ]], dtype=float32)
+          M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
           delta_pix = M @ delta_pam
 
     Returns:

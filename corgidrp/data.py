@@ -1361,11 +1361,11 @@ class FpamFsamRotMat(Image):
     Attributes:
         default_rot (arr): default values for FPAM and FSAM rotation matrices (modelbased)
     """
-    # default rotation matrices (model is consistent with ground FFT tests)
-    # Signs +/- have been double checked against FFT data
+    # default rotation matrices (model is consistent with FFT/TVAC tests)
+    # Signs +/- have been double checked against FFT/TVAC data
     fpam_to_excam_modelbased = np.array([[ 0.        ,  0.12285012],
        [-0.12285012, 0.        ]], dtype=float)
-    # Signs -/- have been double checked against FFT data
+    # Signs -/- have been double checked against FFT/TVAC data
     fsam_to_excam_modelbased = np.array([[-0.        , -0.09509319],
        [-0.09509319, 0.        ]], dtype=float)
     default_rot = np.array([fpam_to_excam_modelbased, fsam_to_excam_modelbased])
