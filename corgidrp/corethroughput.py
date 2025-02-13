@@ -411,10 +411,25 @@ def write_ct_calfile(
     fsam_pos_ct=None,
     ):
     """
-    1090884 - TBD Add text from 1090884
+    1090884 - Given 1) a core throughput dataset consisting of a set of clean
+    frames (nominally 1024x1024) taken at different FSM positions, and 2) a list
+    of N (x, y) coordinates, in units of EXCAM pixels, which fall within the area
+    covered by the core throughput dataset, the CTC GSW shall produce a
+    1024x1024xN cube of PSF images best centered at each set of coordinates
 
+    A CoreThroughput calibration file has two main data arrays:
+    
+      3-d cube of PSF images, i.e, a N1xN1xN array where N1<=1024 is set by a
+      keyword argument, with default value of 1024. The N PSF images are the ones
+      in the CT dataset (1090881 and 1090884)
+      
+      Nx3 cube that contains N sets of (x,y, CT measurements). The (x,y) are
+      pixel coordinates of the N1xN1xN cube of PSF images wrt the FPAM's center
+      (1090881 and 1090882)
 
-    TBD: Add definition of CT cal file
+      The CoreThroughput calibration file will also include the FPAM, FSAM
+      position during coronagraphic and core throughput observing sequences in
+      units of EXCAM pixels (1090882)
 
     Args:
       dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of

@@ -116,7 +116,15 @@ def test_fpm_pos():
     # DRP calibration files
     fpam2excam_matrix, fsam2excam_matrix = corethroughput.read_rot_matrix()
     # TVAC files
-    
+    fpam2excam_matrix_tvac = fits.getdata(os.path.join(os.getcwd(),
+        'test_data', 'fpam_to_excam_modelbased.fits'))
+    fsam2excam_matrix_tvac = fits.getdata(os.path.join(os.getcwd(),
+        'test_data', 'fsam_to_excam_modelbased.fits'))
+
+    # Some irrelevant rounding happens when defining FpamFsamRotMat() in data.py
+    assert np.all(fpam2excam_matrix - fpam2excam_matrix_tvac <= 1e-9)
+    assert np.all(fsam2excam_matrix - fsam2excam_matrix_tvac <= 1e-9)
+
     # Check that DRP calibration files for FPAM and FSAM agree with TVAC files
    
     # Using values within the range should return a meaningful value. Tested 10 times
