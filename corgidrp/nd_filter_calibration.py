@@ -4,12 +4,11 @@ import math
 import numpy as np
 from astropy.io import fits
 import corgidrp.fluxcal as fluxcal
-from corgidrp.data import NDFilterSweetSpotDataset, NDFilterOD
+from corgidrp.data import NDFilterSweetSpotDataset
 from corgidrp.astrom import centroid
+from scipy.interpolate import griddata
 
-# ---------------------------------------------------------------------------
-# Existing Helper Functions
-# ---------------------------------------------------------------------------
+
 def compute_expected_band_irradiance(star_name, filter_name):
     """
     Compute the expected band-integrated irradiance (erg/(s*cm^2)) for a star.
@@ -172,166 +171,100 @@ def get_max_serial(output_path, visit_id):
     return max_serial
 
 
-def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, visit_id, 
-                                 current_max, output_path, save_to_disk=True):
+def interpolate_od(sweet_spot_data, x_query, y_query, method='linear'):
     """
-    Create an ND filter sweet spot dataset product (an instance of NDFilterSweetSpotDataset)
-    using the aggregated sweet-spot data.
+    sweet_spot_data: Nx3 array [OD, x, y]
+    Returns the interpolated OD at (x_query, y_query).
+    """
+    # points -> array of shape (N, 2), i.e. all (x, y)
+    points = sweet_spot_data[:, 1:3]
+    values = sweet_spot_data[:, 0]  # OD
+    od_interp = griddata(points, values, (x_query, y_query), method=method)
+    return float(od_interp)
 
-    Args:
-        aggregated_sweet_spot_data (np.ndarray): An N×3 array with columns [OD, x, y].
-        common_metadata (dict): Common metadata (FPAM values, filter name).
-        visit_id (str): Identifier used in the output filename.
-        current_max (int): Current maximum serial number.
-        output_path (str): Directory where the file should be saved.
-        save_to_disk (bool): If True, the product is written to disk.
-    
-    Returns:
-        NDFilterSweetSpotDataset object.
+
+def create_nd_sweet_spot_dataset(
+    aggregated_sweet_spot_data,
+    common_metadata,
+    visit_id,
+    current_max,
+    output_path,
+    clean_frame_entry=None,             
+    transformation_matrix=None,            # 2x2 matrix from FPAM->EXCAM
+    transformation_matrix_file=None,       # path to that matrix file
+    save_to_disk=True
+):
     """
+    Create a *single* ND Filter Sweet Spot product:
+      - Start with the Nx3 sweet spot array from the ND dithers
+      - If a clean frame is provided, compute OD at the new location (via
+        the transformation matrix + nearest neighbor or interpolation).
+      - Append that row [OD, x, y] to the sweet spot data.
+      - Save the result as one NDFilterSweetSpotDataset.
+    """
+    # 1. Optionally compute and append the new row from the clean frame image
+    final_sweet_spot_data = aggregated_sweet_spot_data
+
+    if (clean_frame_entry is not None) and (transformation_matrix is not None):
+        # (a) Compute centroid in clean frame
+        x_clean, y_clean = centroid(clean_frame_entry.data)
+        hdr = clean_frame_entry.ext_hdr
+        clean_fpam_h = hdr.get('FPAM_H', 0.0)
+        clean_fpam_v = hdr.get('FPAM_V', 0.0)
+
+        # (b) Compare to sweet-spot FPAM reference
+        sp_fpam_h = common_metadata['FPAM_H']
+        sp_fpam_v = common_metadata['FPAM_V']
+        fpam_offset = np.array([clean_fpam_h - sp_fpam_h, clean_fpam_v - sp_fpam_v])
+
+        # (c) Apply the 2x2 transformation matrix to get EXCAM offset
+        excam_offset = transformation_matrix @ fpam_offset
+
+        # (d) Adjust the clean image centroid
+        x_adj = x_clean + excam_offset[0]
+        y_adj = y_clean + excam_offset[1]
+
+        # (e) Interpolate (or nearest-neighbor) OD from the existing Nx3 data
+        #     to get the predicted OD for that new location.
+        new_od = interpolate_od(final_sweet_spot_data, x_adj, y_adj)
+
+        # (f) Append that row to the Nx3 array
+        new_row = np.array([[new_od, x_adj, y_adj]])
+        final_sweet_spot_data = np.vstack([final_sweet_spot_data, new_row])
+
+    # 2. Build up the NDFilterSweetSpotDataset
     pri_hdr = fits.Header()
     pri_hdr['SIMPLE'] = True
     pri_hdr['BITPIX'] = 32
     pri_hdr['OBSID'] = 0
     pri_hdr['COMMENT'] = "Combined ND Filter Sweet Spot Dataset primary header"
-    
+
     ext_hdr = fits.Header()
     ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
     ext_hdr['FPAM_H'] = common_metadata.get('FPAM_H')
     ext_hdr['FPAM_V'] = common_metadata.get('FPAM_V')
     ext_hdr['CFAMNAME'] = common_metadata.get('CFAMNAME')
-    ext_hdr['HISTORY'] = "Combined sweet-spot dataset from bright star observations"
-    
+    ext_hdr['HISTORY'] = "Combined sweet-spot dataset from bright star dithers"
+
+    # Note transformation matrix in HISTORY
+    if transformation_matrix_file:
+        note = f"Clean frame row appended using transform: {os.path.basename(transformation_matrix_file)}"
+        ext_hdr['HISTORY'] = note
+
     ndsweetspot_dataset = NDFilterSweetSpotDataset(
-        data_or_filepath=aggregated_sweet_spot_data,
+        data_or_filepath=final_sweet_spot_data,
         pri_hdr=pri_hdr,
         ext_hdr=ext_hdr,
-        input_dataset=None
+        input_dataset=None  # or pass something if you have a known parent dataset
     )
-    
-    if save_to_disk:
-        serial_number = f"{current_max + 1:03d}"
-        output_filename = f"CGI_{visit_id}_{serial_number}_FilterBand_{ext_hdr['CFAMNAME']}_NDF_SWEETSPOT.fits"
-        ndsweetspot_dataset.save(filedir=output_path, filename=output_filename)
-        print(f"ND Filter Sweet Spot Dataset saved to {output_filename}")
-    
-    return ndsweetspot_dataset
 
-
-def create_expected_od_calibration_product(clean_entry, sweet_spot_data, sweet_spot_metadata, 
-                                           transformation_matrix, transformation_matrix_file,
-                                           visit_id, current_max, output_path, save_to_disk=True):
-    """
-    Compute the expected ND filter optical density (OD) for a clean image using a sweet-spot dataset and a 
-    transformation matrix, and create an NDFilterOD calibration product.
-
-    The function performs the following steps:
-      1. Computes the centroid of the clean image.
-      2. Retrieves FPAM values from the clean image header and from the sweet-spot metadata.
-      3. Computes the offset between the clean image FPAM values and the sweet-spot FPAM values.
-      4. Applies the provided 2×2 transformation matrix to map the FPAM offset to an EXCAM pixel offset.
-      5. Adjusts the clean image centroid using the computed EXCAM offset.
-      6. Finds the nearest sweet-spot data point (with columns [OD, x, y]) to the adjusted position.
-      7. Creates an NDFilterOD calibration product with the computed expected OD as the product data.
-      8. Optionally saves the calibration product to disk, embedding in the header the filename of the 
-         transformation matrix used.
-
-    Parameters:
-        clean_entry: Clean image entry (must have attributes `.data` and `.ext_hdr` with FPAM values).
-        sweet_spot_data (np.ndarray): Aggregated sweet-spot dataset (an M×3 array with columns [OD, x, y]).
-        sweet_spot_metadata (dict): Metadata from the sweet-spot product (must include keys 'fpam_h', 'fpam_v', and 'filter_name').
-        transformation_matrix (np.ndarray): A 2×2 matrix mapping FPAM motions to EXCAM pixel motions.
-        transformation_matrix_file (str): File path to the FITS file containing the transformation matrix.
-        visit_id (str): Identifier used in the output filename.
-        current_max (int): Current maximum serial number for expected OD products.
-        output_path (str): Directory where the output file should be saved.
-        save_to_disk (bool): If True, the calibration product is saved to disk.
-
-    Returns:
-        NDFilterOD object representing the expected OD calibration product.
-    """
-    # --- Compute expected OD ---
-    # 1. Compute the centroid of the clean image.
-    x_clean, y_clean = centroid(clean_entry.data)
-    hdr = clean_entry.ext_hdr
-    clean_fpam_h = hdr.get('FPAM_H')
-    clean_fpam_v = hdr.get('FPAM_V')
-    
-    # 2. Retrieve sweet-spot FPAM values.
-    sp_fpam_h = sweet_spot_metadata.get('FPAM_H')
-    sp_fpam_v = sweet_spot_metadata.get('FPAM_V')
-    
-    # 3. Compute the FPAM offset and 4. transform it to EXCAM offset.
-    fpam_offset = np.array([clean_fpam_h - sp_fpam_h, clean_fpam_v - sp_fpam_v])
-    excam_offset = transformation_matrix @ fpam_offset
-    
-    # 5. Adjust the clean image centroid.
-    x_adj = x_clean + excam_offset[0]
-    y_adj = y_clean + excam_offset[1]
-    
-    # 6. Find the nearest sweet-spot point (columns 1 and 2 are x and y).
-    positions = sweet_spot_data[:, 1:3]
-    diffs = positions - np.array([x_adj, y_adj])
-    distances = np.linalg.norm(diffs, axis=1)
-    nearest_idx = np.argmin(distances)
-    expected_od = sweet_spot_data[nearest_idx, 0]
-    
-    # --- Build FITS headers for the calibration product ---
-    pri_hdr = fits.Header()
-    pri_hdr['SIMPLE'] = True
-    pri_hdr['BITPIX'] = 32
-    pri_hdr['OBSID'] = 0
-    pri_hdr['COMMENT'] = "Expected ND filter OD for clean image (Requirement 1090877)"
-    
-    ext_hdr = fits.Header()
-    ext_hdr['FPAMNAME'] = hdr.get('FPAMNAME')
-    # Store the clean image FPAM values.
-    ext_hdr['FPAM_H'] = clean_fpam_h
-    ext_hdr['FPAM_V'] = clean_fpam_v
-    # Store the sweet-spot FPAM values.
-    ext_hdr['SPFPAM_H'] = sp_fpam_h
-    ext_hdr['SPFPAM_V'] = sp_fpam_v
-    # Record the filter name.
-    ext_hdr['CFAMNAME'] = sweet_spot_metadata.get('CFAMNAME')
-    # Record the transformation matrix file used (basename only).
-    ext_hdr['HISTORY'] = (
-        f"Expected OD computed using sweet-spot dataset and transformation matrix file: "
-        f"{os.path.basename(transformation_matrix_file)} (req. 1090877)"
-    )
-    
-    # 7. Create the calibration product
-    # Ensure the expected OD is stored as a numeric (float) array.
-    data = np.array([[float(expected_od)]], dtype=float)
-    
-    nd_expected_product = NDFilterOD(
-        data_or_filepath=data,
-        pri_hdr=pri_hdr,
-        ext_hdr=ext_hdr,
-        input_dataset=None
-    )
-    
-    # 8. Save to disk
+    # 3. Optionally save the final product
     if save_to_disk:
         serial_number = f"{current_max + 1:03d}"
         output_filename = (
-            f"CGI_{visit_id}_{serial_number}_FilterBand_{ext_hdr['CFAMNAME']}_NDF_ExpectedOD.fits"
+            f"CGI_{visit_id}_{serial_number}_FilterBand_{ext_hdr['CFAMNAME']}_NDF_SWEETSPOT.fits"
         )
-        nd_expected_product.save(filedir=output_path, filename=output_filename)
-        print(f"Expected OD Calibration product saved to {output_filename}")
-    
-    return nd_expected_product
+        ndsweetspot_dataset.save(filedir=output_path, filename=output_filename)
+        print(f"ND Filter Sweet Spot Dataset (combined) saved to {output_filename}")
 
-
-def get_max_serial_expected_od(output_path, visit_id):
-    """
-    Find the current maximum serial number for expected OD products.
-    """
-    pattern = re.compile(rf"CGI_{visit_id}_(\d+)_FilterBand_.*_NDF_ExpectedOD\.fits")
-    max_serial = 0
-    for filename in os.listdir(output_path):
-        match = pattern.match(filename)
-        if match:
-            current_serial = int(match.group(1))
-            if current_serial > max_serial:
-                max_serial = current_serial
-    return max_serial
+    return ndsweetspot_dataset

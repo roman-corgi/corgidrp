@@ -11,7 +11,7 @@ from photutils.aperture import CircularAperture
 from photutils.background import LocalBackground
 from photutils.psf import fit_2dgaussian
 from scipy import integrate
-from corgidrp.astrom import centroid
+from corgidrp.astrom import centroid_with_roi
 import urllib
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
@@ -284,7 +284,7 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
         w = wcs.WCS(image.ext_hdr)
         pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
     elif centering_method == 'xy':
-        x_center, y_center = centroid(image.data)
+        x_center, y_center = centroid_with_roi(image.data)
         pos = (x_center, y_center)
     else:
         raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
@@ -343,7 +343,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=
         w = wcs.WCS(image.ext_hdr)
         pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
     elif centering_method == 'xy':
-        x_center, y_center = centroid(image.data)
+        x_center, y_center = centroid_with_roi(image.data)
         pos = (x_center, y_center)
     else:
         raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
