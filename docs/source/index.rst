@@ -11,9 +11,7 @@ This is the documentation for the CoronaGraph Instrument Data Reduction Pipeline
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents: 
+   :caption: Contents
    
-   
-
-   setup
    installation
+  
