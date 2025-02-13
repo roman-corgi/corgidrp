@@ -399,6 +399,86 @@ def get_ct_fpm_center(
 
     return fpam_center_ct, fsam_center_ct
 
+def write_ct_calfile(
+    dataset_in,
+    fpm_center_cor,
+    pix_method=None,
+    ct_method=None,
+    version=None,
+    fpam_pos_cor=None,
+    fpam_pos_ct=None,
+    fsam_pos_cor=None,
+    fsam_pos_ct=None,
+    ):
+    """
+    1090884 - TBD Add text from 1090884
+
+
+    TBD: Add definition of CT cal file
+
+    Args:
+      dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
+        M clean frames (nominally 1024x1024) taken at different FSM positions.
+        It includes some pupil images of the unocculted source.
+        Units: photoelectrons / second / pixel.
+      pix_method (string): The method used to estimate the PSF positions.
+      ct_method (string): The method used to estimate the PSF core throughput.
+        Default: 'direct'.
+      version (int): version number of the filters (CFAM, pupil, imaging
+        lens). Default is 0.
+      fpm_center_cor (array): 2-dimensional array with the center of the focal
+        plane mask during coronagraphic observations. Units: EXAM pixels.
+      fpam_pos_cor (array): 2-dimensional array with the [H,V] values of the FPAM
+        positions during coronagraphic observations. Units: micrometers.
+      fpam_pos_ct (array): 2-dimensional array with the [H,V] values of the FPAM
+        positions during core throughput observations. Units: micrometers.
+      fsam_pos_cor (array): 2-dimensional array with the [H,V] values of the FSAM
+        positions during coronagraphic observations. Units: micrometers.
+      fsam_pos_ct (array): 2-dimensional array with the [H,V] values of the FSAM
+        positions during core throughput observations. Units: micrometers.
+
+    Returns:
+      CoreThroughputCalibration file.
+    """
+    dataset = dataset_in.copy()
+
+    # default methods
+    if pix_method is None:
+        pix_method = 'centroid'
+    if ct_method is None:
+        ct_method = 'direct'
+    if version is None:
+        version = 0
+
+    # Get PSF centers and CT
+    psf_loc_est, ct_est = \
+        corethroughput.estimate_psf_pix_and_ct(dataset,
+            pix_method=pix_method,
+            ct_method=ct_method,
+            version=version)
+    # Get FPAM and FSAM centers during CT in EXCAM pixels
+    fpam_center_ct_pix, fsam_center_ct_pix = \
+            corethroughput.get_ct_fpm_center(fpm_center_cor,
+            fpam_pos_cor=FPAM_center_pos_um,
+            fpam_pos_ct=FPAM_center_pos_um + delta_fpam_um.transpose()[0],
+            fsam_pos_cor=FSAM_center_pos_um,
+            fsam_pos_ct=FSAM_center_pos_um + delta_fsam_um.transpose()[0])
+    # Translate PSF centers wrt FPAM's center
+
+    # Collect data
+    # Dataset
+
+    # PSF centers, relative to FPAM, and CT
+
+    # FPAM, FSAM during coronagraphic observations
+
+    # FPAM, FSAM during CT observations
+
+    # History (see example with NonLinearity)
+
+    
+    
+
 def ct_map(
     psf_pix,
     fpam_pix,

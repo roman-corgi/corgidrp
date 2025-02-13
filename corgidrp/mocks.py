@@ -19,8 +19,8 @@ import corgidrp.detector as detector
 from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 
-#from emccd_detect.emccd_detect import EMCCDDetect
-#from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
+from emccd_detect.emccd_detect import EMCCDDetect
+from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
 
 detector_areas_test= {
 'SCI' : { #used for unit tests; enables smaller memory usage with frames of scaled-down comparable geometry
