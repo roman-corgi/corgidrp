@@ -35,6 +35,7 @@ detector_areas_test= {
             'cols': 108,
             'r0c0': [0, 0]
         },        
+
         'prescan': {
             'rows': 120,
             'cols': 108,
@@ -42,7 +43,8 @@ detector_areas_test= {
             'col_start': 0, #10
             'col_end': 108, #100
         }, 
-        'serial_overscan': {
+
+        'serial_overscan' : {
             'rows': 120,
             'cols': 5,
             'r0c0': [0, 215]
@@ -693,6 +695,7 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
     exthdr['HIERARCH DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
+    exthdr['BUNIT'] = ""
 
     return prihdr, exthdr
 def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
@@ -1010,6 +1013,34 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
         frame.save(filedir=filedir, filename=filename)
 
     frames.append(frame)
+    dataset = data.Dataset(frames)
+
+    return dataset
+def create_not_normalized_dataset(filedir=None, numfiles=10):
+    """
+    Create simulated data not normalized for the exposure time.
+
+    Args:
+        filedir (str): (Optional) Full path to directory to save to.
+        numfiles (int): Number of files in dataset. Default is 10.
+
+    Returns:
+        corgidrp.data.Dataset:
+            the simulated dataset
+    """
+    filepattern = "simcall_not_normalized_{0:04d}.fits"
+    frames = []
+    for i in range(numfiles):
+        prihdr, exthdr = create_default_headers()
+
+        sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024,1024)), dtype=float)
+        sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024,1024)), dtype=float)
+        sim_dq = np.asarray(np.zeros((1024,1024)), dtype=int)
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr, err=sim_err, dq=sim_dq)
+        # frame = data.Image(sim_data, pri_hdr = prihdr, ext_hdr = exthdr, err = sim_err, dq = sim_dq)
+        if filedir is not None:
+            frame.save(filedir=filedir, filename=filepattern.format(i))
+        frames.append(frame)
     dataset = data.Dataset(frames)
 
     return dataset
@@ -1865,7 +1896,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter = '3C', target_name = 
                       add_gauss_noise=True, noise_scale=1., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
-    and Gaussian noise
+    and Gaussian noise and a background.
 
     Args:
         star_flux (float): flux of point source in erg/(s*cm^2*AA)
@@ -1881,6 +1912,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter = '3C', target_name = 
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
         add_gauss_noise (boolean): Argument to determine if Gaussian noise should be added to the data (default: True)
         noise_scale (float): spread of the Gaussian noise
+        background (float): optional additive background value
         file_save (boolean): save the simulated Image or not (default: False)
 
     Returns:
@@ -1955,6 +1987,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter = '3C', target_name = 
     # inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
+    #add a background
+    sim_data += background
     if add_gauss_noise:
         # add Gaussian random noise
         noise_rng = np.random.default_rng(10)
