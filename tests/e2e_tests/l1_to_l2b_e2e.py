@@ -1,3 +1,31 @@
+"""
+    End-to-end test for processing L1 data to L2b data.
+
+    This function processes raw L1 data through a series of calibration and noise correction steps,
+    then compares the output against the expected TVAC dataset. If the difference is below a threshold,
+    the test is considered successful.
+
+    Parameters:
+    
+    tvacdata_path : str
+        Path to the directory containing the TVAC data.
+    e2eoutput_path : str
+        Path to the directory where processed output will be saved.
+
+    Steps:
+    
+    1. Define paths for L1, L2b, and calibration data.
+    2. Generate necessary calibration files and add them to the calibration database.
+    3. Run the `walker` function to process L1 data and create L2b output.
+    4. Compare the processed L2b output against the TVAC data to ensure accuracy.
+
+    Asserts:
+    
+    Compares the processed L2b files against the expected TVAC files and asserts that the difference
+    is less than 1e-5.
+    
+"""
+
 import argparse
 import os
 import pytest
@@ -11,21 +39,29 @@ import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 
-thisfile_dir = os.path.dirname(__file__) # this file's folder
+thisfile_dir = os.path.dirname(__file__)  # This file's folder
 
 @pytest.mark.e2e
 def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
-    # figure out paths, assuming everything is located in the same relative location
+    """
+    Test the conversion of L1 data to L2b data by processing the raw science data, 
+    generating necessary calibration files, and comparing the output with the TVAC data.
+
+    Args:
+        tvacdata_path (str): Path to the directory containing the TVAC data.
+        e2eoutput_path (str): Path to the directory to store output files.
+    """
+    # Figure out paths, assuming everything is located in the same relative location
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     l2b_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L2b")
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # make output directory if needed
+    # Make output directory if needed
     l2b_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_output")
     if not os.path.exists(l2b_outputdir):
         os.mkdir(l2b_outputdir)
 
-    # assume all cals are in the same directory
+    # Assume all calibration files are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
@@ -33,40 +69,35 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
-    # define the raw science data to process
-
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
-    tvac_l2b_filelist = [os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]] # just grab the first two files
-
+    # Define the raw science data to process
+    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]  # Just grab the first two files
+    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]  # Grab the last two real data to mock the calibration
+    tvac_l2b_filelist = [os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]]  # Just grab the first two files
 
     ###### Setup necessary calibration files
     # Create necessary calibration files
-    # we are going to make calibration files using
-    # a combination of the II&T nonlinearty file and the mock headers from
-    # our unit test version
     pri_hdr, ext_hdr = mocks.create_default_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
-    ext_hdr['DRPVERSN'] =  corgidrp.__version__
+    ext_hdr['DRPVERSN'] = corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
-    this_caldb = caldb.CalDB() # connection to cal DB
+    this_caldb = caldb.CalDB()  # Connection to calibration DB
 
     # Nonlinearity calibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=l2b_outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=l2b_outputdir, filename="mock_nonlinearcal.fits")
     this_caldb.create_entry(nonlinear_cal)
 
-    # KGain
+    # KGain calibration
     kgain_val = 8.7
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
-                    input_dataset=mock_input_dataset)
+                       input_dataset=mock_input_dataset)
     kgain.save(filedir=l2b_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
 
-    # NoiseMap
+    # NoiseMap calibration
     with fits.open(fpn_path) as hdulist:
         fpn_dat = hdulist[0].data
     with fits.open(cic_path) as hdulist:
@@ -84,31 +115,29 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
-                                    input_dataset=mock_input_dataset, err=noise_map_noise,
-                                    dq = noise_map_dq, err_hdr=err_hdr)
+                                       input_dataset=mock_input_dataset, err=noise_map_noise,
+                                       dq=noise_map_dq, err_hdr=err_hdr)
     noise_map.save(filedir=l2b_outputdir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
-    ## Flat field
+    # Flat field calibration
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     flat.save(filedir=l2b_outputdir, filename="mock_flat.fits")
     this_caldb.create_entry(flat)
 
-    # bad pixel map
+    # Bad pixel map calibration
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     bp_map.save(filedir=l2b_outputdir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
-    ####### Run the walker on some test_data
-
+    ####### Run the walker on some test data
     walker.walk_corgidrp(l1_data_filelist, "", l2b_outputdir)
 
-
-    # clean up by removing entry
+    # Clean up by removing entries
     this_caldb.remove_entry(nonlinear_cal)
     this_caldb.remove_entry(kgain)
     this_caldb.remove_entry(noise_map)
@@ -128,7 +157,7 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
 
         assert np.all(np.abs(diff) < 1e-5)
 
-        # plotting script for debugging
+        # Debugging plot code (if needed)
         # import matplotlib.pylab as plt
         # fig = plt.figure(figsize=(10,3.5))
         # fig.add_subplot(131)
@@ -152,19 +181,19 @@ def test_l1_to_l2b(tvacdata_path, e2eoutput_path):
         # plt.show()
 
 if __name__ == "__main__":
-    # Use arguments to run the test. Users can then write their own scripts
-    # that call this script with the correct arguments and they do not need
-    # to edit the file. The arguments use the variables in this file as their
-    # defaults allowing the use to edit the file if that is their preferred
-    # workflow.
-    tvacdata_dir =  "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    """
+    Main entry point for running the test. Accepts command-line arguments for the 
+    paths to the TVAC data and output directory.
+    """
+    # Default paths
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     outputdir = thisfile_dir
 
-    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
+    ap = argparse.ArgumentParser(description="Run the L1 -> L2b end-to-end test")
     ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
-                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
+                    help="Path to the CGI_TVAC_Data folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
-                    help="directory to write results to [%(default)s]")
+                    help="Directory to write results to [%(default)s]")
     args = ap.parse_args()
     tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir

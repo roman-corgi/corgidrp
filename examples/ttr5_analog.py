@@ -1,11 +1,28 @@
-## This file is meant to provide an example of the different pipeline steps
-## that we will need to run for a TTR5-like observation. This is not meant to
-## be a working example, but rather a template for the different 
-## steps that we will need to run. It's not even really meant to show how 
-## the pipeline will actually work. Most of the functions are just placeholders
-## and their exact names and home files are only preliminary suggestions. 
+"""
+Example Pipeline Script for TTR5-like Observation
 
-from corgidrp.data import Dataset, Dark, Flat, generate_filelist
+This script demonstrates the different pipeline steps required for processing 
+TTR5-like observations. It is meant as a **template**, not a working example. 
+The functions used here are placeholders.
+
+Example:
+    To run this pipeline:
+    
+    >>> python ttr5_analog.py
+
+Attributes:
+    input_filepath (str): Path to the input data files.
+    output_filepath (str): Path to store processed data files.
+    caldb_filepath (str): Path to the calibration database.
+
+Steps:
+    - Load L1 dataset
+    - Process through L2a, L2b, L3, and L4 levels
+    - Apply calibrations, corrections, and transformations
+
+"""
+
+from corgidrp.data import Dataset, Dark, FlatField, generate_filelist
 from corgidrp import l1_to_l2a, l2a_to_l2b, l2b_to_l3, l3_to_l4
 from corgidrp.caldb import CalDB
 
@@ -14,8 +31,7 @@ output_filepath = "where/the/planets/will/go/"
 caldb_filepath = "where/the/caldb/is/"
 
 #Load up the file list
-filelist = generate_filelist(input_filepath) # This function doesn't exist
-
+filelist = generate_filelist(input_filepath)
 #Read it into a Dataset object. Here we'll be starting with L1 data and the pipeline will figure that out. 
 l1_dataset = Dataset(filelist)
 
