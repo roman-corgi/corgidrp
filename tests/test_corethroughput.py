@@ -26,6 +26,7 @@ def setup_module():
     global cfam_name
     cfam_name = '1F'
     global dataset_ct
+    global dataset_ct_known
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in
     global ct_in
@@ -69,6 +70,22 @@ def setup_module():
     data_ct += data_psf
     dataset_ct = Dataset(data_ct)
 
+    # Synthetic PSF:
+    psf_test = np.zeros([1024, 1024])
+    # Maximum value at one pixel
+
+    # Set of known values at selected locations
+
+    # Synthetic pupil images
+
+    # Known CT
+
+    # Dataset
+
+    # Obtain PSF location and CT
+
+    # They must agree exactly
+
 def test_psf_pix_and_ct():
     """
     Test 1090881 - Given a core throughput dataset consisting of M clean frames
@@ -79,11 +96,16 @@ def test_psf_pix_and_ct():
     core throughput data collection, to allow for the removal of outliers.
     """
 
+    # test 1:
+    # Check transmition ratio of direct imaging vs pupil lenses
     # This function was written and tested during TVAC. The ratio is known to
     # be 1.01633660... by running the TVAC function
     assert (corethroughput.di_over_pil_transmission(filter=cfam_name) ==
         pytest.approx(1.01633660))
 
+    # test 2:
+    # Check that the step function retrieves the expected location and CT of
+    # a set of simulated 2D Gaussian PSFs (created in setup_module before:)
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct)
     # Difference between expected and retrieved locations for the max (peak) method
     diff_psf_loc = psf_loc_in - psf_loc_est
@@ -96,6 +118,11 @@ def test_psf_pix_and_ct():
 
     # comparison between I/O values (1%)
     assert np.all(np.abs(ct_est-ct_in) <= 0.01)
+
+    # test 3:
+    # Functional test with some mock data with known PSF location and CT
+    # Synthetic PSF from setup_module
+    
 
 def test_fpm_pos():
     """
@@ -121,12 +148,13 @@ def test_fpm_pos():
     fsam2excam_matrix_tvac = fits.getdata(os.path.join(os.getcwd(),
         'test_data', 'fsam_to_excam_modelbased.fits'))
 
+    # test 1:
+    # Check that DRP calibration files for FPAM and FSAM agree with TVAC files
     # Some irrelevant rounding happens when defining FpamFsamRotMat() in data.py
     assert np.all(fpam2excam_matrix - fpam2excam_matrix_tvac <= 1e-9)
     assert np.all(fsam2excam_matrix - fsam2excam_matrix_tvac <= 1e-9)
-
-    # Check that DRP calibration files for FPAM and FSAM agree with TVAC files
    
+    # test 2:
     # Using values within the range should return a meaningful value. Tested 10 times
     rng = np.random.default_rng(0)
     for _ in range(10):
@@ -169,6 +197,7 @@ def test_ct_map():
     fpam_pix = np.array([513,515])
     target_pix = np.array([520, 520])
 
+    # test 1:
     # If all the target pixels are outside the range of the original data, the
     # function must fail
     target_pix_x = [331.8, 141.6, 851.4, 560, 521.4, 532, 542,
@@ -178,10 +207,8 @@ def test_ct_map():
     target_pix = np.array([target_pix_x, target_pix_y])
     with pytest.raises(ValueError):
         corethroughput.ct_map(psf_pix, fpam_pix, ct_in, target_pix)
-    # If target positions are the same as the reference ones, the core throughput
-    # must be the same
-    target_pix = psf_pix
-
+    
+    # test 2:
     # If inputs are valid, the function must return a set of interpolated
     # core throughput values within (0,1]
     target_pix_x = [531.8, 541.6, 551.4, 512, 519.4, 532, 542,
