@@ -2,11 +2,14 @@
 Test the data level specification
 """
 import pytest
+import numpy as np
 import corgidrp.mocks as mocks
 import corgidrp.l1_to_l2a as l1_to_l2a
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.l3_to_l4 as l3_to_l4
+
+np.random.seed(456)
 
 def test_l1_to_l4():
     """
