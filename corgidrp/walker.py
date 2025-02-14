@@ -253,8 +253,11 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
-            if ('ISPC' in image.ext_hdr) & (image.ext_hdr['ISPC']):
-                recipe_filename = "l1_to_l2b_pc.json"
+            if 'ISPC' in image.ext_hdr: 
+                if image.ext_hdr['ISPC']:
+                    recipe_filename = "l1_to_l2b_pc.json"
+                else:
+                    recipe_filename = "l1_to_l2b.json"   
             else:  
                 recipe_filename = "l1_to_l2b.json"    
     elif image.ext_hdr['DATA_LEVEL'] == "L2a":
@@ -273,8 +276,11 @@ def guess_template(dataset):
                 else: # then len(unique_vals) is 1: traditional darks
                     recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if ('ISPC' in image.ext_hdr) & (image.ext_hdr['ISPC']):
+            if 'ISPC' in image.ext_hdr: 
+                if image.ext_hdr['ISPC']:
                     recipe_filename = "l2a_to_l2b_pc.json"
+                else:
+                    raise NotImplementedError()
             else:
                 raise NotImplementedError()
     else:
