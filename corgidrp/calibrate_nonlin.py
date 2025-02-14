@@ -127,7 +127,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=True, plot_outdir='figures', show_plot=False,
-                     verbose=False, nonlin_params=nonlin_params_default):
+                     verbose=False, nonlin_params=None):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -222,7 +222,7 @@ def calibrate_nonlin(dataset_nl,
         where a '1' ending indicates the smaller of two values, and a '2' ending indicates the larger 
         of two values.  The coordinates of each square are specified by matching 
         up as follows: (rowroi1, colroi1), (rowroi1, colroi2), (rowback11, colback11), 
-        (rowback11, colback12), etc. Defaults to nonlin_params specified in this file.
+        (rowback11, colback12), etc. Defaults to nonlin_params_default specified in this file.
     
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
@@ -230,7 +230,9 @@ def calibrate_nonlin(dataset_nl,
         input signal in DN is the first column. Signal values start with min_write
         and run through max_write in steps of 20 DN.
     """
-
+    if nonlin_params is None:
+        nonlin_params = nonlin_params_default
+        
     check_nonlin_params(nonlin_params)
 
     # dataset_nl.all_data must be 3-D 
