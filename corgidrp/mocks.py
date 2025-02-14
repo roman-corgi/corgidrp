@@ -1950,6 +1950,8 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['CMDGAIN'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
+        frame.ext_hdr['KGAIN'] = kgain
+        frame.ext_hdr['ISPC'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
         frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
@@ -1963,6 +1965,8 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['CMDGAIN'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
+        frame_dark.ext_hdr['KGAIN'] = kgain
+        frame_dark.ext_hdr['ISPC'] = True
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
         frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)

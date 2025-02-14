@@ -277,7 +277,7 @@ def calibrate_kgain(dataset_kgain,
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=True,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
-                    verbose=False, detector_regions=None, kgain_params=kgain_params_default):
+                    verbose=False, detector_regions=None, kgain_params=None):
     """
     kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
@@ -351,14 +351,16 @@ def calibrate_kgain(dataset_kgain,
         'rn_bins2': upper bound of counts histogram for fitting or read noise 
         'max_DN_val': maximum DN value to be included in photon transfer curve (PTC)
         'signal_bins_N': number of bins in the signal variables of PTC curve
-        Defaults to kgain_params included in this file.
+        Defaults to kgain_params_default included in this file.
     
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
         transfer curve (in e-/DN). The expected value of kgain for EXCAM with
         flight readout sequence should be between 8 and 9 e-/DN
     """
-
+    if kgain_params is None:
+        kgain_params = kgain_params_default
+        
     check_kgain_params(kgain_params)
 
     if detector_regions is None:

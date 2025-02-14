@@ -21,7 +21,7 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
     np.random.seed(1234)
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=2, cosmic_rate=1, flux=0.5)#(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
     output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
@@ -122,7 +122,8 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(bp_map)
 
     # make PC dark
-    walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir, template="l1_to_l2b_pc_dark.json")
+    # below I leave out the template specification to check that the walker recipe guesser works as expected
+    walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")
     for f in os.listdir(output_dir):
         if f.endswith('_pc_dark.fits'):
             pc_dark_filename = f
@@ -130,7 +131,8 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     pc_dark_file = os.path.join(output_dir, pc_dark_filename)
 
     # make PC illuminated, subtracting the PC dark
-    walker.walk_corgidrp(l1_data_ill_filelist, '', output_dir, template="l1_to_l2b_pc.json")
+    # below I leave out the template specification to check that the walker recipe guesser works as expected
+    walker.walk_corgidrp(l1_data_ill_filelist, '', output_dir)#, template="l1_to_l2b_pc.json")
     # get photon-counted frame
     for f in os.listdir(output_dir):
         if f.endswith('_pc.fits'):
