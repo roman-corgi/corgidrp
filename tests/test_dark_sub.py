@@ -10,6 +10,8 @@ import corgidrp.detector as detector
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 from corgidrp.darks import build_trad_dark
 
+np.random.seed(456)
+
 old_err_tracking = corgidrp.track_individual_errors
 # use default parameters
 detector_params = data.DetectorParams({})
@@ -81,6 +83,7 @@ def test_dark_sub():
     # load in the dark
     dark_filepath = os.path.join(calibdir, dark_filename)
     new_dark = data.Dark(dark_filepath)
+    assert new_dark.ext_hdr['PC_STAT'] == 'analog master dark'
 
     # check the dark can be pickled (for CTC operations)
     pickled = pickle.dumps(new_dark)
@@ -90,6 +93,11 @@ def test_dark_sub():
     # subtract darks from itself; also saves to testcalib folder
     darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
     assert(dark_filename in str(darkest_dataset[0].ext_hdr["HISTORY"]))
+
+    # PC dark cannot be used for this step function
+    new_dark.ext_hdr['PC_STAT'] = 'photon-counted master dark'
+    with pytest.raises(Exception):
+        l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
 
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(darkest_dataset.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)

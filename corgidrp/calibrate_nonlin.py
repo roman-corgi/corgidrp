@@ -16,7 +16,7 @@ from corgidrp.mocks import create_default_headers
 from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
-nonlin_params = {
+nonlin_params_default = {
     # ROI constants
     'rowroi1': 305,
     'rowroi2': 736,
@@ -44,41 +44,44 @@ nonlin_params = {
     'min_mask_factor': 1.1,
     }
  
-def check_nonlin_params(
-    ):
-    """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
+def check_nonlin_params(nonlin_params):
+    """ Checks integrity of kgain parameters in the dictionary nonlin_params. 
+
+    Args:
+        nonlin_params (dict):  Dictionary of parameters used for calibrating nonlinearity.
+    """
     if 'rowroi1' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi2.')
     if 'colroi1' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi1.')
     if 'colroi2' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi2.')
     if 'rowback11' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback11.')
     if 'rowback12' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback12.')
     if 'rowback21' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback21.')
     if 'rowback22' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback22.')
     if 'colback11' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback11.')
     if 'colback12' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback12.')
     if 'colback21' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback21.')
     if 'colback22' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback22.')
     if 'min_exp_time' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  min_exp_time.')
     if 'num_bins' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  num_bins.')
     if 'min_bin' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  min_bin.')
     if 'min_mask_factor' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  min_mask_factor.')
     
     if not isinstance(nonlin_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
@@ -124,7 +127,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=True, plot_outdir='figures', show_plot=False,
-                     verbose=False):
+                     verbose=False, nonlin_params=None):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -210,6 +213,16 @@ def calibrate_nonlin(dataset_nl,
       show_plot (bool): (Optional) display the plots. Default is False.
       verbose (bool): (Optional) display various diagnostic print messages.
         Default is False.
+      nonlin_params (dict): (Optional) Dictionary of row and col specifications
+        for the region of interest (indicated by 'roi') where the frame is illuminated and for 
+        two background regions (indicated by 'back1' and 'back2') where the frame is not illuminated.  
+        Must contain 'rowroi1','rowroi2','colroi1','colroi2','rowback11','rowback12',
+        'rowback21','rowback22','colback11','colback12','colback21',and 'colback22'.
+        The 'roi' needs one square region specified, and 'back' needs two square regions, 
+        where a '1' ending indicates the smaller of two values, and a '2' ending indicates the larger 
+        of two values.  The coordinates of each square are specified by matching 
+        up as follows: (rowroi1, colroi1), (rowroi1, colroi2), (rowback11, colback11), 
+        (rowback11, colback12), etc. Defaults to nonlin_params_default specified in this file.
     
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
@@ -217,6 +230,11 @@ def calibrate_nonlin(dataset_nl,
         input signal in DN is the first column. Signal values start with min_write
         and run through max_write in steps of 20 DN.
     """
+    if nonlin_params is None:
+        nonlin_params = nonlin_params_default
+        
+    check_nonlin_params(nonlin_params)
+
     # dataset_nl.all_data must be 3-D 
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
