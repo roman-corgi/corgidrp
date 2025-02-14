@@ -105,14 +105,14 @@ def mean_combine(image_list, bpmap_list, err=False):
             sum_im += masked
         map_im += (im_m.mask == False).astype(int)
 
-    if err: # sqrt of sum of sigma**2 terms
-        sum_im = np.sqrt(sum_im)
-
     # Divide sum_im by map_im only where map_im is not equal to 0 (i.e.,
     # not masked).
     # Where map_im is equal to 0, set combined_im to zero
     comb_image = np.divide(sum_im, map_im, out=np.zeros_like(sum_im),
                             where=map_im != 0)
+   
+    if err: # (sqrt of sum of sigma**2 terms)/sqrt(n)
+        comb_image = np.sqrt(comb_image)
 
     # Mask any value that was never mapped (aka masked in every frame)
     comb_bpmap = (map_im == 0).astype(int)
@@ -133,12 +133,13 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have been desmeared if desmearing is appropriate.  Under normal
-    circumstances, darks should not be desmeared.  The only time desmearing
-    would be useful is in the unexpected case that, for example,
-    dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge, 
-    fixed-pattern noise, and read noise.
+    - have NOT been desmeared. Darks should not be desmeared.  The only component 
+    of dark frames that would be subject to a smearing effect is dark current 
+    since it linearly increases with time, so the extra row read time affects 
+    the dark current per pixel.  However, illuminated images
+    would also contain this smeared dark current, so dark subtraction should 
+    remove this smeared dark current (and then desmearing may be applied to the 
+    processed image if appropriate).  
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -268,12 +269,13 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have been desmeared if desmearing is appropriate.  Under normal
-    circumstances, darks should not be desmeared.  The only time desmearing
-    would be useful is in the unexpected case that, for example,
-    dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge, 
-    fixed-pattern noise, and read noise.
+    - have NOT been desmeared. Darks should not be desmeared.  The only component 
+    of dark frames that would be subject to a smearing effect is dark current 
+    since it linearly increases with time, so the extra row read time affects 
+    the dark current per pixel.  However, illuminated images
+    would also contain this smeared dark current, so dark subtraction should 
+    remove this smeared dark current (and then desmearing may be applied to the 
+    processed image if appropriate).  
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -329,7 +331,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         output Dark's dq after assigning these pixels a flag value of 256.
         They should have large err values.
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 4 (or less) are assigned a flag value of
+        but 3 (or less) are assigned a flag value of
         1, which falls under the category of "Bad pixel - unspecified reason".
         These pixels would have no reliability for dark subtraction.
 
@@ -415,7 +417,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         output Dark's dq after assigning these pixels a flag value of 256.
         They should have large err values.
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 4 (or less) are assigned a flag value of
+        but 3 (or less) are assigned a flag value of
         1, which falls under the category of "Bad pixel - unspecified reason".
         These pixels would have no reliability for dark subtraction.
     FPN_std_map : array-like (full frame)
@@ -522,7 +524,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # flag value of 256; unreliable pixels, large err
     output_dq = (unreliable_pix_map >= len(datasets)-3).astype(int)*256
     # flag value of 1 for those that are masked all the way through for all
-    # but 4 (or less) stacks; this overwrites the flag value of 256 that was assigned to
+    # but 3 (or less) stacks; this overwrites the flag value of 256 that was assigned to
     # these pixels in previous line
     unfittable_ind = np.where(unfittable_pix_map >= len(datasets)-3)
     output_dq[unfittable_ind] = 1
@@ -577,7 +579,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # input data error comes from .err arrays; could use this for error bars
     # in input data for weighted least squares, but we'll just simply get the
     # std error and add it in quadrature to least squares fit standard dev
-    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0))/len(mean_err_stack)
+    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0)/np.sqrt(len(mean_err_stack)))
 
     # matrix to be used for least squares and covariance matrix
     X = np.array([np.ones([len(EMgain_arr)]), EMgain_arr, EMgain_arr*exptime_arr]).T
@@ -865,5 +867,5 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
 
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
-
+        
         return master_dark
