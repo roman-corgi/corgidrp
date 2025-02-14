@@ -25,11 +25,10 @@ def setup_module():
     """
     global cfam_name
     cfam_name = '1F'
-    global dataset_ct
-    global dataset_ct_known
+    global dataset_ct, dataset_ct_syn
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
-    global psf_loc_in
-    global ct_in
+    global psf_loc_in, psf_loc_syn
+    global ct_in, ct_syn
 
     # Default headers
     prhd, exthd = create_default_headers()
@@ -62,7 +61,7 @@ def setup_module():
     di_over_pil = corethroughput.di_over_pil_transmission(filter=exthd['CFAMNAME'])
     unocc_psf_norm *= di_over_pil
 
-    # 100 psfs with fwhm=50 mas in band 1
+    # 100 psfs with fwhm=50 mas in band 1 (mock.py)
     data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='1F',n_psfs=100)
     # Input CT
     ct_in = half_psf/unocc_psf_norm/di_over_pil
@@ -73,10 +72,17 @@ def setup_module():
     # Synthetic PSF:
     psf_test = np.zeros([1024, 1024])
     # Maximum value at one pixel
-
+    psf_loc_syn = [400, 500]
     # Set of known values at selected locations
-
-    # Synthetic pupil images
+    psf_test[psf_loc_syn[0]-3:psf_loc_syn[0]+4,
+        psf_loc_syn[1]-3:psf_loc_syn[1]+4] = 1
+    psf_test[psf_loc_syn[0]-2:psf_loc_syn[0]+3,
+        psf_loc_syn[1]-2:psf_loc_syn[1]+3] = 2
+    psf_test[psf_loc_syn[0]-1:psf_loc_syn[0]+2,
+        psf_loc_syn[1]-1:psf_loc_syn[1]+2] = 3
+    psf_test[psf_loc_syn[0],
+        psf_loc_syn[1]] = 4
+    # Synthetic pupil images (common to all PSFs)
 
     # Known CT
 
