@@ -34,7 +34,7 @@ def test_mean_im():
 
     check_combined_im = np.mean(check_ims, axis=0)
     check_combined_im_err = np.sqrt(np.sum(np.array(check_ims)**2,
-                                            axis=0))/len(check_ims)
+                                            axis=0)/len(check_ims))
     # For the pixel that is masked throughout
     check_combined_im[all_masks_i] = 0
     check_combined_im_err[all_masks_i] = 0
@@ -42,7 +42,7 @@ def test_mean_im():
     # For pixel that is only masked once
     check_combined_im[single_mask_i] = np.mean(unmasked_vals)
     check_combined_im_err[single_mask_i] = \
-        np.sqrt(np.sum(unmasked_vals**2))/unmasked_vals.size
+        np.sqrt(np.sum(unmasked_vals**2)/unmasked_vals.size)
 
     combined_im, _, _, _ = mean_combine(check_ims, check_masks)
     combined_im_err, _, _, _ = mean_combine(check_ims,

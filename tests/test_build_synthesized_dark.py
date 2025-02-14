@@ -26,6 +26,7 @@ F = noise_maps.FPN_map
 C = noise_maps.CIC_map
 D = noise_maps.DC_map
 # just need some a dataset for input
+np.random.seed(456)
 dataset = create_dark_calib_files()
 # values used in create_dark_calib_files()
 g = 1
