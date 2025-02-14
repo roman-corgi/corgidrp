@@ -243,22 +243,20 @@ def guess_template(dataset):
                     recipe_filename = "l1_to_l2b_pc_dark.json"
                 elif len(unique_vals) > 1: # darks for noisemap creation
                     recipe_filename = "l1_to_l2a_noisemap.json"
-                elif len(unique_vals) == 1: # traditional darks
+                else: # then len(unique_vals) is 1 and not PC: traditional darks
                     recipe_filename = "build_trad_dark_image.json"
             else: # can't distinguish PC or analog then; default to analog
                 if len(unique_vals) > 1: # darks for noisemap creation
                     recipe_filename = "l1_to_l2a_noisemap.json"
-                elif len(unique_vals) == 1: # traditional darks
+                else: # then len(unique_vals) is 1: traditional darks
                     recipe_filename = "build_trad_dark_image.json"
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
-            if 'ISPC' in image.ext_hdr:
-                if image.ext_hdr['ISPC']:
-                    recipe_filename = "l1_to_l2b_pc.json"
-            else:
-                recipe_filename = "l1_to_l2b.json"
-        
+            if ('ISPC' in image.ext_hdr) & (image.ext_hdr['ISPC']):
+                recipe_filename = "l1_to_l2b_pc.json"
+            else:  
+                recipe_filename = "l1_to_l2b.json"    
     elif image.ext_hdr['DATA_LEVEL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
@@ -267,16 +265,15 @@ def guess_template(dataset):
                     recipe_filename = "l2a_to_l2b_pc_dark.json"
                 elif len(unique_vals) > 1: # darks for noisemap creation
                     recipe_filename = "l2a_to_l2a_noisemap.json"
-                elif len(unique_vals) == 1: # traditional darks
+                else: # then len(unique_vals) is 1 and not PC: traditional darks
                     recipe_filename = "l2a_build_trad_dark_image.json"
             else: # can't distinguish PC or analog then; default to analog
                 if len(unique_vals) > 1: # darks for noisemap creation
                     recipe_filename = "l2a_to_l2a_noisemap.json"
-                elif len(unique_vals) == 1: # traditional darks
+                else: # then len(unique_vals) is 1: traditional darks
                     recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if 'ISPC' in image.ext_hdr:
-                if image.ext_hdr['ISPC']:
+            if ('ISPC' in image.ext_hdr) & (image.ext_hdr['ISPC']):
                     recipe_filename = "l2a_to_l2b_pc.json"
             else:
                 raise NotImplementedError()
