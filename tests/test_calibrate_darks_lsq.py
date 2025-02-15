@@ -11,6 +11,8 @@ from corgidrp.mocks import create_synthesized_master_dark_calib
 from corgidrp.mocks import detector_areas_test as dat
 from corgidrp.data import DetectorNoiseMaps, DetectorParams, Dataset
 
+# make test reproducible
+np.random.seed(4567)
 # use default parameters
 detector_params = DetectorParams({})
 # specified parameters simulated in simulated data from
@@ -207,6 +209,7 @@ def test_mean_num():
 
 
 if __name__ == '__main__':
+    test_mean_num()
     test_expected_results_sub()
     test_sub_stack_len()
     test_g_arr_unique()
@@ -214,7 +217,6 @@ if __name__ == '__main__':
     test_t_arr_unique()
     test_t_gtr_0()
     test_k_gtr_0()
-    test_mean_num()
 
 
 
