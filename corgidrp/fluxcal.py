@@ -248,7 +248,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
 
 
 def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', subpixels=5,
-              background_sub=False, r_in=5, r_out=10, centering_method='xy'):
+              background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5):
     """
     returns the flux in photo-electrons of a point source at the target Ra/Dec position
     and using a circular aperture by applying aperture_photometry of photutils.
@@ -266,6 +266,8 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
         r_in (float): inner radius of circular annulus in pixels, (default: 5)
         r_out (float): outer radius of circular annulus in pixels, (default: 10)
         centering_method (str): 'xy' for centroiding or 'wcs' for WCS-based centering.
+        centroid_roi_radius (int or float): Half-size of the box around the peak,
+                                   in pixels. Adjust based on desired λ/D.
     
     Returns:
         tuple: (flux, flux_err) or (flux, flux_err, back) if background_sub is True.
@@ -284,7 +286,7 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
         w = wcs.WCS(image.ext_hdr)
         pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
     elif centering_method == 'xy':
-        x_center, y_center = centroid_with_roi(image.data)
+        x_center, y_center = centroid_with_roi(image.data, centroid_roi_radius)
         pos = (x_center, y_center)
     else:
         raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
@@ -316,7 +318,7 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
 
 
 def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=5,
-                        r_out=10, centering_method='xy'):
+                        r_out=10, centering_method='xy', centroid_roi_radius=5):
     """
     Returns the flux in photo-electrons using a 2D Gaussian fit.
     Allows optional background subtraction and selection of centering method.
@@ -331,6 +333,8 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=
         r_in (float): Inner annulus radius.
         r_out (float): Outer annulus radius.
         centering_method (str): 'xy' or 'wcs' centering.
+        centroid_roi_radius (int or float): Half-size of the box around the peak,
+                                   in pixels. Adjust based on desired λ/D.
     
     Returns:
         tuple: (flux, flux_err)
@@ -343,7 +347,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=
         w = wcs.WCS(image.ext_hdr)
         pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
     elif centering_method == 'xy':
-        x_center, y_center = centroid_with_roi(image.data)
+        x_center, y_center = centroid_with_roi(image.dat, centroid_roi_radius)
         pos = (x_center, y_center)
     else:
         raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
@@ -397,6 +401,8 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         'r_out' (float): The outer radius of the annulus used for background estimation.
         'centering_method' (str): The method for determining the star's center. Options include 
             'xy' for centroiding or 'wcs' for WCS-based centering.
+        'centroid_roi_radius' (int or float): Half-size of the box around the peak,
+                                   in pixels. Adjust based on desired λ/D.
     
     Parameters:
         dataset_or_image:
@@ -428,7 +434,8 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
             'background_sub': False,
             'r_in': 5,
             'r_out': 10,
-            'centering_method': 'xy'
+            'centering_method': 'xy',
+            'centroid_roi_radius': 5
         }
     
     star_name = image.ext_hdr["TARGET"]
@@ -489,6 +496,8 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         'r_out' (float): The outer radius of the annulus used for background estimation.
         'centering_method' (str): The method for determining the star's center. Options include 
             'xy' for centroiding or 'wcs' for WCS-based centering.
+        'centroid_roi_radius' (int or float): Half-size of the box around the peak,
+            in pixels. Adjust based on desired λ/D.
 
     Parameters:
     dataset_or_image:
@@ -516,7 +525,8 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         'background_sub': False,
         'r_in': 5,
         'r_out': 10,
-        'centering_method': 'xy'
+        'centering_method': 'xy',
+        'centroid_roi_radius': 5
     }
 
     star_name = image.ext_hdr["TARGET"]
