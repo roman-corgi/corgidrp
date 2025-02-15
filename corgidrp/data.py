@@ -1370,6 +1370,82 @@ class FluxcalFactor(Image):
             self.filedir = "."
             self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
 
+class NDFilterSweetSpotDataset(Image):
+    """
+    Class for an ND filter sweet spot dataset product.
+    Typically stores an N×3 array of data:
+      [OD, x_center, y_center] for each measurement.
+    Args:
+        data_or_filepath (str or np.array): Either the filepath to the FITS file 
+            to read in OR the 2D array of ND filter sweet-spot data (N×3).
+        pri_hdr (astropy.io.fits.Header): The primary header (required only if 
+            raw 2D data is passed in).
+        ext_hdr (astropy.io.fits.Header): The image extension header (required 
+            only if raw 2D data is passed in).
+        input_dataset (corgidrp.data.Dataset): The input dataset used to produce 
+            this calibration file (optional). If this is a new product, you should 
+            pass in the dataset so that the parent filenames can be recorded.
+        err (np.array): Optional 3D error array for the data.
+        dq (np.array): Optional 2D data-quality mask for the data.
+        err_hdr (astropy.io.fits.Header): Optional error extension header.
+    Attributes:
+        od_values (np.array): Array of OD measurements (length N).
+        x_values (np.array): Array of x-centroid positions (length N).
+        y_values (np.array): Array of y-centroid positions (length N).
+    """
+
+    def __init__(
+        self,
+        data_or_filepath,
+        pri_hdr=None,
+        ext_hdr=None,
+        input_dataset=None,
+        err=None,
+        dq=None,
+        err_hdr=None
+    ):
+        # Run the standard Image constructor.
+        super().__init__(
+            data_or_filepath,
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
+            err=err,
+            dq=dq,
+            err_hdr=err_hdr
+        )
+
+        # 1. Check data shape: expect N×3 array for the sweet-spot dataset.
+        if self.data.ndim != 2 or self.data.shape[1] != 3:
+            raise ValueError(
+                "NDFilterSweetSpotDataset data must be a 2D array of shape (N, 3). "
+                f"Received shape {self.data.shape}."
+            )
+
+        # 2. Parse the columns into convenient attributes.
+        #    Column 0: OD, Column 1: x_center, Column 2: y_center.
+        self.od_values = self.data[:, 0]
+        self.x_values = self.data[:, 1]
+        self.y_values = self.data[:, 2]
+
+        # 3. If creating a new product (i.e. ext_hdr was passed in), record metadata.
+        if ext_hdr is not None:
+            if input_dataset is not None:
+                self._record_parent_filenames(input_dataset)
+            self.ext_hdr['DATATYPE'] = 'NDFilterSweetSpotDataset'
+            self.ext_hdr['HISTORY'] = (
+                f"NDFilterSweetSpotDataset created from {self.ext_hdr.get('DRPNFILE','?')} frames"
+            )
+            # Optionally, define a default filename.
+            if input_dataset is not None and len(input_dataset) > 0:
+                base_name = input_dataset[0].filename.split(".fits")[0]
+                self.filename = f"{base_name}_ndfsweet.fits"
+            else:
+                self.filename = "NDFilterSweetSpotDataset.fits"
+
+        # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
+            raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
+
 
 datatypes = { "Image" : Image,
                "Dark" : Dark,

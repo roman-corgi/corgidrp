@@ -318,8 +318,16 @@ def test_average_od_within_tolerance(dim_dataset, bright_dataset, output_dir):
 # Run tests
 # ---------------------------------------------------------------------------
 def dataset_files_exist(directory):
-    """Check if there are already files in the specified directory."""
-    return os.path.exists(directory) and bool(glob.glob(os.path.join(directory, "*")))
+     """
+    Check if the specified directory exists and contains files.
+
+    Args:
+        directory (str): The path to the directory.
+
+    Returns:
+        bool: True if the directory exists and has files, False otherwise.
+    """
+     return os.path.exists(directory) and bool(glob.glob(os.path.join(directory, "*")))
 
 
 if __name__ == '__main__':

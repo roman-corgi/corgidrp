@@ -139,7 +139,7 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, flux_or_irr="
         dim_stars_dataset (iterable): Dataset containing dim star entries.
         phot_method (str): Photometry method to use ("Aperture" or "PSF").
         flux_or_irr (str): Whether flux ('flux') or in-band irradiance ('irr') should be used.
-        calibrate_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
+        phot_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
 
     Returns:
         float: The average calibration factor.
