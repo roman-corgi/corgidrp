@@ -7,6 +7,7 @@ from astropy.io import fits
 import pytest
 
 import corgidrp.nd_filter_calibration as nd_filter_calibration
+import corgidrp.l2b_to_l3 as l2b_tol3
 from corgidrp.data import Dataset
 import corgidrp.mocks as mocks
 
@@ -49,7 +50,7 @@ OD_TEST_TOLERANCE = 0.2
 VISIT_ID = 'PPPPPCCAAASSSOOOVVV'  # Update to pull from VISITID when available in L1s
 FILESAVE = True
 ADD_BACKGROUND = False
-PHOT_METHOD = "Aperture"
+PHOT_METHOD = "PSF"
 FLUX_OR_IRR = 'irr'
 
 if PHOT_METHOD == "Aperture":
@@ -177,12 +178,32 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor,
     return bright_star_images
 
 def mock_clean_entry(bright_dataset):
+    """
+    Generate a mock clean entry from the given bright dataset.
+
+    Parameters:
+        bright_dataset (list or array): The dataset containing bright entries.
+
+    Returns:
+        object: A processed clean entry derived from the first entry in the dataset.
+    """
+    # do whatever steps are necessary in the pipeline to make this a clean image
     clean_entry = bright_dataset[0]
-    #do some processing to make it clean
     return clean_entry
 
+
 def mock_transformation_matrix(output_dir):
-    # use sergi's product here
+    """
+    Create a mock transformation matrix and save it as a FITS file.
+
+    Parameters:
+        output_dir (str): The directory where the transformation matrix FITS file 
+            will be saved.
+
+    Returns:
+        str: The file path of the saved transformation matrix FITS file.
+    """
+    # eventually find Sergi's transformation matrix product and use it here
     transformation_matrix_file = os.path.join(output_dir, "fpam_to_excam.fits")
     dummy_matrix = np.eye(2)
     hdu = fits.PrimaryHDU(dummy_matrix)
@@ -332,6 +353,13 @@ if __name__ == '__main__':
     # Load datasets
     dim_dataset = Dataset(dim_dataset_files)
     bright_dataset = Dataset(bright_dataset_files)
+
+    # Get input data to the state they are expected to be in prior to running the ND Filter 
+    # Calibration step. At a minimum for now, we want to normalize for exposure time and do
+    # flat-fielding. When the function to add in the WCS headers is done, we will want to add
+    # that in here as well (and remove those steps from mocks.py)
+    dim_dataset_l3 = l2b_tol3.divide_by_exptime(dim_dataset)
+    bright_dataset = l2b_tol3.divide_by_exptime(bright_dataset)
 
     # Uncomment the tests you want to run:
     test_nd_filter_calibration_object(dim_dataset, bright_dataset, DEFAULT_CAL_PRODUCTS_OUTPUT_DIR)

@@ -1974,7 +1974,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Veg
     # Error map
     err = np.full(size, noise_scale)
 
-    # WCS header
+    # Define header
     new_hdr = {
         'TARGET': target_name,
         'CFAMNAME': filter,

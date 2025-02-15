@@ -250,8 +250,8 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
 def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', subpixels=5,
               background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5):
     """
-    returns the flux in photo-electrons of a point source at the target Ra/Dec position
-    and using a circular aperture by applying aperture_photometry of photutils.
+    Returns the flux in photo-electrons of a point source, either by placing an aperture using a 
+        centroiding method, or by using WCS information.
     Background subtraction can be done optionally using a user defined circular annulus.
     
     Parameters:
@@ -320,7 +320,9 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
 def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=5,
                         r_out=10, centering_method='xy', centroid_roi_radius=5):
     """
-    Returns the flux in photo-electrons using a 2D Gaussian fit.
+    Returns the flux in photo-electrons using a 2D Gaussian fit. Finds the star
+        center either by placing an aperture using a centroiding method, or by using 
+        WCS information.
     Allows optional background subtraction and selection of centering method.
     
     Parameters:
@@ -347,7 +349,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=
         w = wcs.WCS(image.ext_hdr)
         pos = wcs.utils.skycoord_to_pixel(target_skycoord, w, origin=1)
     elif centering_method == 'xy':
-        x_center, y_center = centroid_with_roi(image.dat, centroid_roi_radius)
+        x_center, y_center = centroid_with_roi(image.data, centroid_roi_radius)
         pos = (x_center, y_center)
     else:
         raise ValueError("Invalid centering_method. Choose 'xy' or 'wcs'.")
@@ -407,7 +409,7 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     Parameters:
         dataset_or_image:
             A corgidrp.data.Dataset or a single corgidrp.data.Image from which to compute 
-            the calibration factor.
+            the calibration factor. Should already be normalized for exposure time.
         flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
             be used.
         phot_kwargs (dict, optional):
@@ -439,7 +441,6 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         }
     
     star_name = image.ext_hdr["TARGET"]
-    exptime = image.ext_hdr["EXPTIME"]
     filter_name = image.ext_hdr["CFAMNAME"]
     filter_file = get_filter_name(image)
     
@@ -461,8 +462,8 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     else:
         ap_sum, ap_sum_err = result
 
-    fluxcal_fac = (flux * exptime) / ap_sum
-    fluxcal_fac_err = (flux * exptime) / ap_sum**2 * ap_sum_err
+    fluxcal_fac = flux / ap_sum
+    fluxcal_fac_err = flux / ap_sum**2 * ap_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
         np.array([[fluxcal_fac]]),
@@ -502,7 +503,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     Parameters:
     dataset_or_image:
         A corgidrp.data.Dataset or a single corgidrp.data.Image from which to compute 
-        the calibration factor.
+        the calibration factor. Should already be normalized for exposure time.
     flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
         be used.
     phot_kwargs (dict, optional):
@@ -530,7 +531,6 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     }
 
     star_name = image.ext_hdr["TARGET"]
-    exptime = image.ext_hdr["EXPTIME"]
     filter_file = get_filter_name(image)
     
     wave, filter_trans = read_filter_curve(filter_file)
@@ -544,11 +544,15 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
-    flux_sum, flux_sum_err = phot_by_gauss2d_fit(image, **phot_kwargs)
+    if phot_kwargs.get('background_sub', False):
+        flux_sum, flux_sum_err, back = phot_by_gauss2d_fit(image, **phot_kwargs)
+    else:
+        flux_sum, flux_sum_err = phot_by_gauss2d_fit(image, **phot_kwargs)
     
     # Factor in exposure time.
-    fluxcal_fac = (flux * exptime) / flux_sum
-    fluxcal_fac_err = (flux * exptime) / flux_sum**2 * flux_sum_err
+    print("flux", flux, flux_sum)
+    fluxcal_fac = flux / flux_sum
+    fluxcal_fac_err = flux / flux_sum**2 * flux_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
         np.array([[fluxcal_fac]]),
