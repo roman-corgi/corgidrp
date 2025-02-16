@@ -160,7 +160,9 @@ def test_abs_fluxcal():
     #create a simulated mock image with a central point source + noise that has a flux band_flux 
     #and a flux calibration factor band_flux/200
     #that results in a total extracted count of 200 photo electrons
-    flux_image = create_flux_image(band_flux, fwhm, cal_factor, filedir=datadir, file_save=True)
+    flux_image = create_flux_image(band_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
+                      fsm_y=0.0, exptime=1.0, filedir=datadir, color_cor=1., platescale=21.8, background=0,
+                      add_gauss_noise=True, noise_scale=1., file_save=True)
     assert type(flux_image) == Image
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
     radius = 3.* sigma
@@ -168,7 +170,8 @@ def test_abs_fluxcal():
     #Test the aperture photometry
     #The error of one pixel is 1, so the error of the aperture sum should be: 
     error_sum = np.sqrt(np.pi * radius * radius)
-    [flux_el_ap, flux_err_ap] = fluxcal.aper_phot(flux_image, radius, 0.997)
+    [flux_el_ap, flux_err_ap] = fluxcal.aper_phot(flux_image, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5)
     #200 is the input count of photo electrons
     assert flux_el_ap == pytest.approx(200, rel = 0.05)
     assert flux_err_ap == pytest.approx(error_sum, rel = 0.05)
@@ -186,15 +189,15 @@ def test_abs_fluxcal():
     assert flux_err_gauss == pytest.approx(error_gauss, rel = 0.05)
     #test the generation of the flux cal factors cal file
     dataset = Dataset([flux_image])
-    fluxcal_factor = fluxcal.calibrate_fluxcal_aper(dataset, radius, 0.997)
+    fluxcal_factor = fluxcal.calibrate_fluxcal_aper(dataset, flux_or_irr = 'flux', phot_kwargs=None)
     assert fluxcal_factor.filter == '3C'
     #band_flux/200 was the input calibration factor cal_factor of the simulated mock image
     assert fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor, rel = 0.05)
     #divisive error propagation of the aperture phot error
     err_fluxcal_ap = band_flux/flux_el_ap**2*flux_err_ap
     assert fluxcal_factor.fluxcal_err == pytest.approx(err_fluxcal_ap)
-    assert fluxcal_factor.filename == 'sim_fluxcal_FluxcalFactor_3C_ND475.fits'
-    fluxcal_factor_gauss = fluxcal.calibrate_fluxcal_gauss2d(dataset, fwhm)
+    assert fluxcal_factor.filename == 'mock_flux_image_Vega_0.0_0.0_FluxcalFactor_3C_ND475.fits'
+    fluxcal_factor_gauss = fluxcal.calibrate_fluxcal_gauss2d(dataset, flux_or_irr = 'flux', phot_kwargs=None)
     assert fluxcal_factor_gauss.filter == '3C'
     assert fluxcal_factor_gauss.fluxcal_fac == pytest.approx(cal_factor,rel = 0.05)
     #divisive error propagation of the 2D Gaussian fit phot error
@@ -227,16 +230,21 @@ def test_abs_fluxcal():
     assert output_dataset[0].err[1,512, 512] == pytest.approx(err_layer2)
     
     #Test the optional background subtraction#
-    flux_image_back = create_flux_image(band_flux, fwhm, cal_factor, background = 3, filedir=datadir, file_save=True)
+    flux_image_back = create_flux_image(band_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
+                      fsm_y=0.0, exptime=1.0, filedir=datadir, color_cor=1., platescale=21.8, background=3,
+                      add_gauss_noise=True, noise_scale=1., file_save=True)
     
-    [flux_back, flux_err_back, back] = fluxcal.aper_phot(flux_image_back, radius, background_sub = True)
+    [flux_back, flux_err_back, back] = fluxcal.aper_phot(flux_image_back, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=True, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5)
+
     #calculated median background should be close to the input
     assert back == pytest.approx(3, abs = 0.03)
     #the found values should be close to the ones without background subtraction
     assert flux_back == pytest.approx(flux_el_ap, abs = 1)
     assert flux_err_back == pytest.approx(flux_err_ap, abs = 0.03)
 
-    [flux_back, flux_err_back, back] = fluxcal.phot_by_gauss2d_fit(flux_image_back, fwhm, background_sub = True)
+    [flux_back, flux_err_back, back] = fluxcal.phot_by_gauss2d_fit(flux_image_back, fwhm, fit_shape=None, background_sub=True, r_in=5,
+                        r_out=10, centering_method='xy', centroid_roi_radius=5)
     #calculated median background should be close to the input
     assert back == pytest.approx(3, abs = 0.03)
     #the found values should be close to the ones without background subtraction
@@ -244,10 +252,30 @@ def test_abs_fluxcal():
     assert flux_err_back == pytest.approx(flux_err_gauss, abs = 0.03)
     
     #Also test again the generation of the cal file now with a background subtraction
-    fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, radius, 0.997, background_sub = True)
+    aper_kwargs = {
+        "encircled_radius": radius,
+        "frac_enc_energy": 0.997,
+        "method": "subpixel",
+        "subpixels": 10,
+        "background_sub": True,
+        "r_in": 5,
+        "r_out": 10,
+        "centering_method": "xy",
+        "centroid_roi_radius": 5
+    }
+    gauss_kwargs = {
+        'fwhm': fwhm,                  
+        'fit_shape': None,            
+        'background_sub': True,        
+        'r_in': 5.0,                   
+        'r_out': 10.0,                
+        'centering_method': 'xy',     
+        'centroid_roi_radius': 5       
+    }
+    fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     assert fluxcal_factor_back.fluxcal_fac == pytest.approx(fluxcal_factor.fluxcal_fac)
     assert fluxcal_factor_back.ext_hdr["LOCBACK"] == back
-    fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, fwhm, background_sub = True)
+    fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, flux_or_irr = 'flux', phot_kwargs=gauss_kwargs)
     assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
     assert fluxcal_factor_back_gauss.ext_hdr["LOCBACK"] == back
     
