@@ -549,7 +549,6 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     else:
         flux_sum, flux_sum_err = phot_by_gauss2d_fit(image, **phot_kwargs)
     
-    # Factor in exposure time.
     fluxcal_fac = flux / flux_sum
     fluxcal_fac_err = flux / flux_sum**2 * flux_sum_err
 

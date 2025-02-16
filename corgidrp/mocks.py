@@ -2054,7 +2054,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Veg
     ypos = center[1] + fsm_y_shift
 
     # Convert flux from calspec units to photo-electrons
-    flux = star_flux / cal_factor / color_cor
+    flux = (star_flux * exptime / color_cor) / cal_factor
 
     # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
