@@ -2026,7 +2026,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Veg
         filedir (str): (Optional) Directory path to save the output file
         color_cor (float): (Optional) Color correction factor
         platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
-        ackground (float): optional additive background value
+        background (float): optional additive background value
         add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
         noise_scale (float): Spread of the Gaussian noise
         file_save (bool): Whether to save the image (default: False)
