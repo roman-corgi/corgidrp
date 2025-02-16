@@ -315,8 +315,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    # tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
-    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data/"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
     outputdir = thisfile_dir
 
     # Argument parser setup
