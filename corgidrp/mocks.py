@@ -2008,8 +2008,8 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
     return ill_dataset, dark_dataset, ill_mean, dark_mean
 
 def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=5.0, filedir=None, color_cor=1., platescale=21.8, 
-                      add_gauss_noise=True, noise_scale=1., file_save=False):
+                      fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
+                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
     and Gaussian noise.
@@ -2026,6 +2026,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Veg
         filedir (str): (Optional) Directory path to save the output file
         color_cor (float): (Optional) Color correction factor
         platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
+        ackground (float): optional additive background value
         add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
         noise_scale (float): Spread of the Gaussian noise
         file_save (bool): Whether to save the image (default: False)
@@ -2081,6 +2082,9 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Veg
     # Inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
+    # Add background
+    sim_data += background
+
     # Add Gaussian noise
     if add_gauss_noise:
         noise_rng = np.random.default_rng(10)
@@ -2124,7 +2128,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Veg
     # Save file
     if filedir is not None and file_save:
         safe_target_name = target_name.replace(' ', '_')
-        filename = os.path.join(filedir, f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}.fits")
+        filename = os.path.join(f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}.fits")
         frame.save(filedir=filedir, filename=filename)
 
     return frame

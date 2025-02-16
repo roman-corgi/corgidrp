@@ -474,9 +474,17 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     )
     fluxcal_obj.ext_hdr["TARGET"] = star_name
     fluxcal_obj.ext_hdr["CFAMNAME"] = filter_name
-    
-    return fluxcal_obj
 
+    # If background subtraction was performed, set the LOCBACK keyword.
+    if phot_kwargs.get('background_sub', False):
+        # Here, "back" is the third value returned from phot_by_gauss2d_fit.
+        fluxcal_obj.ext_hdr['LOCBACK'] = back
+
+    # Append to or create a HISTORY entry in the header.
+    history_entry = "Flux calibration factor was determined by aperture photometry."
+    fluxcal_obj.ext_hdr.add_history(history_entry)
+
+    return fluxcal_obj
 
 
 def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=None):
@@ -559,5 +567,14 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         ext_hdr=image.ext_hdr,
         input_dataset=dataset
     )
+    
+    # If background subtraction was performed, set the LOCBACK keyword.
+    if phot_kwargs.get('background_sub', False):
+        # Here, "back" is the third value returned from phot_by_gauss2d_fit.
+        fluxcal_obj.ext_hdr['LOCBACK'] = back
+
+    # Append to or create a HISTORY entry in the header.
+    history_entry = "Flux calibration factor was determined by a Gaussian 2D fit photometry."
+    fluxcal_obj.ext_hdr.add_history(history_entry)
     
     return fluxcal_obj
