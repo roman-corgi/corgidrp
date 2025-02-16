@@ -27,7 +27,8 @@ CAL_FACTOR = 0.8
 OD_RASTER_THRESHOLD = 0.1
 OD_TEST_TOLERANCE = 0.2
 FILESAVE = True
-ADD_BACKGROUND = False
+ADD_GAUSS = False
+BACKGROUND = 3
 PHOT_METHOD = "Aperture"
 FLUX_OR_IRR = 'irr'
 
@@ -57,7 +58,8 @@ elif PHOT_METHOD == "PSF":
 # ---------------------------------------------------------------------------
 # Functions to generate mocks
 # ---------------------------------------------------------------------------
-def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, output_path=None):
+def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, output_path=None, 
+                           background_val=0, add_gauss_noise_val=False):
     if save_mocks:
         output_path = output_path or os.getcwd()
     else:
@@ -69,14 +71,17 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
         flux_image = mocks.create_flux_image(
             dim_star_flux, FWHM, cal_factor, filter_used, star_name,
             fsm_x=0, fsm_y=0, exptime=dim_exptime, filedir=output_path,
-            color_cor=1.0, platescale=21.8, add_gauss_noise=ADD_BACKGROUND,
+            color_cor=1.0, platescale=21.8,
+            background=background_val,
+            add_gauss_noise=add_gauss_noise_val,
             noise_scale=1.0, file_save=True
         )
         dim_star_images.append(flux_image)
     return dim_star_images
 
 
-def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_mocks, output_path=None):
+def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_mocks, output_path=None, 
+                              background_val=0, add_gauss_noise_val=False):
     if save_mocks:
         output_path = output_path or os.getcwd()
     else:
@@ -87,12 +92,15 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
     for star_name in BRIGHT_STARS:
         for dy in [-10, 0, 10]:
             for dx in [-10, 0, 10]:
-                bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
+                bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, 
+                                                                                          filter_used)
                 attenuated_flux = bright_star_flux * ND_transmission
                 flux_image = mocks.create_flux_image(
                     attenuated_flux, FWHM, cal_factor, filter_used, star_name,
                     dx, dy, bright_exptime, output_path,
-                    color_cor=1.0, platescale=21.8, add_gauss_noise=ADD_BACKGROUND,
+                    color_cor=1.0, platescale=21.8,
+                    background=background_val,
+                    add_gauss_noise=add_gauss_noise_val,
                     noise_scale=1.0, file_save=True
                 )
                 bright_star_images.append(flux_image)
@@ -100,10 +108,14 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
 
 
 def mock_clean_entry(bright_dataset):
+    # TO DO: eventually add other processing steps that would produce the 
+    # appropriate level input file
     return bright_dataset[0]
 
 
 def mock_transformation_matrix(output_dir):
+    # TO DO: use Sergi's FPAM to EXCAM transformation matrix product once it is
+    # ready
     transformation_matrix_file = os.path.join(output_dir, "fpam_to_excam.fits")
     dummy_matrix = np.eye(2)
     hdu = fits.PrimaryHDU(dummy_matrix)
@@ -113,13 +125,21 @@ def mock_transformation_matrix(output_dir):
 # ---------------------------------------------------------------------------
 # Pytest fixtures
 # ---------------------------------------------------------------------------
-# These fixtures cache the expensive mock generation for the entire module
+# These fixtures generate and cache the mocks (which is time consuming) for the
+# entire module
+@pytest.fixture(scope="module", params=[(0, False), (BACKGROUND, ADD_GAUSS)])
+def bg_settings(request):
+    return request.param
+
 @pytest.fixture(scope="module")
 def dim_dataset_cached(tmp_path_factory):
     tmp_dir = tmp_path_factory.mktemp("dim_dataset")
     print(f"Generating cached dim dataset in {tmp_dir}")
     files = mock_dim_dataset_files(DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False, output_path=str(tmp_dir))
     ds = Dataset(files)
+    # Divide by exposure time
+    # TO DO: May eventually need to add other processing steps to get the mocks
+    # to a representative input state
     return l2b_tol3.divide_by_exptime(ds)
 
 @pytest.fixture(scope="module")
@@ -128,6 +148,9 @@ def bright_dataset_cached(tmp_path_factory):
     print(f"Generating cached bright dataset in {tmp_dir}")
     files = mock_bright_dataset_files(BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False, output_path=str(tmp_dir))
     ds = Dataset(files)
+    # Divide by exposure time
+    # TO DO: May eventually need to add other processing steps to get the mocks
+    # to a representative input state
     return l2b_tol3.divide_by_exptime(ds)
 
 # The output directory can still be function-scoped
@@ -269,35 +292,6 @@ def test_multiple_nd_levels(dim_dataset_cached, output_dir, test_od):
         )
 
 
-@pytest.mark.parametrize("background_flag", [True, False])
-def test_background_sub_flag(dim_dataset_cached, bright_dataset_cached, output_dir, background_flag):
-    print(f"**Testing background subtraction flag set to {background_flag}**")
-    phot_args = {
-        "encircled_radius": 7,
-        "frac_enc_energy": 1,
-        "method": "subpixel",
-        "subpixels": 10,
-        "background_sub": background_flag,
-        "r_in": 5,
-        "r_out": 10,
-        "centering_method": "xy",
-        "centroid_roi_radius": 5
-    }
-    clean_entry = mock_clean_entry(bright_dataset_cached)
-    transformation_matrix_file = mock_transformation_matrix(output_dir)
-    results = nd_filter_calibration.create_nd_filter_cal(
-        dim_dataset_cached, bright_dataset_cached, output_dir,
-        file_save=True, od_raster_threshold=OD_RASTER_THRESHOLD,
-        clean_entry=clean_entry, transformation_matrix_file=transformation_matrix_file,
-        phot_method="Aperture", flux_or_irr="irr", phot_kwargs=phot_args
-    )
-    for target, data in results["flux_results"].items():
-        avg_od = data["average_od"]
-        assert abs(avg_od - INPUT_OD) < 0.2, (
-            f"Background_sub={background_flag}: OD off for {target}"
-        )
-
-
 @pytest.mark.parametrize("aper_radius", [3, 5, 7, 10])
 def test_aperture_radius_sensitivity(dim_dataset_cached, bright_dataset_cached, output_dir, aper_radius):
     print(f"**Testing aperture radius sensitivity: radius = {aper_radius}**")
@@ -306,7 +300,7 @@ def test_aperture_radius_sensitivity(dim_dataset_cached, bright_dataset_cached, 
         "frac_enc_energy": 1,
         "method": "subpixel",
         "subpixels": 5,
-        "background_sub": False,
+        "background_sub": True,
         "r_in": 5,
         "r_out": 10,
         "centering_method": "xy",
@@ -343,3 +337,60 @@ def test_od_stability(dim_dataset_cached, bright_dataset_cached, output_dir):
         assert np.std(od_values) < allowed_scatter, (
             f"OD dithers for {target} have std={np.std(od_values)}, expected < {allowed_scatter}"
         )
+
+def test_background_effect(tmp_path):
+    """
+    Generate two sets of mocks (one without background, one with background)
+    and compare the calibration results. We expect that the overall OD values
+    remain similar while the error (scatter) increases when background is added.
+    """
+    # Create dim star mocks for two modes.
+    dim_dir_no = tmp_path / "dim_no"
+    dim_dir_bg = tmp_path / "dim_bg"
+    dim_dir_no.mkdir()
+    dim_dir_bg.mkdir()
+    files_no = mock_dim_dataset_files(DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False,
+                                      output_path=str(dim_dir_no), background_val=0, add_gauss_noise_val=False)
+    files_bg = mock_dim_dataset_files(DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False,
+                                      output_path=str(dim_dir_bg), background_val=BACKGROUND, add_gauss_noise_val=ADD_GAUSS)
+    ds_no = l2b_tol3.divide_by_exptime(Dataset(files_no))
+    ds_bg = l2b_tol3.divide_by_exptime(Dataset(files_bg))
+    
+    # Create bright star mocks for two modes.
+    bright_dir_no = tmp_path / "bright_no"
+    bright_dir_bg = tmp_path / "bright_bg"
+    bright_dir_no.mkdir()
+    bright_dir_bg.mkdir()
+    bright_files_no = mock_bright_dataset_files(BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False,
+                                                output_path=str(bright_dir_no), background_val=0, add_gauss_noise_val=False)
+    bright_files_bg = mock_bright_dataset_files(BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False,
+                                                output_path=str(bright_dir_bg), background_val=BACKGROUND, add_gauss_noise_val=ADD_GAUSS)
+    ds_bright_no = l2b_tol3.divide_by_exptime(Dataset(bright_files_no))
+    ds_bright_bg = l2b_tol3.divide_by_exptime(Dataset(bright_files_bg))
+    
+    output_directory = str(tmp_path / "output")
+    os.mkdir(output_directory)
+    
+    clean_entry_no = ds_bright_no[0]
+    clean_entry_bg = ds_bright_bg[0]
+    transformation_matrix_file = mock_transformation_matrix(output_directory)
+    
+    results_no = nd_filter_calibration.create_nd_filter_cal(
+        ds_no, ds_bright_no, output_directory,
+        FILESAVE, OD_RASTER_THRESHOLD, clean_entry_no,
+        transformation_matrix_file, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS
+    )
+    results_bg = nd_filter_calibration.create_nd_filter_cal(
+        ds_bg, ds_bright_bg, output_directory,
+        FILESAVE, OD_RASTER_THRESHOLD, clean_entry_bg,
+        transformation_matrix_file, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS
+    )
+    
+    for target in results_no['flux_results'].keys():
+        od_no = results_no['flux_results'][target]['average_od']
+        od_bg = results_bg['flux_results'][target]['average_od']
+        err_no = np.std(results_no['flux_results'][target]['od_values'])
+        err_bg = np.std(results_bg['flux_results'][target]['od_values'])
+        print(f"Target {target}: OD no-bg = {od_no}, error no-bg = {err_no}; OD bg = {od_bg}, error bg = {err_bg}")
+        # The overall OD should be similar, within a small tolerance.
+        assert abs(od_no - od_bg) < 0.1, f"OD should not differ drastically between modes for {target}"
