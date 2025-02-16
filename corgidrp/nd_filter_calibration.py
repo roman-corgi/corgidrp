@@ -261,7 +261,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
 
     # Compute expected flux
     expected_irradiance_no_nd = compute_expected_band_irradiance(target, ref_cfam_name)
-    expected_flux = expected_irradiance_no_nd * exptime * cal_factor
+    expected_flux = expected_irradiance_no_nd / cal_factor
 
     od_values, x_values, y_values = [], [], []
 
@@ -443,12 +443,10 @@ def create_nd_filter_cal(dim_stars_dataset,
         phot_kwargs = {}
 
     # 1. Average calibration factor from dim stars
-    print("Computing calibration factor with dim stars...")
     cal_factor = compute_avg_calibration_factor(dim_stars_dataset,
                                                 phot_method,
                                                 flux_or_irr,
                                                 phot_kwargs)
-    print("Computed calibration factor:", cal_factor)
 
     # 2. Process bright star frames
     grouped_files = group_by_target(bright_stars_dataset)
