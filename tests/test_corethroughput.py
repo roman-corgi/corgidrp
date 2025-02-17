@@ -192,6 +192,47 @@ def test_fpm_pos():
         fsam_center_ct_pix_out - fsam_center_ct_pix_in
         assert np.all(fsam_center_ct_pix_out - fsam_center_ct_pix_in <= 1e-12)
 
+def test_cal_file():
+    """
+    Test 1090884 - Given 1) a core throughput dataset consisting of a set of clean
+    frames (nominally 1024x1024) taken at different FSM positions, and 2) a list
+    of N (x, y) coordinates, in units of EXCAM pixels, which fall within the area
+    covered by the core throughput dataset, the CTC GSW shall produce a
+    1024x1024xN cube of PSF images best centered at each set of coordinates
+    """
+    # Choose some EXCAM pixel for the FPM's center during coronagraphic observations
+    fpm_center_cor = np.array([300,500])
+    # Choose some values of H/V of FPAM during coronagraphic observations
+    fpam_pos_cor = np.array([6757, 22424])
+    # Choose some (different) values of H/V of FPAM during corethroughput observations
+    fpam_pos_ct = np.array([6854, 22524])
+    # Choose some values of H/V of FSAM during coronagraphic observations
+    fsam_pos_cor = np.array([29387, 12238])
+    # Choose some (different) values of H/V of FSAM during corethroughput observations
+    fsam_pos_ct = np.array([29471,12120])
+    # Write CT calibration file
+    corethroughput.write_ct_calfile(dataset_ct,
+        fpm_center_cor,
+        fpam_pos_cor, fpam_pos_ct,
+        fsam_pos_cor, fsam_pos_ct)
+
+    # Open calibration file
+
+    # Compare I/O. Remember:
+    #     A CoreThroughput calibration file has two main data arrays:
+    #
+    #  3-d cube of PSF images, i.e, a N1xN1xN array where N1<=1024 is set by a
+    #  keyword argument, with default value of 1024. The N PSF images are the ones
+    #  in the CT dataset (1090881 and 1090884)
+    #
+    #  Nx3 cube that contains N sets of (x,y, CT measurements). The (x,y) are
+    #  pixel coordinates of the N1xN1xN cube of PSF images wrt the FPAM's center
+    #  (1090881 and 1090882)
+    #
+    #  The CoreThroughput calibration file will also include the FPAM, FSAM
+    #  position during coronagraphic and core throughput observing sequences in
+    #  units of EXCAM pixels (1090882)
+
 def test_ct_map():
     """ 
     Test 1090883 - Given 1) an array of PSF pixel locations and 2) the location
@@ -235,6 +276,7 @@ def test_ct_map():
 if __name__ == '__main__':
     test_psf_pix_and_ct()
     test_fpm_pos()
+    test_cal_file()
     test_ct_map()
 
 
