@@ -8,6 +8,7 @@ from scipy.interpolate import griddata
 import corgidrp
 from corgidrp.data import Dataset
 from corgidrp.astrom import centroid_with_roi
+from corgidrp import corethroughput
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -377,13 +378,13 @@ def get_ct_fpm_center(
 def write_ct_calfile(
     dataset_in,
     fpm_center_cor,
-    pix_method=None,
-    ct_method=None,
+    fpam_pos_cor,
+    fpam_pos_ct,
+    fsam_pos_cor,
+    fsam_pos_ct,
+    roi_radius=None,
     version=None,
-    fpam_pos_cor=None,
-    fpam_pos_ct=None,
-    fsam_pos_cor=None,
-    fsam_pos_ct=None,
+    n_pix_psf=None,
     ):
     """
     1090884 - Given 1) a core throughput dataset consisting of a set of clean
@@ -411,11 +412,6 @@ def write_ct_calfile(
         M clean frames (nominally 1024x1024) taken at different FSM positions.
         It includes some pupil images of the unocculted source.
         Units: photoelectrons / second / pixel.
-      pix_method (string): The method used to estimate the PSF positions.
-      ct_method (string): The method used to estimate the PSF core throughput.
-        Default: 'direct'.
-      version (int): version number of the filters (CFAM, pupil, imaging
-        lens). Default is 0.
       fpm_center_cor (array): 2-dimensional array with the center of the focal
         plane mask during coronagraphic observations. Units: EXAM pixels.
       fpam_pos_cor (array): 2-dimensional array with the [H,V] values of the FPAM
@@ -426,6 +422,13 @@ def write_ct_calfile(
         positions during coronagraphic observations. Units: micrometers.
       fsam_pos_ct (array): 2-dimensional array with the [H,V] values of the FSAM
         positions during core throughput observations. Units: micrometers.
+      roi_radius (int or float): Half-size of the box around the peak,
+        in pixels. Adjust based on desired λ/D.
+      version (int): version number of the filters (CFAM, pupil, imaging
+        lens). Default is 0.
+      n_pix_psf (int): The number of pixels of each PSF array dimension. The
+        PSF array is centered at the EXCAM pixel closest to the PSF's location.
+        Default: 1024 (SCI frame size). 
 
     Returns:
       CoreThroughputCalibration file.
@@ -433,38 +436,41 @@ def write_ct_calfile(
     dataset = dataset_in.copy()
 
     # default methods
-    if pix_method is None:
-        pix_method = 'centroid'
-    if ct_method is None:
-        ct_method = 'direct'
+    if roi_radius is None:
+        roi_radius = 3
     if version is None:
         version = 0
+    if n_pix_psf is None:
+        n_pix_psf = 1024
 
     # Get PSF centers and CT
-    psf_loc_est, ct_est = \
+    psf_loc, ct = \
         corethroughput.estimate_psf_pix_and_ct(dataset,
-            pix_method=pix_method,
-            ct_method=ct_method,
+            roi_radius=roi_radius,
             version=version)
     # Get FPAM and FSAM centers during CT in EXCAM pixels
     fpam_center_ct_pix, fsam_center_ct_pix = \
             corethroughput.get_ct_fpm_center(fpm_center_cor,
-            fpam_pos_cor=FPAM_center_pos_um,
-            fpam_pos_ct=FPAM_center_pos_um + delta_fpam_um.transpose()[0],
-            fsam_pos_cor=FSAM_center_pos_um,
-            fsam_pos_ct=FSAM_center_pos_um + delta_fsam_um.transpose()[0])
-    # Translate PSF centers wrt FPAM's center
-
+            fpam_pos_cor=fpam_pos_cor,
+            fpam_pos_ct=fpam_pos_ct,
+            fsam_pos_cor=fsam_pos_cor,
+            fsam_pos_ct=fsam_pos_ct)
     # Collect data
-    # Dataset
+    # First extension: 3-d cube of PSF images 
+    breakpoint()
+    # Cut PSFs around its location with n_pix_psf
 
-    # PSF centers, relative to FPAM, and CT
+    # Second extension: Nx3 cube that contains N sets of (x,y, CT measurements)
+    # PSF centers wrt FPAM's center
+    psf_loc_fpm = psf_loc - fpam_center_ct_pix
 
-    # FPAM, FSAM during coronagraphic observations
-
-    # FPAM, FSAM during CT observations
+    # Third extension: FPAM, FSAM position during coronagraphic and core throughput
+    # observing sequences in  units of EXCAM pixels
+    breakpoint()
 
     # History (see example with NonLinearity)
+
+    # Call CorethroughputCalibration class and store cal file
 
     
     
