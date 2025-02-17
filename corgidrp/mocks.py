@@ -2151,6 +2151,7 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
     # Generate random source model list. Random amplitues and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
+    # Set seed for reproducibility of mock data
     rng = np.random.default_rng(0)
     model_params = [
         dict(amplitude=rng.uniform(1,10),
