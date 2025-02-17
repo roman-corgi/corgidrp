@@ -7,7 +7,7 @@ import corgidrp.detector as detector
 from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 from corgidrp.darks import build_trad_dark
 
-
+np.random.seed(456)
 def test_badpixelmap(): 
     '''
 
@@ -70,7 +70,7 @@ def test_badpixelmap():
             flat_frame.data[i_col, i_row] = 0.3
 
     ###### make the badpixel map (input the flat_dataset just as a dummy):
-    badpixelmap = create_bad_pixel_map(flat_dataset, dark_frame,flat_frame)
+    badpixelmap = create_bad_pixel_map(flat_dataset, dark_frame,flat_frame, dthresh=6)
     # Use np.unpackbits to unpack the bits - big endien
     badpixelmap_bits = np.unpackbits(badpixelmap.data[:, :, np.newaxis], axis=2)
 

@@ -10,6 +10,7 @@ from corgidrp.data import Image, Dataset, DetectorParams
 import corgidrp.caldb as caldb
 from corgidrp.darks import build_trad_dark
 
+np.random.seed(123)
 
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024])

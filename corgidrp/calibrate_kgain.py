@@ -12,7 +12,7 @@ from corgidrp.mocks import create_default_headers
 from corgidrp.detector import slice_section, detector_areas
 
 # Dictionary with constant kgain calibration parameters
-kgain_params= {
+kgain_params_default= {
 # ROI constants
 'rowroi1': 9,
 'rowroi2': 1000,
@@ -30,34 +30,30 @@ kgain_params= {
 'signal_bins_N': 400,
 }
 
-def check_kgain_params(
-    ):
-    """ Checks integrity of kgain parameters in the dictionary kgain_params. """
-    if 'offset_colroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_colroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+def check_kgain_params(kgain_params):
+    """ Checks integrity of kgain parameters in the dictionary kgain_params. 
+    
+    Args:
+        kgain_params (dict):  Dictionary of parameters used for calibrating the k gain.
+    """
+    
     if 'rowroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi2.')
     if 'colroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi1.')
     if 'colroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi2.')
     if 'rn_bins1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rn_bins1.')
     if 'rn_bins2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rn_bins2.')
     if 'max_DN_val' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  max_DN_val.')
     if 'signal_bins_N' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  signal_bins_N.')
 
-    if not isinstance(kgain_params['offset_colroi1'], (float, int)):
-        raise TypeError('offset_colroi1 is not a number')
-    if not isinstance(kgain_params['offset_colroi2'], (float, int)):
-        raise TypeError('offset_colroi2 is not a number')
     if not isinstance(kgain_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
     if not isinstance(kgain_params['rowroi2'], (float, int)):
@@ -281,7 +277,7 @@ def calibrate_kgain(dataset_kgain,
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=True,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
-                    verbose=False, detector_regions=None):
+                    verbose=False, detector_regions=None, kgain_params=None):
     """
     kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
@@ -344,12 +340,29 @@ def calibrate_kgain(dataset_kgain,
       detector_regions (dict): a dictionary of detector geometry properties.
         Keys should be as found in detector_areas in detector.py.  Defaults to
         that dictionary.
+      kgain_params (dict): (Optional) Dictionary containing row and col specifications
+        for the region of interest (indicated by 'rowroi1','rowroi2','colroi1',and 'colroi2').
+        The 'roi' needs one square region specified, and 'back' needs two square regions, 
+        where a '1' ending indicates the smaller of two values, and a '2' ending indicates the larger 
+        of two values.  The coordinates of the square region are specified by matching 
+        up as follows: (rowroi1, colroi1), (rowroi2, colroi1), etc. 
+        Also must contain:
+        'rn_bins1': lower bound of counts histogram for fitting or read noise
+        'rn_bins2': upper bound of counts histogram for fitting or read noise 
+        'max_DN_val': maximum DN value to be included in photon transfer curve (PTC)
+        'signal_bins_N': number of bins in the signal variables of PTC curve
+        Defaults to kgain_params_default included in this file.
     
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
         transfer curve (in e-/DN). The expected value of kgain for EXCAM with
         flight readout sequence should be between 8 and 9 e-/DN
     """
+    if kgain_params is None:
+        kgain_params = kgain_params_default
+        
+    check_kgain_params(kgain_params)
+
     if detector_regions is None:
         detector_regions = detector_areas
 
