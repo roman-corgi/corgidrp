@@ -7,6 +7,7 @@ from scipy.interpolate import griddata
 
 import corgidrp
 from corgidrp.data import Dataset
+from corgidrp.astrom import centroid_with_roi
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -76,41 +77,29 @@ def di_over_pil_transmission(
 
 def get_psf_pix(
     dataset,
-    method='centroid',
+    roi_radius=3,
     ):
     """ Estimate the PSF positions of a set of PSF images. 
  
     Args:
       dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
       
-      method (string): the method used to estimate the PSF positions. Default:
-        'centroid'.
+      roi_radius (int or float): Half-size of the box around the peak,
+        in pixels. Adjust based on desired λ/D.
 
     Returns:
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
       with respect to the pixel (0,0) in the PSF images
     """ 
     psf_pix = []
-    if method.lower() == 'centroid':
-        # Find max first
-        for psf in dataset:
-            pix_max = np.unravel_index(psf.data.argmax(), psf.data.shape)
-            # Cut out PSF within +/- 3 pixels (+/- 1.3 l/D for band 1F)
-            psf_cent = psf.data[pix_max[0]-3:pix_max[0]+4, pix_max[1]-3:pix_max[1]+4]
-            y, x = np.indices(psf_cent.shape)
-            y_cent = (y*psf_cent).sum()/psf_cent.sum()
-            x_cent = (x*psf_cent).sum()/psf_cent.sum()
-            # Add centroid shift relative to maximum location
-            psf_pix += [[pix_max[0]+y_cent-3,pix_max[1]+x_cent-3]]
-    else:
-        raise Exception('Method to estimate PSF pixels unrecognized')
+    for psf in dataset:
+        psf_pix += [centroid_with_roi(psf.data,roi_radius=roi_radius)]
 
     return np.array(psf_pix)
 
 def get_psf_ct(
     dataset,
     unocc_psf_norm=1,
-    method='direct',
     filter='1F',
     ):
     """ Estimate the core throughput of a set of PSF images.
@@ -136,10 +125,6 @@ def get_psf_ct(
         unocculted psf. Default: off-axis PSF are normalized to the unocculted
         PSF already. That is, unocc_psf_norm equals 1.
 
-      method (string): the method used to estimate the PSF core throughput.
-        Default: 'direct'. This method finds the set of EXCAM pixels that
-        satisfy the condition to derive the core throughput with no approximations.
-
       filter (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
         Default: '1F'.      
 
@@ -149,20 +134,16 @@ def get_psf_ct(
     Returns:
       Array of core throughput values between 0 and 1.
     """
-    if method.lower() == 'direct':
-        psf_ct = []
-        for psf in dataset:
-            psf_ct += [psf.data[psf.data >= psf.data.max()/2].sum()/unocc_psf_norm]
-        psf_ct = np.array(psf_ct)
-    else:
-        raise Exception('Method to estimate core throughput unrecognized')
+    psf_ct = []
+    for psf in dataset:
+        psf_ct += [psf.data[psf.data >= psf.data.max()/2].sum()/unocc_psf_norm]
+    psf_ct = np.array(psf_ct)
 
     return psf_ct
 
 def estimate_psf_pix_and_ct(
     dataset_in,
-    pix_method=None,
-    ct_method=None,
+    roi_radius=None,
     version=None,
     ):
     """
@@ -181,11 +162,8 @@ def estimate_psf_pix_and_ct(
         It includes some pupil images of the unocculted source.
         Units: photoelectrons / second / pixel.
 
-      pix_method (string): The method used to estimate the PSF positions.
-        Default: 'centroid'.
-
-      ct_method (string): The method used to estimate the PSF core throughput.
-        Default: 'direct'.        
+      roi_radius (int or float): Half-size of the box around the peak,
+        in pixels. Adjust based on desired λ/D.
 
       version (int): version number of the filters (CFAM, pupil, imaging
         lens). Default is 0.
@@ -199,11 +177,9 @@ def estimate_psf_pix_and_ct(
     """
     dataset = dataset_in.copy()
 
-    # default methods
-    if pix_method is None:
-        pix_method = 'centroid'
-    if ct_method is None:
-        ct_method = 'direct'
+    if roi_radius is None:
+        roi_radius = 3
+
     if version is None:
         version = 0
 
@@ -257,13 +233,12 @@ def estimate_psf_pix_and_ct(
     # find the PSF positions of the off-axis PSFs
     psf_pix = get_psf_pix(
         dataset_offaxis,
-        method=pix_method)
+        roi_radius=roi_radius)
 
     # find the PSF corethroughput of the off-axis PSFs
     psf_ct = get_psf_ct(
         dataset_offaxis,
         unocc_psf_norm = unocc_psf_norm,
-        method=ct_method,
         filter=filter)
 
     # same number of estimates. One per PSF 
