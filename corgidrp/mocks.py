@@ -2179,9 +2179,8 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
         # List of known positions and list of known PSF volume
         psf_loc += [[512+x_image+model.x_mean.value-imshape[0]//2,
             512+y_image+model.y_mean.value-imshape[0]//2]]
-        # Add half PSF volume for 2D circular Gaussian (numerator of core throughput)
-        # TBD: use analytical value
-        half_psf += [model.amplitude.value*10/np.pi]
+        # Add half PSF volume for 2D Gaussian (numerator of core throughput)
+        half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
         # Build up the Dataset
         data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
 
