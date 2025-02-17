@@ -168,7 +168,7 @@ class CalDB:
             drp_version,
             obsid,
             naxis1,
-            naxis2,
+            naxis2
         ]
 
         # rest are ext_hdr keys we can copy
@@ -243,7 +243,7 @@ class CalDB:
 
     def get_calib(self, frame, dtype, to_disk=True):
         """
-        Outputs the best calibration file of the given type for the input sciene frame.
+        Outputs the best calibration file of the given type for the input science frame.
 
         Args:
             frame (corgidrp.data.Image): an image frame to request a calibration for. If None is passed in, looks for the 
@@ -288,14 +288,12 @@ class CalDB:
             options = calibdf.loc[
                 (
                     (calibdf["EXPTIME"] == frame_dict["EXPTIME"])
-                    & (calibdf["NAXIS1"] == frame_dict["NAXIS1"])
-                    & (calibdf["NAXIS2"] == frame_dict["NAXIS2"])
                 )
             ]
 
             if len(options) == 0:
-                raise ValueError("No valid Dark with EXPTIME={0} and dimension ({1},{2})"
-                                 .format(frame_dict["EXPTIME"], frame_dict["NAXIS1"], frame_dict["NAXIS2"]))
+                raise ValueError("No valid Dark with EXPTIME={0})"
+                                 .format(frame_dict["EXPTIME"]))
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()

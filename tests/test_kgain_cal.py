@@ -17,8 +17,10 @@ import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
 from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
-from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params)
+from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params_default)
 
+
+np.random.seed(8585)
 ######################## function definitions ###############################
 
 def count_contiguous_repeats(arr):
@@ -135,10 +137,17 @@ def test_expected_results_sub():
     """Outputs are as expected, for imported frames."""
     kgain = calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, binwidth)
         
-    signal_bins_N = kgain_params['signal_bins_N']
+    signal_bins_N = kgain_params_default['signal_bins_N']
     # kgain - should be close to the assumed value
     assert np.isclose(round(kgain.value,1), kgain_in, atol=0.5)
     assert np.all(np.equal(kgain.ptc.shape, (signal_bins_N,2)))
+
+    # test bad input for kgain_params
+    kgain_params_bad = kgain_params_default.copy()
+    kgain_params_bad['colroi2'] = 'foo'
+    with pytest.raises(TypeError):
+        calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, binwidth,
+                        kgain_params=kgain_params_bad)
 
 def test_psi():
     """These three below must be positive scalar integers."""
