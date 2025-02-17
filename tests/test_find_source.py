@@ -10,14 +10,14 @@ import pyklip.instruments.GPI as GPI
 import pyklip.fakes as fakes
 
 from corgidrp import data
-from find_source import find_source
+from corgidrp.find_source import find_source
 
 if __name__ == "__main__":
     # Define file paths for test data
-    filepath_test = './tests/test_data/'
-    input_dataset = data.Dataset(glob.glob(filepath_test + 'mock_northup.fits'))
+    mockfilepath = os.path.join(os.path.dirname(__file__), 'test_data/')
+    input_dataset = data.Dataset(glob.glob(mockfilepath+'mock_northup.fits'))
 
-    filepath_out = filepath_test
+    filepath_out = mockfilepath
     os.makedirs(filepath_out, exist_ok=True)
 
     # Set parameters for the source detection process
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     nsigma_threshold = 5.0
 
     # Load the dataset from GPI data file
-    file_gpi = filepath_test+'NoCompNoDisk-GPIcube.fits'
+    file_gpi = mockfilepath+'NoCompNoDisk-GPIcube.fits'
     dataset = GPI.GPIData(file_gpi)
     
     x = np.arange(dataset.input.shape[1]) ; y = np.arange(dataset.input.shape[2])
@@ -166,7 +166,8 @@ if __name__ == "__main__":
         plt.ylim(np.nanmin(detection[:,3])-2, np.nanmax(detection[:,3])+2)
         plt.xlabel('SN_injected') ; plt.ylabel('SN_detected')
 
-        plt.show()
+        
+        #plt.show()
         outfile = filepath_out+'test_find_source.png'
         plt.savefig(outfile)
         plt.cla() ; plt.clf() ; plt.close()
