@@ -117,11 +117,9 @@ def test_psf_pix_and_ct():
     diff_psf_loc = psf_loc_in - psf_loc_est
     # Set a difference of 0.005 pixels
     assert np.all(np.abs(diff_psf_loc) <= 0.005)
-
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
-
     # comparison between I/O values (1%)
     assert np.all(np.abs(ct_est-ct_in) <= 0.01)
 
