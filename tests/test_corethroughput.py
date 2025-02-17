@@ -64,33 +64,33 @@ def setup_module():
     # 100 psfs with fwhm=50 mas in band 1 (mock.py)
     data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='1F',n_psfs=100)
     # Input CT
-    ct_in = half_psf/unocc_psf_norm/di_over_pil
+    ct_in = half_psf/unocc_psf_norm
     # Add pupil images
     data_ct += data_psf
     dataset_ct = Dataset(data_ct)
 
-    # Synthetic PSF:
+    data_ct = []
+    # Synthetic PSF for a functional test
     psf_test = np.zeros([1024, 1024])
     # Maximum value at one pixel
-    psf_loc_syn = [400, 500]
+    psf_loc_syn = [500, 400]
     # Set of known values at selected locations
-    psf_test[psf_loc_syn[0]-3:psf_loc_syn[0]+4,
-        psf_loc_syn[1]-3:psf_loc_syn[1]+4] = 1
-    psf_test[psf_loc_syn[0]-2:psf_loc_syn[0]+3,
-        psf_loc_syn[1]-2:psf_loc_syn[1]+3] = 2
-    psf_test[psf_loc_syn[0]-1:psf_loc_syn[0]+2,
-        psf_loc_syn[1]-1:psf_loc_syn[1]+2] = 3
-    psf_test[psf_loc_syn[0],
-        psf_loc_syn[1]] = 4
-    # Synthetic pupil images (common to all PSFs)
-
+    psf_test[psf_loc_syn[1]-3:psf_loc_syn[1]+4,
+        psf_loc_syn[0]-3:psf_loc_syn[0]+4] = 1
+    psf_test[psf_loc_syn[1]-2:psf_loc_syn[1]+3,
+        psf_loc_syn[0]-2:psf_loc_syn[0]+3] = 2
+    psf_test[psf_loc_syn[1]-1:psf_loc_syn[1]+2,
+        psf_loc_syn[0]-1:psf_loc_syn[0]+2] = 3
+    psf_test[psf_loc_syn[1],
+        psf_loc_syn[0]] = 4
+    data_ct += [Image(psf_test,pri_hdr=prhd, ext_hdr=exthd, err=err)]
+    # Synthetic pupil images
+    data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+    data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     # Known CT
-
+    ct_syn = (4+3*8+2*16)/(0.5*(1+3)*400)/di_over_pil
     # Dataset
-
-    # Obtain PSF location and CT
-
-    # They must agree exactly
+    dataset_ct_syn = Dataset(data_ct) 
 
 def test_psf_pix_and_ct():
     """
@@ -115,8 +115,8 @@ def test_psf_pix_and_ct():
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct)
     # Difference between expected and retrieved locations for the max (peak) method
     diff_psf_loc = psf_loc_in - psf_loc_est
-    # Set a difference of 0.01 pixels
-    assert np.all(np.abs(diff_psf_loc) <= 0.01)
+    # Set a difference of 0.005 pixels
+    assert np.all(np.abs(diff_psf_loc) <= 0.005)
 
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
@@ -128,7 +128,10 @@ def test_psf_pix_and_ct():
     # test 3:
     # Functional test with some mock data with known PSF location and CT
     # Synthetic PSF from setup_module
-    
+    psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct_syn)
+    # Exact agreement
+    assert np.all(psf_loc_est == psf_loc_syn)
+    assert ct_syn == ct_est
 
 def test_fpm_pos():
     """
