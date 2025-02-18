@@ -32,7 +32,7 @@ dataset = create_dark_calib_files()
 g = 1
 t = 60
 for fr in dataset.frames:
-    fr.ext_hdr['KGAIN'] = 7
+    fr.ext_hdr['KGAINPAR'] = 7
 
 # convenience function for these tests
 def reset_g_t(d, g, t):
@@ -50,7 +50,7 @@ def reset_g_t(d, g, t):
     '''
     dset = d.copy()
     for fr in dset.frames:
-        fr.ext_hdr['CMDGAIN'] = g
+        fr.ext_hdr['EMGAIN_C'] = g
         fr.ext_hdr['EXPTIME'] = t
 
     return dset
@@ -105,9 +105,9 @@ def main():
         assert(np.max(np.abs(M.data - target)) < tol)
         assert(np.max(np.abs(M.err - exp_err)) < tol)
         assert(np.max(np.abs(M.dq - exp_dq)) < tol)
-        assert(M.err_hdr['BUNIT'] == 'detected electrons')
+        assert(M.err_hdr['BUNIT'] == 'Photoelectrons')
         assert(M.ext_hdr['EXPTIME'] == t)
-        assert(M.ext_hdr['CMDGAIN'] == g)
+        assert(M.ext_hdr['EMGAIN_C'] == g)
         assert(M.ext_hdr['DATATYPE'] == 'Dark')
         assert(M.data.shape == (rows, cols))
         assert(M.ext_hdr['NAXIS1'] == rows)
@@ -121,16 +121,16 @@ def main():
         assert(np.max(np.abs(M_copy.data - target)) < tol)
         assert(np.max(np.abs(M_copy.err - exp_err)) < tol)
         assert(np.max(np.abs(M_copy.dq - exp_dq)) < tol)
-        assert(M_copy.err_hdr['BUNIT'] == 'detected electrons')
+        assert(M_copy.err_hdr['BUNIT'] == 'Photoelectrons')
         assert(M_copy.ext_hdr['EXPTIME'] == t)
-        assert(M_copy.ext_hdr['CMDGAIN'] == g)
+        assert(M_copy.ext_hdr['EMGAIN_C'] == g)
         assert(M_copy.ext_hdr['DATATYPE'] == 'Dark')
         assert(M_copy.data.shape == (rows, cols))
         assert(M_copy.ext_hdr['NAXIS1'] == rows)
         assert(M_copy.ext_hdr['NAXIS2'] == cols)
         assert(M_copy.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
         assert(M_copy.filename == '0_DetectorNoiseMaps_dark.fits')
-        assert('EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
+        assert('EM commanded gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
         assert('exptime = '+str(t) in str(M_copy.ext_hdr['HISTORY']))
         pass
         

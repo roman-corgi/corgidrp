@@ -214,23 +214,20 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
     # Calculate the full well capacity for every frame in the dataset
     if k_gain is None:
-        kgain = detector_params.params['kgain']
+        kgain = detector_params.params['KGAINPAR']
     else:
         #get the kgain value from the k_gain calibration file
         kgain = k_gain.value
     emgain_list = []
     for frame in crmasked_dataset:
-        try: # use measured gain if available TODO change hdr name if necessary
-            emgain = frame.ext_hdr['EMGAIN_M']
-        except:
-            try: # use applied EM gain if available
-                emgain = frame.ext_hdr['EMGAIN_A']
-            except: # otherwise use commanded EM gain
-                emgain = frame.ext_hdr['CMDGAIN']
+        try: # use applied EM gain if available
+            emgain = frame.ext_hdr['EMGAIN_A']
+        except: # otherwise use commanded EM gain
+            emgain = frame.ext_hdr['EMGAIN_C']
         emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
-    fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
-    fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
+    fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in crmasked_dataset])
+    fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in crmasked_dataset])
 
     fwcpp_dn_arr = fwcpp_e_arr / kgain
     fwcem_dn_arr = fwcem_e_arr / kgain
@@ -333,8 +330,8 @@ def update_to_l2a(input_dataset):
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATA_LEVEL'] != "L1":
-            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+        if orig_frame.ext_hdr['HIERARCH'] != "L1":
+            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['HIERARCH'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -342,7 +339,7 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # update header
-        frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        frame.ext_hdr['HIERARCH'] = "L2a"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)

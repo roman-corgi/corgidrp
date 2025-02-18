@@ -4,7 +4,7 @@ import pytest
 import corgidrp
 import numpy as np
 import corgidrp.mocks as mocks
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_calibration_product_headers
 from corgidrp.l2a_to_l2b import correct_bad_pixels
 from corgidrp.data import Image, Dataset, BadPixelMap
 
@@ -13,7 +13,7 @@ old_err_tracking = corgidrp.track_individual_errors
 data = np.ones([1024,1024])*2.
 err = np.ones([1024,1024]) *0.5
 dq = np.zeros([1024,1024], dtype = np.uint16)
-prhd, exthd = create_default_headers()
+prhd, exthd = create_default_calibration_product_headers()
 
 def test_bad_pixels():
 
