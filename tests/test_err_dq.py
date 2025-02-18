@@ -5,7 +5,7 @@ import astropy.io.fits as fits
 import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L2a_headers
 from corgidrp.data import Image, Dataset, DetectorParams
 import corgidrp.caldb as caldb
 from corgidrp.darks import build_trad_dark
@@ -20,7 +20,7 @@ err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1
-prhd, exthd = create_default_headers()
+prhd, exthd = create_default_L2a_headers()
 errhd = fits.Header()
 errhd["CASE"] = "test"
 dqhd = fits.Header()
@@ -210,7 +210,6 @@ def test_err_array_sizes():
     if not os.path.exists(calibdir):
             os.mkdir(calibdir)
     dark_frame.save(filedir=calibdir, filename=dark_filename)
-
 
     ##### Scan the caldb ##### - This tests for previous bug that darks weren't in the right format.
     testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")

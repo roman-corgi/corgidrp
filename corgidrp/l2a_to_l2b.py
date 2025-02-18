@@ -388,7 +388,7 @@ def desmear(input_dataset, detector_params):
     data = input_dataset.copy()
     data_cube = data.all_data
 
-    rowreadtime_sec = detector_params.params['rowreadtime']
+    rowreadtime_sec = detector_params.params['ROWREADT']
 
     for i in range(data_cube.shape[0]):
         exptime_sec = float(data[i].ext_hdr['EXPTIME'])

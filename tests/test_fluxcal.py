@@ -2,7 +2,7 @@ import pytest
 import os
 import numpy as np
 import corgidrp
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L3_headers
 from corgidrp.mocks import create_flux_image
 from corgidrp.data import Image, Dataset, FluxcalFactor
 import corgidrp.fluxcal as fluxcal
@@ -12,10 +12,10 @@ import astropy.units as u
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5
-prhd, exthd = create_default_headers()
+prhd, exthd = create_default_L3_headers()
 exthd["CFAMNAME"] = '3C'
 exthd["FPAMNAME"] = 'ND475'
-exthd["TARGET"] = 'VEGA'
+prhd["TARGET"] = 'VEGA'
 image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
 image2 = image1.copy()
 dataset=Dataset([image1, image2])

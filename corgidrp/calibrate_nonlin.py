@@ -12,7 +12,6 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from corgidrp import check
 import corgidrp.data as data
-from corgidrp.mocks import create_default_headers
 from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
@@ -854,7 +853,7 @@ def nonlin_dataset_2_stack(dataset):
     """
     # Split Dataset
     dataset_cp = dataset.copy()
-    split = dataset_cp.split_dataset(exthdr_keywords=['CMDGAIN'])
+    split = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     
     # Calibration data
     stack = []
@@ -875,17 +874,17 @@ def nonlin_dataset_2_stack(dataset):
         len_cal_frames = 0
         record_gain = True 
         for frame in data_set.frames:
-            if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
+            if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
                 if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
                     raise Exception('Frames used to build the mean frame must have the same exposure time')
-                if frame.ext_hdr['CMDGAIN'] != 1:
+                if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-            elif (frame.pri_hdr['OBSTYPE'] == 'KGAIN' or
-                frame.pri_hdr['OBSTYPE'] == 'NONLIN'):
+            elif (frame.pri_hdr['OBSNAME'] == 'KGAIN' or
+                frame.pri_hdr['OBSNAME'] == 'NONLIN'):
                 len_cal_frames += 1
                 sub_stack.append(frame.data)
                 exp_time = frame.ext_hdr['EXPTIME']
@@ -900,16 +899,13 @@ def nonlin_dataset_2_stack(dataset):
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
                 if record_gain:
-                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
-                        gains.append(frame.ext_hdr['EMGAIN_M'])
-                    except:
-                        try: # use applied EM gain if available
-                            gains.append(frame.ext_hdr['EMGAIN_A'])
-                        except: # use commanded gain otherwise
-                            gains.append(frame.ext_hdr['CMDGAIN'])
+                    try: # use applied EM gain if available
+                        gains.append(frame.ext_hdr['EMGAIN_A'])
+                    except: # use commanded gain otherwise
+                        gains.append(frame.ext_hdr['EMGAIN_C'])
                     record_gain = False
             else:
-                raise Exception('OBSTYPE can only be MNFRAME or NONLIN in non-linearity')
+                raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
         
         # First layer (array of unique EM values)
         if len(sub_stack):
