@@ -217,6 +217,7 @@ def test_cal_file():
         fsam_pos_cor, fsam_pos_ct)
 
     # Open calibration file
+    breakpoint()
 
     # Compare I/O. Remember:
     #     A CoreThroughput calibration file has two main data arrays:
