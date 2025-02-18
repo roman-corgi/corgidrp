@@ -397,15 +397,14 @@ def write_ct_calfile(
     
       3-d cube of PSF images, i.e, a N1xN1xN array where N1<=1024 is set by a
       keyword argument, with default value of 1024. The N PSF images are the ones
-      in the CT dataset (1090881 and 1090884)
+      in the CT dataset (obtained in 1090881 and 1090884)
       
-      Nx3 cube that contains N sets of (x,y, CT measurements). The (x,y) are
-      pixel coordinates of the N1xN1xN cube of PSF images wrt the FPAM's center
-      (1090881 and 1090882)
+      N sets of (x,y, CT measurements). The (x,y) are pixel coordinates of the
+      PSF images wrt the FPAM's center (obtained in 1090881 and 1090882)
 
       The CoreThroughput calibration file will also include the FPAM, FSAM
       position during coronagraphic and core throughput observing sequences in
-      units of EXCAM pixels (1090882)
+      units of EXCAM pixels (Obtained in 1090882)
 
     Args:
       dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
@@ -428,7 +427,8 @@ def write_ct_calfile(
         lens). Default is 0.
       n_pix_psf (int): The number of pixels of each PSF array dimension. The
         PSF array is centered at the EXCAM pixel closest to the PSF's location.
-        Default: 1024 (SCI frame size). 
+        Default: 15 EXCAM pixels (corresponding to radius from PSF's centroid
+        of 3 l/D, where the PSF intensity is ~1e-10 its peak). 
 
     Returns:
       CoreThroughputCalibration file.
@@ -441,10 +441,10 @@ def write_ct_calfile(
     if version is None:
         version = 0
     if n_pix_psf is None:
-        n_pix_psf = 1024
+        n_pix_psf = 15
 
     # Get PSF centers and CT
-    psf_loc, ct = \
+    psf_loc_ct, ct = \
         corethroughput.estimate_psf_pix_and_ct(dataset,
             roi_radius=roi_radius,
             version=version)
@@ -456,24 +456,111 @@ def write_ct_calfile(
             fsam_pos_cor=fsam_pos_cor,
             fsam_pos_ct=fsam_pos_ct)
     # Collect data
-    # First extension: 3-d cube of PSF images 
+    # First extension: 3-d cube of PSF images cut around the PSF's location
+    psf_basis = []
+    n_pix_psf_1 = n_pix_psf // 2
+    n_pix_psf_2 = n_pix_psf - n_pix_psf_1
+    i_psf = 0
+    for frame in dataset:
+        # Skip pupil images of the unocculted source, which satisfy:
+        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+        try:
+        # Pupil images of the unocculted source satisfy:
+        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+            exthd = frame.ext_hdr
+            if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
+                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
+                continue
+        except:
+           pass 
+        idx_0_0 = max(int(np.round(psf_loc_ct[i_psf][1])) - n_pix_psf_1,0)
+        idx_0_1 = min(frame.data.shape[0],
+            int(np.round(psf_loc_ct[i_psf][1])) + n_pix_psf_2)
+        idx_1_0 = max(int(np.round(psf_loc_ct[i_psf][0])) - n_pix_psf_1,0)
+        idx_1_1 = min(frame.data.shape[1],
+            int(np.round(psf_loc_ct[i_psf][0])) + n_pix_psf_2)
+        psf_basis += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
+        i_psf += 1 
+
+    # Check
+    if len(psf_basis) != len(psf_loc_ct) or len(psf_basis) != len(ct):
+        raise Exception(('The number of PSFs does not match the number of PSF '+
+            ' locations and/or core throughput values'))
+   
+    # FITS extensions
+    # Primary extension: PSF basis
+    hdr_psf = fits.Header()
+    hdr_psf['UNITS'] = 'photoelectron/pix/s'
+    hdr_psf['COMMENT'] = ('Set of PSFs derived from a core throughput observing '+
+        'sequence. PSFs are not normalized. They are the L2b images of the '+
+        'off-axis source. The data cube is centered around each PSF location')
+    hdu_psf = fits.PrimaryHDU(psf_basis, header=hdr_psf)
+
+    # N sets of (x,y, CT measurements)
+    # Next extension: PSF centers wrt FPAM's center
+    psf_loc = psf_loc_ct - fpam_center_ct_pix
+    hdr_loc = fits.Header()
+    hdr_loc['COMMENT'] = 'PSF location with respect to FPAM center'
+    hdr_loc['UNITS'] = 'EXCAM pixels'
+    hdu_loc = fits.ImageHDU(psf_loc, header=hdr_loc)
+    # Next extension: Core throughput values for each PSF
+    hdr_ct = fits.Header()
+    hdr_ct['COMMENT'] = 'Core throughput value for each PSF'
+    hdr_ct['UNITS'] = 'EXCAM pixels'
+    hdu_ct = fits.ImageHDU(ct, header=hdr_ct)
+
+    # Next extension: FPM center during coronagraphic observations in EXCAM pixels
+    hdr_fpm_cor_excam = fits.Header()
+    hdr_fpm_cor_excam['COMMENT'] = ('FPM center during coronagraphic observing ' +
+        'sequences in units of EXCAM pixels')
+    hdr_fpm_cor_excam['UNITS'] = 'EXCAM pixels'
+    hdu_fpm_cor_excam = fits.ImageHDU(fpm_center_cor, header=hdr_fpm_cor_excam)
+
+    # Next extension: FPAM center during core throughput observations in EXCAM pixels
+    hdr_fpam_excam = fits.Header()
+    hdr_fpam_excam['COMMENT'] = ('FPAM center during core throughput observing ' +
+        'sequences in units of EXCAM pixels')
+    hdr_fpam_excam['UNITS'] = 'EXCAM pixels'
+    hdu_fpam_excam = fits.ImageHDU(fpam_center_ct_pix, header=hdr_fpam_excam)
+
+    # Next extension: FSAM center during core throughput observations in EXCAM pixels
+    hdr_fsam_excam = fits.Header()
+    hdr_fsam_excam['COMMENT'] = ('FSAM center during core throughput observing ' +
+        'sequences in units of EXCAM pixels')
+    hdr_fsam_excam['UNITS'] = 'EXCAM pixels'
+    hdu_fsam_excam = fits.ImageHDU(fsam_center_ct_pix, header=hdr_fsam_excam)
+
+    # Next extension: FPAM H/V positions during coronagraphic and core throughput
+    # observing sequences in micron
+    hdr_fpam = fits.Header()
+    hdr_fpam['COMMENT'] = ('FPAM H/V values during coronagraphic and core ' +
+        'throughput observing sequences. FPAM H/V during coronagraphic ' +
+        'observations is data[0]. FPAM H/V during core throughput observations ' +
+        'is data[1]')
+    hdr_fpam['UNITS'] = 'micron'
+    hdu_fpam = fits.ImageHDU([fpam_pos_cor, fpam_pos_ct], header=hdr_fpam)
+
+    # Next extension: FSAM H/V positions during coronagraphic and core throughput
+    # observing sequences in micron
+    hdr_fsam = fits.Header()
+    hdr_fsam['COMMENT'] = ('FSAM H/V values during coronagraphic and core ' +
+        'throughput observing sequences. FSAM H/V during coronagraphic ' +
+        'observations is data[0]. FSAM H/V during core throughput observations ' +
+        'is data[1]')
+    hdr_fsam['UNITS'] = 'micron'
+    hdu_fsam = fits.ImageHDU([fsam_pos_cor, fsam_pos_ct], header=hdr_fsam)
+
+    # Collect all HDU extensions, including primary one
+    hdul_ct = fits.HDUList([hdu_psf, hdu_loc, hdu_ct, hdu_fpm_cor_excam,
+        hdu_fpam_excam, hdu_fsam_excam, hdu_fpam, hdu_fsam])
+    # Add history
+    prhd = dataset.frames[0].pri_hdr
+    exthd = dataset.frames[0].ext_hdr
+    exthd['HISTORY'] = f"Core Throughput calibration derived from a set of frames on {exthd['DATETIME']}"
+    # Create an instance of the CorethroughputCalibration class and save it
     breakpoint()
-    # Cut PSFs around its location with n_pix_psf
-
-    # Second extension: Nx3 cube that contains N sets of (x,y, CT measurements)
-    # PSF centers wrt FPAM's center
-    psf_loc_fpm = psf_loc - fpam_center_ct_pix
-
-    # Third extension: FPAM, FSAM position during coronagraphic and core throughput
-    # observing sequences in  units of EXCAM pixels
-    breakpoint()
-
-    # History (see example with NonLinearity)
-
-    # Call CorethroughputCalibration class and store cal file
-
-    
-    
+    data.NonLinearityCalibration(hdul_ct,
+        pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset)
 
 def ct_map(
     psf_pix,
