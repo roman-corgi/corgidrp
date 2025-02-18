@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from astropy.io import fits
 import pytest
 import corgidrp
 import corgidrp.caldb as caldb
@@ -22,6 +23,17 @@ dark_dataset = mocks.create_dark_calib_files()
 master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
 # save master dark to disk to be loaded later
 master_dark.save(filedir=calibdir, filename="mockdark.fits")
+
+'''
+# Now open the saved file and print its headers
+filepath = os.path.join(calibdir, "mockdark.fits")
+with fits.open(filepath) as hdul:
+    print("Primary Header:")
+    print(hdul[0].header)
+    if len(hdul) > 1:
+        print("\nExtension Header:")
+        print(hdul[1].header)
+        '''
 
 def test_caldb_create_default():
     """

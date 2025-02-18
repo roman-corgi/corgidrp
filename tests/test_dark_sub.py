@@ -141,11 +141,11 @@ def test_dark_sub():
     EMgain = 10
     exptime = 4
     frame = (noise_maps.FPN_map + noise_maps.CIC_map*EMgain + noise_maps.DC_map*exptime*EMgain)/EMgain
-    prihdr, exthdr = mocks.create_default_headers()
+    prihdr, exthdr = mocks.create_default_calibration_product_headers()
     image_frame = data.Image(frame, prihdr, exthdr)
-    image_frame.ext_hdr['CMDGAIN'] = EMgain
+    image_frame.ext_hdr['EMGAIN_C'] = EMgain
     image_frame.ext_hdr['EXPTIME'] = exptime
-    image_frame.ext_hdr['KGAIN'] = 7
+    image_frame.ext_hdr['KGAINPAR'] = 7
     dataset_from_noisemap = data.Dataset([image_frame])
     nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
     # check the level of the dataset is now approximately 0, leaving off telemetry row

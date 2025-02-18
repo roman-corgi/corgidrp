@@ -17,11 +17,11 @@ column_dtypes = {
     "Date Created": float,
     "Hash": str,
     "DRPVERSN": str,
-    "OBSID": int,
+    "OBSNUM": int,
     "NAXIS1": int,
     "NAXIS2": int,
     "OPMODE": str,
-    "CMDGAIN": float,
+    "EMGAIN_C": float,
     "EXCAMT": float
 }
 
@@ -120,7 +120,7 @@ class CalDB:
                 "NAXIS1": 0,
                 "NAXIS2" : 0,
                 "OPMODE" : "",
-                "CMDGAIN" : 0.,
+                "EMGAIN_C" : 0.,
                 "EXCAMT" : 0
             }
             return list(row_dict.values()), row_dict
@@ -149,7 +149,7 @@ class CalDB:
         else:
             drp_version = ""
 
-        obsid = entry.pri_hdr["OBSID"]
+        obsid = entry.pri_hdr["OBSNUM"]
 
         hash_val = entry.get_hash()
 

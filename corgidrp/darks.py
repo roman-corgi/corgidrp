@@ -187,12 +187,12 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     if detector_regions is None:
             detector_regions = detector_areas
 
-    _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
     # getting telemetry rows to ignore in fit
-    telem_rows_start = detector_params.params['telem_rows_start']
-    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows_start = detector_params.params['TELRSTRT']
+    telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
 
     frames = []
@@ -433,13 +433,13 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     if detector_regions is None:
             detector_regions = detector_areas
 
-    datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(datasets) <= 3:
         raise CalDarksLSQException('Number of sub-stacks in datasets must '
                 'be more than 3 for proper curve fit.')
     # getting telemetry rows to ignore in fit
-    telem_rows_start = detector_params.params['telem_rows_start']
-    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows_start = detector_params.params['TELRSTRT']
+    telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
 
     EMgain_arr = np.array([])
@@ -465,16 +465,13 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
             if np.shape(datasets[i-1].all_data) != np.shape(datasets[i].all_data):
                 raise CalDarksLSQException('All sub-stacks must have the '
                             'same number of frames and frame shape.')
-        try: # if EM gain measured directly from frame TODO change hdr name if necessary
-            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
-        except:
-            try: # use applied EM gain if available
-                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
-            except: # use commanded gain otherwise
-                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['CMDGAIN'])
+        try: # use applied EM gain if available
+            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
+        except: # use commanded gain otherwise
+            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_C'])
         exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
-        cmdgain = datasets[i].frames[0].ext_hdr['CMDGAIN']
-        kgain = datasets[i].frames[0].ext_hdr['KGAIN']
+        cmdgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
+        kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
         exptime_arr = np.append(exptime_arr, exptime)
         kgain_arr = np.append(kgain_arr, kgain)
 
@@ -720,15 +717,12 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     prihdr = datasets[0].frames[0].pri_hdr
     exthdr = datasets[0].frames[0].ext_hdr
     exthdr['EXPTIME'] = None
-    if 'EMGAIN_M' in exthdr.keys():
-        exthdr['EMGAIN_M'] = None
-    exthdr['CMDGAIN'] = None
-    exthdr['KGAIN'] = None
-    exthdr['BUNIT'] = 'detected electrons'
-    exthdr['HIERARCH DATA_LEVEL'] = None
+    exthdr['EMGAIN_C'] = None
+    exthdr['KGAINPAR'] = None
+    exthdr['BUNIT'] = 'Photoelectrons'
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'Photoelectrons'
 
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
 
@@ -799,16 +793,13 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         Fd = noise_maps.FPN_map
         Dd = noise_maps.DC_map
         Cd = noise_maps.CIC_map
-        _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+        _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
-        try: # use measured EM gain if available TODO change hdr name if necessary
-            g = dataset.frames[0].ext_hdr['EMGAIN_M']
-        except:
-            try: # use applied EM gain if available
-                g = dataset.frames[0].ext_hdr['EMGAIN_A']
-            except: # otherwise, use commanded EM gain
-                g = dataset.frames[0].ext_hdr['CMDGAIN']
+        try: # use applied EM gain if available
+            g = dataset.frames[0].ext_hdr['EMGAIN_A']
+        except: # otherwise, use commanded EM gain
+            g = dataset.frames[0].ext_hdr['EMGAIN_C']
         t = dataset.frames[0].ext_hdr['EXPTIME']
 
         rows = detector_regions['SCI']['frame_rows']
@@ -851,7 +842,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr['NAXIS1'] = Fd.shape[0]
         exthdr['NAXIS2'] = Fd.shape[1]
         exthdr['DATATYPE'] = 'Dark'
-        exthdr['CMDGAIN'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
+        exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
         # wipe clean so that the proper documenting occurs for dark
         exthdr.pop('DRPNFILE')

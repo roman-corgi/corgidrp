@@ -634,7 +634,7 @@ class Dark(Image):
                 self._record_parent_filenames(input_dataset)
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
+            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['EMGAIN_C'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
@@ -650,7 +650,7 @@ class Dark(Image):
             self.ext_hdr['PC_STAT'] = 'analog master dark'
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'detected electrons'
+            self.err_hdr['BUNIT'] = 'Photoelectrons'
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -870,7 +870,7 @@ class KGain(Image):
                 self.filename = "{0}_kgain.fits".format(orig_input_filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected electrons/DN'
+            self.ext_hdr['BUNIT'] = 'Photoelectrons/DN'
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
 
@@ -942,7 +942,7 @@ class BadPixelMap(Image):
             if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new bad pixel map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this bad pixel map.")
-            self.ext_hdr['DATATYPE'] = 'BadPixelMap' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'BadPixelMap'
 
             # log all the data that went into making this bad pixel map
             self._record_parent_filenames(input_dataset)
@@ -1011,7 +1011,7 @@ class DetectorNoiseMaps(Image):
                 raise ValueError("This appears to be a new DetectorNoiseMaps instance. The dataset of input files needs to be passed in to the input_dataset keyword to record the history of the files that made the calibration products.")
 
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected electrons'
+            self.ext_hdr['BUNIT'] = 'Photoelectrons'
             # bias offset
             self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
 
@@ -1026,7 +1026,7 @@ class DetectorNoiseMaps(Image):
             self.filename = "{0}_DetectorNoiseMaps.fits".format(orig_input_filename)
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'detected electrons'
+            self.err_hdr['BUNIT'] = 'Photoelectrons'
 
         # double check that this is actually a DetectorNoiseMaps file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1065,35 +1065,20 @@ class DetectorParams(Image):
     """
      # default detector params
     default_values = {
-        'kgain' : 8.7,
-        'fwc_pp' : 90000.,
-        'fwc_em' : 100000.,
-        'rowreadtime' : 223.5e-6, # seconds
-        # number of EM gain register stages
-        'Nem': 604,
-        # slice of rows that are used for telemetry
-        'telem_rows_start': -1,
-        'telem_rows_end': None, #goes to the end, in other words
-        # pixel full well (e-)
-        'fwc': 90000,
-        # serial full well (e-) in EM gain register in EXCAM EMCCD
-        'fwc_em': 100000,
-        # cosmic ray hit rate (hits/m**2/sec)
-        'X': 5.0e+04,
-        # pixel area (m**2/pixel)
-        'a': 1.69e-10,
-        # Maximum allowable EM gain
-        'gmax': 8000.0,
-        # tolerance in exposure time calculator
-        'delta_constr': 1.0e-4,
-        # Overhead time, in seconds, for each collected frame.  Used to compute
-        # total wall-clock time for data collection
-        'overhead': 3,
-        # Maximum allowed electrons/pixel/frame for photon counting
-        'pc_ecount_max': 0.1,
-        # number of read noise standard deviations at which to set the
-        # photon-counting threshold
-        'T_factor': 5,
+        'KGAINPAR' : 8.7,
+        'FWC_PP_E' : 90000.,
+        'FWC_EM_E' : 100000.,
+        'ROWREADT' : 223.5e-6,  # seconds
+        'NEMGAIN': 604,         # number of EM gain register stages
+        'TELRSTRT': -1,         # slice of rows that are used for telemetry
+        'TELREND': None,        #goes to the end, in other words
+        'CRHITRT': 5.0e+04,     # cosmic ray hit rate (hits/m**2/sec)
+        'PIXAREA': 1.69e-10,    # pixel area (m**2/pixel)
+        'GAINMAX': 8000.0,      # Maximum allowable EM gain
+        'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
+        'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
+        'PCECNTMX': 0.1,        # Maximum allowed electrons/pixel/frame for photon counting
+        'TFACTOR': 5,            # number of read noise standard deviations at which to set the photon-counting threshold
     }
 
     def __init__(self, data_or_filepath, date_valid=None):
@@ -1113,36 +1098,29 @@ class DetectorParams(Image):
         else:
             if not isinstance(data_or_filepath, dict):
                 raise ValueError("Input should either be a dictionary or a filepath string")
-            prihdr = fits.Header()
-            exthdr = fits.Header()
-            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
-            exthdr['DRPVERSN'] =  corgidrp.__version__
-            exthdr['DRPCTIME'] =  time.Time.now().isot
+            pri_hdr = fits.Header()
+            ext_hdr = fits.Header()
+            ext_hdr['SCTSRT'] = date_valid.isot # use this for validity date
+            ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
-            prihdr['OBSID'] = 0     # reverting back to obsid from obsnum for now, 
-            exthdr["EXPTIME"] = 0
-            exthdr['OPMODE'] = ""
-            exthdr['CMDGAIN'] = 1.0
-            exthdr['EXCAMT'] = 40.0
+            pri_hdr['OBSNUM'] = 0     
+            ext_hdr["EXPTIME"] = 0
+            ext_hdr['OPMODE'] = ""
+            ext_hdr['EMGAIN_C'] = 1.0
+            ext_hdr['EXCAMT'] = 40.0
 
             # write default values to headers
-            for key in self.default_values:
-                if len(key) > 8:
-                    # to avoid VerifyWarning from fits
-                    exthdr['HIERARCH ' + key] = self.default_values[key]
-                else:
-                    exthdr[key] = self.default_values[key]
+            for key, value in self.default_values.items():
+                ext_hdr[key] = value
             # overwrite default values
-            for key in data_or_filepath:
+            for key, value in data_or_filepath.items():
                 # to avoid VerifyWarning from fits
-                if len(key) > 8:
-                    exthdr['HIERARCH ' + key] = data_or_filepath[key]
-                else:
-                    exthdr[key] = data_or_filepath[key]
+                ext_hdr[key] = value
 
-            self.pri_hdr = prihdr
-            self.ext_hdr = exthdr
+            self.pri_hdr = pri_hdr
+            self.ext_hdr = ext_hdr
             self.data = np.zeros([1,1])
             self.dq = np.zeros([1,1])
             self.err = np.zeros([1,1])
@@ -1158,7 +1136,7 @@ class DetectorParams(Image):
         for key in self.default_values:
             if len(key) > 8:
                 # to avoid VerifyWarning from fits
-                self.params[key] = self.ext_hdr['HIERARCH ' + key]
+                self.params[key] = self.ext_hdr['DATATYPE ' + key]
             else:
                 self.params[key] = self.ext_hdr[key]
 
@@ -1448,7 +1426,7 @@ class NDFilterSweetSpotDataset(Image):
 
 
 datatypes = { "Image" : Image,
-               "Dark" : Dark,
+              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
               "KGain" : KGain,
               "BadPixelMap" : BadPixelMap,
