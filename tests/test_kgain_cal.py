@@ -16,7 +16,7 @@ from pathlib import Path
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
+from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params_default)
 
 

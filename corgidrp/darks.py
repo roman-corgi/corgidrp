@@ -249,6 +249,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['NAXIS1'] = data.shape[0]
     exthdr['NAXIS2'] = data.shape[1]
     exthdr['DATATYPE'] = 'Dark'
+    prihdr['OBSNUM'] = 000
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
 

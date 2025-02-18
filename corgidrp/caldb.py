@@ -116,7 +116,7 @@ class CalDB:
                 "Date Created" : time_now.mjd,
                 "Hash" : hash(time_now),
                 "DRPVERSN" : "0.0",
-                "OBSID" : 0,
+                "OBSNUM" : 000,
                 "NAXIS1": 0,
                 "NAXIS2" : 0,
                 "OPMODE" : "",

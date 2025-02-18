@@ -1105,8 +1105,8 @@ class DetectorParams(Image):
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
-            pri_hdr['OBSNUM'] = 0     
-            ext_hdr["EXPTIME"] = 0
+            pri_hdr["OBSNUM"] = 000     
+            ext_hdr["EXPTIME"] = 1
             ext_hdr['OPMODE'] = ""
             ext_hdr['EMGAIN_C'] = 1.0
             ext_hdr['EXCAMT'] = 40.0

@@ -8,7 +8,6 @@ from scipy.optimize import curve_fit
 from corgidrp import check
 import corgidrp.data as data
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_headers
 from corgidrp.detector import slice_section, detector_areas
 
 # Dictionary with constant kgain calibration parameters
@@ -799,7 +798,7 @@ def kgain_dataset_2_list(dataset):
     Casts the CORGIDRP Dataset object for K-gain calibration into a list of
     numpy arrays sharing the same exposure time. It also returns the list of
     unique EM values and set of exposure times used with each EM. Note: EM gain
-    is the commanded values: CMDGAIN.
+    is the commanded values: EMGAIN_C.
 
     This function also performs a set of tests about the data type and values in
     dataset.
@@ -846,8 +845,8 @@ def kgain_dataset_2_list(dataset):
             if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
                 raise Exception('Frames in the same data set must have the same exposure time')
 
-            if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
-                if frame.ext_hdr['CMDGAIN'] != 1:
+            if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
+                if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
             else:
@@ -865,18 +864,15 @@ def kgain_dataset_2_list(dataset):
                 if isinstance(datetime, str) is False:
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
-                em_gain = frame.ext_hdr['CMDGAIN']
+                em_gain = frame.ext_hdr['EMGAIN_C']
                 if em_gain < 1:
                     raise Exception('Commanded EM gain must be >= 1')
                 em_gains.append(em_gain)
                 if record_gain:
-                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
-                        gains.append(frame.ext_hdr['EMGAIN_M'])
-                    except:
-                        try: # use applied EM gain if available
-                            gains.append(frame.ext_hdr['EMGAIN_A'])
-                        except: # use commanded gain otherwise
-                            gains.append(frame.ext_hdr['CMDGAIN'])
+                    try: # use applied EM gain if available
+                        gains.append(frame.ext_hdr['EMGAIN_A'])
+                    except: # use commanded gain otherwise
+                        gains.append(frame.ext_hdr['EMGAIN_C'])
                     record_gain = False
                 
         # Calibration data may have different subsets

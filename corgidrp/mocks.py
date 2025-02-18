@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import numpy as np
 import warnings
+import datetime
 import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
@@ -105,6 +106,9 @@ def create_default_L1_headers(arrtype="SCI"):
             exthdr (fits.Header): Extension FITS Header
 
     """
+    dt = datetime.datetime.now(datetime.timezone.utc)
+    dt_str = dt.isoformat() 
+    
     prihdr = fits.Header()
     exthdr = fits.Header()
 
@@ -171,7 +175,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['STATUS']      = 0               # Housekeeping packet health check status: 0=Nominal, 1=Off-nominal
     exthdr['HVCBIAS']     = 0               # HV clock bias value (DAC value controlling EM-gain)
     exthdr['OPMODE']      = 'NONE_DETON_0'  # EXCAM readout operational mode
-    exthdr['EXPTIME']     = 0.0             # Commanded exposure time (sec)
+    exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain
     exthdr['EMGAINA1']    = 0.0             # "Actual" gain calculation a1 coefficient
     exthdr['EMGAINA2']    = 0.0             # "Actual" gain calculation a2 coefficient
@@ -259,8 +263,8 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
     exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
     exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
-    exthdr['DATETIME']    = '2025-02-16T00:00:00'  # Time of preceding 1Hz HK packet (TAI)
-    exthdr['FTIMEUTC']    = '2025-02-16T00:00:00'  # Frame time in UTC
+    exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
+    exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
     exthdr['HIERARCH']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
 
@@ -281,6 +285,9 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
             exthdr (fits.Header): Extension FITS Header
 
     """
+    dt = datetime.datetime.now(datetime.timezone.utc)
+    dt_str = dt.isoformat() 
+
     prihdr = fits.Header()
     exthdr = fits.Header()
 
@@ -347,7 +354,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['STATUS']      = 0               # Housekeeping packet health check status: 0=Nominal, 1=Off-nominal
     exthdr['HVCBIAS']     = 0               # HV clock bias value (DAC value controlling EM-gain)
     exthdr['OPMODE']      = 'NONE_DETON_0'  # EXCAM readout operational mode
-    exthdr['EXPTIME']     = 0.0             # Commanded exposure time (sec)
+    exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain
     exthdr['EMGAINA1']    = 0.0             # "Actual" gain calculation a1 coefficient
     exthdr['EMGAINA2']    = 0.0             # "Actual" gain calculation a2 coefficient
@@ -442,8 +449,8 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['TPSCHEME2']   = 0               # Number of cycles for TPUMP pumping SCHEME_2
     exthdr['TPSCHEME3']   = 0               # Number of cycles for TPUMP pumping SCHEME_3
     exthdr['TPSCHEME4']   = 0               # Number of cycles for TPUMP pumping SCHEME_4
-    exthdr['DATETIME']    = '2025-02-16T00:00:00'  # Time of preceding 1Hz HK packet (TAI)
-    exthdr['FTIMEUTC']    = '2025-02-16T00:00:00'  # Frame time in UTC
+    exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
+    exthdr['FTIMEUTC']    = dt_str          # Frame time in UTC
     exthdr['HIERARCH']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
 
@@ -465,9 +472,21 @@ def create_default_L2a_headers(arrtype="SCI"):
 
     """
     # TO DO: Update this once L2a headers have been finalized
+    dt = datetime.datetime.now(datetime.timezone.utc)
+    dt_str = dt.isoformat() 
+
     prihdr, exthdr = create_default_L1_headers(arrtype)
 
-    exthdr['HIERARCH']    = 'L2a'           # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['HIERARCH']      = 'L2a'         # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
+    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['SAT_DN']        = 0.0           # DN saturation
+    exthdr['DESMEAR']       = False         # Whether desmearing was used
+    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
+    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
+    exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
+    exthdr['DRPVERSN']      = '1.1.2'       # Version of DRP software
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
 
     return prihdr, exthdr
 
@@ -512,6 +531,8 @@ def create_default_L3_headers(arrtype="SCI"):
     # TO DO: Update this once L3 headers have been finalized
     prihdr, exthdr = create_default_L2b_headers(arrtype)
 
+    prihdr['TARGET'] = ''
+    
     exthdr['CD1_1'] = 0
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
@@ -585,7 +606,7 @@ def create_default_calibration_product_headers():
     exthdr['NAXIS2']      = 0               # Axis 2 size
     exthdr['PCOUNT']      = 0               # Number of parameters (FITS keyword)
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
-    exthdr['EXPTIME']     = 0.0             # Commanded exposure time (sec)
+    exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain
     exthdr['KGAINPAR']    = 0               # Calculated K-gain parameter (DN to electrons)
     exthdr['BSCALE']      = 1               # Linear scaling factor
@@ -739,6 +760,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     frames = []
     for i in range(numfiles):
         prihdr, exthdr = create_default_L2a_headers(arrtype="SCI")
+        prihdr["OBSNUM"] = 000
         exthdr['KGAINPAR'] = 7
         #np.random.seed(456+i); 
         sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
@@ -992,9 +1014,10 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     filepattern = "simcal_nonlin_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_L1_headers()
+        prihdr, exthdr = create_default_calibration_product_headers()
         #Add the commanded gain to the headers
         exthdr['EMGAIN_C'] = em_gain
+        exthdr['OBSNAME'] = 'NONLIN'
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])

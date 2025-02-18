@@ -17,10 +17,10 @@ def test_default_params():
     """
     default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
 
-    assert default_detparams.params['rowreadtime'] == expected_rowreadtime
-    assert default_detparams.params['fwc_em'] == expected_fwc_em
-    assert default_detparams.params['fwc_pp'] == expected_fwc_pp
-    assert default_detparams.params['kgain'] == expected_kgain
+    assert default_detparams.params['ROWREADT'] == expected_rowreadtime
+    assert default_detparams.params['FWC_EM_E'] == expected_fwc_em
+    assert default_detparams.params['FWC_PP_E'] == expected_fwc_pp
+    assert default_detparams.params['KGAINPAR'] == expected_kgain
 
 def test_hashing():
     """

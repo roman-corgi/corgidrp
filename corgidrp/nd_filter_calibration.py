@@ -361,7 +361,7 @@ def create_nd_sweet_spot_dataset(
     pri_hdr = fits.Header()
     pri_hdr['SIMPLE']  = True
     pri_hdr['BITPIX']  = 32
-    pri_hdr['OBSID']   = 0
+    pri_hdr['OBSNUM']   = 000
     pri_hdr['COMMENT'] = "Combined ND Filter Sweet Spot Dataset primary header"
 
     ext_hdr = fits.Header()
