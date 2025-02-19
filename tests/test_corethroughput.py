@@ -217,6 +217,7 @@ def test_cal_file():
         fsam_pos_cor, fsam_pos_ct)
 
     # Open calibration file
+    ct_cal = corethroughput.read_ct_cal_file()
     breakpoint()
 
     # Compare I/O. Remember:

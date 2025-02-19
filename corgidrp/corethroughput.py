@@ -6,6 +6,7 @@ from astropy.io import fits, ascii
 from scipy.interpolate import griddata
 
 import corgidrp
+import corgidrp.data as data
 from corgidrp.data import Dataset
 from corgidrp.astrom import centroid_with_roi
 from corgidrp import corethroughput
@@ -255,10 +256,10 @@ def read_rot_matrix():
     try:
         idx1 = len('FpamFsamRotMat')
         for _, _, files in os.walk(corgidrp.default_cal_dir):
-            calfile_date = [Time(file[idx1+1:-5]) for file in files if 'FpamFsamRotMat' in file]
-        calfile_latest = np.array(calfile_date).max().value
-        rot_matrix = fits.getdata(os.path.join(corgidrp.default_cal_dir,
-            f'FpamFsamRotMat_{calfile_latest}.fits'))
+            calfile_list = [file for file in files if 'FpamFsamRotMat' in file]
+            calfile_date = [Time(file[idx1+1:-5]) for file in calfile_list]
+        calfile_latest = calfile_list[np.array(calfile_date).argmax()]
+        rot_matrix = fits.getdata(os.path.join(corgidrp.default_cal_dir, calfile_latest))
         try:
             fpam2excam_matrix = rot_matrix[0]
             fsam2excam_matrix = rot_matrix[1]
@@ -481,86 +482,78 @@ def write_ct_calfile(
             int(np.round(psf_loc_ct[i_psf][0])) + n_pix_psf_2)
         psf_basis += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
         i_psf += 1 
+        # Get headers from an off-axis PSF
+        prhd_offaxis = frame.pri_hdr
+        exthd_offaxis = frame.ext_hdr
 
+    psf_basis = np.array(psf_basis)
     # Check
     if len(psf_basis) != len(psf_loc_ct) or len(psf_basis) != len(ct):
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations and/or core throughput values'))
    
-    # FITS extensions
-    # Primary extension: PSF basis
-    hdr_psf = fits.Header()
-    hdr_psf['UNITS'] = 'photoelectron/pix/s'
-    hdr_psf['COMMENT'] = ('Set of PSFs derived from a core throughput observing '+
-        'sequence. PSFs are not normalized. They are the L2b images of the '+
-        'off-axis source. The data cube is centered around each PSF location')
-    hdu_psf = fits.PrimaryHDU(psf_basis, header=hdr_psf)
+    # Add history
+    exthd_offaxis['HISTORY'] = ('Core Throughput calibration derived from a '
+        f'set of frames on {exthd_offaxis["DATETIME"]}')
+    # Add specific information
+    exthd_offaxis['UNITS'] = 'photoelectron/pix/s'
+    exthd_offaxis['COMMENT'] = ('Set of PSFs derived from a core throughput '
+        'observing sequence. PSFs are not normalized. They are the L2b images '
+        'of the off-axis source. The data cube is centered around each PSF location')
 
     # N sets of (x,y, CT measurements)
-    # Next extension: PSF centers wrt FPAM's center
+    # x, y: PSF centers wrt FPAM's center
     psf_loc = psf_loc_ct - fpam_center_ct_pix
-    hdr_loc = fits.Header()
-    hdr_loc['COMMENT'] = 'PSF location with respect to FPAM center'
-    hdr_loc['UNITS'] = 'EXCAM pixels'
-    hdu_loc = fits.ImageHDU(psf_loc, header=hdr_loc)
-    # Next extension: Core throughput values for each PSF
+    ct_map = np.array([psf_loc[:,0], psf_loc[:,1], ct])
     hdr_ct = fits.Header()
-    hdr_ct['COMMENT'] = 'Core throughput value for each PSF'
-    hdr_ct['UNITS'] = 'EXCAM pixels'
-    hdu_ct = fits.ImageHDU(ct, header=hdr_ct)
+    hdr_ct['COMMENT'] = ('PSF location with respect to FPAM center. '
+        'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
+    hdr_ct['UNITS'] = 'PSF locsation: EXCAM pixels. Core throughput: values between 0 and 1.'
 
-    # Next extension: FPM center during coronagraphic observations in EXCAM pixels
-    hdr_fpm_cor_excam = fits.Header()
-    hdr_fpm_cor_excam['COMMENT'] = ('FPM center during coronagraphic observing ' +
-        'sequences in units of EXCAM pixels')
-    hdr_fpm_cor_excam['UNITS'] = 'EXCAM pixels'
-    hdu_fpm_cor_excam = fits.ImageHDU(fpm_center_cor, header=hdr_fpm_cor_excam)
+    # FPM information:
+    fpm_info = np.array([fpam_center_ct_pix, fsam_center_ct_pix,fpm_center_cor,
+        fpam_pos_cor,fpam_pos_ct,fsam_pos_cor,fsam_pos_ct])
+    hdr_fpm = fits.Header()
+    hdr_fpm['COMMENT'] = ('fpm_info[0]=FPAM center during core throughput '
+        'observing sequences in units of EXCAM pixels.'
+        'fpm_info[1]=FSAM center during core throughput observing sequences in '
+        'units of EXCAM pixels. '
+        'fpm_info[2]=FPM center during coronagraphic observing sequences in '
+        'units of EXCAM pixels.'
+        'fpm_info[3]=FPAM H/V values during coronagraphic observing sequences '
+        'in units of micron. '
+        'fpm_info[4]=FPAM H/V values during core throughput observing sequences '
+        'in units of micron.'
+        'fpm_info[5]=FSAM H/V values during coronagraphic observing sequences '
+        'in units of micron. '
+        'fpm_info[6]=FSAM H/V values during core throughput observing sequences '
+        'in units of micron.')
 
-    # Next extension: FPAM center during core throughput observations in EXCAM pixels
-    hdr_fpam_excam = fits.Header()
-    hdr_fpam_excam['COMMENT'] = ('FPAM center during core throughput observing ' +
-        'sequences in units of EXCAM pixels')
-    hdr_fpam_excam['UNITS'] = 'EXCAM pixels'
-    hdu_fpam_excam = fits.ImageHDU(fpam_center_ct_pix, header=hdr_fpam_excam)
+    # Create an instance of the CoreThroughputCalibration class and save it
+    ct_cal_file = data.CoreThroughputCalibration(psf_basis, 
+        pri_hdr = prhd_offaxis, ext_hdr = exthd_offaxis,
+        ct_map=ct_map, hdr_ct=hdr_ct,
+        fpm_info=fpm_info, hdr_fpm=hdr_fpm,
+        input_dataset=dataset)
+    ct_cal_file.save(filedir=corgidrp.default_cal_dir)
 
-    # Next extension: FSAM center during core throughput observations in EXCAM pixels
-    hdr_fsam_excam = fits.Header()
-    hdr_fsam_excam['COMMENT'] = ('FSAM center during core throughput observing ' +
-        'sequences in units of EXCAM pixels')
-    hdr_fsam_excam['UNITS'] = 'EXCAM pixels'
-    hdu_fsam_excam = fits.ImageHDU(fsam_center_ct_pix, header=hdr_fsam_excam)
+def read_ct_cal_file():
+    """ Read latest core throughput calibration file."""
 
-    # Next extension: FPAM H/V positions during coronagraphic and core throughput
-    # observing sequences in micron
-    hdr_fpam = fits.Header()
-    hdr_fpam['COMMENT'] = ('FPAM H/V values during coronagraphic and core ' +
-        'throughput observing sequences. FPAM H/V during coronagraphic ' +
-        'observations is data[0]. FPAM H/V during core throughput observations ' +
-        'is data[1]')
-    hdr_fpam['UNITS'] = 'micron'
-    hdu_fpam = fits.ImageHDU([fpam_pos_cor, fpam_pos_ct], header=hdr_fpam)
+    # Check for latest time with FPAM/FSAM rotation matrices
+    try:
+        idx1 = len('CoreThroughputCalibration')
+        for _, _, files in os.walk(corgidrp.default_cal_dir):
+            calfile_list = [file for file in files if 'CoreThroughputCalibration' in file]
+            calfile_date = [Time(file[idx1+1:-5]) for file in calfile_list]
+        calfile_latest = calfile_list[np.array(calfile_date).argmax()]
+        psf_basis = fits.getdata(os.path.join(corgidrp.default_cal_dir, calfile_latest))
+        # Get other extensions and headers (get all at once?)
+    except:
+        raise OSError('The core throughput calibration file could not be loaded.')
 
-    # Next extension: FSAM H/V positions during coronagraphic and core throughput
-    # observing sequences in micron
-    hdr_fsam = fits.Header()
-    hdr_fsam['COMMENT'] = ('FSAM H/V values during coronagraphic and core ' +
-        'throughput observing sequences. FSAM H/V during coronagraphic ' +
-        'observations is data[0]. FSAM H/V during core throughput observations ' +
-        'is data[1]')
-    hdr_fsam['UNITS'] = 'micron'
-    hdu_fsam = fits.ImageHDU([fsam_pos_cor, fsam_pos_ct], header=hdr_fsam)
-
-    # Collect all HDU extensions, including primary one
-    hdul_ct = fits.HDUList([hdu_psf, hdu_loc, hdu_ct, hdu_fpm_cor_excam,
-        hdu_fpam_excam, hdu_fsam_excam, hdu_fpam, hdu_fsam])
-    # Add history
-    prhd = dataset.frames[0].pri_hdr
-    exthd = dataset.frames[0].ext_hdr
-    exthd['HISTORY'] = f"Core Throughput calibration derived from a set of frames on {exthd['DATETIME']}"
-    # Create an instance of the CorethroughputCalibration class and save it
     breakpoint()
-    data.NonLinearityCalibration(hdul_ct,
-        pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset)
+    return ct_cal
 
 def ct_map(
     psf_pix,
