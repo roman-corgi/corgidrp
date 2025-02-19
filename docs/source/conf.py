@@ -22,19 +22,23 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    'sphinx.ext.autosummary',  
-    'sphinx_autodoc_typehints',  
+    'autoapi.extension'
+    
 ]
 
-# Add autosummary settings
-autosummary_generate = True  # Generate stub pages for autosummary
-autodoc_default_options = {
-    'members': True,
-    'member-order': 'bysource',
-    'special-members': '__init__',
-    'undoc-members': True,
-    'exclude-members': '__weakref__'
-}
+# AutoAPI settings
+autoapi_type = 'python'
+autoapi_dirs = ['../../corgidrp']  # Path to your package relative to conf.py
+autoapi_options = [
+    'members',
+    'undoc-members',
+    'show-inheritance',
+    'show-module-summary',
+    'special-members',
+    'imported-members',
+]
+
+
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
