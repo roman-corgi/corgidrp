@@ -20,7 +20,7 @@ def add_photon_noise(input_dataset):
 
     for i, frame in enumerate(phot_noise_dataset.frames):
         em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
-        if em_gain: # use EM applied EM gain if available
+        if em_gain > 0: # use EM applied EM gain if available
             em_gain = em_gain
         else: # otherwise use commanded EM gain
             em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
@@ -108,7 +108,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     history_msg = "Dark subtracted using dark {0}.  Units changed from detected electrons to photoelectrons.".format(dark.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"photoelectrons"})
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"Photoelectrons"})
 
     return darksub_dataset
 
@@ -292,9 +292,10 @@ def em_gain_division(input_dataset):
     emgain_error = emgain_dataset.all_err
 
     for i in range(len(emgain_dataset)):
-        try: # use EM applied EM gain if available
+        emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
+        if emgain > 0: # use EM applied EM gain if available
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
-        except: # otherwise use commanded EM gain
+        else: # otherwise use commanded EM gain
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_C"]
         emgain_cube[i] /= emgain
         emgain_error[i] /= emgain

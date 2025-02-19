@@ -627,6 +627,7 @@ class Dark(Image):
                 raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
             self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected electrons'
+            # TO-DO: check PC_STAT and whether this will be in L2s
             if 'PC_STAT' not in ext_hdr:
                 self.ext_hdr['PC_STAT'] = 'analog master dark'
             # log all the data that went into making this calibration file

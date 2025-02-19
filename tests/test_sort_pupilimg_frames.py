@@ -9,7 +9,7 @@ import astropy.io.fits as fits
 from corgidrp import sorting as sorting
 import corgidrp.data as data
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L1_headers
 
 # Functions
 def get_cmdgain_exptime_mean_frame(
@@ -161,7 +161,7 @@ def make_minimal_image(
     """
     signal = np.zeros(1)
 
-    prhd, exthd = create_default_headers()
+    prhd, exthd = create_default_L1_headers()
     # Mock error maps
     err = np.ones(1)
     dq = np.zeros(1, dtype = np.uint16)
@@ -170,7 +170,7 @@ def make_minimal_image(
     hdr_img = fits.ImageHDU(signal, header=exthd)
     hdul = fits.HDUList([prim, hdr_img])
     # Record actual commanded EM
-    hdul[1].header['CMDGAIN'] = cmdgain
+    hdul[1].header['EMGAIN_C'] = cmdgain
     # Record actual exposure time
     hdul[1].header['EXPTIME'] = exptime_sec
     # Add corresponding VISTYPE
