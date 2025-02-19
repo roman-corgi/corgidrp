@@ -14,6 +14,5 @@ This is the documentation for the CoronaGraph Instrument Data Reduction Pipeline
    :caption: Contents: Setup
    
 
-   setup
    installation
    tutorial
