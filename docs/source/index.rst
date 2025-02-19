@@ -6,12 +6,12 @@
 corgidrp: CoronaGraph Instrument Data Reduction Pipeline 
 ========================================================
 
-This is the documentation for the CoronaGraph Instrument Data Reduction Pipeline for the Nancy Grace Roman Space Telescope.
+The CoronaGraph Instrument Data Reduction Pipeline ``corgidrp`` is a Python-based data processing pipeline designed for the Nancy Grace Roman Space Telescope Coronagraph Instrument. This pipeline handles the reduction and processing of data in 4 levels, implementing various calibration and processing steps essential for coronagraphic observations.
 
 
 .. toctree::
    :maxdepth: 2
-   :caption: Content
+   :caption: Table of Contents
    
 
    installation

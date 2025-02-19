@@ -6,8 +6,31 @@ This section demonstrates how to run an end-to-end test for processing Level 1 (
 The test involves processing raw L1 data through calibration procedures and comparing the results against known TVAC L2b data. It also ensures calibration file creation and removal from the calibration database. Before running the test, ensure you have set up the necessary paths to your data and calibration files. The following example demonstrates the steps involved in processing the data and running the test.
 
 
-Test Setup
+Running the Test
+~~~~~~~~~~~~~~~~
 
+There are several ways to run the L1 to L2b end-to-end test:
+
+1. Using pytest
+   
+   .. code-block:: bash
+
+      # From the root directory of corgidrp
+      pytest tests/test_l1_to_l2b.py -v
+
+2. Direct execution
+   
+   .. code-block:: bash
+
+      # Run the script directly with default paths
+      python tests/test_l1_to_l2b.py
+
+      # Or specify custom paths
+      python tests/test_l1_to_l2b.py --tvacdata_dir /path/to/CGI_TVAC_Data --outputdir /path/to/output
+
+
+Test Setup
+~~~~~~~~~~
 
 To run this test, you will need three specific datasets from the database:
 
@@ -15,13 +38,8 @@ To run this test, you will need three specific datasets from the database:
 2. **L2b Data** - Processed Level 2b data files.
 3. **Cals** - Calibration files required for processing.
 
-If you don't have all the datasets downloaded, make sure you at least have these three files to run the test promptly.
-
-The script imports necessary libraries and determines the directory containing the script.
+If you don't have all the datasets downloaded, make sure you at least have these three files to run the test promptly. The script imports necessary libraries and determines the directory containing the script.
    
-
-The script imports necessary libraries and determines the directory containing the script.
-
 .. code-block:: python
 
     import argparse
@@ -151,3 +169,30 @@ The test can be run using command-line arguments.
         test_l1_to_l2b(tvacdata_dir, outputdir)
 
 This script ensures that the `corgidrp` pipeline correctly processes L1 data into L2b. The validation step confirms that the output matches expected results, ensuring data integrity.
+
+Output
+~~~~~~
+
+Once the test has been successfully run, the results will be stored in the output directory you specified. To view and analyze the output data, you will need to use a suitable image viewer, such as **SAOImageDS9**.
+
+To analyze the output FITS files:
+
+1. Load your processed L2b files in DS9:
+   ``saoimageds9 90500.fits``
+
+2. Quick analysis steps:
+
+   - Press 's' for scale menu (zscale recommended)
+   - Press 'c' for colormap options (heat shows features well)
+   - Use Analysis -> Statistics to verify calibration values
+
+For more information on using DS9, including detailed tutorials on viewing and manipulating FITS images, check the `official DS9 documentation <https://sites.google.com/cfa.harvard.edu/saoimageds9/documentation>`_
+
+Here is an example of the output:
+
+
+.. figure:: /_static/Output.png
+   :width: 600px
+   :align: center
+   
+   Sample L2b processed image
