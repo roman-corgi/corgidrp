@@ -129,7 +129,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     if not isinstance(niter, (int, np.integer)) or niter < 1:
             raise PhotonCountException('niter must be an integer greater than '
                                         '0')
-    test_dataset, _ = input_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN', 'RN'])
+    test_dataset, _ = input_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
     if len(test_dataset) > 1:
         raise PhotonCountException('All frames must have the same exposure time, '
                                    'commanded EM gain, and k gain.')
@@ -175,12 +175,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     if thresh < 0:
         raise PhotonCountException('thresh must be nonnegative')
     
-    if 'EMGAIN_M' in dataset.frames[0].ext_hdr: # if EM gain measured directly from frame TODO change hdr name if necessary
-        em_gain = dataset.frames[0].ext_hdr['EMGAIN_M']
-    elif 'EMGAIN_A' in dataset.frames[0].ext_hdr: # use applied EM gain if available
+    em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']
+    if em_gain > 0: # use applied EM gain if available
         em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']
-    elif 'CMDGAIN' in dataset.frames[0].ext_hdr: # use commanded gain otherwise
-        em_gain = dataset.frames[0].ext_hdr['CMDGAIN']
+    else: # use commanded gain otherwise
+        em_gain = dataset.frames[0].ext_hdr['EMGAIN_C']
 
     if thresh >= em_gain:
         if safemode:

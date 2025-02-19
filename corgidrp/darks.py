@@ -797,9 +797,10 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
-        try: # use applied EM gain if available
+        g = dataset.frames[0].ext_hdr['EMGAIN_A']
+        if g > 0: # use applied EM gain if available
             g = dataset.frames[0].ext_hdr['EMGAIN_A']
-        except: # otherwise, use commanded EM gain
+        else: # otherwise, use commanded EM gain
             g = dataset.frames[0].ext_hdr['EMGAIN_C']
         t = dataset.frames[0].ext_hdr['EXPTIME']
 

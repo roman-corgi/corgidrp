@@ -296,17 +296,15 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
     #Apply the non-linearity correction to the data
     linearized_cube = linearized_dataset.all_data
     #Check to see if EM gain is in the header, if not, raise an error
-    if "CMDGAIN" not in linearized_dataset[0].ext_hdr.keys():
+    if "EMGAIN_C" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
     for i in range(linearized_cube.shape[0]):
-        try: # use measured gain if available TODO change hdr name if necessary
-            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
-        except:
-            try: # use applied EM gain if available
-                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
-            except: # otherwise use commanded EM gain
-                em_gain = linearized_dataset[i].ext_hdr["CMDGAIN"]
+        em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+        if em_gain > 0: # use applied EM gain if available
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+        else: # otherwise use commanded EM gain
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
     
     if non_lin_correction is not None:

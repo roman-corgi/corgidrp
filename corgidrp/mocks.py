@@ -184,7 +184,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['EMGAINA5']    = 0.0             # "Actual" gain calculation a5 coefficient
     exthdr['GAINTCAL']    = 0.0             # Calibration reference temperature for gain calculation
     exthdr['EXCAMT']      = 0.0             # EXCAM temperature from telemetry (°C)
-    exthdr['EMGAIN_A']    = 1.0             # "Actual" gain computed from coefficients and calibration temperature
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
     exthdr['KGAINPAR']    = 0               # Calculated K-gain parameter (DN to electrons)
     exthdr['CYCLES']      = 0               # EXCAM clock cycles since boot
     exthdr['LASTEXP']     = 0               # EXCAM clock cycles in the last exposing stage
@@ -363,7 +363,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['EMGAINA5']    = 0.0             # "Actual" gain calculation a5 coefficient
     exthdr['GAINTCAL']    = 0.0             # Calibration reference temperature for gain calculation
     exthdr['EXCAMT']      = 0.0             # EXCAM temperature from telemetry (°C)
-    exthdr['EMGAIN_A']    = 1.0             # "Actual" gain computed from coefficients and calibration temperature
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
     exthdr['KGAINPAR']    = 0               # Calculated K-gain parameter (DN to electrons)
     exthdr['CYCLES']      = 0               # EXCAM clock cycles since boot
     exthdr['LASTEXP']     = 0               # EXCAM clock cycles in the last exposing stage
@@ -608,6 +608,7 @@ def create_default_calibration_product_headers():
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
     exthdr['KGAINPAR']    = 0               # Calculated K-gain parameter (DN to electrons)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
@@ -641,6 +642,8 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
 
     err_hdr = fits.Header()
     err_hdr['BUNIT']        = 'Photoelectrons'
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
+    exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
     exthdr['HIERARCH']      = 'CalibrationProduct'
     exthdr['DATATYPE']      = 'DetectorNoiseMaps'
     exthdr['DRPNFILE']      = "Mocks"         # What files are used to create this calibration product 

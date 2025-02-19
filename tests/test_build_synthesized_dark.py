@@ -113,7 +113,7 @@ def main():
         assert(M.ext_hdr['NAXIS1'] == rows)
         assert(M.ext_hdr['NAXIS2'] == cols)
         assert(M.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
-        assert(M.filename == '0_DetectorNoiseMaps_dark.fits')
+        assert(M.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
         assert('EM gain = '+str(g) in str(M.ext_hdr['HISTORY']))
         assert('exptime = '+str(t) in str(M.ext_hdr['HISTORY']))
 
@@ -129,8 +129,8 @@ def main():
         assert(M_copy.ext_hdr['NAXIS1'] == rows)
         assert(M_copy.ext_hdr['NAXIS2'] == cols)
         assert(M_copy.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
-        assert(M_copy.filename == '0_DetectorNoiseMaps_dark.fits')
-        assert('EM commanded gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
+        assert(M_copy.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
+        assert('commanded EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
         assert('exptime = '+str(t) in str(M_copy.ext_hdr['HISTORY']))
         pass
         

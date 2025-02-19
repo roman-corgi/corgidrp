@@ -130,7 +130,6 @@ def test_create_flatfield_uranus():
     if not os.path.exists(file_dir):
         os.mkdir(file_dir) 
     filenames = glob.glob(os.path.join(data_dir, "med*.fits"))
-    print("test create flatfield", filenames)
     data_set = data.Dataset(filenames)
     planet='uranus'; band='4'
     mocks.create_onsky_rasterscans(data_set,filedir=file_dir,planet='uranus',band='4',im_size=1024,d=65, n_dith=3,radius=90,snr=250,snr_constant=9.66)
