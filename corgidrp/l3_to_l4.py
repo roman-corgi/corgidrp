@@ -2,6 +2,7 @@
 
 from pyklip.klip import rotate
 from corgidrp import data
+from corgidrp import star_center
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
@@ -23,19 +24,83 @@ def distortion_correction(input_dataset, distortion_calibration):
 
     return input_dataset.copy()
 
-def find_star(input_dataset):
+
+def find_star(input_dataset, plus_satspot_dataset, minus_satspot_dataset, xOffsetGuess=0,
+    yOffsetGuess=0, thetaOffsetGuess=0):
     """
-    
-    Find the star position in each Image in the dataset.
+    Find the star position for coronagraphic data using satellite spot images with positive and
+    negative deformable mirror modulation.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        plus_satspot_dataset (corgidrp.data.Dataset): a dataset of Images with satellite spots
+        minus_satspot_dataset (corgidrp.data.Dataset): a dataset of Images with satellite spots
+        xOffsetGuess (float, optional): initial guess for x offset. Defaults to 0.
+        yOffsetGuess (float, optional): initial guess for y offset. Defaults to 0.
+        thetaOffsetGuess (float, optional): initial guess for theta offset. Defaults to 0.
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the stars identified
-    """
 
-    return input_dataset.copy()
+    Raises:
+        AssertionError: If the input frames have incorrect settings or observing modes.
+
+    Notes:
+        This function finds the star position in each image of the input dataset by
+        analyzing the satellite spot frames. It takes the median of the provided frames
+        to compute the center and uses the satellite spot parameters to determine the star
+        location. The star location is then added to the frame headers of the input dataset.
+    """
+    # Copy input dataset
+    dataset = input_dataset.copy()
+    observing_mode = []
+
+    # Check that all frames for each input have the correct satellite spot setting
+    # TODO: There may be a lot more we want to check for here
+    # TODO: Add check on negative or positive DM offset setting once we know what the keyword is
+    for frame in dataset.frames:
+        assert frame.pri_hdr["VISTYPE"] == "SCI", "Input has to be science frames."
+        assert frame.pri_hdr["SATSPOTS"] == 0, "Science frames should not have satellite spots."
+        observing_mode.append(frame.ext_hdr['FSMPRFL'])
+    for frame in plus_satspot_dataset:
+        assert frame.pri_hdr["VISTYPE"] == "SCI", "Input has to be science frames."
+        assert frame.pri_hdr["SATSPOTS"] == 1, "Satellite spot frames should have satellite spots."
+        observing_mode.append(frame.ext_hdr['FSMPRFL'])
+    for frame in minus_satspot_dataset:
+        assert frame.pri_hdr["VISTYPE"] == "SCI", "Input has to be science frames."
+        assert frame.pri_hdr["SATSPOTS"] == 1, "Satellite spot frames should have satellite spots."
+        observing_mode.append(frame.ext_hdr['FSMPRFL'])
+
+    # Check if all frames have the same observing mode
+    same_observing_mode = all(mode == observing_mode[0] for mode in observing_mode)
+    assert same_observing_mode, "All frames should have the same observing mode."
+    observing_mode = observing_mode[0]
+
+    # For now we simply take the median of the provided frames to compute the center
+    img_ref = np.median(dataset.all_data, axis=0)
+    img_plus = np.median(plus_satspot_dataset.all_data, axis=0)
+    img_minus = np.median(minus_satspot_dataset.all_data, axis=0)
+
+    satellite_spot_parameters = star_center.satellite_spot_parameters
+
+    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+        img_ref=img_ref,
+        img_plus=img_plus,
+        img_minus=img_minus,
+        xOffsetGuess=xOffsetGuess,
+        yOffsetGuess=yOffsetGuess,
+        thetaOffsetGuess=thetaOffsetGuess,
+        satellite_spot_parameters=satellite_spot_parameters,
+        observing_mode=observing_mode,
+    )
+
+    # Add star location to frame headers
+    # TODO: Do we want to save the spot location for diagnostics too?
+    for sci_frame in dataset.frames:
+        sci_frame.ext_hdr['STARLOCX'] = star_xy[0]
+        sci_frame.ext_hdr['STARLOCY'] = star_xy[1]
+
+    return dataset
 
 def crop(input_dataset,sizexy=None,centerxy=None):
     """
