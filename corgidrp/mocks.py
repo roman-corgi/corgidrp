@@ -12,7 +12,9 @@ import astropy.wcs as wcs
 from astropy.table import Table
 from astropy.convolution import convolve_fft
 import astropy.units as u
+from astropy.modeling.models import Gaussian2D
 import photutils.centroids as centr
+import corgidrp
 import corgidrp.data as data
 from corgidrp.data import Image
 import corgidrp.detector as detector
@@ -2113,3 +2115,216 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
         frame.save(filedir=filedir, filename=filename)
 
     return frame
+
+def create_synthetic_satellite_spot_image(
+    image_shape,
+    bg_sigma,
+    bg_offset,
+    gaussian_fwhm,
+    separation,
+    center_offset=(0, 0),
+    angle_offset=0,
+    amplitude_multiplier=10,
+):
+    """
+    Create a synthetic 2D image with Gaussian background noise, a constant background,
+    and four symmetric Gaussians.
+
+    Parameters
+    ----------
+    image_shape : tuple of int
+        The (ny, nx) shape of the image.
+    bg_sigma : float
+        Standard deviation of the background Gaussian noise.
+    bg_offset : float
+        Constant background level added to the entire image.
+    gaussian_fwhm : float
+        Full width at half maximum (FWHM) for the 2D Gaussian sources (in pixels).
+    separation : float
+        Radial separation (in pixels) of each Gaussian from the image center.
+    center_offset : tuple of float, optional
+        Offset (dx, dy) to add to the image center. By default the center is (nx//2, ny//2).
+    angle_offset : float, optional
+        An additional angle (in degrees) to add to each default position angle.
+        The default Gaussians are at [0, 90, 180, 270] degrees; the final angles will be these plus
+        the angle_offset. Positive offset rotates the Gaussians counterclockwise.
+    amplitude_multiplier : float, optional
+        Multiplier for the amplitude of the Gaussians relative to bg_sigma. By default each Gaussian’s
+        amplitude is 10 * bg_sigma.
+
+    Returns
+    -------
+    image : ndarray
+        The synthetic image (2D NumPy array) with background noise, a constant background,
+        and four added Gaussians.
+    """
+    # Create the background noise image with an added constant offset.
+    image = np.random.normal(loc=0, scale=bg_sigma, size=image_shape) + bg_offset
+
+    ny, nx = image_shape
+    # Default image center is at (nx//2, ny//2); apply user offset (dx, dy)
+    center_x = nx // 2 + center_offset[0]
+    center_y = ny // 2 + center_offset[1]
+
+    # Define the default position angles (in degrees) and add any additional angle offset.
+    default_angles_deg = np.array([0, 90, 180, 270])
+    angles_rad = np.deg2rad(default_angles_deg + angle_offset)
+
+    # Compute the amplitude and convert FWHM to standard deviation.
+    amplitude = amplitude_multiplier * bg_sigma
+    # FWHM = 2 * sqrt(2*ln2) * stddev  --> stddev = FWHM / (2*sqrt(2*ln2))
+    stddev = gaussian_fwhm / (2 * np.sqrt(2 * np.log(2)))
+
+    # Create a grid of (x,y) pixel coordinates.
+    y_indices, x_indices = np.indices(image_shape)
+
+    # Add four Gaussians at the computed positions.
+    for angle in angles_rad:
+        # Compute offset in x and y (note: in image coordinates, x increases to the right, y increases downward)
+        dx = separation * np.cos(angle)
+        dy = separation * np.sin(angle)
+        gauss_center_x = center_x + dx
+        gauss_center_y = center_y + dy
+
+        # Create a 2D Gaussian model with the desired parameters.
+        gauss = Gaussian2D(
+            amplitude=amplitude,
+            x_mean=gauss_center_x,
+            y_mean=gauss_center_y,
+            x_stddev=stddev,
+            y_stddev=stddev,
+            theta=0,
+        )
+        # Evaluate the model on the coordinate grid and add it to the image.
+        image += gauss(x_indices, y_indices)
+
+    return image
+
+def create_satellite_spot_observing_sequence(
+        n_sci_frames, n_plus_frames, n_minus_frames, 
+        image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
+        gaussian_fwhm=5.0, separation=14.79, center_offset=(0, 0), angle_offset=0,
+        amplitude_multiplier=100, observing_mode='NFOV'):
+    """
+    Creates three sequences of synthetic observing frames. Science frames without satellite spots, frames with positive
+    satellite spots, and frames with negative satellite spots. The synthetic frames are created using the
+    create_synthetic_satellite_spot_image function.
+
+    Args:
+        n_sci_frames (int): Number of science frames without satellite spots.
+        n_plus_frames (int): Number of science frames with positive satellite spots.
+        n_minus_frames (int): Number of science frames with negative satellite spots.
+        image_shape (tuple, optional): Shape of the synthetic image. Defaults to (201, 201).
+        bg_sigma (float, optional): Standard deviation of the background noise. Defaults to 1.0.
+        bg_offset (float, optional): Offset of the background noise. Defaults to 10.0.
+        gaussian_fwhm (float, optional): Full width at half maximum of the Gaussian spot. Defaults to 5.0.
+        separation (float, optional): Separation between the satellite spots. Defaults to 14.79.
+        center_offset (tuple, optional): Offset of the spot centers from the image center. Defaults to (0, 0).
+        angle_offset (float, optional): Offset of the spot angles. Defaults to 0.
+        amplitude_multiplier (int, optional): Amplitude multiplier for the satellite spots. Defaults to 100.
+
+    Returns:
+        tuple: A tuple containing three datasets of synthetic frames: 
+            - sci_dataset: dataset of science frames without satellite spots
+            - plus_dataset: dataset of science frames with positive satellite spots
+            - minus_dataset: dataset of science frames with negative satellite spots
+    """
+    assert len(image_shape) == 2, "Data shape needs to have two values"
+    assert observing_mode in ['NFOV', 'WFOV', 'SPEC660', 'SPEC730'], "Invalid mode. Mode has to be one of 'NFOV', 'WFOV', 'SPEC660', 'SPEC730'"
+
+    # Create the synthetic image with the Gaussians.
+    sci_frames = []
+    plus_frames = []
+    minus_frames = []
+    
+    prihdr, exthdr = create_default_headers()
+    prihdr['TELESCOP'] = 'ROMAN'
+    prihdr['INSTRUME'] = 'CGI'
+    prihdr['FILENAME'] = ''
+    prihdr['NAXIS1'] = image_shape[1]
+    prihdr['NAXIS2'] = image_shape[0]
+    exthdr['BUNIT'] = 'MJy/sr'
+    exthdr["HIERARCH DATA_LEVEL"] = 'L3'
+
+    prihdr["SATSPOTS"] = 0 # 0 if no satellite spots, 1 if satellite spots
+    exthdr['FSMPRFL'] = f'{observing_mode}' # Needed for initial guess of satellite spot parameters
+
+    # TODO: Currently using the normal Image class from corgidrp.data, may need to use a custom class later
+    # Make science images without satellite spots, just random noise and a constant background
+    for i in range(n_sci_frames):
+        # Make science images without satellite spots, set amplitude_multiplier to 0
+        sci_image = create_synthetic_satellite_spot_image(
+            image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+              separation, center_offset, angle_offset,
+              amplitude_multiplier=0
+        )
+        sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+        sci_frame.pri_hdr["VISTYPE"] = "SCI"
+        # Add header indicating this is not a satellite frame
+        sci_frame.pri_hdr["SATSPOTS"] = 0
+        sci_frame.filename = "sci_frame_{0}.fits".format(i)
+        sci_frames.append(sci_frame)
+    sci_dataset = data.Dataset(sci_frames)
+
+    # Make science image with satellite spots, positive mirror command
+    for i in range(n_plus_frames):
+        plus_image = create_synthetic_satellite_spot_image(
+            image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+            separation, center_offset, angle_offset, amplitude_multiplier
+        )
+        plus_frame = data.Image(plus_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+        plus_frame.pri_hdr["VISTYPE"] = "SCI"
+        # Add header indicating this is a satellite frame
+        # TODO: Missing is something to distinguish negative and positive amplitudes for the deformable mirror
+        plus_frame.pri_hdr["SATSPOTS"] = 1
+        plus_frame.filename = "plus_frame_{0}.fits".format(i)
+        plus_frames.append(plus_frame)
+    plus_dataset = data.Dataset(plus_frames)
+
+    # Make science image with satellite spots, positive mirror command  
+    for i in range(n_minus_frames):
+        minus_image = create_synthetic_satellite_spot_image(
+            image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+             separation, center_offset, angle_offset, amplitude_multiplier
+        )
+        minus_frame = data.Image(minus_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+        minus_frame.pri_hdr["VISTYPE"] = "SCI"
+        # Add header indicating this is a satellite frame
+        # TODO: Missing is something to distinguish negative and positive amplitudes for the deformable mirror
+        minus_frame.pri_hdr["SATSPOTS"] = 1
+        minus_frame.filename = "minus_frame_{0}.fits".format(i)
+        minus_frames.append(minus_frame)
+    minus_dataset = data.Dataset(minus_frames)
+
+    return sci_dataset, plus_dataset, minus_dataset
+
+
+# satellite_spot_parameters
+
+# Read initial parameters for testing
+from corgidrp import star_center
+from corgidrp.l3_to_l4 import find_star
+
+satellite_spot_parameters = star_center.satellite_spot_parameters
+separation = satellite_spot_parameters['NFOV']['separation']['spotSepPix']
+
+# Generate test data
+sci_dataset, plus_dataset, minus_dataset = create_satellite_spot_observing_sequence(
+        3, 3, 3, 
+        image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
+        gaussian_fwhm=5.0, separation=separation, center_offset=(0, 0), angle_offset=0,
+        amplitude_multiplier=100)
+
+xOffsetGuess = 0
+yOffsetGuess = 0
+thetaOffsetGuess = 0
+
+
+
+# input_dataset = input_dataset.copy()
+
+
+
+
+    
+
