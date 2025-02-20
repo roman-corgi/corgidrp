@@ -1477,7 +1477,7 @@ class CoreThroughputCalibration(Image):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
                 pri_hdr = hdulist[0].header
-                self.psf_basis = hdulist[1].data
+                self.psf_cube = hdulist[1].data
                 ext_hdr = hdulist[1].header
                 err = hdulist[2].data
                 err_hdr = hdulist[2].header
