@@ -195,4 +195,4 @@ Here is an example of the output:
    :width: 600px
    :align: center
    
-   Sample L2b processed image
+   Sample L2b processed image "90500.fits"
