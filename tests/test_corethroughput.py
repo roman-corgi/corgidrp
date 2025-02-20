@@ -8,7 +8,7 @@ from scipy.signal import decimate
 import corgidrp
 import corgidrp.data as data
 from corgidrp.mocks import create_default_headers, create_ct_psfs
-from corgidrp.data import Image, Dataset
+from corgidrp.data import Image, Dataset, CoreThroughputCalibration
 from corgidrp import corethroughput
 
 # Generate a calibration file with the FPAM and FSAM rotation matrices if it

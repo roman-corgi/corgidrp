@@ -1462,48 +1462,67 @@ class CoreThroughputCalibration(Image):
         ext_hdr (astropy.io.fits.Header): the image extension header (required
           only if raw data is passed in)
         ct_map (array): List of core throughput values for each PSF.
-        hdr_ct (astropy.io.fits.Header): Header for the core throughput values.
+        ct_hdr (astropy.io.fits.Header): Header for the core throughput values.
         fpm_info (array): Array with information about FPAM and FSAM during
           coronagraphic and core throughput observing sequences.
-        hdr_fpm (astropy.io.fits.Header): Header for the FPAM and FSAM information.
+        fpm_hdr (astropy.io.fits.Header): Header for the FPAM and FSAM information.
         input_dataset (corgidrp.data.Dataset): the input dataset that were
           combined together to make this image.
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None,
-        ct_map=None, hdr_ct=None, fpm_info=None, hdr_fpm=None,
+        ct_map=None, ct_hdr=None, fpm_info=None, fpm_hdr=None,
         input_dataset=None):
-        # All inputs provide necessary information
-        if ext_hdr is None:
-            raise Exception('Please provide header for PSF basis.')
-        if ct_map is None:
-            raise Exception('Please provide the core throughput map.')
-        if hdr_ct is None:
-            raise Exception('Please provide header for the core throughput map.')
-        if fpm_info is None:
-            raise Exception('Please provide the values of the FPAM/FSAM during '
-                'coronagraphic and core throughput observing sequences.')
-        if hdr_fpm is None:
-            raise Exception('Please provide header for the FPAM/FSAM information.')
 
+        if isinstance(data_or_filepath, str):
+            # a filepath is passed in
+            with fits.open(data_or_filepath) as hdulist:
+                pri_hdr = hdulist[0].header
+                self.psf_basis = hdulist[1].data
+                ext_hdr = hdulist[1].header
+                err = hdulist[2].data
+                err_hdr = hdulist[2].header
+                dq = hdulist[3].data
+                dq_hdr = hdulist[3].header
+                self.ct_map = hdulist[4].data
+                self.ct_hdr = hdulist[4].header
+                self.fpm_info = hdulist[5].data
+                self.fpm_hdr = hdulist[5].header
+        else:
+            # All inputs provide necessary information
+            if ext_hdr is None:
+                raise Exception('Please provide header for PSF basis.')
+            if ct_map is None:
+                raise Exception('Please provide the core throughput map.')
+            if ct_hdr is None:
+                raise Exception('Please provide header for the core throughput map.')
+            if fpm_info is None:
+                raise Exception('Please provide the values of the FPAM/FSAM during '
+                    'coronagraphic and core throughput observing sequences.')
+            if fpm_hdr is None:
+                raise Exception('Please provide header for the FPAM/FSAM information.')
+            self.ct_map = ct_map
+            self.ct_hdr = ct_hdr
+            self.fpm_info = fpm_info
+            self.fpm_hdr = fpm_hdr
+    
         # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
         # File format checks 
-        psf_basis = self.data
         # Check PSF basis is a 3D set
-        if psf_basis.ndim != 3:
+        if self.data.ndim != 3:
             raise ValueError('The PSF basis is an (N,N1,N1) array with N PSFs, '
                 'each with N1 pixels x N1 pixels.')
         # Check CT map is a 3xN set
-        if len(ct_map) != 3:
+        if len(self.ct_map) != 3:
             raise ValueError('The core throughput map is a Nx3 array with '
                 '(x,y,ct).')
         # Check the CT map has one PSF location and CT value for each PSF
-        if ct_map.shape[1] != psf_basis.shape[0]:
+        if self.ct_map.shape[1] != self.data.shape[0]:
             raise ValueError('The core throughput map must have one PSF location '
                 'and CT value for each PSF.')
         # Check that all FPAM/FSAM values are provided
-        if len(fpm_info) != 7:
+        if len(self.fpm_info) != 7:
             raise ValueError('The FPAM/FSAM information must have 7 components.')
 
         # Additional bookkeeping for a calibration file:
@@ -1513,10 +1532,10 @@ class CoreThroughputCalibration(Image):
         if ext_hdr is not None:
             if input_dataset is None:
                 # error check. this is required in this case
-                raise ValueError("This appears to be a new Core Throughput calibration"
-                                 "File. The dataset of input files needs"
-                                 "to be passed in to the input_dataset keyword"
-                                 "to record history of this calibration file.")
+                raise ValueError('This appears to be a new Core Throughput calibration'
+                                 'File. The dataset of input files needs'
+                                 'to be passed in to the input_dataset keyword'
+                                 'to record history of this calibration file.')
             # corgidrp specific keyword for saving to disk
             self.ext_hdr['DATATYPE'] = 'CoreThroughputCalibration'
 
@@ -1530,7 +1549,7 @@ class CoreThroughputCalibration(Image):
 
             # use the start date for the filename by default
             self.filedir = '.'
-            self.filename = "CoreThroughputCalibration_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = 'CoreThroughputCalibration_{0}.fits'.format(self.ext_hdr['SCTSRT'])
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1538,6 +1557,41 @@ class CoreThroughputCalibration(Image):
             raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
         if self.ext_hdr['DATATYPE'] != 'CoreThroughputCalibration':
             raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+ 
+        errhdu = fits.ImageHDU(data=self.err, header = self.err_hdr)
+        hdulist.append(errhdu)
+
+        dqhdu = fits.ImageHDU(data=self.dq, header = self.dq_hdr)
+        hdulist.append(dqhdu)
+
+        cthdu = fits.ImageHDU(data=self.ct_map, header = self.ct_hdr)
+        hdulist.append(cthdu)
+
+        fpmhdu = fits.ImageHDU(data=self.fpm_info, header = self.fpm_hdr)
+        hdulist.append(fpmhdu)
+
+        hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
 
 datatypes = { "Image" : Image,
               "Dark" : Dark,
