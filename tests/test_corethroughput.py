@@ -218,14 +218,13 @@ def test_cal_file():
 
     # Open calibration file
     ct_cal = corethroughput.read_ct_cal_file()
-    breakpoint()
 
-    # Compare I/O. Remember:
+    # Test: Compare I/O. Remember:
     #     A CoreThroughput calibration file has two main data arrays:
     #
     #  3-d cube of PSF images, i.e, a N1xN1xN array where N1<=1024 is set by a
-    #  keyword argument, with default value of 1024. The N PSF images are the ones
-    #  in the CT dataset (1090881 and 1090884)
+    #  keyword argument. The N PSF images are the ones in the CT dataset (1090881
+    #  and 1090884)
     #
     #  Nx3 cube that contains N sets of (x,y, CT measurements). The (x,y) are
     #  pixel coordinates of the N1xN1xN cube of PSF images wrt the FPAM's center
@@ -234,6 +233,47 @@ def test_cal_file():
     #  The CoreThroughput calibration file will also include the FPAM, FSAM
     #  position during coronagraphic and core throughput observing sequences in
     #  units of EXCAM pixels (1090882)
+
+    # Test FPAM and FSAM positions
+    # fpm_center_cor
+    assert np.all(fpm_center_cor == ct_cal[9][2])
+    # fpam_pos_cor
+    assert np.all(fpam_pos_cor == ct_cal[9][3])
+    # fpam_pos_ct
+    assert np.all(fpam_pos_ct == ct_cal[9][4])
+    # fsam_pos_cor
+    assert np.all(fsam_pos_cor == ct_cal[9][5])
+    # fsam_pos_ct
+    assert np.all(fsam_pos_ct == ct_cal[9][6])
+
+    breakpoint()
+    # Test PSF positions and CT map
+    # x location wrt FPM
+    assert np.all(psf_loc_in[:,0] == ct_cal[7][0])
+    # y location wrt FPM
+    assert np.all(psf_loc_in[:,1] == ct_cal[7][1])
+    # CT map
+    assert np.all(ct_in == ct_cal[7][2])
+
+
+    # Test PSF cube
+    # Recover off-axis PSF cube from CT Dataset
+    psf_cube_in = []
+    for frame in dataset_ct:
+        try:
+        # Pupil images of the unocculted source satisfy:
+        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+            exthd = frame.ext_hdr
+            if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
+                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
+                continue
+        except:
+           pass 
+        psf_cube_in += [frame.data]
+    psf_cube_in = np.array(psf_cube_in)
+
+    # Need to cut-out PSFs to match them
+    #assert np.all()
 
 def test_ct_map():
     """ 

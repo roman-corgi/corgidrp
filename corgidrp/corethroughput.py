@@ -458,7 +458,7 @@ def write_ct_calfile(
             fsam_pos_ct=fsam_pos_ct)
     # Collect data
     # First extension: 3-d cube of PSF images cut around the PSF's location
-    psf_basis = []
+    psf_cube = []
     n_pix_psf_1 = n_pix_psf // 2
     n_pix_psf_2 = n_pix_psf - n_pix_psf_1
     i_psf = 0
@@ -480,15 +480,15 @@ def write_ct_calfile(
         idx_1_0 = max(int(np.round(psf_loc_ct[i_psf][0])) - n_pix_psf_1,0)
         idx_1_1 = min(frame.data.shape[1],
             int(np.round(psf_loc_ct[i_psf][0])) + n_pix_psf_2)
-        psf_basis += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
+        psf_cube += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
         i_psf += 1 
         # Get headers from an off-axis PSF
         prhd_offaxis = frame.pri_hdr
         exthd_offaxis = frame.ext_hdr
 
-    psf_basis = np.array(psf_basis)
+    psf_cube = np.array(psf_cube)
     # Check
-    if len(psf_basis) != len(psf_loc_ct) or len(psf_basis) != len(ct):
+    if len(psf_cube) != len(psf_loc_ct) or len(psf_cube) != len(ct):
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations and/or core throughput values'))
    
@@ -530,7 +530,7 @@ def write_ct_calfile(
         'in units of micron.')
 
     # Create an instance of the CoreThroughputCalibration class and save it
-    ct_cal_file = data.CoreThroughputCalibration(psf_basis, 
+    ct_cal_file = data.CoreThroughputCalibration(psf_cube, 
         pri_hdr = prhd_offaxis, ext_hdr = exthd_offaxis,
         ct_map=ct_map, ct_hdr=ct_hdr,
         fpm_info=fpm_info, fpm_hdr=fpm_hdr,
@@ -547,15 +547,24 @@ def read_ct_cal_file():
             calfile_list = [file for file in files if 'CoreThroughputCalibration' in file]
             calfile_date = [Time(file[idx1+1:-5]) for file in calfile_list]
         calfile_latest = calfile_list[np.array(calfile_date).argmax()]
-        breakpoint()
-        # Use fits.read to get all extensions? 6: Primary (no data), 
-        # 1->PSF basis, 2-> ERR, 3-> DQ, 4-> ct_map, 5-> fpm_info and corresponding
-        # headers
-        ct_cal = fits.getdata(os.path.join(corgidrp.default_cal_dir, calfile_latest))
+        
+        with fits.open(os.path.join(corgidrp.default_cal_dir, calfile_latest)) as hdul:
+            pri_hdr = hdul[0].header
+            psf_cube = hdul[1].data
+            psf_hdr = hdul[1].header
+            err_cube = hdul[2].data
+            err_hdr = hdul[2].header
+            dq_cube = hdul[3].data
+            dq_hdr = hdul[3].header
+            ct_map = hdul[4].data
+            ct_hdr = hdul[4].header
+            fpm_info = hdul[5].data
+            fpm_hdr = hdul[5].header
     except:
         raise OSError('The core throughput calibration file could not be loaded.')
 
-    return ct_cal
+    return [pri_hdr, psf_cube, psf_hdr, err_cube, err_hdr, dq_cube, dq_hdr,
+        ct_map, ct_hdr, fpm_info, fpm_hdr]
 
 def ct_map(
     psf_pix,
