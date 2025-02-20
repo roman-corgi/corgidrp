@@ -505,16 +505,16 @@ def write_ct_calfile(
     # x, y: PSF centers wrt FPAM's center
     psf_loc = psf_loc_ct - fpam_center_ct_pix
     ct_map = np.array([psf_loc[:,0], psf_loc[:,1], ct])
-    hdr_ct = fits.Header()
-    hdr_ct['COMMENT'] = ('PSF location with respect to FPAM center. '
+    ct_hdr = fits.Header()
+    ct_hdr['COMMENT'] = ('PSF location with respect to FPAM center. '
         'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
-    hdr_ct['UNITS'] = 'PSF locsation: EXCAM pixels. Core throughput: values between 0 and 1.'
+    ct_hdr['UNITS'] = 'PSF locsation: EXCAM pixels. Core throughput: values between 0 and 1.'
 
     # FPM information:
     fpm_info = np.array([fpam_center_ct_pix, fsam_center_ct_pix,fpm_center_cor,
         fpam_pos_cor,fpam_pos_ct,fsam_pos_cor,fsam_pos_ct])
-    hdr_fpm = fits.Header()
-    hdr_fpm['COMMENT'] = ('fpm_info[0]=FPAM center during core throughput '
+    fpm_hdr = fits.Header()
+    fpm_hdr['COMMENT'] = ('fpm_info[0]=FPAM center during core throughput '
         'observing sequences in units of EXCAM pixels.'
         'fpm_info[1]=FSAM center during core throughput observing sequences in '
         'units of EXCAM pixels. '
@@ -532,8 +532,8 @@ def write_ct_calfile(
     # Create an instance of the CoreThroughputCalibration class and save it
     ct_cal_file = data.CoreThroughputCalibration(psf_basis, 
         pri_hdr = prhd_offaxis, ext_hdr = exthd_offaxis,
-        ct_map=ct_map, hdr_ct=hdr_ct,
-        fpm_info=fpm_info, hdr_fpm=hdr_fpm,
+        ct_map=ct_map, ct_hdr=ct_hdr,
+        fpm_info=fpm_info, fpm_hdr=fpm_hdr,
         input_dataset=dataset)
     ct_cal_file.save(filedir=corgidrp.default_cal_dir)
 
@@ -547,12 +547,14 @@ def read_ct_cal_file():
             calfile_list = [file for file in files if 'CoreThroughputCalibration' in file]
             calfile_date = [Time(file[idx1+1:-5]) for file in calfile_list]
         calfile_latest = calfile_list[np.array(calfile_date).argmax()]
-        psf_basis = fits.getdata(os.path.join(corgidrp.default_cal_dir, calfile_latest))
-        # Get other extensions and headers (get all at once?)
+        breakpoint()
+        # Use fits.read to get all extensions? 6: Primary (no data), 
+        # 1->PSF basis, 2-> ERR, 3-> DQ, 4-> ct_map, 5-> fpm_info and corresponding
+        # headers
+        ct_cal = fits.getdata(os.path.join(corgidrp.default_cal_dir, calfile_latest))
     except:
         raise OSError('The core throughput calibration file could not be loaded.')
 
-    breakpoint()
     return ct_cal
 
 def ct_map(
