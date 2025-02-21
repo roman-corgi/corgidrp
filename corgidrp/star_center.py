@@ -348,7 +348,7 @@ def _cost_func_spots(optim_params, fixed_params):
 
 
 def calc_star_location_and_spot_separation(
-    spotArray, xOffsetGuess, yOffsetGuess, fnTuning
+    spotArray, xOffsetGuess, yOffsetGuess, tuningParamDict
 ):
     """
     Calculate the center of the occulted star using satellite spots.
@@ -372,8 +372,35 @@ def calc_star_location_and_spot_separation(
         Starting guess for the number of pixels in x and y that the star is
         offset from the center pixel of the array spotArray. The convention
         for the center pixel follows that of FFTs.
-    fnTuning : str
-        Name of the YAML file containing the tuning parameter values.
+    tuningParamDict : dict
+            Dictionary containing the tuning parameter values.
+            The dictionary should contain the following keys:
+            - spotSepPix : float
+                Expected separation of the satellite spots from the star. Used as the
+                separation for the center of the region of interest. Units of pixels.
+                Compute beforehand as sep in lambda/D and multiply by pix per lambda/D.
+            - roiRadiusPix : float
+                Radius of each region of interest used when summing the intensity of a
+                satellite spot. Units of pixels.
+            - probeRotVecDeg : array_like
+                1-D array of how many degrees counterclockwise from the x-axis to
+                rotate the regions of interest used when summing the satellite spots.
+                Note that a pair of satellite spots is given by just one value. For
+                example, for a single pair of satellite spots along the x-axis use [0,]
+                and [0, 180]. And for a plus-shaped layout of spots, use [0, 90].
+            - nSubpixels : int
+                Number of subpixels across used to make edge values of the region-of-
+                interest mask. The value of the edge pixels in the ROI is the mean of
+                all the subpixel values.
+            - nSteps : int
+                Number of points used along each direction for the grid search.
+                Odd numbers are better to provide symmetry of values when the array is
+                truly centered.
+            - stepSize : float
+                The step size used in the grid search. Units of pixels.
+            - nIter : int
+                Number of iterations in the loop that hones in on the stellar center
+                location.
 
     Returns
     -------
@@ -384,37 +411,6 @@ def calc_star_location_and_spot_separation(
     roi_mask : numpy ndarray
         2-D float array of the best-fit region-of-interest mask used to fit
         the translation and scaling of the ROI regions to spotArray.
-
-    Notes
-    -----
-    Tuning parameters in the YAML file are explained below:
-
-    spotSepPix : float
-        Expected separation of the satellite spots from the star. Used as the
-        separation for the center of the region of interest. Units of pixels.
-        Compute beforehand as sep in lambda/D and multiply by pix per lambda/D.
-    roiRadiusPix : float
-        Radius of each region of interest used when summing the intensity of a
-        satellite spot. Units of pixels.
-    probeRotVecDeg : array_like
-        1-D array of how many degrees counterclockwise from the x-axis to
-        rotate the regions of interest used when summing the satellite spots.
-        Note that a pair of satellite spots is given by just one value. For
-        example, for a single pair of satellite spots along the x-axis use [0,]
-        and [0, 180]. And for a plus-shaped layout of spots, use [0, 90].
-    nSubpixels : int
-        Number of subpixels across used to make edge values of the region-of-
-        interest mask. The value of the edge pixels in the ROI is the mean of
-        all the subpixel values.
-    nSteps : int
-        Number of points used along each direction for the grid search.
-        Odd numbers are better to provide symmetry of values when the array is
-        truly centered.
-    stepSize : float
-        The step size used in the grid search. Units of pixels.
-    nIter : int
-        Number of iterations in the loop that hones in on the stellar center
-        location.
     """
 
     # tuningParamDict = loadyaml(fnTuning)
@@ -488,8 +484,35 @@ def calc_star_location_from_spots(spotArray, xOffsetGuess, yOffsetGuess, tuningP
         Starting guess for the number of pixels in x and y that the star is
         offset from the center pixel of the array spotArray. The convention
         for the center pixel follows that of FFTs.
-    fnYAML : str
-        Name of the YAML file containing the tuning parameter values.
+    tuningParamDict : dict
+        Dictionary containing the tuning parameter values.
+        The dictionary should contain the following keys:
+        - spotSepPix : float
+            Expected separation of the satellite spots from the star. Used as the
+            separation for the center of the region of interest. Units of pixels.
+            Compute beforehand as sep in lambda/D and multiply by pix per lambda/D.
+        - roiRadiusPix : float
+            Radius of each region of interest used when summing the intensity of a
+            satellite spot. Units of pixels.
+        - probeRotVecDeg : array_like
+            1-D array of how many degrees counterclockwise from the x-axis to
+            rotate the regions of interest used when summing the satellite spots.
+            Note that a pair of satellite spots is given by just one value. For
+            example, for a single pair of satellite spots along the x-axis use [0,]
+            and [0, 180]. And for a plus-shaped layout of spots, use [0, 90].
+        - nSubpixels : int
+            Number of subpixels across used to make edge values of the region-of-
+            interest mask. The value of the edge pixels in the ROI is the mean of
+            all the subpixel values.
+        - nSteps : int
+            Number of points used along each direction for the grid search.
+            Odd numbers are better to provide symmetry of values when the array is
+            truly centered.
+        - stepSize : float
+            The step size used in the grid search. Units of pixels.
+        - nIter : int
+            Number of iterations in the loop that hones in on the stellar center
+            location.
 
     Returns
     -------
@@ -497,38 +520,8 @@ def calc_star_location_from_spots(spotArray, xOffsetGuess, yOffsetGuess, tuningP
         Estimated lateral offsets of the stellar center from the center pixel
         of the array spotArray. The convention for the center pixel follows
         that of FFTs.
-
-    Notes
-    -----
-    Tuning parameters in the YAML file are explained below:
-
-    spotSepPix : float
-        Expected separation of the satellite spots from the star. Used as the
-        separation for the center of the region of interest. Units of pixels.
-        Compute beforehand as sep in lambda/D and multiply by pix per lambda/D.
-    roiRadiusPix : float
-        Radius of each region of interest used when summing the intensity of a
-        satellite spot. Units of pixels.
-    probeRotVecDeg : array_like
-        1-D array of how many degrees counterclockwise from the x-axis to
-        rotate the regions of interest used when summing the satellite spots.
-        Note that a pair of satellite spots is given by just one value. For
-        example, for a single pair of satellite spots along the x-axis use [0,]
-        and [0, 180]. And for a plus-shaped layout of spots, use [0, 90].
-    nSubpixels : int
-        Number of subpixels across used to make edge values of the region-of-
-        interest mask. The value of the edge pixels in the ROI is the mean of
-        all the subpixel values.
-    nSteps : int
-        Number of points used along each direction for the grid search.
-        Odd numbers are better to provide symmetry of values when the array is
-        truly centered.
-    stepSize : float
-        The step size used in the grid search. Units of pixels.
-    nIter : int
-        Number of iterations in the loop that hones in on the stellar center
-        location.
     """
+    
     # check.twoD_array(spotArray, 'spotArray', TypeError)
     # check.real_scalar(xOffsetGuess, 'xOffsetGuess', TypeError)
     # check.real_scalar(yOffsetGuess, 'yOffsetGuess', TypeError)
@@ -634,48 +627,43 @@ def calc_spot_separation(spotArray, xOffset, yOffset, tuningParamDict):
         Previously estimated stellar center offset from the array's center
         pixel. Units of pixels. The convention for the center pixel follows
         that of FFTs.
-    fnYAML : str
-        Name of the YAML file containing the tuning parameter values.
+    tuningParamDict : dict
+        Dictionary containing the tuning parameter values.
+        - spotSepPix : float
+            Expected (i.e., model-based) separation of the satellite spots from the
+            star. Used as the starting point for the separation for the center of
+            the region of interest. Units of pixels. Compute beforehand as
+            separation in lambda/D multiplied by pixels per lambda/D.
+            6.5*(51.46*0.575/13)
+        - roiRadiusPix : float
+            Radius of each region of interest used when summing the intensity of a
+            satellite spot. Units of pixels.
+        - probeRotVecDeg : array_like
+            1-D array of how many degrees counterclockwise from the x-axis to
+            rotate the regions of interest used when summing the satellite spots.
+            Note that a pair of satellite spots is given by just one value. For
+            example, for a single pair of satellite spots along the x-axis use
+            [0, ] and not [0, 180]. And for a plus-shaped layout of spots,
+            use [0, 90].
+        - nSubpixels : int
+            Number of subpixels across used to make edge values of the region-of-
+            interest mask. The value of the edge pixels in the ROI is the mean of
+            all the subpixel values.
+        - nSteps : int
+            Number of points used along each direction for the grid search.
+            Odd numbers are better to provide symmetry of values when the array is
+            truly centered.
+        - stepSize : float
+            The step size used in the grid search. Units of pixels.
+        - nIter : int
+            Number of iterations in the loop that hones in on the radial separation
+            of the satellite spots.
 
     Returns
     -------
     spotSepEst : float
         Estimated radial separation of the satellite spots from the stellar
         center. Units of pixels.
-
-    Notes
-    -----
-    Tuning parameters in the YAML file are explained below:
-
-    spotSepGuessPix : float
-        Expected (i.e., model-based) separation of the satellite spots from the
-        star. Used as the starting point for the separation for the center of
-        the region of interest. Units of pixels. Compute beforehand as
-        separation in lambda/D multiplied by pixels per lambda/D.
-        6.5*(51.46*0.575/13)
-    roiRadiusPix : float
-        Radius of each region of interest used when summing the intensity of a
-        satellite spot. Units of pixels.
-    probeRotVecDeg : array_like
-        1-D array of how many degrees counterclockwise from the x-axis to
-        rotate the regions of interest used when summing the satellite spots.
-        Note that a pair of satellite spots is given by just one value. For
-        example, for a single pair of satellite spots along the x-axis use
-        [0, ] and not [0, 180]. And for a plus-shaped layout of spots,
-        use [0, 90].
-    nSubpixels : int
-        Number of subpixels across used to make edge values of the region-of-
-        interest mask. The value of the edge pixels in the ROI is the mean of
-        all the subpixel values.
-    nSteps : int
-        Number of points used along each direction for the grid search.
-        Odd numbers are better to provide symmetry of values when the array is
-        truly centered.
-    stepSize : float
-        The step size used in the grid search. Units of pixels.
-    nIter : int
-        Number of iterations in the loop that hones in on the radial separation
-        of the satellite spots.
     """
     # check.twoD_array(spotArray, 'spotArray', TypeError)
     # check.real_scalar(xOffset, 'xOffset', TypeError)
