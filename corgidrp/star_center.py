@@ -128,7 +128,7 @@ def find_optimum_1d(xVec, arrayToFit):
 
     # Avoid divide by zero error
     if np.abs(p0) < np.finfo(p0).eps:
-        raise QuadraticException(
+        raise ValueError(
             "Quadratic fit failed because data being "
             + "fitted has no quadratic component."
         )
@@ -224,7 +224,7 @@ def find_optimum_2d(xVec, yVec, arrayToFit, mask):
         np.abs(x_denominator) < 4 * np.finfo(x_denominator).resolution
         or np.abs(y_denominator) < 2 * np.finfo(y_denominator).resolution
     ):
-        raise QuadraticException(
+        raise ValueError(
             "Quadratic fit failed because data being "
             + "fitted has no quadratic component."
         )
