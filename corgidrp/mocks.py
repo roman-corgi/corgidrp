@@ -2127,37 +2127,36 @@ def create_synthetic_satellite_spot_image(
     amplitude_multiplier=10,
 ):
     """
-    Create a synthetic 2D image with Gaussian background noise, a constant background,
+    Creates a synthetic 2D image with Gaussian background noise, a constant background,
     and four symmetric Gaussians.
 
-    Parameters
-    ----------
-    image_shape : tuple of int
-        The (ny, nx) shape of the image.
-    bg_sigma : float
-        Standard deviation of the background Gaussian noise.
-    bg_offset : float
-        Constant background level added to the entire image.
-    gaussian_fwhm : float
-        Full width at half maximum (FWHM) for the 2D Gaussian sources (in pixels).
-    separation : float
-        Radial separation (in pixels) of each Gaussian from the image center.
-    center_offset : tuple of float, optional
-        Offset (dx, dy) to add to the image center. By default the center is (nx//2, ny//2).
-    angle_offset : float, optional
-        An additional angle (in degrees) to add to each default position angle.
-        The default Gaussians are at [0, 90, 180, 270] degrees; the final angles will be these plus
-        the angle_offset. Positive offset rotates the Gaussians counterclockwise.
-    amplitude_multiplier : float, optional
-        Multiplier for the amplitude of the Gaussians relative to bg_sigma. By default each Gaussian’s
-        amplitude is 10 * bg_sigma.
+    Args:
+        image_shape (tuple of int):  
+            The (ny, nx) shape of the image.  
+        bg_sigma (float):  
+            Standard deviation of the background Gaussian noise.  
+        bg_offset (float):  
+            Constant background level added to the entire image.  
+        gaussian_fwhm (float):  
+            Full width at half maximum (FWHM) for the 2D Gaussian sources (in pixels).  
+        separation (float):  
+            Radial separation (in pixels) of each Gaussian from the image center.  
+        center_offset (tuple of float, optional):  
+            Offset (dx, dy) to add to the image center. By default, the center is (nx//2, ny//2).  
+        angle_offset (float, optional):  
+            An additional angle (in degrees) to add to each default position angle.  
+            The default Gaussians are at [0, 90, 180, 270] degrees; the final angles will be these 
+            plus the `angle_offset`. Positive offsets rotate the Gaussians counterclockwise.  
+        amplitude_multiplier (float, optional):  
+            Multiplier for the amplitude of the Gaussians relative to `bg_sigma`. By default, each 
+            Gaussian’s amplitude is 10 * `bg_sigma`.  
 
-    Returns
-    -------
-    image : ndarray
-        The synthetic image (2D NumPy array) with background noise, a constant background,
-        and four added Gaussians.
+    Returns:
+        numpy.ndarray:  
+            The synthetic image (2D NumPy array) with background noise, a constant background, 
+            and four added Gaussians.  
     """
+
     # Create the background noise image with an added constant offset.
     image = np.random.normal(loc=0, scale=bg_sigma, size=image_shape) + bg_offset
 
@@ -2222,6 +2221,7 @@ def create_satellite_spot_observing_sequence(
         center_offset (tuple, optional): Offset of the spot centers from the image center. Defaults to (0, 0).
         angle_offset (float, optional): Offset of the spot angles. Defaults to 0.
         amplitude_multiplier (int, optional): Amplitude multiplier for the satellite spots. Defaults to 100.
+        observing_mode (str, optional): Observing mode. Defaults to 'NFOV'.
 
     Returns:
         tuple: A tuple containing three datasets of synthetic frames: 
@@ -2229,6 +2229,7 @@ def create_satellite_spot_observing_sequence(
             - plus_dataset: dataset of science frames with positive satellite spots
             - minus_dataset: dataset of science frames with negative satellite spots
     """
+
     assert len(image_shape) == 2, "Data shape needs to have two values"
     assert observing_mode in ['NFOV', 'WFOV', 'SPEC660', 'SPEC730'], "Invalid mode. Mode has to be one of 'NFOV', 'WFOV', 'SPEC660', 'SPEC730'"
 
@@ -2297,34 +2298,3 @@ def create_satellite_spot_observing_sequence(
     minus_dataset = data.Dataset(minus_frames)
 
     return sci_dataset, plus_dataset, minus_dataset
-
-
-# satellite_spot_parameters
-
-# Read initial parameters for testing
-from corgidrp import star_center
-from corgidrp.l3_to_l4 import find_star
-
-satellite_spot_parameters = star_center.satellite_spot_parameters
-separation = satellite_spot_parameters['NFOV']['separation']['spotSepPix']
-
-# Generate test data
-sci_dataset, plus_dataset, minus_dataset = create_satellite_spot_observing_sequence(
-        3, 3, 3, 
-        image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
-        gaussian_fwhm=5.0, separation=separation, center_offset=(0, 0), angle_offset=0,
-        amplitude_multiplier=100)
-
-xOffsetGuess = 0
-yOffsetGuess = 0
-thetaOffsetGuess = 0
-
-
-
-# input_dataset = input_dataset.copy()
-
-
-
-
-    
-

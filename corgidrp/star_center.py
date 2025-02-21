@@ -1,6 +1,37 @@
 import numpy as np
 from scipy.optimize import minimize
 
+"""
+spotSepGuessPix : float
+    Expected (i.e., model-based) separation of the satellite spots from the
+    star. Used as the starting point for the separation for the center of
+    the region of interest. Units of pixels. Compute beforehand as
+    separation in lambda/D multiplied by pixels per lambda/D.
+    6.5*(51.46*0.575/13)
+roiRadiusPix : float
+    Radius of each region of interest used when summing the intensity of a
+    satellite spot. Units of pixels.
+probeRotVecDeg : array_like
+    1-D array of how many degrees counterclockwise from the x-axis to
+    rotate the regions of interest used when summing the satellite spots.
+    Note that a pair of satellite spots is given by just one value. For
+    example, for a single pair of satellite spots along the x-axis use
+    [0, ] and not [0, 180]. And for a plus-shaped layout of spots,
+    use [0, 90].
+nSubpixels : int
+    Number of subpixels across used to make edge values of the region-of-
+    interest mask. The value of the edge pixels in the ROI is the mean of
+    all the subpixel values.
+nSteps : int
+    Number of points used along each direction for the grid search.
+    Odd numbers are better to provide symmetry of values when the array is
+    truly centered.
+stepSize : float
+    The step size used in the grid search. Units of pixels.
+nIter : int
+    Number of iterations in the loop that hones in on the radial separation
+    of the satellite spots.
+"""
 satellite_spot_parameters = {
     "NFOV": {
         "offset": {
@@ -26,32 +57,34 @@ satellite_spot_parameters = {
 
 def circle(nx, ny, roiRadiusPix, xShear, yShear, nSubpixels=100):
     """
-    Generate a circular aperture with an antialiased edge at specified offsets.
+    Generates a circular aperture with an antialiased edge at specified offsets.
 
-    Used as a software window for isolating a region of interest. Grayscale
-    edges are used because the detector sampling may be low enough that
-    fractional values along the edges are important.
+    This function is used as a software window for isolating a region of interest. 
+    Grayscale edges are applied to account for low detector sampling, ensuring that 
+    fractional values along the edges are preserved.
 
-    Parameters
-    ----------
-    nx, ny : array_like
-        Dimensions of the 2-D array to create.
-    roiRadiusPix : float
-        Radius of the circle in pixels.
-    xShear, yShear : float
-        Lateral offsets in pixels of the circle's center from the array's
-        center pixel.
-    nSubpixels : int, optional
-        Each edge pixel of the circle is subdivided into a square subarray
-        nSubpixels across. The subarray is given binary values and then
-        averaged to give the edge pixel a value between 0 and 1, inclusive.
-        The default value is 100. Must be a positive scalar integer.
+    Args:
+        nx (int):  
+            Width of the 2D array to create.  
+        ny (int):  
+            Height of the 2D array to create.  
+        roiRadiusPix (float):  
+            Radius of the circle in pixels.  
+        xShear (float):  
+            Lateral offset of the circle's center from the array's center pixel along the x-axis.  
+        yShear (float):  
+            Lateral offset of the circle's center from the array's center pixel along the y-axis.  
+        nSubpixels (int, optional):  
+            Number of subpixels per edge pixel used for antialiasing. Each edge pixel is subdivided 
+            into a square subarray of `nSubpixels` across, where binary values are assigned and 
+            averaged to produce grayscale edge values between 0 and 1.  
+            Defaults to 100. Must be a positive integer.  
 
-    Returns
-    -------
-    mask : numpy ndarray
-        2-D array containing the circle
+    Returns:
+        numpy.ndarray:  
+            A 2D array containing the generated circular aperture mask.  
     """
+
     if nx % 2 == 0:
         x = np.linspace(-nx / 2.0, nx / 2.0 - 1, nx) - xShear
     elif nx % 2 == 1:
@@ -102,19 +135,17 @@ def circle(nx, ny, roiRadiusPix, xShear, yShear, nSubpixels=100):
 
 def find_optimum_1d(xVec, arrayToFit):
     """
-    Fit a parabola to a 1-D array and return the location of the min or max.
+    Fits a parabola to a 1D array and returns the location of the minimum or maximum.
 
-    Parameters
-    ----------
-    xVec : array_like
-        1-D array of coordinate values for the values in arrayToFit.
-    arrayToFit : array_like
-        1-D array of values to fit.
+    Args:
+        xVec (array_like):  
+            1D array of coordinate values corresponding to `arrayToFit`.  
+        arrayToFit (array_like):  
+            1D array of values to fit.  
 
-    Returns
-    -------
-    xOpt : float
-        Best fit value for the optimum (i.e., min or max) of the parabola.
+    Returns:
+        xOpt (float):  
+            Best-fit value for the optimum (i.e., minimum or maximum) of the parabola.  
     """
 
     if len(xVec) != len(arrayToFit):
@@ -141,32 +172,28 @@ def find_optimum_1d(xVec, arrayToFit):
 
 def find_optimum_2d(xVec, yVec, arrayToFit, mask):
     """
-    Fit a paraboloid to a 2-D array and return the location of the min or max.
+    Fits a paraboloid to a 2D array and returns the location of the minimum or maximum.
 
-    Parameters
-    ----------
-    xVec : array_like
-        1-D array of coordinate values along axis 1 of arrayToFit.
-    yVec : array_like
-        1-D array of coordinate values along axis 0 of arrayToFit.
-    arrayToFit : array_like
-        2-D array of values to fit.
-    mask : array_like
-        2-D boolean mask of which pixels to use. Same shape as arrayToFit.
+    Args:
+        xVec (array_like):  
+            1D array of coordinate values along axis 1 of `arrayToFit`.  
+        yVec (array_like):  
+            1D array of coordinate values along axis 0 of `arrayToFit`.  
+        arrayToFit (array_like):  
+            2D array of values to fit.  
+        mask (array_like):  
+            2D boolean mask indicating which pixels to use. Must have the same shape as `arrayToFit`.  
 
-    Returns
-    -------
-    xBest : float
-        Best fit value along axis 1.
-    yBest : float
-        Best fit value along axis 0.
+    Returns:
+        tuple:  
+            - `xBest` (float): Best-fit value along axis 1.  
+            - `yBest` (float): Best-fit value along axis 0.  
 
-    Notes
-    -----
-    Modified from code at
-    https://au.mathworks.com/matlabcentral/answers/5482-fit-a-3d-curve
-    and equations at
-    https://math.stackexchange.com/questions/2010758/how-do-i-fit-a-paraboloid-surface-to-nine-points-and-find-the-minimum
+    Notes:
+        - Modified from code at  
+          [MATLAB Central](https://au.mathworks.com/matlabcentral/answers/5482-fit-a-3d-curve).  
+        - Based on equations from  
+          [Math StackExchange](https://math.stackexchange.com/questions/2010758/how-do-i-fit-a-paraboloid-surface-to-nine-points-and-find-the-minimum).  
     """
 
     if arrayToFit.shape != mask.shape:
@@ -237,47 +264,46 @@ def find_optimum_2d(xVec, yVec, arrayToFit, mask):
 
 def _roi_mask_for_spots(optim_params, fixed_params):
     """
-    Compute the stellar offset and spot separation simultaneously.
+    Computes the stellar offset and spot separation simultaneously.
 
-    Parameters
-    ----------
-    optim_params : list
-        List of the parameters to be optimized by scipy.optimize.minimize().
-        They must be these 3 variables in this exact order:
-            [xOffsetGuess, yOffsetGuess, spotSepGuessPix]
-            xOffsetGuess, yOffsetGuess are the starting guesses for the star
-            offsets from the array center pixel. Units of pixels
-            spotSepGuessPix is the starting guess for the spot separation from
-            the star center in units of pixels.
-    fixed_params : list
-        List of the fixed parameters used when computing the cost function.
-        They must be these 4 variables in this exact order:
-            [spotArray, probeRotVecDeg, roiRadiusPix, nSubpixels]
-            spotArray is the 2-D array of the DM-generated satellite spots.
-            Calculated outside this function from probed images as
-            (Iplus + Iminus)/2 - Iunprobed.
-            probeRotVecDeg is the 1-D array of how many degrees
-            counterclockwise from the x-axis to rotate the regions of interest
-            used when summing the satellite spots. Note that a pair of
-            satellite spots is given by just one value. For example, for a
-            single pair of satellite spots along the x-axis use [0, ] and not
-            [0, 180]. And for a plus-shaped layout of spots, use [0, 90].
-            roiRadiusPix is the radius of each region of interest used when
-            summing the intensity of a satellite spot. Units of pixels.
-            nSubpixels is the number of subpixels across used to make edge
-            values of the region-of-interest mask. The value of the edge
-            pixels in the ROI is the mean of all the subpixel values.
+    Args:
+        optim_params (list):  
+            List of parameters to be optimized by `scipy.optimize.minimize()`.  
+            These three variables must be provided in this exact order:  
+            `[xOffsetGuess, yOffsetGuess, spotSepGuessPix]`          
+            - `xOffsetGuess` (float): Initial guess for the star offset from the array center pixel in the x direction. Units: pixels.  
+            - `yOffsetGuess` (float): Initial guess for the star offset from the array center pixel in the y direction. Units: pixels.  
+            - `spotSepGuessPix` (float): Initial guess for the spot separation from the star center. Units: pixels.  
+        fixed_params (list):  
+            List of fixed parameters used in computing the cost function.  
+            These four variables must be provided in this exact order:  
+            `[spotArray, probeRotVecDeg, roiRadiusPix, nSubpixels]`         
+            - `spotArray` (numpy.ndarray):  
+              2D array of DM-generated satellite spots.  
+              Computed externally from probed images as `(Iplus + Iminus)/2 - Iunprobed`.  
+            - `probeRotVecDeg` (array_like):  
+              1D array of angles (in degrees) counterclockwise from the x-axis  
+              to rotate the regions of interest when summing satellite spots.  
+              A pair of satellite spots is represented by a single value.  
+              - Example for a single pair along the x-axis: `[0]` (not `[0, 180]`).  
+              - Example for a plus-shaped layout of spots: `[0, 90]`.  
+            - `roiRadiusPix` (float):  
+              Radius of each region of interest used when summing the intensity  
+              of a satellite spot. Units: pixels.  
+            - `nSubpixels` (int):  
+              Number of subpixels used to refine edge values of the region-of-interest mask.  
+              The value of the edge pixels in the ROI is the mean of all subpixel values.  
 
-    Returns
-    -------
-    cost : float
-        The summed total intensity getting through the region-of-interest mask
-        multiplied by -1. This is used as the cost to be minimized by
-        scipy.optimize.minimize()..
-    roi_mask : numpy ndarray
-        2-D array with values between 0 and 1, inclusive, telling how much
-        to weight the intensity in each pixel in the summed cost.
+    Returns:
+        tuple:  
+            - `cost` (float):  
+              The summed total intensity passing through the region-of-interest mask,  
+              multiplied by `-1`. Used as the cost function to be minimized by `scipy.optimize.minimize()`.  
+            - `roi_mask` (numpy.ndarray):  
+              2D array with values between 0 and 1 (inclusive), indicating how much  
+              to weight the intensity in each pixel in the summed cost.  
     """
+
     # Unpack and check the input list of optimization variables
     try:
         xOffsetGuess, yOffsetGuess, spotSepGuessPix = optim_params
@@ -336,12 +362,20 @@ def _roi_mask_for_spots(optim_params, fixed_params):
 def _cost_func_spots(optim_params, fixed_params):
     """
     Return only the cost value for scipy.optimize.minimize().
-
+        
     This is a thin wrapper for occastro.roi_mask_for_spots() because
     scipy.optimize.minimize() requires the given function to return only
     the cost function value but we want some other diagnostic outputs from
     occastro.roi_mask_for_spots() as well.
+
+    Args:
+        optim_params (tuple): Tuple of optimization parameters.
+        fixed_params (dict): Dictionary of fixed parameters.
+
+    Returns:
+        float: The cost function value.
     """
+
     cost, _ = _roi_mask_for_spots(optim_params, fixed_params)
 
     return cost
@@ -351,66 +385,67 @@ def calc_star_location_and_spot_separation(
     spotArray, xOffsetGuess, yOffsetGuess, tuningParamDict
 ):
     """
-    Calculate the center of the occulted star using satellite spots.
+    Calculates the center of the occulted star using satellite spots.
 
-    Just one processed image of satellite spots is used. A multitude of
-    software masks are generated and applied to the measured spots in order to
-    determine the stellar location. The best estimate of the star location is
-    the one that maximizes the total summed energy, as found by a 2-D quadratic
-    fit.
+    A single processed image of satellite spots is used. Multiple software masks 
+    are generated and applied to the measured spots to determine the stellar location. 
+    The best estimate of the star's location is the one that maximizes the total summed 
+    energy, as determined by a 2D quadratic fit.
 
-    All filenames may be absolute or relative paths.  If relative, they will be
-    relative to the current working directory, not to any particular location
-    in Calibration.
+    All filenames may be absolute or relative paths. If relative, they will be 
+    relative to the current working directory, not to any particular location in Calibration.
 
-    Parameters
-    ----------
-    spotArray : numpy ndarray
-        2-D array of the DM-generated satellite spots. Calculated outside
-        this function from probed images as (Iplus + Iminus)/2 - Iunprobed.
-    xOffsetGuess, yOffsetGuess : float
-        Starting guess for the number of pixels in x and y that the star is
-        offset from the center pixel of the array spotArray. The convention
-        for the center pixel follows that of FFTs.
-    tuningParamDict : dict
-            Dictionary containing the tuning parameter values.
-            The dictionary should contain the following keys:
-            - spotSepPix : float
-                Expected separation of the satellite spots from the star. Used as the
-                separation for the center of the region of interest. Units of pixels.
-                Compute beforehand as sep in lambda/D and multiply by pix per lambda/D.
-            - roiRadiusPix : float
-                Radius of each region of interest used when summing the intensity of a
-                satellite spot. Units of pixels.
-            - probeRotVecDeg : array_like
-                1-D array of how many degrees counterclockwise from the x-axis to
-                rotate the regions of interest used when summing the satellite spots.
-                Note that a pair of satellite spots is given by just one value. For
-                example, for a single pair of satellite spots along the x-axis use [0,]
-                and [0, 180]. And for a plus-shaped layout of spots, use [0, 90].
-            - nSubpixels : int
-                Number of subpixels across used to make edge values of the region-of-
-                interest mask. The value of the edge pixels in the ROI is the mean of
-                all the subpixel values.
-            - nSteps : int
-                Number of points used along each direction for the grid search.
-                Odd numbers are better to provide symmetry of values when the array is
-                truly centered.
-            - stepSize : float
-                The step size used in the grid search. Units of pixels.
-            - nIter : int
-                Number of iterations in the loop that hones in on the stellar center
-                location.
+    Args:
+        spotArray (numpy.ndarray): 
+            2D array of the DM-generated satellite spots. Calculated outside 
+            this function from probed images as `(Iplus + Iminus)/2 - Iunprobed`.
+        xOffsetGuess (float): 
+            Starting guess for the number of pixels in the x direction that the 
+            star is offset from the center pixel of `spotArray`. The convention 
+            for the center pixel follows that of FFTs.
+        yOffsetGuess (float): 
+            Starting guess for the number of pixels in the y direction that the 
+            star is offset from the center pixel of `spotArray`. The convention 
+            for the center pixel follows that of FFTs.
+        tuningParamDict (dict): 
+            Dictionary containing tuning parameter values.
+            
+            - **spotSepPix (float)**:  
+              Expected separation of the satellite spots from the star. Used as 
+              the separation for the center of the region of interest. Units of 
+              pixels. Compute beforehand as separation in lambda/D multiplied by 
+              pixels per lambda/D.
+            - **roiRadiusPix (float)**:  
+              Radius of each region of interest used when summing the intensity 
+              of a satellite spot. Units of pixels.
+            - **probeRotVecDeg (array_like)**:  
+              1D array of angles (in degrees) counterclockwise from the x-axis 
+              to rotate the regions of interest when summing the satellite spots.  
+              A pair of satellite spots is given by just one value.  
+              - Example for a single pair along the x-axis: `[0]` (not `[0, 180]`).  
+              - Example for a plus-shaped layout of spots: `[0, 90]`.
+            - **nSubpixels (int)**:  
+              Number of subpixels across used to make edge values of the region-of-interest 
+              mask. The value of the edge pixels in the ROI is the mean of all subpixel values.
+            - **nSteps (int)**:  
+              Number of points used along each direction for the grid search. 
+              Odd numbers are preferable for symmetry when the array is truly centered.
+            - **stepSize (float)**:  
+              Step size used in the grid search. Units of pixels.
+            - **nIter (int)**:  
+              Number of iterations in the loop that refines the stellar center location.
 
-    Returns
-    -------
-    xOffsetEst, yOffsetEst : float
-        Estimated lateral offsets of the stellar center from the center pixel
-        of the array spotArray. The convention for the center pixel follows
-        that of FFTs.
-    roi_mask : numpy ndarray
-        2-D float array of the best-fit region-of-interest mask used to fit
-        the translation and scaling of the ROI regions to spotArray.
+    Returns:
+        tuple:  
+            - **xOffsetEst (float)**: Estimated lateral offset of the stellar center 
+              from the center pixel of `spotArray` in the x direction.  
+            - **yOffsetEst (float)**: Estimated lateral offset of the stellar center 
+              from the center pixel of `spotArray` in the y direction.  
+              
+              The convention for the center pixel follows that of FFTs.
+            - **roi_mask (numpy.ndarray)**:  
+              2D float array of the best-fit region-of-interest mask used to fit 
+              the translation and scaling of the ROI regions to `spotArray`.
     """
 
     # tuningParamDict = loadyaml(fnTuning)
@@ -463,63 +498,64 @@ def calc_star_location_and_spot_separation(
 
 def calc_star_location_from_spots(spotArray, xOffsetGuess, yOffsetGuess, tuningParamDict):
     """
-    Calculate the center of the occulted star using satellite spots.
+    Calculates the center of the occulted star using satellite spots.
 
-    Just one processed image of satellite spots is used. A multitude of
-    software masks are generated and applied to the measured spots in order to
-    determine the stellar location. The best estimate of the star location is
-    the one that maximizes the total summed energy, as found by a 2-D quadratic
-    fit.
+    A single processed image of satellite spots is used. Multiple software masks 
+    are generated and applied to the measured spots to determine the stellar location. 
+    The best estimate of the star's location is the one that maximizes the total summed 
+    energy, as determined by a 2D quadratic fit.
 
-    All filenames may be absolute or relative paths.  If relative, they will be
-    relative to the current working directory, not to any particular location
-    in Calibration.
+    All filenames may be absolute or relative paths. If relative, they will be 
+    relative to the current working directory, not to any particular location in Calibration.
 
-    Parameters
-    ----------
-    spotArray : numpy ndarray
-        2-D array of the DM-generated satellite spots. Calculated outside
-        this function from probed images as (Iplus + Iminus)/2 - Iunprobed.
-    xOffsetGuess, yOffsetGuess : float
-        Starting guess for the number of pixels in x and y that the star is
-        offset from the center pixel of the array spotArray. The convention
-        for the center pixel follows that of FFTs.
-    tuningParamDict : dict
-        Dictionary containing the tuning parameter values.
-        The dictionary should contain the following keys:
-        - spotSepPix : float
-            Expected separation of the satellite spots from the star. Used as the
-            separation for the center of the region of interest. Units of pixels.
-            Compute beforehand as sep in lambda/D and multiply by pix per lambda/D.
-        - roiRadiusPix : float
-            Radius of each region of interest used when summing the intensity of a
-            satellite spot. Units of pixels.
-        - probeRotVecDeg : array_like
-            1-D array of how many degrees counterclockwise from the x-axis to
-            rotate the regions of interest used when summing the satellite spots.
-            Note that a pair of satellite spots is given by just one value. For
-            example, for a single pair of satellite spots along the x-axis use [0,]
-            and [0, 180]. And for a plus-shaped layout of spots, use [0, 90].
-        - nSubpixels : int
-            Number of subpixels across used to make edge values of the region-of-
-            interest mask. The value of the edge pixels in the ROI is the mean of
-            all the subpixel values.
-        - nSteps : int
-            Number of points used along each direction for the grid search.
-            Odd numbers are better to provide symmetry of values when the array is
-            truly centered.
-        - stepSize : float
-            The step size used in the grid search. Units of pixels.
-        - nIter : int
-            Number of iterations in the loop that hones in on the stellar center
-            location.
+    Args:
+        spotArray (numpy.ndarray): 
+            2D array of the DM-generated satellite spots. Calculated outside 
+            this function from probed images as `(Iplus + Iminus)/2 - Iunprobed`.
+        xOffsetGuess (float): 
+            Starting guess for the number of pixels in the x direction that the 
+            star is offset from the center pixel of `spotArray`. The convention 
+            for the center pixel follows that of FFTs.
+        yOffsetGuess (float): 
+            Starting guess for the number of pixels in the y direction that the 
+            star is offset from the center pixel of `spotArray`. The convention 
+            for the center pixel follows that of FFTs.
+        tuningParamDict (dict): 
+            Dictionary containing tuning parameter values.
+            
+            - **spotSepPix (float)**:  
+              Expected separation of the satellite spots from the star. Used as 
+              the separation for the center of the region of interest. Units of 
+              pixels. Compute beforehand as separation in lambda/D multiplied by 
+              pixels per lambda/D.
+            - **roiRadiusPix (float)**:  
+              Radius of each region of interest used when summing the intensity 
+              of a satellite spot. Units of pixels.
+            - **probeRotVecDeg (array_like)**:  
+              1D array of angles (in degrees) counterclockwise from the x-axis 
+              to rotate the regions of interest when summing the satellite spots.  
+              A pair of satellite spots is given by just one value.  
+              - Example for a single pair along the x-axis: `[0]` (not `[0, 180]`).  
+              - Example for a plus-shaped layout of spots: `[0, 90]`.
+            - **nSubpixels (int)**:  
+              Number of subpixels across used to make edge values of the region-of-interest 
+              mask. The value of the edge pixels in the ROI is the mean of all subpixel values.
+            - **nSteps (int)**:  
+              Number of points used along each direction for the grid search. 
+              Odd numbers are preferable for symmetry when the array is truly centered.
+            - **stepSize (float)**:  
+              Step size used in the grid search. Units of pixels.
+            - **nIter (int)**:  
+              Number of iterations in the loop that refines the stellar center location.
 
-    Returns
-    -------
-    xOffsetEst, yOffsetEst : float
-        Estimated lateral offsets of the stellar center from the center pixel
-        of the array spotArray. The convention for the center pixel follows
-        that of FFTs.
+    Returns:
+        tuple:  
+            - **xOffsetEst (float)**: Estimated lateral offset of the stellar center 
+              from the center pixel of `spotArray` in the x direction.  
+            - **yOffsetEst (float)**: Estimated lateral offset of the stellar center 
+              from the center pixel of `spotArray` in the y direction.  
+              
+            The convention for the center pixel follows that of FFTs.
     """
     
     # check.twoD_array(spotArray, 'spotArray', TypeError)
@@ -605,65 +641,63 @@ def calc_star_location_from_spots(spotArray, xOffsetGuess, yOffsetGuess, tuningP
 
 def calc_spot_separation(spotArray, xOffset, yOffset, tuningParamDict):
     """
-    Calculate the radial separation in pixels of the satellite spots.
+    Calculates the radial separation in pixels of the satellite spots.
 
-    Just one processed image of satellite spots is used. Several software
-    masks are generated and applied to the measured spots in order to
-    determine the radial separation of the spots from the given star center.
-    The best estimate of the radial spot separation is the one that maximizes
-    the total summed energy in the software mask, as found by a 1-D quadratic
-    fit.
+    A single processed image of satellite spots is used. Several software masks 
+    are generated and applied to the measured spots to determine the radial 
+    separation of the spots from the given star center. The best estimate of 
+    the radial spot separation is the one that maximizes the total summed 
+    energy in the software mask, as determined by a 1D quadratic fit.
 
-    All filenames may be absolute or relative paths.  If relative, they will be
-    relative to the current working directory, not to any particular location
+    All filenames may be absolute or relative paths. If relative, they will be 
+    relative to the current working directory, not to any particular location 
     in Calibration.
 
-    Parameters
-    ----------
-    spotArray : numpy ndarray
-        2-D array of the DM-generated satellite spots. Calculated outside
-        this function from probed images as (Iplus + Iminus)/2 - Iunprobed.
-    xOffset, yOffset : float
-        Previously estimated stellar center offset from the array's center
-        pixel. Units of pixels. The convention for the center pixel follows
-        that of FFTs.
-    tuningParamDict : dict
-        Dictionary containing the tuning parameter values.
-        - spotSepPix : float
-            Expected (i.e., model-based) separation of the satellite spots from the
-            star. Used as the starting point for the separation for the center of
-            the region of interest. Units of pixels. Compute beforehand as
-            separation in lambda/D multiplied by pixels per lambda/D.
-            6.5*(51.46*0.575/13)
-        - roiRadiusPix : float
-            Radius of each region of interest used when summing the intensity of a
-            satellite spot. Units of pixels.
-        - probeRotVecDeg : array_like
-            1-D array of how many degrees counterclockwise from the x-axis to
-            rotate the regions of interest used when summing the satellite spots.
-            Note that a pair of satellite spots is given by just one value. For
-            example, for a single pair of satellite spots along the x-axis use
-            [0, ] and not [0, 180]. And for a plus-shaped layout of spots,
-            use [0, 90].
-        - nSubpixels : int
-            Number of subpixels across used to make edge values of the region-of-
-            interest mask. The value of the edge pixels in the ROI is the mean of
-            all the subpixel values.
-        - nSteps : int
-            Number of points used along each direction for the grid search.
-            Odd numbers are better to provide symmetry of values when the array is
-            truly centered.
-        - stepSize : float
-            The step size used in the grid search. Units of pixels.
-        - nIter : int
-            Number of iterations in the loop that hones in on the radial separation
-            of the satellite spots.
+    Args:
+        spotArray (numpy.ndarray): 
+            2D array of the DM-generated satellite spots. Calculated outside 
+            this function from probed images as `(Iplus + Iminus)/2 - Iunprobed`.
+        xOffset (float): 
+            Previously estimated stellar center offset from the array's center 
+            pixel. Units of pixels. The convention for the center pixel follows 
+            that of FFTs.
+        yOffset (float): 
+            Previously estimated stellar center offset from the array's center 
+            pixel. Units of pixels. The convention for the center pixel follows 
+            that of FFTs.
+        tuningParamDict (dict): 
+            Dictionary containing tuning parameter values.
+            
+            - **spotSepPix (float)**:  
+              Expected (model-based) separation of the satellite spots from the 
+              star. Used as the starting point for the separation for the 
+              center of the region of interest. Units of pixels. Compute 
+              beforehand as separation in lambda/D multiplied by pixels per 
+              lambda/D (e.g., `6.5 * (51.46 * 0.575 / 13)`).
+            - **roiRadiusPix (float)**:  
+              Radius of each region of interest used when summing the intensity 
+              of a satellite spot. Units of pixels.
+            - **probeRotVecDeg (array_like)**:  
+              1D array of angles (in degrees) counterclockwise from the x-axis 
+              to rotate the regions of interest when summing the satellite spots. 
+              A pair of satellite spots is given by just one value.  
+              - Example for a single pair along the x-axis: `[0]` (not `[0, 180]`).  
+              - Example for a plus-shaped layout of spots: `[0, 90]`.
+            - **nSubpixels (int)**:  
+              Number of subpixels across used to make edge values of the region-of-interest 
+              mask. The value of the edge pixels in the ROI is the mean of all the subpixel values.
+            - **nSteps (int)**:  
+              Number of points used along each direction for the grid search. 
+              Odd numbers are preferable for symmetry when the array is truly centered.
+            - **stepSize (float)**:  
+              Step size used in the grid search. Units of pixels.
+            - **nIter (int)**:  
+              Number of iterations in the loop that refines the radial separation of the satellite spots.
 
-    Returns
-    -------
-    spotSepEst : float
-        Estimated radial separation of the satellite spots from the stellar
-        center. Units of pixels.
+    Returns:
+        float: 
+            Estimated radial separation of the satellite spots from the stellar center. 
+            Units of pixels.
     """
     # check.twoD_array(spotArray, 'spotArray', TypeError)
     # check.real_scalar(xOffset, 'xOffset', TypeError)
@@ -756,99 +790,31 @@ def star_center_from_satellite_spots(
     observing_mode='NFOV',
 ):
     """
-    Estimate the star center and spot locations from satellite spot images and science data.
+    Estimates the star center and spot locations from satellite spot images and science data.
 
-    Parameters
-    ----------
-    img_ref : numpy ndarray
-        2-D image representing a clean occulted focal-plane image with a base DM setting.
-    img_plus : numpy ndarray
-        2-D image representing a clean occulted focal-plane image with a relative satellite-spot DM setting added.
-    img_minus : numpy ndarray
-        2-D image representing a clean occulted focal-plane image with the same relative DM setting satellite-spot subtracted.
-    xOffsetGuess, yOffsetGuess : float
-        Starting guess for the number of pixels in x and y that the star is offset from the center pixel of the spots image.
-    thetaOffsetGuess : float (degrees)
-        Theta rotation of spot locations on the camera, which might be different from expected due to clocking error between the DM and the camera.
-    satellite_spot_parameters : dict
-        Dictionary containing tuning parameters for spot separation and offset estimation.
-    mode : str, optional
-        Mode for selecting the satellite spot parameters from the `satellite_spot_parameters` dictionary.
+    Args:
+        img_ref (numpy.ndarray): 
+            2D image representing a clean occulted focal-plane image with a base DM setting.
+        img_plus (numpy.ndarray): 
+            2D image representing a clean occulted focal-plane image with a relative satellite-spot DM setting added.
+        img_minus (numpy.ndarray): 
+            2D image representing a clean occulted focal-plane image with the same relative DM setting satellite-spot subtracted.
+        xOffsetGuess (float): 
+            Starting guess for the number of pixels in the x direction that the star is offset from the center pixel of the spots image.
+        yOffsetGuess (float): 
+            Starting guess for the number of pixels in the y direction that the star is offset from the center pixel of the spots image.
+        thetaOffsetGuess (float): 
+            Theta rotation (in degrees) of spot locations on the camera, which might be different from expected due to clocking error between the DM and the camera.
+        satellite_spot_parameters (dict): 
+            Dictionary containing tuning parameters for spot separation and offset estimation.
+        observing_mode (str, optional): 
+            Mode for selecting the satellite spot parameters from the `satellite_spot_parameters` dictionary.
 
-    Returns
-    -------
-    star_xy : numpy ndarray
-        Estimated lateral offsets of the stellar center from the center pixel of the spots image.
-    list_spots_xy : numpy ndarray
-        List of spot locations.
-
-    Notes
-    -----
-    Offset Tuning parameters in the satellite_spot_parameters dictionary are explained below:
-
-    spotSepPix : float
-        Expected (i.e., model-based) separation of the satellite spots from the
-        star. Used as the starting point for the separation for the center of
-        the region of interest. Units of pixels. Compute beforehand as
-        separation in lambda/D multiplied by pixels per lambda/D.
-        6.5*(51.46*0.575/13)
-    roiRadiusPix : float
-        Radius of each region of interest used when summing the intensity of a
-        satellite spot. Units of pixels.
-    probeRotVecDeg : array_like
-        1-D array of how many degrees counterclockwise from the x-axis to
-        rotate the regions of interest used when summing the satellite spots.
-        Note that a pair of satellite spots is given by just one value. For
-        example, for a single pair of satellite spots along the x-axis use
-        [0, ] and not [0, 180]. And for a plus-shaped layout of spots,
-        use [0, 90].
-    nSubpixels : int
-        Number of subpixels across used to make edge values of the region-of-
-        interest mask. The value of the edge pixels in the ROI is the mean of
-        all the subpixel values.
-    nSteps : int
-        Number of points used along each direction for the grid search.
-        Odd numbers are better to provide symmetry of values when the array is
-        truly centered.
-    stepSize : float
-        The step size used in the grid search. Units of pixels.
-    nIter : int
-        Number of iterations in the loop that hones in on the radial separation
-        of the satellite spots.
-
-    Separation Tuning parameters in the satellite_spot_parameters dictionary are explained
-    below:
-
-    spotSepGuessPix : float
-        Expected (i.e., model-based) separation of the satellite spots from the
-        star. Used as the starting point for the separation for the center of
-        the region of interest. Units of pixels. Compute beforehand as
-        separation in lambda/D multiplied by pixels per lambda/D.
-        6.5*(51.46*0.575/13)
-    roiRadiusPix : float
-        Radius of each region of interest used when summing the intensity of a
-        satellite spot. Units of pixels.
-    probeRotVecDeg : array_like
-        1-D array of how many degrees counterclockwise from the x-axis to
-        rotate the regions of interest used when summing the satellite spots.
-        Note that a pair of satellite spots is given by just one value. For
-        example, for a single pair of satellite spots along the x-axis use
-        [0, ] and not [0, 180]. And for a plus-shaped layout of spots,
-        use [0, 90].
-    nSubpixels : int
-        Number of subpixels across used to make edge values of the region-of-
-        interest mask. The value of the edge pixels in the ROI is the mean of
-        all the subpixel values.
-    nSteps : int
-        Number of points used along each direction for the grid search.
-        Odd numbers are better to provide symmetry of values when the array is
-        truly centered.
-    stepSize : float
-        The step size used in the grid search. Units of pixels.
-    nIter : int
-        Number of iterations in the loop that hones in on the radial separation
-        of the satellite spots.
-
+    Returns:
+        numpy.ndarray: 
+            Estimated lateral offsets of the stellar center from the center pixel of the spots image.
+        numpy.ndarray: 
+            List of spot locations.
     """
 
     # check inputs
@@ -899,5 +865,7 @@ def star_center_from_satellite_spots(
         )
 
     star_xy = [xOffsetEst, yOffsetEst]
+    star_xy = np.array(star_xy, dtype='float')
+    list_spots_xy = np.array(list_spots_xy, dtype='float')
 
-    return np.array(star_xy, dtype='float'), np.array(list_spots_xy, dtype='float')
+    return star_xy, list_spots_xy
