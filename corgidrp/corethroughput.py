@@ -470,8 +470,6 @@ def write_ct_calfile(
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations and/or core throughput values'))
     # Add history
-    exthd_offaxis['HISTORY'] = ('Core Throughput calibration derived from a '
-        f'set of frames on {exthd_offaxis["DATETIME"]}')
     # Add specific information
     exthd_offaxis['UNITS'] = 'photoelectron/pix/s'
     exthd_offaxis['COMMENT'] = ('Set of PSFs derived from a core throughput '
