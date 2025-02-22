@@ -1381,7 +1381,8 @@ class FpamFsamRotMat(Image):
         date_valid (astropy.time.Time): date after which these parameters are valid
 
     Attributes:
-        default_rot (arr): default values for FPAM and FSAM rotation matrices (modelbased)
+         fpam_to_excam_modelbased (arr): default values for FPAM rotation matrices.
+         fsam_to_excam_modelbased (arr): default values for FSAM rotation matrices.
     """
     # default rotation matrices (model is consistent with FFT/TVAC tests)
     # Signs +/- have been double checked against FFT/TVAC data

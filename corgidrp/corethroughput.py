@@ -140,8 +140,7 @@ def estimate_psf_pix_and_ct(
     Args:
       dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
         M clean frames (nominally 1024x1024) taken at different FSM positions.
-        It includes some pupil images of the unocculted source.
-        Units: photoelectrons / second / pixel.
+        It includes some pupil images of the unocculted source.  photoelectrons / second / pixel.
       roi_radius (int or float): Half-size of the box around the peak,
         in pixels. Adjust based on desired λ/D.
       version (int): version number of the filters (CFAM, pupil, imaging
@@ -219,7 +218,14 @@ def estimate_psf_pix_and_ct(
     return psf_pix, psf_ct
 
 def read_rot_matrix():
-    """ Read latest calibration file with the FPAM and FSAM rotation matrices."""
+    """ Read latest calibration file with the FPAM and FSAM rotation matrices.
+
+    Returns:
+      fpam2excam_matrix (array): Rotation matrix to translate delta FPAM positions
+        in micrometer to EXCAM (direct imaging) pixels.
+      fsam2excam_matrix (array): Rotation matrix to translate delta FSAM positions
+        in micrometer to EXCAM (direct imaging) pixels.
+    """
 
     # Check for latest time with FPAM/FSAM rotation matrices
     try:
@@ -247,11 +253,12 @@ def pam_mum2pix(
     """ Translate PAM delta positions in micrometers to EXCAM pixels.
     Args:
       pam2excam_matrix (array): Rotation matrix to translate delta PAM positions
-        in micrometer to EXCAM (direct imaging) pixels
+        in micrometer to EXCAM (direct imaging) pixels.
       delta_pam_pos_um (array): Value of the PAM delta positions in units of
         micrometer.
     Returns:
-      Value of the PAM delta position in units of EXCAM (direct imaging) pixels
+      deltapam_excam (array): Value of the PAM delta position in units of
+        EXCAM (direct imaging) pixels.
     """
     # Enforce vertical array. Transpose if it is a horizontal array
     try:
@@ -262,7 +269,8 @@ def pam_mum2pix(
     except:
         raise ValueError('Input delta PAM must be a 2-1 array')
 
-    return (pam2excam_matrix @ delta_pam_pos_um).transpose()[0]
+    deltapam_excam = (pam2excam_matrix @ delta_pam_pos_um).transpose()[0]
+    return deltapam_excam
 
 def get_ct_fpm_center(
     fpm_center_cor,
@@ -358,6 +366,8 @@ def write_ct_calfile(
     n_pix_psf=None,
     ):
     """
+    Function that writes the core throughput calibration file.
+
     1090884 - Given 1) a core throughput dataset consisting of a set of clean
     frames (nominally 1024x1024) taken at different FSM positions, and 2) a list
     of N (x, y) coordinates, in units of EXCAM pixels, which fall within the area
@@ -380,8 +390,7 @@ def write_ct_calfile(
     Args:
       dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
         M clean frames (nominally 1024x1024) taken at different FSM positions.
-        It includes some pupil images of the unocculted source.
-        Units: photoelectrons / second / pixel.
+        It includes some pupil images of the unocculted source. photoelectrons / second / pixel.
       fpm_center_cor (array): 2-dimensional array with the center of the focal
         plane mask during coronagraphic observations. Units: EXAM pixels.
       fpam_pos_cor (array): 2-dimensional array with the [H,V] values of the FPAM
@@ -400,9 +409,6 @@ def write_ct_calfile(
         PSF array is centered at the EXCAM pixel closest to the PSF's location.
         Default: 15 EXCAM pixels (corresponding to radius from PSF's centroid
         of 3 l/D, where the PSF intensity is ~1e-10 its peak). 
-
-    Returns:
-      CoreThroughputCalibration file.
     """
     dataset = dataset_in.copy()
 
@@ -507,7 +513,11 @@ def write_ct_calfile(
     ct_cal_file.save(filedir=corgidrp.default_cal_dir)
 
 def read_ct_cal_file():
-    """ Read latest core throughput calibration file."""
+    """ Read latest core throughput calibration file.
+
+    Returns:
+      Components of the core throughput calibration file as a list.
+    """
 
     # Check for latest time with FPAM/FSAM rotation matrices
     try:
