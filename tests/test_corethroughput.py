@@ -278,9 +278,14 @@ def test_cal_file():
         psf_cube_in += [frame.data]
     psf_cube_in = np.array(psf_cube_in)
 
-    # Need to cut-out PSFs to match them
-    breakpoint()
-    #assert np.all()
+    # Compare the PSF cube from the calibration file, which may have a smaller
+    # extension, with the input ones
+    cal_file_side_0 = ct_cal[1][0].shape[0]
+    cal_file_side_1 = ct_cal[1][0].shape[1]
+    for i_psf, psf in enumerate(psf_cube_in):
+        loc_00 = np.argwhere(psf == ct_cal[1][i_psf][0][0])[0]
+        assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
+            loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal[1][i_psf])
 
 def test_ct_map():
     """ 
