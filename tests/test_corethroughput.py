@@ -152,8 +152,10 @@ def test_fpm_pos():
     # DRP calibration files
     fpam2excam_matrix, fsam2excam_matrix = corethroughput.read_rot_matrix()
     # TVAC files
-    fpam2excam_matrix_tvac = fits.getdata(here, 'test_data', 'fpam_to_excam_modelbased.fits'))
-    fsam2excam_matrix_tvac = fits.getdata(here, 'test_data', 'fsam_to_excam_modelbased.fits'))
+    fpam2excam_matrix_tvac = fits.getdata(os.path.join(here, 'test_data',
+        'fpam_to_excam_modelbased.fits'))
+    fsam2excam_matrix_tvac = fits.getdata(os.path.join(here, 'test_data',
+        'fsam_to_excam_modelbased.fits'))
 
     # test 1:
     # Check that DRP calibration files for FPAM and FSAM agree with TVAC files
