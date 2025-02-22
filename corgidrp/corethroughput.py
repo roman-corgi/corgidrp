@@ -124,8 +124,8 @@ def get_psf_ct(
 
 def estimate_psf_pix_and_ct(
     dataset_in,
-    roi_radius=None,
-    version=None,
+    roi_radius=3,
+    version=0,
     ):
     """
     1090881 - Given a core throughput dataset consisting of M clean frames
@@ -144,7 +144,7 @@ def estimate_psf_pix_and_ct(
       roi_radius (int or float): Half-size of the box around the peak,
         in pixels. Adjust based on desired λ/D.
       version (int): version number of the filters (CFAM, pupil, imaging
-        lens). Default is 0.
+        lens).
 
     Returns:
       psf_pix (array): Array with PSF's pixel positions. Units: EXCAM pixels
@@ -153,12 +153,6 @@ def estimate_psf_pix_and_ct(
         dimensionless (Values must be within 0 and 1).
     """
     dataset = dataset_in.copy()
-
-    if roi_radius is None:
-        roi_radius = 3
-
-    if version is None:
-        version = 0
 
     # All frames must have the same CFAM setup
     cfam_list = []
@@ -362,9 +356,9 @@ def write_ct_calfile(
     fpam_pos_ct,
     fsam_pos_cor,
     fsam_pos_ct,
-    roi_radius=None,
-    version=None,
-    n_pix_psf=None,
+    roi_radius=3,
+    version=0,
+    n_pix_psf=15,
     ):
     """
     Function that writes the core throughput calibration file.
@@ -405,21 +399,13 @@ def write_ct_calfile(
       roi_radius (int or float): Half-size of the box around the peak,
         in pixels. Adjust based on desired λ/D.
       version (int): version number of the filters (CFAM, pupil, imaging
-        lens). Default is 0.
+        lens).
       n_pix_psf (int): The number of pixels of each PSF array dimension. The
         PSF array is centered at the EXCAM pixel closest to the PSF's location.
-        Default: 15 EXCAM pixels (corresponding to radius from PSF's centroid
-        of 3 l/D, where the PSF intensity is ~1e-10 its peak). 
+        15 EXCAM pixels correspond to a radius from PSF's centroid
+        of 3 l/D. The PSF intensity at that angular distance is ~1e-10 its peak. 
     """
     dataset = dataset_in.copy()
-
-    # default methods
-    if roi_radius is None:
-        roi_radius = 3
-    if version is None:
-        version = 0
-    if n_pix_psf is None:
-        n_pix_psf = 15
 
     # Get estimated PSF centers and CT
     psf_loc_est, ct_est = \
