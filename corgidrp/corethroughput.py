@@ -21,13 +21,11 @@ def di_over_pil_transmission(
     Args:
       filter (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
         Default: '1F'.
-
       version (int): version number of the filters (CFAM, pupil, imaging
-        lens). Default is 0.
+        lens). Default: 0.
 
     Returns:
       Ratio trans_imaging/trans_pupil.
-
     """
     # Read pupil and direct imaging lenses
     try:
