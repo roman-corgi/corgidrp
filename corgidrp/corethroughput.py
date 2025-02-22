@@ -540,10 +540,13 @@ def read_ct_cal_file():
     print('PSF cube dq header: [6]')
     print('CT map: [7]. PSF location: [7][0], [7][1]. CT values: [7][2]')
     print('CT map header: [8]')
-    print('FPM info: [9]. FPAM during CT observations: [9][0], FSAM during CT observations: [9][1].')
+    print('FPM info: [9]. FPAM during CT observations: [9][0], '
+        'FSAM during CT observations: [9][1].')
     print('FPM during coronagraphic observations: [9][2].')
-    print('FPAM H/V values during coronagraphic observations: [9][3], FPAM H/V values during corethroughput observations: [9][4]')
-    print('FSAM H/V values during coronagraphic observations: [9][5], FSAM H/V values during corethroughput observations: [9][6]')
+    print('FPAM H/V values during coronagraphic observations: [9][3], '
+        'FPAM H/V values during corethroughput observations: [9][4]')
+    print('FSAM H/V values during coronagraphic observations: [9][5], '
+        'FSAM H/V values during corethroughput observations: [9][6]')
     print('FPM info header: [10]')
 
     return [pri_hdr, psf_cube, psf_hdr, err_cube, err_hdr, dq_cube, dq_hdr,
