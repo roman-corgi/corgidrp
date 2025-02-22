@@ -256,6 +256,7 @@ def pam_mum2pix(
         in micrometer to EXCAM (direct imaging) pixels.
       delta_pam_pos_um (array): Value of the PAM delta positions in units of
         micrometer.
+
     Returns:
       deltapam_excam (array): Value of the PAM delta position in units of
         EXCAM (direct imaging) pixels.
