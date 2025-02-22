@@ -1545,7 +1545,7 @@ class CoreThroughputCalibration(Image):
             # add to history if not present
             if not 'HISTORY' in self.ext_hdr:
                 self.ext_hdr['HISTORY'] = ('Core Throughput calibration derived '
-                    f'from a set of frames on {exthd_offaxis["DATETIME"]}')
+                    f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
             # use the start date for the filename by default
             self.filedir = '.'
