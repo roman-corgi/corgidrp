@@ -1,15 +1,10 @@
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 from astropy.time import Time
 from astropy.io import fits, ascii
-from scipy.interpolate import griddata
 
 import corgidrp
-import corgidrp.data as data
-from corgidrp.data import Dataset
-from corgidrp.astrom import centroid_with_roi
-from corgidrp import corethroughput
+from corgidrp import astrom
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -42,7 +37,7 @@ def di_over_pil_transmission(
         lambda_pupil_nm = lambda_pupil_A / 10
     except:
         raise Exception('* File with the transmission of the pupil lens not found')
- 
+
     try:
         lambda_imaging_A, trans_imaging = np.loadtxt(os.path.join(here, 'data',
             'filter_curves', f'imaging_lens_v{version}.txt'),
@@ -50,7 +45,6 @@ def di_over_pil_transmission(
         lambda_imaging_nm = lambda_imaging_A / 10
     except:
         raise Exception('* File with the transmission of the imaging lens not found')
- 
     # Read filter (CFAM)
     datadir = os.path.join(here, 'data', 'filter_curves')
     filter_names = os.listdir(datadir)
@@ -66,7 +60,6 @@ def di_over_pil_transmission(
         lambda_nm_filter,
         lambda_pupil_nm,
         trans_pupil)
- 
     trans_lambda_imaging_band = np.interp(
         lambda_nm_filter,
         lambda_imaging_nm,
@@ -74,7 +67,6 @@ def di_over_pil_transmission(
     # Ratio of both transmissions:
     ratio_imaging_pupil_trans = \
         np.sum(trans_lambda_imaging_band)/np.sum(trans_lambda_pupil_band)
- 
     return ratio_imaging_pupil_trans
 
 def get_psf_pix(
@@ -92,17 +84,15 @@ def get_psf_pix(
     Returns:
       Array of pair of values with PSFs position in (fractional) EXCAM pixels
       with respect to the pixel (0,0) in the PSF images
-    """ 
+    """
     psf_pix = []
     for psf in dataset:
-        psf_pix += [centroid_with_roi(psf.data,roi_radius=roi_radius)]
-
+        psf_pix += [astrom.centroid_with_roi(psf.data,roi_radius=roi_radius)]
     return np.array(psf_pix)
 
 def get_psf_ct(
     dataset,
     unocc_psf_norm=1,
-    filter='1F',
     ):
     """ Estimate the core throughput of a set of PSF images.
 
@@ -126,12 +116,6 @@ def get_psf_ct(
       unocc_psf_norm (float): sum of the 2-d array corresponding to the
         unocculted psf. Default: off-axis PSF are normalized to the unocculted
         PSF already. That is, unocc_psf_norm equals 1.
-
-      filter (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
-        Default: '1F'.      
-
-      version (int): version number of the filters (CFAM, pupil, imaging
-        lens). Default is 0.
 
     Returns:
       Array of core throughput values between 0 and 1.
@@ -207,8 +191,7 @@ def estimate_psf_pix_and_ct(
                 pupil_img_frames += [frame]
         except:
             pass
-    
-    if len(pupil_img_frames):
+    if pupil_img_frames:
         print(f'Found {len(pupil_img_frames)} pupil images for the core throughput estimation.')
     else:
         raise Exception('No pupil image found. At least there must be one pupil image.')
@@ -220,33 +203,27 @@ def estimate_psf_pix_and_ct(
     # Transform pupil counts into direct imaging counts. Recall all frames have
     # the same cfam filter or an Exception is raised
     unocc_psf_norm *= di_over_pil_transmission(filter=cfam_list[0], version=version)
-    
     # Remove pupil frames
     offaxis_frames = []
     for frame in dataset:
         if frame not in pupil_img_frames:
             offaxis_frames += [frame]
-    dataset_offaxis = Dataset(offaxis_frames)
+    dataset_offaxis = corgidrp.data.Dataset(offaxis_frames)
     if len(dataset_offaxis):
         print(f'Found {len(dataset_offaxis)} off-axis PSFs for the core throughput estimation.')
     else:
         raise Exception('No off-axis PSF found. At least there must be one off-axis PSF.')
-    
     # find the PSF positions of the off-axis PSFs
     psf_pix = get_psf_pix(
         dataset_offaxis,
         roi_radius=roi_radius)
-
     # find the PSF corethroughput of the off-axis PSFs
     psf_ct = get_psf_ct(
         dataset_offaxis,
-        unocc_psf_norm = unocc_psf_norm,
-        filter=filter)
-
-    # same number of estimates. One per PSF 
+        unocc_psf_norm = unocc_psf_norm)
+    # same number of estimates. One per PSF
     if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset_offaxis):
         raise Exception('PSF positions and CT values are inconsistent')
-
     return psf_pix, psf_ct
 
 def read_rot_matrix():
@@ -264,7 +241,8 @@ def read_rot_matrix():
             fpam2excam_matrix = rot_matrix[0]
             fsam2excam_matrix = rot_matrix[1]
         except:
-            raise ValueError(f'The data in {calfile_latest} does not have two (2x2) rotation matrices.')
+            raise ValueError(f'The data in {calfile_latest} does not have two '
+                '(2x2) rotation matrices.')
     except:
         raise OSError('The rotation matrix for FPAM and FSAM could not be loaded.')
 
@@ -337,11 +315,11 @@ def get_ct_fpm_center(
     """
     # Checks
     try:
-        if (type(fpm_center_cor) != np.ndarray or len(fpm_center_cor) !=2 or
-            type(fpam_pos_cor) != np.ndarray or len(fpam_pos_cor) !=2 or 
-            type(fpam_pos_ct) != np.ndarray or len(fpam_pos_ct) !=2 or
-            type(fsam_pos_cor) != np.ndarray or len(fsam_pos_cor) !=2 or
-            type(fsam_pos_ct) != np.ndarray or len(fsam_pos_ct) !=2):
+        if not (isinstance(fpm_center_cor, np.ndarray) and len(fpm_center_cor) ==2 and
+            isinstance(fpam_pos_cor, np.ndarray) and len(fpam_pos_cor) ==2 and
+            isinstance(fpam_pos_ct, np.ndarray) and len(fpam_pos_ct) ==2 and
+            isinstance(fsam_pos_cor, np.ndarray) and len(fsam_pos_cor) ==2 and
+            isinstance(fsam_pos_ct, np.ndarray) and len(fsam_pos_ct) ==2):
             raise OSError('Input values are not 2-dimensional arrays')
     except:
         raise OSError('Input values are not 2-dimensional arrays')
@@ -349,7 +327,7 @@ def get_ct_fpm_center(
     # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
     # EXCAM pixels)
     if (np.any(fpm_center_cor <= 23) or np.any(fpm_center_cor >= 1000)):
-      raise ValueError("Input focal plane mask's center is too close to the edges")
+        raise ValueError("Input focal plane mask's center is too close to the edges")
 
     # Read FPAM and FSAM rotation matrices from their calibration file
     fpam2excam_matrix, fsam2excam_matrix = read_rot_matrix()
@@ -370,9 +348,9 @@ def get_ct_fpm_center(
     # accommodate the HLC mask area (OWA radius <=9.7 l/D ~ 487 mas ~ 22.34
     # EXCAM pixels
     if (np.any(fpam_center_ct <= 23) or np.any(fpam_center_ct >= 1000)):
-      raise ValueError("New FPAM mask's center is too close to the edges")
+        raise ValueError("New FPAM mask's center is too close to the edges")
     if (np.any(fsam_center_ct <= 23) or np.any(fsam_center_ct >= 1000)):
-      raise ValueError("New FSAM mask's center is too close to the edges")
+        raise ValueError("New FSAM mask's center is too close to the edges")
 
     return fpam_center_ct, fsam_center_ct
 
@@ -444,14 +422,14 @@ def write_ct_calfile(
     if n_pix_psf is None:
         n_pix_psf = 15
 
-    # Get PSF centers and CT
-    psf_loc_ct, ct = \
-        corethroughput.estimate_psf_pix_and_ct(dataset,
+    # Get estimated PSF centers and CT
+    psf_loc_est, ct_est = \
+        corgidrp.corethroughput.estimate_psf_pix_and_ct(dataset,
             roi_radius=roi_radius,
             version=version)
     # Get FPAM and FSAM centers during CT in EXCAM pixels
     fpam_center_ct_pix, fsam_center_ct_pix = \
-            corethroughput.get_ct_fpm_center(fpm_center_cor,
+            corgidrp.corethroughput.get_ct_fpm_center(fpm_center_cor,
             fpam_pos_cor=fpam_pos_cor,
             fpam_pos_ct=fpam_pos_ct,
             fsam_pos_cor=fsam_pos_cor,
@@ -473,25 +451,24 @@ def write_ct_calfile(
                 exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
                 continue
         except:
-           pass 
-        idx_0_0 = max(int(np.round(psf_loc_ct[i_psf][1])) - n_pix_psf_1,0)
+            pass
+        idx_0_0 = max(int(np.round(psf_loc_est[i_psf][1])) - n_pix_psf_1,0)
         idx_0_1 = min(frame.data.shape[0],
-            int(np.round(psf_loc_ct[i_psf][1])) + n_pix_psf_2)
-        idx_1_0 = max(int(np.round(psf_loc_ct[i_psf][0])) - n_pix_psf_1,0)
+            int(np.round(psf_loc_est[i_psf][1])) + n_pix_psf_2)
+        idx_1_0 = max(int(np.round(psf_loc_est[i_psf][0])) - n_pix_psf_1,0)
         idx_1_1 = min(frame.data.shape[1],
-            int(np.round(psf_loc_ct[i_psf][0])) + n_pix_psf_2)
+            int(np.round(psf_loc_est[i_psf][0])) + n_pix_psf_2)
         psf_cube += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
-        i_psf += 1 
+        i_psf += 1
         # Get headers from an off-axis PSF
         prhd_offaxis = frame.pri_hdr
         exthd_offaxis = frame.ext_hdr
 
     psf_cube = np.array(psf_cube)
     # Check
-    if len(psf_cube) != len(psf_loc_ct) or len(psf_cube) != len(ct):
+    if len(psf_cube) != len(psf_loc_est) or len(psf_cube) != len(ct_est):
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations and/or core throughput values'))
-   
     # Add history
     exthd_offaxis['HISTORY'] = ('Core Throughput calibration derived from a '
         f'set of frames on {exthd_offaxis["DATETIME"]}')
@@ -503,8 +480,8 @@ def write_ct_calfile(
 
     # N sets of (x,y, CT measurements)
     # x, y: PSF centers wrt FPAM's center
-    psf_loc = psf_loc_ct - fpam_center_ct_pix
-    ct_map = np.array([psf_loc[:,0], psf_loc[:,1], ct])
+    psf_loc = psf_loc_est - fpam_center_ct_pix
+    ct_map = np.array([psf_loc[:,0], psf_loc[:,1], ct_est])
     ct_hdr = fits.Header()
     ct_hdr['COMMENT'] = ('PSF location with respect to FPAM center. '
         'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
@@ -530,7 +507,7 @@ def write_ct_calfile(
         'in units of micron.')
 
     # Create an instance of the CoreThroughputCalibration class and save it
-    ct_cal_file = data.CoreThroughputCalibration(psf_cube, 
+    ct_cal_file = corgidrp.data.CoreThroughputCalibration(psf_cube,
         pri_hdr = prhd_offaxis, ext_hdr = exthd_offaxis,
         ct_map=ct_map, ct_hdr=ct_hdr,
         fpm_info=fpm_info, fpm_hdr=fpm_hdr,
@@ -547,7 +524,6 @@ def read_ct_cal_file():
             calfile_list = [file for file in files if 'CoreThroughputCalibration' in file]
             calfile_date = [Time(file[idx1+1:-5]) for file in calfile_list]
         calfile_latest = calfile_list[np.array(calfile_date).argmax()]
-        
         with fits.open(os.path.join(corgidrp.default_cal_dir, calfile_latest)) as hdul:
             pri_hdr = hdul[0].header
             psf_cube = hdul[1].data
