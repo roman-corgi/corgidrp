@@ -20,9 +20,8 @@ def di_over_pil_transmission(
  
     Args:
       filter (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
-        Default: '1F'.
       version (int): version number of the filters (CFAM, pupil, imaging
-        lens). Default: 0.
+        lens).
 
     Returns:
       Ratio trans_imaging/trans_pupil.
@@ -75,7 +74,6 @@ def get_psf_pix(
  
     Args:
       dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
-      
       roi_radius (int or float): Half-size of the box around the peak,
         in pixels. Adjust based on desired λ/D.
 
@@ -110,7 +108,6 @@ def get_psf_ct(
 
     Args:
       dataset (corgidrp.data.Dataset): a collection of off-axis PSFs.
-
       unocc_psf_norm (float): sum of the 2-d array corresponding to the
         unocculted psf. Default: off-axis PSF are normalized to the unocculted
         PSF already. That is, unocc_psf_norm equals 1.
@@ -145,17 +142,14 @@ def estimate_psf_pix_and_ct(
         M clean frames (nominally 1024x1024) taken at different FSM positions.
         It includes some pupil images of the unocculted source.
         Units: photoelectrons / second / pixel.
-
       roi_radius (int or float): Half-size of the box around the peak,
         in pixels. Adjust based on desired λ/D.
-
       version (int): version number of the filters (CFAM, pupil, imaging
         lens). Default is 0.
 
     Returns:
       psf_pix (array): Array with PSF's pixel positions. Units: EXCAM pixels
         referred to the (0,0) pixel.
-
       psf_ct (array): Array with PSF's core throughput values. Units:
         dimensionless (Values must be within 0 and 1).
     """
