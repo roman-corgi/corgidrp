@@ -120,14 +120,14 @@ def test_psf_pix_and_ct():
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
-    # comparison between I/O values (1%)
+    # comparison between I/O values (<=1% due to pixelization effects vs. expected analytical value)
     assert np.all(np.abs(ct_est-ct_in) <= 0.01)
 
     # test 3:
     # Functional test with some mock data with known PSF location and CT
     # Synthetic PSF from setup_module
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct_syn)
-    # Exact agreement
+    # In this test, there must be an exact agreement
     assert np.all(psf_loc_est == psf_loc_syn)
     assert ct_syn == ct_est
 
@@ -210,11 +210,18 @@ def test_cal_file():
     fsam_pos_cor = np.array([29387, 12238])
     # Choose some (different) values of H/V of FSAM during corethroughput observations
     fsam_pos_ct = np.array([29471,12120])
-    # Write CT calibration file
+
+    # Write core throughput calibration file
     corethroughput.write_ct_calfile(dataset_ct,
         fpm_center_cor,
         fpam_pos_cor, fpam_pos_ct,
         fsam_pos_cor, fsam_pos_ct)
+    # This test checks that I=O (not the comparison b/w analytical predictions
+    # vs. centroid/pixelized data, which was the check on test_psf_pix_and_ct above)
+    # Input values
+    # Get PSF centers and CT
+    psf_loc_input, ct_input = \
+        corethroughput.estimate_psf_pix_and_ct(dataset_ct)
 
     # Open calibration file
     ct_cal = corethroughput.read_ct_cal_file()
@@ -246,14 +253,13 @@ def test_cal_file():
     # fsam_pos_ct
     assert np.all(fsam_pos_ct == ct_cal[9][6])
 
-    breakpoint()
     # Test PSF positions and CT map
     # x location wrt FPM
-    assert np.all(psf_loc_in[:,0] == ct_cal[7][0])
+    assert np.all(psf_loc_input[:,0] - ct_cal[9][0][0] == ct_cal[7][0])
     # y location wrt FPM
-    assert np.all(psf_loc_in[:,1] == ct_cal[7][1])
+    assert np.all(psf_loc_input[:,1] - ct_cal[9][0][1]== ct_cal[7][1])
     # CT map
-    assert np.all(ct_in == ct_cal[7][2])
+    assert np.all(ct_input == ct_cal[7][2])
 
 
     # Test PSF cube
@@ -273,6 +279,7 @@ def test_cal_file():
     psf_cube_in = np.array(psf_cube_in)
 
     # Need to cut-out PSFs to match them
+    breakpoint()
     #assert np.all()
 
 def test_ct_map():
