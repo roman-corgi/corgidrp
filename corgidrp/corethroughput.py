@@ -245,6 +245,7 @@ def pam_mum2pix(
     delta_pam_pos_um,
     ):
     """ Translate PAM delta positions in micrometers to EXCAM pixels.
+
     Args:
       pam2excam_matrix (array): Rotation matrix to translate delta PAM positions
         in micrometer to EXCAM (direct imaging) pixels.
