@@ -855,7 +855,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing a images for astrometric calibration
         field_path (str): Full path to file with search field data (ra, dec, vmag, etc.) (default: 'JWST_CALFIELD2020.csv')
-        field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if None, automated source matching is used (default: None)
+        field_matches (list of str or astropy.table.Table): List of full paths to files or astropy tables with calibration field matches for each image in the dataset (x, y, ra, dec), if single str the same filepath used for all frames,nif None, automated source matching is used (default: None)
         find_threshold (int): Number of stars to find (default 10)
         fwhm (float): Full width at half maximum of the stellar psf (default: 7, ~fwhm for a normal distribution with sigma=3)
         mask_rad (int): Radius of mask for stars [in fwhm] (default: 1)
@@ -880,14 +880,24 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     # load in the source matches if automated source finder is not being used
     matched_sources_multiframe = []
     if field_matches is not None:
-        if type(field_matches[0]) == str:
+        if len(field_matches) == 1: # single str case
+            for i in range(len(dataset)):
+                if type(field_matches[0]) == str:
+                    matched_sources = ascii.read(field_matches[0])
+                    matched_sources_multiframe.append(matched_sources)
+
+                else:
+                    matched_sources_multiframe.append(matched_sources[0])
+        elif len(field_matches) == len(dataset):
             for i in range(len(field_matches)):
-                matched_sources = ascii.read(field_matches[i])
-                matched_sources_multiframe.append(matched_sources)
+                if type(field_matches[0]) == str:
+                    matched_sources = ascii.read(field_matches[i])
+                    matched_sources_multiframe.append(matched_sources)
+                else:
+                    matched_sources_multiframe = field_matches
         else:
-            for i in range(len(field_matches)):
-                matched_sources_multiframe = field_matches
-        
+            raise TypeError('field_matches must be a single str or the same length as input_dataset')
+
     # load in field data to refer to
     if field_path == 'JWST_CALFIELD2020.csv':
         full_field_path = os.path.join(os.path.dirname(__file__), "data", field_path)
