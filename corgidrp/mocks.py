@@ -2173,7 +2173,8 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
         model.render(psf)
         # Insert PSF at random location within the SCI frame
         image = np.zeros([1024, 1024])
-        y_image, x_image = rng.integers(100), rng.integers(100)
+        # +/- 23 pixels corresponds to +/- 10 l/D, which is a bit larger than HLC (+/- 9.7 l/D) 
+        y_image, x_image = rng.integers(50)-25, rng.integers(50)-25
         image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
             512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
         # List of known positions and list of known PSF volume

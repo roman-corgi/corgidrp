@@ -203,7 +203,7 @@ def test_cal_file():
     1024x1024xN cube of PSF images best centered at each set of coordinates
     """
     # Choose some EXCAM pixel for the FPM's center during coronagraphic observations
-    fpm_center_cor = np.array([300,500])
+    fpm_center_cor = np.array([509,513])
     # Choose some values of H/V of FPAM during coronagraphic observations
     fpam_pos_cor = np.array([6757, 22424])
     # Choose some (different) values of H/V of FPAM during corethroughput observations
@@ -297,43 +297,42 @@ def test_ct_map_interp():
     the CTC GSW shall compute a 2D floating-point interpolated core throughput
     map.
     """
-    # TBD: Replace by a set of well-known locations and CT values covering all HLC
-    # Build a CT cal file
-    # Call the function using the cal file, and extract the information
-    psf_pix = psf_loc_in.transpose()
-    fpam_pix = np.array([int(psf_pix[0].mean()),int(psf_pix[1].mean())])
+    # Use CT cal file created during UTs
+    try:
+        idx1 = len('CoreThroughputCalibration')
+        for _, _, files in os.walk(corgidrp.default_cal_dir):
+            calfile_list = [file for file in files if 'CoreThroughputCalibration' in file]
+            calfile_date = [time.Time(file[idx1+1:-5]) for file in calfile_list]
+        calfile_latest = calfile_list[np.array(calfile_date).argmax()]
+    except:
+        raise OSError('The core throughput calibration file could not be loaded.')
 
-    breakpoint()
+    # Create an instance of CoreThroughputCalibration
+    ct_cal = CoreThroughputCalibration(os.path.join(corgidrp.default_cal_dir,
+        calfile_latest))
     # test 1: default grid
     # Output CT should be close to the input values
-    ct_interp = CoreThroughputCalibration.ct_map(psf_pix, fpam_pix, ct_in)
+    ct_map_interp = ct_cal.ct_map_interp()
+    # Add some numerical comparison based on expected changes of core throughput
+    # TBD
 
-    breakpoint()
-
-    # test 2: user provided target pixels
-    # If all the target pixels are outside the range of the original data, the
+    # test 2: user provided target pixels outside the HLC region, the
     # function must fail
-    target_pix_x = [331.8, 141.6, 851.4, 560, 521.4, 532, 542,
-        752, 362]
-    target_pix_y = [830.4, 540, 550.3, 361.2, 210.6, 920.6, 382.8,
-        474, 476]
+    target_pix_x = [331, 141, 851, 560, 521.4, 532, 542, 752, 362]
+    target_pix_y = [830, 540, 550, 361, 210, 920, 382, 474, 476]
     target_pix = np.array([target_pix_x, target_pix_y])
     with pytest.raises(ValueError):
-        CoreThroughputCalibration.ct_map(psf_pix, fpam_pix, ct_in, target_pix=target_pix)
+        ct_cal.ct_map_interp(target_pix=target_pix)
     
-    # test 3: user provided target pixels
-    # If inputs are valid, the function must return a set of interpolated
-    # core throughput values within (0,1]
-    target_pix_x = [531.8, 541.6, 551.4, 512, 519.4, 532, 542,
-        552, 562]
-    target_pix_y = [530.4, 540, 550.3, 512, 512.6, 492.6, 482.8,
-        474, 476]
+    # test 3: user provided target pixels within the HLC region
+    target_pix_x = [7.3, 8.4, 12.1, 22.1, -8.6, -12.5, -20.5, 12.4, 5.6]
+    target_pix_y = [-13.4, -4, 5.3, -5.1, -12.6, 9.6, 4.8, -7.4, 7.6]
     target_pix = np.array([target_pix_x, target_pix_y])
     
-    ct_map = CoreThroughputCalibration.ct_map(psf_pix, fpam_pix, ct_in, target_pix=target_pix)
+    ct_map_interp = ct_cal.ct_map_interp(target_pix=target_pix)
     # core throughput in (0,1]
-    assert np.all(ct_map[-1]) > 0
-    assert np.all(ct_map[-1]) <= 1
+    assert np.all(ct_map_interp[-1]) > 0
+    assert np.all(ct_map_interp[-1]) <= 1
     # Add some numerical comparison based on expected changes of core throughput
     # TBD
 
