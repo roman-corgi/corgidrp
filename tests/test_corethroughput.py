@@ -203,7 +203,7 @@ def test_cal_file():
     1024x1024xN cube of PSF images best centered at each set of coordinates
     """
     # Choose some EXCAM pixel for the FPM's center during coronagraphic observations
-    fpm_center_cor = np.array([300,500])
+    fpm_center_cor = np.array([509,513])
     # Choose some values of H/V of FPAM during coronagraphic observations
     fpam_pos_cor = np.array([6757, 22424])
     # Choose some (different) values of H/V of FPAM during corethroughput observations
