@@ -289,7 +289,7 @@ def test_cal_file():
         assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
             loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal[1][i_psf])
 
-def test_ct_map():
+def test_ct_map_interp():
     """ 
     Test 1090883 - Given 1) an array of PSF pixel locations and 2) the location
     of the center of the FPAM coronagraphic mask in EXCAM pixels during core
@@ -297,11 +297,20 @@ def test_ct_map():
     the CTC GSW shall compute a 2D floating-point interpolated core throughput
     map.
     """
+    # TBD: Replace by a set of well-known locations and CT values covering all HLC
+    # Build a CT cal file
+    # Call the function using the cal file, and extract the information
     psf_pix = psf_loc_in.transpose()
-    fpam_pix = np.array([513,515])
-    target_pix = np.array([520, 520])
+    fpam_pix = np.array([int(psf_pix[0].mean()),int(psf_pix[1].mean())])
 
-    # test 1:
+    breakpoint()
+    # test 1: default grid
+    # Output CT should be close to the input values
+    ct_interp = CoreThroughputCalibration.ct_map(psf_pix, fpam_pix, ct_in)
+
+    breakpoint()
+
+    # test 2: user provided target pixels
     # If all the target pixels are outside the range of the original data, the
     # function must fail
     target_pix_x = [331.8, 141.6, 851.4, 560, 521.4, 532, 542,
@@ -310,9 +319,9 @@ def test_ct_map():
         474, 476]
     target_pix = np.array([target_pix_x, target_pix_y])
     with pytest.raises(ValueError):
-        corethroughput.ct_map(psf_pix, fpam_pix, ct_in, target_pix)
+        CoreThroughputCalibration.ct_map(psf_pix, fpam_pix, ct_in, target_pix=target_pix)
     
-    # test 2:
+    # test 3: user provided target pixels
     # If inputs are valid, the function must return a set of interpolated
     # core throughput values within (0,1]
     target_pix_x = [531.8, 541.6, 551.4, 512, 519.4, 532, 542,
@@ -321,7 +330,7 @@ def test_ct_map():
         474, 476]
     target_pix = np.array([target_pix_x, target_pix_y])
     
-    ct_map = corethroughput.ct_map(psf_pix, fpam_pix, ct_in, target_pix)
+    ct_map = CoreThroughputCalibration.ct_map(psf_pix, fpam_pix, ct_in, target_pix=target_pix)
     # core throughput in (0,1]
     assert np.all(ct_map[-1]) > 0
     assert np.all(ct_map[-1]) <= 1
@@ -332,6 +341,6 @@ if __name__ == '__main__':
     test_psf_pix_and_ct()
     test_fpm_pos()
     test_cal_file()
-    test_ct_map()
+    test_ct_map_interp()
 
 

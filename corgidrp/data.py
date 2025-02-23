@@ -6,6 +6,7 @@ import astropy.time as time
 import pandas as pd
 import copy
 import corgidrp
+from scipy.interpolate import griddata
 
 class Dataset():
     """
@@ -1479,13 +1480,13 @@ class CoreThroughputCalibration(Image):
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
-                pri_hdr = hdulist[0].header
+                self.pri_hdr = hdulist[0].header
                 self.psf_cube = hdulist[1].data
-                ext_hdr = hdulist[1].header
-                err = hdulist[2].data
-                err_hdr = hdulist[2].header
-                dq = hdulist[3].data
-                dq_hdr = hdulist[3].header
+                self.ext_hdr = hdulist[1].header
+                self.err = hdulist[2].data
+                self.err_hdr = hdulist[2].header
+                self.dq = hdulist[3].data
+                self.dq_hdr = hdulist[3].header
                 self.ct_map = hdulist[4].data
                 self.ct_hdr = hdulist[4].header
                 self.fpm_info = hdulist[5].data
@@ -1535,10 +1536,10 @@ class CoreThroughputCalibration(Image):
         if ext_hdr is not None:
             if input_dataset is None:
                 # error check. this is required in this case
-                raise ValueError('This appears to be a new Core Throughput calibration'
-                                 'File. The dataset of input files needs'
-                                 'to be passed in to the input_dataset keyword'
-                                 'to record history of this calibration file.')
+                raise ValueError('This appears to be a new Core Throughput '
+                                 'calibration File. The dataset of input files '
+                                 'needs to be passed in to the input_dataset '
+                                 'keyword to record history of this calibration file.')
             # corgidrp specific keyword for saving to disk
             self.ext_hdr['DATATYPE'] = 'CoreThroughputCalibration'
 
@@ -1597,50 +1598,49 @@ class CoreThroughputCalibration(Image):
         hdulist.close()
 
     def ct_map(
+        self,
         psf_pix,
         fpam_pix,
         ct,
+        x_range=[-23,23],
+        y_range=[-23,23],
+        n_gridx=47,
+        n_gridy=47,
         target_pix=None,
-        x_range=None,
-        y_range=None,
-        n_gridx=None,
-        n_gridy=None,
         ):
         """
-        Function satisfying CTC requirement 1090883.
+        Function satisfying CTC requirement 1090883. If an external list of
+        locations is not provided, a default grid of points is condidered.
     
         Args:
           psf_pix (array): Nx2 array containing the pixel positions for N PSFs in
             EXCAM pixels with respect to (0,0).
-    
           fpam_pix (array): 2-dimensional array with the pixel location of the
             center of the focal plane mask in EXCAM pixels with respect to (0,0).
-    
           ct (array): 1-dimensional array of core throughput values (0,1] associated
             with each PSF.
-    
-          target_pix (array): Mx2 array containing the pixel positions for M target
+          x_range (array): Two values [xmin, xmax] specifying the range of pixels to
+            be considered. Units are EXCAM pixels measured with respect the center
+            of the FPM. Notice that [-23,23] is approx. +/-10 l/D.
+          y_range (array): Two values [xmin, xmax] specifying the range of pixels to
+            be considered. Units are EXCAM pixels measured with respect the center
+            of the FPM. Notice that [-23,23] is approx. +/-10 l/D.
+          n_gridx (int): Number of x gridpoints.
+          n_gridy (int): Number of y gridpoints.
+          target_pix (array) (optional): Mx2 array containing the pixel positions for M target
             pixels where the core throughput will be derived by interpolation. the
             target pixels are measured with respect the center of the focal plane
             mask in (fractional) EXCAM pixels. Default is None. In this case, a
             rectangular grid of pixel positions is used. See next options.
-    
-          x_range (array): Two values [xmin, xmax] specifying the range of pixels to
-            be considered. Units are EXCAM pixels measured with respect the center
-            of the FPM. Default values are [-23,23].
-    
-          y_range (array): Two values [xmin, xmax] specifying the range of pixels to
-            be considered. Units are EXCAM pixels measured with respect the center
-            of the FPM. Default values are [-23,23].
-    
+
         Returns:
-          Core throughput map: 3-dimensional array (x,y,ct_target) where (x,y) is
+          ct_map_interp (array): (x,y,ct_target) where (x,y) is
           the position of each target pixel location and ct_target is the
           interpolated core throughput value corresponding to each target pixel
           location. 
-    
         """
-        # Checks
+        breakpoint()
+        # Sanity checks
         # FPAM
         if fpam_pix.shape != (2,):
             raise TypeError('FPAM input must be a two-dimensional array')
@@ -1666,17 +1666,24 @@ class CoreThroughputCalibration(Image):
           raise ValueError('Core throughput must be positive')
         if np.any(np.array(ct) > 1):
           raise ValueError('Core throughput cannot be greater than 1')
-        
+
+        # If no target pixels are provided, create a grid
+        if target_pix is None:
+            x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
+            y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
+            target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
+ 
         # Use linear interpolation
-        ct_interp = griddata((psf_pix[0], psf_pix[1]), ct, (target_pix[0],
-            target_pix[1]), method='linear')
+        ct_interp = griddata((psf_pix[0]-fpam_pix[0], psf_pix[1]-fpam_pix[1]),
+            ct, (target_pix[0], target_pix[1]), method='linear')
         # Check if all PSF positions fall out of the range of the input PSFs
         if np.all(np.isnan(ct_interp)):
             raise ValueError('There are no valid target positions within the ' + 
                 'range of input PSF locations') 
     
         isvalid = np.where(np.isnan(ct_interp) == False)[0]
-        return np.array([target_pix[0][isvalid], target_pix[1][isvalid], ct_interp[isvalid]])
+        ct_map_interp = np.array([target_pix[0][isvalid], target_pix[1][isvalid], ct_interp[isvalid]])
+        return ct_map_interp
 
 datatypes = { "Image" : Image,
               "Dark" : Dark,
