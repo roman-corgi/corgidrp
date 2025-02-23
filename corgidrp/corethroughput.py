@@ -221,7 +221,7 @@ def read_rot_matrix():
         in micrometer to EXCAM (direct imaging) pixels.
     """
 
-    # Check for latest time with FPAM/FSAM rotation matrices
+    # Check for latest file
     try:
         idx1 = len('FpamFsamRotMat')
         for _, _, files in os.walk(corgidrp.default_cal_dir):
@@ -507,7 +507,7 @@ def read_ct_cal_file():
       Components of the core throughput calibration file as a list.
     """
 
-    # Check for latest time with FPAM/FSAM rotation matrices
+    # Check for latest file
     try:
         idx1 = len('CoreThroughputCalibration')
         for _, _, files in os.walk(corgidrp.default_cal_dir):
