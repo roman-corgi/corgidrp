@@ -27,7 +27,7 @@ def setup_module():
     """
     global cfam_name
     cfam_name = '1F'
-    global dataset_ct, dataset_ct_syn
+    global dataset_ct_rand, dataset_ct_syn
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in_rand, psf_loc_in_equi, psf_loc_syn
     global ct_in_rand, ct_in_equi, ct_syn
@@ -125,7 +125,7 @@ def test_psf_pix_and_ct():
     # test 2:
     # Check that the step function retrieves the expected location and CT of
     # a set of simulated 2D Gaussian PSFs (created in setup_module before:)
-    psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct)
+    psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct_rand)
     # Difference between expected and retrieved locations for the max (peak) method
     diff_psf_loc = psf_loc_in_rand - psf_loc_est
     # Set a difference of 0.005 pixels
@@ -225,7 +225,7 @@ def test_cal_file():
     fsam_pos_ct = np.array([29471,12120])
 
     # Write core throughput calibration file
-    corethroughput.write_ct_calfile(dataset_ct,
+    corethroughput.write_ct_calfile(dataset_ct_rand,
         fpm_center_cor,
         fpam_pos_cor, fpam_pos_ct,
         fsam_pos_cor, fsam_pos_ct)
@@ -234,7 +234,7 @@ def test_cal_file():
     # Input values
     # Get PSF centers and CT
     psf_loc_input, ct_input = \
-        corethroughput.estimate_psf_pix_and_ct(dataset_ct)
+        corethroughput.estimate_psf_pix_and_ct(dataset_ct_rand)
 
     # Open calibration file
     ct_cal = corethroughput.read_ct_cal_file()
@@ -278,7 +278,7 @@ def test_cal_file():
     # Test PSF cube
     # Recover off-axis PSF cube from CT Dataset
     psf_cube_in = []
-    for frame in dataset_ct:
+    for frame in dataset_ct_rand:
         try:
         # Pupil images of the unocculted source satisfy:
         # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
