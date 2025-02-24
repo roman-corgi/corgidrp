@@ -220,9 +220,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         kgain = k_gain.value
     emgain_list = []
     for frame in crmasked_dataset:
-        try: # use applied EM gain if available
+        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
             emgain = frame.ext_hdr['EMGAIN_A']
-        except: # otherwise use commanded EM gain
+        else: # otherwise use commanded EM gain
             emgain = frame.ext_hdr['EMGAIN_C']
         emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
@@ -328,7 +328,7 @@ def update_to_l2a(input_dataset):
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['HIERARCH'] != "L1":
+        if orig_frame.ext_hdr['DATALVL'] != "L1":
             err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['HIERARCH'])
             raise ValueError(err_msg)
 
@@ -337,7 +337,7 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # update header
-        frame.ext_hdr['HIERARCH'] = "L2a"
+        frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)

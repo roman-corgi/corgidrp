@@ -157,11 +157,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     # photon-counting threshold
     if T_factor is None:
         detector_params = data.DetectorParams({})
-        T_factor = detector_params.params['T_factor']
+        T_factor = detector_params.params['TFACTOR']
     # getting maximum allowed electrons/pixel/frame for photon counting
     if pc_ecount_max is None:
         detector_params = data.DetectorParams({})
-        pc_ecount_max = detector_params.params['pc_ecount_max']
+        pc_ecount_max = detector_params.params['PCECNTMX']
     if mask_filepath is None:
         mask = np.zeros_like(dataset.frames[0].data)
     else:

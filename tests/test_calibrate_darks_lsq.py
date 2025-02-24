@@ -192,6 +192,7 @@ def test_mean_num():
     that dq values are as expected, too.
     '''
     data_set = dataset.copy()
+
     ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     # tag 48 of the 49 sub-stacks as bad pixel all the
     # way through for one pixel (7,8)
