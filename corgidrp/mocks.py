@@ -2115,15 +2115,19 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
 
     return frame
 
-def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
+def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
     """
     Create simulated data for core throughput calibration. This is a set of
     individual, noiseless 2D Gaussians, one per image.  
 
     Args:
         fwhm_mas (float): PSF's FWHM in mas
-        cfam_name (str): CFAM filter name. Default is '1F'
-        n_psfs (int): (Optional) Number of simulated PSFs. Default s 10
+        cfam_name (str) (optional): CFAM filter name. Default is '1F'
+        n_psfs (int) (optional): Number of simulated PSFs. Default is 10
+        random (bool) (optional): If False, a set of equispaced PSFs with a
+          specific radial profile for their amplitude is generated. If True,
+          the PSF location and amplitude is random within some specific ranges. 
+          If False, n_psfs is rounded up to the closest squared integer.
 
     Returns:
         corgidrp.data.Image: The simulated PSF Images
@@ -2151,18 +2155,45 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
     # Generate random source model list. Random amplitues and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
-    # Set seed for reproducibility of mock data
-    rng = np.random.default_rng(0)
-    model_params = [
-        dict(amplitude=rng.uniform(1,10),
-        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-        x_stddev=fwhm_mas/21.8/2.335,
-        y_stddev=fwhm_mas/21.8/2.335)
-        for _ in range(n_psfs)]
+    if random:
+        # Set seed for reproducibility of mock data
+        rng = np.random.default_rng(0)
+        model_params = [
+            dict(amplitude=rng.uniform(1,10),
+            x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+            y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+            x_stddev=fwhm_mas/21.8/2.335,
+            y_stddev=fwhm_mas/21.8/2.335)
+            for _ in range(n_psfs)]
+    else:
+        n_psfs_x = int(np.sqrt(n_psfs)) + 1
+        n_psfs_y = n_psfs_x
+        # 23 EXCAM pixels correspond to approx. 10 l/D (OWA of HLC is 9.7 l/D as-modeled)
+        x_mean_arr = np.linspace(-23, 23, n_psfs_x)
+        y_mean_arr = np.linspace(-23, 23, n_psfs_y)
+        # Create mesh
+        X_mean, Y_mean = np.meshgrid(x_mean_arr, y_mean_arr)
+        # Compute r2
+        r2=X_mean**2 + Y_mean**2
+        # Define profile (0<=r<IWA, IWA<=r<=OWA, OWA<=r)
+        rad_amp = np.zeros(r2.shape)
+        # 0 <=r<=IWA. HLC=3 l/D ~ 6.9 EXCAM pixels (6.9**2~47)
+        idx_in = r2<=47
+        rad_amp[idx_in] = np.exp(r2[idx_in]-47)
+        # IWA<=r<=OWA HLC=9.7 l/D ~ 22.2 EXCAM pixels (22.2**~494)
+        idx_hlc = (r2>=47) & (r2<=494)
+        rad_amp[idx_hlc]= 1 + 0.1*(r2[idx_hlc] - 47)/(494-47)
+        # OWA<=r: zero
+        model_params = [
+            dict(
+            amplitude=rad_amp[np.mod(idx_psf,n_psfs_x),idx_psf//n_psfs_x],
+            x_mean=x_mean_arr[np.mod(idx_psf,n_psfs_x)],
+            y_mean=y_mean_arr[idx_psf//n_psfs_x],
+            x_stddev=fwhm_mas/21.8/2.335,
+            y_stddev=fwhm_mas/21.8/2.335)
+            for idx_psf in range(n_psfs)]
 
     model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
-
     # Render models to image using full evaluation
     psf_loc = []
     half_psf = []
@@ -2171,9 +2202,13 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
         psf = np.zeros(imshape)
         model.bounding_box = None
         model.render(psf)
-        # Insert PSF at random location within the SCI frame
         image = np.zeros([1024, 1024])
-        y_image, x_image = rng.integers(100), rng.integers(100)
+        if random:
+            # Insert PSF at random location within the SCI frame
+            y_image, x_image = rng.integers(100), rng.integers(100)
+        else:
+            # No need to shift them further
+            y_image, x_image = 0, 0
         image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
             512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
         # List of known positions and list of known PSF volume

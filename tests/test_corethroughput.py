@@ -29,8 +29,8 @@ def setup_module():
     cfam_name = '1F'
     global dataset_ct, dataset_ct_syn
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
-    global psf_loc_in, psf_loc_syn
-    global ct_in, ct_syn
+    global psf_loc_in_rand, psf_loc_in_equi, psf_loc_syn
+    global ct_in_rand, ct_in_equi, ct_syn
 
     # Default headers
     prhd, exthd = create_default_headers()
@@ -64,15 +64,26 @@ def setup_module():
     unocc_psf_norm *= di_over_pil
 
     # 100 psfs with fwhm=50 mas in band 1 (mock.py)
-    data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='1F',n_psfs=100)
+    data_psf, psf_loc_in_rand, half_psf = create_ct_psfs(50, cfam_name='1F',
+        n_psfs=100, random=True)
     # Input CT
-    ct_in = half_psf/unocc_psf_norm
+    ct_in_rand = half_psf/unocc_psf_norm
     # Add pupil images
     data_ct += data_psf
-    dataset_ct = Dataset(data_ct)
+    dataset_ct_rand = Dataset(data_ct)
 
+    # Dataset with equispaced PSFs and amplitude with known radial profile
     data_ct = []
+    data_psf, psf_loc_in_equi, half_psf = create_ct_psfs(50, cfam_name='1F',
+        n_psfs=100, random=False)
+    # Input CT
+    ct_in_equi = half_psf/unocc_psf_norm
+    # Add pupil images
+    data_ct += data_psf
+    dataset_ct_equi = Dataset(data_ct)
+
     # Synthetic PSF for a functional test
+    data_ct = []
     psf_test = np.zeros([1024, 1024])
     # Maximum value at one pixel
     psf_loc_syn = [500, 400]
@@ -116,14 +127,14 @@ def test_psf_pix_and_ct():
     # a set of simulated 2D Gaussian PSFs (created in setup_module before:)
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct)
     # Difference between expected and retrieved locations for the max (peak) method
-    diff_psf_loc = psf_loc_in - psf_loc_est
+    diff_psf_loc = psf_loc_in_rand - psf_loc_est
     # Set a difference of 0.005 pixels
     assert np.all(np.abs(diff_psf_loc) <= 0.005)
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
     # comparison between I/O values (<=1% due to pixelization effects vs. expected analytical value)
-    assert np.all(np.abs(ct_est-ct_in) <= 0.01)
+    assert np.all(np.abs(ct_est-ct_in_rand) <= 0.01)
 
     # test 3:
     # Functional test with some mock data with known PSF location and CT
