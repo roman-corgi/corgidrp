@@ -2199,6 +2199,9 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
     half_psf = []
     data_psf = []
     for model in model_list:
+        # Skip any PSFs with 0 amplitude (if any)
+        if model.amplitude == 0:
+            continue
         psf = np.zeros(imshape)
         model.bounding_box = None
         model.render(psf)
