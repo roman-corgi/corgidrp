@@ -27,10 +27,10 @@ def setup_module():
     """
     global cfam_name
     cfam_name = '1F'
-    global dataset_ct_rand, dataset_ct_syn
+    global dataset_ct_rand, dataset_ct_syn, dataset_ct_equi
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
-    global psf_loc_in_rand, psf_loc_in_equi, psf_loc_syn
-    global ct_in_rand, ct_in_equi, ct_syn
+    global psf_loc_in_rand, psf_loc_syn
+    global ct_in_rand, ct_syn
 
     # Default headers
     prhd, exthd = create_default_headers()
@@ -74,12 +74,11 @@ def setup_module():
 
     # Dataset with equispaced PSFs and amplitude with known radial profile
     data_ct = []
-    data_psf, psf_loc_in_equi, half_psf = create_ct_psfs(50, cfam_name='1F',
-        n_psfs=100, random=False)
-    # Input CT
-    ct_in_equi = half_psf/unocc_psf_norm
+    data_psf, _, _ = create_ct_psfs(50, cfam_name='1F', n_psfs=100, random=False)
     # Add pupil images
     data_ct += data_psf
+    data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+    data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     dataset_ct_equi = Dataset(data_ct)
 
     # Synthetic PSF for a functional test
@@ -274,7 +273,6 @@ def test_cal_file():
     # CT map
     assert np.all(ct_input == ct_cal[7][2])
 
-
     # Test PSF cube
     # Recover off-axis PSF cube from CT Dataset
     psf_cube_in = []
@@ -308,24 +306,25 @@ def test_ct_map_interp():
     the CTC GSW shall compute a 2D floating-point interpolated core throughput
     map.
     """
-    # Use CT cal file created during UTs
-    try:
-        idx1 = len('CoreThroughputCalibration')
-        for _, _, files in os.walk(corgidrp.default_cal_dir):
-            calfile_list = [file for file in files if 'CoreThroughputCalibration' in file]
-            calfile_date = [time.Time(file[idx1+1:-5]) for file in calfile_list]
-        calfile_latest = calfile_list[np.array(calfile_date).argmax()]
-    except:
-        raise OSError('The core throughput calibration file could not be loaded.')
-
-    # Create an instance of CoreThroughputCalibration
-    ct_cal = CoreThroughputCalibration(os.path.join(corgidrp.default_cal_dir,
-        calfile_latest))
+    # Create a CT cal file with a set of PSFs whose locations are equispaced
+    fpm_center_cor = np.array([509,513])
+    fpam_pos_cor = np.array([6757, 22424])
+    fpam_pos_ct = np.array([6854, 22524])
+    fsam_pos_cor = np.array([29387, 12238])
+    fsam_pos_ct = np.array([29471,12120])
+    corethroughput.write_ct_calfile(dataset_ct_equi,
+        fpm_center_cor,
+        fpam_pos_cor, fpam_pos_ct,
+        fsam_pos_cor, fsam_pos_ct)
+    # Read calibration file
+    ct_cal_input = corethroughput.read_ct_cal_file()
+    breakpoint()
     # test 1: default grid
     # Output CT should be close to the input values
     ct_map_interp = ct_cal.ct_map_interp()
     # Add some numerical comparison based on expected changes of core throughput
     # TBD
+    breakpoint()
 
     # test 2: user provided target pixels outside the HLC region, the
     # function must fail

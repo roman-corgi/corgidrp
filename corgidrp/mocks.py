@@ -2175,15 +2175,12 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
         X_mean, Y_mean = np.meshgrid(x_mean_arr, y_mean_arr)
         # Compute r2
         r2=X_mean**2 + Y_mean**2
-        # Define profile (0<=r<IWA, IWA<=r<=OWA, OWA<=r)
+        # Define radial profile within IWA<=r<=OWA
         rad_amp = np.zeros(r2.shape)
-        # 0 <=r<=IWA. HLC=3 l/D ~ 6.9 EXCAM pixels (6.9**2~47)
-        idx_in = r2<=47
-        rad_amp[idx_in] = np.exp(r2[idx_in]-47)
-        # IWA<=r<=OWA HLC=9.7 l/D ~ 22.2 EXCAM pixels (22.2**~494)
+        # HLC=3 l/D ~ 6.9 EXCAM pixels (6.9**2~47)
+        # HLC=9.7 l/D ~ 22.2 EXCAM pixels (22.2**~494)
         idx_hlc = (r2>=47) & (r2<=494)
         rad_amp[idx_hlc]= 1 + 0.1*(r2[idx_hlc] - 47)/(494-47)
-        # OWA<=r: zero
         model_params = [
             dict(
             amplitude=rad_amp[np.mod(idx_psf,n_psfs_x),idx_psf//n_psfs_x],
@@ -2199,6 +2196,9 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
     half_psf = []
     data_psf = []
     for model in model_list:
+        # Skip any PSFs with 0 amplitude (if any)
+        if model.amplitude == 0:
+            continue
         psf = np.zeros(imshape)
         model.bounding_box = None
         model.render(psf)

@@ -1515,8 +1515,9 @@ class CoreThroughputCalibration(Image):
         # File format checks 
         # Check PSF basis is a 3D set
         if self.data.ndim != 3:
-            raise ValueError('The PSF basis is an (N,N1,N1) array with N PSFs, '
-                'each with N1 pixels x N1 pixels.')
+            breakpoint()
+            raise ValueError('The PSF basis should be an (N,N1,N1) array with '
+                'N PSFs each with N1 pixels x N1 pixels.')
         # Check CT map is a 3xN set
         if len(self.ct_map) != 3:
             raise ValueError('The core throughput map is a Nx3 array with '
