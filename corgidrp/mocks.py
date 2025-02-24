@@ -265,7 +265,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
     exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
     exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
-    exthdr['HIERARCH']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['DATALVL']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
 
     return prihdr, exthdr
@@ -451,7 +451,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['TPSCHEME4']   = 0               # Number of cycles for TPUMP pumping SCHEME_4
     exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
     exthdr['FTIMEUTC']    = dt_str          # Frame time in UTC
-    exthdr['HIERARCH']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['DATALVL']    = 'L1'             # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
 
     return prihdr, exthdr
@@ -477,7 +477,7 @@ def create_default_L2a_headers(arrtype="SCI"):
 
     prihdr, exthdr = create_default_L1_headers(arrtype)
 
-    exthdr['HIERARCH']      = 'L2a'         # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['DATALVL']       = 'L2a'         # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
@@ -508,7 +508,7 @@ def create_default_L2b_headers(arrtype="SCI"):
     # TO DO: Update this once L2a headers have been finalized
     prihdr, exthdr = create_default_L1_headers(arrtype)
 
-    exthdr['HIERARCH']    = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['DATALVL']      = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['PCTHRESH']     = 0.0            # Photon-counting threshold (electrons)
 
     return prihdr, exthdr
@@ -547,7 +547,7 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CRVAL2'] = 0
     exthdr['STARLOCX'] = 0
     exthdr['STARLOCY'] = 0
-    exthdr['HIERARCH']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
 
@@ -569,7 +569,7 @@ def create_default_L4_headers(arrtype="SCI"):
     # TO DO: Update this once L4 headers have been finalized
     prihdr, exthdr = create_default_L3_headers(arrtype)
 
-    exthdr['HIERARCH']    = 'L4'           # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['DATALVL']    = 'L4'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
 
@@ -586,33 +586,9 @@ def create_default_calibration_product_headers():
             exthdr (fits.Header): Extension FITS Header
     '''
     # TO DO: update when this has been more defined
-    prihdr = fits.Header()
-    exthdr = fits.Header()
-
-    prihdr['SIMPLE']    = 'T'          # Conforms to FITS Standard
-    prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
-    prihdr['NAXIS']     = 0            # Number of array dimensions
-    prihdr['EXTEND']    = 'T'          # Denotes FIT extensions
-    prihdr['FILETIME']  = '2025-02-16T00:00:00'  # When file was created (placeholder datetime)
-    prihdr['DATAVERS']  = ''           # Version of data (increments for reprocessing)
-    prihdr['MOCK']      = 1            # DRP only. 0: Not a mock; 1: Image is a mock (for simulated data)
-    prihdr["OBSNUM"]    = 000          # Observation number
-
-    # fill in exthdr
-    exthdr['XTENSION']    = 'IMAGE'         # Image Extension (FITS format keyword)
-    exthdr['BITPIX']      = 16              # Array data type – instrument data is unsigned 16-bit
-    exthdr['NAXIS']       = 2               # Number of array dimensions
-    exthdr['NAXIS1']      = 0               # Axis 1 size
-    exthdr['NAXIS2']      = 0               # Axis 2 size
-    exthdr['PCOUNT']      = 0               # Number of parameters (FITS keyword)
-    exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
-    exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
-    exthdr['EMGAIN_C']    = 1.0             # Commanded gain
-    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
-    exthdr['KGAINPAR']    = 0               # Calculated K-gain parameter (DN to electrons)
-    exthdr['BSCALE']      = 1               # Linear scaling factor
-    exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['HIERARCH']    = 'CalibrationProduct' # What level data product
+    # TO DO: Update this once L2a headers have been finalized
+    prihdr, exthdr = create_default_L1_headers()
+    exthdr['DATALVL']    = 'Calibration Product'
     exthdr['DATATYPE']    = ''              # What type of calibration product
 
     return prihdr, exthdr
@@ -644,7 +620,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     err_hdr['BUNIT']        = 'Photoelectrons'
     exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
-    exthdr['HIERARCH']      = 'CalibrationProduct'
+    exthdr['DATALVL']      = 'CalibrationProduct'
     exthdr['DATATYPE']      = 'DetectorNoiseMaps'
     exthdr['DRPNFILE']      = "Mocks"         # What files are used to create this calibration product 
     exthdr['FILE0']         = "Mock0"

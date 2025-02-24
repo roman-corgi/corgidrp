@@ -246,8 +246,8 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     prihdr = dataset.frames[0].pri_hdr
     exthdr = dataset.frames[0].ext_hdr
     errhdr = dataset.frames[0].err_hdr
-    exthdr['NAXIS1'] = data.shape[0]
-    exthdr['NAXIS2'] = data.shape[1]
+    exthdr['NAXIS1'] = data.shape[1]
+    exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
     prihdr['OBSNUM'] = 000
 
@@ -466,9 +466,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
             if np.shape(datasets[i-1].all_data) != np.shape(datasets[i].all_data):
                 raise CalDarksLSQException('All sub-stacks must have the '
                             'same number of frames and frame shape.')
-        try: # use applied EM gain if available
+        if datasets[i].frames[0].ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
             EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
-        except: # use commanded gain otherwise
+        else: # use commanded gain otherwise
             EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_C'])
         exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
         cmdgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
@@ -841,14 +841,14 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         prihdr = noise_maps.pri_hdr
         exthdr = noise_maps.ext_hdr
         errhdr = noise_maps.err_hdr
-        exthdr['NAXIS1'] = Fd.shape[0]
-        exthdr['NAXIS2'] = Fd.shape[1]
+        exthdr['NAXIS1'] = Fd.shape[1]
+        exthdr['NAXIS2'] = Fd.shape[0]
         exthdr['DATATYPE'] = 'Dark'
         exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
         # wipe clean so that the proper documenting occurs for dark
-        exthdr.pop('DRPNFILE')
-        exthdr.pop('HISTORY')
+        exthdr.pop("DRPNFILE", None)
+        exthdr.pop("HISTORY", None)
         # this makes the filename of the dark have "_DetectorNoiseMaps_Dark" in
         # the name so that it is known that this Dark came from noise maps
         input_data = [noise_maps]
