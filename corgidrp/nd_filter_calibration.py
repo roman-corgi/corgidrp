@@ -63,7 +63,7 @@ def group_by_target(dataset):
         dict: A dictionary where keys are unique target values and values are the 
             corresponding dataset subsets.
     """
-    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=['TARGET'])
+    split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=['TARGET'])
     groups = {}
     for key, sub_ds in zip(unique_vals, split_datasets):
         target = key[0] if isinstance(key, tuple) else key
