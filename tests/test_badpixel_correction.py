@@ -42,7 +42,7 @@ def test_bad_pixels():
     assert type(dataset) == corgidrp.data.Dataset
 
     # Generate bad pixel detector mask
-    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    datadir = os.path.join(os.path.dirname(__file__), "testcalib")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
     outputdir = os.path.join(os.path.dirname(__file__), "testcalib")
