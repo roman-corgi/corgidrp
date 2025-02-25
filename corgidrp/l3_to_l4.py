@@ -280,8 +280,8 @@ def update_to_l4(input_dataset):
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATA_LEVEL'] != "L3":
-            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+        if orig_frame.ext_hdr['DATALVL'] != "L3":
+            err_msg = "{0} needs to be L3 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -289,7 +289,7 @@ def update_to_l4(input_dataset):
 
     for frame in updated_dataset:
         # update header
-        frame.ext_hdr['DATA_LEVEL'] = "L4"
+        frame.ext_hdr['DATALVL'] = "L4"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L3_", "_L4_", 1)

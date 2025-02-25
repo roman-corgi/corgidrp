@@ -135,7 +135,7 @@ def test_non_linearity_correction():
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
 
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     non_linearity_correction.save(filename = test_non_linearity_path)
 

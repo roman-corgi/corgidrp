@@ -79,7 +79,6 @@ def test_create_flatfield_neptune():
     assert np.all(onskyflat_field.data == pickled_flat.data)
     
     flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset,onsky_flatfield)
-    print(flatdivided_dataset[0].ext_hdr["HISTORY"])
     
     
     # perform checks after the flat divison for one of the dataset
@@ -100,8 +99,6 @@ def test_create_flatfield_neptune():
     print("mean of all flat divided data errors:",err_flatdiv)
     print("Error estimated:",err_estimated)
     assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-1))
-    
-    print(flatdivided_dataset[0].ext_hdr)
 
     corgidrp.track_individual_errors = old_err_tracking
 
@@ -143,6 +140,7 @@ def test_create_flatfield_uranus():
         filter=flat_dataset_all[i].pri_hdr['FILTER']
         if planet==target and band==filter: 
             flat_dataset.append(flat_dataset_all[i])
+    
     onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=1024, N=1, rad_mask=1.75,  planet_rad=65, n_pix=165)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
@@ -163,7 +161,6 @@ def test_create_flatfield_uranus():
 
     
     flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset,onsky_flatfield)
-    print(flatdivided_dataset[0].ext_hdr["HISTORY"])
     
     
     # perform checks after the flat divison for one of the dataset
@@ -183,7 +180,6 @@ def test_create_flatfield_uranus():
     print("Error estimated:",err_estimated)
     assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-1))
     
-    print(flatdivided_dataset[0].ext_hdr)
     corgidrp.track_individual_errors = old_err_tracking
 
     return

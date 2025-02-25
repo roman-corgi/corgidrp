@@ -224,7 +224,7 @@ def guess_template(dataset):
         str or list: the best template filename or a list of multiple template filenames
     """
     image = dataset[0] # first image for convenience
-    if image.ext_hdr['DATA_LEVEL'] == "L1":
+    if image.ext_hdr['DATALVL'] == "L1":
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
             recipe_filename = "l1_to_l2b.json"
@@ -260,7 +260,7 @@ def guess_template(dataset):
                     recipe_filename = "l1_to_l2b.json"   
             else:  
                 recipe_filename = "l1_to_l2b.json"    
-    elif image.ext_hdr['DATA_LEVEL'] == "L2a":
+    elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
             if 'ISPC' in image.ext_hdr:

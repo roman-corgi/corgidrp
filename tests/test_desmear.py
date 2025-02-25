@@ -5,7 +5,7 @@ import numpy as np
 import corgidrp.detector as detector
 from astropy.time import Time
 from corgidrp.l2a_to_l2b import desmear
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L1_headers
 from corgidrp.data import Image, Dataset, DetectorParams
 
 old_err_tracking = corgidrp.track_individual_errors
@@ -19,7 +19,7 @@ def test_desmear():
     print("Testing desmear step function")
 
     detector_params = DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
-    rowreadtime_sec = detector_params.params['rowreadtime']
+    rowreadtime_sec = detector_params.params['ROWREADT']
 
     #make a flux map
     size = 1024
@@ -32,7 +32,7 @@ def test_desmear():
     #make a truth frame
     err = np.ones([1024,1024]) *0.5
     dq = np.zeros([1024,1024], dtype = np.uint16)
-    prhd, exthd = create_default_headers()
+    prhd, exthd = create_default_L1_headers()
     e_t=exthd['EXPTIME']
     unsmeared_frame = e_t*flux
 

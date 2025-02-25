@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import corgidrp
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.data import Image, Dataset
 from corgidrp.l2a_to_l2b import add_photon_noise
 import pytest
@@ -11,7 +11,8 @@ old_err_tracking = corgidrp.track_individual_errors
 data = np.ones([1024,1024])*2.
 err = np.ones([1024,1024]) *0.5
 dq = np.zeros([1024,1024], dtype = np.uint16)
-prhd, exthd = create_default_headers()
+# TO DO: Check to confirm this is correct data level
+prhd, exthd = create_default_L2b_headers()
 
 def test_add_phot_noise():
     corgidrp.track_individual_errors = True
@@ -30,7 +31,7 @@ def test_add_phot_noise():
     assert "noise" in str(dataset_add.frames[0].ext_hdr["HISTORY"])
     assert "photnoise_error" == dataset_add.frames[0].err_hdr["Layer_2"]
     #check that excess noise is applied
-    dataset[0].ext_hdr["CMDGAIN"] = 3000
+    dataset[0].ext_hdr["EMGAIN_C"] = 3000
     dataset_add1 = add_photon_noise(dataset)
     all_err2 = dataset_add1.all_err
     assert np.array_equal(all_err2[0,1], np.sqrt(data)*np.sqrt(2))
