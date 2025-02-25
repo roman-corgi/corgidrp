@@ -150,8 +150,8 @@ def test_marking():
     # add tt rms header
     tt_rms = 0
     for frame in default_dataset:
-        frame.ext_hdr['Z2VAR'] = tt_rms
-        frame.ext_hdr['Z3VAR'] = tt_rms
+        frame.ext_hdr['Z2RES'] = tt_rms
+        frame.ext_hdr['Z3RES'] = tt_rms
         tt_rms += 1
 
     # does nothing

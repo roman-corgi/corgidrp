@@ -738,7 +738,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_L2a_headers(arrtype="SCI")
+        prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
         prihdr["OBSNUM"] = 000
         exthdr['KGAINPAR'] = 7
         #np.random.seed(456+i); 
@@ -932,8 +932,9 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
         pl=planet
         band=band
         frame.pri_hdr['TARGET'] = pl
+        frame.pri_hdr['FILTER'] = band
         #frame.pri_hdr.append(('TARGET', pl), end=True)
-        frame.pri_hdr.append(('FILTER', band), end=True)
+        #frame.pri_hdr.append(('FILTER', band), end=True)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
         frames.append(frame)
@@ -994,7 +995,7 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     filepattern = "simcal_nonlin_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_calibration_product_headers()
+        prihdr, exthdr = create_default_L1_headers()
         #Add the commanded gain to the headers
         exthdr['EMGAIN_C'] = em_gain
         exthdr['OBSNAME'] = 'NONLIN'
