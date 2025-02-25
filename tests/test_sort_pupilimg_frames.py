@@ -469,7 +469,7 @@ def test_nonlin_sorting_wo_change():
             n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
-            cmdgain_nonlin_list += [frame.ext_hdr['CMDGAIN']]
+            cmdgain_nonlin_list += [frame.ext_hdr['EMGAIN_C']]
         # Testing only non-unity gain frames for Non-linearity
         elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
             pass
@@ -532,7 +532,7 @@ def test_nonlin_sorting_w_change():
             n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
-            cmdgain_nonlin_list += [frame.ext_hdr['CMDGAIN']]
+            cmdgain_nonlin_list += [frame.ext_hdr['EMGAIN_C']]
         # Testing only non-unity gain frames for Non-linearity
         elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
             pass

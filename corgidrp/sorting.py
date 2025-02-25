@@ -49,7 +49,7 @@ def sort_pupilimg_frames(
     # Copy dataset
     dataset_cp = dataset_in.copy()
     # Split by CMDGAIN
-    split_cmdgain = dataset_cp.split_dataset(exthdr_keywords=['CMDGAIN'])
+    split_cmdgain = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     # Mean frame: split by EXPTIME
     idx_unity = np.where(np.array(split_cmdgain[1])==1)[0][0]
     split_exptime = split_cmdgain[0][idx_unity].split_dataset(exthdr_keywords=['EXPTIME'])
