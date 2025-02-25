@@ -14,6 +14,7 @@ import corgidrp.caldb as caldb
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 
+np.random.seed(456)
 
 def test_autoreducing():
     """

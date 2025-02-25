@@ -8,6 +8,8 @@ import corgidrp
 from corgidrp.data import Image, Dataset
 from corgidrp.mocks import create_default_headers, create_dark_calib_files
 
+np.random.seed(123)
+
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024])
 err1 = np.ones([1024,1024])
