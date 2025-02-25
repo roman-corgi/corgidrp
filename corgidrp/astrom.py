@@ -970,9 +970,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, ref_star_pos=target_coord_tables, position_error=position_error)
         distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
-        distortion_coeffs = (np.array([np.inf]), np.inf)
+        # set default coeffs to produce zero distortion
+        fitparams = (fitorder + 1)**2
+        zero_dist = [0 for _ in range(fitorder+1)] + [500,] + [0 for _ in range(fitparams - fitorder - 2)] + [0,500] + [0 for _ in range(fitparams-2)]
+        distortion_coeffs = np.array(zero_dist)
+        order = fitorder
 
-    astromcal_data = np.concatenate((np.array([avg_ra, avg_dec, avg_platescale, avg_northangle]), distortion_coeffs[0], np.array([distortion_coeffs[1]])), axis=0)
+    astromcal_data = np.concatenate((np.array([avg_ra, avg_dec, avg_platescale, avg_northangle]), distortion_coeffs.append(order)), axis=0)
+
     astroms_dataset = corgidrp.data.Dataset(astroms)
     avg_cal = corgidrp.data.AstrometricCalibration(astromcal_data, pri_hdr=input_dataset[0].pri_hdr, ext_hdr=input_dataset[0].ext_hdr, input_dataset=astroms_dataset)
         
