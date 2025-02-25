@@ -1612,7 +1612,7 @@ class CoreThroughputCalibration(Image):
         """
         Function satisfying CTC requirement 1090883. If an external list of
         locations is not provided, a default grid of points is condidered.
-    
+
         Args:
           x_range (array) (optional): Two values [xmin, xmax] specifying the range of pixels to
             be considered. Units are EXCAM pixels measured with respect the center
@@ -1623,10 +1623,12 @@ class CoreThroughputCalibration(Image):
           n_gridx (int) (optional): Number of x gridpoints.
           n_gridy (int) (optional): Number of y gridpoints.
           target_pix (array) (optional): Mx2 array containing the pixel positions for M target
-            pixels where the core throughput will be derived by interpolation. the
+            pixels where the core throughput will be derived by interpolation. The
             target pixels are measured with respect the center of the focal plane
             mask in (fractional) EXCAM pixels. Default is None. In this case, a
-            rectangular grid of pixel positions is used. See next options.
+            rectangular grid of pixel positions is used. Using matplotlib.pyplot,
+            target_pix[0] is the horizontal axis (x), and target_pix[1] is the
+            vertical axis (y).
 
         Returns:
           ct_map_interp (array): (x,y,ct_target) where (x,y) is
@@ -1653,6 +1655,7 @@ class CoreThroughputCalibration(Image):
             target_pix[0][isvalid],
             target_pix[1][isvalid],
             ct_interp[isvalid]])
+
         return ct_map_interp
 
 datatypes = { "Image" : Image,

@@ -2184,8 +2184,8 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
         model_params = [
             dict(
             amplitude=rad_amp[np.mod(idx_psf,n_psfs_x),idx_psf//n_psfs_x],
-            x_mean=x_mean_arr[np.mod(idx_psf,n_psfs_x)],
-            y_mean=y_mean_arr[idx_psf//n_psfs_x],
+            x_mean=imshape[0]//2,
+            y_mean=imshape[0]//2,
             x_stddev=fwhm_mas/21.8/2.335,
             y_stddev=fwhm_mas/21.8/2.335)
             for idx_psf in range(n_psfs)]
@@ -2195,7 +2195,7 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
     psf_loc = []
     half_psf = []
     data_psf = []
-    for model in model_list:
+    for idx_mod, model in enumerate(model_list):
         # Skip any PSFs with 0 amplitude (if any)
         if model.amplitude == 0:
             continue
@@ -2207,8 +2207,9 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
             # Insert PSF at random location within the SCI frame
             y_image, x_image = rng.integers(100), rng.integers(100)
         else:
-            # No need to shift them further
-            y_image, x_image = 0, 0
+            # location consistent with the radial profile of the amplitude
+            y_image = int(y_mean_arr[np.mod(idx_mod,n_psfs_x)])
+            x_image = int(x_mean_arr[idx_mod//n_psfs_x])
         image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
             512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
         # List of known positions and list of known PSF volume

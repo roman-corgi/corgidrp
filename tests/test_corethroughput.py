@@ -74,7 +74,7 @@ def setup_module():
 
     # Dataset with equispaced PSFs and amplitude with known radial profile
     data_ct = []
-    data_psf, _, _ = create_ct_psfs(50, cfam_name='1F', n_psfs=100, random=False)
+    data_psf, psf_loc_tmp, ct_tmp = create_ct_psfs(50, cfam_name='1F', n_psfs=100, random=False)
     # Add pupil images
     data_ct += data_psf
     data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
@@ -269,7 +269,7 @@ def test_cal_file():
     # x location wrt FPM
     assert np.all(psf_loc_input[:,0] - ct_cal[9][0][0] == ct_cal[7][0])
     # y location wrt FPM
-    assert np.all(psf_loc_input[:,1] - ct_cal[9][0][1]== ct_cal[7][1])
+    assert np.all(psf_loc_input[:,1] - ct_cal[9][0][1] == ct_cal[7][1])
     # CT map
     assert np.all(ct_input == ct_cal[7][2])
 
@@ -307,34 +307,61 @@ def test_ct_map_interp():
     map.
     """
     # Create a CT cal file with a set of PSFs whose locations are equispaced
-    fpm_center_cor = np.array([509,513])
+    # FPM positions and deltas have already been tested in test_fpm_pos. Choose
+    # a simple configuration now to test the interpolation:
+    fpm_center_cor = np.array([512,512])
     fpam_pos_cor = np.array([6757, 22424])
-    fpam_pos_ct = np.array([6854, 22524])
+    fpam_pos_ct = fpam_pos_cor
     fsam_pos_cor = np.array([29387, 12238])
-    fsam_pos_ct = np.array([29471,12120])
+    fsam_pos_ct = fsam_pos_cor
     corethroughput.write_ct_calfile(dataset_ct_equi,
         fpm_center_cor,
         fpam_pos_cor, fpam_pos_ct,
         fsam_pos_cor, fsam_pos_ct)
-    # Read calibration file
+    # Read inputs for the calibration file
     ct_cal_input = corethroughput.read_ct_cal_file()
-    breakpoint()
-    # test 1: default grid
+
+    # Interpolate
+    # Create an instance of CoreThroughputCalibration with the previous PSFs
+    try:
+        idx1 = len('CoreThroughputCalibration')
+        for _, _, files in os.walk(corgidrp.default_cal_dir):
+            calfile_list = [file for file in files if 'CoreThroughputCalibration' in file]
+            calfile_date = [time.Time(file[idx1+1:-5]) for file in calfile_list]
+        calfile_latest = calfile_list[np.array(calfile_date).argmax()]
+    except:
+        raise OSError('The core throughput calibration file could not be loaded.')
+
+    # Create an instance of CoreThroughputCalibration
+    ct_cal = CoreThroughputCalibration(os.path.join(corgidrp.default_cal_dir,
+        calfile_latest))
+    # Test 1: default grid
     # Output CT should be close to the input values
     ct_map_interp = ct_cal.ct_map_interp()
-    # Add some numerical comparison based on expected changes of core throughput
-    # TBD
+    # For each interpolated location, find the closest location in the set that
+    # defined the CT cal file and compare the CT values
+    import matplotlib.pyplot as plt
+    plt.plot(ct_map_interp[0], ct_map_interp[1], 'rx', label='TARGET (VALID)')
+    plt.plot(ct_cal_input[7][0], ct_cal_input[7][1], 'k.', label='PSF (INPUT)')
+    plt.xlabel('PIX')
+    plt.ylabel('PIX')
+    plt.legend()
+    plt.show()
+    r_ld=np.sqrt(ct_map_interp[0]**2 + ct_map_interp[1]**2)*21.8/50
     breakpoint()
+#    for idx_interp in range(ct_map_interp.shape[1]):
+#        dpos = 
+    # TBD
 
-    # test 2: user provided target pixels outside the HLC region, the
+    # Test 2: user provided target pixels outside the HLC region, the
     # function must fail
-    target_pix_x = [331, 141, 851, 560, 521.4, 532, 542, 752, 362]
-    target_pix_y = [830, 540, 550, 361, 210, 920, 382, 474, 476]
+    target_pix_x = [33, 141, 85, 56, 31.4, -532, -42, -7, 3]
+    target_pix_y = [830, 54, 55, -3, -2, 92, 38, 474, -47]
     target_pix = np.array([target_pix_x, target_pix_y])
     with pytest.raises(ValueError):
         ct_cal.ct_map_interp(target_pix=target_pix)
     
-    # test 3: user provided target pixels within the HLC region
+    # Test 3: user provided target pixels within the HLC region
     target_pix_x = [7.3, 8.4, 12.1, 22.1, -8.6, -12.5, -20.5, 12.4, 5.6]
     target_pix_y = [-13.4, -4, 5.3, -5.1, -12.6, 9.6, 4.8, -7.4, 7.6]
     target_pix = np.array([target_pix_x, target_pix_y])
