@@ -589,7 +589,7 @@ def create_default_calibration_product_headers():
     # TO DO: Update this once L2a headers have been finalized
     prihdr, exthdr = create_default_L1_headers()
     exthdr['DATALVL']    = 'Calibration Product'
-    exthdr['DATATYPE']    = ''              # What type of calibration product
+    exthdr['DATATYPE']    = 'Image'              # What type of calibration product, just do image for now, mock codes will update
 
     return prihdr, exthdr
 
@@ -931,7 +931,8 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         pl=planet
         band=band
-        frame.pri_hdr.append(('TARGET', pl), end=True)
+        frame.pri_hdr['TARGET'] = pl
+        #frame.pri_hdr.append(('TARGET', pl), end=True)
         frame.pri_hdr.append(('FILTER', band), end=True)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
