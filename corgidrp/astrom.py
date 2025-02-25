@@ -968,7 +968,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     # compute the distortion map coeffs
     if find_distortion:
         first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, ref_star_pos=target_coord_tables, position_error=position_error)
-        distortion_coeffs = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
+        distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         distortion_coeffs = (np.array([np.inf]), np.inf)
 
