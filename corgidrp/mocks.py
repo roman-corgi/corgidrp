@@ -2115,6 +2115,41 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
 
     return frame
 
+def amp_psf_rad_lin(
+    x_mean_arr=None,
+    y_mean_arr=None,
+    ):
+    """ Helper function to generate a PSF whose amplitude within the HLC area
+        varies radially and is linearly proportional to the distance to the
+        center.
+
+        Args:
+          x_mean_arr (array) (optional): array of locations on EXCAM PIXELS
+            along one dimension.
+          y_mean_arr (array) (optional): array of locations on EXCAM PIXELS
+            along one orthogonal dimension to x_mean_arr.
+
+        Returns:
+          rad_amp (arr): radial profile of the amplitudes of the PSF.
+    """
+    # Default values
+    # 23 EXCAM pixels correspond to approx. 10 l/D (OWA of HLC is 9.7 l/D as-modeled)
+    if x_mean_arr is None:
+        x_mean_arr = np.linspace(-23, 23, 47)
+    if y_mean_arr is None:
+        y_mean_arr = np.linspace(-23, 23, 47) 
+    # Create mesh
+    X_mean, Y_mean = np.meshgrid(x_mean_arr, y_mean_arr)
+    # Compute radial distance from center
+    r_dist=np.sqrt(X_mean**2 + Y_mean**2)
+    # Define radial profile within IWA<=r<=OWA
+    rad_amp = np.zeros(r_dist.shape)
+    # HLC=3 l/D ~ 6.9 EXCAM pixels
+    # HLC=9.7 l/D ~ 22.2 EXCAM pixels
+    idx_hlc = (r_dist>=6.9) & (r_dist<=22.2)
+    rad_amp[idx_hlc]= 1 + 0.1*(r_dist[idx_hlc] - 6.9)/(22.2-6.9)
+    return rad_amp
+
 def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
     """
     Create simulated data for core throughput calibration. This is a set of
@@ -2168,19 +2203,9 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
     else:
         n_psfs_x = int(np.sqrt(n_psfs)) + 1
         n_psfs_y = n_psfs_x
-        # 23 EXCAM pixels correspond to approx. 10 l/D (OWA of HLC is 9.7 l/D as-modeled)
         x_mean_arr = np.linspace(-23, 23, n_psfs_x)
         y_mean_arr = np.linspace(-23, 23, n_psfs_y)
-        # Create mesh
-        X_mean, Y_mean = np.meshgrid(x_mean_arr, y_mean_arr)
-        # Compute r2
-        r2=X_mean**2 + Y_mean**2
-        # Define radial profile within IWA<=r<=OWA
-        rad_amp = np.zeros(r2.shape)
-        # HLC=3 l/D ~ 6.9 EXCAM pixels (6.9**2~47)
-        # HLC=9.7 l/D ~ 22.2 EXCAM pixels (22.2**~494)
-        idx_hlc = (r2>=47) & (r2<=494)
-        rad_amp[idx_hlc]= 1 + 0.1*(r2[idx_hlc] - 47)/(494-47)
+        rad_amp = amp_psf_rad_lin(x_mean_arr=x_mean_arr, y_mean_arr=y_mean_arr)
         model_params = [
             dict(
             amplitude=rad_amp[np.mod(idx_psf,n_psfs_x),idx_psf//n_psfs_x],
