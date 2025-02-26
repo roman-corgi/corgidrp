@@ -142,7 +142,12 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
+    #tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
+    tvacdata_dir = "/Users/jmilton/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    
+    # adding in a separate local directory where frames with headers that this code modifies can be saved so that
+    # we don't overwrite the original shared files on box
+    updated_file_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data/Updated_Header_Files"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

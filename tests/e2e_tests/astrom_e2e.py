@@ -28,11 +28,11 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
-    dark_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")  
-    flat_path = os.path.join(processed_cal_path, "flat.fits")
-    fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
-    cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
-    bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
+    dark_path = os.path.join(processed_cal_path, "Cals_dark_current_20240322_updated_headers.fits")
+    flat_path = os.path.join(processed_cal_path, "Cals_flat_updated_headers.fits")
+    fpn_path = os.path.join(processed_cal_path, "Cals_fpn_20240322_updated_headers.fits")
+    cic_path = os.path.join(processed_cal_path, "Cals_cic_20240322_updated_headers.fits")
+    bp_path = os.path.join(processed_cal_path, "Cals_bad_pix_updated_headers.fits")
 
     # create raw data that includes injected stars with gaussian psfs
     jwst_calfield_path = os.path.join(os.path.dirname(thisfile_dir), "test_data", "JWST_CALFIELD2020.csv")
@@ -56,18 +56,25 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['VISTYPE'] = "BORESITE"
+            # TO DO: when the walker can handle different data levels, change the below. For now we are setting it to L1.
+            hdulist[1].header['DATALVL'] = "L1"
             # setting SNR to ~250 (arbitrary SNR)
             scaled_image = ((250 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
             # update headers
             for key in image_sources[0].pri_hdr:
-                if key not in hdulist[0].header:
-                    hdulist[0].header[key] = image_sources[0].pri_hdr[key]
+                #if key not in hdulist[0].header:
+                hdulist[0].header[key] = image_sources[0].pri_hdr[key]
 
             for ext_key in image_sources[0].ext_hdr:
-                if ext_key not in hdulist[1].header:
-                    hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
+                #if ext_key not in hdulist[1].header:
+                hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
+
+            # TO DO: updating RA and DEC here so that they carry over from mocks. Should be a better way to do this
+            hdulist[1].header['EXPTIME'] = 100
+            #hdulist[0].header['RA'] = image_sources[0].pri_hdr['RA']
+            #hdulist[0].header['DEC'] = image_sources[0].pri_hdr['DEC']
 
             # save to the data dir in the output directory
             hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'_astrom.fits'), overwrite=True)
@@ -75,14 +82,14 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     # define the raw science data to process
     ## replace w my raw data sets
     sim_data_filelist = [os.path.join(rawdata_dir, f) for f in os.listdir(rawdata_dir)] # full paths to simulated data
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
+    mock_cal_filelist = [os.path.join(l1_datadir, "L1_{0}_updated_headers.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
 
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -178,7 +185,8 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     assert dec == pytest.approx(target[1], abs=8.333e-7)
 
 if __name__ == "__main__":
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #"/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
+    #tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #"/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
+    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data/Updated_Header_Files"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

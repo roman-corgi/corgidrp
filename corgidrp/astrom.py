@@ -549,6 +549,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
         xguess = star2['x'] - star1['x']
         yguess = star2['y'] - star1['y']
         
+        # Is there a typo here below? it is ystar_guess=star2['x'], should it be ystar_guess=star1['y']
         xoff, yoff = measure_offset(image, xstar_guess=star1['x'], ystar_guess=star2['x'], xoffset_guess= xguess, yoffset_guess= yguess)
 
         pixsep = np.sqrt(np.power(xoff,2) + np.power(yoff,2))

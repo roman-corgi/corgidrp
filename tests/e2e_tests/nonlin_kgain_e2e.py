@@ -41,6 +41,7 @@ def set_vistype_for_tvac(
 def test_nonlin_and_kgain_e2e(
     tvacdata_path,
     e2eoutput_path,
+    updated_header_path
     ):
     """ 
     Performs the e2e test to generate both nonlin and kgain calibrations from the same
@@ -88,9 +89,36 @@ def test_nonlin_and_kgain_e2e(
         if filename not in nonlin_l1_filenames:
             pupilimg_l1_list.append(filepath)
 
+    print(len(pupilimg_l1_list))
 
     # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
+
+    # Need to write new headers to the files and save copies of them to disk to run the walker
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
+
+
+    new_file_list = []
+    for filename in pupilimg_l1_list:
+        base, ext = os.path.splitext(os.path.basename(filename))
+        out_fname = f"{base}_updated_headers{ext}"
+        out_path = os.path.join(updated_header_path, out_fname)
+
+        with fits.open(filename) as hdul:
+            # Overwrite the original headers in memory
+            hdul[0].header.clear()
+            hdul[0].header.update(pri_hdr)
+            if len(hdul) > 1:
+                hdul[1].header.clear()
+                hdul[1].header.update(ext_hdr)
+
+            # Write them to a new file
+            hdul.writeto(out_path, overwrite=True)
+
+        new_file_list.append(out_path)
+
+    # We'll use the newly updated files as the pipeline input
+    pupilimg_l1_list = new_file_list
 
    
     # Run the walker on some test_data
@@ -124,7 +152,9 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    #TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    TVACDATA_DIR = "/Users/jmilton/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    UPDATED_FILE_DIR = "/Users/jmilton/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/Updated_Header_Images"
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
@@ -132,6 +162,8 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--output_dir", default=OUTPUT_DIR,
                     help="directory to write results to [%(default)s]")
+    ap.add_argument("-u", "--updated_header_dir", default=UPDATED_FILE_DIR,
+                    help="directory to write updated-header FITS files [%(default)s]")
     args = ap.parse_args()
     # Run the e2e test
-    test_nonlin_and_kgain_e2e(args.tvacdata_dir, args.output_dir)
+    test_nonlin_and_kgain_e2e(args.tvacdata_dir, args.output_dir, args.updated_header_dir)

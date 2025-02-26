@@ -123,7 +123,7 @@ def create_default_L1_headers(arrtype="SCI"):
     prihdr['SIMPLE']    = 'T'          # Conforms to FITS Standard
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
-    prihdr['EXTEND']    = 'T'          # Denotes FIT extensions
+    prihdr['EXTEND']    = True         # Denotes FIT extensions
     prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
     prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
     prihdr['INSTRUME']  = 'CGI'        # Instrument designation
@@ -302,7 +302,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     prihdr['SIMPLE']    = 'T'          # Conforms to FITS Standard
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
-    prihdr['EXTEND']    = 'T'          # Denotes FIT extensions
+    prihdr['EXTEND']    = True         # Denotes FIT extensions
     prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
     prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
     prihdr['INSTRUME']  = 'CGI'        # Instrument designation
@@ -1429,8 +1429,8 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
 
     # load as an image object
     frames = []
-    # TO DO: Determine what level this image should be
-    prihdr, exthdr = create_default_L3_headers()
+    # TO DO: Determine what level this image should be. For now I am putting as L1 because it breaks walker otherwise/ there is no recipe for L3
+    prihdr, exthdr = create_default_L1_headers()
     prihdr['VISTYPE'] = 'BORESITE'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]

@@ -170,7 +170,8 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    #TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    TVACDATA_DIR = "/Users/jmilton/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder"
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")

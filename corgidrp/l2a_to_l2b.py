@@ -56,6 +56,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
         corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
     _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
 

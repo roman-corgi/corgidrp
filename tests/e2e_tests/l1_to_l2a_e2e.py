@@ -20,9 +20,9 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     l2a_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L2a")
     nonlin_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
-    dark_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "dark_current_20240322.fits")
-    fpn_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "fpn_20240322.fits")
-    cic_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "cic_20240322.fits")
+    dark_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "Cals_dark_current_20240322_updated_headers.fits")
+    fpn_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "Cals_fpn_20240322_updated_headers.fits")
+    cic_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "Cals_cic_20240322_updated_headers.fits")
 
     # make output directory if needed
     l2a_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_output")
@@ -31,9 +31,9 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
 
     # define the raw science data to process
 
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
-    tvac_l2a_filelist = [os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
+    l1_data_filelist = [os.path.join(l1_datadir, "L1_{0}_updated_headers.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
+    mock_cal_filelist = [os.path.join(l1_datadir, "L1_{0}_updated_headers.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
+    tvac_l2a_filelist = [os.path.join(l2a_datadir, "L2a_{0}_updated_headers.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
 
     ###### Setup necessary calibration files
     # Create necessary calibration files
@@ -41,7 +41,7 @@ def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -137,7 +137,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    #tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data/Updated_Header_Files"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
