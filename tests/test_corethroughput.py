@@ -339,20 +339,15 @@ def test_ct_map_interp():
     # Test 1: default grid
     # Output CT should be close to the input values
     ct_map_interp = ct_cal.ct_map_interp()
+    # core throughput in (0,1]
+    assert np.all(ct_map_interp[2]) > 0
+    assert np.all(ct_map_interp[2]) <= 1
     # For each interpolated location, find the closest location in the set that
     # defined the CT cal file and compare the CT values
-    import matplotlib.pyplot as plt
-    plt.plot(ct_map_interp[0], ct_map_interp[1], 'rx', label='TARGET (VALID)')
-    plt.plot(ct_cal_input[7][0], ct_cal_input[7][1], 'k.', label='PSF (INPUT)')
-    plt.xlabel('PIX')
-    plt.ylabel('PIX')
-    plt.legend()
-    plt.show()
-    r_ld=np.sqrt(ct_map_interp[0]**2 + ct_map_interp[1]**2)*21.8/50
-    breakpoint()
-#    for idx_interp in range(ct_map_interp.shape[1]):
-#        dpos = 
-    # TBD
+    for idx_interp in range(ct_map_interp.shape[0]):
+        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_cal_input[7][0]) +
+            np.abs(ct_map_interp[1][idx_interp]-ct_cal_input[7][1])).argmin()
+        assert ct_map_interp[2][idx_interp] - ct_map_interp[2][idx_closest] <1e-4
 
     # Test 2: user provided target pixels outside the HLC region, the
     # function must fail
@@ -369,8 +364,8 @@ def test_ct_map_interp():
     
     ct_map_interp = ct_cal.ct_map_interp(target_pix=target_pix)
     # core throughput in (0,1]
-    assert np.all(ct_map_interp[-1]) > 0
-    assert np.all(ct_map_interp[-1]) <= 1
+    assert np.all(ct_map_interp[2]) > 0
+    assert np.all(ct_map_interp[2]) <= 1
     # Add some numerical comparison based on expected changes of core throughput
     # TBD
 
