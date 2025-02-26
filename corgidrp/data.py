@@ -1608,7 +1608,8 @@ class CoreThroughputCalibration(Image):
         n_gridx=47,
         n_gridy=47,
         target_pix=None,
-        r_flag=6.9,
+        r_flag_in_pix=6.9,
+        r_flag_out_pix=22.2
         ):
         """
         Function satisfying CTC requirement 1090883. If an external list of
@@ -1630,10 +1631,14 @@ class CoreThroughputCalibration(Image):
             rectangular grid of pixel positions is used. Using matplotlib.pyplot,
             target_pix[0] is the horizontal axis (x), and target_pix[1] is the
             vertical axis (y).
-          r_iwa (float) (optional): The radius of locations in pixels that may
-            have valid interpolation locations in scipy, though will be flag as
-            invalid. For instance, if we want to flag all results that satisfy
-            r<IWA. For HLC and band 1F, r_flag=3 lamD~3*50/21.8~6.9 pix. 
+          r_flag_in_pix (float) (optional): The radius of locations in pixels
+            (r<=r_flag_in_pix) that may have valid interpolation locations in
+            scipy, though will be flag as invalid. For instance, if we want to
+            flag all results that satisfy r<=IWA. For HLC and band 1F, the IWA
+            corresponds to 3 lamD~3*50/21.8~6.9 pix.
+          r_flag_out_pix (float) (optional): The radius of locations in pixels
+            (r>=r_flag_in_pix) that may have valid interpolation locations in               scipy, though will be flag as invalid. For instance, if we want to              flag all results that satisfy r<OWA. For HLC and band 1F, the OWA
+            corresponds to 9.7 lamD~9.7*50/21.8~22.2 pix.
 
         Returns:
           ct_map_interp (array): (x,y,ct_target) where (x,y) is
@@ -1649,12 +1654,15 @@ class CoreThroughputCalibration(Image):
         
         # Flag locations according to r_flag
         r2_interp = target_pix[0]**2 + target_pix[1]**2
-        r2_good = r2_interp >= r_flag**2
+        r2_good = r2_interp > r_flag_in_pix**2
+        target_pix = np.array([target_pix[0][r2_good], target_pix[1][r2_good]])
+        r2_interp = target_pix[0]**2 + target_pix[1]**2
+        r2_good = r2_interp < r_flag_out_pix**2
         target_pix = np.array([target_pix[0][r2_good], target_pix[1][r2_good]])
 
-        # Flag locations that are closer to the FPM's center than any reference
-        # one to avoid results without a proper support for interpolation of DH
-        # radial pattern, which is highly non-linear.
+        # Addionally, flag locations that are closer to the FPM's center than
+        # any reference location to avoid results without a proper support for
+        # interpolation since the DH radial pattern is highly non-linear.
         # Note: This method does not compare every target position with the set
         # of nearest reference locations, or more elaborated methods.
         r2_ct_map = self.ct_map[0]**2 + self.ct_map[1]**2
