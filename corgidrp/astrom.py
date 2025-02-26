@@ -936,10 +936,10 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
         target_coord_tab = astropy.table.Table()
-        target_coord_tab['x'] = [dataset[i].ext_hdr['CRPIX1']]
-        target_coord_tab['y'] = [dataset[i].ext_hdr['CRPIX2']]
-        target_coord_tab['RA'] = [dataset[i].ext_hdr['CRVAL1']]
-        target_coord_tab['DEC'] = [dataset[i].ext_hdr['CRVAL2']]
+        target_coord_tab['x'] = np.shape(image)[1] // 2     # assume the target is at the center of the image
+        target_coord_tab['y'] = np.shape(image)[0] // 2
+        target_coord_tab['RA'] = target_coordinate[0]
+        target_coord_tab['DEC'] = target_coordinate[1]
         target_coord_tables.append(target_coord_tab)
 
         # run automated source finder if field_matches are passed but distortion is also being computed
