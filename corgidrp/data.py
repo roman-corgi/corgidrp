@@ -1311,7 +1311,9 @@ class AstrometricCalibration(Image):
     Class for astrometric calibration file. 
     
     Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR an array of calibration measurements (boresight, plate scale, north angle, distortion coeffs)
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR a single array of calibration measurements of the following lengths (boresight: length 2 (RA, DEC), 
+        plate scale: length 1 (float), north angle: length 1 (float), distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
+        3rd order distortion fit the input array should be length 37.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
@@ -1319,7 +1321,7 @@ class AstrometricCalibration(Image):
         boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
         platescale (float): the platescale value in [mas/pixel]
         northangle (float): the north angle value in [deg]
-        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map (if distortion map is not computed this is an array of nans)
+        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map (if distortion map is not computed this is an array of nans), where the last value of the array is the order of polynomial used
 
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
@@ -1333,7 +1335,7 @@ class AstrometricCalibration(Image):
             self.boresight = self.data[:2]
             self.platescale = self.data[2]
             self.northangle = self.data[3]
-            self.distortion_coeffs = (self.data[4:-1], self.data[-1])
+            self.distortion_coeffs = self.data[4:]
             
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
