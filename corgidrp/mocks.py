@@ -1056,9 +1056,12 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfi
     prihdr['VISTYPE'] = 'BORESITE'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
+    prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
 
-    newhdr = fits.Header(new_hdr)
-    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+    # newhdr = fits.Header(new_hdr)
+    # frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+        ## save a default ext_hdr
+    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
     filename = "simcal_astrom.fits"
     guessname = "guesses.csv"
     if filedir is not None:
