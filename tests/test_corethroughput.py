@@ -347,7 +347,8 @@ def test_ct_map_interp():
     for idx_interp in range(ct_map_interp.shape[0]):
         idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_cal_input[7][0]) +
             np.abs(ct_map_interp[1][idx_interp]-ct_cal_input[7][1])).argmin()
-        assert ct_map_interp[2][idx_interp] - ct_map_interp[2][idx_closest] <1e-4
+        # Choosing a 1% relative error
+        assert np.abs(ct_map_interp[2][idx_interp]/ct_cal_input[7][2][idx_closest]-1) < 1e-2
 
     # Test 2: user provided target pixels outside the HLC region, the
     # function must fail
@@ -366,8 +367,13 @@ def test_ct_map_interp():
     # core throughput in (0,1]
     assert np.all(ct_map_interp[2]) > 0
     assert np.all(ct_map_interp[2]) <= 1
-    # Add some numerical comparison based on expected changes of core throughput
-    # TBD
+    # For each interpolated location, find the closest location in the set that
+    # defined the CT cal file and compare the CT values
+    for idx_interp in range(ct_map_interp.shape[0]):
+        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_cal_input[7][0]) +
+            np.abs(ct_map_interp[1][idx_interp]-ct_cal_input[7][1])).argmin()
+        # Choosing a 1% relative error
+        assert np.abs(ct_map_interp[2][idx_interp]/ct_cal_input[7][2][idx_closest]-1) < 1e-2
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()
