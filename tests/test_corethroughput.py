@@ -74,7 +74,8 @@ def setup_module():
 
     # Dataset with equispaced PSFs and amplitude with known radial profile
     data_ct = []
-    data_psf, psf_loc_tmp, ct_tmp = create_ct_psfs(50, cfam_name='1F', n_psfs=100, random=False)
+    data_psf, psf_loc_tmp, ct_tmp = create_ct_psfs(50, cfam_name='1F',
+        n_psfs=120, random=False)
     # Add pupil images
     data_ct += data_psf
     data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]

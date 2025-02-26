@@ -1608,6 +1608,7 @@ class CoreThroughputCalibration(Image):
         n_gridx=47,
         n_gridy=47,
         target_pix=None,
+        r_flag=6.9,
         ):
         """
         Function satisfying CTC requirement 1090883. If an external list of
@@ -1629,6 +1630,10 @@ class CoreThroughputCalibration(Image):
             rectangular grid of pixel positions is used. Using matplotlib.pyplot,
             target_pix[0] is the horizontal axis (x), and target_pix[1] is the
             vertical axis (y).
+          r_iwa (float) (optional): The radius of locations in pixels that may
+            have valid interpolation locations in scipy, though will be flag as
+            invalid. For instance, if we want to flag all results that satisfy
+            r<IWA. For HLC and band 1F, r_flag=3 lamD~3*50/21.8~6.9 pix. 
 
         Returns:
           ct_map_interp (array): (x,y,ct_target) where (x,y) is
@@ -1641,6 +1646,21 @@ class CoreThroughputCalibration(Image):
             x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
             y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
             target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
+        
+        # Flag locations according to r_flag
+        r2_interp = target_pix[0]**2 + target_pix[1]**2
+        r2_good = r2_interp >= r_flag**2
+        target_pix = np.array([target_pix[0][r2_good], target_pix[1][r2_good]])
+
+        # Flag locations that are closer to the FPM's center than any reference
+        # one to avoid results without a proper support for interpolation of DH
+        # radial pattern, which is highly non-linear.
+        # Note: This method does not compare every target position with the set
+        # of nearest reference locations, or more elaborated methods.
+        r2_ct_map = self.ct_map[0]**2 + self.ct_map[1]**2
+        r2_interp = target_pix[0]**2 + target_pix[1]**2
+        r2_good = r2_interp >= r2_ct_map.min()
+        #target_pix = np.array([target_pix[0][r2_good], target_pix[1][r2_good]])
  
         # Use linear interpolation
         ct_interp = griddata((self.ct_map[0], self.ct_map[1]), self.ct_map[2],
@@ -1649,7 +1669,8 @@ class CoreThroughputCalibration(Image):
         if np.all(np.isnan(ct_interp)):
             raise ValueError('There are no valid target positions within the ' + 
                 'range of input PSF locations') 
-    
+
+        # Extrapolation:  Remove locations outside the reference locations 
         isvalid = np.where(np.isnan(ct_interp) == False)[0]
         ct_map_interp = np.array([
             target_pix[0][isvalid],
