@@ -5,7 +5,8 @@ from corgidrp.l2b_to_l3 import create_wcs
 
 def test_create_wcs():
     """
-    Unit test of the create WCS function.
+    Unit test of the create WCS function. The test checks that all WCS keywords (['CD{}_{}'], ['CRPIX{}'], ['CTYPE{}'], ['CDELT{}'], ['CRVAL{}']) exist in the updated ext_hdr 
+    and that the values are consistent with those derived from the AstrometricCalibration file.
     """
 
     # create mock dataset (arbitrary northangle)
