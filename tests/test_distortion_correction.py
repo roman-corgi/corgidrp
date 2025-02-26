@@ -7,7 +7,7 @@ from corgidrp.l3_to_l4 import distortion_correction
 
 def test_distortion_correction():
     """
-    Unit test of the distortion correction function
+    Unit test of the distortion correction function. The test checks that a distorted mock image has been accurately corrected for by comparing it to an undistorted mock image.
     
     """
 
