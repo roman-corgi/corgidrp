@@ -64,6 +64,7 @@ tests/walker_output/*
 tests/testcalib/*
 tests/e2e_tests/*/*.json
 tests/ops_output/*.json
+tests/e2e_tests/UpdateHeaders.py
 
 # editor files
 .vscode/*
