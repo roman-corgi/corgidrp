@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import numpy as np
 import warnings
+import datetime
 import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
@@ -90,6 +91,508 @@ detector_areas_test= {
             },
         }
 }
+
+def create_default_L1_headers(arrtype="SCI"):
+    """
+    Creates an empty primary header and an Image extension header with currently
+        defined keywords.
+
+    Args:
+        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+
+    """
+    dt = datetime.datetime.now(datetime.timezone.utc)
+    dt_str = dt.isoformat() 
+    
+    prihdr = fits.Header()
+    exthdr = fits.Header()
+
+    if arrtype != "SCI":
+        NAXIS1 = 2200
+        NAXIS2 = 1200
+    else:
+        NAXIS1 = 2200
+        NAXIS2 = 2200
+
+    # fill in prihdr
+    prihdr['SIMPLE']    = 'T'          # Conforms to FITS Standard
+    prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
+    prihdr['NAXIS']     = 0            # Number of array dimensions
+    prihdr['EXTEND']    = True         # Denotes FIT extensions
+    prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
+    prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
+    prihdr['INSTRUME']  = 'CGI'        # Instrument designation
+    prihdr['ORIGIN']    = 'SSC'        # Who is responsible for the data
+    prihdr['FILETIME']  = '2025-02-16T00:00:00'  # When file was created (placeholder datetime)
+    prihdr['DATAVERS']  = ''           # Version of data (increments for reprocessing)
+    prihdr['MOCK']      = 1            # DRP only. 0: Not a mock; 1: Image is a mock (for simulated data)
+    prihdr['PROGNUM']   = 00000        # The Program ID in visit hierarchy (first 5 digits)
+    prihdr['EXECNUM']   = 00           # The Execution Number in visit hierarchy (digits 6-7)
+    prihdr['CAMPAIGN']  = 000          # The Pass/Campaign in visit hierarchy (digits 8-10)
+    prihdr['SEGMENT']   = 000          # The Segment Number in visit hierarchy (digits 11-13)
+    prihdr['OBSNUM']    = 000          # The Observation Number in visit hierarchy (digits 14-16)
+    prihdr['VISNUM']    = 000          # The Visit number in visit hierarchy (digits 17-19)
+    prihdr['CPGSFILE']  = 'N/A'        # Campaign-level XML containing the current visit
+    prihdr['AUXFILE']   = 'N/A'        # An AUX file associated with this observation
+    prihdr['VISTYPE']   = 'MOCK'       # Visit file template (enum values as defined)
+    prihdr['OBSNAME']   = 'MOCK'       # User-defined label for the associated observation plan
+    prihdr['TARGET']    = 'MOCK'       # Name of pointing target
+    prihdr['RA']        = 0.0          # Commanded RA in mas
+    prihdr['DEC']       = 0.0          # Commanded DEC in mas
+    prihdr['EQUINOX']   = '2000.0'     # Reference equinox (J2000)
+    prihdr['RAPM']      = 0.0          # RA proper motion (mas/yr)
+    prihdr['DECPM']     = 0.0          # DEC proper motion (mas/yr)
+    prihdr['ROLL']      = 0.0          # S/C roll (deg)
+    prihdr['PITCH']     = 0.0          # S/C pitch (deg)
+    prihdr['YAW']       = 0.0          # S/C yaw (deg)
+    prihdr['PSFREF']    = 0            # 0: Not a PSF reference observation; 1: PSF reference observation
+    prihdr['OPGAIN']    = 'AUTO'       # Planned gain (value or "AUTO")
+    prihdr['PHTCNT']    = 0            # 0: Photon counting mode planned; 1: Not planned
+    prihdr['FRAMET']    = 0.0          # Expected exposure time per frame (sec)
+    prihdr['SATSPOTS']  = 0            # 0: No satellite spots; 1: Satellite spots present
+    prihdr['ISHOWFSC']  = 0            # 0: Images taken as part of HOWFSC; 1: Not part of HOWFSC
+    prihdr['HOWFSLNK']  = 0            # 0: Campaign does not include HOWFSC activity; 1: Includes HOWFSC activity
+
+    # fill in exthdr
+    exthdr['XTENSION']    = 'IMAGE'         # Image Extension (FITS format keyword)
+    exthdr['BITPIX']      = 16              # Array data type – instrument data is unsigned 16-bit
+    exthdr['NAXIS']       = 2               # Number of array dimensions
+    exthdr['NAXIS1']      = NAXIS1          # Axis 1 size
+    exthdr['NAXIS2']      = NAXIS2          # Axis 2 size
+    exthdr['PCOUNT']      = 0               # Number of parameters (FITS keyword)
+    exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
+    exthdr['BSCALE']      = 1               # Linear scaling factor
+    exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
+    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
+    exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
+    exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
+    exthdr['STATUS']      = 0               # Housekeeping packet health check status: 0=Nominal, 1=Off-nominal
+    exthdr['HVCBIAS']     = 0               # HV clock bias value (DAC value controlling EM-gain)
+    exthdr['OPMODE']      = 'NONE_DETON_0'  # EXCAM readout operational mode
+    exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
+    exthdr['EMGAIN_C']    = 1.0             # Commanded gain
+    exthdr['EMGAINA1']    = 0.0             # "Actual" gain calculation a1 coefficient
+    exthdr['EMGAINA2']    = 0.0             # "Actual" gain calculation a2 coefficient
+    exthdr['EMGAINA3']    = 0.0             # "Actual" gain calculation a3 coefficient
+    exthdr['EMGAINA4']    = 0.0             # "Actual" gain calculation a4 coefficient
+    exthdr['EMGAINA5']    = 0.0             # "Actual" gain calculation a5 coefficient
+    exthdr['GAINTCAL']    = 0.0             # Calibration reference temperature for gain calculation
+    exthdr['EXCAMT']      = 0.0             # EXCAM temperature from telemetry (°C)
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
+    exthdr['KGAINPAR']    = 0               # Calculated K-gain parameter (DN to electrons)
+    exthdr['CYCLES']      = 0               # EXCAM clock cycles since boot
+    exthdr['LASTEXP']     = 0               # EXCAM clock cycles in the last exposing stage
+    exthdr['BLNKTIME']    = 0               # EXCAM commanded blanking time (sec)
+    exthdr['BLNKCYC']     = 0               # Commanded blanking cycles (clock cycles)
+    exthdr['EXPCYC']      = 0               # Exposing stage duration (cycles)
+    exthdr['OVEREXP']     = 0               # EXCAM over-illumination flag: 0=Not over-exposed, 1=Over-exposed
+    exthdr['NOVEREXP']    = 0.0             # Number of pixels overexposed divided by 100
+    exthdr['PROXET']      = 0.0             # EXCAM ProxE heater value (°C)
+    exthdr['FCMLOOP']     = 0               # FCM control loop state: 0=open, 1=closed
+    exthdr['FCMPOS']      = 0.0             # Coarse FCM position (counts)
+    exthdr['FSMINNER']    = 0               # FSM inner loop control state: 0=open, 1=closed
+    exthdr['FSMLOS']      = 0               # FSM line-of-sight loop control state: 0=open, 1=closed, 2=unknown
+    exthdr['FSMPRFL']     = 'FSM_PROFILE_UNKNOWN'  # FSM profile loaded (e.g., NFOV, WFOV, SPEC660, etc.)
+    exthdr['FSMRSTR']     = 0               # FSM raster status: 0=not executing, 1=executing
+    exthdr['FSMSG1']      = 0.0             # Average measurement (volts) for strain gauge 1
+    exthdr['FSMSG2']      = 0.0             # Average measurement (volts) for strain gauge 2
+    exthdr['FSMSG3']      = 0.0             # Average measurement (volts) for strain gauge 3
+    exthdr['FSMX']        = 0.0             # Derived FSM X position relative to home (mas)
+    exthdr['FSMY']        = 0.0             # Derived FSM Y position relative to home (mas)
+    exthdr['DMZLOOP']     = 0               # DM Zernike loop control state: 0=Open, 1=Closed
+    exthdr['1SVALID']     = 0               # LOWFSC 1s derived stats validity: 0=not valid, 1=valid
+    exthdr['Z2AVG']       = 0.0             # Average Z2 value (nm)
+    exthdr['Z2RES']       = 0.0             # Residual Z2 value (nm)
+    exthdr['Z2VAR']       = 0.0             # Variance of Z2 value (nm^2)
+    exthdr['Z3AVG']       = 0.0             # Average Z3 value (nm)
+    exthdr['Z3RES']       = 0.0             # Residual Z3 value (nm)
+    exthdr['Z3VAR']       = 0.0             # Variance of Z3 value (nm^2)
+    exthdr['10SVALID']    = 0               # LOWFSC 10s derived stats validity: 0=not valid, 1=valid
+    exthdr['Z4AVG']       = 0.0             # Average Z4 value (nm) for 10,000 samples
+    exthdr['Z4RES']       = 0.0             # Residual Z4 value (nm) for 10,000 samples
+    exthdr['Z5AVG']       = 0.0             # Average Z5 value (nm) for 10,000 samples
+    exthdr['Z5RES']       = 0.0             # Residual Z5 value (nm) for 10,000 samples
+    exthdr['Z6AVG']       = 0.0             # Average Z6 value (nm) for 10,000 samples
+    exthdr['Z6RES']       = 0.0             # Residual Z6 value (nm) for 10,000 samples
+    exthdr['Z7AVG']       = 0.0             # Average Z7 value (nm) for 10,000 samples
+    exthdr['Z7RES']       = 0.0             # Residual Z7 value (nm) for 10,000 samples
+    exthdr['Z8AVG']       = 0.0             # Average Z8 value (nm) for 10,000 samples
+    exthdr['Z8RES']       = 0.0             # Residual Z8 value (nm) for 10,000 samples
+    exthdr['Z9AVG']       = 0.0             # Average Z9 value (nm) for 10,000 samples
+    exthdr['Z9RES']       = 0.0             # Residual Z9 value (nm) for 10,000 samples
+    exthdr['Z10AVG']      = 0.0             # Average Z10 value (nm) for 10,000 samples
+    exthdr['Z10RES']      = 0.0             # Residual Z10 value (nm) for 10,000 samples
+    exthdr['Z11AVG']      = 0.0             # Average Z11 value (nm) for 10,000 samples
+    exthdr['Z11RES']      = 0.0             # Residual Z11 value (nm) for 10,000 samples
+    exthdr['Z12AVG']      = 0.0             # Average Z12 value (nm) for 10,000 samples
+    exthdr['Z13AVG']      = 0.0             # Average Z13 value (nm) for 10,000 samples
+    exthdr['Z14AVG']      = 0.0             # Average Z14 value (nm) for 10,000 samples
+    exthdr['SPAMNAME']    = ''              # Closest named SPAM position from PAM dictionary
+    exthdr['SPAM_H']      = 0.0             # SPAM absolute position of the H-axis (µm)
+    exthdr['SPAM_V']      = 0.0             # SPAM absolute position of the V-axis (µm)
+    exthdr['SPAMSP_H']    = 0.0             # SPAM set point H (µm)
+    exthdr['SPAMSP_V']    = 0.0             # SPAM set point V (µm)
+    exthdr['FPAMNAME']    = ''              # Closest named FPAM position from PAM dictionary
+    exthdr['FPAM_H']      = 0.0             # FPAM absolute position of the H-axis (µm)
+    exthdr['FPAM_V']      = 0.0             # FPAM absolute position of the V-axis (µm)
+    exthdr['FPAMSP_H']    = 0.0             # FPAM set point H (µm)
+    exthdr['FPAMSP_V']    = 0.0             # FPAM set point V (µm)
+    exthdr['LSAMNAME']    = ''              # Closest named LSAM position from PAM dictionary
+    exthdr['LSAM_H']      = 0.0             # LSAM absolute position of the H-axis (µm)
+    exthdr['LSAM_V']      = 0.0             # LSAM absolute position of the V-axis (µm)
+    exthdr['LSAMSP_H']    = 0.0             # LSAM set point H (µm)
+    exthdr['LSAMSP_V']    = 0.0             # LSAM set point V (µm)
+    exthdr['FSAMNAME']    = ''              # Closest named FSAM position from PAM dictionary
+    exthdr['FSAM_H']      = 0.0             # FSAM absolute position of the H-axis (µm)
+    exthdr['FSAM_V']      = 0.0             # FSAM absolute position of the V-axis (µm)
+    exthdr['FSAMSP_H']    = 0.0             # FSAM set point H (µm)
+    exthdr['FSAMSP_V']    = 0.0             # FSAM set point V (µm)
+    exthdr['CFAMNAME']    = ''              # Closest named CFAM position from PAM dictionary
+    exthdr['CFAM_H']      = 0.0             # CFAM absolute position of the H-axis (µm)
+    exthdr['CFAM_V']      = 0.0             # CFAM absolute position of the V-axis (µm)
+    exthdr['CFAMSP_H']    = 0.0             # CFAM set point H (µm)
+    exthdr['CFAMSP_V']    = 0.0             # CFAM set point V (µm)
+    exthdr['DPAMNAME']    = ''              # Closest named DPAM position from PAM dictionary
+    exthdr['DPAM_H']      = 0.0             # DPAM absolute position of the H-axis (µm)
+    exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
+    exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
+    exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
+    exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
+    exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
+    exthdr['DATALVL']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
+
+    return prihdr, exthdr
+
+
+def create_default_L1_TrapPump_headers(arrtype="SCI"):
+    """
+    Creates an empty primary header and an Image extension header with currently
+        defined keywords.
+
+    Args:
+        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+
+    """
+    dt = datetime.datetime.now(datetime.timezone.utc)
+    dt_str = dt.isoformat() 
+
+    prihdr = fits.Header()
+    exthdr = fits.Header()
+
+    if arrtype != "SCI":
+        NAXIS1 = 2200
+        NAXIS2 = 1200
+    else:
+        NAXIS1 = 2200
+        NAXIS2 = 2200
+
+    # fill in prihdr
+    prihdr['SIMPLE']    = 'T'          # Conforms to FITS Standard
+    prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
+    prihdr['NAXIS']     = 0            # Number of array dimensions
+    prihdr['EXTEND']    = True         # Denotes FIT extensions
+    prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
+    prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
+    prihdr['INSTRUME']  = 'CGI'        # Instrument designation
+    prihdr['ORIGIN']    = 'SSC'        # Who is responsible for the data
+    prihdr['FILETIME']  = '2025-02-16T00:00:00'  # When file was created (placeholder datetime)
+    prihdr['DATAVERS']  = ''           # Version of data (increments for reprocessing)
+    prihdr['MOCK']      = 1            # DRP only. 0: Not a mock; 1: Image is a mock (for simulated data)
+    prihdr['PROGNUM']   = 00000        # The Program ID in visit hierarchy (first 5 digits)
+    prihdr['EXECNUM']   = 00           # The Execution Number in visit hierarchy (digits 6-7)
+    prihdr['CAMPAIGN']  = 000          # The Pass/Campaign in visit hierarchy (digits 8-10)
+    prihdr['SEGMENT']   = 000          # The Segment Number in visit hierarchy (digits 11-13)
+    prihdr['OBSNUM']    = 000          # The Observation Number in visit hierarchy (digits 14-16)
+    prihdr['VISNUM']    = 000          # The Visit number in visit hierarchy (digits 17-19)
+    prihdr['CPGSFILE']  = 'N/A'        # Campaign-level XML containing the current visit
+    prihdr['AUXFILE']   = 'N/A'        # An AUX file associated with this observation
+    prihdr['VISTYPE']   = 'MOCK'       # Visit file template (enum values as defined)
+    prihdr['OBSNAME']   = 'MOCK'       # User-defined label for the associated observation plan
+    prihdr['TARGET']    = 'MOCK'       # Name of pointing target
+    prihdr['RA']        = 0.0          # Commanded RA in mas
+    prihdr['DEC']       = 0.0          # Commanded DEC in mas
+    prihdr['EQUINOX']   = '2000.0'     # Reference equinox (J2000)
+    prihdr['RAPM']      = 0.0          # RA proper motion (mas/yr)
+    prihdr['DECPM']     = 0.0          # DEC proper motion (mas/yr)
+    prihdr['ROLL']      = 0.0          # S/C roll (deg)
+    prihdr['PITCH']     = 0.0          # S/C pitch (deg)
+    prihdr['YAW']       = 0.0          # S/C yaw (deg)
+    prihdr['PSFREF']    = 0            # 0: Not a PSF reference observation; 1: PSF reference observation
+    prihdr['OPGAIN']    = 'AUTO'       # Planned gain (value or "AUTO")
+    prihdr['PHTCNT']    = 0            # 0: Photon counting mode planned; 1: Not planned
+    prihdr['FRAMET']    = 0.0          # Expected exposure time per frame (sec)
+    prihdr['SATSPOTS']  = 0            # 0: No satellite spots; 1: Satellite spots present
+    prihdr['ISHOWFSC']  = 0            # 0: Images taken as part of HOWFSC; 1: Not part of HOWFSC
+    prihdr['HOWFSLNK']  = 0            # 0: Campaign does not include HOWFSC activity; 1: Includes HOWFSC activity
+
+    # fill in exthdr
+    exthdr['XTENSION']    = 'IMAGE'         # Image Extension (FITS format keyword)
+    exthdr['BITPIX']      = 16              # Array data type – instrument data is unsigned 16-bit
+    exthdr['NAXIS']       = 2               # Number of array dimensions
+    exthdr['NAXIS1']      = NAXIS1          # Axis 1 size
+    exthdr['NAXIS2']      = NAXIS2          # Axis 2 size
+    exthdr['PCOUNT']      = 0               # Number of parameters (FITS keyword)
+    exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
+    exthdr['BSCALE']      = 1               # Linear scaling factor
+    exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
+    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
+    exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
+    exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
+    exthdr['STATUS']      = 0               # Housekeeping packet health check status: 0=Nominal, 1=Off-nominal
+    exthdr['HVCBIAS']     = 0               # HV clock bias value (DAC value controlling EM-gain)
+    exthdr['OPMODE']      = 'NONE_DETON_0'  # EXCAM readout operational mode
+    exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
+    exthdr['EMGAIN_C']    = 1.0             # Commanded gain
+    exthdr['EMGAINA1']    = 0.0             # "Actual" gain calculation a1 coefficient
+    exthdr['EMGAINA2']    = 0.0             # "Actual" gain calculation a2 coefficient
+    exthdr['EMGAINA3']    = 0.0             # "Actual" gain calculation a3 coefficient
+    exthdr['EMGAINA4']    = 0.0             # "Actual" gain calculation a4 coefficient
+    exthdr['EMGAINA5']    = 0.0             # "Actual" gain calculation a5 coefficient
+    exthdr['GAINTCAL']    = 0.0             # Calibration reference temperature for gain calculation
+    exthdr['EXCAMT']      = 0.0             # EXCAM temperature from telemetry (°C)
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
+    exthdr['KGAINPAR']    = 0               # Calculated K-gain parameter (DN to electrons)
+    exthdr['CYCLES']      = 0               # EXCAM clock cycles since boot
+    exthdr['LASTEXP']     = 0               # EXCAM clock cycles in the last exposing stage
+    exthdr['BLNKTIME']    = 0               # EXCAM commanded blanking time (sec)
+    exthdr['BLNKCYC']     = 0               # Commanded blanking cycles (clock cycles)
+    exthdr['EXPCYC']      = 0               # Exposing stage duration (cycles)
+    exthdr['OVEREXP']     = 0               # EXCAM over-illumination flag: 0=Not over-exposed, 1=Over-exposed
+    exthdr['NOVEREXP']    = 0.0             # Number of pixels overexposed divided by 100
+    exthdr['PROXET']      = 0.0             # EXCAM ProxE heater value (°C)
+    exthdr['FCMLOOP']     = 0               # FCM control loop state: 0=open, 1=closed
+    exthdr['FCMPOS']      = 0.0             # Coarse FCM position (counts)
+    exthdr['FSMINNER']    = 0               # FSM inner loop control state: 0=open, 1=closed
+    exthdr['FSMLOS']      = 0               # FSM line-of-sight loop control state: 0=open, 1=closed, 2=unknown
+    exthdr['FSMPRFL']     = 'FSM_PROFILE_UNKNOWN'  # FSM profile loaded (e.g., NFOV, WFOV, SPEC660, etc.)
+    exthdr['FSMRSTR']     = 0               # FSM raster status: 0=not executing, 1=executing
+    exthdr['FSMSG1']      = 0.0             # Average measurement (volts) for strain gauge 1
+    exthdr['FSMSG2']      = 0.0             # Average measurement (volts) for strain gauge 2
+    exthdr['FSMSG3']      = 0.0             # Average measurement (volts) for strain gauge 3
+    exthdr['FSMX']        = 0.0             # Derived FSM X position relative to home (mas)
+    exthdr['FSMY']        = 0.0             # Derived FSM Y position relative to home (mas)
+    exthdr['DMZLOOP']     = 0               # DM Zernike loop control state: 0=Open, 1=Closed
+    exthdr['1SVALID']     = 0               # LOWFSC 1s derived stats validity: 0=not valid, 1=valid
+    exthdr['Z2AVG']       = 0.0             # Average Z2 value (nm)
+    exthdr['Z2RES']       = 0.0             # Residual Z2 value (nm)
+    exthdr['Z2VAR']       = 0.0             # Variance of Z2 value (nm^2)
+    exthdr['Z3AVG']       = 0.0             # Average Z3 value (nm)
+    exthdr['Z3RES']       = 0.0             # Residual Z3 value (nm)
+    exthdr['Z3VAR']       = 0.0             # Variance of Z3 value (nm^2)
+    exthdr['10SVALID']    = 0               # LOWFSC 10s derived stats validity: 0=not valid, 1=valid
+    exthdr['Z4AVG']       = 0.0             # Average Z4 value (nm) for 10,000 samples
+    exthdr['Z4RES']       = 0.0             # Residual Z4 value (nm) for 10,000 samples
+    exthdr['Z5AVG']       = 0.0             # Average Z5 value (nm) for 10,000 samples
+    exthdr['Z5RES']       = 0.0             # Residual Z5 value (nm) for 10,000 samples
+    exthdr['Z6AVG']       = 0.0             # Average Z6 value (nm) for 10,000 samples
+    exthdr['Z6RES']       = 0.0             # Residual Z6 value (nm) for 10,000 samples
+    exthdr['Z7AVG']       = 0.0             # Average Z7 value (nm) for 10,000 samples
+    exthdr['Z7RES']       = 0.0             # Residual Z7 value (nm) for 10,000 samples
+    exthdr['Z8AVG']       = 0.0             # Average Z8 value (nm) for 10,000 samples
+    exthdr['Z8RES']       = 0.0             # Residual Z8 value (nm) for 10,000 samples
+    exthdr['Z9AVG']       = 0.0             # Average Z9 value (nm) for 10,000 samples
+    exthdr['Z9RES']       = 0.0             # Residual Z9 value (nm) for 10,000 samples
+    exthdr['Z10AVG']      = 0.0             # Average Z10 value (nm) for 10,000 samples
+    exthdr['Z10RES']      = 0.0             # Residual Z10 value (nm) for 10,000 samples
+    exthdr['Z11AVG']      = 0.0             # Average Z11 value (nm) for 10,000 samples
+    exthdr['Z11RES']      = 0.0             # Residual Z11 value (nm) for 10,000 samples
+    exthdr['Z12AVG']      = 0.0             # Average Z12 value (nm) for 10,000 samples
+    exthdr['Z13AVG']      = 0.0             # Average Z13 value (nm) for 10,000 samples
+    exthdr['Z14AVG']      = 0.0             # Average Z14 value (nm) for 10,000 samples
+    exthdr['SPAMNAME']    = ''              # Closest named SPAM position from PAM dictionary
+    exthdr['SPAM_H']      = 0.0             # SPAM absolute position of the H-axis (µm)
+    exthdr['SPAM_V']      = 0.0             # SPAM absolute position of the V-axis (µm)
+    exthdr['SPAMSP_H']    = 0.0             # SPAM set point H (µm)
+    exthdr['SPAMSP_V']    = 0.0             # SPAM set point V (µm)
+    exthdr['FPAMNAME']    = ''              # Closest named FPAM position from PAM dictionary
+    exthdr['FPAM_H']      = 0.0             # FPAM absolute position of the H-axis (µm)
+    exthdr['FPAM_V']      = 0.0             # FPAM absolute position of the V-axis (µm)
+    exthdr['FPAMSP_H']    = 0.0             # FPAM set point H (µm)
+    exthdr['FPAMSP_V']    = 0.0             # FPAM set point V (µm)
+    exthdr['LSAMNAME']    = ''              # Closest named LSAM position from PAM dictionary
+    exthdr['LSAM_H']      = 0.0             # LSAM absolute position of the H-axis (µm)
+    exthdr['LSAM_V']      = 0.0             # LSAM absolute position of the V-axis (µm)
+    exthdr['LSAMSP_H']    = 0.0             # LSAM set point H (µm)
+    exthdr['LSAMSP_V']    = 0.0             # LSAM set point V (µm)
+    exthdr['FSAMNAME']    = ''              # Closest named FSAM position from PAM dictionary
+    exthdr['FSAM_H']      = 0.0             # FSAM absolute position of the H-axis (µm)
+    exthdr['FSAM_V']      = 0.0             # FSAM absolute position of the V-axis (µm)
+    exthdr['FSAMSP_H']    = 0.0             # FSAM set point H (µm)
+    exthdr['FSAMSP_V']    = 0.0             # FSAM set point V (µm)
+    exthdr['CFAMNAME']    = ''              # Closest named CFAM position from PAM dictionary
+    exthdr['CFAM_H']      = 0.0             # CFAM absolute position of the H-axis (µm)
+    exthdr['CFAM_V']      = 0.0             # CFAM absolute position of the V-axis (µm)
+    exthdr['CFAMSP_H']    = 0.0             # CFAM set point H (µm)
+    exthdr['CFAMSP_V']    = 0.0             # CFAM set point V (µm)
+    exthdr['DPAMNAME']    = ''              # Closest named DPAM position from PAM dictionary
+    exthdr['DPAM_H']      = 0.0             # DPAM absolute position of the H-axis (µm)
+    exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
+    exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
+    exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
+    exthdr['TPINJCYC']    = 0               # Number of cycles for TPUMP injection
+    exthdr['TPOSCCYC']    = 0               # Number of cycles for charge oscillation (TPUMP)
+    exthdr['TPTAU']       = 0               # Length of one step in a trap pumping scheme (microseconds)
+    exthdr['TPSCHEME1']   = 0               # Number of cycles for TPUMP pumping SCHEME_1
+    exthdr['TPSCHEME2']   = 0               # Number of cycles for TPUMP pumping SCHEME_2
+    exthdr['TPSCHEME3']   = 0               # Number of cycles for TPUMP pumping SCHEME_3
+    exthdr['TPSCHEME4']   = 0               # Number of cycles for TPUMP pumping SCHEME_4
+    exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
+    exthdr['FTIMEUTC']    = dt_str          # Frame time in UTC
+    exthdr['DATALVL']    = 'L1'             # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
+
+    return prihdr, exthdr
+
+
+def create_default_L2a_headers(arrtype="SCI"):
+    """
+    Creates an empty primary header and an Image extension header with currently
+        defined keywords.
+
+    Args:
+        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+
+    """
+    # TO DO: Update this once L2a headers have been finalized
+    dt = datetime.datetime.now(datetime.timezone.utc)
+    dt_str = dt.isoformat() 
+
+    prihdr, exthdr = create_default_L1_headers(arrtype)
+
+    exthdr['DATALVL']       = 'L2a'         # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
+    exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
+    exthdr['SAT_DN']        = 0.0           # DN saturation
+    exthdr['DESMEAR']       = False         # Whether desmearing was used
+    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
+    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
+    exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
+    exthdr['DRPVERSN']      = '1.1.2'       # Version of DRP software
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+
+    return prihdr, exthdr
+
+
+def create_default_L2b_headers(arrtype="SCI"):
+    """
+    Creates an empty primary header and an Image extension header with currently
+        defined keywords.
+
+    Args:
+        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+
+    """
+    # TO DO: Update this once L2a headers have been finalized
+    prihdr, exthdr = create_default_L1_headers(arrtype)
+
+    exthdr['DATALVL']      = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
+    exthdr['PCTHRESH']     = 0.0            # Photon-counting threshold (electrons)
+
+    return prihdr, exthdr
+
+
+def create_default_L3_headers(arrtype="SCI"):
+    """
+    Creates an empty primary header and an Image extension header with currently
+        defined keywords.
+
+    Args:
+        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+
+    """
+    # TO DO: Update this once L3 headers have been finalized
+    prihdr, exthdr = create_default_L2b_headers(arrtype)
+
+    prihdr['TARGET'] = ''
+    
+    exthdr['CD1_1'] = 0
+    exthdr['CD1_2'] = 0
+    exthdr['CD2_1'] = 0
+    exthdr['CD2_2'] = 0
+    exthdr['CRPIX1'] = 0
+    exthdr['CRPIX2'] = 0
+    exthdr['CTYPE1'] = 'RA---TAN'
+    exthdr['CTYPE2'] = 'DEC--TAN'
+    exthdr['CDELT1'] = 0
+    exthdr['CDELT2'] = 0
+    exthdr['CRVAL1'] = 0
+    exthdr['CRVAL2'] = 0
+    exthdr['STARLOCX'] = 0
+    exthdr['STARLOCY'] = 0
+    exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
+
+    return prihdr, exthdr
+
+
+def create_default_L4_headers(arrtype="SCI"):
+    """
+    Creates an empty primary header and an Image extension header with currently
+        defined keywords.
+
+    Args:
+        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+
+    """
+    # TO DO: Update this once L4 headers have been finalized
+    prihdr, exthdr = create_default_L3_headers(arrtype)
+
+    exthdr['DATALVL']    = 'L4'           # Data level (e.g., 'L1', 'L2a', 'L2b')
+
+    return prihdr, exthdr
+
+
+def create_default_calibration_product_headers():
+    '''
+    This function creates the basic primary and extension headers that
+        would be used in a calibration product. Each individual calibration
+        product should add additional headers as required.
+
+    Returns:
+        tuple:
+            prihdr (fits.Header): Primary FITS Header
+            exthdr (fits.Header): Extension FITS Header
+    '''
+    # TO DO: update when this has been more defined
+    # TO DO: Update this once L2a headers have been finalized
+    prihdr, exthdr = create_default_L1_headers()
+    exthdr['DATALVL']    = 'Calibration Product'
+    exthdr['DATATYPE']    = 'Image'              # What type of calibration product, just do image for now, mock codes will update
+
+    return prihdr, exthdr
+
 
 def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CIC_map_dq, DC_map, DC_map_err, DC_map_dq):
     '''
