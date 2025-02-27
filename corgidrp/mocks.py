@@ -2150,7 +2150,7 @@ def amp_psf_rad_lin(
     rad_amp[idx_hlc]= 1 + 0.1*(r_dist[idx_hlc] - 6.9)/(22.2-6.9)
     return rad_amp
 
-def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
+def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
     """
     Create simulated data for core throughput calibration. This is a set of
     individual, noiseless 2D Gaussians, one per image.  
@@ -2159,10 +2159,6 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
         fwhm_mas (float): PSF's FWHM in mas
         cfam_name (str) (optional): CFAM filter name. Default is '1F'
         n_psfs (int) (optional): Number of simulated PSFs. Default is 10
-        random (bool) (optional): If False, a set of equispaced PSFs with a
-          specific radial profile for their amplitude is generated. If True,
-          the PSF location and amplitude is random within some specific ranges. 
-          If False, n_psfs is rounded up to the closest squared integer.
 
     Returns:
         corgidrp.data.Image: The simulated PSF Images
@@ -2190,30 +2186,15 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
     # Generate random source model list. Random amplitues and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
-    if random:
-        # Set seed for reproducibility of mock data
-        rng = np.random.default_rng(0)
-        model_params = [
-            dict(amplitude=rng.uniform(1,10),
-            x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-            y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-            x_stddev=fwhm_mas/21.8/2.335,
-            y_stddev=fwhm_mas/21.8/2.335)
-            for _ in range(n_psfs)]
-    else:
-        n_psfs_x = int(np.sqrt(n_psfs)) + 1
-        n_psfs_y = n_psfs_x
-        x_mean_arr = np.linspace(-23, 23, n_psfs_x)
-        y_mean_arr = np.linspace(-23, 23, n_psfs_y)
-        rad_amp = amp_psf_rad_lin(x_mean_arr=x_mean_arr, y_mean_arr=y_mean_arr)
-        model_params = [
-            dict(
-            amplitude=rad_amp[np.mod(idx_psf,n_psfs_x),idx_psf//n_psfs_x],
-            x_mean=imshape[0]//2,
-            y_mean=imshape[0]//2,
-            x_stddev=fwhm_mas/21.8/2.335,
-            y_stddev=fwhm_mas/21.8/2.335)
-            for idx_psf in range(n_psfs)]
+    # Set seed for reproducibility of mock data
+    rng = np.random.default_rng(0)
+    model_params = [
+        dict(amplitude=rng.uniform(1,10),
+        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        x_stddev=fwhm_mas/21.8/2.335,
+        y_stddev=fwhm_mas/21.8/2.335)
+        for _ in range(n_psfs)]
 
     model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
     # Render models to image using full evaluation
@@ -2228,13 +2209,8 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None, random=False):
         model.bounding_box = None
         model.render(psf)
         image = np.zeros([1024, 1024])
-        if random:
-            # Insert PSF at random location within the SCI frame
-            y_image, x_image = rng.integers(100), rng.integers(100)
-        else:
-            # location consistent with the radial profile of the amplitude
-            y_image = int(y_mean_arr[np.mod(idx_mod,n_psfs_x)])
-            x_image = int(x_mean_arr[idx_mod//n_psfs_x])
+        # Insert PSF at random location within the SCI frame
+        y_image, x_image = rng.integers(100), rng.integers(100)
         image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
             512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
         # List of known positions and list of known PSF volume
