@@ -7,7 +7,7 @@ from scipy.signal import decimate
 
 import corgidrp
 import corgidrp.data as data
-from corgidrp.mocks import create_default_headers, create_ct_psfs,
+from corgidrp.mocks import create_default_headers, create_ct_psfs
 from corgidrp.data import Image, Dataset, CoreThroughputCalibration
 from corgidrp import corethroughput
 
@@ -27,7 +27,7 @@ def setup_module():
     """
     global cfam_name
     cfam_name = '1F'
-    global dataset_ct, dataset_ct_syn
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
     global ct_in, ct_syn
@@ -68,7 +68,7 @@ def setup_module():
         n_psfs=100)
     # Input CT
     ct_in = half_psf/unocc_psf_norm
-    # Add pupil images
+    # Add synthetic pupil images
     data_ct += data_psf
     dataset_ct = Dataset(data_ct)
 
@@ -87,13 +87,22 @@ def setup_module():
     psf_test[psf_loc_syn[1],
         psf_loc_syn[0]] = 4
     data_ct += [Image(psf_test,pri_hdr=prhd, ext_hdr=exthd, err=err)]
-    # Synthetic pupil images
+    # Add synthetic pupil images
     data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     # Known CT
     ct_syn = (4+3*8+2*16)/(0.5*(1+3)*400)/di_over_pil
     # Dataset
     dataset_ct_syn = Dataset(data_ct) 
+
+    # PSF for CT map interpolation
+    data_ct = []
+    # Add synthetic pupil images
+    data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+    data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+    # Synthetic psfs with known CT map (mock.py)
+    data_ct += create_ct_psfs(50, cfam_name='1F', interp=True)[0]
+    dataset_ct_interp = Dataset(data_ct)
 
 def test_psf_pix_and_ct():
     """
