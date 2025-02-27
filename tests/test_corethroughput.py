@@ -7,8 +7,7 @@ from scipy.signal import decimate
 
 import corgidrp
 import corgidrp.data as data
-from corgidrp.mocks import (create_default_headers, create_ct_psfs,
-    amp_psf_rad_lin)
+from corgidrp.mocks import create_default_headers, create_ct_psfs,
 from corgidrp.data import Image, Dataset, CoreThroughputCalibration
 from corgidrp import corethroughput
 
@@ -298,23 +297,20 @@ def test_ct_map_interp():
     the CTC GSW shall compute a 2D floating-point interpolated core throughput
     map.
     """
-    # Create a CT cal file with a set of PSFs whose locations are equispaced
-    # FPM positions and deltas have already been tested in test_fpm_pos. Choose
-    # a simple configuration now to test the interpolation:
+    # FPM positions and deltas have already been tested in test_fpm_pos. Create
+    # a CT calibration file with a standard configuration to test the CT
+    # interpolation with reference PSFs to be within the HLC region
     fpm_center_cor = np.array([512,512])
     fpam_pos_cor = np.array([6757, 22424])
     fpam_pos_ct = fpam_pos_cor
     fsam_pos_cor = np.array([29387, 12238])
     fsam_pos_ct = fsam_pos_cor
-    corethroughput.write_ct_calfile(dataset_ct_equi,
+    corethroughput.write_ct_calfile(dataset_ct_interp,
         fpm_center_cor,
         fpam_pos_cor, fpam_pos_ct,
         fsam_pos_cor, fsam_pos_ct)
-    # Read inputs for the calibration file
-    ct_cal_input = corethroughput.read_ct_cal_file()
-
-    # Interpolate
-    # Create an instance of CoreThroughputCalibration with the previous PSFs
+    # Read reference CT map
+    ct_map_ref = corethroughput.read_ct_cal_file()[7]
     try:
         idx1 = len('CoreThroughputCalibration')
         for _, _, files in os.walk(corgidrp.default_cal_dir):
@@ -323,10 +319,11 @@ def test_ct_map_interp():
         calfile_latest = calfile_list[np.array(calfile_date).argmax()]
     except:
         raise OSError('The core throughput calibration file could not be loaded.')
-
     # Create an instance of CoreThroughputCalibration
     ct_cal = CoreThroughputCalibration(os.path.join(corgidrp.default_cal_dir,
         calfile_latest))
+    
+
     # Test 1: default grid
     # Output CT should be close to the input values
     ct_map_interp = ct_cal.ct_map_interp()
@@ -337,21 +334,10 @@ def test_ct_map_interp():
     # defined the CT cal file and compare the CT values
     ratio_input, ratio_target = [], []
     for idx_interp in range(ct_map_interp.shape[1]):
-        try:
-            amp_ct_input = amp_psf_rad_lin(
-                x_mean_arr=np.array(ct_cal_input[7][0][idx_interp]),
-                y_mean_arr=np.array(ct_cal_input[7][1][idx_interp]))
-            ratio_input += [ct_cal_input[7][2][idx_interp]/amp_ct_input]
-        except:
-            pass
-        amp_ct_target = amp_psf_rad_lin(
-            x_mean_arr=np.array(ct_map_interp[0][idx_interp]),
-            y_mean_arr=np.array(ct_map_interp[1][idx_interp]))[0]
-        ratio_target += [ct_map_interp[2][idx_interp]/amp_ct_target]
-        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_cal_input[7][0]) +
-            np.abs(ct_map_interp[1][idx_interp]-ct_cal_input[7][1])).argmin()
+        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_map_ref[0]) +
+            np.abs(ct_map_interp[1][idx_interp]-ct_map_ref[1])).argmin()
         # Choosing a 1% relative error
-#        assert np.abs(ct_map_interp[2][idx_interp]/ct_cal_input[7][2][idx_closest]-1) < 1e-2
+#        assert np.abs(ct_map_interp[2][idx_interp]/ct_map_ref[2][idx_closest]-1) < 1e-2
     breakpoint()
 
     # Test 2: user provided target pixels outside the HLC region, the
