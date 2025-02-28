@@ -43,9 +43,53 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 
 
-# -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
+# The theme to use for HTML and HTML Help pages.  See the documentation for
+# a list of builtin themes.
+#
+html_theme = 'pydata_sphinx_theme'
 
-html_theme = 'sphinx_rtd_theme'
-pygments_style = 'sphinx'  
+html_theme_options = {
+    "logo": {
+        "link": "index",
+        "image_light": "corgi.png",
+        "image_dark": "corgi.png",
+    },
+    "icon_links": [
+        {
+            "name": "GitHub",
+            "url": "https://github.com/roman-corgi/corgidrp.git",
+            "icon": "fab fa-github-square",
+        },
+    ],
+    "footer_start": ["copyright", "last-updated"],
+    "secondary_sidebar_items": [],
+    "header_links_before_dropdown": 8,
+    "pygment_light_style": "tango",
+    "pygment_dark_style": "monokai",
+}
+
+html_last_updated_fmt = "%Y %b %d at %H:%M:%S UTC"
+html_show_sourcelink = False
+
+html_sidebars = {
+    "*": ["sidebar-nav-bs.html"],
+    "index": [],
+    "pages/install": ["page-toc"],
+    "pages/getting_started": ["page-toc"],
+    "pages/about": [],
+    "pages/learning": [],
+    "pages/tutorials": [],
+    "pages/case_studies": [],
+    "pages/cite": [],
+    "pages/feedback": [],
+    "auto_examples/*": [],
+    "tutorials/**": ["page-toc", "sidebar-nav-bs.html"],
+    "case_studies/**": ["page-toc", "sidebar-nav-bs.html"]
+}
+
+# Add any paths that contain custom static files (such as style sheets) here,
+# relative to this directory. They are copied after the builtin static files,
+# so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+html_css_files = ["custom.css"]
+html_js_files = ['custom.js']

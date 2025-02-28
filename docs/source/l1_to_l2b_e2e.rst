@@ -1,45 +1,32 @@
-L1 to L2b end to end Test
---------------------------
+Process L1 to L2b data
+-----------------------
 
-This section demonstrates how to run an end-to-end test for processing Level 1 (L1) data into Level 2b (L2b) data using the ``corgidrp`` package.
+This section demonstrates how process Level 1 (L1) data into Level 2b (L2b) data using the ``corgidrp`` package.
 
-The test involves processing raw L1 data through calibration procedures and comparing the results against known TVAC L2b data. It also ensures calibration file creation and removal from the calibration database. Before running the test, ensure you have set up the necessary paths to your data and calibration files. The following example demonstrates the steps involved in processing the data and running the test.
+The focus is on explaining the key steps involved in processing data, including setting up calibration files, running the data processing pipeline, and understanding the core steps for transforming raw data into processed output. The test can be run by processing raw L1 data into L2b data using the ``walker.walk_corgidrp`` function. This function is the core of the pipeline and is responsible for the actual data processing. Here is how you can set up and run the test:
 
+Calibration Files
+~~~~~~~~~~~~~~~~~
 
-Running the Test
-~~~~~~~~~~~~~~~~
+To process the L1 data, you will need several calibration files. These files are used in the calibration process to adjust the raw data accordingly. The following calibration files are required:
 
-There are several ways to run the L1 to L2b end-to-end test:
-
-1. Using pytest
-   
-   .. code-block:: bash
-
-      # From the root directory of corgidrp
-      pytest tests/test_l1_to_l2b.py -v
-
-2. Direct execution
-   
-   .. code-block:: bash
-
-      # Run the script directly with default paths
-      python tests/test_l1_to_l2b.py
-
-      # Or specify custom paths
-      python tests/test_l1_to_l2b.py --tvacdata_dir /path/to/CGI_TVAC_Data --outputdir /path/to/output
+    - Noise Maps: Used to account for noise in the sensor data.
+    - Non-Linearity Calibration: Corrects for any non-linearities in the sensor's response.
+    - Dark Current Calibration: Accounts for any dark current noise in the sensor.
+    - Flat Field Calibration: Used to correct for uneven sensitivity across the detector.
+    - Bad Pixel Maps: Identifies pixels that are defective or not functioning properly.
 
 
 Test Setup
 ~~~~~~~~~~
 
-To run this test, you will need three specific datasets from the database:
+Before running the test, ensure you have the necessary datasets and calibration files. You will need:
 
 1. **L1 Data** - Raw Level 1 data files.
-2. **L2b Data** - Processed Level 2b data files.
-3. **Cals** - Calibration files required for processing.
+2. **Cals** - Calibration files required for processing as outlined above. 
 
-If you don't have all the datasets downloaded, make sure you at least have these three files to run the test promptly. The script imports necessary libraries and determines the directory containing the script.
-   
+The test script is written to process the L1 data, apply the calibration files, and produce the output in the L2b format.
+
 .. code-block:: python
 
     import argparse
@@ -54,8 +41,6 @@ If you don't have all the datasets downloaded, make sure you at least have these
     import corgidrp.walker as walker
     import corgidrp.caldb as caldb
     import corgidrp.detector as detector
-
-    thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
 The `test_l1_to_l2b` function initializes paths for input data, calibration files, and output directories.
 
@@ -92,7 +77,7 @@ The raw science data files and mock calibration files are defined.
         mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
         tvac_l2b_filelist = [os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]]
 
-The calibration database (`caldb`) is initialized, and calibration entries are created.
+The calibration database (`caldb`) is initialized, and calibration entries are created. The following is mocking code for squeezing the test data in the official format. 
 
 .. code-block:: python
 
@@ -121,18 +106,7 @@ Non-linearity calibration, KGain, noise maps, flat field, and bad pixel maps are
         kgain.save(filedir=l2b_outputdir, filename="mock_kgain.fits")
         this_caldb.create_entry(kgain)
 
-The `walker.walk_corgidrp` function processes the L1 data.
-
-.. code-block:: python
-
-        walker.walk_corgidrp(l1_data_filelist, "", l2b_outputdir)
-
-Calibration entries are removed from the database.
-
-.. code-block:: python
-
-        this_caldb.remove_entry(nonlinear_cal)
-        this_caldb.remove_entry(kgain)
+The ``walker.walk_corgidrp`` function is the main part of the pipeline responsible for transforming the raw L1 data into L2b data. This function applies all necessary calibration steps and generates the output files.
 
 The processed L2b data is compared against TVAC data to verify correctness.
 
@@ -150,10 +124,6 @@ The processed L2b data is compared against TVAC data to verify correctness.
 
             assert np.all(np.abs(diff) < 1e-5)
 
-The test can be run using command-line arguments.
-
-.. code-block:: python
-
     if __name__ == "__main__":
         tvacdata_dir = "/path/to/CGI_TVAC_Data/"
         outputdir = thisfile_dir
@@ -169,6 +139,23 @@ The test can be run using command-line arguments.
         test_l1_to_l2b(tvacdata_dir, outputdir)
 
 This script ensures that the `corgidrp` pipeline correctly processes L1 data into L2b. The validation step confirms that the output matches expected results, ensuring data integrity.
+
+The test can be run using command-line arguments.
+
+1. Using pytest
+
+.. code-block:: python
+      # From the root directory of corgidrp
+      pytest tests/test_l1_to_l2b.py -v
+
+2. Direct execution
+
+.. code-block:: python
+      # Run the script directly with default paths
+      python tests/test_l1_to_l2b.py
+      # Or specify custom paths
+      python tests/test_l1_to_l2b.py --tvacdata_dir /path/to/CGI_TVAC_Data --outputdir /path/to/output
+
 
 Output
 ~~~~~~
