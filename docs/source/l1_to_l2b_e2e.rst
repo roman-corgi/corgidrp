@@ -140,21 +140,23 @@ The processed L2b data is compared against TVAC data to verify correctness.
 
 This script ensures that the `corgidrp` pipeline correctly processes L1 data into L2b. The validation step confirms that the output matches expected results, ensuring data integrity.
 
-The test can be run using command-line arguments.
+There are several ways to run test:
 
 1. Using pytest
 
 .. code-block:: python
-      # From the root directory of corgidrp
-      pytest tests/test_l1_to_l2b.py -v
+        
+        # From the root directory of corgidrp
+        pytest tests/test_l1_to_l2b.py -v
 
 2. Direct execution
 
 .. code-block:: python
-      # Run the script directly with default paths
-      python tests/test_l1_to_l2b.py
-      # Or specify custom paths
-      python tests/test_l1_to_l2b.py --tvacdata_dir /path/to/CGI_TVAC_Data --outputdir /path/to/output
+
+         # Run the script directly with default paths
+        python tests/test_l1_to_l2b.py
+        # Or specify custom paths
+        python tests/test_l1_to_l2b.py --tvacdata_dir /path/to/CGI_TVAC_Data --outputdir /path/to/output
 
 
 Output
