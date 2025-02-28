@@ -75,14 +75,7 @@ html_sidebars = {
     "*": ["sidebar-nav-bs.html"],
     "index": [],
     "pages/install": ["page-toc"],
-    "pages/getting_started": ["page-toc"],
-    "pages/about": [],
-    "pages/learning": [],
     "pages/tutorials": [],
-    "pages/case_studies": [],
-    "pages/cite": [],
-    "pages/feedback": [],
-    "auto_examples/*": [],
     "tutorials/**": ["page-toc", "sidebar-nav-bs.html"],
     "case_studies/**": ["page-toc", "sidebar-nav-bs.html"]
 }

@@ -3,7 +3,6 @@ import os
 import pathlib
 import configparser
 
-
 __version__ = "1.1.2"
 version = __version__ # temporary backwards compatability 
 
