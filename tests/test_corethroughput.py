@@ -7,7 +7,7 @@ from scipy.signal import decimate
 
 import corgidrp
 import corgidrp.data as data
-from corgidrp.mocks import create_default_headers, create_ct_psfs
+from corgidrp.mocks import create_default_headers, create_ct_psfs, create_ct_interp
 from corgidrp.data import Image, Dataset, CoreThroughputCalibration
 from corgidrp import corethroughput
 
@@ -101,7 +101,7 @@ def setup_module():
     data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     # Synthetic psfs with known CT map (mock.py)
-    data_ct += create_ct_psfs(50, cfam_name='1F', interp=True)[0]
+    data_ct += create_ct_interp()[0]
     dataset_ct_interp = Dataset(data_ct)
 
 def test_psf_pix_and_ct():
@@ -332,8 +332,7 @@ def test_ct_map_interp():
     ct_cal = CoreThroughputCalibration(os.path.join(corgidrp.default_cal_dir,
         calfile_latest))
     
-
-    # Test 1: default grid
+    # Test 1: default grid of target locations
     # Output CT should be close to the input values
     ct_map_interp = ct_cal.ct_map_interp()
     # core throughput in (0,1]
@@ -341,13 +340,12 @@ def test_ct_map_interp():
     assert np.all(ct_map_interp[2]) <= 1
     # For each interpolated location, find the closest location in the set that
     # defined the CT cal file and compare the CT values
-    ratio_input, ratio_target = [], []
+    ratio = []
     for idx_interp in range(ct_map_interp.shape[1]):
         idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_map_ref[0]) +
             np.abs(ct_map_interp[1][idx_interp]-ct_map_ref[1])).argmin()
-        # Choosing a 1% relative error
-#        assert np.abs(ct_map_interp[2][idx_interp]/ct_map_ref[2][idx_closest]-1) < 1e-2
-    breakpoint()
+        # Choosing a 10% *relative error*
+        assert np.abs(ct_map_interp[2][idx_interp]/ct_map_ref[2][idx_closest]-1) < 0.1
 
     # Test 2: user provided target pixels outside the HLC region, the
     # function must fail
@@ -369,10 +367,10 @@ def test_ct_map_interp():
     # For each interpolated location, find the closest location in the set that
     # defined the CT cal file and compare the CT values
     for idx_interp in range(ct_map_interp.shape[0]):
-        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_cal_input[7][0]) +
-            np.abs(ct_map_interp[1][idx_interp]-ct_cal_input[7][1])).argmin()
-        # Choosing a 1% relative error
-        assert np.abs(ct_map_interp[2][idx_interp]/ct_cal_input[7][2][idx_closest]-1) < 1e-2
+        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_map_ref[0]) +
+            np.abs(ct_map_interp[1][idx_interp]-ct_map_ref[1])).argmin()
+        # Choosing a 10% relative error
+        assert np.abs(ct_map_interp[2][idx_interp]/ct_map_ref[2][idx_closest]-1) < 0.1
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()

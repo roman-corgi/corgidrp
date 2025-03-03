@@ -1603,6 +1603,7 @@ class CoreThroughputCalibration(Image):
 
     def ct_map_interp(
         self,
+        method=None,
         x_range=[-23,23],
         y_range=[-23,23],
         n_gridx=47,
@@ -1616,6 +1617,9 @@ class CoreThroughputCalibration(Image):
         locations is not provided, a default grid of points is condidered.
 
         Args:
+          method (string) (optional): The interpolation method being used. For
+            instance, 'linear' does scipy.interpolate.griddata with a linear
+            interpolant.
           x_range (array) (optional): Two values [xmin, xmax] specifying the range of pixels to
             be considered. Units are EXCAM pixels measured with respect the center
             of the FPM. Notice that [-23,23] is approx. +/-10 l/D.
@@ -1646,6 +1650,8 @@ class CoreThroughputCalibration(Image):
           interpolated core throughput value corresponding to each target pixel
           location. 
         """
+        if method is None:
+            method = 'linear'
         # If no target pixels are provided, create a grid
         if target_pix is None:
             x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
@@ -1663,16 +1669,20 @@ class CoreThroughputCalibration(Image):
         # Addionally, flag locations that are closer to the FPM's center than
         # any reference location to avoid results without a proper support for
         # interpolation since the DH radial pattern is highly non-linear.
-        # Note: This method does not compare every target position with the set
-        # of nearest reference locations, or more elaborated methods.
+        # Note: This method does not perform a search for every target position
+        # with the set of nearest reference locations, or more elaborated methods.
         r2_ct_map = self.ct_map[0]**2 + self.ct_map[1]**2
         r2_interp = target_pix[0]**2 + target_pix[1]**2
         r2_good = r2_interp >= r2_ct_map.min()
-        #target_pix = np.array([target_pix[0][r2_good], target_pix[1][r2_good]])
+        target_pix = np.array([target_pix[0][r2_good], target_pix[1][r2_good]])
  
-        # Use linear interpolation
-        ct_interp = griddata((self.ct_map[0], self.ct_map[1]), self.ct_map[2],
-            (target_pix[0], target_pix[1]), method='linear')
+        if method.lower()=='linear':
+            # Use linear interpolation od scattered data
+            ct_interp = griddata((self.ct_map[0], self.ct_map[1]), self.ct_map[2],
+                (target_pix[0], target_pix[1]), method='linear')
+        else:
+            raise ValueError(f'Interpolation method: {method} unrecognized.')
+
         # Check if all PSF positions fall out of the range of the input PSFs
         if np.all(np.isnan(ct_interp)):
             raise ValueError('There are no valid target positions within the ' + 

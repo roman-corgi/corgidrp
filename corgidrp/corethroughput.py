@@ -360,6 +360,7 @@ def write_ct_calfile(
     roi_radius=3,
     version=0,
     n_pix_psf=15,
+    filename=None,
     ):
     """
     Function that writes the core throughput calibration file.
@@ -405,6 +406,7 @@ def write_ct_calfile(
         PSF array is centered at the EXCAM pixel closest to the PSF's location.
         15 EXCAM pixels correspond to a radius from PSF's centroid
         of 3 l/D. The PSF intensity at that angular distance is ~1e-10 its peak. 
+      filename (str): file name to save to.
     """
     dataset = dataset_in.copy()
 
@@ -498,7 +500,7 @@ def write_ct_calfile(
         ct_map=ct_map, ct_hdr=ct_hdr,
         fpm_info=fpm_info, fpm_hdr=fpm_hdr,
         input_dataset=dataset)
-    ct_cal_file.save(filedir=corgidrp.default_cal_dir)
+    ct_cal_file.save(filedir=corgidrp.default_cal_dir, filename=filename)
 
 def read_ct_cal_file():
     """ Read latest core throughput calibration file.

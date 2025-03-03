@@ -2618,7 +2618,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
 
     return frame
 
-def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None,ct_interp=False):
+def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
     """
     Create simulated data for core throughput calibration. This is a set of
     individual, noiseless 2D Gaussians, one per image.  
@@ -2627,9 +2627,6 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None,ct_interp=False):
         fwhm_mas (float): PSF's FWHM in mas
         cfam_name (str) (optional): CFAM filter name. Default is '1F'
         n_psfs (int) (optional): Number of simulated PSFs. Default is 10
-        ct_interp (bool) (optional): generates a set of synthetic PSFs with
-          known centers and CT values. Aimed at creating a test set for CT
-          interpolation.
 
     Returns:
         corgidrp.data.Image: The simulated PSF Images
@@ -2642,7 +2639,7 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None,ct_interp=False):
         n_psfs = 10
 
     # Default headers
-    prhd, exthd = create_default_headers()
+    prhd, exthd = create_default_L2b_headers()
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
     # Mock error
@@ -2657,7 +2654,7 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None,ct_interp=False):
     # Generate random source model list. Random amplitues and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
-    # Set seed for reproducibility of mock data
+    # Set seed for reproducibility
     rng = np.random.default_rng(0)
     model_params = [
         dict(amplitude=rng.uniform(1,10),
@@ -2689,6 +2686,66 @@ def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None,ct_interp=False):
             512+y_image+model.y_mean.value-imshape[0]//2]]
         # Add half PSF volume for 2D Gaussian (numerator of core throughput)
         half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
+        # Build up the Dataset
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
+
+    return data_psf, np.array(psf_loc), np.array(half_psf)
+
+def create_ct_interp(n_psfs=None):
+    """
+    Create simulated data to test the step function that does core throughput
+    interpolation.
+
+    Args:
+        n_psfs (int) (optional): The number of PSFs to be simulated.
+
+    Returns:
+        corgidrp.data.Image: The simulated PSF Images
+        np.array: PSF locations
+        np.array: PSF CT values
+    """
+    if n_psfs is None:
+        n_psfs=500
+
+    # The shape of all PSFs is the same. Their location and amplitude will be
+    # adjusted depending on their location.
+    imshape=(7,7)
+    psf_model = np.zeros(imshape)
+    # Set of known values at selected locations
+    psf_model[imshape[1]//2 - 3:imshape[1]//2 + 4,
+        imshape[0]//2 - 3:imshape[0]//2 + 4] = 1
+    psf_model[imshape[1]//2 - 2:imshape[1]//2 + 3,
+        imshape[0]//2 - 2:imshape[0]//2 + 3] = 2
+    psf_model[imshape[1]//2 - 1:imshape[1]//2 + 2,
+        imshape[0]//2 - 1:imshape[0]//2 + 2] = 3
+    psf_model[imshape[1]//2, imshape[0]//2] = 4
+
+    # Default headers
+    prhd, exthd = create_default_L2b_headers()
+    exthd['CFAMNAME'] = '1F'
+    # Mock error
+    err = np.ones([1,1024,1024])
+
+    # Simulate PSFs within two radii
+    psf_loc = []
+    half_psf = []
+    data_psf = []
+    # Set seed for reproducibility
+    rng = np.random.default_rng(0)
+    for i_psf in range(n_psfs):
+        image = np.zeros([1024, 1024])
+        # Insert PSF at random location within the SCI frame
+        x_image = (-1)**rng.integers(2)*rng.integers(22)
+        y_image = (-1)**rng.integers(2)*rng.integers(22)
+        image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
+            512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf_model
+        # Adjust intensity following some radial profile
+        amp = 1 + np.sqrt(x_image**2+y_image**2)/31
+        image *= amp
+        # List of known positions
+        psf_loc += [[512+x_image-imshape[0]//2, 512+y_image-imshape[0]//2]]
+        # Add numerator of core throughput
+        half_psf += [image[image>=image.max()/2].sum()]
         # Build up the Dataset
         data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
 
