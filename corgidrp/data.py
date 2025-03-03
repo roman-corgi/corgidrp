@@ -1487,10 +1487,27 @@ class CoreThroughputCalibration(Image):
           raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required
           only if raw data is passed in)
-        ct_map (array): List of core throughput values for each PSF.
+        ct_map (array): List of PSF locations and corresponding core throughput
+          values for each PSF.
         ct_hdr (astropy.io.fits.Header): Header for the core throughput values.
         fpm_info (array): Array with information about FPAM and FSAM during
           coronagraphic and core throughput observing sequences.
+        
+          fpm_info[0]=FPAM center during core throughput observing sequences
+            in units of EXCAM pixels.
+          fpm_info[1]=FSAM center during core throughput observing sequences in
+            units of EXCAM pixels.
+          fpm_info[2]=FPM center during coronagraphic observing sequences in
+            units of EXCAM pixels.
+          fpm_info[3]=FPAM H/V values during coronagraphic observing sequences
+            in units of micron.
+          fpm_info[4]=FPAM H/V values during core throughput observing sequences
+            in units of micron.
+          fpm_info[5]=FSAM H/V values during coronagraphic observing sequences
+            in units of micron.
+          fpm_info[6]=FSAM H/V values during core throughput observing sequences
+            in units of micron.
+
         fpm_hdr (astropy.io.fits.Header): Header for the FPAM and FSAM information.
         input_dataset (corgidrp.data.Dataset): the input dataset that were
           combined together to make this image.
