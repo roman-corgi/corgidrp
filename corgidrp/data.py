@@ -1466,6 +1466,19 @@ class CoreThroughputCalibration(Image):
     """
     Class containing a core throughput calibration file
 
+    A CoreThroughput calibration file has two main data arrays:
+
+      3-d cube of PSF images, i.e, a N1xN1xN array where N1<=1024 is set by a
+      keyword argument, with default value of 1024. The N PSF images are the ones
+      in the CT dataset.
+
+      N sets of (x,y, CT measurements). The (x,y) are pixel coordinates of the
+      PSF images wrt the FPAM's center.
+
+      The CoreThroughput calibration file will also include the FPAM, FSAM
+      position during coronagraphic and core throughput observing sequences in
+      units of EXCAM pixels.
+
     Args:
         data_or_filepath (array or str): either a filepath string corresponding
           to an existing CoreThroughputCalibration file saved to disk or an
