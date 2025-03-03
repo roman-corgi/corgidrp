@@ -1372,7 +1372,17 @@ class FluxcalFactor(Image):
 
 class FpamFsamRotMat(Image):
     """
-    Class containing detector parameters that may change over time.
+    Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
+    CGI model was consistent with FFT/TVAC tests. Transformation matrices are
+    a 2x2 array with real values. Model cases are fpam_to_excam_modelbased and
+    fsam_to_excam_modelbased, see below.
+
+    The use of the delta FPAM/FSAM positions and the rotation matrices is based
+    on the prescription provided on 1/14/25: "H/V values to EXCAM row/column pixels"
+
+          delta_pam = np.array([[dh], [dv]]) # fill these in
+          M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
+          delta_pix = M @ delta_pam 
 
     Args:
         data_or_filepath (dict or str): either a filepath string corresponding to an
