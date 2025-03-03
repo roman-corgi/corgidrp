@@ -4,6 +4,7 @@ import numpy as np
 import astropy.time as time
 from astropy.io import fits
 from scipy.signal import decimate
+from scipy.interpolate import griddata
 
 import corgidrp
 import corgidrp.data as data
@@ -333,44 +334,38 @@ def test_ct_map_interp():
         calfile_latest))
     
     # Test 1: default grid of target locations
-    # Output CT should be close to the input values
     ct_map_interp = ct_cal.ct_map_interp()
     # core throughput in (0,1]
     assert np.all(ct_map_interp[2]) > 0
-    assert np.all(ct_map_interp[2]) <= 1
-    # For each interpolated location, find the closest location in the set that
-    # defined the CT cal file and compare the CT values
-    ratio = []
-    for idx_interp in range(ct_map_interp.shape[1]):
-        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_map_ref[0]) +
-            np.abs(ct_map_interp[1][idx_interp]-ct_map_ref[1])).argmin()
-        # Choosing a 10% *relative error*
-        assert np.abs(ct_map_interp[2][idx_interp]/ct_map_ref[2][idx_closest]-1) < 0.1
+    # Expected CT values
+    ct_exp = griddata((ct_map_ref[0], ct_map_ref[1]), ct_map_ref[2],
+                (ct_map_interp[0], ct_map_interp[1]), method='linear')
+    # Remove NaN
+    isvalid = np.where(np.isnan(ct_exp) == False)[0]
+    assert np.all(ct_map_interp[2] == ct_exp[isvalid])
 
-    # Test 2: user provided target pixels outside the HLC region, the
+    # Test 2: user provided target pixels within the HLC region
+    target_pix_x = [7.3, 8.4, 12.1, 22.1, -8.6, -12.5, -20.5, 12.4, 5.6]
+    target_pix_y = [-13.4, -4, 5.3, -5.1, -12.6, 9.6, 4.8, -7.4, 7.6]
+    target_pix = np.array([target_pix_x, target_pix_y])
+    ct_map_interp = ct_cal.ct_map_interp(target_pix=target_pix)
+    # core throughput in (0,1]
+    assert np.all(ct_map_interp[2]) > 0
+    assert np.all(ct_map_interp[2]) <= 1
+    # Expected CT values
+    ct_exp = griddata((ct_map_ref[0], ct_map_ref[1]), ct_map_ref[2],
+                (target_pix[0], target_pix[1]), method='linear')
+    # Remove NaN
+    isvalid = np.where(np.isnan(ct_exp) == False)[0]
+    assert np.all(ct_map_interp[2] == ct_exp[isvalid])
+
+    # Test 3: user provided target pixels outside the HLC region, the
     # function must fail
     target_pix_x = [33, 141, 85, 56, 31.4, -532, -42, -7, 3]
     target_pix_y = [830, 54, 55, -3, -2, 92, 38, 474, -47]
     target_pix = np.array([target_pix_x, target_pix_y])
     with pytest.raises(ValueError):
         ct_cal.ct_map_interp(target_pix=target_pix)
-    
-    # Test 3: user provided target pixels within the HLC region
-    target_pix_x = [7.3, 8.4, 12.1, 22.1, -8.6, -12.5, -20.5, 12.4, 5.6]
-    target_pix_y = [-13.4, -4, 5.3, -5.1, -12.6, 9.6, 4.8, -7.4, 7.6]
-    target_pix = np.array([target_pix_x, target_pix_y])
-    
-    ct_map_interp = ct_cal.ct_map_interp(target_pix=target_pix)
-    # core throughput in (0,1]
-    assert np.all(ct_map_interp[2]) > 0
-    assert np.all(ct_map_interp[2]) <= 1
-    # For each interpolated location, find the closest location in the set that
-    # defined the CT cal file and compare the CT values
-    for idx_interp in range(ct_map_interp.shape[0]):
-        idx_closest = (np.abs(ct_map_interp[0][idx_interp]-ct_map_ref[0]) +
-            np.abs(ct_map_interp[1][idx_interp]-ct_map_ref[1])).argmin()
-        # Choosing a 10% relative error
-        assert np.abs(ct_map_interp[2][idx_interp]/ct_map_ref[2][idx_closest]-1) < 0.1
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()
