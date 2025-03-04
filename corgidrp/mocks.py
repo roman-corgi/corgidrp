@@ -2618,28 +2618,23 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
 
     return frame
 
-def create_ct_psfs(fwhm_mas, cfam_name=None, n_psfs=None):
+def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
     """
     Create simulated data for core throughput calibration. This is a set of
     individual, noiseless 2D Gaussians, one per image.  
 
     Args:
         fwhm_mas (float): PSF's FWHM in mas
-        cfam_name (str) (optional): CFAM filter name. Default is '1F'
-        n_psfs (int) (optional): Number of simulated PSFs. Default is 10
+        cfam_name (str) (optional): CFAM filter name.
+        n_psfs (int) (optional): Number of simulated PSFs.
 
     Returns:
         corgidrp.data.Image: The simulated PSF Images
         np.array: PSF locations
         np.array: PSF CT values
     """
-    if cfam_name == None:
-        cfam_name = '1F'
-    if n_psfs == None:
-        n_psfs = 10
-
     # Default headers
-    prhd, exthd = create_default_headers()
+    prhd, exthd = create_default_L3_headers()
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
     # Mock error
