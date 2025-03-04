@@ -64,7 +64,7 @@ def test_pyklipdata_ADI():
                                               centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-    pass
+
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
 
@@ -88,7 +88,6 @@ def test_pyklipdata_RDI():
     mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-    pass
     
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
@@ -114,7 +113,7 @@ def test_pyklipdata_ADIRDI():
                                               centerxy=(50.5,50.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-    pass
+
     # Check image is recentered properly
     for i,image in enumerate(pyklip_dataset._input):
 
