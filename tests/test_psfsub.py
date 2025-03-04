@@ -59,16 +59,16 @@ def test_pyklipdata_ADI():
     """
 
     rolls = [0,90]
-    # Init with center shifted by 1 pixel
+    # Init with center shifted by 1 pixel in x, 2 pixels in y
     mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
-                                              centerxy=(50.5,50.5))
+                                              centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
 
-        assert mock_sci.all_data[i,1:,1:] == pytest.approx(image[:-1,:-1]), f"Frame {i} centered improperly."
+        assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
@@ -84,15 +84,15 @@ def test_pyklipdata_RDI():
     rolls = [45,180]
     n_sci = 1
     n_ref = 1
-    # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,centerxy=(50.5,50.5))
+    # Init with center shifted
+    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
     
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
 
-        assert mock_sci.all_data[i,1:,1:] == pytest.approx(image[:-1,:-1]), f"Frame {i} centered improperly."
+        assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
@@ -110,14 +110,14 @@ def test_pyklipdata_ADIRDI():
     n_ref = 1
     # Init with center shifted by 1 pixel
     mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,
-                                              centerxy=(50.5,50.5))
+                                              centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
     # Check image is recentered properly
     for i,image in enumerate(pyklip_dataset._input):
 
-        assert mock_sci.all_data[i,1:,1:] == pytest.approx(image[:-1,:-1]), f"Frame {i} centered improperly."
+        assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
