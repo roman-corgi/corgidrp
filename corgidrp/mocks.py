@@ -2323,11 +2323,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['MASKLOCY'] = psfcenty
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
-        exthdr['PIXSCALE'] = pixscale
+        exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
         exthdr["ROLL"] = roll_angles[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
-        #exthdr["HISTORY"] = "" # This line keeps triggering an "illegal value" error
-
+        
         # Add WCS header info, if provided
         if wcs_header is None:
             wcs_header = generate_wcs(roll_angles[i], 
