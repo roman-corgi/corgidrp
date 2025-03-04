@@ -152,6 +152,17 @@ def test_distortion():
     assert np.all(np.abs(x_diff)) < np.max(np.abs(true_x_diff))
     assert np.all(np.abs(y_diff)) < np.max(np.abs(true_y_diff))
 
+    # check that the distortion error in the central 1" x 1" region (center ~45 x 45 pixels) 
+    # has distortion error < 4 [mas] (~0.1835 [pixel])
+    lower_lim, upper_lim = int((1024//2) - ((1000/21.8)//2)), int((1024//2) + ((1000/21.8)//2))
+    central_1arcsec_x = x_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
+    central_1arcsec_y = y_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
+    true_1arcsec_x = true_x_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
+    true_1arcsec_y = true_y_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
+
+    assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
+    assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
+
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal)
     pickled_astrom = pickle.loads(pickled)
