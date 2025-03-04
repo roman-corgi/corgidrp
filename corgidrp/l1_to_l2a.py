@@ -287,7 +287,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
 def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
     """
-    Perform non-linearity correction of a dataset using the corresponding non-linearity correction
+    Perform non-linearity correction of a dataset using the corresponding non-linearity correction. Now we check for non-linear pixel and flag them in the DQ. 
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
