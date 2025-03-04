@@ -292,7 +292,8 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
         non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity
-        threshold (float): threshold for flagging pixels in the DQ array. By default it is set to infinity, user can change it to a different value. 
+        threshold (float): threshold for flagging pixels in the DQ array. By default it is set to infinity, user can change it to a different value
+        
     Returns:
         corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
     """
