@@ -286,7 +286,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         ext_hdr['NAXIS2'] = naxis2
 
         # Add info from input dataset
-        ext_hdr_keys = ['BUNIT','PIXSCALE','CFAMNAME',
+        ext_hdr_keys = ['BUNIT','PLTSCALE','CFAMNAME',
                         'DPAMNAME','FPAMNAME','FSAMNAME',
                         'LSAMNAME','SPAMNAME']
         for kw in ext_hdr_keys:
@@ -318,8 +318,6 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     
     dataset_out.update_after_processing_step(history_msg)
     
-    # TODO: Update DQ to 1 where there are nans
-
     return dataset_out
 
 def northup(input_dataset,correct_wcs=False):

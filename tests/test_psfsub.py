@@ -182,7 +182,7 @@ def test_pyklipdata_multiplepixscales():
     """
     mock_sci,mock_ref = create_psfsub_dataset(2,0,[0,0])
     
-    mock_sci[0].ext_hdr["PIXSCALE"] = 10
+    mock_sci[0].ext_hdr["PLTSCALE"] = 10
     with pytest.raises(UserWarning):
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
