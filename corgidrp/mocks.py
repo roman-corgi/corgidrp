@@ -2053,9 +2053,6 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
 
     # Calculate Gaussian 
     gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp / (2.0 * np.pi * sigma**2)
-
-    #np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2)) * flux/(2. * np.pi * sigma**2)
-
     
     return gauss
 
