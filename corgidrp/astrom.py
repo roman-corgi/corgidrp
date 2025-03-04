@@ -502,20 +502,17 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
     
     corr_offset_sep = np.sqrt(corr_offset_x**2 + corr_offset_y**2)
     corr_offset_pa = np.degrees(np.arctan2(-corr_offset_x, corr_offset_y))
-    
-    # ensuring the position angle is always positive
-    for i, pa in enumerate(corr_offset_pa):
-        if pa < 0:
-            corr_offset_pa[i] += 360
 
-    res_sep = corr_offset_sep - true_offset_sep
-    res_pa = corr_offset_pa - true_offset_pa
+    res_sep = corr_offset_sep - true_offset_sep  # this is in pixels
+    res_pa_arctan_num = np.sin(np.radians(corr_offset_pa - true_offset_pa)) 
+    res_pa_arctan_denom = np.cos(np.radians(corr_offset_pa - true_offset_pa))
+    res_pa = np.arctan(res_pa_arctan_num / res_pa_arctan_denom) # this is in radians
 
     # translate pixel error in measurement to sep pa errs
     sep_err = np.sqrt(meas_errs[0]**2 + meas_errs[1]**2)
-    pa_err = np.degrees(np.arctan2(-meas_errs[0],  meas_errs[1]))
+    pa_err = np.arctan2(-meas_errs[0],  meas_errs[1]) # this is in radians
     
-    res_sep /= sep_err 
+    res_sep /= sep_err
     res_pa /= pa_err
     
     residuals = np.append(residuals, np.array([res_sep, res_pa]).ravel())
