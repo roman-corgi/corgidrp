@@ -1372,12 +1372,11 @@ class PyKLIPDataset(pyKLIP_Data):
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
 
     # TODO: Add more bandpasses, modes to self.wave_hlc
-    #       Clarify attribute descriptions
     #       Add wcs header info!
 
     Attrs:
         input: Input corgiDRP dataset.
-        centers: PSF center locations (double check this).
+        centers: Star center locations.
         filenums: file numbers.
         filenames: file names.
         PAs: position angles.
@@ -1564,7 +1563,7 @@ class PyKLIPDataset(pyKLIP_Data):
             if data.ndim != 3:
                 raise UserWarning('Requires 2D/3D data cube')
             NINTS = data.shape[0]
-            pix_scale = shead['PIXSCALE'] # arcsec
+            pix_scale = shead['PLTSCALE'] * 1000. # arcsec
             PIXSCALE += [pix_scale] 
 
             # Get centers.
@@ -1649,7 +1648,7 @@ class PyKLIPDataset(pyKLIP_Data):
                 if data.ndim != 3:
                     raise UserWarning('Requires 2D/3D data cube')
                 NINTS = data.shape[0]
-                pix_scale = shead['PIXSCALE'] # arcsec
+                pix_scale = shead['PLTSCALE'] * 1000. # arcsec
                 PIXSCALE += [pix_scale] 
 
                 # Get centers.
