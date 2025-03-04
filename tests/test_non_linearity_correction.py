@@ -168,7 +168,10 @@ def test_non_linearity_correction():
     pickled_nonlin = pickle.loads(pickled)
     assert np.all((non_linearity_correction.data == pickled_nonlin.data) | np.isnan(non_linearity_correction.data))
 
-    linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
+    # check if flagging non-linearity works
+    non_linear_flag = 64
+    linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction,threshold=-np.inf)
+    assert np.all(linear_dataset.all_dq >= non_linear_flag) # all pixels should be flagged
 
     #The data was generated with a ramp in the x-direction going from 10 to 65536
     expected_ramp = np.linspace(800,65536,1024)
