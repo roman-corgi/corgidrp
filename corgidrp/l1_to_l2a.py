@@ -285,14 +285,14 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
     return crmasked_dataset
 
-def correct_nonlinearity(input_dataset, non_lin_correction):
+def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
     """
     Perform non-linearity correction of a dataset using the corresponding non-linearity correction
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
         non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity
-
+        threshold (float): threshold for flagging pixels in the DQ array. By default it is set to infinity, user can change it to a different value. 
     Returns:
         corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
     """
@@ -301,6 +301,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
 
     #Apply the non-linearity correction to the data
     linearized_cube = linearized_dataset.all_data
+
     #Check to see if EM gain is in the header, if not, raise an error
     if "EMGAIN_C" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
@@ -314,6 +315,10 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
                 em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
             else: # otherwise use commanded EM gain
                 em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
+
+        # Flag pixels in the DQ array if they exceed the threshold
+        # Select dq = 4 for pixels that exceed the threshold, can be changed
+        linearized_dataset[i].dq[linearized_cube[i] > threshold] = 4
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
     
     if non_lin_correction is not None:
