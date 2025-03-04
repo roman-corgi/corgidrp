@@ -2047,12 +2047,15 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     Returns:
         np.array: 2D array of a gaussian surface.
     """
-    x, y = np.meshgrid(np.linspace(-array_shape[0]/2, array_shape[0]/2, array_shape[0]),
-                        np.linspace(-array_shape[1]/2, array_shape[1]/2, array_shape[1]))
+    x, y = np.meshgrid(np.linspace(-array_shape[0]/2+0.5, array_shape[0]/2-0.5, array_shape[0]),
+                        np.linspace(-array_shape[1]/2+0.5, array_shape[1]/2-0.5, array_shape[1]))
     dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
 
     # Calculate Gaussian 
     gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp / (2.0 * np.pi * sigma**2)
+
+    #np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2)) * flux/(2. * np.pi * sigma**2)
+
     
     return gauss
 
@@ -2117,7 +2120,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     # inject gaussian psf star
     stampsize = int(np.ceil(3 * fwhm))
     sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
-    
+
     # coordinate system
     y, x = np.indices([stampsize, stampsize])
     y -= stampsize // 2
@@ -2134,8 +2137,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     ymin = y[0][0]
     ymax = y[-1][-1]
         
-    # psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
-    psf = gaussian_array(stampsize,sigma,flux,xoffset=0.,yoffset=0.)
+    psf = gaussian_array((stampsize,stampsize),sigma,flux)
 
     # inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
