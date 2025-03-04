@@ -2034,6 +2034,28 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
 
     return ill_dataset, dark_dataset, ill_mean, dark_mean
 
+def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.):
+    """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
+
+    Args:
+        array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
+        sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
+        amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
+        xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
+        yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
+        
+    Returns:
+        np.array: 2D array of a gaussian surface.
+    """
+    x, y = np.meshgrid(np.linspace(-array_shape[0]/2, array_shape[0]/2, array_shape[0]),
+                        np.linspace(-array_shape[1]/2, array_shape[1]/2, array_shape[1]))
+    dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
+
+    # Calculate Gaussian 
+    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp / (2.0 * np.pi * sigma**2)
+    
+    return gauss
+
 def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., background = 0., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
@@ -2095,7 +2117,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     # inject gaussian psf star
     stampsize = int(np.ceil(3 * fwhm))
     sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
-    amplitude = flux/(2. * np.pi * sigma**2)
     
     # coordinate system
     y, x = np.indices([stampsize, stampsize])
@@ -2113,7 +2134,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     ymin = y[0][0]
     ymax = y[-1][-1]
         
-    psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+    # psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+    psf = gaussian_array(stampsize,sigma,flux,xoffset=0.,yoffset=0.)
 
     # inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
@@ -2152,30 +2174,6 @@ LATPOLE =                 90.0 / [deg] Native latitude of celestial pole
 MJDREF  =                  0.0 / [d] MJD of fiducial time
 """
 
-def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.):
-    """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
-
-    Args:
-        array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
-        sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
-        amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
-        xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
-        yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
-        
-    Returns:
-        np.array: 2D array of a gaussian surface.
-    """
-    x, y = np.meshgrid(np.linspace(-array_shape[0]/2, array_shape[0]/2, array_shape[0]),
-                        np.linspace(-array_shape[1]/2, array_shape[1]/2, array_shape[1]))
-    dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
-
-    # lower normal part of gaussian
-    normal = 1/(2.0 * np.pi * sigma**2)
-
-    # Calculating Gaussian filter
-    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * normal * amp
-    
-    return gauss
 
 def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
                           wcs_header = None,
