@@ -293,7 +293,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
         non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity
         threshold (float): threshold for flagging pixels in the DQ array. By default it is set to infinity, user can change it to a different value
-        
+
     Returns:
         corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
     """
@@ -318,8 +318,9 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
                 em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
 
         # Flag pixels in the DQ array if they exceed the threshold
-        # Select dq = 4 for pixels that exceed the threshold, can be changed
-        linearized_dataset[i].dq[linearized_cube[i] > threshold] = 4
+        non_linear_flag = 64
+        current_value = linearized_dataset[i].dq[linearized_cube[i] > threshold]
+        linearized_dataset[i].dq[linearized_cube[i] > threshold] = np.bitwise_or(current_value, non_linear_flag)
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
     
     if non_lin_correction is not None:
