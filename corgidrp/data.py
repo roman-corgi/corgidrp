@@ -1397,8 +1397,7 @@ class PyKLIPDataset(pyKLIP_Data):
     def __init__(self,
                  dataset,
                  psflib_dataset=None,
-                 highpass=False,
-                 center_include_offset=True):
+                 highpass=False):
         """
         Initialize the pyKLIP instrument class for space telescope data.
         # TODO: Determine inner working angle based on PAM positions
@@ -1412,9 +1411,6 @@ class PyKLIPDataset(pyKLIP_Data):
                 Dataset containing input reference observations. The default is None.
             highpass (bool, optional):
                 Toggle to do highpass filtering. Defaults fo False.
-            center_include_offset (bool, optional):
-                Toggle as to whether the relative header offset values of each
-                image is applied during image centering. Defaults to True.
         """
         
         # Initialize pyKLIP Data class.
@@ -1422,10 +1418,7 @@ class PyKLIPDataset(pyKLIP_Data):
 
         # Set filter wavelengths
         self.wave_hlc = {'1F': 575e-9} # meters
-        
-        # Optional variables
-        self.center_include_offset = center_include_offset
-                
+            
         # Read science and reference files.
         self.readdata(dataset, psflib_dataset, highpass)
         
@@ -1575,13 +1568,7 @@ class PyKLIPDataset(pyKLIP_Data):
             PIXSCALE += [pix_scale] 
 
             # Get centers.
-            if self.center_include_offset == True:
-                # Use the offset values from the header to adjust the center
-                centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
-                    shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
-            else:
-                # Assume the STARLOC define the correct center for each image
-                centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+            centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
 
             # Get metadata.
             input_all += [data]
@@ -1666,13 +1653,7 @@ class PyKLIPDataset(pyKLIP_Data):
                 PIXSCALE += [pix_scale] 
 
                 # Get centers.
-                if self.center_include_offset == True:
-                    # Use the offset values from the header to adjust the center
-                    centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
-                        shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
-                else:
-                    # Assume the STARLOC define the correct center for each image
-                    centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+                centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
 
                 psflib_data_all += [data]
                 psflib_centers_all += [centers]
