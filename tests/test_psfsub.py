@@ -432,6 +432,25 @@ def test_psf_sub_withcrop():
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
+def test_psf_sub_badmode():
+    """Tests that psf subtraction step fails correctly if an unconfigured mode is supplied (e.g. SDI).
+    """
+
+    numbasis = [1,2,3,4]
+    rolls = [13,-13,0]
+    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+    
+
+    with pytest.raises(Exception):
+        _ = do_psf_subtraction(mock_sci,mock_ref,
+                                numbasis=numbasis,
+                                mode='SDI',
+                                fileprefix='test_SDI',
+                                do_crop=False)
+    
 if __name__ == '__main__':  
     test_pyklipdata_ADI()
     test_pyklipdata_RDI()
@@ -446,4 +465,4 @@ if __name__ == '__main__':
     test_psf_sub_RDI_nocrop()
     test_psf_sub_ADIRDI_nocrop()
     test_psf_sub_withcrop()
-    
+    test_psf_sub_badmode()
