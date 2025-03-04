@@ -123,7 +123,8 @@ def test_psf_pix_and_ct():
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
-    # comparison between I/O values (<=1% due to pixelization effects vs. expected analytical value)
+    # comparison between I/O values (<=1% due to pixelization effects vs.
+    # expected analytical value)
     assert np.all(np.abs(ct_est-ct_in) <= 0.01)
 
     # test 3:
