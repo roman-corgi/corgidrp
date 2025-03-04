@@ -2202,13 +2202,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         wcs_header (astropy.fits.Header, optional): Fits header object containing WCS 
             information. If not provided, a mock header will be created. Defaults to None.
         data_shape (list of int): desired shape of data array. Must have length 2. Defaults to 
-            [1024,1024].
+            [100,100].
         centerxy (list of float): Desired PSF center in xy order. Must have length 2. Defaults 
             to image center.
         outdir (str, optional): Desired output directory. If not provided, data will not be 
             saved. Defaults to None.
-        st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 10000.
-        noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1e-11.
+        st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 100.
+        noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1.
         ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
             reference PSFs. Defaults to 1.
         pl_contrast (float): Flux ratio between planet and starlight incident on the detector. 
