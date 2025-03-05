@@ -179,7 +179,10 @@ def test_non_linearity_correction():
     flagged_dataset.all_data[0,0,0] = non_linear_pixel_value
     flagged_dataset = l1_to_l2a.correct_nonlinearity(flagged_dataset, non_linearity_correction,threshold=non_linear_pixel_value-1)
 
-    assert flagged_dataset.all_dq[0,0,0] >= non_linear_flag # all pixels should be flagged
+    assert flagged_dataset.all_dq[0,0,0] >= non_linear_flag # flagged_dataset.all_data[0,0,0] should be flagged
+    flagged_dataset.all_dq[0,0,0] = 0 # reset the flag
+
+    assert np.all(flagged_dataset.all_dq <= non_linear_flag) # all other pixels should not be flagged 
 
     linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
 
