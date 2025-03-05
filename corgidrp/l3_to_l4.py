@@ -207,10 +207,25 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     """
 
     sci_dataset = input_dataset.copy()
+    
+    # Use input reference dataset if provided
     if not reference_star_dataset is None:
         ref_dataset = reference_star_dataset.copy()
+
+    # Try getting PSF references via the "PSFREF" header kw
     else:
-        ref_dataset = None
+        split_datasets, unique_vals = sci_dataset.split_dataset(prihdr_keywords=["PSFREF"])
+        unique_vals = np.array(unique_vals)
+
+        if 0. in unique_vals:
+            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0])]
+        else:
+            raise UserWarning('No science files found in input dataset.')
+
+        if 1. in unique_vals:
+            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0])]
+        else:
+            ref_dataset = None
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
 
