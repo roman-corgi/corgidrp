@@ -271,57 +271,43 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     pyklip_data = fits.getdata(result_fpath)
     pyklip_hdr = fits.getheader(result_fpath)
 
-    # TODO: Handle DQ & errors correctly
+    # TODO: Handle errors correctly
     err = np.zeros([1,*pyklip_data.shape])
     dq = np.zeros_like(pyklip_data) # This will get filled out later
 
-    # Clean up primary header
-    pri_hdr = pyklip_hdr.copy()
-    naxis1 = pri_hdr['NAXIS1']
-    naxis2 = pri_hdr['NAXIS2']
-    naxis3 = pri_hdr['NAXIS3']
-    pri_hdr['NAXIS'] = 0
-
-    remove_kws = ['NAXIS1','NAXIS2','NAXIS3',
-                    'CRPIX1','CRPIX2']
-    for kw in remove_kws:
-        del pri_hdr[kw]
-
-    # Add observation info from input dataset
-    pri_hdr_keys = ['TELESCOP','INSTRUME']
-    for kw in pri_hdr_keys:
-        pri_hdr[kw] = sci_dataset[0].pri_hdr[kw]
+    # Collapse sci_dataset headers
+    pri_hdr = sci_dataset[0].pri_hdr.copy()
+    ext_hdr = sci_dataset[0].ext_hdr.copy()    
     
-    # Make extension header
-    ext_hdr = fits.Header()
+    # Add relevant info from the pyklip headers:
+    for kw, val, comment in pyklip_hdr._cards:
+        if not 'NAXIS' in kw:
+            pri_hdr.set(kw,val,comment)
+
+    # Record KLIP algorithm explicitly
+    pri_hdr.set('KLIP_ALG',mode)
+    
+    # Update NAXIS keywords
+    pri_hdr.set('NAXIS',0)
     ext_hdr['NAXIS'] = 2
-    ext_hdr['NAXIS1'] = naxis1
-    ext_hdr['NAXIS2'] = naxis2
-    ext_hdr['NAXIS3'] = naxis2
-
-    # Add info from input dataset
-    ext_hdr_keys = ['BUNIT','PLTSCALE','CFAMNAME',
-                    'DPAMNAME','FPAMNAME','FSAMNAME',
-                    'LSAMNAME','SPAMNAME']
-    for kw in ext_hdr_keys:
-        ext_hdr[kw] = sci_dataset[0].ext_hdr[kw]
-
-    # Add info from pyklip
-    ext_hdr['KLIP_ALG'] = mode
-    #ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
+    ext_hdr['NAXIS1'] = pyklip_hdr['NAXIS1']
+    ext_hdr['NAXIS2'] = pyklip_hdr['NAXIS2']
+    ext_hdr['NAXIS3'] = pyklip_hdr['NAXIS3']
+    
+    # Add info from pyklip to ext_hdr
     ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
     ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
     if "HISTORY" in sci_dataset[0].ext_hdr.keys():
         history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
         ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
     
-    # Construct Image object and add to list
+    # Construct Image and Dataset object
     frame = data.Image(pyklip_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                         err=err, dq=dq)
     
     dataset_out = data.Dataset([frame])
-
+    
     # Flag nans in the dq array and then add nans to the error array
     dataset_out = flag_nans(dataset_out,flag_val=1)
     dataset_out = nan_flags(dataset_out,threshold=1)
