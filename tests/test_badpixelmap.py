@@ -4,6 +4,7 @@ import numpy as np
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
+import corgidrp.flat as flat
 from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 from corgidrp.darks import build_trad_dark
 
@@ -59,7 +60,7 @@ def test_badpixelmap():
     flat_dataset = data.Dataset(flat_filenames)
     
     ###### create flatfield
-    flat_frame = detector.create_flatfield(flat_dataset)
+    flat_frame = flat.create_flatfield(flat_dataset)
 
     ###### make some hot pixels:
     col_dead_pixel_test=[12, 120, 234, 450, 678, 990]

@@ -17,6 +17,7 @@ import photutils.centroids as centr
 import corgidrp.data as data
 from corgidrp.data import Image
 import corgidrp.detector as detector
+import corgidrp.flat as flat
 from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 from corgidrp.data import DetectorParams
@@ -906,7 +907,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             centroid=centr.centroid_com(planet_image)
             xc=centroid[0]
             yc=centroid[1]
-            planet_image = convolve_fft(planet_image, detector.raster_kernel(raster_radius, planet_image))
+            planet_image = convolve_fft(planet_image, flat.raster_kernel(raster_radius, planet_image))
             if planet == 'neptune':
                 planetrad=radius; snrcon=snr_constant
                 planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
