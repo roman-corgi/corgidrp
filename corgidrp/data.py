@@ -1082,6 +1082,22 @@ class DetectorParams(Image):
         'TFACTOR': 5,            # number of read noise standard deviations at which to set the photon-counting threshold
     }
 
+    back_compat_mapping = {
+        "KGAINPAR" : "KGAIN",
+        "FWC_PP_E" : "FWC_PP",
+        'FWC_EM_E' : 'FWC_EM',
+        'ROWREADT' : "rowreadtime",
+        "NEMGAIN" : "NEM",
+        "TELRSTRT" : "telem_rows_start",
+        "TELREND" : "telem_rows_end",
+        "CRHITRT" : "X",
+        "PIXAREA" : "A",
+        "GAINMAX" : "GMAX",
+        "DELCNST" : "delta_constr",
+        "PCECNTMX" : "pc_ecount_max",
+        "TFACTOR" : "T_FACTOR"
+    }
+
     def __init__(self, data_or_filepath, date_valid=None):
         if date_valid is None:
             date_valid = time.Time.now()
@@ -1135,12 +1151,24 @@ class DetectorParams(Image):
         self.params = {}
         # load back in all the values from the header
         for key in self.default_values:
+            # if this key is not in the header, try the backwards compatability mapping
+            new_key = key
+            if key not in self.ext_hdr:
+                key = self.back_compat_mapping[key]
+
             if len(key) > 8:
                 # to avoid VerifyWarning from fits
-                self.params[key] = self.ext_hdr['DATATYPE ' + key]
+                self.params[new_key] = self.ext_hdr['HIERARCH ' + key]
             else:
-                self.params[key] = self.ext_hdr[key]
+                self.params[new_key] = self.ext_hdr[key]
 
+
+
+        # for backwards compatability:
+        if "OBSID" in self.pri_hdr:
+            self.pri_hdr['OBSNUM'] = self.pri_hdr['OBSID']
+        if "CMDGAIN" in self.ext_hdr:
+            self.ext_hdr["EMGAIN_C"] = self.ext_hdr['CMDGAIN']
 
         # if this is a new DetectorParams file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new DetectorParams file
