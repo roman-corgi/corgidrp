@@ -348,7 +348,7 @@ def test_psf_sub_split_dataset():
 
     # Sci & Ref
     CASE='SCI+REF'
-    numbasis = [1]
+    numbasis = [1,4,8]
     rolls = [270+13,270-13,0,0]
     mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
                                               st_amp=st_amp,
@@ -379,8 +379,8 @@ def test_psf_sub_split_dataset():
     
     # Should choose ADI
     for frame in result:
-        if not frame.ext_hdr['KLIP_ALG'] == 'ADI':
-            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
+        if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
 
     # pass only reference frames (should fail)
     CASE='REF_ONLY'
@@ -445,8 +445,8 @@ def test_psf_sub_ADI_nocrop():
         if np.nanmax(np.abs(frame.data - analytical_result)) > 1e-5:
             raise Exception(f"Absolute difference between ADI result and analytical result is greater then 1e-5.")
         
-        if not frame.ext_hdr['KLIP_ALG'] == 'ADI':
-            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
+        if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
 
     # Check expected data shape
     expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
@@ -528,8 +528,8 @@ def test_psf_sub_RDI_nocrop():
             raise Exception(f"RDI subtraction resulted in increased counts for frame {i}.")
         
         # The step should choose mode RDI based on having 1 roll and 1 reference.
-        if not frame.ext_hdr['KLIP_ALG'] == 'RDI':
-            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'RDI' mode when provided 1 science image and 1 reference.")
+        if not frame.pri_hdr['KLIP_ALG'] == 'RDI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'RDI' mode when provided 1 science image and 1 reference.")
         
         # Frame should match analytical result outside of the IWA (after correcting for the median offset)
         if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_result)) < 1e-5:
@@ -597,8 +597,8 @@ def test_psf_sub_ADIRDI_nocrop():
             raise Exception(f"ADI+RDI subtraction resulted in increased counts for frame {i}.")
         
         # Corgidrp should know to choose ADI+RDI mode
-        if not frame.ext_hdr['KLIP_ALG'] == 'ADI+RDI':
-            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 1 reference.")
+        if not frame.pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 1 reference.")
         
         # Frame should match analytical result outside of the IWA (after correcting for the median offset) for KL mode 1
         if i==0:
@@ -671,10 +671,10 @@ if __name__ == '__main__':
     # test_flagnans_3D()
     # test_flagnans_flagval2()
 
-    # test_psf_sub_split_dataset()
+    test_psf_sub_split_dataset()
 
     # test_psf_sub_ADI_nocrop()
-    test_psf_sub_RDI_nocrop()
-    test_psf_sub_ADIRDI_nocrop()
-    test_psf_sub_withcrop()
-    test_psf_sub_badmode()
+    # test_psf_sub_RDI_nocrop()
+    # test_psf_sub_ADIRDI_nocrop()
+    # test_psf_sub_withcrop()
+    # test_psf_sub_badmode()
