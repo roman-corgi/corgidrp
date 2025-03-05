@@ -280,23 +280,18 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     ext_hdr = sci_dataset[0].ext_hdr.copy()    
     
     # Add relevant info from the pyklip headers:
+    skip_kws = ['PSFCENTX','PSFCENTY']
     for kw, val, comment in pyklip_hdr._cards:
-        if not 'NAXIS' in kw:
-            pri_hdr.set(kw,val,comment)
+        if not kw in skip_kws:
+            ext_hdr.set(kw,val,comment)
 
     # Record KLIP algorithm explicitly
     pri_hdr.set('KLIP_ALG',mode)
     
-    # Update NAXIS keywords
-    pri_hdr.set('NAXIS',0)
-    ext_hdr['NAXIS'] = 2
-    ext_hdr['NAXIS1'] = pyklip_hdr['NAXIS1']
-    ext_hdr['NAXIS2'] = pyklip_hdr['NAXIS2']
-    ext_hdr['NAXIS3'] = pyklip_hdr['NAXIS3']
-    
     # Add info from pyklip to ext_hdr
     ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
     ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
+
     if "HISTORY" in sci_dataset[0].ext_hdr.keys():
         history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
         ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
@@ -307,7 +302,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
                         err=err, dq=dq)
     
     dataset_out = data.Dataset([frame])
-    
+
     # Flag nans in the dq array and then add nans to the error array
     dataset_out = flag_nans(dataset_out,flag_val=1)
     dataset_out = nan_flags(dataset_out,threshold=1)
