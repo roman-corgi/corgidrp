@@ -6,6 +6,7 @@ import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.data as data
+import astropy.io.ascii as ascii
 
 def test_astrom():
     """ 
@@ -105,13 +106,13 @@ def test_distortion():
     xorig -= x0
 
         # get the number of fitting params from the order
-    fitorder = int(coeffs[1])
+    fitorder = int(astrom_cal.distortion_coeffs[-1])
     fitparams = (fitorder + 1)**2
     true_fitorder = int(expected_coeffs[-1])
     true_fitparams = (true_fitorder + 1)**2
 
-        # reshape the coeff arrays
-    best_params_x = coeffs[0][:fitparams]
+        # reshape the coeff arrays for the best fit and true coeff params
+    best_params_x = coeffs[:fitparams]
     best_params_x = best_params_x.reshape(fitorder+1, fitorder+1)
     total_orders = np.arange(fitorder+1)[:,None] + np.arange(fitorder+1)[None, :]
     best_params_x = best_params_x / 500**(total_orders)
@@ -131,7 +132,7 @@ def test_distortion():
     true_x_diff = true_x_corr - xorig
 
         # reshape and evaluate the same for y
-    best_params_y = coeffs[0][fitparams:]
+    best_params_y = coeffs[fitparams:]
     best_params_y = best_params_y.reshape(fitorder+1, fitorder+1)
     best_params_y = best_params_y / 500**(total_orders)
 
@@ -149,16 +150,16 @@ def test_distortion():
     true_y_diff = true_y_corr - yorig
 
     # check the distortion maps are less than the maximum injected distortion (~3 pixels)
-    assert np.all(np.abs(x_diff)) < np.max(np.abs(true_x_diff))
-    assert np.all(np.abs(y_diff)) < np.max(np.abs(true_y_diff))
+    assert np.all(np.abs(x_diff) < np.max(np.abs(true_x_diff)))
+    assert np.all(np.abs(y_diff) < np.max(np.abs(true_y_diff)))
 
     # check that the distortion error in the central 1" x 1" region (center ~45 x 45 pixels) 
     # has distortion error < 4 [mas] (~0.1835 [pixel])
     lower_lim, upper_lim = int((1024//2) - ((1000/21.8)//2)), int((1024//2) + ((1000/21.8)//2))
-    central_1arcsec_x = x_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
-    central_1arcsec_y = y_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
-    true_1arcsec_x = true_x_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
-    true_1arcsec_y = true_y_diff[lower_lim: upper_lim+1][lower_lim: upper_lim+1]
+    central_1arcsec_x = x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
+    central_1arcsec_y = y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
+    true_1arcsec_x = true_x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
+    true_1arcsec_y = true_y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
 
     assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
     assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
