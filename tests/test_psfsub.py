@@ -449,7 +449,7 @@ def test_psf_sub_ADI_nocrop():
             raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
 
     # Check expected data shape
-    expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
@@ -477,7 +477,7 @@ def test_psf_sub_RDI_nocrop():
     
     for i,frame in enumerate(result):
 
-        mask = create_circular_mask(*frame.data.shape,r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -536,7 +536,7 @@ def test_psf_sub_RDI_nocrop():
             raise Exception("RDI subtraction did not produce expected analytical result.")
     
     # Check expected data shape
-    expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after RDI subtraction.")
     
@@ -566,7 +566,7 @@ def test_psf_sub_ADIRDI_nocrop():
     for i,frame in enumerate(result):
 
         
-        mask = create_circular_mask(*frame.data.shape,r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -606,7 +606,7 @@ def test_psf_sub_ADIRDI_nocrop():
                 raise Exception("ADI+RDI subtraction did not produce expected analytical result.")
                 
     # Check expected data shape
-    expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI+RDI subtraction.")
 
@@ -630,7 +630,7 @@ def test_psf_sub_withcrop():
             raise Exception(f"PSF subtraction resulted in increased counts for frame {i}.")
 
     # Check expected data shape
-    expected_data_shape = (len(numbasis),60,60)
+    expected_data_shape = (1,len(numbasis),60,60)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
@@ -671,10 +671,10 @@ if __name__ == '__main__':
     # test_flagnans_3D()
     # test_flagnans_flagval2()
 
-    test_psf_sub_split_dataset()
+    # test_psf_sub_split_dataset()
 
     # test_psf_sub_ADI_nocrop()
-    # test_psf_sub_RDI_nocrop()
-    # test_psf_sub_ADIRDI_nocrop()
-    # test_psf_sub_withcrop()
-    # test_psf_sub_badmode()
+    test_psf_sub_RDI_nocrop()
+    test_psf_sub_ADIRDI_nocrop()
+    test_psf_sub_withcrop()
+    test_psf_sub_badmode()
