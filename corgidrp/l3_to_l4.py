@@ -280,7 +280,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     ext_hdr = sci_dataset[0].ext_hdr.copy()    
     
     # Add relevant info from the pyklip headers:
-    skip_kws = ['PSFCENTX','PSFCENTY']
+    skip_kws = ['PSFCENTX','PSFCENTY','CREATOR','CTYPE3']
     for kw, val, comment in pyklip_hdr._cards:
         if not kw in skip_kws:
             ext_hdr.set(kw,val,comment)
