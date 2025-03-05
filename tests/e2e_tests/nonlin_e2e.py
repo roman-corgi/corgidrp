@@ -41,6 +41,29 @@ def set_vistype_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
     tvacdata_path,
@@ -81,6 +104,7 @@ def test_nonlin_cal_e2e(
 
     # Set TVAC OBSTYPE to MNFRAME/NONLIN (flight data should have these values)
     set_vistype_for_tvac(nonlin_l1_list)
+    fix_headers_for_tvac(nonlin_l1_list)
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
@@ -89,7 +113,7 @@ def test_nonlin_cal_e2e(
     nonlin_table_from_eng = 'nonlin_table_091224.txt'
     nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,nonlin_table_from_eng),
         delimiter=",")
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(nonlin_l1_list)
