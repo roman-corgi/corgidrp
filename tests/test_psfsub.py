@@ -1,15 +1,10 @@
-from corgidrp.mocks import create_psfsub_dataset
+from corgidrp.mocks import create_psfsub_dataset,create_default_headers
 from corgidrp.l3_to_l4 import do_psf_subtraction
-from corgidrp.data import PyKLIPDataset
+from corgidrp.data import PyKLIPDataset, Image, Dataset
+from corgidrp.detector import nan_flags, flag_nans
 from scipy.ndimage import shift, rotate
 import pytest
 import numpy as np
-import glob
-import os
-from astropy.io import fits
-from pyklip.instruments import Instrument
-from pyklip import parallelized
-from matplotlib.colors import LogNorm
 
 ## Helper functions/quantities
 
@@ -184,6 +179,166 @@ def test_pyklipdata_multiplepixscales():
     mock_sci[0].ext_hdr["PLTSCALE"] = 10
     with pytest.raises(UserWarning):
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
+
+# DQ flagging tests
+
+def make_test_data(frame_shape,n_frames=1,):
+    """Makes a test corgidrp Dataset of all zeros with the desired
+    frame shape and number of frames.
+
+    Args:
+        frame_shape (listlike of int): 2D or 3D image shape desired.
+        n_frames (int, optional): Number of frames. Defaults to 1.
+
+    Returns:
+        corgidrp.Dataset: mock dataset of all zeros.
+    """
+    
+    frames = []
+    for i in range(n_frames):
+        prihdr, exthdr = create_default_headers()
+        im_data = np.zeros(frame_shape).astype(np.float64)
+        frame = Image(im_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+        frames.append(frame)
+
+    dataset = Dataset(frames)
+    return dataset
+
+def test_nanflags_2D():
+    """Test detector.nan_flags() on 2D data.
+    """
+
+    # 2D:
+    mock_dataset = make_test_data([10,10],n_frames=2,)
+    mock_dataset.all_dq[0,4,6] = 1
+    mock_dataset.all_dq[1,5,7] = 1
+
+    expected_data = np.zeros([2,10,10])
+    expected_data[0,4,6] = np.nan
+    expected_data[1,5,7] = np.nan
+
+    expected_err = np.zeros([2,1,10,10])
+    expected_err[0,0,4,6] = np.nan
+    expected_err[1,0,5,7] = np.nan
+
+    nanned_dataset = nan_flags(mock_dataset,threshold=1)
+
+    if not np.array_equal(nanned_dataset.all_data, expected_data,equal_nan=True):
+        # import matplotlib.pyplot as plt 
+        # fig,axes = plt.subplots(1,2)
+        # axes[0].imshow(nanned_dataset.all_data[0,:,:])
+        # axes[1].imshow(expected_data[0,:,:])
+        # plt.show()
+        # plt.close()
+        raise Exception('2D nan_flags test produced unexpected result')
+
+    if not np.array_equal(nanned_dataset.all_err,expected_err,equal_nan=True):
+        raise Exception('2D nan_flags test produced unexpected result for ERR array')
+
+
+def test_nanflags_3D():
+    """Test detector.nan_flags() on 3D data.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_dq[0,0,4,6] = 1
+    mock_dataset.all_dq[1,:,5,7] = 1
+
+    expected_data = np.zeros([2,3,10,10])
+    expected_data[0,0,4,6] = np.nan
+    expected_data[1,:,5,7] = np.nan
+
+    expected_err = np.zeros([2,1,3,10,10])
+    expected_err[0,0,0,4,6] = np.nan
+    expected_err[1,0,:,5,7] =  np.nan
+
+    nanned_dataset = nan_flags(mock_dataset,threshold=1)
+
+    if not np.array_equal(nanned_dataset.all_data, expected_data,equal_nan=True):
+        raise Exception('2D nan_flags test produced unexpected result')
+    
+    if not np.array_equal(nanned_dataset.all_err, expected_err,equal_nan=True):
+        raise Exception('3D nan_flags test produced unexpected result for ERR array')
+
+def test_nanflags_mixed_dqvals():
+    """Test detector.nan_flags() on 3D data with some DQ values below the threshold.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_dq[0,0,4,6] = 1
+    mock_dataset.all_dq[1,:,5,7] = 2
+
+    expected_data = np.zeros([2,3,10,10])
+    expected_data[1,:,5,7] = np.nan
+
+    expected_err = np.zeros([2,1,3,10,10])
+    expected_err[1,0,:,5,7] =  np.nan
+
+    nanned_dataset = nan_flags(mock_dataset,threshold=2)
+
+    if not np.array_equal(nanned_dataset.all_data, expected_data,equal_nan=True):
+        raise Exception('nan_flags with mixed dq values produced unexpected result')
+    
+    if not np.array_equal(nanned_dataset.all_err, expected_err,equal_nan=True):
+        raise Exception('3D nan_flags with mixed dq values produced unexpected result for ERR array')
+
+def test_flagnans_2D():
+    """Test detector.flag_nans() on 2D data.
+    """
+
+    # 2D:
+    mock_dataset = make_test_data([10,10],n_frames=2,)
+    mock_dataset.all_data[0,4,6] = np.nan
+    mock_dataset.all_data[1,5,7] = np.nan
+
+    expected_dq = np.zeros([2,10,10])
+    expected_dq[0,4,6] = 1
+    expected_dq[1,5,7] = 1
+
+    flagged_dataset = flag_nans(mock_dataset)
+
+    if not np.array_equal(flagged_dataset.all_dq, expected_dq,equal_nan=True):
+        raise Exception('2D nan_flags test produced unexpected result for DQ array')
+    
+def test_flagnans_3D():
+    """Test detector.flag_nans() on 3D data.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_data[0,0,4,6] = np.nan
+    mock_dataset.all_data[1,:,5,7] = np.nan
+
+    expected_dq = np.zeros([2,3,10,10])
+    expected_dq[0,0,4,6] = 1
+    expected_dq[1,:,5,7] = 1
+    
+    flagged_dataset = flag_nans(mock_dataset)
+
+    if not np.array_equal(flagged_dataset.all_dq, expected_dq,equal_nan=True):
+        raise Exception('3D flag_nans test produced unexpected result for DQ array')
+
+
+def test_flagnans_flagval2():
+    """Test detector.flag_nans() on 3D data with a non-default DQ value.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_data[0,0,4,6] = np.nan
+    mock_dataset.all_data[1,:,5,7] = np.nan
+
+    expected_dq = np.zeros([2,3,10,10])
+    expected_dq[0,0,4,6] = 2
+    expected_dq[1,:,5,7] = 2
+
+    flagged_dataset = flag_nans(mock_dataset,flag_val=2)
+
+    if not np.array_equal(flagged_dataset.all_dq, expected_dq,equal_nan=True):
+        raise Exception('3D nan_flags test produced unexpected result for DQ array')
 
 ## PSF subtraction step tests
 
@@ -460,6 +615,14 @@ if __name__ == '__main__':
     test_pyklipdata_notdataset()
     test_pyklipdata_badimgshapes()
     test_pyklipdata_multiplepixscales()
+
+    test_nanflags_2D()
+    test_nanflags_3D() 
+    test_nanflags_mixed_dqvals()
+    test_flagnans_2D()
+    test_flagnans_3D()
+    test_flagnans_flagval2()
+
     test_psf_sub_ADI_nocrop()
     test_psf_sub_RDI_nocrop()
     test_psf_sub_ADIRDI_nocrop()

@@ -833,8 +833,11 @@ def nan_flags(dataset,threshold=1):
     # mask bad pixels
     bad = np.where(dataset_out.all_dq >= threshold)
     dataset_out.all_data[bad] = np.nan
-    dataset_out.all_err[bad[0],:,bad[1],bad[2]] = np.nan
 
+    new_error = np.zeros_like(dataset_out.all_data)
+    new_error[bad] = np.nan
+    dataset_out.add_error_term(new_error, 'DQ flagged')
+    
     return dataset_out
 
 def flag_nans(dataset,flag_val=1):
