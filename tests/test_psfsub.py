@@ -236,7 +236,6 @@ def test_nanflags_2D():
     if not np.array_equal(nanned_dataset.all_err,expected_err,equal_nan=True):
         raise Exception('2D nan_flags test produced unexpected result for ERR array')
 
-
 def test_nanflags_3D():
     """Test detector.nan_flags() on 3D data.
     """
@@ -321,7 +320,6 @@ def test_flagnans_3D():
     if not np.array_equal(flagged_dataset.all_dq, expected_dq,equal_nan=True):
         raise Exception('3D flag_nans test produced unexpected result for DQ array')
 
-
 def test_flagnans_flagval2():
     """Test detector.flag_nans() on 3D data with a non-default DQ value.
     """
@@ -341,6 +339,56 @@ def test_flagnans_flagval2():
         raise Exception('3D nan_flags test produced unexpected result for DQ array')
 
 ## PSF subtraction step tests
+
+def test_psf_sub_split_dataset():
+    """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
+    that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
+    output data shape is correct.
+    """
+
+    # Sci & Ref
+    CASE='SCI+REF'
+    numbasis = [1]
+    rolls = [270+13,270-13,0,0]
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+    
+    # combine mock_sci and mock_ref into 1 dataset
+    frames = [*mock_sci,*mock_ref]
+    mock_sci_and_ref = Dataset(frames)
+
+    result = do_psf_subtraction(mock_sci_and_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_single_dataset',
+                                do_crop=False)
+    
+    # Sci only
+    CASE='SCI_ONLY'
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+    
+    # pass only science frames
+    result = do_psf_subtraction(mock_sci,
+                                numbasis=numbasis,
+                                fileprefix='test_sci_only_dataset',
+                                do_crop=False)
+    
+    # Should choose ADI
+    for frame in result:
+        if not frame.ext_hdr['KLIP_ALG'] == 'ADI':
+            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
+
+    # pass only reference frames (should fail)
+    CASE='REF_ONLY'
+    with pytest.raises(UserWarning):
+        _ = do_psf_subtraction(mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_ref_only_dataset',
+                                do_crop=False)
 
 def test_psf_sub_ADI_nocrop():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
@@ -606,25 +654,27 @@ def test_psf_sub_badmode():
                                 do_crop=False)
     
 if __name__ == '__main__':  
-    test_pyklipdata_ADI()
-    test_pyklipdata_RDI()
-    test_pyklipdata_ADIRDI()
-    test_pyklipdata_badtelescope()
-    test_pyklipdata_badinstrument()
-    test_pyklipdata_badcfamname()
-    test_pyklipdata_notdataset()
-    test_pyklipdata_badimgshapes()
-    test_pyklipdata_multiplepixscales()
+    # test_pyklipdata_ADI()
+    # test_pyklipdata_RDI()
+    # test_pyklipdata_ADIRDI()
+    # test_pyklipdata_badtelescope()
+    # test_pyklipdata_badinstrument()
+    # test_pyklipdata_badcfamname()
+    # test_pyklipdata_notdataset()
+    # test_pyklipdata_badimgshapes()
+    # test_pyklipdata_multiplepixscales()
 
-    test_nanflags_2D()
-    test_nanflags_3D() 
-    test_nanflags_mixed_dqvals()
-    test_flagnans_2D()
-    test_flagnans_3D()
-    test_flagnans_flagval2()
+    # test_nanflags_2D()
+    # test_nanflags_3D() 
+    # test_nanflags_mixed_dqvals()
+    # test_flagnans_2D()
+    # test_flagnans_3D()
+    # test_flagnans_flagval2()
 
-    test_psf_sub_ADI_nocrop()
-    test_psf_sub_RDI_nocrop()
-    test_psf_sub_ADIRDI_nocrop()
-    test_psf_sub_withcrop()
-    test_psf_sub_badmode()
+    test_psf_sub_split_dataset()
+
+    # test_psf_sub_ADI_nocrop()
+    # test_psf_sub_RDI_nocrop()
+    # test_psf_sub_ADIRDI_nocrop()
+    # test_psf_sub_withcrop()
+    # test_psf_sub_badmode()

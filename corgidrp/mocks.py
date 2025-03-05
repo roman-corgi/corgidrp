@@ -2307,6 +2307,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                                             yoffset=yoff+psf_off_xy[1])
                 img_data += planet_psf
         
+                # Assign PSFREF flag
+                prihdr['PSFREF'] = 0
+            else:
+                prihdr['PSFREF'] = 1
 
         # Add necessary header keys
         prihdr['TELESCOP'] = 'ROMAN'
