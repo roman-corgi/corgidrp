@@ -1416,3 +1416,30 @@ def autoload(filepath):
     frame = data_class(filepath)
 
     return frame
+
+def unpackbits_64uint(arr, axis):
+    """
+    Unpacking bits from a 64-bit unsigned integer array
+
+    Args:
+        arr (np.ndarray): the array to unpack
+        axis (int): axis to unpack
+
+    Returns:
+        _type_: np.ndarray of bits
+    """
+    n = np.array(arr).view("u1")
+    return np.unpackbits(n, axis=axis, bitorder='little')
+
+def packbits_64uint(arr, axis):
+    """
+    Packing bits into a 64-bit unsigned integer array
+
+    Args:
+        arr (np.ndarray): the array to pack 
+        axis (int): axis to pack
+
+    Returns:
+        _type_: np.ndarray of 64-bit unsigned integers
+    """
+    return np.packbits(arr, axis=axis, bitorder='little').view(np.uint64)
