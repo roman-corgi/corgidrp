@@ -7,7 +7,7 @@ from scipy.signal import decimate
 
 import corgidrp
 import corgidrp.data as data
-from corgidrp.mocks import create_default_headers, create_ct_psfs
+from corgidrp.mocks import create_default_L3_headers, create_ct_psfs
 from corgidrp.data import Image, Dataset, CoreThroughputCalibration
 from corgidrp import corethroughput
 
@@ -27,17 +27,29 @@ def setup_module():
     """
     global cfam_name
     cfam_name = '1F'
-    global dataset_ct, dataset_ct_syn
+    # CT and coronagraphic datasets
+    global dataset_ct, dataset_ct_syn, dataset_cor
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
     global ct_in, ct_syn
 
     # Default headers
-    prhd, exthd = create_default_headers()
+    prhd, exthd = create_default_L3_headers()
+    # DRP
+    exthd['DRPCTIME'] = time.Time.now().isot
+    exthd['DRPVERSN'] = corgidrp.__version__
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
+    # FPAM/FSAM
+    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
+    exthd['FPAM_H'] = 6854
+    exthd['FPAM_V'] = 22524
+    exthd['FSAM_H'] = 29471
+    exthd['FSAM_V'] = 12120
+
     data_ct = []
-    # Add pupil image(s) of the unocculted source's observation
+    # Add pupil image(s) of the unocculted source's observation to test that
+    # the corethroughput calibration function can handle more than one pupil image
     pupil_image_1 = np.zeros([1024, 1024])
     # Set it to some known value for some known pixels
     pupil_image_1[510:530, 510:530]=1
@@ -94,6 +106,21 @@ def setup_module():
     ct_syn = (4+3*8+2*16)/(0.5*(1+3)*400)/di_over_pil
     # Dataset
     dataset_ct_syn = Dataset(data_ct) 
+
+    # Coronagraphic dataset (only headers will be used)
+    # FPAM/FSAM
+    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
+    # These values are *different* than the ones in the dataset_ct defined before
+    exthd['FPAM_H'] = 6757
+    exthd['FPAM_V'] = 22424
+    exthd['FSAM_H'] = 29387
+    exthd['FSAM_V'] = 12238
+    # FPM center
+    exthd['MASKLOCX'] = 509
+    exthd['MASKLOCY'] = 513
+    breakpoint()
+    data_ct = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
+    dataset_ct = Dataset(data_ct)
 
 def test_psf_pix_and_ct():
     """
