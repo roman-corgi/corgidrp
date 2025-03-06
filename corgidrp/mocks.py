@@ -2510,7 +2510,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
 
     return ill_dataset, dark_dataset, ill_mean, dark_mean
 
-def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
+def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
                       fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
                       background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
@@ -2601,7 +2601,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', target_name='Veg
     new_hdr = {
         'TARGET': target_name,
         'CFAMNAME': filter,
-        'FPAMNAME': 'ND475',
+        'FPAMNAME': fpamname,
         'FPAM_H': 2503.7,
         'FPAM_V': 6124.9,
         'FSM_X': fsm_x,
