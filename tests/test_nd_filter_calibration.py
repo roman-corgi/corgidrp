@@ -108,6 +108,7 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
     Parameters:
         bright_exptime (float): Exposure time for the simulated images.
         filter_used (str): Filter used for the observations.
+        OD (float): The OD used for the observations.
         cal_factor (float): Calibration factor applied to the images.
         save_mocks (bool): Whether to save the generated mock images.
         output_path (str, optional): Directory path to save the images. Defaults to the current working directory.
