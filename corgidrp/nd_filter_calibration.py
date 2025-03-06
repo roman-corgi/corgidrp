@@ -281,10 +281,8 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
     }
 
 
-def create_nd_sweet_spot_dataset(
-    aggregated_sweet_spot_data,
-    common_metadata, od_var_flag
-    ):
+def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od_var_flag, 
+                                 input_dataset):
     """
     Create an NDFilterSweetSpotDataset FITS file with the Nx3 sweet-spot array.
     
@@ -295,6 +293,8 @@ def create_nd_sweet_spot_dataset(
             and offsets.
         od_var_flag (Bool): A flag that is passed in if the OD variance is too high among 
             rasters.
+        input_dataset (corgidrp.data.Dataset): input dataset used to create the ND Filter 
+            calibration
 
     Returns:
         tuple:
@@ -321,7 +321,7 @@ def create_nd_sweet_spot_dataset(
         data_or_filepath=final_sweet_spot_data,
         pri_hdr=pri_hdr,
         ext_hdr=ext_hdr,
-        input_dataset=None
+        input_dataset=input_dataset
     )
 
     return ndsweetspot_dataset
@@ -490,7 +490,7 @@ def create_nd_filter_cal(stars_dataset,
     
     sweet_spot_dataset = create_nd_sweet_spot_dataset(
         aggregated_sweet_spot_data=combined_sweet_spot_data,
-        common_metadata=common_metadata, od_var_flag = od_var_flag
+        common_metadata=common_metadata, od_var_flag = od_var_flag, input_dataset = stars_dataset
     )
 
     #TO DO: do we want to return flux?
