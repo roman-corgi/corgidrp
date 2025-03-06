@@ -178,7 +178,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     assert dec == pytest.approx(target[1], abs=8.333e-7)
 
 if __name__ == "__main__":
-    tvacdata_dir = "/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
+    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #"/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

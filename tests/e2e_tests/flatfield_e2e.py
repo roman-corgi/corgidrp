@@ -120,11 +120,21 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
+    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    ext_hdr['RN'] = 100
+    ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
-    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(kgain, to_disk=False)
+    this_caldb.save()
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
@@ -290,11 +300,21 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
+    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    ext_hdr['RN'] = 100
+    ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
-    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(kgain, to_disk=False)
+    this_caldb.save()
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
