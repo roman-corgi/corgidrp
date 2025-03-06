@@ -472,8 +472,6 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         ext_hdr=image.ext_hdr,
         input_dataset=dataset
     )
-    fluxcal_obj.ext_hdr["TARGET"] = star_name
-    fluxcal_obj.ext_hdr["CFAMNAME"] = filter_name
 
     # If background subtraction was performed, set the LOCBACK keyword.
     if phot_kwargs.get('background_sub', False):
