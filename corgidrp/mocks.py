@@ -2543,7 +2543,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     center = [nx //2, ny //2]
     target = (80.553428801, -69.514096821)
 
-    new_hdr = {}
+    prihdr, new_hdr = create_default_L1_headers()
     new_hdr['TARGET'] = 'Vega'
     new_hdr['CFAMNAME'] = '3C'
     new_hdr['FPAMNAME'] = 'ND475'
@@ -2604,7 +2604,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     err = np.zeros(size)
     err[:] = noise_scale
     # load as an image object
-    prihdr, exthdr = create_default_headers()
     prihdr['VISTYPE'] = 'FLUXCAL'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
