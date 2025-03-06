@@ -182,15 +182,15 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None):
 
     return input_dataset.copy()
 
-def northup(input_dataset,correct_wcs=False):
+def northup(input_dataset,correct_wcs=True):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
-    Now tentatively assuming 'ROLL' in the primary header incorporates all the angle offset, and the center of the FoV is the star position.
-    WCS correction is not yet implemented - TBD.
+    Now tentatively assuming the center of the FoV as the star position.
+    WCS correction is incorporated - the angle offset is calculated based on the CD information.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-	correct_wcs: if you want to correct WCS solutions after rotation, set True. Now hardcoded with not using astr_hdr.
+	correct_wcs: if you want to correct WCS solutions after rotation, set True. 
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
@@ -202,8 +202,6 @@ def northup(input_dataset,correct_wcs=False):
 
     new_all_data = []; new_all_err = []; new_all_dq = []
     for processed_data in processed_dataset:
-        # read the roll angle parameter, assuming this info is recorded in the primary header as requested
-        roll_angle = processed_data.pri_hdr['ROLL']
 
         ## image extension ##
         im_hd = processed_data.ext_hdr
@@ -214,15 +212,23 @@ def northup(input_dataset,correct_wcs=False):
         try: 
             xcen, ycen = im_hd['PSFCENTX'], im_hd['PSFCENTY'] # TBU, after concluding the header keyword
         except KeyError:
-            xcen, ycen = xlen/2, ylen/2
-    
-        # look for WCS solutions
-        if correct_wcs is False: 
+            try:
+                xcen, ycen = im_hd['CRPIX1'], im_hd['CRPIX2']
+            except KeyError:
+                xcen, ycen = int(sci_im.shape[1]/2), int(sci_im.shape[0]/2) 
+        
+	# look for WCS solutions
+        if correct_wcs is False: # in case of no WCS information
             astr_hdr = None 
+	    # read the roll angle parameter, assuming this info is recorded in the primary header as requested
+            roll_angle = processed_data.pri_hdr['ROLL']
         else:
-            astr_hdr = None # hardcoded now, no WCS information in the header
-
-        # derotate
+            astr_hdr = WCS(sci_hd)
+            CD1_2 = sci_hd['CD1_2']
+            CD2_2 = sci_hd['CD2_2']
+            roll_angle = np.rad2deg(np.arctan2(CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
+        
+	# derotate
         im_derot = rotate(im_data,-roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
         new_all_data.append(im_derot)
         ##############
