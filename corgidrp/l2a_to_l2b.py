@@ -82,10 +82,14 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
             outputdir = '.' #current directory
         dark.save(filedir=outputdir)
     elif type(dark) is data.Dark:
-       # In this case, the Dark loaded in should already match the arry dimensions
-       # of input_dataset, specified by full_frame argument of build_trad_dark
-       # when this Dark was built
-       pass
+        if 'PC_STAT' in dark.ext_hdr:
+            if dark.ext_hdr['PC_STAT'] != 'analog master dark':
+                raise Exception('The input \'dark\' is a photon-counted dark and cannot be used in the dark_subtraction step function, which is intended for analog frames.')
+        # In this case, the Dark loaded in should already match the arry dimensions
+        # of input_dataset, specified by full_frame argument of build_trad_dark
+        # when this Dark was built
+        if (dark.ext_hdr['EXPTIME'], dark.ext_hdr['CMDGAIN'], dark.ext_hdr['KGAIN']) != unique_vals[0]:
+            raise Exception('Dark should have the same EXPTIME, CMDGAIN, and KGAIN as input_dataset.')
     else:
         raise Exception('dark type should be either corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps.')
 
@@ -255,16 +259,20 @@ def convert_to_electrons(input_dataset, k_gain):
    # you should make a copy the dataset to start
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
-    kgain_error = kgain_dataset.all_err
 
     kgain = k_gain.value #extract from caldb
+    kgainerr = k_gain.error[0]
+    # x = c*kgain, where c (counts beforehand) and kgain both have error, so do propogation of error due to the product of 2 independent sources
+    kgain_error = np.zeros_like(input_dataset.all_err)
+    kgain_tot_err = (np.sqrt((kgain*kgain_dataset.all_err[:,0,:,:])**2 + (kgain_cube*kgainerr)**2))
+    kgain_error[:,0,:,:] = kgain_tot_err
     kgain_cube *= kgain
-    kgain_error *= kgain
-
+    
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
-    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain})
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain, 
+                                                                                    "KGAIN_ER": k_gain.error[0], "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
     return kgain_dataset
 
 def em_gain_division(input_dataset):
