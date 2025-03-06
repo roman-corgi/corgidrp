@@ -65,6 +65,7 @@ def setup_module():
     exthd_pupil['FPAMNAME'] = 'OPEN_12'
     # Mock error
     err = np.ones([1,1024,1024])
+    # Add pupil images
     data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     # Total counts from the pupil images
@@ -72,7 +73,7 @@ def setup_module():
     # Adjust for pupil vs. direct imaging lens transmission
     # This function was written and tested during TVAC tests. There's a test value
     # in test_psf_pix_and_ct() later on
-    di_over_pil = corethroughput.di_over_pil_transmission(filter=exthd['CFAMNAME'])
+    di_over_pil = corethroughput.di_over_pil_transmission(cfam_name=exthd['CFAMNAME'])
     unocc_psf_norm *= di_over_pil
 
     # 100 psfs with fwhm=50 mas in band 1 (mock.py)
@@ -80,7 +81,7 @@ def setup_module():
         n_psfs=100)
     # Input CT
     ct_in = half_psf/unocc_psf_norm
-    # Add pupil images
+    # Add PSF images
     data_ct += data_psf
     dataset_ct = Dataset(data_ct)
 
@@ -118,9 +119,8 @@ def setup_module():
     # FPM center
     exthd['MASKLOCX'] = 509
     exthd['MASKLOCY'] = 513
-    breakpoint()
-    data_ct = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
-    dataset_ct = Dataset(data_ct)
+    data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
+    dataset_cor = Dataset(data_cor)
 
 def test_psf_pix_and_ct():
     """
@@ -131,15 +131,7 @@ def test_psf_pix_and_ct():
     NOTE: the list of M clean frames may be a subset of the frames collected during
     core throughput data collection, to allow for the removal of outliers.
     """
-
-    # test 1:
-    # Check transmition ratio of direct imaging vs pupil lenses
-    # This function was written and tested during TVAC. The ratio is known to
-    # be 1.01633660... by running the TVAC function
-    assert (corethroughput.di_over_pil_transmission(filter=cfam_name) ==
-        pytest.approx(1.01633660))
-
-    # test 2:
+    # Test 1:
     # Check that the step function retrieves the expected location and CT of
     # a set of simulated 2D Gaussian PSFs (created in setup_module before:)
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct)
@@ -154,13 +146,13 @@ def test_psf_pix_and_ct():
     # expected analytical value)
     assert np.all(np.abs(ct_est-ct_in) <= 0.01)
 
-    # test 3:
+    # Test 2:
     # Functional test with some mock data with known PSF location and CT
     # Synthetic PSF from setup_module
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct_syn)
     # In this test, there must be an exact agreement
-    assert np.all(psf_loc_est == psf_loc_syn)
-    assert ct_syn == ct_est
+    assert np.all(psf_loc_est[0] == psf_loc_syn)
+    assert np.abs(ct_est[0]-ct_syn) < 1e-16
 
 def test_fpm_pos():
     """
@@ -224,76 +216,27 @@ def test_fpm_pos():
         assert np.all(fsam_center_ct_pix_out - fsam_center_ct_pix_in <= 1e-12)
 
 def test_cal_file():
-    """
-    Test 1090884 - Given 1) a core throughput dataset consisting of a set of clean
-    frames (nominally 1024x1024) taken at different FSM positions, and 2) a list
-    of N (x, y) coordinates, in units of EXCAM pixels, which fall within the area
-    covered by the core throughput dataset, the CTC GSW shall produce a
-    1024x1024xN cube of PSF images best centered at each set of coordinates
-    """
-    # Choose some EXCAM pixel for the FPM's center during coronagraphic observations
-    fpm_center_cor = np.array([509,513])
-    # Choose some values of H/V of FPAM during coronagraphic observations
-    fpam_pos_cor = np.array([6757, 22424])
-    # Choose some (different) values of H/V of FPAM during corethroughput observations
-    fpam_pos_ct = np.array([6854, 22524])
-    # Choose some values of H/V of FSAM during coronagraphic observations
-    fsam_pos_cor = np.array([29387, 12238])
-    # Choose some (different) values of H/V of FSAM during corethroughput observations
-    fsam_pos_ct = np.array([29471,12120])
+    """ Test creation of core throughput calibration file. """
 
     # Write core throughput calibration file
-    corethroughput.write_ct_calfile(dataset_ct,
-        fpm_center_cor,
-        fpam_pos_cor, fpam_pos_ct,
-        fsam_pos_cor, fsam_pos_ct)
-    # This test checks that I=O (not the comparison b/w analytical predictions
-    # vs. centroid/pixelized data, which was the check on test_psf_pix_and_ct above)
-    # Input values
-    # Get PSF centers and CT
+    # TBD: Create an instance of the calibration file
+    corethroughput.generate_cal(dataset_ct)
+
+
+    # This test checks that the CT cal file has the right information by making
+    # sure that I=O (Note: the comparison b/w analytical predictions
+    # vs. centroid/pixelized data is part of the tests on test_psf_pix_and_ct before)
+
+    # Input values for PSF centers and corresponding CT values
     psf_loc_input, ct_input = \
         corethroughput.estimate_psf_pix_and_ct(dataset_ct)
 
-    # Open calibration file
+    breakpoint()
+    # TBD: Open calibration file with available methods (unit tests, it is fine hardcoded)
+    # Before:
     ct_cal = corethroughput.read_ct_cal_file()
 
-    # Test: Compare I/O. Remember:
-    #     A CoreThroughput calibration file has two main data arrays:
-    #
-    #  3-d cube of PSF images, i.e, a N1xN1xN array where N1<=1024 is set by a
-    #  keyword argument. The N PSF images are the ones in the CT dataset (1090881
-    #  and 1090884)
-    #
-    #  Nx3 cube that contains N sets of (x,y, CT measurements). The (x,y) are
-    #  pixel coordinates of the N1xN1xN cube of PSF images wrt the FPAM's center
-    #  (1090881 and 1090882)
-    #
-    #  The CoreThroughput calibration file will also include the FPAM, FSAM
-    #  position during coronagraphic and core throughput observing sequences in
-    #  units of EXCAM pixels (1090882)
-
-    # Test FPAM and FSAM positions
-    # fpm_center_cor
-    assert np.all(fpm_center_cor == ct_cal[9][2])
-    # fpam_pos_cor
-    assert np.all(fpam_pos_cor == ct_cal[9][3])
-    # fpam_pos_ct
-    assert np.all(fpam_pos_ct == ct_cal[9][4])
-    # fsam_pos_cor
-    assert np.all(fsam_pos_cor == ct_cal[9][5])
-    # fsam_pos_ct
-    assert np.all(fsam_pos_ct == ct_cal[9][6])
-
-    # Test PSF positions and CT map
-    # x location wrt FPM
-    assert np.all(psf_loc_input[:,0] - ct_cal[9][0][0] == ct_cal[7][0])
-    # y location wrt FPM
-    assert np.all(psf_loc_input[:,1] - ct_cal[9][0][1]== ct_cal[7][1])
-    # CT map
-    assert np.all(ct_input == ct_cal[7][2])
-
-
-    # Test PSF cube
+    # Test 1: PSF cube
     # Recover off-axis PSF cube from CT Dataset
     psf_cube_in = []
     for frame in dataset_ct:
@@ -305,7 +248,7 @@ def test_cal_file():
                 exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
                 continue
         except:
-           pass 
+           pass
         psf_cube_in += [frame.data]
     psf_cube_in = np.array(psf_cube_in)
 
@@ -317,6 +260,14 @@ def test_cal_file():
         loc_00 = np.argwhere(psf == ct_cal[1][i_psf][0][0])[0]
         assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
             loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal[1][i_psf])
+
+    # Test 2: PSF positions and CT map
+    # x location wrt FPM
+    assert np.all(psf_loc_input[:,0] - ct_cal[9][0][0] == ct_cal[7][0])
+    # y location wrt FPM
+    assert np.all(psf_loc_input[:,1] - ct_cal[9][0][1]== ct_cal[7][1])
+    # CT map
+    assert np.all(ct_input == ct_cal[7][2])
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()

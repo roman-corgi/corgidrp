@@ -8,9 +8,37 @@ from corgidrp import astrom
 
 here = os.path.abspath(os.path.dirname(__file__))
 
+def get_cfam(
+    cfam_name='1F',
+    cfam_version=0,
+    ):
+    """ Read CFAM filter wavelength in nm and transmission.
+
+    Args:
+      cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
+        lens).
+
+    Returns:
+      CFAM filter wavelength in nm and transmission.
+    """
+    datadir = os.path.join(here, 'data', 'filter_curves')
+    filter_names = os.listdir(datadir)
+    filter_name = [name for name in filter_names if name.find(cfam_name) >= 0]
+    if filter_name == []:
+        raise ValueError(f'there is no filter available with name {cfam_name}')
+    filter_name = [name for name in filter_name if f'v{cfam_version}' in name]
+    if filter_name == []:
+        raise ValueError(f'there is no filter {cfam_name} available with version {cfam_version}')
+    tab = ascii.read(os.path.join(datadir,filter_name[0]), format='csv',
+        header_start = 3, data_start = 4)
+    lambda_nm_filter = tab['lambda_nm'].data
+    trans_filter = tab['%T'].data / tab['%T'].data.max()
+    return lambda_nm_filter, trans_filter
+
 def di_over_pil_transmission(
-    filter='1F',
-    version=0,
+    cfam_name='1F',
+    cfam_version=0,
     ):
     """ Derives the relative transmission between the pupil lens and the imaging
       lens: trans_imaging/trans_pupil.
@@ -19,8 +47,8 @@ def di_over_pil_transmission(
       into equivalent counts of the direct imaging lens.
  
     Args:
-      filter (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
-      version (int): version number of the filters (CFAM, pupil, imaging
+      cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
 
     Returns:
@@ -29,7 +57,7 @@ def di_over_pil_transmission(
     # Read pupil and direct imaging lenses
     try:
         lambda_pupil_A, trans_pupil = np.loadtxt(os.path.join(here, 'data',
-            'filter_curves', f'pupil_lens_v{version}.txt'),
+            'filter_curves', f'pupil_lens_v{cfam_version}.txt'),
             delimiter=',', unpack=True)
         lambda_pupil_nm = lambda_pupil_A / 10
     except:
@@ -37,20 +65,15 @@ def di_over_pil_transmission(
 
     try:
         lambda_imaging_A, trans_imaging = np.loadtxt(os.path.join(here, 'data',
-            'filter_curves', f'imaging_lens_v{version}.txt'),
+            'filter_curves', f'imaging_lens_v{cfam_version}.txt'),
             delimiter=',', unpack=True)
         lambda_imaging_nm = lambda_imaging_A / 10
     except:
         raise Exception('* File with the transmission of the imaging lens not found')
-    # Read filter (CFAM)
-    datadir = os.path.join(here, 'data', 'filter_curves')
-    filter_names = os.listdir(datadir)
-    filter_name = [name for name in filter_names if filter in name]
-    if filter_name == []:
-        raise ValueError('there is no filter available with name {filter}')
-    tab = ascii.read(os.path.join(datadir,filter_name[0]), format='csv',
-        header_start = 3, data_start = 4)
-    lambda_nm_filter = tab['lambda_nm'].data
+
+    # Get CFAM filter wavelength and transmission
+    lambda_nm_filter, trans_lambda_filter = get_cfam(cfam_name=cfam_name,
+        cfam_version=cfam_version)
 
     # Linear interpolation
     trans_lambda_pupil_band = np.interp(
@@ -62,8 +85,8 @@ def di_over_pil_transmission(
         lambda_imaging_nm,
         trans_imaging)
     # Ratio of both transmissions:
-    ratio_imaging_pupil_trans = \
-        np.sum(trans_lambda_imaging_band)/np.sum(trans_lambda_pupil_band)
+    ratio_imaging_pupil_trans = (np.sum(trans_lambda_imaging_band*trans_lambda_filter)/
+        np.sum(trans_lambda_pupil_band*trans_lambda_filter))
     return ratio_imaging_pupil_trans
 
 def get_psf_pix(
@@ -118,14 +141,14 @@ def get_psf_ct(
     psf_ct = []
     for psf in dataset:
         psf_ct += [psf.data[psf.data >= psf.data.max()/2].sum()/unocc_psf_norm]
-    psf_ct = np.array(psf_ct)
+    psf_ct = np.array(psf_ct, dtype=float)
 
     return psf_ct
 
 def estimate_psf_pix_and_ct(
     dataset_in,
     roi_radius=3,
-    version=0,
+    cfam_version=0,
     ):
     """
     1090881 - Given a core throughput dataset consisting of M clean frames
@@ -143,7 +166,7 @@ def estimate_psf_pix_and_ct(
         It includes some pupil images of the unocculted source.  photoelectrons / second / pixel.
       roi_radius (int or float): Half-size of the box around the peak,
         in pixels. Adjust based on desired λ/D.
-      version (int): version number of the filters (CFAM, pupil, imaging
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
 
     Returns:
@@ -154,7 +177,7 @@ def estimate_psf_pix_and_ct(
     """
     dataset = dataset_in.copy()
 
-    # All frames must have the same CFAM setup
+    # All frames must have the same CFAM filter
     cfam_list = []
     for frame in dataset:
         try:
@@ -163,7 +186,7 @@ def estimate_psf_pix_and_ct(
             raise Exception('Frame w/o CFAM specification. All frames must have CFAM specified')
     if len(set(cfam_list)) != 1:
         raise Exception('All frames must have the same CFAM filter')
-
+    
     # identify the pupil images in the dataset
     pupil_img_frames = []
     for frame in dataset:
@@ -187,7 +210,8 @@ def estimate_psf_pix_and_ct(
     unocc_psf_norm /= len(pupil_img_frames)
     # Transform pupil counts into direct imaging counts. Recall all frames have
     # the same cfam filter or an Exception is raised
-    unocc_psf_norm *= di_over_pil_transmission(filter=cfam_list[0], version=version)
+    unocc_psf_norm *= di_over_pil_transmission(cfam_name=cfam_list[0],
+        cfam_version=cfam_version)
     # Remove pupil frames
     offaxis_frames = []
     for frame in dataset:
@@ -210,3 +234,131 @@ def estimate_psf_pix_and_ct(
     if len(psf_pix) != len(psf_ct) or len(psf_pix) != len(dataset_offaxis):
         raise Exception('PSF positions and CT values are inconsistent')
     return psf_pix, psf_ct
+
+def generate_psf_cube(
+    dataset_in,
+    psf_loc,
+    cfam_name='1F',
+    cfam_version=0,
+    ):
+    """
+    Function that derives a 3-d cube of PSF images from a core throughput dataset.
+
+    Args:
+      dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
+        M clean frames (nominally 1024x1024) taken at different FSM positions.
+        It includes some pupil images of the unocculted source.
+      psf_loc (array): Array of pair of values with PSFs position in (fractional)
+        EXCAM pixels with respect to the pixel (0,0) in the PSF images.
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
+        lens).
+    Returns:
+      3-d PSF cube of PSF images from a core throughput dataset.
+    """
+    dataset = dataset_in.copy()
+
+    # 3-d cube of PSF images cut around the PSF's location
+    psf_cube = []
+    n_pix_psf = int(1 + 2*np.ceil(3*get_cfam(cfam_name=cfam_name,
+        cfam_version=cfam_version)[0].mean()*1e-9/2.36*180/np.pi*3600e3/21.8))
+    i_psf = 0
+    for frame in dataset:
+        # Skip pupil images of the unocculted source, which satisfy:
+        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+        try:
+        # Pupil images of the unocculted source satisfy:
+        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+            exthd = frame.ext_hdr
+            if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
+                exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
+                continue
+        except:
+            pass
+        idx_0_0 = max(int(np.round(psf_loc[i_psf][1])) - n_pix_psf,0)
+        idx_0_1 = min(frame.data.shape[0],
+            int(np.round(psf_loc[i_psf][1])) + n_pix_psf)
+        idx_1_0 = max(int(np.round(psf_loc[i_psf][0])) - n_pix_psf,0)
+        idx_1_1 = min(frame.data.shape[1],
+            int(np.round(psf_loc[i_psf][0])) + n_pix_psf)
+        psf_cube += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
+        i_psf += 1
+
+    psf_cube = np.array(psf_cube)
+    # Check
+    if len(psf_cube) != len(psf_loc):
+        raise Exception(('The number of PSFs does not match the number of PSF '+
+            ' locations.'))
+
+    return psf_cube
+
+def generate_cal(
+    dataset_in,
+    roi_radius=3,
+    cfam_version=0,
+    ):
+    """
+
+    A CoreThroughput calibration file has two main data arrays:
+
+    3-d cube of PSF images, e.g, a N1xN1xN array where N1= +/- 3l/D about 
+      PSF's centroid in EXCAM pixels. The N PSF images are the ones in the CT
+      dataset.
+
+    N sets of (x, y, CT measurements). The (x, y) are pixel coordinates of the
+      PSF images in the CT dataset wrt EXCAM (0,0) pixel during core throughput
+      observation.
+
+    Args:
+      dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
+        M clean frames (nominally 1024x1024) taken at different FSM positions.
+        It includes some pupil images of the unocculted source.
+      roi_radius (int or float): Half-size of the box around the peak,
+        in pixels. Adjust based on desired λ/D.
+      version (int): version number of the filters (CFAM, pupil, imaging
+        lens).
+    """
+    dataset = dataset_in.copy()
+
+    # All frames must have the same CFAM filter
+    cfam_list = []
+    for frame in dataset:
+        try:
+            cfam_list += [frame.ext_hdr['CFAMNAME']]
+        except:
+            raise Exception('Frame w/o CFAM specification. All frames must have CFAM specified')
+    if len(set(cfam_list)) != 1:
+        raise Exception('All frames must have the same CFAM filter')
+
+    # Get estimated PSF centers and CT
+    psf_loc_est, ct_est = \
+        corgidrp.corethroughput.estimate_psf_pix_and_ct(dataset,
+            roi_radius=roi_radius,
+            cfam_version=cfam_version)
+
+    # Collect data
+    # First extension: 3-d cube of PSF images cut around the PSF's location
+    psf_cube = generate_psf_cube(dataset, psf_loc_est, cfam_name=cfam_list[0],
+        cfam_version=cfam_version)
+    exthd_offaxis = fits.Header()
+    # Add history
+    exthd_offaxis['HISTORY'] = ('Core Throughput calibration derived from a '
+        f'set of frames from {dataset[0].ext_hdr["DATETIME"]} to '
+        f'{dataset[-1].ext_hdr["DATETIME"]}')
+    # Add specific information
+    exthd_offaxis['UNITS'] = 'photoelectron/pix/s'
+    exthd_offaxis['COMMENT'] = ('Set of PSFs derived from a core throughput '
+        'observing sequence. PSFs are not normalized. They are the images of the '
+        'off-axis source. The data cube is centered around each PSF location')
+
+    # N sets of (x,y, CT measurements)
+    # x, y: PSF centers wrt EXCAM's (0,0) pixel
+    ct_arr = np.array([psf_loc_est[:,0], psf_loc_est[:,1], ct_est])
+    ct_hdr = fits.Header()
+    ct_hdr['COMMENT'] = ('PSF location with respect to EXCAM (0,0) pixel. '
+        'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
+    ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'
+
+    # Build HDUList and return it. see save() in CoreThroughputCalibration
+    breakpoint()
+
+
