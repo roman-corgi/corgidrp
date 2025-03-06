@@ -207,10 +207,25 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     """
 
     sci_dataset = input_dataset.copy()
+    
+    # Use input reference dataset if provided
     if not reference_star_dataset is None:
         ref_dataset = reference_star_dataset.copy()
+
+    # Try getting PSF references via the "PSFREF" header kw
     else:
-        ref_dataset = None
+        split_datasets, unique_vals = sci_dataset.split_dataset(prihdr_keywords=["PSFREF"])
+        unique_vals = np.array(unique_vals)
+
+        if 0. in unique_vals:
+            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0])]
+        else:
+            raise UserWarning('No science files found in input dataset.')
+
+        if 1. in unique_vals:
+            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0])]
+        else:
+            ref_dataset = None
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
 
@@ -256,59 +271,37 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     pyklip_data = fits.getdata(result_fpath)
     pyklip_hdr = fits.getheader(result_fpath)
 
-    frames = []
-    for i,frame_data in enumerate(pyklip_data):
+    # TODO: Handle errors correctly
+    err = np.zeros([1,*pyklip_data.shape])
+    dq = np.zeros_like(pyklip_data) # This will get filled out later
 
-        # TODO: Handle DQ & errors correctly
-        err = np.zeros_like(frame_data)
-        dq = np.zeros_like(frame_data) # This will get filled out later
-
-        # Clean up primary header
-        pri_hdr = pyklip_hdr.copy()
-        naxis1 = pri_hdr['NAXIS1']
-        naxis2 = pri_hdr['NAXIS2']
-        pri_hdr['NAXIS'] = 0
-
-        remove_kws = ['NAXIS1','NAXIS2','NAXIS3',
-                      'CRPIX1','CRPIX2']
-        for kw in remove_kws:
-            del pri_hdr[kw]
-
-        # Add observation info from input dataset
-        pri_hdr_keys = ['TELESCOP','INSTRUME']
-        for kw in pri_hdr_keys:
-            pri_hdr[kw] = sci_dataset[0].pri_hdr[kw]
-        
-        # Make extension header
-        ext_hdr = fits.Header()
-        ext_hdr['NAXIS'] = 2
-        ext_hdr['NAXIS1'] = naxis1
-        ext_hdr['NAXIS2'] = naxis2
-
-        # Add info from input dataset
-        ext_hdr_keys = ['BUNIT','PIXSCALE','CFAMNAME',
-                        'DPAMNAME','FPAMNAME','FSAMNAME',
-                        'LSAMNAME','SPAMNAME']
-        for kw in ext_hdr_keys:
-            ext_hdr[kw] = sci_dataset[0].ext_hdr[kw]
-
-        # Add info from pyklip
-        ext_hdr['KLIP_ALG'] = mode
-        ext_hdr['KLMODES'] = pyklip_hdr[f'KLMODE{i}']
-        ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
-        ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
-        if "HISTORY" in sci_dataset[0].ext_hdr.keys():
-            history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
-            ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
-        
-        # Construct Image object and add to list
-        frame = data.Image(frame_data,
-                           pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
-                           err=err, dq=dq)
-        
-        frames.append(frame)
+    # Collapse sci_dataset headers
+    pri_hdr = sci_dataset[0].pri_hdr.copy()
+    ext_hdr = sci_dataset[0].ext_hdr.copy()    
     
-    dataset_out = data.Dataset(frames)
+    # Add relevant info from the pyklip headers:
+    skip_kws = ['PSFCENTX','PSFCENTY','CREATOR','CTYPE3']
+    for kw, val, comment in pyklip_hdr._cards:
+        if not kw in skip_kws:
+            ext_hdr.set(kw,val,comment)
+
+    # Record KLIP algorithm explicitly
+    pri_hdr.set('KLIP_ALG',mode)
+    
+    # Add info from pyklip to ext_hdr
+    ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
+    ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
+
+    if "HISTORY" in sci_dataset[0].ext_hdr.keys():
+        history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
+        ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
+    
+    # Construct Image and Dataset object
+    frame = data.Image(pyklip_data,
+                        pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                        err=err, dq=dq)
+    
+    dataset_out = data.Dataset([frame])
 
     # Flag nans in the dq array and then add nans to the error array
     dataset_out = flag_nans(dataset_out,flag_val=1)
@@ -318,8 +311,6 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     
     dataset_out.update_after_processing_step(history_msg)
     
-    # TODO: Update DQ to 1 where there are nans
-
     return dataset_out
 
 def northup(input_dataset,correct_wcs=False):

@@ -2034,6 +2034,28 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
 
     return ill_dataset, dark_dataset, ill_mean, dark_mean
 
+def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.):
+    """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
+
+    Args:
+        array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
+        sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
+        amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
+        xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
+        yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
+        
+    Returns:
+        np.array: 2D array of a gaussian surface.
+    """
+    x, y = np.meshgrid(np.linspace(-array_shape[0]/2+0.5, array_shape[0]/2-0.5, array_shape[0]),
+                        np.linspace(-array_shape[1]/2+0.5, array_shape[1]/2-0.5, array_shape[1]))
+    dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
+
+    # Calculate Gaussian 
+    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp / (2.0 * np.pi * sigma**2)
+    
+    return gauss
+
 def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., background = 0., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
@@ -2095,8 +2117,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     # inject gaussian psf star
     stampsize = int(np.ceil(3 * fwhm))
     sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
-    amplitude = flux/(2. * np.pi * sigma**2)
-    
+
     # coordinate system
     y, x = np.indices([stampsize, stampsize])
     y -= stampsize // 2
@@ -2113,7 +2134,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     ymin = y[0][0]
     ymax = y[-1][-1]
         
-    psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+    psf = gaussian_array((stampsize,stampsize),sigma,flux)
 
     # inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
@@ -2152,30 +2173,6 @@ LATPOLE =                 90.0 / [deg] Native latitude of celestial pole
 MJDREF  =                  0.0 / [d] MJD of fiducial time
 """
 
-def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.):
-    """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
-
-    Args:
-        array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
-        sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
-        amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
-        xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
-        yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
-        
-    Returns:
-        np.array: 2D array of a gaussian surface.
-    """
-    x, y = np.meshgrid(np.linspace(-array_shape[0]/2, array_shape[0]/2, array_shape[0]),
-                        np.linspace(-array_shape[1]/2, array_shape[1]/2, array_shape[1]))
-    dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
-
-    # lower normal part of gaussian
-    normal = 1/(2.0 * np.pi * sigma**2)
-
-    # Calculating Gaussian filter
-    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * normal * amp
-    
-    return gauss
 
 def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
                           wcs_header = None,
@@ -2202,13 +2199,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         wcs_header (astropy.fits.Header, optional): Fits header object containing WCS 
             information. If not provided, a mock header will be created. Defaults to None.
         data_shape (list of int): desired shape of data array. Must have length 2. Defaults to 
-            [1024,1024].
+            [100,100].
         centerxy (list of float): Desired PSF center in xy order. Must have length 2. Defaults 
             to image center.
         outdir (str, optional): Desired output directory. If not provided, data will not be 
             saved. Defaults to None.
-        st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 10000.
-        noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1e-11.
+        st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 100.
+        noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1.
         ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
             reference PSFs. Defaults to 1.
         pl_contrast (float): Flux ratio between planet and starlight incident on the detector. 
@@ -2310,6 +2307,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                                             yoffset=yoff+psf_off_xy[1])
                 img_data += planet_psf
         
+                # Assign PSFREF flag
+                prihdr['PSFREF'] = 0
+            else:
+                prihdr['PSFREF'] = 1
 
         # Add necessary header keys
         prihdr['TELESCOP'] = 'ROMAN'
@@ -2323,11 +2324,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['MASKLOCY'] = psfcenty
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
-        exthdr['PIXSCALE'] = pixscale
+        exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
         exthdr["ROLL"] = roll_angles[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
-        #exthdr["HISTORY"] = "" # This line keeps triggering an "illegal value" error
-
+        
         # Add WCS header info, if provided
         if wcs_header is None:
             wcs_header = generate_wcs(roll_angles[i], 
