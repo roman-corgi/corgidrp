@@ -33,10 +33,11 @@ def load_transformation_matrix_from_fits(file_path):
 
 def group_by_keyword(dataset, keyword):
     """
-    Split the dataset by the 'TARGET' keyword and return a dictionary {target: subset}.
+    Split the dataset by the keyword given and return a dictionary {target: subset}.
 
     Parameters:
-        dataset (Dataset): The dataset to be split based on the 'TARGET' keyword.
+        dataset (Dataset): The dataset to be split.
+        keyword (String): FITS header keyword to split the dataset on.
 
     Returns:
         dict: A dictionary where keys are unique target values and values are the 
@@ -292,6 +293,8 @@ def create_nd_sweet_spot_dataset(
             sweet-spot data in the format [OD, x, y].
         common_metadata (dict): A dictionary containing metadata such as FPAM/CFAM names 
             and offsets.
+        od_var_flag (Bool): A flag that is passed in if the OD variance is too high among 
+            rasters.
 
     Returns:
         tuple:
@@ -331,16 +334,15 @@ def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file,
     image, using a provided EXCAM to FPAM transformation_matrix.
     
     Parameters:
-        clean_frame_entry (object, optional): A clean frame image.
-        transformation_matrix (numpy.ndarray): A 2x2 matrix for transforming 
+        clean_frame_entry (corgidrp.Data.Image): A clean frame image.
+        transformation_matrix_file (string): File path to the 2x2 matrix for transforming 
             FPAM offsets to EXCAM offsets.
-        ndsweetspot_dataset
+            # TO DO: is this going to be a data object?
+        ndsweetspot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter 
+            Sweet Spot dataset
 
     Returns:
-        tuple:
-            NDFilterSweetSpotDataset: The generated ND filter sweet spot dataset.
-            float or None: The appended OD value if a clean frame entry was provided, 
-                otherwise None.
+        interpolated_od (float): OD that is interpolated at the new star location
     """
     final_sweet_spot_data = ndsweetspot_dataset.data
     transformation_matrix = load_transformation_matrix_from_fits(transformation_matrix_file)
@@ -386,26 +388,21 @@ def create_nd_filter_cal(stars_dataset,
       2. Compute avg calibration factor from dim stars.
       2. Group bright star frames by target + measure OD, centroids.
       3. Combine all sweet-spot data into a single Nx3 array.
-      5. Save final NDFilterSweetSpotDataset (if file_save is True).
     
     Parameters:
         stars_dataset (Dataset): Dataset containing star images. The splitting into bright and dim stars
             is performed based on the 'FPAMNAME' value in the FITS header. For example, entries with 'FPAMNAME'
             containing "dim" (case-insensitive) are considered dim stars.
-        output_path (str, optional): Directory to save output files.
-        file_save (bool): Flag to determine if output files should be written to disk.
         od_raster_threshold (float): Threshold for flagging OD variations.
         phot_method (str): Photometry method ("Aperture" or "Gaussian").
         flux_or_irr (str): Either 'flux' or 'irr' for the calibration approach.
         phot_kwargs (dict, optional): Extra arguments for the actual photometry function 
             (e.g., aper_phot).
+        fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): A pre-computed flux factor calibration product to use
+            if dim stars are not included as part of the input dataset
 
     Returns:
-        Dict[str, Any]: Dictionary containing:
-            -'sweet_spot_dataset': sweet_spot_dataset,
-            -'common_metadata': common_metadata,
-            -'flux_results': flux_results,
-            -'overall_avg_od': overall_avg_od
+        sweet_spot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter calibration product for the dataset given
     """
     if phot_kwargs is None:
         phot_kwargs = {}

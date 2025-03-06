@@ -2522,6 +2522,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fwhm (float): Full width at half max (FWHM) of the centroid
         cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electrons
         filter (str): (Optional) The CFAM filter used.
+        fpamname (str): (Optional) Position of the FPAM
         target_name (str): (Optional) Name of the calspec star
         fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
         fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)

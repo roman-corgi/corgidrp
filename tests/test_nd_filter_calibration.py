@@ -187,6 +187,24 @@ def stars_dataset_cached(bright_files_cached, dim_files_cached):
     # to a representative input state
     return l2b_tol3.divide_by_exptime(Dataset(combined_files))
 
+@pytest.fixture(scope="module")
+def dim_dir(tmp_path_factory):
+    """
+    Creates a temporary directory, populates it with the mock dim FITS files,
+    then returns the directory path.
+    """
+    tmp_dir = tmp_path_factory.mktemp("dim_dir_fixture")
+    mock_dim_dataset_files(
+        DIM_EXPTIME,
+        FILTER_USED,
+        CAL_FACTOR,
+        save_mocks=True,
+        output_path=str(tmp_dir),
+        background_val=0,
+        add_gauss_noise_val=False
+    )
+    return str(tmp_dir)
+
 @pytest.fixture
 def output_dir(tmp_path):
     out = tmp_path / "output"
@@ -316,6 +334,7 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
     3) Passes that flux calibration factor to create_nd_filter_cal
     4) Checks the resulting ND filter calibration to ensure it ran as expected
     """
+    print(f"**Testing with FluxcalFactor input using method {phot_method}**")
     # Pick images without the ND filter in
     dim_filepaths = glob.glob(os.path.join(dim_dir, "*.fits"))
     assert len(dim_filepaths) > 0, f"No FITS files found in {dim_dir}"
@@ -473,6 +492,7 @@ def test_background_effect(tmp_path):
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
 
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -560,71 +580,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-'''
-#this is for julia testing
-
-def main():
-    # Define cache directories for dim and bright datasets
-    cache_dir = "corgidrp/data/nd_filter_mocks"
-    
-    dim_cache_dir = os.path.join(cache_dir, "dim")
-    bright_cache_dir = os.path.join(cache_dir, "bright")
-
-    # --- Dim dataset ---
-    dim_files = glob.glob(os.path.join(dim_cache_dir, "*.fits"))
-    if not dim_files:
-        print(f"Cached dim dataset not found in {dim_cache_dir}. Generating new dataset...")
-        os.makedirs(dim_cache_dir, exist_ok=True)
-        dim_files = mock_dim_dataset_files(
-            DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False, output_path=dim_cache_dir
-        )
-    else:
-        print(f"Using cached dim dataset from {dim_cache_dir}")
-    dim_ds = Dataset(dim_files)
-    dim_ds = l2b_tol3.divide_by_exptime(dim_ds)
-
-    # --- Bright dataset ---
-    bright_files = glob.glob(os.path.join(bright_cache_dir, "*.fits"))
-    if not bright_files:
-        print(f"Cached bright dataset not found in {bright_cache_dir}. Generating new dataset...")
-        os.makedirs(bright_cache_dir, exist_ok=True)
-        bright_files = mock_bright_dataset_files(
-            BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False, output_path=bright_cache_dir
-        )
-    else:
-        print(f"Using cached bright dataset from {bright_cache_dir}")
-    bright_ds = Dataset(bright_files)
-    bright_ds = l2b_tol3.divide_by_exptime(bright_ds)
-
-
-
-    # Option 1: Combine file lists and create a new Dataset
-    combined_files = dim_files + bright_files
-    combined_ds = Dataset(combined_files)
-    combined_ds= l2b_tol3.divide_by_exptime(combined_ds)
-    
-    # Create (or use) an output directory for calibration products
-    output_directory = "output"
-    os.makedirs(output_directory, exist_ok=True)
-    
-    # Proceed with processing as before
-    clean_frame_entry = mock_clean_entry(bright_ds)
-    transformation_matrix = mock_transformation_matrix(output_directory)
-
-    sweet_spot_dataset = nd_filter_calibration.create_nd_filter_cal(
-        combined_ds, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, fluxcal_factor = None)
-
-    # TO DO: update this when file name conventions are finalized
-    output_filename = (
-        f"CGI_Mock_NDF_CAL.fits"
-    )
-    sweet_spot_dataset.save(filedir='/Users/jmilton/Github/corgidrp/tests/e2e_tests/nd_filter_output', filename=output_filename)
-
-    interpolated_nd = nd_filter_calibration.calculate_od_at_new_location(clean_frame_entry, transformation_matrix, 
-                                 sweet_spot_dataset)
-
-    print(interpolated_nd)
-
-if __name__ == "__main__":
-    main()
 '''
