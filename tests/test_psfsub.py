@@ -1,15 +1,10 @@
-from corgidrp.mocks import create_psfsub_dataset
+from corgidrp.mocks import create_psfsub_dataset,create_default_headers
 from corgidrp.l3_to_l4 import do_psf_subtraction
-from corgidrp.data import PyKLIPDataset
+from corgidrp.data import PyKLIPDataset, Image, Dataset
+from corgidrp.detector import nan_flags, flag_nans
 from scipy.ndimage import shift, rotate
 import pytest
 import numpy as np
-import glob
-import os
-from astropy.io import fits
-from pyklip.instruments import Instrument
-from pyklip import parallelized
-from matplotlib.colors import LogNorm
 
 ## Helper functions/quantities
 
@@ -59,16 +54,16 @@ def test_pyklipdata_ADI():
     """
 
     rolls = [0,90]
-    # Init with center shifted by 1 pixel
+    # Init with center shifted by 1 pixel in x, 2 pixels in y
     mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
-                                              centerxy=(50.5,50.5))
+                                              centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-    pass
+
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
 
-        assert mock_sci.all_data[i,1:,1:] == pytest.approx(image[:-1,:-1]), f"Frame {i} centered improperly."
+        assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
@@ -84,16 +79,15 @@ def test_pyklipdata_RDI():
     rolls = [45,180]
     n_sci = 1
     n_ref = 1
-    # Init with center shifted by 1 pixel
-    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,centerxy=(50.5,50.5))
+    # Init with center shifted
+    mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-    pass
     
     # Check image is centered properly
     for i,image in enumerate(pyklip_dataset._input):
 
-        assert mock_sci.all_data[i,1:,1:] == pytest.approx(image[:-1,:-1]), f"Frame {i} centered improperly."
+        assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
@@ -111,14 +105,14 @@ def test_pyklipdata_ADIRDI():
     n_ref = 1
     # Init with center shifted by 1 pixel
     mock_sci,mock_ref = create_psfsub_dataset(n_sci,n_ref,rolls,
-                                              centerxy=(50.5,50.5))
+                                              centerxy=(50.5,51.5))
 
     pyklip_dataset = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
-    pass
+
     # Check image is recentered properly
     for i,image in enumerate(pyklip_dataset._input):
 
-        assert mock_sci.all_data[i,1:,1:] == pytest.approx(image[:-1,:-1]), f"Frame {i} centered improperly."
+        assert mock_sci.all_data[i,2:,1:] == pytest.approx(image[:-2,:-1]), f"Frame {i} centered improperly."
 
     # Check roll assignments and filenames match up for sci dataset
     for r,roll in enumerate(pyklip_dataset._PAs):
@@ -182,11 +176,215 @@ def test_pyklipdata_multiplepixscales():
     """
     mock_sci,mock_ref = create_psfsub_dataset(2,0,[0,0])
     
-    mock_sci[0].ext_hdr["PIXSCALE"] = 10
+    mock_sci[0].ext_hdr["PLTSCALE"] = 10
     with pytest.raises(UserWarning):
         _ = PyKLIPDataset(mock_sci,psflib_dataset=mock_ref)
 
+# DQ flagging tests
+
+def make_test_data(frame_shape,n_frames=1,):
+    """Makes a test corgidrp Dataset of all zeros with the desired
+    frame shape and number of frames.
+
+    Args:
+        frame_shape (listlike of int): 2D or 3D image shape desired.
+        n_frames (int, optional): Number of frames. Defaults to 1.
+
+    Returns:
+        corgidrp.Dataset: mock dataset of all zeros.
+    """
+    
+    frames = []
+    for i in range(n_frames):
+        prihdr, exthdr = create_default_headers()
+        im_data = np.zeros(frame_shape).astype(np.float64)
+        frame = Image(im_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+        frames.append(frame)
+
+    dataset = Dataset(frames)
+    return dataset
+
+def test_nanflags_2D():
+    """Test detector.nan_flags() on 2D data.
+    """
+
+    # 2D:
+    mock_dataset = make_test_data([10,10],n_frames=2,)
+    mock_dataset.all_dq[0,4,6] = 1
+    mock_dataset.all_dq[1,5,7] = 1
+
+    expected_data = np.zeros([2,10,10])
+    expected_data[0,4,6] = np.nan
+    expected_data[1,5,7] = np.nan
+
+    expected_err = np.zeros([2,1,10,10])
+    expected_err[0,0,4,6] = np.nan
+    expected_err[1,0,5,7] = np.nan
+
+    nanned_dataset = nan_flags(mock_dataset,threshold=1)
+
+    if not np.array_equal(nanned_dataset.all_data, expected_data,equal_nan=True):
+        # import matplotlib.pyplot as plt 
+        # fig,axes = plt.subplots(1,2)
+        # axes[0].imshow(nanned_dataset.all_data[0,:,:])
+        # axes[1].imshow(expected_data[0,:,:])
+        # plt.show()
+        # plt.close()
+        raise Exception('2D nan_flags test produced unexpected result')
+
+    if not np.array_equal(nanned_dataset.all_err,expected_err,equal_nan=True):
+        raise Exception('2D nan_flags test produced unexpected result for ERR array')
+
+def test_nanflags_3D():
+    """Test detector.nan_flags() on 3D data.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_dq[0,0,4,6] = 1
+    mock_dataset.all_dq[1,:,5,7] = 1
+
+    expected_data = np.zeros([2,3,10,10])
+    expected_data[0,0,4,6] = np.nan
+    expected_data[1,:,5,7] = np.nan
+
+    expected_err = np.zeros([2,1,3,10,10])
+    expected_err[0,0,0,4,6] = np.nan
+    expected_err[1,0,:,5,7] =  np.nan
+
+    nanned_dataset = nan_flags(mock_dataset,threshold=1)
+
+    if not np.array_equal(nanned_dataset.all_data, expected_data,equal_nan=True):
+        raise Exception('2D nan_flags test produced unexpected result')
+    
+    if not np.array_equal(nanned_dataset.all_err, expected_err,equal_nan=True):
+        raise Exception('3D nan_flags test produced unexpected result for ERR array')
+
+def test_nanflags_mixed_dqvals():
+    """Test detector.nan_flags() on 3D data with some DQ values below the threshold.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_dq[0,0,4,6] = 1
+    mock_dataset.all_dq[1,:,5,7] = 2
+
+    expected_data = np.zeros([2,3,10,10])
+    expected_data[1,:,5,7] = np.nan
+
+    expected_err = np.zeros([2,1,3,10,10])
+    expected_err[1,0,:,5,7] =  np.nan
+
+    nanned_dataset = nan_flags(mock_dataset,threshold=2)
+
+    if not np.array_equal(nanned_dataset.all_data, expected_data,equal_nan=True):
+        raise Exception('nan_flags with mixed dq values produced unexpected result')
+    
+    if not np.array_equal(nanned_dataset.all_err, expected_err,equal_nan=True):
+        raise Exception('3D nan_flags with mixed dq values produced unexpected result for ERR array')
+
+def test_flagnans_2D():
+    """Test detector.flag_nans() on 2D data.
+    """
+
+    # 2D:
+    mock_dataset = make_test_data([10,10],n_frames=2,)
+    mock_dataset.all_data[0,4,6] = np.nan
+    mock_dataset.all_data[1,5,7] = np.nan
+
+    expected_dq = np.zeros([2,10,10])
+    expected_dq[0,4,6] = 1
+    expected_dq[1,5,7] = 1
+
+    flagged_dataset = flag_nans(mock_dataset)
+
+    if not np.array_equal(flagged_dataset.all_dq, expected_dq,equal_nan=True):
+        raise Exception('2D nan_flags test produced unexpected result for DQ array')
+    
+def test_flagnans_3D():
+    """Test detector.flag_nans() on 3D data.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_data[0,0,4,6] = np.nan
+    mock_dataset.all_data[1,:,5,7] = np.nan
+
+    expected_dq = np.zeros([2,3,10,10])
+    expected_dq[0,0,4,6] = 1
+    expected_dq[1,:,5,7] = 1
+    
+    flagged_dataset = flag_nans(mock_dataset)
+
+    if not np.array_equal(flagged_dataset.all_dq, expected_dq,equal_nan=True):
+        raise Exception('3D flag_nans test produced unexpected result for DQ array')
+
+def test_flagnans_flagval2():
+    """Test detector.flag_nans() on 3D data with a non-default DQ value.
+    """
+
+    # 3D:
+    mock_dataset = make_test_data([3,10,10],n_frames=2,)
+    mock_dataset.all_data[0,0,4,6] = np.nan
+    mock_dataset.all_data[1,:,5,7] = np.nan
+
+    expected_dq = np.zeros([2,3,10,10])
+    expected_dq[0,0,4,6] = 2
+    expected_dq[1,:,5,7] = 2
+
+    flagged_dataset = flag_nans(mock_dataset,flag_val=2)
+
+    if not np.array_equal(flagged_dataset.all_dq, expected_dq,equal_nan=True):
+        raise Exception('3D nan_flags test produced unexpected result for DQ array')
+
 ## PSF subtraction step tests
+
+def test_psf_sub_split_dataset():
+    """Tests that psf subtraction step can correctly split an input dataset into
+    science and reference dataset, if they are not passed in separately.
+    """
+
+    # Sci & Ref
+    numbasis = [1,4,8]
+    rolls = [270+13,270-13,0,0]
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+    
+    # combine mock_sci and mock_ref into 1 dataset
+    frames = [*mock_sci,*mock_ref]
+    mock_sci_and_ref = Dataset(frames)
+
+    # Pass combined dataset to do_psf_subtraction
+    result = do_psf_subtraction(mock_sci_and_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_single_dataset',
+                                do_crop=False)
+    
+    # Should choose ADI+RDI
+    for frame in result:
+        if not frame.pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 2 references.")
+
+    # Try passing only science frames
+    result = do_psf_subtraction(mock_sci,
+                                numbasis=numbasis,
+                                fileprefix='test_sci_only_dataset',
+                                do_crop=False)
+    
+    # Should choose ADI
+    for frame in result:
+        if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
+
+    # pass only reference frames (should fail)
+    with pytest.raises(UserWarning):
+        _ = do_psf_subtraction(mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_ref_only_dataset',
+                                do_crop=False)
 
 def test_psf_sub_ADI_nocrop():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
@@ -243,11 +441,11 @@ def test_psf_sub_ADI_nocrop():
         if np.nanmax(np.abs(frame.data - analytical_result)) > 1e-5:
             raise Exception(f"Absolute difference between ADI result and analytical result is greater then 1e-5.")
         
-        if not frame.ext_hdr['KLIP_ALG'] == 'ADI':
-            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
+        if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
 
     # Check expected data shape
-    expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
@@ -275,7 +473,7 @@ def test_psf_sub_RDI_nocrop():
     
     for i,frame in enumerate(result):
 
-        mask = create_circular_mask(*frame.data.shape,r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -326,15 +524,15 @@ def test_psf_sub_RDI_nocrop():
             raise Exception(f"RDI subtraction resulted in increased counts for frame {i}.")
         
         # The step should choose mode RDI based on having 1 roll and 1 reference.
-        if not frame.ext_hdr['KLIP_ALG'] == 'RDI':
-            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'RDI' mode when provided 1 science image and 1 reference.")
+        if not frame.pri_hdr['KLIP_ALG'] == 'RDI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'RDI' mode when provided 1 science image and 1 reference.")
         
         # Frame should match analytical result outside of the IWA (after correcting for the median offset)
         if not np.nanmax(np.abs((masked_frame - np.nanmedian(frame.data)) - analytical_result)) < 1e-5:
             raise Exception("RDI subtraction did not produce expected analytical result.")
     
     # Check expected data shape
-    expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after RDI subtraction.")
     
@@ -364,7 +562,7 @@ def test_psf_sub_ADIRDI_nocrop():
     for i,frame in enumerate(result):
 
         
-        mask = create_circular_mask(*frame.data.shape,r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -395,8 +593,8 @@ def test_psf_sub_ADIRDI_nocrop():
             raise Exception(f"ADI+RDI subtraction resulted in increased counts for frame {i}.")
         
         # Corgidrp should know to choose ADI+RDI mode
-        if not frame.ext_hdr['KLIP_ALG'] == 'ADI+RDI':
-            raise Exception(f"Chose {frame.ext_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 1 reference.")
+        if not frame.pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 1 reference.")
         
         # Frame should match analytical result outside of the IWA (after correcting for the median offset) for KL mode 1
         if i==0:
@@ -404,7 +602,7 @@ def test_psf_sub_ADIRDI_nocrop():
                 raise Exception("ADI+RDI subtraction did not produce expected analytical result.")
                 
     # Check expected data shape
-    expected_data_shape = (len(numbasis),*mock_sci[0].data.shape)
+    expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI+RDI subtraction.")
 
@@ -428,10 +626,29 @@ def test_psf_sub_withcrop():
             raise Exception(f"PSF subtraction resulted in increased counts for frame {i}.")
 
     # Check expected data shape
-    expected_data_shape = (len(numbasis),60,60)
+    expected_data_shape = (1,len(numbasis),60,60)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
+def test_psf_sub_badmode():
+    """Tests that psf subtraction step fails correctly if an unconfigured mode is supplied (e.g. SDI).
+    """
+
+    numbasis = [1,2,3,4]
+    rolls = [13,-13,0]
+    mock_sci,mock_ref = create_psfsub_dataset(2,1,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+    
+
+    with pytest.raises(Exception):
+        _ = do_psf_subtraction(mock_sci,mock_ref,
+                                numbasis=numbasis,
+                                mode='SDI',
+                                fileprefix='test_SDI',
+                                do_crop=False)
+    
 if __name__ == '__main__':  
     test_pyklipdata_ADI()
     test_pyklipdata_RDI()
@@ -442,8 +659,18 @@ if __name__ == '__main__':
     test_pyklipdata_notdataset()
     test_pyklipdata_badimgshapes()
     test_pyklipdata_multiplepixscales()
+
+    test_nanflags_2D()
+    test_nanflags_3D() 
+    test_nanflags_mixed_dqvals()
+    test_flagnans_2D()
+    test_flagnans_3D()
+    test_flagnans_flagval2()
+
+    test_psf_sub_split_dataset()
+
     test_psf_sub_ADI_nocrop()
     test_psf_sub_RDI_nocrop()
     test_psf_sub_ADIRDI_nocrop()
     test_psf_sub_withcrop()
-    
+    test_psf_sub_badmode()

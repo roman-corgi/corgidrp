@@ -149,19 +149,19 @@ class Dataset():
         Updates Dataset.all_err.
 
         Args:
-          input_error (np.array): 2-d or 3-d error layer
+          input_error (np.array): per-frame or per-dataset error layer
           err_name (str): name of the uncertainty layer
         """
-        if input_error.ndim == 3:
+        if input_error.ndim == self.all_data.ndim:
             for i,frame in enumerate(self.frames):
                 frame.add_error_term(input_error[i], err_name)
 
-        elif input_error.ndim ==2:
+        elif input_error.ndim == self.all_data.ndim - 1:
             for frame in self.frames:
                 frame.add_error_term(input_error, err_name)
 
         else:
-            raise ValueError("input_error is not either a 2D or 3D array.")
+            raise ValueError("input_error is not either a 2D or 3D array for 2D data, or a 3D or 4D array for 3D data.")
 
         # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])
@@ -288,8 +288,8 @@ class Image():
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
-                    #we want to have a 3 dim error array
-                    if err.ndim > 2:
+                    #we want to have an extra dimension in the error array
+                    if err.ndim == self.data.ndim+1:
                         self.err = err
                     else:
                         self.err = err.reshape((1,)+err.shape)
@@ -297,7 +297,7 @@ class Image():
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
-                    if self.err.ndim == 2:
+                    if self.err.ndim == self.data.ndim:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
@@ -350,7 +350,7 @@ class Image():
                 if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                     raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
                 #we want to have a 3 dim error array
-                if err.ndim > 2:
+                if err.ndim == self.data.ndim + 1:
                     self.err = err
                 else:
                     self.err = err.reshape((1,)+err.shape)
@@ -518,7 +518,7 @@ class Image():
 
     def add_error_term(self, input_error, err_name):
         """
-        Add a layer of a specific additive uncertainty on the 3-dim error array extension
+        Add a layer of a specific additive uncertainty on the 3- or 4-dim error array extension
         and update the combined uncertainty in the first layer.
         Update the error header and assign the error name.
 
@@ -526,18 +526,22 @@ class Image():
         in the configuration file
 
         Args:
-          input_error (np.array): 2-d error layer
+          input_error (np.array): error layer with same shape as data
           err_name (str): name of the uncertainty layer
         """
-        if input_error.ndim != 2 or input_error.shape != self.data.shape:
-            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        ndim = self.data.ndim
+        if not (input_error.ndim==2 or input_error.ndim==3) or input_error.shape != self.data.shape:
+            raise ValueError("we expect a 2-dimensional or 3-dimensional error layer with dimensions {0}".format(self.data.shape))
 
         #first layer is always the updated combined error
-        self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
+        if ndim == 2:
+            self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
+        elif ndim == 3:
+            self.err[0,:,:,:] = np.sqrt(self.err[0,:,:,:]**2 + input_error**2)
         self.err_hdr["Layer_1"] = "combined_error"
 
         if corgidrp.track_individual_errors:
-            #append new error as layer on 3D cube
+            #append new error as layer on 3D or 4D cube
             self.err=np.append(self.err, [input_error], axis=0)
 
             layer = str(self.err.shape[0])
@@ -1372,12 +1376,11 @@ class PyKLIPDataset(pyKLIP_Data):
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
 
     # TODO: Add more bandpasses, modes to self.wave_hlc
-    #       Clarify attribute descriptions
     #       Add wcs header info!
 
     Attrs:
         input: Input corgiDRP dataset.
-        centers: PSF center locations (double check this).
+        centers: Star center locations.
         filenums: file numbers.
         filenames: file names.
         PAs: position angles.
@@ -1397,8 +1400,7 @@ class PyKLIPDataset(pyKLIP_Data):
     def __init__(self,
                  dataset,
                  psflib_dataset=None,
-                 highpass=False,
-                 center_include_offset=True):
+                 highpass=False):
         """
         Initialize the pyKLIP instrument class for space telescope data.
         # TODO: Determine inner working angle based on PAM positions
@@ -1412,9 +1414,6 @@ class PyKLIPDataset(pyKLIP_Data):
                 Dataset containing input reference observations. The default is None.
             highpass (bool, optional):
                 Toggle to do highpass filtering. Defaults fo False.
-            center_include_offset (bool, optional):
-                Toggle as to whether the relative header offset values of each
-                image is applied during image centering. Defaults to True.
         """
         
         # Initialize pyKLIP Data class.
@@ -1422,10 +1421,7 @@ class PyKLIPDataset(pyKLIP_Data):
 
         # Set filter wavelengths
         self.wave_hlc = {'1F': 575e-9} # meters
-        
-        # Optional variables
-        self.center_include_offset = center_include_offset
-                
+            
         # Read science and reference files.
         self.readdata(dataset, psflib_dataset, highpass)
         
@@ -1571,17 +1567,11 @@ class PyKLIPDataset(pyKLIP_Data):
             if data.ndim != 3:
                 raise UserWarning('Requires 2D/3D data cube')
             NINTS = data.shape[0]
-            pix_scale = shead['PIXSCALE'] # arcsec
+            pix_scale = shead['PLTSCALE'] * 1000. # arcsec
             PIXSCALE += [pix_scale] 
 
             # Get centers.
-            if self.center_include_offset == True:
-                # Use the offset values from the header to adjust the center
-                centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
-                    shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
-            else:
-                # Assume the STARLOC define the correct center for each image
-                centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+            centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
 
             # Get metadata.
             input_all += [data]
@@ -1662,17 +1652,11 @@ class PyKLIPDataset(pyKLIP_Data):
                 if data.ndim != 3:
                     raise UserWarning('Requires 2D/3D data cube')
                 NINTS = data.shape[0]
-                pix_scale = shead['PIXSCALE'] # arcsec
+                pix_scale = shead['PLTSCALE'] * 1000. # arcsec
                 PIXSCALE += [pix_scale] 
 
                 # Get centers.
-                if self.center_include_offset == True:
-                    # Use the offset values from the header to adjust the center
-                    centers = np.array([shead['STARLOCX'] + phead['XOFFSET'] / pix_scale, 
-                        shead['STARLOCY'] + phead['YOFFSET'] / pix_scale] * NINTS)
-                else:
-                    # Assume the STARLOC define the correct center for each image
-                    centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+                centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
 
                 psflib_data_all += [data]
                 psflib_centers_all += [centers]
