@@ -406,7 +406,7 @@ def northup(input_dataset,correct_wcs=True):
         ############
 
     history_msg = 'North is Up and East is Left'
-    processed_dataset.update_after_processing_step(hisotry_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
+    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
                                                    new_all_dq=np.array(new_all_dq))
 
     return processed_dataset 
