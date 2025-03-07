@@ -303,13 +303,9 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
     final_sweet_spot_data = aggregated_sweet_spot_data.copy()
 
     # Build the NDFilterSweetSpotDataset
-    pri_hdr = fits.Header()
-    pri_hdr['SIMPLE']  = True
-    pri_hdr['BITPIX']  = 32
-    pri_hdr['OBSID']   = 0
-    pri_hdr['COMMENT'] = "Combined ND Filter Sweet Spot Dataset primary header"
+    pri_hdr = input_dataset[0].pri_hdr
+    ext_hdr = input_dataset[0].ext_hdr
 
-    ext_hdr = fits.Header()
     ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
     ext_hdr['FPAM_H']   = common_metadata.get('FPAM_H')
     ext_hdr['FPAM_V']   = common_metadata.get('FPAM_V')
