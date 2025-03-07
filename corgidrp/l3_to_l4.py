@@ -216,7 +216,7 @@ def northup(input_dataset,correct_wcs=True):
             try:
                 xcen, ycen = im_hd['CRPIX1'], im_hd['CRPIX2']
             except KeyError:
-                xcen, ycen = int(sci_im.shape[1]/2), int(sci_im.shape[0]/2)
+                xcen, ycen = int(im_data.shape[1]/2), int(im_data.shape[0]/2)
 
         # look for WCS solutions
         if correct_wcs is True:
