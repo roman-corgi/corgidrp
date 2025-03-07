@@ -1836,8 +1836,9 @@ def unpackbits_64uint(arr, axis):
     Returns:
         _type_: np.ndarray of bits
     """
-    n = np.array(arr).view("u1")
-    return np.unpackbits(n, axis=axis, bitorder='little')
+    arr = arr.astype('>u8')
+    n = arr.view('u1')
+    return np.unpackbits(n, axis=axis, bitorder='big')
 
 def packbits_64uint(arr, axis):
     """
@@ -1850,4 +1851,4 @@ def packbits_64uint(arr, axis):
     Returns:
         _type_: np.ndarray of 64-bit unsigned integers
     """
-    return np.packbits(arr, axis=axis, bitorder='little').view(np.uint64)
+    return np.packbits(arr, axis=axis, bitorder='big').view('>u8')
