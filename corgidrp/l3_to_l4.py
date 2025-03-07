@@ -336,13 +336,13 @@ def northup(input_dataset,correct_wcs=True):
     for processed_data in processed_dataset:
 
         ## image extension ##
-        im_hd = processed_data.ext_hdr
-        im_data = processed_data.data
-        ylen, xlen = im_data.shape
+        sci_hd = processed_data.ext_hdr
+        sci_data = processed_data.data
+        ylen, xlen = sci_data.shape
 
         # define the center for rotation
         try: 
-            xcen, ycen = im_hd['STARLOCX'], im_hd['STARLOCY'] 
+            xcen, ycen = ['STARLOCX'], sci_hd['STARLOCY'] 
         except KeyError:
             warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             xcen, ycen = xlen/2, ylen/2
@@ -359,16 +359,19 @@ def northup(input_dataset,correct_wcs=True):
             roll_angle = processed_data.pri_hdr['ROLL']
 
         # derotate
-        im_derot = rotate(im_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
-        new_all_data.append(im_derot)
+        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
+        new_all_data.append(sci_derot)
+
+        log = f'FoV rotated by {-roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
+        sci_hd['HISTORY'] = log 
 
         # update WCS solutions
         if correct_wcs:
-            header_entries={'CD1_1': astr_hdr.wcs.cd[0,0],
-                            'CD1_2': astr_hdr.wcs.cd[0,1],
-                            'CD2_1': astr_hdr.wcs.cd[1,0],
-                            'CD2_2': astr_hdr.wcs.cd[1,1]
-                               }
+            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
+            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
+            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
+            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
+        #############
 
         ## HDU ERR ##
         err_data = processed_data.err
@@ -402,13 +405,8 @@ def northup(input_dataset,correct_wcs=True):
         new_all_dq.append(dq_derot)
         ############
 
-    hisotry_msg = f'FoV rotated by {-roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
-
-    if correct_wcs is True:
-        processed_dataset.update_after_processing_step(hisotry_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
-                                                   new_all_dq=np.array(new_all_dq), header_entries=header_entries)
-    else:
-        processed_dataset.update_after_processing_step(hisotry_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
+    history_msg = 'North is Up and East is Left'
+    processed_dataset.update_after_processing_step(hisotry_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
                                                    new_all_dq=np.array(new_all_dq))
 
     return processed_dataset 
