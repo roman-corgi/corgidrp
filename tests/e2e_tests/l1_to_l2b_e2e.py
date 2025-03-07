@@ -36,6 +36,7 @@ def fix_headers_for_tvac(
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         exthdr['KGAINPAR'] = exthdr['KGAIN']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        prihdr['PHTCNT'] = False
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
