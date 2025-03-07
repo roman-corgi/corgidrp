@@ -253,12 +253,16 @@ def generate_psf_cube(
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
     Returns:
-      3-d PSF cube of PSF images from a core throughput dataset.
+      3-d PSF cube of PSF images from a core throughput dataset, including their
+      data quality.
+
+      NOTE: error data cubes will be added in a release after R3.0.2
     """
     dataset = dataset_in.copy()
 
     # 3-d cube of PSF images cut around the PSF's location
     psf_cube = []
+    dq_cube = []
     n_pix_psf = int(1 + 2*np.ceil(3*get_cfam(cfam_name=cfam_name,
         cfam_version=cfam_version)[0].mean()*1e-9/2.36*180/np.pi*3600e3/21.8))
     i_psf = 0
@@ -281,22 +285,25 @@ def generate_psf_cube(
         idx_1_1 = min(frame.data.shape[1],
             int(np.round(psf_loc[i_psf][0])) + n_pix_psf)
         psf_cube += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
+        dq_cube += [frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
         i_psf += 1
 
     psf_cube = np.array(psf_cube)
+    dq_cube = np.array(dq_cube)
     # Check
     if len(psf_cube) != len(psf_loc):
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations.'))
 
-    return psf_cube
+    return psf_cube, dq_cube
 
-def generate_cal(
+def generate_ct_cal(
     dataset_in,
     roi_radius=3,
     cfam_version=0,
     ):
     """
+    Generate the elements needed to create a core throughput calibration file.
 
     A CoreThroughput calibration file has two main data arrays:
 
@@ -316,6 +323,9 @@ def generate_cal(
         in pixels. Adjust based on desired λ/D.
       version (int): version number of the filters (CFAM, pupil, imaging
         lens).
+    Returns:
+      PSF cube, data quality cube, HDU list with the CT array measurements,
+      including the PSF locations, PSF cube header, and CT array header.
     """
     dataset = dataset_in.copy()
 
@@ -335,30 +345,28 @@ def generate_cal(
             roi_radius=roi_radius,
             cfam_version=cfam_version)
 
-    # Collect data
-    # First extension: 3-d cube of PSF images cut around the PSF's location
-    psf_cube = generate_psf_cube(dataset, psf_loc_est, cfam_name=cfam_list[0],
-        cfam_version=cfam_version)
-    exthd_offaxis = fits.Header()
+    psf_cube, dq_cube = generate_psf_cube(dataset, psf_loc_est,
+        cfam_name=cfam_list[0], cfam_version=cfam_version)
+    # 1/ 3-d cube of PSF images cut around the PSF's location
+    ext_hdr = dataset[0].ext_hdr
     # Add history
-    exthd_offaxis['HISTORY'] = ('Core Throughput calibration derived from a '
+    ext_hdr['HISTORY'] = ('Core Throughput calibration derived from a '
         f'set of frames from {dataset[0].ext_hdr["DATETIME"]} to '
         f'{dataset[-1].ext_hdr["DATETIME"]}')
     # Add specific information
-    exthd_offaxis['UNITS'] = 'photoelectron/pix/s'
-    exthd_offaxis['COMMENT'] = ('Set of PSFs derived from a core throughput '
+    ext_hdr['UNITS'] = 'photoelectron/pix/s'
+    ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
         'observing sequence. PSFs are not normalized. They are the images of the '
         'off-axis source. The data cube is centered around each PSF location')
-
-    # N sets of (x,y, CT measurements)
+    # 2/ Data quality cube
+    dqhdu = fits.ImageHDU(data=dq_cube, name='DQCUBE')
+    # 3/ N sets of (x,y, CT measurements)
     # x, y: PSF centers wrt EXCAM's (0,0) pixel
-    ct_arr = np.array([psf_loc_est[:,0], psf_loc_est[:,1], ct_est])
+    ct_excam = np.array([psf_loc_est[:,0], psf_loc_est[:,1], ct_est])
     ct_hdr = fits.Header()
     ct_hdr['COMMENT'] = ('PSF location with respect to EXCAM (0,0) pixel. '
         'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
     ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'
+    ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
 
-    # Build HDUList and return it. see save() in CoreThroughputCalibration
-    breakpoint()
-
-
+    return psf_cube, dq_cube, ct_hdu_list, ext_hdr, ct_hdr

@@ -64,7 +64,7 @@ def setup_module():
     exthd_pupil['FSAMNAME'] = 'OPEN'
     exthd_pupil['FPAMNAME'] = 'OPEN_12'
     # Mock error
-    err = np.ones([1,1024,1024])
+    err = np.ones([1024,1024])
     # Add pupil images
     data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
@@ -219,9 +219,12 @@ def test_cal_file():
     """ Test creation of core throughput calibration file. """
 
     # Write core throughput calibration file
-    # TBD: Create an instance of the calibration file
-    corethroughput.generate_cal(dataset_ct)
-
+    ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
+    ct_cal_file = corgidrp.data.CoreThroughputCalibration(
+        ct_cal_inputs[0], pri_hdr=dataset_ct[0].pri_hdr, ext_hdr=ct_cal_inputs[3],
+        dq=ct_cal_inputs[1], input_hdulist=ct_cal_inputs[2],
+        input_dataset=dataset_ct)
+    ct_cal_file.save(filedir=corgidrp.default_cal_dir)
 
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
