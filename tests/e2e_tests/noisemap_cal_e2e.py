@@ -42,6 +42,7 @@ def set_obstype_for_darks(
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
         prihdr['VISTYPE'] = 'DARK'
+        prihdr['PHTCNT'] = False
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
