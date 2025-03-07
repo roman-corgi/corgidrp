@@ -2637,8 +2637,10 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
     prhd, exthd = create_default_L3_headers()
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
-    # Mock error
-    err = np.ones([1,1024,1024])
+    # Mock ERR
+    err = np.ones([1024,1024])
+    # Mock DQ
+    dq = np.zeros([1024,1024], dtype = np.uint16)
 
     fwhm_pix = int(np.ceil(fwhm_mas/21.8))
     # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
@@ -2682,6 +2684,6 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
         # Add half PSF volume for 2D Gaussian (numerator of core throughput)
         half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
         # Build up the Dataset
-        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
 
     return data_psf, np.array(psf_loc), np.array(half_psf)
