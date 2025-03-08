@@ -1,9 +1,6 @@
 import os
 import glob
 from pathlib import Path
-import re
-import shutil
-import tempfile
 import numpy as np
 from astropy.io import fits
 import pytest
@@ -471,7 +468,8 @@ def test_background_effect(tmp_path):
     ds_bg = l2b_tol3.divide_by_exptime(Dataset(combined_bg))
     
     output_directory = str(tmp_path / "output")
-    os.mkdir(output_directory)
+    if not os.path.exists(output_directory):
+        os.mkdir(output_directory)
     
     results_no = nd_filter_calibration.create_nd_filter_cal(
         ds_no, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
@@ -493,7 +491,7 @@ def test_background_effect(tmp_path):
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
 
-
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -557,20 +555,20 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
-    run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
-    run_test(test_average_od_within_tolerance, stars_dataset_cached)
+    #run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
+    #run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
+    #run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
-    for method in ["Aperture", "Gaussian"]:
-        run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
+    #for method in ["Aperture", "Gaussian"]:
+    #    run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
 
-    for test_od in [1.0, 3.0]:
-        run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
+    #for test_od in [1.0, 3.0]:
+    #    run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
 
-    for aper_radius in [5, 10]:
-        run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
+    #for aper_radius in [5, 10]:
+    #    run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
-    run_test(test_od_stability, stars_dataset_cached)
+    #run_test(test_od_stability, stars_dataset_cached)
 
     run_test(test_background_effect, background_tmp_dir)
 
@@ -580,5 +578,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
+'''
