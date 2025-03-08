@@ -1,0 +1,290 @@
+/* Hide numbers with Jupyter notebook cells */
+div.nbinput.container div.prompt pre {
+    display: none;
+}
+
+div.nboutput.container div.prompt pre {
+    display: none;
+}
+
+/* Shift notebook cells left to account for no numbers */
+div.highlight-python.notranslate pre {
+    padding-left: 5px;
+}
+
+/* Customise the copy buttons */
+/* increase size, less transparent, faster transition */
+a.copybtn {
+    width: 25px;
+    height: 25px;
+	opacity: 0.5;
+    transition: opacity 0.3s;
+}
+
+/* make sure image fills width */
+a.copybtn > img {
+    width: 100%;
+}
+
+/* hide buttons in output */
+.nboutput a.copybtn {
+    display:none;
+}
+
+/* don't wait too long */
+.o-tooltip--left:hover:after {
+    transition-delay: 0.2s;
+}
+.navbar-brand img {
+   height: 60px;
+}
+.navbar-brand {
+   height: 75px;
+}
+
+pre, code {
+  font-size: 100%;
+  line-height: 155%;
+}
+
+div.output_area div[class*=highlight] pre {
+  white-space: pre-wrap;
+}
+
+dt:target, span.highlighted {
+    background: none!important;
+    border-left: 5px solid var(--pst-color-text-base);
+    padding-left: 10px;
+}
+
+dl blockquote {
+    margin-left: 1rem;
+    padding: 0.4rem 0rem;
+    padding-left: 0.4rem;
+}
+
+/* Adjust colour themes */
+:root {
+  --pst-color-primary: #905cc4!important;
+  --pst-font-family-base: 'Signika', sans-serif!important;
+  --pst-font-family-base-system: 'Signika', sans-serif!important;
+  --pst-font-family-heading: 'Signika', sans-serif!important;
+}
+
+:root[data-theme="dark"] {
+    --pst-color-border: #222!important;
+    --pst-color-secondary: #8e82dd!important;
+}
+
+:root[data-theme="light"] {
+    --pst-color-secondary: #dd82b9!important;
+}
+
+html[data-theme="dark"] .sidebar-primary-item {
+    border-color: var(--pst-color-border);
+}
+
+html[data-theme="dark"] .bd-content img:not(.only-dark):not(.dark-light) {
+    background: none;
+}
+
+/* Make code colours match */
+a > code {
+    color: inherit!important;
+}
+
+/* Get rid of underlines everywhere */
+a, a p {
+    text-decoration: none!important;
+}
+
+a:hover, .nav-link:hover {
+    text-decoration: none!important;
+    box-shadow: none!important;
+}
+
+.bd-content .sd-tab-set > input + label:hover {
+    border-top: none!important;
+}
+
+.form-control:focus {
+    outline: none!important;
+}
+
+/* Make tables in notebooks fit */
+.bd-content {
+    flex-grow: 1;
+    max-width: 100%;
+}
+
+table.dataframe {
+    width: unset;
+}
+
+/* Better dark mode tables */
+html[data-theme="dark"] .bd-content .nboutput .output_area.rendered_html {
+    background: #333!important;
+}
+
+html[data-theme="dark"] .jp-RenderedHTMLCommon table,
+html[data-theme="dark"] div.rendered_html table {
+    color: white;
+}
+
+html[data-theme="dark"] .jp-RenderedHTMLCommon tbody tr:nth-child(2n+1),
+html[data-theme="dark"] div.rendered_html tbody tr:nth-child(2n+1) {
+    background: #111!important;
+}
+
+/* Centre gallery thumbnail labels and titles */
+.sphx-glr-thumbcontainer[tooltip]:hover::after,
+.sphx-glr-thumbnail-title {
+    text-align: center;
+}
+
+/* vertically align content in the thumbnails */
+.sphx-glr-thumbcontainer {
+    justify-content: center;
+}
+
+/* Create grid of blocks for navigation */
+.toms-nav-container {
+    margin: 20px 0; /* Removes horizontal centering */
+    width: 100%; /* Makes the container span the entire width */
+    height: 150px;
+    display: grid;
+    grid-template-columns: 300px 300px;
+    grid-template-rows: 75px 75px;
+    grid-column-gap: 20px;
+    grid-row-gap: 20px;
+}
+
+.toms-nav-container .box, .toms-nav-box {
+    background-color: #333;
+    padding: 20px;
+    border-radius: 10px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23px;
+    text-align: center;
+    transition: 0.2s;
+    cursor: pointer;
+}
+
+/* shrink on hover */
+.toms-nav-container .box:hover, .toms-nav-box:hover {
+    transform: scale(0.9);
+    background-color: var(--pst-color-primary);
+}
+
+/* Style the Table of Contents */
+.page-toc {
+    background: var(--pst-color-secondary);
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+    font-family: var(--pst-font-family-heading);
+    max-width: 300px;
+}
+
+.page-toc .nav {
+    list-style: none;
+    padding: 0;
+}
+
+.page-toc .nav-link {
+    display: block;
+    padding: 8px 12px;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 5px;
+    transition: background 0.2s ease-in-out;
+}
+
+.page-toc .nav-link:hover {
+    background: var(--pst-color-primary);
+    color: #fff;
+}
+
+/* Indent sub-items */
+.page-toc .nav .nav {
+    margin-left: 15px;
+    font-size: 14px;
+}
+
+/* Optional: Sticky positioning to keep TOC visible while scrolling */
+.page-toc {
+    position: sticky;
+    top: 80px;
+}
+
+/* Stop tqdm cells from turning red (needs function in custom.js too) */
+.tqdm {
+    background: none!important;
+}
+
+/* Fix nonsense with the header flowing onto two lines */
+bd-header .navbar-header-items__center,
+.bd-header .navbar-header-items__end,
+.bd-header .navbar-header-items__start {
+    flex-flow: unset!important;
+}
+
+/* Make some styled custom card headers */
+.card-header-tom {
+    font-family: var(--pst-font-family-heading);
+    font-size: var(--pst-font-size-h2);
+    font-weight: var(--pst-font-weight-heading);
+    line-height: 1.15;
+    margin: 2.75rem 0 1.05rem;
+}
+
+.icon-link.sd-card-text {
+    margin-left: 1rem;
+    font-size: var(--pst-font-size-h6);
+}
+
+.icon-link .svg-inline--fa {
+    margin-right: 0.5rem;
+    color: var(--pst-color-link);
+}
+
+.icon-link:hover .svg-inline--fa {
+    color: var(--pst-color-link-hover)
+}
+
+.bd-content .sd-card {
+    border-radius: 1rem;
+    padding: 0.5rem;
+}
+
+html[data-theme="dark"] .bd-content .sd-card {
+    border: 2px solid #333;
+}
+
+/* Get rid of giant blank space */
+.bd-article {
+    padding-top: 0!important;
+}
+
+/* Further emphasise onthispage header */
+.onthispage {
+    font-size: var(--pst-font-size-h5);
+}
+
+/* centre plots when there are multiple */
+.sphx-glr-horizontal {
+    text-align: center;
+}
+
+/* Make card links bigger on landing page */
+#tutorials-examples-case-studies .sd-card-body a {
+    font-size: var(--pst-font-size-h3);
+}
+
+.sd-card-body {
+    align-content: center;
+}
