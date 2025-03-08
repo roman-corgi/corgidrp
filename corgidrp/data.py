@@ -1778,6 +1778,7 @@ class PyKLIPDataset(pyKLIP_Data):
         hdul.close()
         
         pass
+    
 class NDFilterSweetSpotDataset(Image):
     """
     Class for an ND filter sweet spot dataset product.
