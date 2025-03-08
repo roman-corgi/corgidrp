@@ -2559,65 +2559,58 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     
     return gauss
 
-def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., background = 0., file_save=False):
+def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
+                      fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
+                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
-    Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
-    and Gaussian noise and a background.
+    Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
+    and Gaussian noise.
 
     Args:
-        star_flux (float): flux of point source in erg/(s*cm^2*AA)
-        fwhm (float): FWHM of the centroid
-        cal_factor (float): calibration factor erg/(s*cm^2*AA)/electrons
-        filedir (str): (Optional) Full path to directory to save to.
-        color_cor (float): (Optional) the color correction factor
-        platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
-        add_gauss_noise (boolean): Argument to determine if Gaussian noise should be added to the data (default: True)
-        noise_scale (float): spread of the Gaussian noise
+        star_flux (float): Flux of the point source in erg/(s*cm^2*AA)
+        fwhm (float): Full width at half max (FWHM) of the centroid
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electrons
+        filter (str): (Optional) The CFAM filter used.
+        fpamname (str): (Optional) Position of the FPAM
+        target_name (str): (Optional) Name of the calspec star
+        fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
+        fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
+        exptime (float): (Optional) Exposure time (s)
+        filedir (str): (Optional) Directory path to save the output file
+        color_cor (float): (Optional) Color correction factor
+        platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
         background (float): optional additive background value
-        file_save (boolean): save the simulated Image or not (default: False)
+        add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
+        noise_scale (float): Spread of the Gaussian noise
+        file_save (bool): Whether to save the image (default: False)
 
     Returns:
-        corgidrp.data.Image:
-            The simulated image
-
+        corgidrp.data.Image: The simulated image
     """
-    # Make filedir if it does not exist
-    if (filedir is not None) and (not os.path.exists(filedir)):
+
+    # Create directory if needed
+    if filedir is not None and not os.path.exists(filedir):
         os.mkdir(filedir)
-    
-    # hard coded image properties
+
+    # Image properties
     size = (1024, 1024)
     sim_data = np.zeros(size)
     ny, nx = size
-    center = [nx //2, ny //2]
-    target = (80.553428801, -69.514096821)
+    center = [nx // 2, ny // 2]  # Default image center
+    target_location = (80.553428801, -69.514096821)
 
-    new_hdr = {}
-    new_hdr['TARGET'] = 'Vega'
-    new_hdr['CFAMNAME'] = '3C'
-    new_hdr['FPAMNAME'] = 'ND475'
-    new_hdr['COL_COR'] = color_cor
-    new_hdr['CRPIX1'] = center[0]
-    new_hdr['CRPIX2'] = center[1]
+    # Convert FSM shifts from mas to pixels
+    fsm_x_shift = fsm_x * 0.001 / (platescale * 0.001)  # Convert mas to degrees, then to pixels
+    fsm_y_shift = fsm_y * 0.001 / (platescale * 0.001)
 
-    new_hdr['CTYPE1'] = 'RA---TAN'
-    new_hdr['CTYPE2'] = 'DEC--TAN'
+    # New star position
+    xpos = center[0] + fsm_x_shift
+    ypos = center[1] + fsm_y_shift
 
-    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+    # Convert flux from calspec units to photo-electrons
+    flux = (star_flux * exptime / color_cor) / cal_factor
 
-    new_hdr['CRVAL1'] = target[0]
-    new_hdr['CRVAL2'] = target[1]
-
-    w = wcs.WCS(new_hdr)
-
-    xpos = center[0]
-    ypos = center[1]
-
-    #convert flux in calspec units to photo-electrons
-    flux = star_flux/cal_factor/color_cor #in photo-electrons
-
-    # inject gaussian psf star
+    # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
     sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
 
@@ -2625,8 +2618,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     y, x = np.indices([stampsize, stampsize])
     y -= stampsize // 2
     x -= stampsize // 2
-    
-    # find nearest pixel
+
+    # Find nearest pixel
     x_int = int(round(xpos))
     y_int = int(round(ypos))
     x += x_int
@@ -2639,28 +2632,57 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
         
     psf = gaussian_array((stampsize,stampsize),sigma,flux)
 
-    # inject the star into the image
+    # Inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
-    #add a background
+    # Add background
     sim_data += background
+
+    # Add Gaussian noise
     if add_gauss_noise:
-        # add Gaussian random noise
         noise_rng = np.random.default_rng(10)
-        noise = noise_rng.normal(scale= noise_scale, size= size)
-        sim_data = sim_data + noise
-    err = np.zeros(size)
-    err[:] = noise_scale
-    # load as an image object
-    prihdr, exthdr = create_default_headers()
-    prihdr['VISTYPE'] = 'FLUXCAL'
-    prihdr['RA'] = target[0]
-    prihdr['DEC'] = target[1]
+        noise = noise_rng.normal(scale=noise_scale, size=size)
+        sim_data += noise
+
+    # Error map
+    err = np.full(size, noise_scale)
+
+    # Define header
+    new_hdr = {
+        'TARGET': target_name,
+        'CFAMNAME': filter,
+        'FPAMNAME': fpamname,
+        'FPAM_H': 2503.7,
+        'FPAM_V': 6124.9,
+        'FSM_X': fsm_x,
+        'FSM_Y': fsm_y,
+        'EXPTIME': exptime,
+        'COL_COR': color_cor,
+        'CRPIX1': xpos,
+        'CRPIX2': ypos,
+        'CTYPE1': 'RA---TAN',
+        'CTYPE2': 'DEC--TAN',
+        'CDELT1': (platescale * 0.001) / 3600,
+        'CDELT2': (platescale * 0.001) / 3600,
+        'CRVAL1': target_location[0],
+        'CRVAL2': target_location[1],
+    }
 
     newhdr = fits.Header(new_hdr)
-    frame = data.Image(sim_data, err = err, pri_hdr= prihdr, ext_hdr= newhdr)
-    filename = "sim_fluxcal.fits"
+
+    # Create image object
+    prihdr, exthdr = create_default_headers()
+    prihdr['VISTYPE'] = 'FLUXCAL'
+    prihdr['RA'] = target_location[0]
+    prihdr['DEC'] = target_location[1]
+
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=newhdr)
+
+    # Save file
+    # TO DO: update with file name conventions
     if filedir is not None and file_save:
+        safe_target_name = target_name.replace(' ', '_')
+        filename = os.path.join(f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}_.fits")
         frame.save(filedir=filedir, filename=filename)
 
     return frame
