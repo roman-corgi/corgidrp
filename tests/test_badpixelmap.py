@@ -70,9 +70,17 @@ def test_badpixelmap():
             flat_frame.data[i_col, i_row] = 0.3
 
     ###### make the badpixel map (input the flat_dataset just as a dummy):
-    badpixelmap = create_bad_pixel_map(flat_dataset, dark_frame,flat_frame, dthresh=6)
-    # Use np.unpackbits to unpack the bits - big endien
-    badpixelmap_bits = np.unpackbits(badpixelmap.data[:, :, np.newaxis], axis=2)
+    badpixelmap = create_bad_pixel_map(flat_dataset, dark_frame,flat_frame, dthresh=6) # you have integer in here
+    
+    current_value = badpixelmap.data[0,0]
+    badpixelmap.data[0,0] = 256 # a value to test uint64
+
+    # Use np.unpackbits to unpack the bits - big endien integer to binary
+    badpixelmap_bits = data.unpackbits_64uint(arr=badpixelmap.data[:, :, np.newaxis], axis=2)  # unit64 to binary
+    badpixelmap_repacked = data.packbits_64uint(badpixelmap_bits, axis=2).reshape(badpixelmap.data.shape)
+    assert np.array_equal(badpixelmap_repacked, badpixelmap.data)    # check if the repacked data is the same as the original
+
+    badpixelmap.data[0,0] = current_value
 
     # Checking that everywhere there's a badpixel is in one of the two lists
     bp_locations = np.argwhere(badpixelmap.data)
