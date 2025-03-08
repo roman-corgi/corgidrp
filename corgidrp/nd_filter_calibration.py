@@ -306,10 +306,11 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
     pri_hdr = input_dataset[0].pri_hdr
     ext_hdr = input_dataset[0].ext_hdr
 
+    # keeping the common metadata because if you do provide dim stars as part of the dataset
+    # and grab the first header you might get the FPAM info of a frame with no ND filter in.
     ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
     ext_hdr['FPAM_H']   = common_metadata.get('FPAM_H')
     ext_hdr['FPAM_V']   = common_metadata.get('FPAM_V')
-    ext_hdr['CFAMNAME'] = common_metadata.get('CFAMNAME')
     ext_hdr['ODFLAG'] = od_var_flag
     ext_hdr['HISTORY']  = "Combined sweet-spot dataset from bright star dithers"
 
@@ -373,7 +374,7 @@ def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file,
 # =============================================================================
 
 def create_nd_filter_cal(stars_dataset,
-                         od_raster_threshold,
+                         od_raster_threshold = 0.1,
                          phot_method="Aperture",
                          flux_or_irr="irr",
                          phot_kwargs=None,
@@ -390,6 +391,7 @@ def create_nd_filter_cal(stars_dataset,
             is performed based on the 'FPAMNAME' value in the FITS header. For example, entries with 'FPAMNAME'
             containing "dim" (case-insensitive) are considered dim stars.
         od_raster_threshold (float): Threshold for flagging OD variations.
+            # TO DO: figure out what a reasonable value for this should be 
         phot_method (str): Photometry method ("Aperture" or "Gaussian").
         flux_or_irr (str): Either 'flux' or 'irr' for the calibration approach.
         phot_kwargs (dict, optional): Extra arguments for the actual photometry function 

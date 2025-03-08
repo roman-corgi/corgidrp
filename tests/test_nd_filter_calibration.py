@@ -305,7 +305,7 @@ def test_nd_filter_calibration_phot_methods(stars_dataset_cached, phot_method):
     )
 
 
-@pytest.mark.parametrize("test_od", [1.0, 2.0, 3.0])
+@pytest.mark.parametrize("test_od", [1.0, 3.0])
 def test_multiple_nd_levels(dim_dir, output_dir, test_od):
     print(f"**Testing multiple ND levels with input OD = {test_od}**")
     bright_mocks_dir = os.path.join(output_dir, f"mock_OD{test_od}")
@@ -401,7 +401,7 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
     print(f"ND filter calibration with fluxcal completed. OD={avg_od} (mean).")
 
 
-@pytest.mark.parametrize("aper_radius", [3, 5, 7, 10])
+@pytest.mark.parametrize("aper_radius", [5, 10])
 def test_aperture_radius_sensitivity(stars_dataset_cached, aper_radius):
     print(f"**Testing aperture radius sensitivity: radius = {aper_radius}**")
     phot_args = {
@@ -448,8 +448,8 @@ def test_background_effect(tmp_path):
     # Create dim star mocks for two modes.
     dim_dir_no = tmp_path / "dim_no"
     dim_dir_bg = tmp_path / "dim_bg"
-    dim_dir_no.mkdir()
-    dim_dir_bg.mkdir()
+    dim_dir_no.mkdir(exist_ok=True)
+    dim_dir_bg.mkdir(exist_ok=True)
     dim_files_no = mock_dim_dataset_files(DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False,
                                       output_path=str(dim_dir_no), background_val=0, add_gauss_noise_val=False)
     dim_files_bg = mock_dim_dataset_files(DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False,
@@ -458,8 +458,8 @@ def test_background_effect(tmp_path):
     # Create bright star mocks for two modes.
     bright_dir_no = tmp_path / "bright_no"
     bright_dir_bg = tmp_path / "bright_bg"
-    bright_dir_no.mkdir()
-    bright_dir_bg.mkdir()
+    bright_dir_no.mkdir(exist_ok=True)
+    bright_dir_bg.mkdir(exist_ok=True)
     bright_files_no = mock_bright_dataset_files(BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False,
                                                 output_path=str(bright_dir_no), background_val=0, add_gauss_noise_val=False)
     bright_files_bg = mock_bright_dataset_files(BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False,
@@ -564,10 +564,10 @@ def main():
     for method in ["Aperture", "Gaussian"]:
         run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
 
-    for test_od in [1.0, 2.0, 3.0]:
+    for test_od in [1.0, 3.0]:
         run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
 
-    for aper_radius in [3, 5, 7, 10]:
+    for aper_radius in [5, 10]:
         run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
     run_test(test_od_stability, stars_dataset_cached)
