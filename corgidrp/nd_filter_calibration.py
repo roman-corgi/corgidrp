@@ -246,7 +246,18 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
 
     # Compute expected flux
     expected_irradiance_no_nd = compute_expected_band_irradiance(target, ref_cfam_name)
-    expected_flux = expected_irradiance_no_nd / cal_factor_value
+    expected_flux_per_area = expected_irradiance_no_nd / cal_factor_value
+
+    telescope_diam = 2.4
+    obscuration_factor = 0          # central obscurtaion, for now just keeping 0. TO DO: update
+    radius_m = telescope_diam / 2.0
+    area_m2 = np.pi * (radius_m**2)
+
+    if obscuration_factor > 0:
+        area_m2 *= (1 - obscuration_factor)  # e.g. reduce area by 10%
+
+    area_cm2 = area_m2 * 1e4
+    expected_flux = expected_flux_per_area * area_cm2
 
     od_values, x_values, y_values = [], [], []
 
