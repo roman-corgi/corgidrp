@@ -547,8 +547,8 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0
     exthdr['CRVAL1'] = 0
     exthdr['CRVAL2'] = 0
-    exthdr['STARLOCX'] = 0
-    exthdr['STARLOCY'] = 0
+    exthdr['STARLOCX'] = 512
+    exthdr['STARLOCY'] = 512
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
@@ -2647,37 +2647,33 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     # Error map
     err = np.full(size, noise_scale)
-
     # Define header
-    new_hdr = {
-        'TARGET': target_name,
-        'CFAMNAME': filter,
-        'FPAMNAME': fpamname,
-        'FPAM_H': 2503.7,
-        'FPAM_V': 6124.9,
-        'FSM_X': fsm_x,
-        'FSM_Y': fsm_y,
-        'EXPTIME': exptime,
-        'COL_COR': color_cor,
-        'CRPIX1': xpos,
-        'CRPIX2': ypos,
-        'CTYPE1': 'RA---TAN',
-        'CTYPE2': 'DEC--TAN',
-        'CDELT1': (platescale * 0.001) / 3600,
-        'CDELT2': (platescale * 0.001) / 3600,
-        'CRVAL1': target_location[0],
-        'CRVAL2': target_location[1],
-    }
-
-    newhdr = fits.Header(new_hdr)
+    prihdr, exthdr = create_default_L3_headers()
+    
+    exthdr['TARGET']= target_name
+    exthdr['CFAMNAME']= filter
+    exthdr['FPAMNAME']= fpamname
+    exthdr['FPAM_H']= 2503.7
+    exthdr['FPAM_V']= 6124.9
+    exthdr['FSM_X']= fsm_x
+    exthdr['FSM_Y']= fsm_y
+    exthdr ['EXPTIME']= exptime
+    exthdr['COL_COR']= color_cor
+    exthdr['CRPIX1']= xpos
+    exthdr['CRPIX2']= ypos
+    exthdr['CTYPE1']= 'RA---TAN'
+    exthdr['CTYPE2']= 'DEC--TAN'
+    exthdr['CDELT1']= (platescale * 0.001) / 3600
+    exthdr['CDELT2']= (platescale * 0.001) / 3600
+    exthdr['CRVAL1']= target_location[0]
+    exthdr['CRVAL2']= target_location[1]
 
     # Create image object
-    prihdr, exthdr = create_default_headers()
     prihdr['VISTYPE'] = 'FLUXCAL'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
 
-    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=newhdr)
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
 
     # Save file
     # TO DO: update with file name conventions
