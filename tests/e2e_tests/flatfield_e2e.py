@@ -76,6 +76,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Neptune"
         base_image.pri_hdr['FILTER'] = 4
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
 
@@ -256,6 +257,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Uranus"
         base_image.pri_hdr['FILTER'] = 1
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
 
