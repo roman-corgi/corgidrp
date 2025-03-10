@@ -55,51 +55,44 @@ def reset_g_t(d, g, t):
 
     return dset
 
-def main():
+def test_success():
+    """Good inputs complete as expected"""
+    build_synthesized_dark(dataset, noise_maps)
+    build_synthesized_dark(dataset, noise_maps, detector_areas, full_frame=True)
+    pass
+    
+def test_output_size():
+    """output is correct size"""
+    M = build_synthesized_dark(dataset, noise_maps)
+    assert(M.data.shape == (im_rows, im_cols))
 
-    def test_success():
-        """Good inputs complete as expected"""
-        build_synthesized_dark(dataset, noise_maps)
-        build_synthesized_dark(dataset, noise_maps, detector_areas, full_frame=True)
-        pass
+def test_exact_case():
+    """Exact case produces expected result.  Use full frame this time."""
+    tol = 1e-13
 
-    test_success()
-
-    def test_output_size():
-        """output is correct size"""
-        M = build_synthesized_dark(dataset, noise_maps)
-        assert(M.data.shape == (im_rows, im_cols))
-        pass
-
-    test_output_size()
-
-    def test_exact_case():
-        """Exact case produces expected result.  Use full frame this time."""
-        tol = 1e-13
-
-        Fd = 5*np.ones((rows, cols))
-        Ferr = 0.1*Fd
-        Fdq = np.zeros((rows, cols)).astype(int)
-        Fdq[3,3] = 1
-        Dd = 1/7*np.ones((rows, cols))
-        Derr = 0.1*Dd
-        Ddq = np.zeros((rows, cols)).astype(int)
-        Ddq[3,3] = 1 # Fdq has this one, too
-        Ddq[2,2] = 1
-        Cd = 1*np.ones((rows, cols))
-        Cerr = 0.1*Cd
-        Cdq = np.zeros((rows, cols)).astype(int)
-        Cdq[1,2] = 1
-        g = 5
-        t = 7
-        target = 3*np.ones((rows, cols))
-        exp_err = np.sqrt(Derr**2*g**2*t**2 + Cerr**2*g**2 + Ferr**2)/g
-        exp_dq = np.zeros((rows, cols))
-        exp_dq[3,3] = 1
-        exp_dq[2,2] = 1
-        exp_dq[1,2] = 1
-        n_maps = create_noise_maps(Fd, Ferr, Fdq, Cd, Cerr, Cdq, Dd, Derr, Ddq)
-        dset = reset_g_t(dataset, g, t)
+    Fd = 5*np.ones((rows, cols))
+    Ferr = 0.1*Fd
+    Fdq = np.zeros((rows, cols)).astype(int)
+    Fdq[3,3] = 1
+    Dd = 1/7*np.ones((rows, cols))
+    Derr = 0.1*Dd
+    Ddq = np.zeros((rows, cols)).astype(int)
+    Ddq[3,3] = 1 # Fdq has this one, too
+    Ddq[2,2] = 1
+    Cd = 1*np.ones((rows, cols))
+    Cerr = 0.1*Cd
+    Cdq = np.zeros((rows, cols)).astype(int)
+    Cdq[1,2] = 1
+    g = 5
+    t = 7
+    target = 3*np.ones((rows, cols))
+    exp_err = np.sqrt(Derr**2*g**2*t**2 + Cerr**2*g**2 + Ferr**2)/g
+    exp_dq = np.zeros((rows, cols))
+    exp_dq[3,3] = 1
+    exp_dq[2,2] = 1
+    exp_dq[1,2] = 1
+    n_maps = create_noise_maps(Fd, Ferr, Fdq, Cd, Cerr, Cdq, Dd, Derr, Ddq)
+    dset = reset_g_t(dataset, g, t)
 
         M = build_synthesized_dark(dset, n_maps, full_frame=True)
         assert(np.max(np.abs(M.data - target)) < tol)
@@ -150,129 +143,109 @@ def main():
         assert(np.max(np.abs(M_im.err - slice_section(exp_err, "SCI", 'image', detector_areas))) < tol)
         assert(np.max(np.abs(M_im.dq - slice_section(exp_dq, "SCI", 'image', detector_areas))) < tol)
 
+def test_gain_goes_as_1overg():
+    """change in dark goes as 1/g"""
+    tol = 1e-13
+    noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, Cd,
+                                        Cerr, Cdq, Dd, Derr, Ddq)
+    dset = reset_g_t(dataset, g, t)
 
-    test_exact_case()
+    F0 = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
+    M1 = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps)
+    M2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps)
+    M4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps)
+    dg1 = M1.data-F0.data
+    dg2 = M2.data-F0.data
+    dg4 = M4.data-F0.data
 
-    def test_gain_goes_as_1overg():
-        """change in dark goes as 1/g"""
-        tol = 1e-13
-        noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, Cd,
-                                            Cerr, Cdq, Dd, Derr, Ddq)
-        dset = reset_g_t(dataset, g, t)
+    assert(np.max(np.abs(dg2 - dg1/2)) < tol)
+    assert(np.max(np.abs(dg4 - dg2/2)) < tol)
+    pass
 
-        F0 = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
-        M1 = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps)
-        M2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps)
-        M4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps)
-        dg1 = M1.data-F0.data
-        dg2 = M2.data-F0.data
-        dg4 = M4.data-F0.data
+def test_exptime_goes_as_t():
+    """change in dark goes as t"""
+    tol = 1e-13
 
-        assert(np.max(np.abs(dg2 - dg1/2)) < tol)
-        assert(np.max(np.abs(dg4 - dg2/2)) < tol)
+    M0 = build_synthesized_dark(reset_g_t(dataset, g, 0), noise_maps)
+    M2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps)
+    M4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps)
+    dg2 = M2.data-M0.data
+    dg4 = M4.data-M0.data
+
+    assert(np.max(np.abs(dg4 - dg2*2)) < tol)
+    pass
+
+def test_c_doesnt_change_with_g_or_t():
+    """F = 0 and D = 0 implies C is constant"""
+    tol = 1e-13
+    noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, Cd,
+                                        Cerr, Cdq, 0*Dd, Derr, Ddq)
+
+    M = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
+    G2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps0)
+    G4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps0)
+    T2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps0)
+    T4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps0)
+    dg2 = G2.data-M.data
+    dg4 = G4.data-M.data
+    dt2 = T2.data-M.data
+    dt4 = T4.data-M.data
+
+    assert(np.max(np.abs(dg2)) < tol)
+    assert(np.max(np.abs(dg4)) < tol)
+    assert(np.max(np.abs(dt2)) < tol)
+    assert(np.max(np.abs(dt4)) < tol)
+    pass
+
+def test_bias_subtracted():
+    """check there is no bias when all three noise terms are 0"""
+    noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, 0*Cd,
+                                        Cerr, Cdq, 0*Dd, Derr, Ddq)
+
+    M = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
+    G2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps0)
+    G4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps0)
+    T2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps0)
+    T4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps0)
+
+    assert((M.data == 0).all())
+    assert((G2.data == 0).all())
+    assert((G4.data == 0).all())
+    assert((T2.data == 0).all())
+    assert((T4.data == 0).all())
+
+    pass
+
+def test_invalid_D_range():
+    """Invalid inputs caught as expected"""
+    for perr in [-1*np.ones_like(Dd)]:
+        nm = create_noise_maps(Fd, Ferr, Fdq, Cd,
+                                        Cerr, Cdq, perr, Derr, Ddq)
+        with pytest.raises(TypeError):
+            build_synthesized_dark(dataset, nm)
         pass
+    pass
 
-    test_gain_goes_as_1overg()
-
-    def test_exptime_goes_as_t():
-        """change in dark goes as t"""
-        tol = 1e-13
-
-        M0 = build_synthesized_dark(reset_g_t(dataset, g, 0), noise_maps)
-        M2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps)
-        M4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps)
-        dg2 = M2.data-M0.data
-        dg4 = M4.data-M0.data
-
-        assert(np.max(np.abs(dg4 - dg2*2)) < tol)
+def test_invalid_C_range():
+    """Invalid inputs caught as expected"""
+    for perr in [-1*np.ones_like(Cd)]:
+        nm = create_noise_maps(Fd, Ferr, Fdq, perr,
+                                        Cerr, Cdq, Dd, Derr, Ddq)
+        with pytest.raises(TypeError):
+            build_synthesized_dark(dataset, nm)
         pass
+    pass
 
-    test_exptime_goes_as_t()
+def test_g_range_correct():
+    """gain is valid >= 1 only"""
 
-    def test_c_doesnt_change_with_g_or_t():
-        """F = 0 and D = 0 implies C is constant"""
-        tol = 1e-13
-        noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, Cd,
-                                            Cerr, Cdq, 0*Dd, Derr, Ddq)
-
-        M = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
-        G2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps0)
-        G4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps0)
-        T2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps0)
-        T4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps0)
-        dg2 = G2.data-M.data
-        dg4 = G4.data-M.data
-        dt2 = T2.data-M.data
-        dt4 = T4.data-M.data
-
-        assert(np.max(np.abs(dg2)) < tol)
-        assert(np.max(np.abs(dg4)) < tol)
-        assert(np.max(np.abs(dt2)) < tol)
-        assert(np.max(np.abs(dt4)) < tol)
-        pass
-
-    test_c_doesnt_change_with_g_or_t()
-
-    def test_bias_subtracted():
-        """check there is no bias when all three noise terms are 0"""
-        noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, 0*Cd,
-                                            Cerr, Cdq, 0*Dd, Derr, Ddq)
-
-        M = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
-        G2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps0)
-        G4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps0)
-        T2 = build_synthesized_dark(reset_g_t(dataset, g, 2), noise_maps0)
-        T4 = build_synthesized_dark(reset_g_t(dataset, g, 4), noise_maps0)
-
-        assert((M.data == 0).all())
-        assert((G2.data == 0).all())
-        assert((G4.data == 0).all())
-        assert((T2.data == 0).all())
-        assert((T4.data == 0).all())
-
-        pass
-
-    test_bias_subtracted()
-
-    def test_invalid_D_range():
-        """Invalid inputs caught as expected"""
-        for perr in [-1*np.ones_like(Dd)]:
-            nm = create_noise_maps(Fd, Ferr, Fdq, Cd,
-                                            Cerr, Cdq, perr, Derr, Ddq)
-            with pytest.raises(TypeError):
-                build_synthesized_dark(dataset, nm)
-            pass
-        pass
-
-    test_invalid_D_range()
-
-    def test_invalid_C_range():
-        """Invalid inputs caught as expected"""
-        for perr in [-1*np.ones_like(Cd)]:
-            nm = create_noise_maps(Fd, Ferr, Fdq, perr,
-                                            Cerr, Cdq, Dd, Derr, Ddq)
-            with pytest.raises(TypeError):
-                build_synthesized_dark(dataset, nm)
-            pass
-        pass
-
-    test_invalid_C_range()
-
-    def test_g_range_correct():
-        """gain is valid >= 1 only"""
-
-        for perr in [-10, -1, 0, 0.999]:
-            with pytest.raises(TypeError):
-                build_synthesized_dark(reset_g_t(dataset, perr, t), noise_maps)
-            pass
-
-        for perr in [1, 1.5, 10]:
+    for perr in [-10, -1, 0, 0.999]:
+        with pytest.raises(TypeError):
             build_synthesized_dark(reset_g_t(dataset, perr, t), noise_maps)
-            pass
         pass
 
-    test_g_range_correct()
+    for perr in [1, 1.5, 10]:
+        build_synthesized_dark(reset_g_t(dataset, perr, t), noise_maps)
+        pass
+    pass
 
-
-if __name__ == '__main__':
-    main()

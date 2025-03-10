@@ -339,7 +339,7 @@ class CalDB:
             # if we don't wnat to look in subdirs now, we should break
             if not look_in_subfolders:
                 break
-        
+
         # load all these files into the caldb
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)

@@ -26,6 +26,15 @@ errhd["CASE"] = "test"
 dqhd = fits.Header()
 dqhd["CASE"] = "test"
 
+data_3d = np.ones([2,1024,1024]) * 2
+err_3d = np.zeros([2,1024,1024])
+err1_3d = np.ones([2,1024,1024])
+err2_3d = err1_3d.copy()
+err3_3d = np.ones([2,1,1024,1024]) * 0.5
+dq_3d = np.zeros([2,1024,1024], dtype = int)
+dq1_3d = dq_3d.copy()
+dq1_3d[0,0,0] = 1
+
 old_err_tracking = corgidrp.track_individual_errors
 # use default parameters
 detector_params = DetectorParams({})
@@ -113,6 +122,22 @@ def test_add_error_term():
     assert image_test.err_hdr["Layer_2"] == "error_noid"
     assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
+    image_3d = Image(data_3d,prhd,exthd,err_3d,dq_3d,errhd,dqhd)
+    image_3d.add_error_term(err1_3d, "error_noid")
+    assert image_3d.err[0,0,0,0] == err_3d[0,0,0]
+    image_3d.add_error_term(err2_3d, "error_nuts")
+    assert image_3d.err.shape == (3,2,1024,1024)
+    assert image_3d.err[0,0,0,0] == np.sqrt(err1_3d[0,0,0]**2 + err2_3d[0,0,0]**2)
+    image_3d.save(filename="test_image3d.fits")
+
+    image_test_3d = Image('test_image3d.fits')
+    assert np.array_equal(image_test_3d.dq, dq_3d)
+    assert np.array_equal(image_test_3d.err, image_3d.err)
+    assert image_test_3d.err.shape == (3,2,1024,1024)
+    assert image_test_3d.err_hdr["Layer_1"] == "combined_error"
+    assert image_test_3d.err_hdr["Layer_2"] == "error_noid"
+    assert image_test_3d.err_hdr["Layer_3"] == "error_nuts"
+
 def test_err_dq_dataset():
     """
     test the behavior of the err and data arrays in the dataset
@@ -143,7 +168,6 @@ def test_get_masked_data():
     assert masked_data.mean()==2
     assert masked_data.sum()==image2.data.sum()-2
 
-
 def test_err_adderr_notrack():
     """
     test the initialization of error and adding errors when we are not tracking
@@ -165,7 +189,6 @@ def test_err_adderr_notrack():
     assert image1.err.shape == (1,1024,1024)
     assert image1.err[0,0,0] == np.sqrt(err1[0,0]**2 + err2[0,0]**2)
 
-
 def test_read_many_errors_notrack():
     """
     Check that we can successfully discard errors when reading in a frame with multiple errors
@@ -180,7 +203,6 @@ def test_read_many_errors_notrack():
         assert image_test.err_hdr["Layer_2"] == "error_noid"
     with pytest.raises(KeyError):
         assert image_test.err_hdr["Layer_3"] == "error_nuts"
-
 
 def test_err_array_sizes():
     '''
@@ -214,8 +236,6 @@ def test_err_array_sizes():
     dark_frame.save(filedir=calibdir, filename=dark_filename)
     testcaldb.scan_dir_for_new_entries(calibdir)
 
-
-
 def teardown_module():
     """
     Runs automatically at the end. ONLY IN PYTEST
@@ -227,7 +247,6 @@ def teardown_module():
 
     corgidrp.track_individual_errors = old_err_tracking
 
-
 # for debugging. does not run with pytest!!
 if __name__ == '__main__':
     test_err_array_sizes()
@@ -236,6 +255,10 @@ if __name__ == '__main__':
     test_add_error_term()
     test_err_dq_dataset()
     test_get_masked_data()
+    test_err_adderr_notrack()
+    test_read_many_errors_notrack()
+    test_err_array_sizes()
 
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))
+    os.remove('test_image3d.fits')

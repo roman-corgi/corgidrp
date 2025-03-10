@@ -196,7 +196,8 @@ def test_abs_fluxcal():
     #divisive error propagation of the aperture phot error
     err_fluxcal_ap = band_flux/flux_el_ap**2*flux_err_ap
     assert fluxcal_factor.fluxcal_err == pytest.approx(err_fluxcal_ap)
-    assert fluxcal_factor.filename == 'mock_flux_image_Vega_0.0_0.0_FluxcalFactor_3C_ND475.fits'
+    # TO DO: add this test back in when filename conventions are settled
+    #assert fluxcal_factor.filename == 'mock_flux_image_Vega_0.0_0.0_FluxcalFactor_3C_ND475.fits'
     fluxcal_factor_gauss = fluxcal.calibrate_fluxcal_gauss2d(dataset, flux_or_irr = 'flux', phot_kwargs=None)
     assert fluxcal_factor_gauss.filter == '3C'
     assert fluxcal_factor_gauss.fluxcal_fac == pytest.approx(cal_factor,rel = 0.05)
