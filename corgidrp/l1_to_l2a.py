@@ -220,11 +220,14 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         kgain = k_gain.value
     emgain_list = []
     for frame in crmasked_dataset:
-        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-            emgain = frame.ext_hdr['EMGAIN_A']
-        else: # otherwise use commanded EM gain
-            emgain = frame.ext_hdr['EMGAIN_C']
-        emgain_list.append(emgain)
+        try: # use measured gain if available TODO change hdr name if necessary
+            emgain = frame.ext_hdr['EMGAIN_M']
+        except:
+            if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                emgain = frame.ext_hdr['EMGAIN_A']
+            else: # otherwise use commanded EM gain
+                emgain = frame.ext_hdr['EMGAIN_C']
+            emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
     fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in crmasked_dataset])
     fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in crmasked_dataset])
@@ -300,11 +303,14 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
     for i in range(linearized_cube.shape[0]):
-        em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
-        if em_gain > 0: # use applied EM gain if available
+        try: # use measured gain if available TODO change hdr name if necessary
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
-        else: # otherwise use commanded EM gain
-            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
+            if em_gain > 0: # use applied EM gain if available
+                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+            else: # otherwise use commanded EM gain
+                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
     
     if non_lin_correction is not None:

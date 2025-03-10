@@ -899,11 +899,14 @@ def nonlin_dataset_2_stack(dataset):
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
                 if record_gain:
-                    if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-                        gains.append(frame.ext_hdr['EMGAIN_A'])
-                    else: # use commanded gain otherwise
-                        gains.append(frame.ext_hdr['EMGAIN_C'])
-                    record_gain = False
+                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                        gains.append(frame.ext_hdr['EMGAIN_M'])
+                    except:
+                        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                            gains.append(frame.ext_hdr['EMGAIN_A'])
+                        else: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['EMGAIN_C'])
+                        record_gain = False
             else:
                 raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
         

@@ -869,11 +869,14 @@ def kgain_dataset_2_list(dataset):
                     raise Exception('Commanded EM gain must be >= 1')
                 em_gains.append(em_gain)
                 if record_gain:
-                    if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-                        gains.append(frame.ext_hdr['EMGAIN_A'])
-                    else: # use commanded gain otherwise
-                        gains.append(frame.ext_hdr['EMGAIN_C'])
-                    record_gain = False
+                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                        gains.append(frame.ext_hdr['EMGAIN_M'])
+                    except:
+                        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                            gains.append(frame.ext_hdr['EMGAIN_A'])
+                        else: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['EMGAIN_C'])
+                        record_gain = False
                 
         # Calibration data may have different subsets
         if len(sub_stack) != 0:
