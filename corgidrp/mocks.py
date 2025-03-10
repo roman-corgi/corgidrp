@@ -21,6 +21,7 @@ from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 from pyklip.instruments.utils.wcsgen import generate_wcs
 from corgidrp.data import DetectorParams
+import corgidrp.fluxcal as fluxcal
 
 
 from emccd_detect.emccd_detect import EMCCDDetect
@@ -2559,7 +2560,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     
     return gauss
 
-def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
+def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
                       fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
                       background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
@@ -2592,6 +2593,28 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     if filedir is not None and not os.path.exists(filedir):
         os.mkdir(filedir)
 
+    # Compute telescope area in cm^2
+    telescope_diam = 2.4
+    obscuration_factor = 0          # central obscurtaion, for now just keeping 0
+    radius_m = telescope_diam / 2.0
+    area_m2 = np.pi * (radius_m**2)
+    if obscuration_factor > 0:
+        area_m2 *= (1 - obscuration_factor)  # e.g. reduce area by 10%
+
+    area_cm2 = area_m2 * 1e4
+
+    # Convert star_flux (erg/(s*cm^2)) to total e-/s
+    # star_flux_erg_s_cm2 = integrated band flux from CALSPEC
+    # multiply by telescope area => ergs/s
+    # multiply by cal_factor => e-/s (assuming that quantum efficiency is also incorporated here)
+    # multiply by exptime => total e-? Do that after
+    flux_per_s = flux_erg_s_cm2 * area_cm2 * cal_factor
+    # also incorporate color_correction if desired
+    flux_per_s /= color_cor
+
+    # Then multiply by exptime => total e- in the image. 
+    star_electrons = flux_per_s * exptime  # total e- from star in the filter band
+
     # Image properties
     size = (1024, 1024)
     sim_data = np.zeros(size)
@@ -2606,9 +2629,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # New star position
     xpos = center[0] + fsm_x_shift
     ypos = center[1] + fsm_y_shift
-
-    # Convert flux from calspec units to photo-electrons
-    flux = (star_flux * exptime / color_cor) / cal_factor
 
     # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
@@ -2630,7 +2650,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     ymin = y[0][0]
     ymax = y[-1][-1]
         
-    psf = gaussian_array((stampsize,stampsize),sigma,flux)
+    psf = gaussian_array((stampsize,stampsize),sigma,star_electrons)
 
     # Inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf

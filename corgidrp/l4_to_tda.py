@@ -2,15 +2,17 @@
 import corgidrp.fluxcal as fluxcal
 import numpy as np
 import warnings
+from corgidrp.data import Dataset, Image
 
-def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
+def determine_app_mag(input_data, source_star, scale_factor = 1.):
     """
     determine the apparent Vega magnitude of the observed source
     in the used filter band and put it into the header.
     We assume that each frame in the dataset was observed with the same color filter.
     
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
+        input_data (corgidrp.data.Dataset or corgidrp.data.Image): 
+            A dataset of Images (L2b-level) or a single Image. Must be all of the same source with same filter.
         source_star (str): either the fits file path of the flux model of the observed source in 
                            CALSPEC units (erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
         scale_factor (float): factor applied to the flux of the calspec standard source, so that you can apply it 
@@ -18,12 +20,34 @@ def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
                               Defaults to 1.
     
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with updated header including 
-                               the apparent magnitude
+        corgidrp.data.Dataset or corgidrp.data.Image: 
+            A version of the input with an updated header including the apparent magnitude.
     """
-    mag_dataset = input_dataset.copy()
-    # get the filter name from the header keyword 'CFAMNAME'
-    filter_name = fluxcal.get_filter_name(mag_dataset[0])
+    # If input is a dataset, process each image
+    if isinstance(input_data, Dataset):
+        mag_data = input_data.copy()
+
+        # Make sure all frames in dataset have the same filter and target
+        filter_name = fluxcal.get_filter_name(mag_data[0])
+        target_name = mag_data[0].ext_hdr["TARGET"]
+        
+        for img in mag_data:
+            img_filter = fluxcal.get_filter_name(img)
+            img_target = img.ext_hdr["TARGET"]
+
+            if img_filter != filter_name:
+                raise ValueError(f"All images in dataset must be taken with the same CFAMNAME for calculating"
+                                 f"apparent magnitude. Found {img_filter}, expected {filter_name}."
+                                 )
+            if img_target != target_name:
+                raise ValueError(f"All images in dataset must be taken of the same TARGET for calculating"
+                                 f"apparent magnitude. Found {img_target}, expected {target_name}."
+                                 )
+
+    elif isinstance(input_data, Image):
+        mag_data = Dataset([input_data.copy()])
+        filter_name = fluxcal.get_filter_name(mag_data[0]) 
+
     # read the transmission curve from the color filter file
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
 
@@ -40,14 +64,16 @@ def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     #Calculate the irradiance of vega and the source star in the filter band
     vega_irr = fluxcal.calculate_band_irradiance(filter_trans, vega_sed, wave)
     source_irr = fluxcal.calculate_band_irradiance(filter_trans, source_sed, wave)
+
     #calculate apparent magnitude
     app_mag = -2.5 * np.log10(source_irr/vega_irr)
+
     # write the reference wavelength and the color correction factor to the header (keyword names tbd)
     history_msg = "the apparent Vega magnitude is calculated and added to the header {0}".format(str(app_mag))
     # update the header of the output dataset and update the history
-    mag_dataset.update_after_processing_step(history_msg, header_entries = {"APP_MAG": app_mag})
+    mag_data.update_after_processing_step(history_msg, header_entries = {"APP_MAG": app_mag})
     
-    return mag_dataset
+    return mag_data
 
 
 def determine_color_cor(input_dataset, ref_star, source_star):
@@ -138,6 +164,7 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     # update the output dataset with this converted data and update the history
     flux_dataset.update_after_processing_step(history_msg, new_all_data=flux_cube, header_entries = {"BUNIT":"erg/(s*cm^2*AA)", "FLUXFAC":fluxcal_factor.fluxcal_fac})
     return flux_dataset
+
 
 def update_to_tda(input_dataset):
     """
