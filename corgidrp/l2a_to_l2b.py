@@ -19,11 +19,14 @@ def add_photon_noise(input_dataset):
     phot_noise_dataset = input_dataset.copy() # necessary at all?
 
     for i, frame in enumerate(phot_noise_dataset.frames):
-        em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
-        if em_gain > 0: # use EM applied EM gain if available
-            em_gain = em_gain
-        else: # otherwise use commanded EM gain
-            em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
+        try: # use measured gain if available TODO change hdr name if necessary
+            em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
+            em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
+            if em_gain > 0: # use EM applied EM gain if available
+                em_gain = em_gain
+            else: # otherwise use commanded EM gain
+                em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
         phot_err = np.sqrt(frame.data)
         #add excess noise in case of em_gain
         if em_gain > 1:
@@ -292,11 +295,14 @@ def em_gain_division(input_dataset):
     emgain_error = emgain_dataset.all_err
 
     for i in range(len(emgain_dataset)):
-        emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
-        if emgain > 0: # use EM applied EM gain if available
+        try: # use measured gain if available TODO change hdr name if necessary
+            emgain = emgain_dataset[i].ext_hdr["EMGAIN_M"]
+        except:
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
-        else: # otherwise use commanded EM gain
-            emgain = emgain_dataset[i].ext_hdr["EMGAIN_C"]
+            if emgain > 0: # use EM applied EM gain if available
+                emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
+            else: # otherwise use commanded EM gain
+                emgain = emgain_dataset[i].ext_hdr["EMGAIN_C"]
         emgain_cube[i] /= emgain
         emgain_error[i] /= emgain
 

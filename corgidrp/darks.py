@@ -466,10 +466,13 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
             if np.shape(datasets[i-1].all_data) != np.shape(datasets[i].all_data):
                 raise CalDarksLSQException('All sub-stacks must have the '
                             'same number of frames and frame shape.')
-        if datasets[i].frames[0].ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
-        else: # use commanded gain otherwise
-            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_C'])
+        try: # if EM gain measured directly from frame TODO change hdr name if necessary
+            EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
+        except:
+            if datasets[i].frames[0].ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
+            else: # use commanded gain otherwise
+                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_C'])
         exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
         cmdgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
         kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
@@ -718,12 +721,14 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     prihdr = datasets[0].frames[0].pri_hdr
     exthdr = datasets[0].frames[0].ext_hdr
     exthdr['EXPTIME'] = None
+    if 'EMGAIN_M' in exthdr.keys():
+        exthdr['EMGAIN_M'] = None
     exthdr['EMGAIN_C'] = None
     exthdr['KGAINPAR'] = None
-    exthdr['BUNIT'] = 'Photoelectrons'
+    exthdr['BUNIT'] = 'Detected Electrons'
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'Photoelectrons'
+    err_hdr['BUNIT'] = 'Detected Electrons'
 
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
 
@@ -797,11 +802,14 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
-        g = dataset.frames[0].ext_hdr['EMGAIN_A']
-        if g > 0: # use applied EM gain if available
+        try: # use measured EM gain if available TODO change hdr name if necessary
+            g = dataset.frames[0].ext_hdr['EMGAIN_M']
+        except:
             g = dataset.frames[0].ext_hdr['EMGAIN_A']
-        else: # otherwise, use commanded EM gain
-            g = dataset.frames[0].ext_hdr['EMGAIN_C']
+            if g > 0: # use applied EM gain if available
+                g = dataset.frames[0].ext_hdr['EMGAIN_A']
+            else: # otherwise, use commanded EM gain
+                g = dataset.frames[0].ext_hdr['EMGAIN_C']
         t = dataset.frames[0].ext_hdr['EXPTIME']
 
         rows = detector_regions['SCI']['frame_rows']
