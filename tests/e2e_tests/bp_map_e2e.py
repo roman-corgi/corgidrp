@@ -14,6 +14,31 @@ from corgidrp import walker
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        exthdr['KGAINPAR'] = exthdr['KGAIN']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 @pytest.mark.e2e
 def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
@@ -35,6 +60,9 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
     l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
+
+    # update TVAC headers
+    fix_headers_for_tvac(l1_data_filelist)
 
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
@@ -207,6 +235,9 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     input_image_filelist = []
     l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
+    # update TVAC headers
+    fix_headers_for_tvac(l1_data_filelist)
+
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
     for file in l1_data_filelist:
@@ -315,7 +346,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
+    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     # Argument parser setup
