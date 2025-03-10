@@ -214,7 +214,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
     # Calculate the full well capacity for every frame in the dataset
     if k_gain is None:
-        kgain = detector_params.params['kgain']
+        kgain = detector_params.params['KGAINPAR']
     else:
         #get the kgain value from the k_gain calibration file
         kgain = k_gain.value
@@ -223,14 +223,14 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         try: # use measured gain if available TODO change hdr name if necessary
             emgain = frame.ext_hdr['EMGAIN_M']
         except:
-            try: # use applied EM gain if available
+            if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
                 emgain = frame.ext_hdr['EMGAIN_A']
-            except: # otherwise use commanded EM gain
-                emgain = frame.ext_hdr['CMDGAIN']
-        emgain_list.append(emgain)
+            else: # otherwise use commanded EM gain
+                emgain = frame.ext_hdr['EMGAIN_C']
+            emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
-    fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
-    fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
+    fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in crmasked_dataset])
+    fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in crmasked_dataset])
 
     fwcpp_dn_arr = fwcpp_e_arr / kgain
     fwcem_dn_arr = fwcem_e_arr / kgain
@@ -299,17 +299,18 @@ def correct_nonlinearity(input_dataset, non_lin_correction):
     #Apply the non-linearity correction to the data
     linearized_cube = linearized_dataset.all_data
     #Check to see if EM gain is in the header, if not, raise an error
-    if "CMDGAIN" not in linearized_dataset[0].ext_hdr.keys():
+    if "EMGAIN_C" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
     for i in range(linearized_cube.shape[0]):
         try: # use measured gain if available TODO change hdr name if necessary
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
         except:
-            try: # use applied EM gain if available
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+            if em_gain > 0: # use applied EM gain if available
                 em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
-            except: # otherwise use commanded EM gain
-                em_gain = linearized_dataset[i].ext_hdr["CMDGAIN"]
+            else: # otherwise use commanded EM gain
+                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
     
     if non_lin_correction is not None:
@@ -333,8 +334,8 @@ def update_to_l2a(input_dataset):
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATA_LEVEL'] != "L1":
-            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+        if orig_frame.ext_hdr['DATALVL'] != "L1":
+            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -342,7 +343,7 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # update header
-        frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)

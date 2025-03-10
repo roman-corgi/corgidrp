@@ -80,7 +80,6 @@ def test_create_flatfield_neptune():
     assert np.all(onskyflat_field.data == pickled_flat.data)
     
     flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset,onsky_flatfield)
-    print(flatdivided_dataset[0].ext_hdr["HISTORY"])
     
     
     # perform checks after the flat divison for one of the dataset
@@ -101,8 +100,6 @@ def test_create_flatfield_neptune():
     print("mean of all flat divided data errors:",err_flatdiv)
     print("Error estimated:",err_estimated)
     assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-1))
-    
-    print(flatdivided_dataset[0].ext_hdr)
 
     corgidrp.track_individual_errors = old_err_tracking
 
@@ -164,7 +161,6 @@ def test_create_flatfield_uranus():
 
     
     flatdivided_dataset = l2a_to_l2b.flat_division(simflat_dataset,onsky_flatfield)
-    print(flatdivided_dataset[0].ext_hdr["HISTORY"])
     
     
     # perform checks after the flat divison for one of the dataset
@@ -184,7 +180,6 @@ def test_create_flatfield_uranus():
     print("Error estimated:",err_estimated)
     assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-1))
     
-    print(flatdivided_dataset[0].ext_hdr)
     corgidrp.track_individual_errors = old_err_tracking
 
     return
