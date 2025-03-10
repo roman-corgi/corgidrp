@@ -16,7 +16,7 @@
         {
             "name" : "calibrate_fluxcal_aper",
                "keywords" : {
-                              "encircled_radius" : 4
+                              "phot_kwargs" : {"encircled_radius" : 4}
                             }
         },
         {
