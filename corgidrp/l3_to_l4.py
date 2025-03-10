@@ -2,11 +2,16 @@
 
 from pyklip.klip import rotate
 from corgidrp import data
+from corgidrp.detector import flag_nans,nan_flags
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
 import numpy as np
 import glob
+import pyklip.rdi
+import os
+from astropy.io import fits
+import warnings
 
 def distortion_correction(input_dataset, distortion_calibration):
     """
@@ -33,6 +38,7 @@ def find_star(input_dataset):
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the stars identified
+            in ext_hdr["STARLOCX/Y"]
     """
 
     return input_dataset.copy()
@@ -78,9 +84,9 @@ def crop(input_dataset,sizexy=None,centerxy=None):
         dqhdr = frame.dq_hdr
         errhdr = frame.err_hdr
 
-        # Pick default crop size based on the size of the effective field of view (determined by the Lyot stop)
+        # Pick default crop size based on the size of the effective field of view
         if sizexy is None:
-            if prihdr['LSAMNAME'] == 'NFOV':
+            if exthdr['LSAMNAME'] == 'NFOV':
                 sizexy = 60
             else:
                 raise UserWarning('Crop function is currently only configured for NFOV (narrow field-of-view) observations if sizexy is not provided.')
@@ -160,27 +166,152 @@ def crop(input_dataset,sizexy=None,centerxy=None):
 
     output_dataset = data.Dataset(frames_out)
 
-    history_msg = f"""Frames cropped to new shape {output_dataset[0].data.shape} on center {centerxy}.\
-             Updated header kws: {", ".join(updated_hdrs)}."""
-    
-    output_dataset.update_after_processing_step(history_msg)
+    history_msg1 = f"""Frames cropped to new shape {list(output_dataset[0].data.shape)} on center {list(centerxy)}. Updated header kws: {", ".join(updated_hdrs)}."""
+    output_dataset.update_after_processing_step(history_msg1)
     
     return output_dataset
 
-def do_psf_subtraction(input_dataset, reference_star_dataset=None):
+def do_psf_subtraction(input_dataset, reference_star_dataset=None,
+                       mode=None, annuli=1,subsections=1,movement=1,
+                       numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
+                       do_crop=True,
+                       crop_sizexy=None
+                       ):
     """
     
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
-
+    TODO: 
+        Handle nans & propagate DQ array
+        What info is missing from output dataset headers?
+        Add comments to new ext header cards
+        
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        reference_star_dataset (corgidrp.data.Dataset): a dataset of Images of the reference star [optional]
+        reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
+            star [optional]
+        mode (str, optional): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously 
+            if not specified.
+        annuli (int, optional): number of concentric annuli to run separate subtractions on. Defaults to 1.
+        subsections (int, optional): number of angular subsections to run separate subtractions on. Defaults to 1.
+        movement (int, optional): KLIP movement parameter. Defaults to 1.
+        numbasis (int or list of int, optional): number of KLIP modes to retain. Defaults to [1,4,8,16].
+        outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
+        fileprefix (str, optional): prefix of saved output files. Defaults to "".
+        do_crop (bool): whether to crop data before PSF subtraction. Defaults to True.
+        crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
+            None, which results in the step choosing a crop size based on the imaging mode. 
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied
+        corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
+
     """
 
-    return input_dataset.copy()
+    sci_dataset = input_dataset.copy()
+    
+    # Use input reference dataset if provided
+    if not reference_star_dataset is None:
+        ref_dataset = reference_star_dataset.copy()
+
+    # Try getting PSF references via the "PSFREF" header kw
+    else:
+        split_datasets, unique_vals = sci_dataset.split_dataset(prihdr_keywords=["PSFREF"])
+        unique_vals = np.array(unique_vals)
+
+        if 0. in unique_vals:
+            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0])]
+        else:
+            raise UserWarning('No science files found in input dataset.')
+
+        if 1. in unique_vals:
+            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0])]
+        else:
+            ref_dataset = None
+
+    assert len(sci_dataset) > 0, "Science dataset has no data."
+
+    # Choose PSF subtraction mode if unspecified
+    if mode is None:
+        
+        if not ref_dataset is None and len(sci_dataset)==1:
+            mode = 'RDI' 
+        elif not ref_dataset is None:
+            mode = 'ADI+RDI'
+        else:
+            mode = 'ADI' 
+
+    else: assert mode in ['RDI','ADI+RDI','ADI'], f"Mode {mode} is not configured."
+
+    # Format numbases
+    if isinstance(numbasis,int):
+        numbasis = [numbasis]
+
+    # Set up outdir
+    outdir = os.path.join(outdir,mode)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
+    # Crop data
+    if do_crop:
+        sci_dataset = crop(sci_dataset,sizexy=crop_sizexy)
+        ref_dataset = None if ref_dataset is None else crop(ref_dataset,sizexy=crop_sizexy) 
+
+    # Mask data where DQ > 0, let pyklip deal with the nans
+    sci_dataset_masked = nan_flags(sci_dataset)
+    ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
+
+    # Run pyklip
+    pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
+    pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
+                              annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
+                              calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
+                              fileprefix=fileprefix)
+    
+    # Construct corgiDRP dataset from pyKLIP result
+    result_fpath = os.path.join(outdir,f'{fileprefix}-KLmodes-all.fits')   
+    pyklip_data = fits.getdata(result_fpath)
+    pyklip_hdr = fits.getheader(result_fpath)
+
+    # TODO: Handle errors correctly
+    err = np.zeros([1,*pyklip_data.shape])
+    dq = np.zeros_like(pyklip_data) # This will get filled out later
+
+    # Collapse sci_dataset headers
+    pri_hdr = sci_dataset[0].pri_hdr.copy()
+    ext_hdr = sci_dataset[0].ext_hdr.copy()    
+    
+    # Add relevant info from the pyklip headers:
+    skip_kws = ['PSFCENTX','PSFCENTY','CREATOR','CTYPE3']
+    for kw, val, comment in pyklip_hdr._cards:
+        if not kw in skip_kws:
+            ext_hdr.set(kw,val,comment)
+
+    # Record KLIP algorithm explicitly
+    pri_hdr.set('KLIP_ALG',mode)
+    
+    # Add info from pyklip to ext_hdr
+    ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
+    ext_hdr['STARLOCY'] = pyklip_hdr['PSFCENTY']
+
+    if "HISTORY" in sci_dataset[0].ext_hdr.keys():
+        history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
+        ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
+    
+    # Construct Image and Dataset object
+    frame = data.Image(pyklip_data,
+                        pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+                        err=err, dq=dq)
+    
+    dataset_out = data.Dataset([frame])
+
+    # Flag nans in the dq array and then add nans to the error array
+    dataset_out = flag_nans(dataset_out,flag_val=1)
+    dataset_out = nan_flags(dataset_out,threshold=1)
+    
+    history_msg = f'PSF subtracted via pyKLIP {mode}.'
+    
+    dataset_out.update_after_processing_step(history_msg)
+    
+    return dataset_out
 
 def northup(input_dataset,correct_wcs=False):
     """
@@ -212,8 +343,9 @@ def northup(input_dataset,correct_wcs=False):
 
         # define the center for rotation
         try: 
-            xcen, ycen = im_hd['PSFCENTX'], im_hd['PSFCENTY'] # TBU, after concluding the header keyword
+            xcen, ycen = im_hd['STARLOCX'], im_hd['STARLOCY'] 
         except KeyError:
+            warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             xcen, ycen = xlen/2, ylen/2
     
         # look for WCS solutions
