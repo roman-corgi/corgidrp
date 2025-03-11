@@ -13,10 +13,10 @@ from glob import glob
 def create_wcs(input_dataset, astrom_calibration):
     """
     Create the WCS headers for the dataset.
-    Args:
+    Arguments:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
         astrom_calibration (corgidrp.data.AstrometricCalibration): an astrometric calibration file for the input dataset
-    Returns:
+    Return:
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
     """
     updated_dataset = input_dataset.copy()
@@ -187,6 +187,6 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           print(f"Comparison figure saved at {dirname+outfilename}")
           plt.close(fig)
 
-    return derot_dataset
+    return
 if __name__ == '__main__':
  test_northup() 
