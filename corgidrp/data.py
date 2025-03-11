@@ -1393,7 +1393,7 @@ class FpamFsamRotMat(Image):
          default_rot (array): array collecting fpam_to_excam_modelbased and
            fsam_to_excam_modelbased.
     """
-    # default rotation matrices (model is consistent with FFT/TVAC tests)
+    # default transformation matrices (model is consistent with FFT/TVAC tests)
     # Signs +/- have been double checked against FFT/TVAC data
     fpam_to_excam_modelbased = np.array([[ 0.        ,  0.12285012],
        [-0.12285012, 0.        ]], dtype=float)
@@ -1482,7 +1482,8 @@ class CoreThroughputCalibration(Image):
     """
     # Using the Image() constructor
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None,
-        dq=None, err_hdr=None, dq_hdr=None, input_hdulist=None, input_dataset=None):
+        dq=None, err_hdr=None, dq_hdr=None, input_hdulist=None,
+        input_dataset=None):
         # run the image class contructor
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
             err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr,
@@ -1513,7 +1514,7 @@ class CoreThroughputCalibration(Image):
         # b/c of logic in the super.__init__, we just need to check this to see if
         # it is a new CoreThroughputCalibration file
         if ext_hdr is not None:
-            if input_hdulist is None:
+            if input_dataset is None:
                 # error check. this is required in this case
                 raise ValueError('This appears to be a new Core Throughput calibration'
                                  'File. The dataset of input files needs'

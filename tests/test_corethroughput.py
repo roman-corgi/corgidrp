@@ -15,11 +15,11 @@ here = os.path.abspath(os.path.dirname(__file__))
 
 # Generate a calibration file with the FPAM and FSAM rotation matrices if it
 # does not exist
-if not os.path.exists(os.path.join(corgidrp.default_cal_dir,
-    'FpamFsamRotMat_2024-02-10T00:00:00.000.fits')):
-    default_rot = data.FpamFsamRotMat([], 
-        date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
-    default_rot.save(filedir=corgidrp.default_cal_dir)
+#if not os.path.exists(os.path.join(corgidrp.default_cal_dir,
+#    'FpamFsamRotMat_2024-02-10T00:00:00.000.fits')):
+#    default_rot = data.FpamFsamRotMat([], 
+#        date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
+#    default_rot.save(filedir=corgidrp.default_cal_dir)
 
 def setup_module():
     """
@@ -154,6 +154,8 @@ def test_psf_pix_and_ct():
     assert np.all(psf_loc_est[0] == psf_loc_syn)
     assert np.abs(ct_est[0]-ct_syn) < 1e-16
 
+    print('Tests of PSF locations and CT values passed')
+
 def test_fpm_pos():
     """
     Test 1090882 - Given 1) the location of the center of the FPM coronagraphic
@@ -215,16 +217,20 @@ def test_fpm_pos():
         fsam_center_ct_pix_out - fsam_center_ct_pix_in
         assert np.all(fsam_center_ct_pix_out - fsam_center_ct_pix_in <= 1e-12)
 
+    print('Tests of FPAM/FSAM to EXCAM passed')
+
 def test_cal_file():
     """ Test creation of core throughput calibration file. """
 
     # Write core throughput calibration file
     ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
-    ct_cal_file = corgidrp.data.CoreThroughputCalibration(
+    ct_cal_file_in = corgidrp.data.CoreThroughputCalibration(
         ct_cal_inputs[0], pri_hdr=dataset_ct[0].pri_hdr, ext_hdr=ct_cal_inputs[3],
         dq=ct_cal_inputs[1], input_hdulist=ct_cal_inputs[2],
         input_dataset=dataset_ct)
-    ct_cal_file.save(filedir=corgidrp.default_cal_dir)
+    # It's fine to use a hardcoded filename for UTs
+    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir,
+        filename='CoreThroughputCalibration_2025-02-15T00:00:00.fits')
 
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
@@ -234,10 +240,11 @@ def test_cal_file():
     psf_loc_input, ct_input = \
         corethroughput.estimate_psf_pix_and_ct(dataset_ct)
 
-    breakpoint()
-    # TBD: Open calibration file with available methods (unit tests, it is fine hardcoded)
-    # Before:
-    ct_cal = corethroughput.read_ct_cal_file()
+    # Test: open calibration file
+    try:
+        ct_cal_file = corgidrp.data.CoreThroughputCalibration(ct_cal_file_in.filepath)
+    except:
+        raise IOError('CT cal file was not saved')
 
     # Test 1: PSF cube
     # Recover off-axis PSF cube from CT Dataset
@@ -257,20 +264,26 @@ def test_cal_file():
 
     # Compare the PSF cube from the calibration file, which may have a smaller
     # extension, with the input ones
-    cal_file_side_0 = ct_cal[1][0].shape[0]
-    cal_file_side_1 = ct_cal[1][0].shape[1]
+    cal_file_side_0 = ct_cal_file.data.shape[1]
+    cal_file_side_1 = ct_cal_file.data.shape[2]
     for i_psf, psf in enumerate(psf_cube_in):
-        loc_00 = np.argwhere(psf == ct_cal[1][i_psf][0][0])[0]
+        loc_00 = np.argwhere(psf == ct_cal_file.data[i_psf][0][0])[0]
         assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
-            loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal[1][i_psf])
+            loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
 
     # Test 2: PSF positions and CT map
     # x location wrt FPM
-    assert np.all(psf_loc_input[:,0] - ct_cal[9][0][0] == ct_cal[7][0])
+    assert np.all(psf_loc_input[:,0] == ct_cal_file.ct_excam[0])
     # y location wrt FPM
-    assert np.all(psf_loc_input[:,1] - ct_cal[9][0][1]== ct_cal[7][1])
+    assert np.all(psf_loc_input[:,1] == ct_cal_file.ct_excam[1])
     # CT map
-    assert np.all(ct_input == ct_cal[7][2])
+    assert np.all(ct_input == ct_cal_file.ct_excam[2])
+
+    # Remove test CT cal file
+    if os.path.exists(ct_cal_file.filepath):
+        os.remove(ct_cal_file.filepath)
+
+    print('Tests of the CT cal file passed')
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()

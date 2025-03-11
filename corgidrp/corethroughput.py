@@ -263,7 +263,8 @@ def generate_psf_cube(
     # 3-d cube of PSF images cut around the PSF's location
     psf_cube = []
     dq_cube = []
-    n_pix_psf = int(1 + 2*np.ceil(3*get_cfam(cfam_name=cfam_name,
+    # Pixels arounf PSF's location +/- n_pix_psf in both dimensions
+    n_pix_psf = int(np.ceil(3*get_cfam(cfam_name=cfam_name,
         cfam_version=cfam_version)[0].mean()*1e-9/2.36*180/np.pi*3600e3/21.8))
     i_psf = 0
     for frame in dataset:
@@ -280,10 +281,10 @@ def generate_psf_cube(
             pass
         idx_0_0 = max(int(np.round(psf_loc[i_psf][1])) - n_pix_psf,0)
         idx_0_1 = min(frame.data.shape[0],
-            int(np.round(psf_loc[i_psf][1])) + n_pix_psf)
+            int(np.round(psf_loc[i_psf][1])) + n_pix_psf + 1)
         idx_1_0 = max(int(np.round(psf_loc[i_psf][0])) - n_pix_psf,0)
         idx_1_1 = min(frame.data.shape[1],
-            int(np.round(psf_loc[i_psf][0])) + n_pix_psf)
+            int(np.round(psf_loc[i_psf][0])) + n_pix_psf + 1)
         psf_cube += [frame.data[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
         dq_cube += [frame.dq[idx_0_0:idx_0_1, idx_1_0:idx_1_1]]
         i_psf += 1
