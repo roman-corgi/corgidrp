@@ -187,5 +187,6 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           print(f"Comparison figure saved at {dirname+outfilename}")
           plt.close(fig)
 
+    return derot_dataset
 if __name__ == '__main__':
  test_northup() 
