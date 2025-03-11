@@ -480,6 +480,10 @@ def create_default_L2a_headers(arrtype="SCI"):
 
     prihdr, exthdr = create_default_L1_headers(arrtype)
 
+    exthdr['BSCALE']        = 1             # Linear scaling factor
+    exthdr['BZERO']         = 0             # 64 bit data
+    exthdr['NAXIS1']        = 1024          # Axis 1 size
+    exthdr['NAXIS2']        = 1024          # Axis 2 size
     exthdr['DATALVL']       = 'L2a'         # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
@@ -591,7 +595,6 @@ def create_default_calibration_product_headers():
             exthdr (fits.Header): Extension FITS Header
     '''
     # TO DO: update when this has been more defined
-    # TO DO: Update this once L2a headers have been finalized
     prihdr, exthdr = create_default_L1_headers()
     exthdr['DATALVL']    = 'Calibration Product'
     exthdr['DATATYPE']    = 'Image'              # What type of calibration product, just do image for now, mock codes will update
@@ -743,7 +746,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
+        prihdr, exthdr = create_default_L2a_headers(arrtype="SCI")
         prihdr["OBSNUM"] = 000
         exthdr['KGAINPAR'] = 7
         #np.random.seed(456+i); 
@@ -2673,28 +2676,16 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # Error map
     err = np.full(size, noise_scale)
 
-    # Define header
-    new_hdr = {
-        'TARGET': target_name,
-        'CFAMNAME': filter,
-        'FPAMNAME': fpamname,
-        'FPAM_H': 2503.7,
-        'FPAM_V': 6124.9,
-        'FSM_X': fsm_x,
-        'FSM_Y': fsm_y,
-        'EXPTIME': exptime,
-        'COL_COR': color_cor,
-        'CRPIX1': xpos,
-        'CRPIX2': ypos,
-        'CTYPE1': 'RA---TAN',
-        'CTYPE2': 'DEC--TAN',
-        'CDELT1': (platescale * 0.001) / 3600,
-        'CDELT2': (platescale * 0.001) / 3600,
-        'CRVAL1': target_location[0],
-        'CRVAL2': target_location[1],
-    }
-
-    newhdr = fits.Header(new_hdr)
+    # Get FPAM positions, not strictly necessary but
+    if fpamname == 'HOLE':
+        fpam_h = 40504.4
+        fpam_v = 9616.8
+    elif fpamname == 'ND225':
+        fpam_h = 61507.8
+        fpam_v = 25612.4
+    elif fpamname == 'ND475':
+        fpam_h = 2503.7
+        fpam_v = 6124.9
 
     # Create image object
     prihdr, exthdr = create_default_L3_headers()
@@ -2704,7 +2695,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     prihdr['TARGET'] = target_name
 
     exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
-    exthdr['FPAMNAME'] = 'ND475'
+    exthdr['FPAMNAME'] = fpamname
     exthdr['FPAM_H']   = 2503.7
     exthdr['FPAM_V']   = 6124.9
     exthdr['FSM_X']    = fsm_x              # Ensure fsm_x is defined
