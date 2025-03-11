@@ -13,10 +13,12 @@ from glob import glob
 def create_wcs(input_dataset, astrom_calibration):
     """
     Create the WCS headers for the dataset.
-    Arguments:
+
+    Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
         astrom_calibration (corgidrp.data.AstrometricCalibration): an astrometric calibration file for the input dataset
-    Return:
+
+    Returns:
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
     """
     updated_dataset = input_dataset.copy()
