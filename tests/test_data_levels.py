@@ -63,8 +63,6 @@ def test_l1a_to_l2b_bad():
     Tests an unsuccessful upgrade because input is not L2a
     """
     l1_dataset = mocks.create_dark_calib_files(numfiles=2)
-    for frame in l1_dataset:
-        print("here in test data levels", frame.ext_hdr['DATALVL'])
     
     # expect an exception
     with pytest.raises(ValueError):
@@ -92,5 +90,8 @@ def test_l3_to_l4_bad():
 
 
 if __name__ == "__main__":
-    #test_l1_to_l4()
+    test_l1_to_l4()
     test_l1_to_l2a_bad()
+    test_l1a_to_l2b_bad()
+    test_l2b_to_l3_bad()
+    test_l3_to_l4_bad()
