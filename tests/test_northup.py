@@ -1,8 +1,6 @@
-import sys,os,math
-sys.path.append(os.path.abspath("../corgidrp/"))
+import os,math
 from corgidrp import data, mocks, astrom
-from corgidrp import l3_to_l4
-from l3_to_l4 import northup
+from corgidrp.l3_to_l4 import northup
 from astropy.io import fits
 from astropy.wcs import WCS
 from matplotlib import pyplot as plt
