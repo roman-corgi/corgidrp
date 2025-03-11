@@ -66,7 +66,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
     """
 
     # read mock file
-    dirname = 'test_data'
+    dirname = 'test_data/'
     filename = 'JWST_CALFIELD2020.csv'
 
     fieldpath = os.path.join(os.path.dirname(__file__),dirname,filename)
@@ -151,8 +151,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           ax0.set_title('Original Mock Data')
           ax0.imshow(im_input,origin='lower',vmin=0,vmax=5)
           astr_hdr = WCS(input_data.ext_hdr)
-          north_vector = np.array([-astr_hdr.wcs.cd[0,1], astr_hdr.wcs.cd[1,1]])  # Points toward increasing Dec
-          east_vector = np.array([astr_hdr.wcs.cd[0,0], -astr_hdr.wcs.cd[1,0]])   # Points toward increasing RA
+          north_vector = np.array([astr_hdr.wcs.cd[0,1], astr_hdr.wcs.cd[1,1]])  # Points toward increasing Dec
+          east_vector = np.array([astr_hdr.wcs.cd[0,0], astr_hdr.wcs.cd[1,0]])   # Points toward increasing RA
           # Normalize vectors for consistent display length
           north_vector /= np.linalg.norm(north_vector)
           east_vector /= np.linalg.norm(east_vector)
@@ -162,11 +162,11 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           ax0.arrow(center_x, center_y, 30 * east_vector[0], 30 * east_vector[1], head_width=5, head_length=10, fc='w', ec='w')
           ax0.text(center_x+75 * east_vector[0], center_y+75 * east_vector[1], 'E', c='w',fontsize=12)
 
-          ax1.set_title(f'Derotated Data\n by {-(ang+north_angle)}deg counterclockwise')
+          ax1.set_title(f'Derotated Data\n by {ang+north_angle}deg counterclockwise')
           ax1.imshow(im_derot,origin='lower',vmin=0,vmax=5)
 
-          new_east_vector = np.array([astr_hdr_new.wcs.cd[0,0], -astr_hdr_new.wcs.cd[1,0]])   # Points toward increasing RA
-          new_north_vector = np.array([-astr_hdr_new.wcs.cd[0,1], astr_hdr_new.wcs.cd[1,1]])
+          new_east_vector = np.array([astr_hdr_new.wcs.cd[0,0], astr_hdr_new.wcs.cd[1,0]])   # Points toward increasing RA
+          new_north_vector = np.array([astr_hdr_new.wcs.cd[0,1], astr_hdr_new.wcs.cd[1,1]])
 
           # Normalize vectors for consistent display length
           new_east_vector /= np.linalg.norm(new_east_vector)
