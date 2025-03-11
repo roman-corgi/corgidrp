@@ -242,6 +242,8 @@ def guess_template(dataset):
             recipe_filename = "l1_to_boresight.json"
         elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
+        elif image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
+            recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
             if 'ISPC' in image.ext_hdr: # to be added eventually, so check if it's present first

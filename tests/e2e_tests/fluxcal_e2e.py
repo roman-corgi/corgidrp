@@ -12,6 +12,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.fluxcal as fluxcal
+from corgidrp import caldb
 
 @pytest.mark.e2e
 def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
