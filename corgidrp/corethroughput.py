@@ -365,6 +365,8 @@ def generate_ct_cal(
     # x, y: PSF centers wrt EXCAM's (0,0) pixel
     ct_excam = np.array([psf_loc_est[:,0], psf_loc_est[:,1], ct_est])
     ct_hdr = fits.Header()
+    # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+    # wrt FPM's center 
     ct_hdr['COMMENT'] = ('PSF location with respect to EXCAM (0,0) pixel. '
         'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
     ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'

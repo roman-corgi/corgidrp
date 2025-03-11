@@ -234,6 +234,9 @@ def test_cal_file():
     # Test: open calibration file
     try:
         ct_cal_file = corgidrp.data.CoreThroughputCalibration(ct_cal_file_in.filepath)
+        # Check EXTNAME is as expected
+        if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
+            raise ValueError('The extension name of the CT values on EXCAM is not correct')
     except:
         raise IOError('CT cal file was not saved')
 
