@@ -2560,7 +2560,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     return gauss
 
 def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
+                      fsm_y=0.0, exptime=1.0, filedir=None, platescale=21.8, 
                       background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
@@ -2577,7 +2577,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
         exptime (float): (Optional) Exposure time (s)
         filedir (str): (Optional) Directory path to save the output file
-        color_cor (float): (Optional) Color correction factor
         platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
         background (float): optional additive background value
         add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
@@ -2608,7 +2607,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     ypos = center[1] + fsm_y_shift
 
     # Convert flux from calspec units to photo-electrons
-    flux = (star_flux * exptime / color_cor) / cal_factor
+    flux = (star_flux * exptime) / cal_factor
 
     # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
@@ -2647,17 +2646,16 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # Error map
     err = np.full(size, noise_scale)
     # Define header
-    prihdr, exthdr = create_default_L3_headers()
+    prihdr, exthdr = create_default_L2b_headers()
     
-    exthdr['TARGET']= target_name
+    prihdr['TARGET']= target_name
     exthdr['CFAMNAME']= filter
     exthdr['FPAMNAME']= fpamname
     exthdr['FPAM_H']= 2503.7
     exthdr['FPAM_V']= 6124.9
-    exthdr['FSM_X']= fsm_x
-    exthdr['FSM_Y']= fsm_y
-    exthdr ['EXPTIME']= exptime
-    exthdr['COL_COR']= color_cor
+    exthdr['FSMX']= fsm_x
+    exthdr['FSMY']= fsm_y
+    exthdr['EXPTIME']= exptime
     exthdr['CRPIX1']= xpos
     exthdr['CRPIX2']= ypos
     exthdr['CTYPE1']= 'RA---TAN'
@@ -2668,7 +2666,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CRVAL2']= target_location[1]
 
     # Create image object
-    prihdr['VISTYPE'] = 'FLUXCAL'
+    prihdr['VISTYPE'] = 'ABSFLXFT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
 
