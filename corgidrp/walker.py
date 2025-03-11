@@ -15,6 +15,7 @@ import corgidrp.photon_counting
 import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
 import corgidrp.detector
+import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
 
@@ -39,7 +40,7 @@ all_steps = {
     "create_bad_pixel_map" : corgidrp.bad_pixel_calibration.create_bad_pixel_map,
     "calibrate_kgain" : corgidrp.calibrate_kgain.calibrate_kgain,
     "calibrate_darks" : corgidrp.darks.calibrate_darks_lsq,
-    "create_onsky_flatfield" : corgidrp.detector.create_onsky_flatfield,
+    "create_onsky_flatfield" : corgidrp.flat.create_onsky_flatfield,
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
