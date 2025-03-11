@@ -52,7 +52,12 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     print("fluxcal factor", flux_fac.fluxcal_fac)
     print("fluxcal factor error", flux_fac.fluxcal_err)
     assert flux_fac.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac.fluxcal_err)
-    
+    # remove entry from caldb
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(flux_fac)
+
+   # Print success message
+    print('e2e test for flux calibration factor passed')
     
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

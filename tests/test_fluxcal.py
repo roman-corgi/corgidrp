@@ -161,7 +161,7 @@ def test_abs_fluxcal():
     #and a flux calibration factor band_flux/200
     #that results in a total extracted count of 200 photo electrons
     flux_image = create_flux_image(band_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=1.0, filedir=datadir, color_cor=1., platescale=21.8, background=0,
+                      fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8, background=0,
                       add_gauss_noise=True, noise_scale=1., file_save=True)
     assert type(flux_image) == Image
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
@@ -232,7 +232,7 @@ def test_abs_fluxcal():
     
     #Test the optional background subtraction#
     flux_image_back = create_flux_image(band_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=1.0, filedir=datadir, color_cor=1., platescale=21.8, background=3,
+                      fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8, background=3,
                       add_gauss_noise=True, noise_scale=1., file_save=True)
     
     [flux_back, flux_err_back, back] = fluxcal.aper_phot(flux_image_back, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
