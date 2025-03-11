@@ -180,16 +180,12 @@ def test_fpm_pos():
     assert np.all(fpam2excam_matrix - fpam2excam_matrix_tvac <= 1e-9)
     assert np.all(fsam2excam_matrix - fsam2excam_matrix_tvac <= 1e-9)
    
-    breakpoint()
     # test 2:
     # Using values within the range should return a meaningful value. Tested 10 times
     rng = np.random.default_rng(0)
     for _ in range(10):
-        EXCAM_center_pos_pix = np.array([rng.integers(300,700),rng.integers(300,700)])
-        # Irrelevant change of units for the origin since what matters is the difference
-        # (see below) Written using model values for mas/um for FPAM and FSAM
-        FPAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.67
-        FSAM_center_pos_um = EXCAM_center_pos_pix * 21.8 / 2.10
+        # EXCAM_center_pos_pix, FPAM_center_pos_um, FSAM_center_pos_um have to be read from the Headers of the dataset_cor
+
         # Delta H/V in um
         delta_fpam_um = np.array([[rng.uniform(1,10)], [rng.uniform(1,10)]])
         delta_fsam_um = np.array([[rng.uniform(1,10)], [rng.uniform(1,10)]])
