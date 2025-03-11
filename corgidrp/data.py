@@ -1367,7 +1367,7 @@ class FluxcalFactor(Image):
             self.filedir = "."
             self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
 
-class FpamFsamRotMat(Image):
+class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
     CGI model was consistent with FFT/TVAC tests. Transformation matrices are
@@ -1383,14 +1383,14 @@ class FpamFsamRotMat(Image):
 
     Args:
         data_or_filepath (dict or str): either a filepath string corresponding to an
-                                        existing FpamFsamRotMat file saved to disk or an
+                                        existing FpamFsamCal file saved to disk or an
                                         array with the FPAM and FSAM rotation matrices
         date_valid (astropy.time.Time): date after which these parameters are valid
 
     Attributes:
          fpam_to_excam_modelbased (array): default values for FPAM rotation matrices.
          fsam_to_excam_modelbased (array): default values for FSAM rotation matrices.
-         default_rot (array): array collecting fpam_to_excam_modelbased and
+         default_trans (array): array collecting fpam_to_excam_modelbased and
            fsam_to_excam_modelbased.
     """
     # default transformation matrices (model is consistent with FFT/TVAC tests)
@@ -1400,7 +1400,7 @@ class FpamFsamRotMat(Image):
     # Signs -/- have been double checked against FFT/TVAC data
     fsam_to_excam_modelbased = np.array([[-0.        , -0.09509319],
        [-0.09509319, 0.        ]], dtype=float)
-    default_rot = np.array([fpam_to_excam_modelbased, fsam_to_excam_modelbased])
+    default_trans = np.array([fpam_to_excam_modelbased, fsam_to_excam_modelbased])
 
     def __init__(self, data_or_filepath, date_valid=None):
         if date_valid is None:
@@ -1410,19 +1410,19 @@ class FpamFsamRotMat(Image):
             # run the image class contructor
             super().__init__(data_or_filepath)
 
-            # double check that this is actually a FpamFsamRotMat file that got read in
+            # double check that this is actually a FpamFsamCal file that got read in
             # since if only a filepath was passed in, any file could have been read in
             if 'DATATYPE' not in self.ext_hdr:
-                raise ValueError('File that was loaded was not a FpamFsamRotMat file.')
-            if self.ext_hdr['DATATYPE'] != 'FpamFsamRotMat':
-                raise ValueError('File that was loaded was not a FpamFsamRotMat file.')
+                raise ValueError('File that was loaded was not a FpamFsamCal file.')
+            if self.ext_hdr['DATATYPE'] != 'FpamFsamCal':
+                raise ValueError('File that was loaded was not a FpamFsamCal file.')
         else:
             if len(data_or_filepath) == 0:
-                data_or_filepath = self.default_rot
+                data_or_filepath = self.default_trans
             elif not isinstance(data_or_filepath, np.ndarray):
                 raise ValueError('Input should either be an array or a filepath string.')
             if data_or_filepath.shape != (2,2,2):
-                raise ValueError('FpamFsamRotMat must be a 2x2x2 array')
+                raise ValueError('FpamFsamCal must be a 2x2x2 array')
             prihdr = fits.Header()
             exthdr = fits.Header()
             exthdr['SCTSRT'] = date_valid.isot # use this for validity date
@@ -1447,17 +1447,19 @@ class FpamFsamRotMat(Image):
 
             self.hdu_list = fits.HDUList()
 
-        # if this is a new FpamFsamRotMat file, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new FpamFsamRotMat file
+        # if this is a new FpamFsamCal file, we need to bookkeep it in the
+        # header b/c of logic in the super.__init__, we just need to check this
+        # to see if it is a new FpamFsamCal file
         if isinstance(data_or_filepath, np.ndarray):
-            self.ext_hdr['DATATYPE'] = 'FpamFsamRotMat' # corgidrp specific keyword for saving to disk
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'FpamFsamCal' 
 
             # add to history
             self.ext_hdr['HISTORY'] = 'FPAM/FSAM rotation matrices file created'
 
             # use the start date for the filename by default
             self.filedir = '.'
-            self.filename = "FpamFsamRotMat_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
 
 class CoreThroughputCalibration(Image):
     """
@@ -1542,6 +1544,15 @@ class CoreThroughputCalibration(Image):
         if self.ext_hdr['DATATYPE'] != 'CoreThroughputCalibration':
             raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
 
+#    def GetCTFPMPosition():
+    """ Gets the FPM's center during a Core throughput observing sequence.
+    
+    Args:
+      CorDataset (): a dataset containing some coronagraphic observations.
+      FpamFsamCal (): an instance of the FpamFsamCal class.
+
+    """
+
 datatypes = { "Image" : Image,
               "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
@@ -1553,7 +1564,7 @@ datatypes = { "Image" : Image,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
-              "FpamFsamRotMat" : FpamFsamRotMat,
+              "FpamFsamCal" : FpamFsamCal,
               "CoreThroughputCalibration": CoreThroughputCalibration}
 
 def autoload(filepath):

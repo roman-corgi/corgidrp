@@ -8,18 +8,10 @@ from scipy.signal import decimate
 import corgidrp
 import corgidrp.data as data
 from corgidrp.mocks import create_default_L3_headers, create_ct_psfs
-from corgidrp.data import Image, Dataset, CoreThroughputCalibration
-from corgidrp import corethroughput
+from corgidrp.data import Image, Dataset, FpamFsamCal, CoreThroughputCalibration
+from corgidrp import corethroughput, caldb
 
 here = os.path.abspath(os.path.dirname(__file__))
-
-# Generate a calibration file with the FPAM and FSAM rotation matrices if it
-# does not exist
-#if not os.path.exists(os.path.join(corgidrp.default_cal_dir,
-#    'FpamFsamRotMat_2024-02-10T00:00:00.000.fits')):
-#    default_rot = data.FpamFsamRotMat([], 
-#        date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
-#    default_rot.save(filedir=corgidrp.default_cal_dir)
 
 def setup_module():
     """
@@ -171,9 +163,11 @@ def test_fpm_pos():
           M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
           delta_pix = M @ delta_pam
     """
-
-    # DRP calibration files
-    fpam2excam_matrix, fsam2excam_matrix = corethroughput.read_rot_matrix()
+    # FPAM/FSAM transformations in DRP
+    fpam_fsam_trans = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    
+    fpam2excam_matrix, fsam2excam_matrix = fpam_fsam_trans.data
     # TVAC files
     fpam2excam_matrix_tvac = fits.getdata(os.path.join(here, 'test_data',
         'fpam_to_excam_modelbased.fits'))
@@ -182,10 +176,11 @@ def test_fpm_pos():
 
     # test 1:
     # Check that DRP calibration files for FPAM and FSAM agree with TVAC files
-    # Some irrelevant rounding happens when defining FpamFsamRotMat() in data.py
+    # Some irrelevant rounding happens when defining FpamFsamCal() in data.py
     assert np.all(fpam2excam_matrix - fpam2excam_matrix_tvac <= 1e-9)
     assert np.all(fsam2excam_matrix - fsam2excam_matrix_tvac <= 1e-9)
    
+    breakpoint()
     # test 2:
     # Using values within the range should return a meaningful value. Tested 10 times
     rng = np.random.default_rng(0)
@@ -224,7 +219,7 @@ def test_cal_file():
 
     # Write core throughput calibration file
     ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
-    ct_cal_file_in = corgidrp.data.CoreThroughputCalibration(
+    ct_cal_file_in = CoreThroughputCalibration(
         ct_cal_inputs[0], pri_hdr=dataset_ct[0].pri_hdr, ext_hdr=ct_cal_inputs[3],
         dq=ct_cal_inputs[1], input_hdulist=ct_cal_inputs[2],
         input_dataset=dataset_ct)
