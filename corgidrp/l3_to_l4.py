@@ -352,14 +352,18 @@ def northup(input_dataset,correct_wcs=True):
             astr_hdr = WCS(sci_hd)
             CD1_2 = sci_hd['CD1_2']
             CD2_2 = sci_hd['CD2_2']
-            roll_angle = np.rad2deg(np.arctan2(CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
+            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
+            # directly edit the WCS info - don't use astr_hdr keyword in pyklip.klip.rotate conflicting the rotation directions in the image and WCS
+            cos_rot = np.cos(np.radians(-roll_angle))
+            sin_rot = np.sin(np.radians(-roll_angle))
+            rot_matrix = np.array([[cos_rot, -sin_rot], [sin_rot, cos_rot]])
+            astr_hdr.wcs.cd = np.dot(astr_hdr.wcs.cd, rot_matrix)
         else:
-            astr_hdr = None
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
             roll_angle = processed_data.pri_hdr['ROLL']
 
         # derotate
-        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
+        sci_derot = rotate(sci_data,-roll_angle,(xcen,ycen),astr_hdr=None) # astr_hdr is corrected at above lines
         new_all_data.append(sci_derot)
 
         log = f'FoV rotated by {-roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
@@ -375,7 +379,7 @@ def northup(input_dataset,correct_wcs=True):
 
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = np.expand_dims(rotate(err_data[0],roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        err_derot = np.expand_dims(rotate(err_data[0],-roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
         #############
 
@@ -395,8 +399,8 @@ def northup(input_dataset,correct_wcs=True):
                 # define slices for cropping
                 crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
 
-                # rotate, re-shift, and crop
-                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=np.nan),\
+                # rotate (invserse direction to pyklip.rotate), re-shift, and crop
+                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan),\
                  (yshift,xshift),order=0,mode='constant',cval=np.nan)[crop_y,crop_x]
         else:
                 # simply rotate 
