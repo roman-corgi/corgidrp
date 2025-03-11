@@ -103,8 +103,8 @@ def test_exact_case():
     assert(M.ext_hdr['EMGAIN_C'] == g)
     assert(M.ext_hdr['DATATYPE'] == 'Dark')
     assert(M.data.shape == (rows, cols))
-    assert(M.ext_hdr['NAXIS1'] == rows)
-    assert(M.ext_hdr['NAXIS2'] == cols)
+    assert(M.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
+    assert(M.ext_hdr['NAXIS2'] == rows)
     assert(M.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
     assert(M.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
     assert('EM gain = '+str(g) in str(M.ext_hdr['HISTORY']))
@@ -119,8 +119,8 @@ def test_exact_case():
     assert(M_copy.ext_hdr['EMGAIN_C'] == g)
     assert(M_copy.ext_hdr['DATATYPE'] == 'Dark')
     assert(M_copy.data.shape == (rows, cols))
-    assert(M_copy.ext_hdr['NAXIS1'] == rows)
-    assert(M_copy.ext_hdr['NAXIS2'] == cols)
+    assert(M_copy.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
+    assert(M_copy.ext_hdr['NAXIS2'] == rows)
     assert(M_copy.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
     assert(M_copy.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
     assert('commanded EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))

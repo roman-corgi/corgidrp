@@ -24,8 +24,8 @@ def make_test_dataset(shape=[100,100],centxy=None):
         cent = [centxy[-i] for i in np.array(range(len(centxy)))+1]
         
     prihdr,exthdr = create_default_L3_headers()
-    exthdr['MASKLOCX'] = cent[1]
-    exthdr['MASKLOCY'] = cent[0]
+    exthdr['STARLOCX'] = cent[1]
+    exthdr['STARLOCY'] = cent[0]
     exthdr['LSAM_H'] = cent[1]
     exthdr['LSAM_V'] = cent[0]
     exthdr['LSAMNAME'] = 'NFOV'

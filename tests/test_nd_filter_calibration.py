@@ -491,7 +491,7 @@ def test_background_effect(tmp_path):
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
 
-'''
+
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -555,8 +555,8 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    #run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
-    #run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
+    run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
+    run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
     #run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
     #for method in ["Aperture", "Gaussian"]:
@@ -578,4 +578,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
+
