@@ -1533,9 +1533,10 @@ class CoreThroughputCalibration(Image):
                 self.ext_hdr['HISTORY'] = ('Core Throughput calibration derived '
                     f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
-            # use the start date for the filename by default
+            # Default convention: replace _L3_.fits from the filename of the
+            # input dataset by _CTP_CAL.fits
             self.filedir = '.'
-            self.filename = 'CoreThroughputCalibration_{0}.fits'.format(self.ext_hdr['SCTSRT'])
+            self.filename = input_dataset[0].filename[:-8] + 'CTP_CAL.fits'
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1544,14 +1545,19 @@ class CoreThroughputCalibration(Image):
         if self.ext_hdr['DATATYPE'] != 'CoreThroughputCalibration':
             raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
 
-#    def GetCTFPMPosition():
-    """ Gets the FPM's center during a Core throughput observing sequence.
+    def GetCTFPMPosition(corDataset, fpamfsamcal):
+        """ Gets the FPM's center during a Core throughput observing sequence.
+        
+        Args:
+          corDataset (): a dataset containing some coronagraphic observations.
+          fpamfsamcal (): an instance of the FpamFsamCal class.
     
-    Args:
-      CorDataset (): a dataset containing some coronagraphic observations.
-      FpamFsamCal (): an instance of the FpamFsamCal class.
-
-    """
+        """
+        # Read FPM location during the coronagraphic observations
+        fpm_center_cor = [CorDataset[0].ext_hdr['MASKLOCX'],
+            CorDataset[0].ext_hdr['MASKLOCY']]
+        breakpoint()
+    
 
 datatypes = { "Image" : Image,
               "Dark" : Dark,
