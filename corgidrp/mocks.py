@@ -171,7 +171,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -350,7 +350,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -484,9 +484,6 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
-    exthdr['DESMEAR']       = False         # Whether desmearing was used
-    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
-    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '1.1.2'       # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
@@ -509,8 +506,12 @@ def create_default_L2b_headers(arrtype="SCI"):
 
     """
     # TO DO: Update this once L2a headers have been finalized
-    prihdr, exthdr = create_default_L1_headers(arrtype)
+    prihdr, exthdr = create_default_L2a_headers(arrtype)
 
+    exthdr['BUNIT'] = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['DESMEAR']       = False         # Whether desmearing was used
+    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
+    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['DATALVL']      = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['PCTHRESH']     = 0.0            # Photon-counting threshold (electrons)
 
@@ -536,6 +537,7 @@ def create_default_L3_headers(arrtype="SCI"):
 
     prihdr['TARGET'] = ''
     
+    exthdr['BUNIT'] = 'Photoelectrons / s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
@@ -626,8 +628,8 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     exthdr['DATALVL']      = 'CalibrationProduct'
     exthdr['DATATYPE']      = 'DetectorNoiseMaps'
     exthdr['DRPNFILE']      = "Mocks"         # What files are used to create this calibration product 
-    exthdr['FILE0']         = "Mock0"
-    exthdr['FILE1']         = "Mock1"
+    exthdr['FILE0']         = "Mock0.fits"
+    exthdr['FILE1']         = "Mock1.fits"
     exthdr['B_O'] = 0.01
     exthdr['B_O_UNIT'] = 'DN'
     exthdr['B_O_ERR'] = 0.001
