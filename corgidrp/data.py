@@ -1494,6 +1494,7 @@ class CoreThroughputCalibration(Image):
         # CT array measurements on EXCAM
         if self.hdu_list[0].name == 'CTEXCAM':
             self.ct_excam = self.hdu_list[0].data
+            self.ct_excam_hdr = self.hdu_list[0].header
         else:
             raise ValueError('The HDU list does not seem to contain the CT '
                 'array of measurements')
