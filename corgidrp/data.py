@@ -1064,6 +1064,7 @@ class DetectorParams(Image):
     Attributes:
         params (dict): the values for various detector parameters specified here
         default_values (dict): default values for detector parameters (fallback values)
+        back_compat_mapping (dict): values to make test FITS files comply with new header standard
     """
      # default detector params
     default_values = {
