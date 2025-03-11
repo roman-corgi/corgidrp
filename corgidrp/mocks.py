@@ -746,7 +746,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_L2a_headers(arrtype="SCI")
+        prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
         prihdr["OBSNUM"] = 000
         exthdr['KGAINPAR'] = 7
         #np.random.seed(456+i); 
