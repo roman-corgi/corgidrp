@@ -344,10 +344,9 @@ def northup(input_dataset,use_wcs=True):
         try: 
             xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
         except KeyError:
-	    ylen, xlen = sci_data.shape
             warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             xcen, ycen = xlen/2, ylen/2
-    
+
         # look for WCS solutions
         if use_wcs is True:
             astr_hdr = WCS(sci_hd)
