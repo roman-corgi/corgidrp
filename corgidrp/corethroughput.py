@@ -254,7 +254,7 @@ def generate_psf_cube(
         lens).
     Returns:
       3-d PSF cube of PSF images from a core throughput dataset, including their
-      data quality.
+      data quality, and corresponding headers as HDU units.
 
       NOTE: error data cubes will be added in a release after R3.0.2
     """
@@ -296,7 +296,28 @@ def generate_psf_cube(
         raise Exception(('The number of PSFs does not match the number of PSF '+
             ' locations.'))
 
-    return psf_cube, dq_cube
+    # PSF cube header
+    ext_hdr = dataset[0].ext_hdr
+    # Add history
+    ext_hdr['HISTORY'] = ('Core Throughput calibration derived from a '
+        f'set of frames from {dataset[0].ext_hdr["DATETIME"]} to '
+        f'{dataset[-1].ext_hdr["DATETIME"]}')
+    # Add specific information
+    ext_hdr['UNITS'] = 'photoelectron/pix/s'
+    ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
+        'observing sequence. PSFs are not normalized. They are the images of the '
+        'off-axis source. The data cube is centered around each PSF location')
+    # Add EXTNAME
+    psf_hdu = fits.ImageHDU(data=psf_cube, header=ext_hdr, name='PSFCUBE')
+
+    # Data quality cube
+    dq_hdr = dataset[0].dq_hdr
+    # Add specific information
+    dq_hdr['COMMENT'] = 'Data quality for each image' 
+    # Add EXTNAME
+    dq_hdu = fits.ImageHDU(data=dq_cube, header=dq_hdr, name='DQCUBE')
+
+    return psf_hdu, dq_hdu
 
 def generate_ct_cal(
     dataset_in,
@@ -326,7 +347,8 @@ def generate_ct_cal(
         lens).
     Returns:
       PSF cube, data quality cube, HDU list with the CT array measurements,
-      including the PSF locations, PSF cube header, and CT array header.
+      including the PSF locations, FPAM/FSAM positions, and corrresponding
+      headers. 
     """
     dataset = dataset_in.copy()
 
@@ -346,22 +368,9 @@ def generate_ct_cal(
             roi_radius=roi_radius,
             cfam_version=cfam_version)
 
-    psf_cube, dq_cube = generate_psf_cube(dataset, psf_loc_est,
+    psf_hdu, dq_hdu = generate_psf_cube(dataset, psf_loc_est,
         cfam_name=cfam_list[0], cfam_version=cfam_version)
-    # 1/ 3-d cube of PSF images cut around the PSF's location
-    ext_hdr = dataset[0].ext_hdr
-    # Add history
-    ext_hdr['HISTORY'] = ('Core Throughput calibration derived from a '
-        f'set of frames from {dataset[0].ext_hdr["DATETIME"]} to '
-        f'{dataset[-1].ext_hdr["DATETIME"]}')
-    # Add specific information
-    ext_hdr['UNITS'] = 'photoelectron/pix/s'
-    ext_hdr['COMMENT'] = ('Set of PSFs derived from a core throughput '
-        'observing sequence. PSFs are not normalized. They are the images of the '
-        'off-axis source. The data cube is centered around each PSF location')
-    # 2/ Data quality cube
-    dqhdu = fits.ImageHDU(data=dq_cube, name='DQCUBE')
-    # 3/ N sets of (x,y, CT measurements)
+    # N sets of (x,y, CT measurements)
     # x, y: PSF centers wrt EXCAM's (0,0) pixel
     ct_excam = np.array([psf_loc_est[:,0], psf_loc_est[:,1], ct_est])
     ct_hdr = fits.Header()
@@ -371,5 +380,20 @@ def generate_ct_cal(
         'Core throughput value for each PSF. (x,y,ct)=(data[0], data[1], data[2])')
     ct_hdr['UNITS'] = 'PSF location: EXCAM pixels. Core throughput: values between 0 and 1.'
     ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
-
-    return psf_cube, dq_cube, ct_hdu_list, ext_hdr, ct_hdr
+    # Values of FPAM during CT observations (needed to derive the FPM's center
+    # during CT observations given a coronagraphic dataset). The values do not
+    # change during CT observations
+    fpam_hv = [dataset_in[0].ext_hdr['FPAM_H'], dataset_in[0].ext_hdr['FPAM_V']]
+    fpam_hdr = fits.Header()
+    fpam_hdr['COMMENT'] = 'FPAM H and V values during the core throughput observations'
+    fpam_hdr['UNITS'] = 'micrometer'
+    ct_hdu_list += [fits.ImageHDU(data=fpam_hv, header=fpam_hdr, name='CTFPAM')]
+    # Values of FSAM during CT observations (needed to derive the FPM's center
+    # during CT observations given a coronagraphic dataset). The values do not
+    # change during CT observations
+    fsam_hv = [dataset_in[0].ext_hdr['FSAM_H'], dataset_in[0].ext_hdr['FSAM_V']]
+    fsam_hdr = fits.Header()
+    fsam_hdr['COMMENT'] = 'FSAM H and V values during the core throughput observations'
+    fsam_hdr['UNITS'] = 'micrometer'
+    ct_hdu_list += [fits.ImageHDU(data=fsam_hv, header=fsam_hdr, name='CTFSAM')]
+    return psf_hdu, ct_hdu_list, dq_hdu

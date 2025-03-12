@@ -1406,6 +1406,10 @@ class FpamFsamCal(Image):
        [-0.09509319, 0.        ]], dtype=float)
     default_trans = np.array([fpam_to_excam_modelbased, fsam_to_excam_modelbased])
 
+    ###################
+    ### Constructor ###
+    ###################
+
     def __init__(self, data_or_filepath, date_valid=None):
         if date_valid is None:
             date_valid = time.Time.now()
@@ -1486,7 +1490,11 @@ class CoreThroughputCalibration(Image):
       hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that
         contains the elements of the core throughput calibration file.
     """
-    # Using the Image() constructor
+
+    ###################
+    ### Constructor ###
+    ###################
+
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None,
         dq=None, err_hdr=None, dq_hdr=None, input_hdulist=None,
         input_dataset=None):
@@ -1495,13 +1503,36 @@ class CoreThroughputCalibration(Image):
             err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr,
             input_hdulist=input_hdulist)
 
+        # Verify the extension header corresponds to the PSF cube
+        if self.ext_hdr['EXTNAME'] != 'PSFCUBE':
+            raise ValueError('The input data does not seem to contain the PSF '
+                'cube of measurements')
+
         # CT array measurements on EXCAM
-        if self.hdu_list[0].name == 'CTEXCAM':
-            self.ct_excam = self.hdu_list[0].data
-            self.ct_excam_hdr = self.hdu_list[0].header
+        idx_hdu = 0
+        if self.hdu_list[idx_hdu].name == 'CTEXCAM':
+            self.ct_excam = self.hdu_list[idx_hdu].data
+            self.ct_excam_hdr = self.hdu_list[idx_hdu].header
         else:
             raise ValueError('The HDU list does not seem to contain the CT '
                 'array of measurements')
+        # FPAM positions during CT observations
+        idx_hdu = 1
+        if self.hdu_list[idx_hdu].name == 'CTFPAM':
+            self.ct_fpam = self.hdu_list[idx_hdu].data
+            self.ct_fpam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the FPAM '
+                'value during core throughput observations')
+        # FSAM positions during CT observations
+        idx_hdu = 2
+        if self.hdu_list[idx_hdu].name == 'CTFSAM':
+            self.ct_fsam = self.hdu_list[idx_hdu].data
+            self.ct_fsam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the FPAM '
+                'value during core throughput observations')
+
         # File format checks 
         # Check PSF basis is a 3D set
         if self.data.ndim != 3:
@@ -1550,17 +1581,40 @@ class CoreThroughputCalibration(Image):
         if self.ext_hdr['DATATYPE'] != 'CoreThroughputCalibration':
             raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
 
-    def GetCTFPMPosition(corDataset, fpamfsamcal):
+    ###############
+    ### Methods ###
+    ###############
+
+    def GetCTFPMPosition(corDataset, ctcal, fpamfsamcal):
         """ Gets the FPM's center during a Core throughput observing sequence.
         
         Args:
           corDataset (): a dataset containing some coronagraphic observations.
+          ctcal (): a core throughput calibration file.
           fpamfsamcal (): an instance of the FpamFsamCal class.
     
         """
         # Read FPM location during the coronagraphic observations
         fpm_center_cor = [CorDataset[0].ext_hdr['MASKLOCX'],
             CorDataset[0].ext_hdr['MASKLOCY']]
+        # Read FPAM and FSAM values during the coronagraphic observations
+        fpam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
+            CorDataset[0].ext_hdr['FPAM_V']]
+        fsam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
+            CorDataset[0].ext_hdr['FPAM_V']]
+        # Read FPAM and FSAM values during the core throughput observations
+        fpam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
+            CorDataset[0].ext_hdr['FPAM_V']]
+        fsam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
+            CorDataset[0].ext_hdr['FPAM_V']]
+
+        # Compute delta FPAM and delta FSAM
+
+        # Get the transformation from FPAM to EXCAM and FSAM to EXCAM
+
+        # Get the shoft in EXCAM pixels of the FPM's center
+
+        # Get the FPM's center during the core throughput observations
         breakpoint()
     
 class PyKLIPDataset(pyKLIP_Data):
