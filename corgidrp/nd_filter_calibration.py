@@ -202,7 +202,7 @@ def _compute_od_for_file(entry, target, phot_method, phot_kwargs, ref_fpam_name,
     else:
         raise ValueError("phot_method must be Aperture or Gaussian.")
 
-    # Compute OD
+    # Compute OD - TO DO: this needs to be revisited
     transmission = phot_result[0] / expected_flux
     od = -math.log10(transmission)
     return od, x_center, y_center
