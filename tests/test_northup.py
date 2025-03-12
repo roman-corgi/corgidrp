@@ -116,7 +116,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         dq_input = input_data.dq
         dq_derot = derot_data.dq
 
-        sci_hd = input_data.ext_hd-r
+        sci_hd = input_data.ext_hd
         try:
             xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY']
         except KeyError:
