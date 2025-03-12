@@ -1594,7 +1594,9 @@ class CoreThroughputCalibration(Image):
         Args:
           corDataset (): a dataset containing some coronagraphic observations.
           fpamfsamcal (): an instance of the FpamFsamCal class.
-    
+
+        Returns:
+            Returns the FPM's center during a Core throughput observing sequence.
         """
         # Read FPM location during the coronagraphic observations
         cor_fpm_center = np.array([corDataset[0].ext_hdr['MASKLOCX'],

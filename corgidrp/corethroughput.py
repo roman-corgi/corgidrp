@@ -244,6 +244,8 @@ def generate_psf_cube(
     """
     Function that derives a 3-d cube of PSF images from a core throughput dataset.
 
+    # TODO: error data cubes will be added in a release after R3.0.2
+
     Args:
       dataset_in (corgidrp.data.Dataset): A core throughput dataset consisting of
         M clean frames (nominally 1024x1024) taken at different FSM positions.
@@ -256,8 +258,7 @@ def generate_psf_cube(
 
     Returns:
       3-d PSF cube of PSF images from a core throughput dataset, including their
-      data quality, and corresponding headers as HDU units. NOTE: error data
-      cubes will be added in a release after R3.0.2
+      data quality, and corresponding headers as HDU units. 
     """
     dataset = dataset_in.copy()
 
