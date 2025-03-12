@@ -153,7 +153,7 @@ def test_psf_pix_and_ct():
     assert np.all(psf_loc_est[0] == psf_loc_syn)
     assert np.abs(ct_est[0]-ct_syn) < 1e-16
 
-    print('Tests of PSF locations and CT values passed')
+    print('Tests about PSF locations and CT values passed')
 
 def test_fpm_pos():
     """
@@ -195,36 +195,42 @@ def test_fpm_pos():
             dataset_cor[0].ext_hdr['FPAM_V']])
     FSAM_center_pos_um =  np.array([dataset_cor[0].ext_hdr['FSAM_H'],
             dataset_cor[0].ext_hdr['FSAM_V']])
-    breakpoint()
     rng = np.random.default_rng(0)
     for _ in range(10):
         # Random shift for Delta H/V in um
-        delta_fpam_um = np.array([[rng.uniform(1,10)], [rng.uniform(1,10)]])
-        delta_fsam_um = np.array([[rng.uniform(1,10)], [rng.uniform(1,10)]])
+        delta_fpam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
+        delta_fsam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
         # Update dataset_ct headers
-
-        # TBD: Update proper call
+        dataset_ct[0].ext_hdr['FPAM_H'] = dataset_cor[0].ext_hdr['FPAM_H'] + delta_fpam_um[0]
+        dataset_ct[0].ext_hdr['FPAM_V'] = dataset_cor[0].ext_hdr['FPAM_V'] + delta_fpam_um[1]
+        dataset_ct[0].ext_hdr['FSAM_H'] = dataset_cor[0].ext_hdr['FSAM_H'] + delta_fsam_um[0]
+        dataset_ct[0].ext_hdr['FSAM_V'] = dataset_cor[0].ext_hdr['FSAM_V'] + delta_fsam_um[1]
+        # Create CT cal file
+        ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
+        # Input PSF cube, header, and CT information
+        ct_cal_file_tmp = CoreThroughputCalibration(ct_cal_inputs[0].data,
+            pri_hdr=dataset_ct[0].pri_hdr,
+            ext_hdr=ct_cal_inputs[0].header,
+            input_hdulist=ct_cal_inputs[1],
+            dq=ct_cal_inputs[2].data,
+            dq_hdr=ct_cal_inputs[2].header,
+            input_dataset=dataset_ct)
+        # Get CT FPM center
         fpam_ct_pix_out, fsam_ct_pix_out = \
-            corethroughput.GetFPMCTPosition(dataset_cor,
-            fpam_pos_cor=FPAM_center_pos_um,
-            fpam_pos_ct=FPAM_center_pos_um + delta_fpam_um.transpose()[0],
-            fsam_pos_cor=FSAM_center_pos_um,
-            fsam_pos_ct=FSAM_center_pos_um + delta_fsam_um.transpose()[0])
-
-        # Compare output with expected value
-
+            ct_cal_file_tmp.GetCTFPMPosition(
+                dataset_cor,
+                fpam_fsam_trans)
         # Expected shifts in EXCAM pixels
         delta_fpam_pix = fpam2excam_matrix @ delta_fpam_um
         delta_fsam_pix = fsam2excam_matrix @ delta_fsam_um
-        
-        # Some of the random tests have differences of ~1e-13, while others are
-        # exactly equal
-        fpam_center_ct_pix_in = FPM_center_pos_pix + delta_fpam_pix.transpose()[0]
-        assert np.all(fpam_center_ct_pix_out - fpam_center_ct_pix_in <= 1e-12)
-        fsam_center_ct_pix_in = FPM_center_pos_pix + delta_fsam_pix.transpose()[0]
-        assert np.all(fsam_center_ct_pix_out - fsam_center_ct_pix_in <= 1e-12)
+        # Compare output and input: Some of the random tests have differences
+        # of ~1e-13, while others are exactly equal
+        fpam_ct_pix_in = FPM_center_pos_pix + delta_fpam_pix
+        assert np.all(fpam_ct_pix_out - fpam_ct_pix_in <= 1e-12)
+        fsam_ct_pix_in = FPM_center_pos_pix + delta_fsam_pix
+        assert np.all(fsam_ct_pix_out - fsam_ct_pix_in <= 1e-12)
 
-    print('Tests of FPAM/FSAM to EXCAM passed')
+    print('Tests about FPAM/FSAM to EXCAM passed')
 
 def test_cal_file():
     """ Test creation of core throughput calibration file. """
@@ -307,7 +313,7 @@ def test_cal_file():
     if os.path.exists(ct_cal_file.filepath):
         os.remove(ct_cal_file.filepath)
 
-    print('Tests of the CT cal file passed')
+    print('Tests about the CT cal file passed')
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()
