@@ -1,11 +1,9 @@
 import os,math
 from corgidrp import data, mocks, astrom
 from corgidrp.l3_to_l4 import northup
-from astropy.io import fits
 from astropy.wcs import WCS
 from matplotlib import pyplot as plt
 import numpy as np
-from glob import glob
 
 # same function as Amanda's step function, will be imported once merged
 def create_wcs(input_dataset, astrom_calibration):
@@ -118,35 +116,36 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         dq_input = input_data.dq
         dq_derot = derot_data.dq
 
-	sci_hd = input_data.ext_hd-r
-	try:
+        sci_hd = input_data.ext_hd-r
+        try:
             xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY']
         except KeyError:
             warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
-	    ylen, xlen = sci_input.shape
+            ylen, xlen = sci_input.shape
             xcen, ycen = xlen/2, ylen/2
+
+        # check the angle offset
         astr_hdr = WCS(sci_hd)
-	angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0,1], astr_hdr.wcs.cd[1,1]))
+        angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0,1], astr_hdr.wcs.cd[1,1]))
 
         # the location for test
         x_value1 = input_dataset[0].ext_hdr['X_1VAL']
         y_value1 = input_dataset[0].ext_hdr['Y_1VAL']
-
-	r = np.sqrt((x_value1-xcen)**2+(y_value1-ycen)**2)
-	theta = np.rad2deg(np.arctan2(y_value1-ycen,x_value1-xcen))
-	if theta<0:
-            theta+=360
+        r = np.sqrt((x_value1-xcen)**2+(y_value1-ycen)**2)
+        theta = np.rad2deg(np.arctan2(y_value1-ycen,x_value1-xcen))
+        if theta<0:
+           theta+=360
         
         # the location for test in the derotated images
-	x_test = round(xcen + r*np.cos(np.deg2rad(angle_offset+theta)))
-	y_test = round(ycen + r*np.sin(np.deg2rad(angle_offset+theta)))
+        x_test = round(xcen + r*np.cos(np.deg2rad(angle_offset+theta)))
+        y_test = round(ycen + r*np.sin(np.deg2rad(angle_offset+theta)))
 
         # check if rotation works properly
         assert(sci_input[y_value1,x_value1] != sci_derot[y_value1,x_value1])
         assert(dq_input[y_value1,x_value1] != dq_derot[y_value1,x_value1])
 
-	assert(math.isclose(sci_derot[y_test,x_test],sci_input[y_value1,x_value1],rel_tol=0.01))
-	assert(dq_input[y_value1,x_value1] == dq_derot[y_test,x_test])
+        assert(math.isclose(sci_derot[y_test,x_test],sci_input[y_value1,x_value1],rel_tol=0.01))
+        assert(dq_input[y_value1,x_value1] == dq_derot[y_test,x_test])
 
         # check if the derotated DQ frame has no non-integer values (except NaN)
         non_integer_mask = (~np.isnan(dq_derot)) & (dq_derot % 1 != 0)
