@@ -452,18 +452,6 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     wave, filter_trans = read_filter_curve(filter_file)
     calspec_filepath = get_calspec_file(star_name) 
     flux_ref = read_cal_spec(calspec_filepath, wave)
-
-    # i think we need to account for telescope collecting area here, otherwise
-    # flux returned by this function is not in -e/s, but -e/s/cm^2?
-    # TO DO: add obscuration %
-    telescope_diam = 2.4
-    obscuration_factor = 0          # central obscurtaion, for now just keeping 0
-    radius_m = telescope_diam / 2.0
-    area_m2 = np.pi * (radius_m**2)
-    if obscuration_factor > 0:
-        area_m2 *= (1 - obscuration_factor)  # e.g. reduce area by 10%
-
-    area_cm2 = area_m2 * 1e4
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
@@ -472,16 +460,14 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
-    total_flux = flux*area_cm2
-    
     result = aper_phot(image, **phot_kwargs)
     if phot_kwargs.get('background_sub', False):
         ap_sum, ap_sum_err, back = result
     else:
         ap_sum, ap_sum_err = result
 
-    fluxcal_fac = total_flux / ap_sum
-    fluxcal_fac_err = total_flux / ap_sum**2 * ap_sum_err
+    fluxcal_fac = flux / ap_sum
+    fluxcal_fac_err = flux / ap_sum**2 * ap_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
         np.array([[fluxcal_fac]]),
@@ -572,17 +558,6 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     wave, filter_trans = read_filter_curve(filter_file)
     calspec_filepath = get_calspec_file(star_name)
     flux_ref = read_cal_spec(calspec_filepath, wave)
-
-    # i think we need to account for telescope collecting area here
-    # TO DO: add obscuration %
-    telescope_diam = 2.4
-    obscuration_factor = 0          # central obscurtaion, for now just keeping 0
-    radius_m = telescope_diam / 2.0
-    area_m2 = np.pi * (radius_m**2)
-    if obscuration_factor > 0:
-        area_m2 *= (1 - obscuration_factor)  # e.g. reduce area by 10%
-
-    area_cm2 = area_m2 * 1e4
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
@@ -591,15 +566,13 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
-    total_flux = flux*area_cm2
-    
     if phot_kwargs.get('background_sub', False):
         gauss_sum, gauss_sum_err, back = phot_by_gauss2d_fit(image, **phot_kwargs)
     else:
         gauss_sum, gauss_sum_err = phot_by_gauss2d_fit(image, **phot_kwargs)
     
-    fluxcal_fac = total_flux / gauss_sum
-    fluxcal_fac_err = total_flux / gauss_sum**2 * gauss_sum_err
+    fluxcal_fac = flux / gauss_sum
+    fluxcal_fac_err = flux / gauss_sum**2 * gauss_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
         np.array([[fluxcal_fac]]),
