@@ -9,13 +9,20 @@ import corgidrp
 import corgidrp.data as data
 from corgidrp.mocks import create_default_L3_headers, create_ct_psfs
 from corgidrp.data import Image, Dataset, FpamFsamCal, CoreThroughputCalibration
-from corgidrp import corethroughput, caldb
+from corgidrp import corethroughput
+
+# If a run has crashed before being able to remove the test CT cal file,
+# remove it before importing caldb, which scans for new entries in the cal folder
+ct_cal_test_file = 'CoreThroughputCalibration_2025-02-15T00:00:00.fits'
+if os.path.exists(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file)):
+    os.remove(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file))
+from corgidrp import caldb
 
 here = os.path.abspath(os.path.dirname(__file__))
 
 def setup_module():
     """
-    Create a dataset with some representative psf responses. 
+    Create datasets needed for the UTs
     """
     global cfam_name
     cfam_name = '1F'
@@ -215,13 +222,16 @@ def test_cal_file():
 
     # Write core throughput calibration file
     ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
-    ct_cal_file_in = CoreThroughputCalibration(
-        ct_cal_inputs[0], pri_hdr=dataset_ct[0].pri_hdr, ext_hdr=ct_cal_inputs[3],
-        dq=ct_cal_inputs[1], input_hdulist=ct_cal_inputs[2],
+    # Input PSF cube, header, and CT information
+    ct_cal_file_in = CoreThroughputCalibration(ct_cal_inputs[0].data,
+        pri_hdr=dataset_ct[0].pri_hdr,
+        ext_hdr=ct_cal_inputs[0].header,
+        input_hdulist=ct_cal_inputs[1],
+        dq=ct_cal_inputs[2].data,
+        dq_hdr=ct_cal_inputs[2].header,
         input_dataset=dataset_ct)
     # It's fine to use a hardcoded filename for UTs
-    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir,
-        filename='CoreThroughputCalibration_2025-02-15T00:00:00.fits')
+    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir, filename=ct_cal_test_file)
 
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
@@ -234,9 +244,6 @@ def test_cal_file():
     # Test: open calibration file
     try:
         ct_cal_file = corgidrp.data.CoreThroughputCalibration(ct_cal_file_in.filepath)
-        # Check EXTNAME is as expected
-        if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
-            raise ValueError('The extension name of the CT values on EXCAM is not correct')
     except:
         raise IOError('CT cal file was not saved')
 
@@ -266,6 +273,9 @@ def test_cal_file():
             loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
 
     # Test 2: PSF positions and CT map
+    # Check EXTNAME is as expected
+    if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
+        raise ValueError('The extension name of the CT values on EXCAM is not correct')
     # x location wrt FPM
     assert np.all(psf_loc_input[:,0] == ct_cal_file.ct_excam[0])
     # y location wrt FPM
@@ -273,6 +283,17 @@ def test_cal_file():
     # CT map
     assert np.all(ct_input == ct_cal_file.ct_excam[2])
 
+    # Test 3: FPAM and FSAM positions during the CT observations are present
+    # Check EXTNAME is as expected
+    if ct_cal_file.ct_fpam_hdr['EXTNAME'] != 'CTFPAM':
+        raise ValueError('The extension name of the FPAM values on EXCAM is not correct')
+    assert np.all(ct_cal_file.ct_fpam == np.array([dataset_ct[0].ext_hdr['FPAM_H'],
+        dataset_ct[0].ext_hdr['FPAM_V']]))
+    if ct_cal_file.ct_fsam_hdr['EXTNAME'] != 'CTFSAM':
+        raise ValueError('The extension name of the FSAM values on EXCAM is not correct')
+    assert np.all(ct_cal_file.ct_fsam == np.array([dataset_ct[0].ext_hdr['FSAM_H'],
+        dataset_ct[0].ext_hdr['FSAM_V']]))
+    
     # Remove test CT cal file
     if os.path.exists(ct_cal_file.filepath):
         os.remove(ct_cal_file.filepath)
