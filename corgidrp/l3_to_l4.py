@@ -346,7 +346,7 @@ def northup(input_dataset,use_wcs=True):
         except KeyError:
             warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             xcen, ycen = xlen/2, ylen/2
-
+    
         # look for WCS solutions
         if use_wcs is True:
             astr_hdr = WCS(sci_hd)
