@@ -1378,13 +1378,6 @@ class FpamFsamCal(Image):
     a 2x2 array with real values. Model cases are fpam_to_excam_modelbased and
     fsam_to_excam_modelbased, see below.
 
-    The use of the delta FPAM/FSAM positions and the rotation matrices is based
-    on the prescription provided on 1/14/25: "H/V values to EXCAM row/column pixels"
-
-          delta_pam = np.array([[dh], [dv]]) # fill these in
-          M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
-          delta_pix = M @ delta_pam 
-
     Args:
         data_or_filepath (dict or str): either a filepath string corresponding to an
                                         existing FpamFsamCal file saved to disk or an
@@ -1585,38 +1578,43 @@ class CoreThroughputCalibration(Image):
     ### Methods ###
     ###############
 
-    def GetCTFPMPosition(corDataset, ctcal, fpamfsamcal):
+    def GetCTFPMPosition(self,
+        corDataset,
+        fpamfsamcal):
         """ Gets the FPM's center during a Core throughput observing sequence.
+
+        The use of the delta FPAM/FSAM positions and the rotation matrices is
+        based on the prescription provided on 1/14/25: "H/V values to EXCAM
+        row/column pixels"
+
+          delta_pam = np.array([[dh], [dv]]) # fill these in
+          M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
+          delta_pix = M @ delta_pam
         
         Args:
           corDataset (): a dataset containing some coronagraphic observations.
-          ctcal (): a core throughput calibration file.
           fpamfsamcal (): an instance of the FpamFsamCal class.
     
         """
-        breakpoint()
         # Read FPM location during the coronagraphic observations
-        fpm_center_cor = [CorDataset[0].ext_hdr['MASKLOCX'],
-            CorDataset[0].ext_hdr['MASKLOCY']]
+        cor_fpm_center = np.array([corDataset[0].ext_hdr['MASKLOCX'],
+            corDataset[0].ext_hdr['MASKLOCY']])
         # Read FPAM and FSAM values during the coronagraphic observations
-        fpam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
-            CorDataset[0].ext_hdr['FPAM_V']]
-        fsam_cor = [CorDataset[0].ext_hdr['FSAM_H'],
-            CorDataset[0].ext_hdr['FSAM_V']]
-        # Read FPAM and FSAM values during the core throughput observations
-        fpam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
-            CorDataset[0].ext_hdr['FPAM_V']]
-        fsam_cor = [CorDataset[0].ext_hdr['FSAM_H'],
-            CorDataset[0].ext_hdr['FSAM_V']]
-
+        cor_fpam = np.array([corDataset[0].ext_hdr['FPAM_H'],
+            corDataset[0].ext_hdr['FPAM_V']])
+        cor_fsam = np.array([corDataset[0].ext_hdr['FSAM_H'],
+            corDataset[0].ext_hdr['FSAM_V']])
         # Compute delta FPAM and delta FSAM
-
-        # Get the transformation from FPAM to EXCAM and FSAM to EXCAM
-
+        delta_fpam_um = self.ct_fpam - cor_fpam
+        delta_fsam_um = self.ct_fsam - cor_fsam
+        # Follow the array prescription from the doc string
+        delta_fpam_um = np.array([delta_fpam_um]).transpose()
+        delta_fsam_um = np.array([delta_fsam_um]).transpose()
         # Get the shift in EXCAM pixels for FPAM and FSAM
-
-        # Get the FPAM and FSAM centers during the core throughput observations
-        breakpoint()
+        delta_fpam_excam = (fpamfsamcal.data[0] @ delta_fpam_um).transpose()[0]
+        delta_fsam_excam = (fpamfsamcal.data[1] @ delta_fsam_um).transpose()[0]
+        # Return the FPAM and FSAM centers during the core throughput observations
+        return cor_fpm_center + delta_fpam_excam, cor_fpm_center + delta_fsam_excam
     
 class PyKLIPDataset(pyKLIP_Data):
     """
