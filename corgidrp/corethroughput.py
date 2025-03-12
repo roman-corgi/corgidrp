@@ -253,6 +253,7 @@ def generate_psf_cube(
       cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
+
     Returns:
       3-d PSF cube of PSF images from a core throughput dataset, including their
       data quality, and corresponding headers as HDU units. NOTE: error data
@@ -345,6 +346,7 @@ def generate_ct_cal(
         in pixels. Adjust based on desired λ/D.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
+
     Returns:
       PSF cube, data quality cube, HDU list with the CT array measurements,
       including the PSF locations, FPAM/FSAM positions, and corrresponding
