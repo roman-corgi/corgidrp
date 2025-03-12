@@ -113,18 +113,40 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
 
     for i, (input_data,derot_data) in enumerate(zip(input_dataset,derot_dataset)):
         # read the original mock file and derotated file
-        im_input = input_data.data
-        im_derot = derot_data.data
+        sci_input = input_data.data
+        sci_derot = derot_data.data
         dq_input = input_data.dq
         dq_derot = derot_data.dq
 
-        # the location for test, where the mock file has 1 in DQ
+	sci_hd = input_data.ext_hd-r
+	try:
+            xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY']
+        except KeyError:
+            warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
+	    ylen, xlen = sci_input.shape
+            xcen, ycen = xlen/2, ylen/2
+        astr_hdr = WCS(sci_hd)
+	angle_offset = np.rad2deg(-np.arctan2(-astr_hdr.wcs.cd[0,1], astr_hdr.wcs.cd[1,1]))
+
+        # the location for test
         x_value1 = input_dataset[0].ext_hdr['X_1VAL']
         y_value1 = input_dataset[0].ext_hdr['Y_1VAL']
 
+	r = np.sqrt((x_value1-xcen)**2+(y_value1-ycen)**2)
+	theta = np.rad2deg(np.arctan2(y_value1-ycen,x_value1-xcen))
+	if theta<0:
+            theta+=360
+        
+        # the location for test in the derotated images
+	x_test = round(xcen + r*np.cos(np.deg2rad(angle_offset+theta)))
+	y_test = round(ycen + r*np.sin(np.deg2rad(angle_offset+theta)))
+
         # check if rotation works properly
-        assert(im_input[y_value1,x_value1] != im_derot[y_value1,x_value1])
+        assert(sci_input[y_value1,x_value1] != sci_derot[y_value1,x_value1])
         assert(dq_input[y_value1,x_value1] != dq_derot[y_value1,x_value1])
+
+	assert(math.isclose(sci_derot[y_test,x_test],sci_input[y_value1,x_value1],rel_tol=0.01))
+	assert(dq_input[y_value1,x_value1] == dq_derot[y_test,x_test])
 
         # check if the derotated DQ frame has no non-integer values (except NaN)
         non_integer_mask = (~np.isnan(dq_derot)) & (dq_derot % 1 != 0)
@@ -134,14 +156,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         # check if the north vector really faces up
         astr_hdr_new = WCS(derot_data.ext_hdr)
         north_pa = -np.rad2deg(np.arctan2(-astr_hdr_new.wcs.cd[0,1], astr_hdr_new.wcs.cd[1,1]))
-        #print(north_pa)
+        assert(math.isclose(north_pa,0,abs_tol=1e-3))
 
-        #if north_pa > 0.05:
-        #       print(f"Warning: north vector is not facing exactly up; PA = {round(north_pa,3)}deg, expected = 0deg")
-#else:
-        assert(math.isclose(north_pa,0,abs_tol=0.01))
-
-        # save comparison figure
+        # (optional) save comparison figure
         ang = ang_list[i]
         if save_comp_figure:
           center_x, center_y = 850,850 # location of the compass
@@ -149,8 +166,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           fig, (ax0, ax1) = plt.subplots(nrows=1, ncols=2, sharex=True, figsize=(8,5))
 
           ax0.set_title('Original Mock Data')
-          ax0.imshow(im_input,origin='lower',vmin=0,vmax=5)
-          astr_hdr = WCS(input_data.ext_hdr)
+          ax0.imshow(sci_input,origin='lower',vmin=0,vmax=5)
+
           north_vector = np.array([astr_hdr.wcs.cd[0,1], astr_hdr.wcs.cd[1,1]])  # Points toward increasing Dec
           east_vector = np.array([astr_hdr.wcs.cd[0,0], astr_hdr.wcs.cd[1,0]])   # Points toward increasing RA
           # Normalize vectors for consistent display length
@@ -163,7 +180,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           ax0.text(center_x+75 * east_vector[0], center_y+75 * east_vector[1], 'E', c='w',fontsize=12)
 
           ax1.set_title(f'Derotated Data\n by {ang+north_angle}deg counterclockwise')
-          ax1.imshow(im_derot,origin='lower',vmin=0,vmax=5)
+          ax1.imshow(sci_derot,origin='lower',vmin=0,vmax=5)
 
           new_east_vector = np.array([astr_hdr_new.wcs.cd[0,0], astr_hdr_new.wcs.cd[1,0]])   # Points toward increasing RA
           new_north_vector = np.array([astr_hdr_new.wcs.cd[0,1], astr_hdr_new.wcs.cd[1,1]])

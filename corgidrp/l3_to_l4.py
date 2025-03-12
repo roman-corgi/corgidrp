@@ -314,7 +314,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     
     return dataset_out
 
-def northup(input_dataset,correct_wcs=True):
+def northup(input_dataset,use_wcs=True):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
     Now tentatively assuming the center of the FoV as the star position.
@@ -342,13 +342,14 @@ def northup(input_dataset,correct_wcs=True):
 
         # define the center for rotation
         try: 
-            xcen, ycen = ['STARLOCX'], sci_hd['STARLOCY'] 
+            xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
         except KeyError:
+	    ylen, xlen = sci_data.shape
             warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             xcen, ycen = xlen/2, ylen/2
     
         # look for WCS solutions
-        if correct_wcs is True:
+        if use_wcs is True:
             astr_hdr = WCS(sci_hd)
             CD1_2 = sci_hd['CD1_2']
             CD2_2 = sci_hd['CD2_2']
@@ -367,7 +368,7 @@ def northup(input_dataset,correct_wcs=True):
         sci_hd['HISTORY'] = log 
 
         # update WCS solutions
-        if correct_wcs:
+        if use_wcs:
             sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
             sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
             sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
