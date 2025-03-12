@@ -255,9 +255,8 @@ def generate_psf_cube(
         lens).
     Returns:
       3-d PSF cube of PSF images from a core throughput dataset, including their
-      data quality, and corresponding headers as HDU units.
-
-      NOTE: error data cubes will be added in a release after R3.0.2
+      data quality, and corresponding headers as HDU units. NOTE: error data
+      cubes will be added in a release after R3.0.2
     """
     dataset = dataset_in.copy()
 
@@ -344,7 +343,7 @@ def generate_ct_cal(
         It includes some pupil images of the unocculted source.
       roi_radius (int or float): Half-size of the box around the peak,
         in pixels. Adjust based on desired λ/D.
-      version (int): version number of the filters (CFAM, pupil, imaging
+      cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
     Returns:
       PSF cube, data quality cube, HDU list with the CT array measurements,
