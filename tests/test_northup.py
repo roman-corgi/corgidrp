@@ -4,6 +4,7 @@ from corgidrp.l3_to_l4 import northup
 from astropy.wcs import WCS
 from matplotlib import pyplot as plt
 import numpy as np
+import warnings
 
 # same function as Amanda's step function, will be imported once merged
 def create_wcs(input_dataset, astrom_calibration):
