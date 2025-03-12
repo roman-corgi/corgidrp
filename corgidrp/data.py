@@ -1594,27 +1594,28 @@ class CoreThroughputCalibration(Image):
           fpamfsamcal (): an instance of the FpamFsamCal class.
     
         """
+        breakpoint()
         # Read FPM location during the coronagraphic observations
         fpm_center_cor = [CorDataset[0].ext_hdr['MASKLOCX'],
             CorDataset[0].ext_hdr['MASKLOCY']]
         # Read FPAM and FSAM values during the coronagraphic observations
         fpam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
             CorDataset[0].ext_hdr['FPAM_V']]
-        fsam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
-            CorDataset[0].ext_hdr['FPAM_V']]
+        fsam_cor = [CorDataset[0].ext_hdr['FSAM_H'],
+            CorDataset[0].ext_hdr['FSAM_V']]
         # Read FPAM and FSAM values during the core throughput observations
         fpam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
             CorDataset[0].ext_hdr['FPAM_V']]
-        fsam_cor = [CorDataset[0].ext_hdr['FPAM_H'],
-            CorDataset[0].ext_hdr['FPAM_V']]
+        fsam_cor = [CorDataset[0].ext_hdr['FSAM_H'],
+            CorDataset[0].ext_hdr['FSAM_V']]
 
         # Compute delta FPAM and delta FSAM
 
         # Get the transformation from FPAM to EXCAM and FSAM to EXCAM
 
-        # Get the shoft in EXCAM pixels of the FPM's center
+        # Get the shift in EXCAM pixels for FPAM and FSAM
 
-        # Get the FPM's center during the core throughput observations
+        # Get the FPAM and FSAM centers during the core throughput observations
         breakpoint()
     
 class PyKLIPDataset(pyKLIP_Data):
