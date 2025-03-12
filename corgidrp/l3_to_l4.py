@@ -322,7 +322,7 @@ def northup(input_dataset,use_wcs=True):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        correct_wcs: if you want to correct WCS solutions after rotation, set True (default). 
+        use_wcs: if you want to correct WCS solutions after rotation, set True (default). 
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
