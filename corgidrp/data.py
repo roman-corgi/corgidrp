@@ -2171,7 +2171,7 @@ def unpackbits_64uint(arr, axis):
         axis (int): axis to unpack
 
     Returns:
-        _type_: np.ndarray of bits
+        np.ndarray of bits
     """
     arr = arr.astype('>u8')
     n = arr.view('u1')
@@ -2186,13 +2186,16 @@ def packbits_64uint(arr, axis):
         axis (int): axis to pack
 
     Returns:
-        _type_: np.ndarray of 64-bit unsigned integers
+        np.ndarray of 64-bit unsigned integers
     """
     return np.packbits(arr, axis=axis, bitorder='big').view('>u8')
 
 def get_flag_to_bit_map():
     """
     Returns a dictionary mapping flag names to bit positions.
+    
+    Returns:
+        dict: A dictionary with flag names as keys and bit positions (int) as values.
     """
     return {
         "bad_pixel_unspecified": 0,
@@ -2209,17 +2212,27 @@ def get_flag_to_bit_map():
 def get_flag_to_value_map():
     """
     Returns a dictionary mapping flag names to their decimal flag values.
+    
+    Returns:
+        dict: A dictionary with flag names as keys and decimal values (int) as values.
     """
     return {name: (1 << bit) for name, bit in get_flag_to_bit_map().items()}
 
 def get_value_to_flag_map():
     """
     Returns a dictionary mapping flag decimal values to flag names.
+    
+    Returns:
+        dict: A dictionary with decimal values (int) as keys and flag names as values.
     """
     return {value: name for name, value in get_flag_to_value_map().items()}
 
 def get_bit_to_flag_map():
     """
     Returns a dictionary mapping bit positions to flag names.
+    
+    Returns:
+        dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
+    
