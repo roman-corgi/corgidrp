@@ -295,7 +295,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
         threshold (float): threshold for flagging pixels in the DQ array, value above this threshold will be flagged in the DQ map as too nonlinear. By default it is set to infinity, user can change it to a different value.
     
     Returns:
-        linearized_dataset (corgidrp.data.Dataset): A non-linearity corrected version of the input dataset
+        (corgidrp.data.Dataset): A non-linearity corrected version of the input dataset
     """
     #Copy the dataset to start
     linearized_dataset = input_dataset.copy()
