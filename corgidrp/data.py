@@ -2189,3 +2189,37 @@ def packbits_64uint(arr, axis):
         _type_: np.ndarray of 64-bit unsigned integers
     """
     return np.packbits(arr, axis=axis, bitorder='big').view('>u8')
+
+def get_flag_to_bit_map():
+    """
+    Returns a dictionary mapping flag names to bit positions.
+    """
+    return {
+        "bad_pixel_unspecified": 0,
+        "data_replaced_by_filled_value": 1,
+        "bad_pixel": 2,
+        "hot_pixel": 3,
+        "not_used": 4,
+        "full_well_saturated_pixel": 5,
+        "non_linear_pixel": 6,
+        "pixel_affected_by_cosmic_ray": 7,
+        "TBD": 8,
+    }
+
+def get_flag_to_value_map():
+    """
+    Returns a dictionary mapping flag names to their decimal flag values.
+    """
+    return {name: (1 << bit) for name, bit in get_flag_to_bit_map().items()}
+
+def get_value_to_flag_map():
+    """
+    Returns a dictionary mapping flag decimal values to flag names.
+    """
+    return {value: name for name, value in get_flag_to_value_map().items()}
+
+def get_bit_to_flag_map():
+    """
+    Returns a dictionary mapping bit positions to flag names.
+    """
+    return {bit: name for name, bit in get_flag_to_bit_map().items()}
