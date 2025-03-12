@@ -250,6 +250,7 @@ def generate_psf_cube(
         It includes some pupil images of the unocculted source.
       psf_loc (array): Array of pair of values with PSFs position in (fractional)
         EXCAM pixels with respect to the pixel (0,0) in the PSF images.
+      cfam_name (string): Filter in CFAM. For instance, '1F', '4A', '3B' or '2C'.
       cfam_version (int): version number of the filters (CFAM, pupil, imaging
         lens).
     Returns:
