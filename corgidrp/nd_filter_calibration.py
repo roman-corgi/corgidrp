@@ -31,19 +31,25 @@ def load_transformation_matrix_from_fits(file_path):
         return np.array(data)
 
 
-def group_by_keyword(dataset, keyword):
+def group_by_keyword(dataset, keyword, header_type = "pri"):
     """
     Split the dataset by the keyword given and return a dictionary {target: subset}.
 
     Parameters:
         dataset (Dataset): The dataset to be split.
         keyword (String): FITS header keyword to split the dataset on.
+        header_type (String): keyword in primary "pri" or extension "ext" header
 
     Returns:
         dict: A dictionary where keys are unique target values and values are the 
             corresponding dataset subsets.
     """
-    split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=[keyword])
+    if header_type == "pri":
+        split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=[keyword])
+    elif header_type == "ext":
+        split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=[keyword])
+    else:
+        raise ValueError(header_type + " wrong header_type, should be called pri or ext")
     groups = {}
     for key, sub_ds in zip(unique_vals, split_datasets):
         target = key[0] if isinstance(key, tuple) else key
@@ -409,9 +415,9 @@ def create_nd_filter_cal(stars_dataset,
     dim_stars_dataset = []
     bright_stars_dataset = []
     try:
-        grouped_nd_files = group_by_keyword(stars_dataset, 'FPAMNAME')
+        grouped_nd_files = group_by_keyword(stars_dataset, 'FPAMNAME', header_type = "ext")
     except:
-        grouped_nd_files = group_by_keyword(stars_dataset, 'FSAMNAME')
+        grouped_nd_files = group_by_keyword(stars_dataset, 'FSAMNAME', header_type = "ext")
         
     dim_stars_dataset = []
     bright_stars_dataset = []
