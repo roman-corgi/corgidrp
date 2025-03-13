@@ -10,6 +10,7 @@ from corgidrp.data import Image, Dataset, DetectorParams
 import corgidrp.caldb as caldb
 from corgidrp.darks import build_trad_dark
 
+np.random.seed(123)
 
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024])
@@ -24,6 +25,15 @@ errhd = fits.Header()
 errhd["CASE"] = "test"
 dqhd = fits.Header()
 dqhd["CASE"] = "test"
+
+data_3d = np.ones([2,1024,1024]) * 2
+err_3d = np.zeros([2,1024,1024])
+err1_3d = np.ones([2,1024,1024])
+err2_3d = err1_3d.copy()
+err3_3d = np.ones([2,1,1024,1024]) * 0.5
+dq_3d = np.zeros([2,1024,1024], dtype = int)
+dq1_3d = dq_3d.copy()
+dq1_3d[0,0,0] = 1
 
 old_err_tracking = corgidrp.track_individual_errors
 # use default parameters
@@ -116,6 +126,23 @@ def test_add_error_term():
     assert image_test.err_hdr["Layer_1"] == "combined_error"
     assert image_test.err_hdr["Layer_2"] == "error_noid"
     assert image_test.err_hdr["Layer_3"] == "error_nuts"
+
+    image_3d = Image(data_3d,prhd,exthd,err_3d,dq_3d,errhd,dqhd)
+    image_3d.add_error_term(err1_3d, "error_noid")
+    assert image_3d.err[0,0,0,0] == err_3d[0,0,0]
+    image_3d.add_error_term(err2_3d, "error_nuts")
+    assert image_3d.err.shape == (3,2,1024,1024)
+    assert image_3d.err[0,0,0,0] == np.sqrt(err1_3d[0,0,0]**2 + err2_3d[0,0,0]**2)
+    image_3d.save(filename="test_image3d.fits")
+
+    image_test_3d = Image('test_image3d.fits')
+    assert np.array_equal(image_test_3d.dq, dq_3d)
+    assert np.array_equal(image_test_3d.err, image_3d.err)
+    assert image_test_3d.err.shape == (3,2,1024,1024)
+    assert image_test_3d.err_hdr["Layer_1"] == "combined_error"
+    assert image_test_3d.err_hdr["Layer_2"] == "error_noid"
+    assert image_test_3d.err_hdr["Layer_3"] == "error_nuts"
+
 
 def test_rescale_error():
     """
@@ -276,6 +303,10 @@ if __name__ == '__main__':
     test_rescale_error()
     test_err_dq_dataset()
     test_get_masked_data()
+    test_err_adderr_notrack()
+    test_read_many_errors_notrack()
+    test_err_array_sizes()
 
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))
+    os.remove('test_image3d.fits')

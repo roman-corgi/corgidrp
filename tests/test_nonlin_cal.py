@@ -15,7 +15,7 @@ from pathlib import Path
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException)
+from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException, nonlin_params_default)
 from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
 
 ############################# prepare simulated frames #######################
@@ -248,8 +248,19 @@ def test_psi():
     for mmerr in check_list:
         with pytest.raises(TypeError):
             calibrate_nonlin(dataset_nl, n_cal, n_mean, mmerr, min_write, max_write)
+
+def test_nonlin_params():
+    '''Check that the check function for nonlin_params works as expected.'''
+    # test bad input for nonlin_params
+    nonlin_params_bad = nonlin_params_default.copy()
+    nonlin_params_bad['colroi2'] = 'foo'
+    with pytest.raises(TypeError):
+        calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write,
+                        nonlin_params=nonlin_params_bad)
  
 if __name__ == '__main__':
+    print('Running test_nonlin_params')
+    test_nonlin_params()
     print('Running test_expected_results_nom_sub')
     test_expected_results_nom_sub()
     print('Running test_expected_results_time_sub')

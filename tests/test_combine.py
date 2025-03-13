@@ -306,3 +306,5 @@ def test_invalid_collapse():
 
 if __name__ == "__main__":
     test_mean_combine_subexposures()
+    test_mean_combine_subexposures_with_bad()
+    test_median_combine_subexposures()
