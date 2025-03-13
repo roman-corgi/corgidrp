@@ -27,7 +27,7 @@ def setup_module():
     global cfam_name
     cfam_name = '1F'
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_cor
+    global dataset_ct, dataset_ct_syn, dataset_cor, dataset_ct_interp
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
     global ct_in, ct_syn
@@ -314,6 +314,9 @@ def test_cal_file():
         os.remove(ct_cal_file.filepath)
 
     print('Tests about the CT cal file passed')
+
+def test_ct_interp()
+    """ Test core throughput interpolation. """
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()

@@ -1617,7 +1617,53 @@ class CoreThroughputCalibration(Image):
         delta_fsam_excam = (fpamfsamcal.data[1] @ delta_fsam_um).transpose()[0]
         # Return the FPAM and FSAM centers during the core throughput observations
         return cor_fpm_center + delta_fpam_excam, cor_fpm_center + delta_fsam_excam
-    
+
+    def InterpolateCT(self,
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal,
+        logr=False):
+        """ Interpolate CT value at a desired position of a coronagraphic
+            observation.
+
+            First implementation based on Max Millar-Blanchaer's suggestions
+            https://collaboration.ipac.caltech.edu/display/romancoronagraph/Max%27s+Interpolation+idea
+
+        # TODO: review accuracy of the method with simulated data that are more
+        # representative of future mission data.
+
+        Args:
+          x_cor (array): Values of the first dimension of the target locations
+              where the CT will be interpolated. Locations are EXCAM pixels
+              measured with respect to the FPM's center.
+          y_cor (array): Values of the first dimension of the target locations
+              where the CT will be interpolated. Locations are EXCAM pixels
+              measured with respect to the FPM's center.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class.
+          logr (bool) (optional): If True, radii are mapped into their logarithmic
+              values before constructing the interpolant.
+
+        Returns:
+            Returns interpolated value of the CT.
+        """
+        breakpoint()
+        # If x_cor or y_cor are scalars, cast them into a numpy array
+
+        # Get FPM's center during CT observations
+
+        # Get CT measurements relative to CT FPM's center
+
+        # Follow on Max's interpolation suggestions
+
+        # Raise ValueError if CT < 0, CT> 1 or all are NaN
+
+        return interpolated_values
+
+
 class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
