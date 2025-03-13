@@ -100,7 +100,7 @@ for j in range(n_mean):
     # Datetime cannot be duplicated
     image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
     # Temporary keyword value. Mean frame is TBD
-    image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
+    image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
     frame_list.append(image_sim)
 
 index = 0
@@ -123,8 +123,8 @@ for j in range(len(exp_repeat_counts)):
                                exp_time,coeffs,nonlin_flag=nonlin_flag,
                                divide_em=True)
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
-        # OBSTYPE has no KGAIN value, but NONLIN
-        image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
+        # OBSNAME has no KGAIN value, but NONLIN
+        image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
         frame_list.append(image_sim)
 dataset_kg = Dataset(frame_list)
 

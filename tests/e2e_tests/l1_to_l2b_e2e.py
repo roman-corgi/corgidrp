@@ -34,7 +34,10 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        exthdr['KGAINPAR'] = exthdr['KGAIN']
+        if 'KGAIN' in exthdr:
+            exthdr['KGAINPAR'] = exthdr['KGAIN']
+        else:
+            exthdr['KGAINPAR'] = 8.7
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         # Update FITS file

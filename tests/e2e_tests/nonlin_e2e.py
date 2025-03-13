@@ -16,30 +16,6 @@ from corgidrp import caldb
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
-def set_vistype_for_tvac(
-    list_of_fits,
-    ):
-    """ Adds proper values to VISTYPE for non-linearity calibration.
-
-    This function is unnecessary with future data because data will have
-    the proper values in VISTYPE. Hence, the "tvac" string in its name.
-    For reference, TVAC data used to calibrate non-linearity were the
-    following 382 files with IDs: 51841-51870 (30: mean frame). And NL:
-    51731-51840 (110), 51941-51984 (44), 51986-52051 (66), 55122-55187 (66),
-    55191-55256 (66)  
-
-    Args:
-    list_of_fits (list): list of FITS files that need to be updated.
-    """
-    print("Adding VISTYPE='PUPILIMG' to TVAC data")
-    for file in list_of_fits:
-        fits_file = fits.open(file)
-        prihdr = fits_file[0].header
-        # Adjust VISTYPE
-        prihdr['VISTYPE'] = 'PUPILIMG'
-        # Update FITS file
-        fits_file.writeto(file, overwrite=True)
-
 
 def fix_headers_for_tvac(
     list_of_fits,
@@ -57,6 +33,8 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         # Adjust VISTYPE
+        prihdr['VISTYPE'] = 'PUPILIMG'
+        # Adjust other keywords
         prihdr['OBSNUM'] = prihdr['OBSID']
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
@@ -102,8 +80,7 @@ def test_nonlin_cal_e2e(
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
     nonlin_l1_list.sort()
 
-    # Set TVAC OBSTYPE to MNFRAME/NONLIN (flight data should have these values)
-    set_vistype_for_tvac(nonlin_l1_list)
+    # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
     fix_headers_for_tvac(nonlin_l1_list)
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
