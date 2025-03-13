@@ -828,7 +828,7 @@ class KGain(Image):
             raise ValueError('The KGain calibration data should be just one float value')
 
         self._kgain = self.data[0,0] 
-        self._kgain_error = self.err[0,0]
+        self._kgain_error = self.err[0,0,0]
         
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
