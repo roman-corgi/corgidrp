@@ -781,8 +781,7 @@ def calc_spot_separation(spotArray, xOffset, yOffset, tuningParamDict):
 
 def star_center_from_satellite_spots(
     img_ref,
-    img_plus,
-    img_minus,
+    img_sat_spot,
     xOffsetGuess,
     yOffsetGuess,
     thetaOffsetGuess,
@@ -795,10 +794,8 @@ def star_center_from_satellite_spots(
     Args:
         img_ref (numpy.ndarray): 
             2D image representing a clean occulted focal-plane image with a base DM setting.
-        img_plus (numpy.ndarray): 
+        img_sat_spot (numpy.ndarray): 
             2D image representing a clean occulted focal-plane image with a relative satellite-spot DM setting added.
-        img_minus (numpy.ndarray): 
-            2D image representing a clean occulted focal-plane image with the same relative DM setting satellite-spot subtracted.
         xOffsetGuess (float): 
             Starting guess for the number of pixels in the x direction that the star is offset from the center pixel of the spots image.
         yOffsetGuess (float): 
@@ -819,13 +816,11 @@ def star_center_from_satellite_spots(
 
     # check inputs
     img_shp = img_ref.shape
-    if img_plus.shape != img_shp:
-        raise TypeError("img_plus not same shape as img_ref")
-    if img_minus.shape != img_shp:
-        raise TypeError("img_minus not same shape as img_ref")
-
-    # combine input images to create image with satellite spots
-    img_spots = 0.5 * (img_plus + img_minus) - img_ref
+    if img_sat_spot.shape != img_shp:
+        raise TypeError("Satellite spot image not same shape as science image.")
+ 
+    # subtract reference image from satellite spot image to highlight satellite spots
+    img_spots = img_sat_spot - img_ref
 
     tuningParamDict = satellite_spot_parameters[observing_mode]
     # estimate star location

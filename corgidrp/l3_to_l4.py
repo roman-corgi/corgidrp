@@ -25,68 +25,91 @@ def distortion_correction(input_dataset, distortion_calibration):
     return input_dataset.copy()
 
 
-def find_star(input_dataset, plus_satspot_dataset, minus_satspot_dataset, xOffsetGuess=0,
-    yOffsetGuess=0, thetaOffsetGuess=0):
+def find_star(input_dataset, xOffsetGuess=0, yOffsetGuess=0, thetaOffsetGuess=0):
     """
-    Find the star position for coronagraphic data using satellite spot images with positive and
-    negative deformable mirror modulation.
+    Determines the star position within a coronagraphic dataset by analyzing frames that 
+    contain satellite spots (indicated by ``SATSPOTS=1`` in the primary header). The 
+    function computes the median of all science frames (``SATSPOTS=0``) and the median 
+    of all satellite spot frames (``SATSPOTS=1``), then estimates the star location 
+    based on these median images and the initial guesses provided.
+
+    The star's (x, y) location is stored in each frame's extension header under 
+    ``STARLOCX`` and ``STARLOCY``.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        plus_satspot_dataset (corgidrp.data.Dataset): a dataset of Images with satellite spots
-        minus_satspot_dataset (corgidrp.data.Dataset): a dataset of Images with satellite spots
-        xOffsetGuess (float, optional): initial guess for x offset. Defaults to 0.
-        yOffsetGuess (float, optional): initial guess for y offset. Defaults to 0.
-        thetaOffsetGuess (float, optional): initial guess for theta offset. Defaults to 0.
+        input_dataset (corgidrp.data.Dataset):
+            A dataset of L3-level frames. Frames should be labeled in their primary 
+            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1`` 
+            (satellite spot frames).
+        xOffsetGuess (float, optional):
+            Initial guess for the star's x offset. Defaults to 0.
+        yOffsetGuess (float, optional):
+            Initial guess for the star's y offset. Defaults to 0.
+        thetaOffsetGuess (float, optional):
+            Initial guess for any angular rotation of the star center 
+            (in degrees, for example). Defaults to 0.
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with the stars identified
+        corgidrp.data.Dataset:
+            The original dataset, augmented with the star's (x, y) location stored in 
+            the extension header (``ext_hdr``) of each frame under the keys 
+            ``STARLOCX`` and ``STARLOCY``.
 
     Raises:
-        AssertionError: If the input frames have incorrect settings or observing modes.
+        AssertionError:
+            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if 
+            the frames do not all share the same observing mode (as determined by 
+            the ``FSMPRFL`` keyword).
 
     Notes:
-        This function finds the star position in each image of the input dataset by
-        analyzing the satellite spot frames. It takes the median of the provided frames
-        to compute the center and uses the satellite spot parameters to determine the star
-        location. The star location is then added to the frame headers of the input dataset.
+        • This function merges the science frames (for reference) and the satellite 
+          spot frames (for analysis) by taking a median image of each set.
+        • The star center is computed using the median images and the 
+          ``star_center.star_center_from_satellite_spots`` routine.
+        • Future enhancements may include separate handling of positive vs. negative 
+          satellite spot frames once the relevant metadata keywords are defined.
     """
+
     # Copy input dataset
     dataset = input_dataset.copy()
+
+    # Separate the dataset into frames with and without satellite spots
+    sci_frames = []
+    sat_spot_frames = []
+
+    # Keep track of observing mode
     observing_mode = []
 
     # Check that all frames for each input have the correct satellite spot setting
     # TODO: There may be a lot more we want to check for here
     # TODO: Add check on negative or positive DM offset setting once we know what the keyword is
     for frame in dataset.frames:
-        assert frame.pri_hdr["VISTYPE"] == "SCI", "Input has to be science frames."
-        assert frame.pri_hdr["SATSPOTS"] == 0, "Science frames should not have satellite spots."
-        observing_mode.append(frame.ext_hdr['FSMPRFL'])
-    for frame in plus_satspot_dataset:
-        assert frame.pri_hdr["VISTYPE"] == "SCI", "Input has to be science frames."
-        assert frame.pri_hdr["SATSPOTS"] == 1, "Satellite spot frames should have satellite spots."
-        observing_mode.append(frame.ext_hdr['FSMPRFL'])
-    for frame in minus_satspot_dataset:
-        assert frame.pri_hdr["VISTYPE"] == "SCI", "Input has to be science frames."
-        assert frame.pri_hdr["SATSPOTS"] == 1, "Satellite spot frames should have satellite spots."
-        observing_mode.append(frame.ext_hdr['FSMPRFL'])
+        if frame.pri_hdr["SATSPOTS"] == 0:
+            sci_frames.append(frame)
+            observing_mode.append(frame.ext_hdr['FSMPRFL'])
+        elif frame.pri_hdr["SATSPOTS"] == 1:
+            sat_spot_frames.append(frame)
+            observing_mode.append(frame.ext_hdr['FSMPRFL'])
+        else:
+            raise AssertionError("Input frames do not have correct SATSPOTS keyword set.")
 
     # Check if all frames have the same observing mode
     same_observing_mode = all(mode == observing_mode[0] for mode in observing_mode)
     assert same_observing_mode, "All frames should have the same observing mode."
     observing_mode = observing_mode[0]
 
+    sci_dataset = data.Dataset(sci_frames)
+    sat_spot_dataset = data.Dataset(sat_spot_frames)
+
     # For now we simply take the median of the provided frames to compute the center
-    img_ref = np.median(dataset.all_data, axis=0)
-    img_plus = np.median(plus_satspot_dataset.all_data, axis=0)
-    img_minus = np.median(minus_satspot_dataset.all_data, axis=0)
+    img_ref = np.median(sci_dataset.all_data, axis=0)
+    img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
 
     satellite_spot_parameters = star_center.satellite_spot_parameters
 
     star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
         img_ref=img_ref,
-        img_plus=img_plus,
-        img_minus=img_minus,
+        img_sat_spot=img_sat_spot,
         xOffsetGuess=xOffsetGuess,
         yOffsetGuess=yOffsetGuess,
         thetaOffsetGuess=thetaOffsetGuess,
