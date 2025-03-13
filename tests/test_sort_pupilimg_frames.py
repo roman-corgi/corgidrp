@@ -406,17 +406,17 @@ def test_kgain_sorting():
     exptime_kgain_list = []
     # This way there's no need to perform a sum check and identifies any issue
     for idx_frame, frame in enumerate(dataset_kgain):
-        if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
+        if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
             n_mean_frame += 1
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
-        elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
+        elif frame.pri_hdr['OBSNAME'] == 'KGAIN':
             n_kgain_test += 1
             filename_kgain_list += [frame.filename]
             exptime_kgain_list += [frame.ext_hdr['EXPTIME']]
         else:
             try:
                 raise Exception((f'Frame #{idx_frame}: Misidentified calibration' +
-                   f"type in the calibration dataset. OBSTYPE={frame.pri_hdr['OBSTYPE']}"))
+                   f"type in the calibration dataset. OBSNAME={frame.pri_hdr['OBSNAME']}"))
             except:
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Kgain calibration dataset'))
@@ -462,21 +462,21 @@ def test_nonlin_sorting_wo_change():
     cmdgain_nonlin_list = []
     # This way there's no need to perform a sum check and identifies any issue
     for idx_frame, frame in enumerate(dataset_nonlin_wo_change):
-        if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
+        if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
             n_mean_frame += 1
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
-        elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
+        elif frame.pri_hdr['OBSNAME'] == 'NONLIN':
             n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
             cmdgain_nonlin_list += [frame.ext_hdr['EMGAIN_C']]
         # Testing only non-unity gain frames for Non-linearity
-        elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
+        elif frame.pri_hdr['OBSNAME'] == 'KGAIN':
             pass
         else:
             try:
                 raise Exception((f'Frame #{idx_frame}: Misidentified calibration' +
-                   f"type in the calibration dataset. OBSTYPE={frame.pri_hdr['OBSTYPE']}"))
+                   f"type in the calibration dataset. OBSNAME={frame.pri_hdr['OBSNAME']}"))
             except:
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Non-linearity calibration dataset'))
@@ -525,21 +525,21 @@ def test_nonlin_sorting_w_change():
     cmdgain_nonlin_list = []
     # This way there's no need to perform a sum check and identifies any issue
     for idx_frame, frame in enumerate(dataset_nonlin_w_change):
-        if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
+        if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
             n_mean_frame += 1
             exptime_mean_frame_list += [frame.ext_hdr['EXPTIME']]
-        elif frame.pri_hdr['OBSTYPE'] == 'NONLIN':
+        elif frame.pri_hdr['OBSNAME'] == 'NONLIN':
             n_nonlin_test += 1
             filename_nonlin_list += [frame.filename]
             exptime_nonlin_list += [frame.ext_hdr['EXPTIME']]
             cmdgain_nonlin_list += [frame.ext_hdr['EMGAIN_C']]
         # Testing only non-unity gain frames for Non-linearity
-        elif frame.pri_hdr['OBSTYPE'] == 'KGAIN':
+        elif frame.pri_hdr['OBSNAME'] == 'KGAIN':
             pass
         else:
             try:
                 raise Exception((f'Frame #{idx_frame}: Misidentified calibration' +
-                   f"type in the calibration dataset. OBSTYPE={frame.pri_hdr['OBSTYPE']}"))
+                   f"type in the calibration dataset. OBSNAME={frame.pri_hdr['OBSNAME']}"))
             except:
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Non-linearity calibration dataset'))

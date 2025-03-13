@@ -23,8 +23,6 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-    # Make a copy of the input dataset to operate on
-    output_dataset = input_dataset.copy()
 
     if detector_regions is None:
         detector_regions = detector_areas
@@ -39,11 +37,11 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     new_err_list = []
 
     # Iterate over frames
-    for i, frame in enumerate(output_dataset):
+    for i, frame in enumerate(input_dataset):
 
-        frame_data = frame.data
-        frame_err = frame.err
-        frame_dq = frame.dq
+        frame_data = np.copy(frame.data)
+        frame_err = np.copy(frame.err)
+        frame_dq = np.copy(frame.dq)
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
         arrtype = frame.ext_hdr['ARRTYPE']
@@ -123,15 +121,16 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         out_frames_dq.append(image_dq)
         out_frames_bias.append(bias[:,0]) # save 1D version of array
 
-        # Update header with new frame dimensions
-        frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
-        frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
-
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data)
     out_frames_err_arr = np.array(out_frames_err)
     out_frames_dq_arr = np.array(out_frames_dq)
     out_frames_bias_arr = np.array(out_frames_bias, dtype=np.float32)
+    # try to free some memory
+    del out_frames_data, out_frames_err, out_frames_dq, out_frames_bias
+
+    # Make a copy of the input dataset to operate on
+    output_dataset = input_dataset.copy()
 
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
@@ -143,6 +142,10 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         frame.dq = out_frames_dq_arr[i]
         # frame.bias = out_frames_bias_arr[i]
         frame.add_extension_hdu("BIAS",data=out_frames_bias_arr[i])
+
+        # Update header with new frame dimensions
+        frame.ext_hdr['NAXIS1'] = out_frames_data_arr[i].shape[1]
+        frame.ext_hdr['NAXIS2'] = out_frames_data_arr[i].shape[0]
 
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")

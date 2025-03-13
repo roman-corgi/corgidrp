@@ -34,7 +34,6 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        exthdr['KGAINPAR'] = exthdr['KGAIN']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
@@ -71,7 +70,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
             # Modify the extension header to set KGAIN to 8.7
             pri_hdr = hdulist[0].header
             ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-            ext_hdr["KGAIN"] = 8.7
+            ext_hdr["KGAINPAR"] = 8.7
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)

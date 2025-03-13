@@ -28,7 +28,7 @@ def sort_pupilimg_frames(
     the calibration type: k-gain. non-linearity.
 
     The output dataset has an added keyword value in its extended header:
-    OBSTYPE with values 'MNFRAME' (for mean frame), 'KGAIN' (for K-gain),
+    OBSNAME with values 'MNFRAME' (for mean frame), 'KGAIN' (for K-gain),
     and 'NONLIN' (for non-linearity).
 
     Args:
@@ -84,8 +84,8 @@ def sort_pupilimg_frames(
     for frame in split_exptime[0][idx_mean_frame]:
         if int(extract_frame_id(frame.filename)) in frame_id_mean_frame:
             exptime_mean_frame = frame.ext_hdr['EXPTIME']
-            # Update keyword OBSTYPE
-            frame.pri_hdr['OBSTYPE'] = 'MNFRAME'
+            # Update keyword OBSNAME
+            frame.pri_hdr['OBSNAME'] = 'MNFRAME'
             mean_frame_list += [frame]
             n_mean_frame += 1
             
@@ -169,13 +169,13 @@ def sort_pupilimg_frames(
     # Sort unity gain filenames
     unity_gain_filepath_arr = np.array(unity_gain_filepath_list)[idx_id_sort]
     cal_list = unity_gain_filepath_arr[idx_kgain_first:idx_kgain_last]
-    # Update OBSTYPE and take profit to check files are in the list
+    # Update OBSNAME and take profit to check files are in the list
     n_kgain = 0
     cal_frame_list = []
     for frame in dataset_cp:
         if frame.filepath in cal_list:
             vistype = frame.pri_hdr['VISTYPE']
-            frame.pri_hdr['OBSTYPE'] = 'KGAIN'
+            frame.pri_hdr['OBSNAME'] = 'KGAIN'
             cal_frame_list += [frame]
             n_kgain += 1
 
@@ -236,11 +236,11 @@ def sort_pupilimg_frames(
             # Sort unity gain filenames
             gain_filepath_arr = np.array(gain_filepath_list)[idx_id_sort]
             cal_list = gain_filepath_arr[idx_nonlin_first:idx_nonlin_last+1]
-            # Update OBSTYPE and take profit to check files are in the list
+            # Update OBSNAME and take profit to check files are in the list
             for frame in dataset_cp:
                 if frame.filepath in cal_list:
                     vistype = frame.pri_hdr['VISTYPE']
-                    frame.pri_hdr['OBSTYPE'] = 'NONLIN'
+                    frame.pri_hdr['OBSNAME'] = 'NONLIN'
                     cal_frame_list += [frame]
                     n_nonlin += 1
             nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
