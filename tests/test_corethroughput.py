@@ -7,7 +7,8 @@ from scipy.signal import decimate
 
 import corgidrp
 import corgidrp.data as data
-from corgidrp.mocks import create_default_L3_headers, create_ct_psfs
+from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
+    create_ct_interp)
 from corgidrp.data import Image, Dataset, FpamFsamCal, CoreThroughputCalibration
 from corgidrp import corethroughput
 
@@ -120,6 +121,15 @@ def setup_module():
     exthd['MASKLOCY'] = 513
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
     dataset_cor = Dataset(data_cor)
+
+    # PSF for CT map interpolation
+    data_ct = []
+    # Add synthetic pupil images
+    data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+    data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+    # Synthetic psfs with known CT values (mock.py)
+    data_ct += create_ct_interp()[0]
+    dataset_ct_interp = Dataset(data_ct)
 
 def test_psf_pix_and_ct():
     """
@@ -318,9 +328,29 @@ def test_cal_file():
 def test_ct_interp()
     """ Test core throughput interpolation. """
 
+    # Write core throughput calibration file
+    ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct_interp)
+    # Input PSF cube, header, and CT information
+    ct_cal_file_in = CoreThroughputCalibration(ct_cal_inputs[0].data,
+        pri_hdr=dataset_ct[0].pri_hdr,
+        ext_hdr=ct_cal_inputs[0].header,
+        input_hdulist=ct_cal_inputs[1],
+        dq=ct_cal_inputs[2].data,
+        dq_hdr=ct_cal_inputs[2].header,
+        input_dataset=dataset_ct)
+    # It's fine to use a hardcoded filename for UTs
+    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir, filename=ct_cal_test_file)
+
+    breakpoint()
+    # Add Max's UTs
+
+    # Add test to confirm that the angular mod produces the expected results
+    # (eg: sample at 0, 60; requesting 80 will produce the interpolated value for 20)
+
 if __name__ == '__main__':
     test_psf_pix_and_ct()
     test_fpm_pos()
     test_cal_file()
+    test_ct_interp()
 
 

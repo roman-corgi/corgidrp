@@ -2759,6 +2759,65 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
 
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
+def create_ct_interp(n_psfs=):
+    """
+    Create simulated data to test the class function that does core throughput
+    interpolation.
+
+    Args:
+        n_psfs (int) (optional): The number of PSFs to be simulated.
+
+    Returns:
+        corgidrp.data.Image: The simulated PSF Images
+        np.array: PSF locations
+        np.array: PSF CT values
+    """
+
+    # The shape of all PSFs is the same, and irrelevant.
+    # Their amplitude will be adjusted depending on their location.
+    imshape=(7,7)
+    psf_model = np.zeros(imshape)
+    # Set of known values at selected locations
+    psf_model[imshape[1]//2 - 3:imshape[1]//2 + 4,
+        imshape[0]//2 - 3:imshape[0]//2 + 4] = 1
+    psf_model[imshape[1]//2 - 2:imshape[1]//2 + 3,
+        imshape[0]//2 - 2:imshape[0]//2 + 3] = 2
+    psf_model[imshape[1]//2 - 1:imshape[1]//2 + 2,
+        imshape[0]//2 - 1:imshape[0]//2 + 2] = 3
+    psf_model[imshape[1]//2, imshape[0]//2] = 4
+
+    # Default headers
+    prhd, exthd = create_default_L2b_headers()
+    exthd['CFAMNAME'] = '1F'
+    # Mock error
+    err = np.ones([1024,1024])
+
+    # Simulate PSFs within two radii
+    psf_loc = []
+    half_psf = []
+    data_psf = []
+    breakpoint()
+    # Implement same test data as proposed by Max
+    rng = np.random.default_rng(0)
+    for i_psf in range(n_psfs):
+        image = np.zeros([1024, 1024])
+        # Insert PSF at random location within the SCI frame
+        x_image = (-1)**rng.integers(2)*rng.integers(22)
+        y_image = (-1)**rng.integers(2)*rng.integers(22)
+        image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
+            512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf_model
+        # Adjust intensity following some radial profile
+        amp = 1 + np.sqrt(x_image**2+y_image**2)/31
+        image *= amp
+        # List of known positions
+        psf_loc += [[512+x_image-imshape[0]//2, 512+y_image-imshape[0]//2]]
+        # Add numerator of core throughput
+        half_psf += [image[image>=image.max()/2].sum()]
+        # Build up the Dataset
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
+
+    return data_psf, np.array(psf_loc), np.array(half_psf)
+
 default_wcs_string = """WCSAXES =                    2 / Number of coordinate axes                      
 CRPIX1  =                  0.0 / Pixel coordinate of reference point            
 CRPIX2  =                  0.0 / Pixel coordinate of reference point            
