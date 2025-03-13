@@ -2200,43 +2200,45 @@ def create_synthetic_satellite_spot_image(
     return image
 
 def create_satellite_spot_observing_sequence(
-        n_sci_frames, n_plus_frames, n_minus_frames, 
+        n_sci_frames, n_satspot_frames, 
         image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
         gaussian_fwhm=5.0, separation=14.79, center_offset=(0, 0), angle_offset=0,
         amplitude_multiplier=100, observing_mode='NFOV'):
     """
-    Creates three sequences of synthetic observing frames. Science frames without satellite spots, frames with positive
-    satellite spots, and frames with negative satellite spots. The synthetic frames are created using the
-    create_synthetic_satellite_spot_image function.
+        Creates a single dataset of synthetic observing frames. The dataset contains:
 
-    Args:
-        n_sci_frames (int): Number of science frames without satellite spots.
-        n_plus_frames (int): Number of science frames with positive satellite spots.
-        n_minus_frames (int): Number of science frames with negative satellite spots.
-        image_shape (tuple, optional): Shape of the synthetic image. Defaults to (201, 201).
-        bg_sigma (float, optional): Standard deviation of the background noise. Defaults to 1.0.
-        bg_offset (float, optional): Offset of the background noise. Defaults to 10.0.
-        gaussian_fwhm (float, optional): Full width at half maximum of the Gaussian spot. Defaults to 5.0.
-        separation (float, optional): Separation between the satellite spots. Defaults to 14.79.
-        center_offset (tuple, optional): Offset of the spot centers from the image center. Defaults to (0, 0).
-        angle_offset (float, optional): Offset of the spot angles. Defaults to 0.
-        amplitude_multiplier (int, optional): Amplitude multiplier for the satellite spots. Defaults to 100.
-        observing_mode (str, optional): Observing mode. Defaults to 'NFOV'.
+            • Science frames (with amplitude_multiplier=0), simulating no satellite spots.
+            • Satellite spot frames (with amplitude_multiplier > 0), simulating the presence of spots.
 
-    Returns:
-        tuple: A tuple containing three datasets of synthetic frames: 
-            - sci_dataset: dataset of science frames without satellite spots
-            - plus_dataset: dataset of science frames with positive satellite spots
-            - minus_dataset: dataset of science frames with negative satellite spots
-    """
+        Synthetic frames are generated using the create_synthetic_satellite_spot_image function, with added Gaussian noise 
+        and adjustable parameters for background level, spot separation, and overall amplitude scaling.
+
+        Args:
+            n_sci_frames (int): Number of science frames without satellite spots.
+            n_satspot_frames (int): Number of frames with satellite spots.
+            image_shape (tuple, optional): Shape of the synthetic image (height, width). Defaults to (201, 201).
+            bg_sigma (float, optional): Standard deviation of the background noise. Defaults to 1.0.
+            bg_offset (float, optional): Offset of the background noise. Defaults to 10.0.
+            gaussian_fwhm (float, optional): Full width at half maximum of the Gaussian spot. Defaults to 5.0.
+            separation (float, optional): Separation between the satellite spots. Defaults to 14.79.
+            center_offset (tuple, optional): Offset of the spot centers from the image center. Defaults to (0, 0).
+            angle_offset (float, optional): Offset of the spot angles. Defaults to 0.
+            amplitude_multiplier (int, optional): Amplitude multiplier for the satellite spots. Defaults to 100.
+            observing_mode (str, optional): Observing mode. Must be one of ['NFOV', 'WFOV', 'SPEC660', 'SPEC730']. 
+                Defaults to 'NFOV'.
+
+        Returns:
+            data.Dataset: A single dataset object containing both science frames (no satellite spots) 
+                and satellite spot frames. The science frames have header value "SATSPOTS" set to 0, 
+                while the satellite spot frames have "SATSPOTS" set to 1.
+        """
 
     assert len(image_shape) == 2, "Data shape needs to have two values"
     assert observing_mode in ['NFOV', 'WFOV', 'SPEC660', 'SPEC730'], "Invalid mode. Mode has to be one of 'NFOV', 'WFOV', 'SPEC660', 'SPEC730'"
 
     # Create the synthetic image with the Gaussians.
     sci_frames = []
-    plus_frames = []
-    minus_frames = []
+    satspot_frames = []
     
     prihdr, exthdr = create_default_headers()
     prihdr['TELESCOP'] = 'ROMAN'
@@ -2260,41 +2262,25 @@ def create_satellite_spot_observing_sequence(
               amplitude_multiplier=0
         )
         sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        sci_frame.pri_hdr["VISTYPE"] = "SCI"
         # Add header indicating this is not a satellite frame
         sci_frame.pri_hdr["SATSPOTS"] = 0
         sci_frame.filename = "sci_frame_{0}.fits".format(i)
         sci_frames.append(sci_frame)
-    sci_dataset = data.Dataset(sci_frames)
 
-    # Make science image with satellite spots, positive mirror command
-    for i in range(n_plus_frames):
-        plus_image = create_synthetic_satellite_spot_image(
+    # Make science image with satellite spots, positive and negative mirror commands are currently the same
+    for i in range(n_satspot_frames):
+        satspot_image = create_synthetic_satellite_spot_image(
             image_shape, bg_sigma, bg_offset, gaussian_fwhm,
             separation, center_offset, angle_offset, amplitude_multiplier
         )
-        plus_frame = data.Image(plus_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        plus_frame.pri_hdr["VISTYPE"] = "SCI"
+        satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         # Add header indicating this is a satellite frame
         # TODO: Missing is something to distinguish negative and positive amplitudes for the deformable mirror
-        plus_frame.pri_hdr["SATSPOTS"] = 1
-        plus_frame.filename = "plus_frame_{0}.fits".format(i)
-        plus_frames.append(plus_frame)
-    plus_dataset = data.Dataset(plus_frames)
+        satspot_frame.pri_hdr["SATSPOTS"] = 1
+        satspot_frame.filename = "plus_frame_{0}.fits".format(i)
+        satspot_frames.append(satspot_frame)
+    
+    all_frames = sci_frames + satspot_frames
+    dataset = data.Dataset(all_frames)
 
-    # Make science image with satellite spots, positive mirror command  
-    for i in range(n_minus_frames):
-        minus_image = create_synthetic_satellite_spot_image(
-            image_shape, bg_sigma, bg_offset, gaussian_fwhm,
-             separation, center_offset, angle_offset, amplitude_multiplier
-        )
-        minus_frame = data.Image(minus_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        minus_frame.pri_hdr["VISTYPE"] = "SCI"
-        # Add header indicating this is a satellite frame
-        # TODO: Missing is something to distinguish negative and positive amplitudes for the deformable mirror
-        minus_frame.pri_hdr["SATSPOTS"] = 1
-        minus_frame.filename = "minus_frame_{0}.fits".format(i)
-        minus_frames.append(minus_frame)
-    minus_dataset = data.Dataset(minus_frames)
-
-    return sci_dataset, plus_dataset, minus_dataset
+    return dataset

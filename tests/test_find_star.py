@@ -19,10 +19,16 @@ def test_find_star():
     separation = satellite_spot_parameters['NFOV']['separation']['spotSepPix']
 
     # Generate test data
-    sci_dataset, plus_dataset, minus_dataset = mocks.create_satellite_spot_observing_sequence(
-            n_sci_frames=3, n_plus_frames=3, n_minus_frames=3, 
-            image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
-            gaussian_fwhm=5.0, separation=separation, center_offset=(0, 0), angle_offset=0,
+    input_dataset = mocks.create_satellite_spot_observing_sequence(
+            n_sci_frames=3,
+            n_satspot_frames=3, 
+            image_shape=(201, 201),
+            bg_sigma=1.0,
+            bg_offset=10.0,
+            gaussian_fwhm=5.0,
+            separation=separation,
+            center_offset=(0, 0),
+            angle_offset=0,
             amplitude_multiplier=100)
 
     xOffsetGuess = 0
@@ -30,8 +36,7 @@ def test_find_star():
     thetaOffsetGuess = 0
 
     dataset_with_center = find_star(
-        input_dataset=sci_dataset, plus_satspot_dataset=plus_dataset,
-        minus_satspot_dataset=minus_dataset, xOffsetGuess=xOffsetGuess,
+        input_dataset=input_dataset, xOffsetGuess=xOffsetGuess,
         yOffsetGuess=yOffsetGuess, thetaOffsetGuess=thetaOffsetGuess)
 
     assert dataset_with_center.frames[0].ext_hdr['STARLOCX'] < 0.1
