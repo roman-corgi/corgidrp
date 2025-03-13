@@ -8,7 +8,7 @@
     "outputdir": "/Users/ygouf/git/cgi-sit/13-tdd/vi_tdd_04_iit_data_processing/output_drp_L4/",
     "steps": [
         {
-            "name": "create_wvs",
+            "name": "create_wcs",
             "calibs": {
                 "AstrometricCalibration": "AUTOMATIC"
             }

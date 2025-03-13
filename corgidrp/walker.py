@@ -11,6 +11,8 @@ import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.l2b_to_l3
+import corgidrp.l3_to_l4
 import corgidrp.photon_counting
 import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
@@ -18,6 +20,7 @@ import corgidrp.detector
 import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
+import corgidrp.fluxcal
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -44,7 +47,15 @@ all_steps = {
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
-    "get_pc_mean" : corgidrp.photon_counting.get_pc_mean
+    "get_pc_mean" : corgidrp.photon_counting.get_pc_mean,
+    "divide_by_exptime" : corgidrp.l2b_to_l3.divide_by_exptime,
+    "northup" : corgidrp.l3_to_l4.northup,
+    "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper,
+    "update_to_l3": corgidrp.l2b_to_l3.update_to_l3,
+    "create_wcs": corgidrp.l2b_to_l3.create_wcs,
+    "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
+    "find_star": corgidrp.l3_to_l4.find_star,
+    "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
