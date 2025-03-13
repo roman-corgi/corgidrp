@@ -19,6 +19,8 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
         - AstrometricCalibration
     '''
 
+    #TODO: Generate mock astrometric calibration data. 
+
     # Read in the os11 data and format it into a dataset
     # Reading things in based on hlc_os11_example.py
 
@@ -37,7 +39,6 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
     roll = data[:,3]
     frame_exptime_sec = data[:,4]
     nframes = data[:,6].astype(int)
-
 
     mock_pri_header, mock_ext_header = create_default_L2b_headers()
 
@@ -88,9 +89,6 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
             if star[ibatch] == 2:
                 new_image.pri_hdr.set('PSFREF', 1)
 
-
-            
-
             image_list.append(new_image)
 
 
@@ -100,6 +98,8 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
     #############################################
     #### Add a sat spot image to the dataset ####
     #############################################
+    #For now assuming there's just one since the step function in progress doesn't break things up. 
+    #We'll want it do later. 
 
     #Create a mock satellite spot image with the same center as the PSF images. 
     satellite_spot_image = create_synthetic_satellite_spot_image([55,55],1e-4,0,2,14.79)
@@ -119,6 +119,8 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
     image_list.append(sat_spot_image)
 
     mock_dataset = data.Dataset(image_list)
+
+    ## Next step run things through the walker. 
 
 
     
