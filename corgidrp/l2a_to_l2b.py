@@ -289,7 +289,7 @@ def convert_to_electrons(input_dataset, k_gain):
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
-    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons",    "KGAIN":kgain, "KGAIN_ER": k_gain.error[0], "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain, "KGAIN_ER": k_gain.error[0], "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
     return kgain_dataset
 
 def em_gain_division(input_dataset):
