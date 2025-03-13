@@ -1592,8 +1592,10 @@ class CoreThroughputCalibration(Image):
           delta_pix = M @ delta_pam
         
         Args:
-          corDataset (): a dataset containing some coronagraphic observations.
-          fpamfsamcal (): an instance of the FpamFsamCal class.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class.
 
         Returns:
             Returns the FPM's center during a Core throughput observing sequence.
@@ -1617,7 +1619,7 @@ class CoreThroughputCalibration(Image):
         delta_fsam_excam = (fpamfsamcal.data[1] @ delta_fsam_um).transpose()[0]
         # Return the FPAM and FSAM centers during the core throughput observations
         return cor_fpm_center + delta_fpam_excam, cor_fpm_center + delta_fsam_excam
-    
+
 class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
