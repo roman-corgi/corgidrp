@@ -1,3 +1,5 @@
+import numpy as np
+
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -18,29 +20,37 @@ def test_find_star():
     satellite_spot_parameters = star_center.satellite_spot_parameters
     separation = satellite_spot_parameters['NFOV']['separation']['spotSepPix']
 
+    # Set the star center position for injection of satellite spots
+    image_shape = (201, 201)
+    injected_position = (111, 111)
+
     # Generate test data
     input_dataset = mocks.create_satellite_spot_observing_sequence(
             n_sci_frames=3,
             n_satspot_frames=3, 
-            image_shape=(201, 201),
+            image_shape=image_shape,
             bg_sigma=1.0,
             bg_offset=10.0,
             gaussian_fwhm=5.0,
             separation=separation,
-            center_offset=(0, 0),
+            star_center=injected_position,
             angle_offset=0,
             amplitude_multiplier=100)
 
-    xOffsetGuess = 0
-    yOffsetGuess = 0
+    # Set initial guesses for offsets
+    xOffsetGuess = injected_position[0] - image_shape[1] // 2
+    yOffsetGuess = injected_position[1] - image_shape[0] // 2
     thetaOffsetGuess = 0
 
     dataset_with_center = find_star(
         input_dataset=input_dataset, xOffsetGuess=xOffsetGuess,
         yOffsetGuess=yOffsetGuess, thetaOffsetGuess=thetaOffsetGuess)
 
-    assert dataset_with_center.frames[0].ext_hdr['STARLOCX'] < 0.1
-    assert dataset_with_center.frames[0].ext_hdr['STARLOCY'] < 0.1
+    measured_x, measured_y = (dataset_with_center.frames[0].ext_hdr['STARLOCX'],
+                            dataset_with_center.frames[0].ext_hdr['STARLOCY'])
+
+    assert np.isclose(injected_position[0], measured_x, atol=0.1)
+    assert np.isclose(injected_position[1], measured_y, atol=0.1)
 
     corgidrp.track_individual_errors = old_err_tracking
 
