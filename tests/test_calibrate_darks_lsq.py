@@ -23,12 +23,13 @@ rn=100 # e-/pix/frame
 bias=2000 # e-
 eperdn = 7 # e-/DN conversion; used in this example for all stacks
 
-EMgain_picks = (np.linspace(2, 5000, 7))
-exptime_picks = (np.linspace(2, 100, 7)) # 7x7 = 49 data points
-grid = np.meshgrid(EMgain_picks, exptime_picks)
-EMgain_arr = grid[0].ravel()
-exptime_arr = grid[1].ravel()
-kgain_arr = eperdn*np.ones_like(EMgain_arr) # all the same
+# EMgain_picks = (np.linspace(2, 5000, 7))
+# exptime_picks = (np.linspace(2, 100, 7)) # 7x7 = 49 data points
+# grid = np.meshgrid(EMgain_picks, exptime_picks)
+# EMgain_arr = grid[0].ravel()
+# exptime_arr = grid[1].ravel()
+# kgain_arr = eperdn*np.ones_like(EMgain_arr) # all the same
+
 #added in after emccd_detect makes the frames (see below)
 FPN = 21 # e
 # number of frames in each sub-stack of stack_arr:
@@ -39,7 +40,19 @@ N = 30#600 #30; can also replace with 30 to use those sub-stacks in the
 # image area, including "shielded" rows and cols:
 imrows, imcols, imr0c0 = imaging_area_geom('SCI', dat)
 
-dataset = create_synthesized_master_dark_calib(dat)
+def setup_module():
+    """
+    Sets up testing module
+    """
+    global dataset
+    dataset = create_synthesized_master_dark_calib(dat)
+
+def teardown_module():
+    """
+    Runs at the end. Deletes big unused variables
+    """
+    global dataset
+    del dataset
 
 # filter out expected warnings
 warnings.filterwarnings('ignore', category=UserWarning,

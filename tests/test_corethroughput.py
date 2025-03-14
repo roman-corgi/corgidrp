@@ -315,6 +315,22 @@ def test_cal_file():
 
     print('Tests about the CT cal file passed')
 
+
+def teardown_module():
+    """
+    Deletes variables
+    """
+    global cfam_name
+    del cfam_name
+    # CT and coronagraphic datasets
+    global dataset_ct, dataset_ct_syn, dataset_cor
+    del dataset_ct, dataset_ct_syn, dataset_cor
+    # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
+    global psf_loc_in, psf_loc_syn
+    global ct_in, ct_syn
+    del psf_loc_in, psf_loc_syn
+    del ct_in, ct_syn
+
 if __name__ == '__main__':
     test_psf_pix_and_ct()
     test_fpm_pos()
