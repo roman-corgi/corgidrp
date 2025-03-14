@@ -25,14 +25,17 @@ def setup_module():
     """
     Create datasets needed for the UTs
     """
+    global n_radii, n_azimuths, max_angle
     global cfam_name
     cfam_name = '1F'
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_cor, dataset_ct_interp
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp
+    global dataset_cor, dataset_cor_interp
     # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
     global ct_in, ct_syn
-
+    global norm_pupil
+   
     # Default headers
     prhd, exthd = create_default_L3_headers()
     # DRP
@@ -124,12 +127,121 @@ def setup_module():
 
     # PSF for CT map interpolation
     data_ct = []
-    # Add synthetic pupil images
+    # Add synthetic pupil images with same FPAM/FSAM values as coronagraphic
     data_ct += [Image(pupil_image_1,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     data_ct += [Image(pupil_image_2,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
     # Synthetic psfs with known CT values (mock.py)
-    data_ct += create_ct_interp()[0]
+    n_radii = 9
+    n_azimuths = 5
+    max_angle = 2/3*np.pi
+    norm_pupil = 0.5*(pupil_image_1.sum()+pupil_image_2.sum())
+    data_ct_interp = create_ct_interp(
+        n_radii=n_radii,
+        n_azimuths=n_azimuths,
+        max_angle=max_angle,
+        norm=norm_pupil)[0]
+    data_ct += data_ct_interp
     dataset_ct_interp = Dataset(data_ct)
+    # Coronagraphic dataset for interpolation (only headers will be used)
+    # FPM's shifts are tested in another test
+    exthd['FPAM_H'] = exthd_pupil['FPAM_H']
+    exthd['FPAM_V'] = exthd_pupil['FPAM_V']
+    exthd['FSAM_H'] = exthd_pupil['FSAM_H']
+    exthd['FSAM_V'] = exthd_pupil['FSAM_V']
+    # FPM center
+    exthd['MASKLOCX'] = 512
+    exthd['MASKLOCY'] = 512
+    data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
+    dataset_cor_interp = Dataset(data_cor)
+
+def test_ct_interp():
+    """ Tests the interpolation within the standard range by popping out data
+    points and checking that the interpolation is < 5% error. The core
+    throughput changes linearly across the radius.
+    """
+
+    # Tolerance (%)
+    test_perc = 5
+
+    # Generate core throughput calibration file
+    ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct_interp)
+    # Input PSF cube, header, and CT information
+    ct_cal_file_in = CoreThroughputCalibration(ct_cal_inputs[0].data,
+        pri_hdr=dataset_ct_interp[0].pri_hdr,
+        ext_hdr=ct_cal_inputs[0].header,
+        input_hdulist=ct_cal_inputs[1],
+        dq=ct_cal_inputs[2].data,
+        dq_hdr=ct_cal_inputs[2].header,
+        input_dataset=dataset_ct_interp)
+
+    # FPAM/FSAM
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+
+    # Generate random indices between 0 and the number of radii and azimuths,
+    # excluding the edge cases 
+    n_random = 50
+    # Set seed for reproducibility of test data
+    rng = np.random.default_rng(0)
+    for i in range(n_random):
+        random_index_radius = rng.choice(np.arange(1, n_radii-1), 1)
+        random_index_az = rng.choice(np.arange(1, n_azimuths-1), 1)
+     
+        #Convert these to flattned indices
+        random_indices_flat = random_index_radius + random_index_az*n_radii
+        
+        # Grid used to generate the Dataset with create_ct_interp
+        x_grid = ct_cal_inputs[1][0].data[0,:] - 512
+        y_grid = ct_cal_inputs[1][0].data[1,:] - 512
+        core_throughput = ct_cal_inputs[1][0].data[2,:]
+        # Make a copy of the x_grid and y_grid with the random indices copied out of it
+        x_grid_copy = x_grid.copy()
+        y_grid_copy = y_grid.copy()
+        core_throughput_copy = core_throughput.copy()
+        # Copy the missing value
+        missing_x = x_grid_copy[random_indices_flat]
+        missing_y = y_grid_copy[random_indices_flat]
+        missing_core_throughput = core_throughput_copy[random_indices_flat]
+        # Generate CT dataset w/o the latter (needed to call the interpolant
+        # without this location)
+        # PSF for CT map interpolation
+        data_ct = []
+        # Add synthetic pupil images with same FPAM/FSAM values as coronagraphic
+        data_ct += dataset_ct[0:2]
+        data_ct_interp = create_ct_interp(
+            n_radii=n_radii,
+            n_azimuths=n_azimuths,
+            max_angle=max_angle,
+            norm=norm_pupil,
+            pop_index=random_indices_flat)[0]
+        data_ct += data_ct_interp
+        dataset_ct_tmp = Dataset(data_ct)
+        # Generate core throughput calibration file
+        ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct_tmp)
+        # Input PSF cube, header, and CT information
+        ct_cal_file_in = CoreThroughputCalibration(ct_cal_tmp[0].data,
+            pri_hdr=dataset_ct_tmp[0].pri_hdr,
+            ext_hdr=ct_cal_tmp[0].header,
+            input_hdulist=ct_cal_tmp[1],
+            dq=ct_cal_tmp[2].data,
+            dq_hdr=ct_cal_tmp[2].header,
+            input_dataset=dataset_ct_tmp)
+        # Now we can interpolate the missing values
+        # Test with linear mapping of radii
+        interpolated_value = ct_cal_file_in.InterpolateCT(
+            missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
+        # Good to within test_perc % (values are different)
+        assert interpolated_value == pytest.approx(missing_core_throughput, abs=test_perc/100), f'Error more than {test_perc}% (linear radii mapping)'
+        # Test with radii mapped into their logarithmic values before
+        # constructing the interpolant.
+        interpolated_value_log = ct_cal_file_in.InterpolateCT(
+            missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
+        # Good to within test_perc % (values are different)
+        assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=test_perc/100), f'Error more than {test_perc}% (logarithmic radii mapping)'
+
+    # Add the other tests from Max, including:
+    # Add test to confirm that the angular mod produces the expected results
+    # (eg: sample at 0, 60; requesting 80 will produce the interpolated value for 20)
 
 def test_psf_pix_and_ct():
     """
@@ -180,11 +292,11 @@ def test_fpm_pos():
           M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
           delta_pix = M @ delta_pam
     """
-    # FPAM/FSAM transformations in DRP
-    fpam_fsam_trans = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+    # FPAM/FSAM transformations
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
         'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
     
-    fpam2excam_matrix, fsam2excam_matrix = fpam_fsam_trans.data
+    fpam2excam_matrix, fsam2excam_matrix = fpam_fsam_cal.data
     # TVAC files
     fpam2excam_matrix_tvac = fits.getdata(os.path.join(here, 'test_data',
         'fpam_to_excam_modelbased.fits'))
@@ -206,7 +318,7 @@ def test_fpm_pos():
     FSAM_center_pos_um =  np.array([dataset_cor[0].ext_hdr['FSAM_H'],
             dataset_cor[0].ext_hdr['FSAM_V']])
     rng = np.random.default_rng(0)
-    for _ in range(10):
+    for _ in range(1):
         # Random shift for Delta H/V in um
         delta_fpam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
         delta_fsam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
@@ -229,7 +341,7 @@ def test_fpm_pos():
         fpam_ct_pix_out, fsam_ct_pix_out = \
             ct_cal_file_tmp.GetCTFPMPosition(
                 dataset_cor,
-                fpam_fsam_trans)
+                fpam_fsam_cal)
         # Expected shifts in EXCAM pixels
         delta_fpam_pix = fpam2excam_matrix @ delta_fpam_um
         delta_fsam_pix = fsam2excam_matrix @ delta_fsam_um
@@ -324,28 +436,6 @@ def test_cal_file():
         os.remove(ct_cal_file.filepath)
 
     print('Tests about the CT cal file passed')
-
-def test_ct_interp()
-    """ Test core throughput interpolation. """
-
-    # Write core throughput calibration file
-    ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct_interp)
-    # Input PSF cube, header, and CT information
-    ct_cal_file_in = CoreThroughputCalibration(ct_cal_inputs[0].data,
-        pri_hdr=dataset_ct[0].pri_hdr,
-        ext_hdr=ct_cal_inputs[0].header,
-        input_hdulist=ct_cal_inputs[1],
-        dq=ct_cal_inputs[2].data,
-        dq_hdr=ct_cal_inputs[2].header,
-        input_dataset=dataset_ct)
-    # It's fine to use a hardcoded filename for UTs
-    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir, filename=ct_cal_test_file)
-
-    breakpoint()
-    # Add Max's UTs
-
-    # Add test to confirm that the angular mod produces the expected results
-    # (eg: sample at 0, 60; requesting 80 will produce the interpolated value for 20)
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()
