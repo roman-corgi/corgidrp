@@ -317,12 +317,12 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
 def northup(input_dataset,use_wcs=True):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
-    Now tentatively assuming the center of the FoV as the star position.
-    WCS correction is incorporated - the angle offset is calculated based on the CD information.
-
+    The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
+    With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
+  
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        use_wcs: if you want to correct WCS solutions after rotation, set True (default). 
+        use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
