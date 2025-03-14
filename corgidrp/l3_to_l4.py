@@ -25,7 +25,8 @@ def distortion_correction(input_dataset, distortion_calibration):
     return input_dataset.copy()
 
 
-def find_star(input_dataset, xOffsetGuess=0, yOffsetGuess=0, thetaOffsetGuess=0):
+def find_star(input_dataset, xOffsetGuess=0, yOffsetGuess=0, thetaOffsetGuess=0,
+              drop_satspots_frames=False):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
     contain satellite spots (indicated by ``SATSPOTS=1`` in the primary header). The 
@@ -119,13 +120,20 @@ def find_star(input_dataset, xOffsetGuess=0, yOffsetGuess=0, thetaOffsetGuess=0)
 
     # Add star location to frame headers
     # TODO: Do we want to save the spot location for diagnostics too?
-    for sci_frame in dataset.frames:
-        sci_frame.ext_hdr['STARLOCX'] = star_xy[0]
-        sci_frame.ext_hdr['STARLOCY'] = star_xy[1]
+    header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
+
+    if drop_satspots_frames:
+        dataset = sci_dataset
+
+    history_msg = f"Satellite spots analyzed. Star location at x={star_xy[0]} and y={star_xy[1]}."
+
+    dataset.update_after_processing_step(
+        history_msg,
+        header_entries=header_entries)
 
     return dataset
 
-def crop(input_dataset,sizexy=None,centerxy=None):
+def crop(input_dataset, sizexy=None, centerxy=None):
     """
     
     Crop the Images in a Dataset to a desired field of view. Default behavior is to 

@@ -859,7 +859,8 @@ def star_center_from_satellite_spots(
             ],
         )
 
-    star_xy = [xOffsetEst, yOffsetEst]
+    star_xy = [xOffsetEst + img_sat_spot.shape[1]//2,
+               yOffsetEst + img_sat_spot.shape[0]//2]
     star_xy = np.array(star_xy, dtype='float')
     list_spots_xy = np.array(list_spots_xy, dtype='float')
 
