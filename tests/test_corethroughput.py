@@ -109,7 +109,7 @@ def setup_module():
 
     # Coronagraphic dataset (only headers will be used)
     # FPAM/FSAM
-    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
+    # Choose some H/V values for FPAM/FSAM  during coronagraphic observations
     # These values are *different* than the ones in the dataset_ct defined before
     exthd['FPAM_H'] = 6757
     exthd['FPAM_V'] = 22424
