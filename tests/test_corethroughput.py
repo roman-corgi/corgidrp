@@ -113,7 +113,7 @@ def setup_module():
 
     # Coronagraphic dataset (only headers will be used)
     # FPAM/FSAM
-    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
+    # Choose some H/V values for FPAM/FSAM  during coronagraphic observations
     # These values are *different* than the ones in the dataset_ct defined before
     exthd['FPAM_H'] = 6757
     exthd['FPAM_V'] = 22424
@@ -491,6 +491,22 @@ def test_cal_file():
         os.remove(ct_cal_file.filepath)
 
     print('Tests about the CT cal file passed')
+
+
+def teardown_module():
+    """
+    Deletes variables
+    """
+    global cfam_name
+    del cfam_name
+    # CT and coronagraphic datasets
+    global dataset_ct, dataset_ct_syn, dataset_cor
+    del dataset_ct, dataset_ct_syn, dataset_cor
+    # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
+    global psf_loc_in, psf_loc_syn
+    global ct_in, ct_syn
+    del psf_loc_in, psf_loc_syn
+    del ct_in, ct_syn
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()
