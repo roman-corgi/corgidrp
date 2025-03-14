@@ -4,7 +4,7 @@ from astropy.time import Time
 from astropy.io import fits, ascii
 
 import corgidrp
-from corgidrp import astrom
+from corgidrp import astrom, data
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -399,4 +399,14 @@ def generate_ct_cal(
     fsam_hdr['COMMENT'] = 'FSAM H and V values during the core throughput observations'
     fsam_hdr['UNITS'] = 'micrometer'
     ct_hdu_list += [fits.ImageHDU(data=fsam_hv, header=fsam_hdr, name='CTFSAM')]
-    return psf_hdu, ct_hdu_list, dq_hdu
+
+    # Generate core throughput calibration file
+    ct_cal = data.CoreThroughputCalibration(psf_hdu.data,
+        pri_hdr=dataset[0].pri_hdr,
+        ext_hdr=psf_hdu.header,
+        input_hdulist=ct_hdu_list,
+        dq=dq_hdu.data,
+        dq_hdr=dq_hdu.header,
+        input_dataset=dataset)
+
+    return ct_cal

@@ -235,15 +235,7 @@ def test_fpm_pos():
         dataset_ct[0].ext_hdr['FSAM_H'] = dataset_cor[0].ext_hdr['FSAM_H'] + delta_fsam_um[0]
         dataset_ct[0].ext_hdr['FSAM_V'] = dataset_cor[0].ext_hdr['FSAM_V'] + delta_fsam_um[1]
         # Create CT cal file
-        ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
-        # Input PSF cube, header, and CT information
-        ct_cal_file_tmp = CoreThroughputCalibration(ct_cal_inputs[0].data,
-            pri_hdr=dataset_ct[0].pri_hdr,
-            ext_hdr=ct_cal_inputs[0].header,
-            input_hdulist=ct_cal_inputs[1],
-            dq=ct_cal_inputs[2].data,
-            dq_hdr=ct_cal_inputs[2].header,
-            input_dataset=dataset_ct)
+        ct_cal_file_tmp = corethroughput.generate_ct_cal(dataset_ct)
         # Get CT FPM center
         fpam_ct_pix_out, fsam_ct_pix_out = \
             ct_cal_file_tmp.GetCTFPMPosition(
@@ -265,15 +257,7 @@ def test_cal_file():
     """ Test creation of core throughput calibration file. """
 
     # Write core throughput calibration file
-    ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
-    # Input PSF cube, header, and CT information
-    ct_cal_file_in = CoreThroughputCalibration(ct_cal_inputs[0].data,
-        pri_hdr=dataset_ct[0].pri_hdr,
-        ext_hdr=ct_cal_inputs[0].header,
-        input_hdulist=ct_cal_inputs[1],
-        dq=ct_cal_inputs[2].data,
-        dq_hdr=ct_cal_inputs[2].header,
-        input_dataset=dataset_ct)
+    ct_cal_file_in = corethroughput.generate_ct_cal(dataset_ct)
     # It's fine to use a hardcoded filename for UTs
     ct_cal_file_in.save(filedir=corgidrp.default_cal_dir, filename=ct_cal_test_file)
 
