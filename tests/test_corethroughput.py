@@ -31,7 +31,7 @@ def setup_module():
     # CT and coronagraphic datasets
     global dataset_ct, dataset_ct_syn, dataset_pupil, dataset_ct_interp
     global dataset_cor, dataset_cor_interp
-    # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
+    # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
     global ct_in, ct_syn
     global norm_pupil
@@ -124,7 +124,6 @@ def setup_module():
     exthd['MASKLOCY'] = 513
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
     dataset_cor = Dataset(data_cor)
-    breakpoint()
 
     # PSF for CT map interpolation
     # Synthetic psfs with known CT values (mock.py)
@@ -235,7 +234,6 @@ def test_fpm_pos():
         dataset_ct[0].ext_hdr['FPAM_V'] = dataset_cor[0].ext_hdr['FPAM_V'] + delta_fpam_um[1]
         dataset_ct[0].ext_hdr['FSAM_H'] = dataset_cor[0].ext_hdr['FSAM_H'] + delta_fsam_um[0]
         dataset_ct[0].ext_hdr['FSAM_V'] = dataset_cor[0].ext_hdr['FSAM_V'] + delta_fsam_um[1]
-        breakpoint()
         # Create CT cal file
         ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct)
         # Input PSF cube, header, and CT information
@@ -346,21 +344,6 @@ def test_cal_file():
 
     print('Tests about the CT cal file passed')
 
-def teardown_module():
-    """
-    Deletes variables
-    """
-    global cfam_name
-    del cfam_name
-    # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_cor
-    del dataset_ct, dataset_ct_syn, dataset_cor
-    # arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
-    global psf_loc_in, psf_loc_syn
-    global ct_in, ct_syn
-    del psf_loc_in, psf_loc_syn
-    del ct_in, ct_syn
-    
 def test_ct_interp():
     """ Tests the interpolation within the standard range by popping out data
     points and checking that the interpolation is < 5% error. The core
@@ -407,9 +390,8 @@ def test_ct_interp():
         # Generate CT dataset w/o the latter (needed to call the interpolant
         # without this location)
         # PSF for CT map interpolation
-        data_ct = []
         # Add synthetic pupil images with same FPAM/FSAM values as coronagraphic
-        data_ct += dataset_pupil_interp
+        data_ct = dataset_pupil
         data_ct_interp = create_ct_interp(
             n_radii=n_radii,
             n_azimuths=n_azimuths,
@@ -513,6 +495,25 @@ def test_ct_interp():
     print((np.abs(np.array(err)) > 0.05).sum(), (np.abs(np.array(err_log)) > 0.05).sum())
     # (0.009310517577696853, 0.03884202149366278)
     breakpoint()
+
+'''
+def teardown_module():
+    """
+    Deletes variables
+    """
+    global cfam_name
+    del cfam_name
+    # CT and coronagraphic datasets
+    global dataset_ct, dataset_ct_syn, dataset_pupil, dataset_ct_interp
+    del dataset_ct, dataset_ct_syn, dataset_pupil, dataset_ct_interp
+    global dataset_cor, dataset_cor_interp
+    del dataset_cor, dataset_cor_interp
+    # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
+    global psf_loc_in, psf_loc_syn
+    global ct_in, ct_syn
+    del psf_loc_in, psf_loc_syn
+    del ct_in, ct_syn
+'''
 
 if __name__ == '__main__':
     test_psf_pix_and_ct()
