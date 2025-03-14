@@ -2762,7 +2762,8 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
 def create_ct_interp(
     n_radii=9,
     n_azimuths=5,
-    max_angle=None,
+    min_angle=0,
+    max_angle=6.2831853072,
     norm=1,
     pop_index=None,
     ):
@@ -2774,11 +2775,12 @@ def create_ct_interp(
     generated from a Dataset of PSF images.
 
     Args:
-        n_radii (int) (optional): Number of divisions along a radial direction.
-        n_azimuths (int) (optional): Number of divisions along the azimuth, from
+        n_radii (int): Number of divisions along a radial direction.
+        n_azimuths (int): Number of divisions along the azimuth, from
           zero to max_angle.
-        max_angle (float) (optional): Maximum angle in radians to be considered.
-        norm (float) (optional): Factor to multiply the CT profile. Useful if one
+        min_angle (float): Minimum angle in radians to be considered.
+        max_angle (float): Maximum angle in radians to be considered.
+        norm (float): Factor to multiply the CT profile. Useful if one
           wants the CT to be between 0 and 1 after the division by the total counts
           that happens when estimating the CT of the Dataset in corethroughput.py.
         pop_index (int) (optional): the Dataset skips the PSF with this index.
@@ -2790,8 +2792,6 @@ def create_ct_interp(
         np.array: PSF locations
         np.array: PSF CT values
     """
-    if max_angle is None:
-        max_angle = 2/3*np.pi
     if max_angle > 2*np.pi:
         print('You may have set a maximum angle in degrees instead of radians. '
             'Please check the value of max_angle is the one intended.')
@@ -2825,7 +2825,7 @@ def create_ct_interp(
     radii = np.logspace(np.log10(2), np.log10(9),n_radii) #From 2 to 9 lambda/D
     # lambda/D ~ 2.3 EXCAM pixels for Band 1 and HLC
     radii *= 2.3
-    azimuths = np.linspace(0, max_angle, n_azimuths) #Threefold symmetry
+    azimuths = np.linspace(min_angle, max_angle, n_azimuths) #Threefold symmetry
     
     # Create 2D grids for the radii and azimuths
     r_grid, theta_grid = np.meshgrid(radii, azimuths)

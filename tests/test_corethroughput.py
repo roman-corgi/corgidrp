@@ -160,9 +160,6 @@ def test_ct_interp():
     throughput changes linearly across the radius.
     """
 
-    # Tolerance (%)
-    test_perc = 5
-
     # Generate core throughput calibration file
     ct_cal_inputs = corethroughput.generate_ct_cal(dataset_ct_interp)
     # Input PSF cube, header, and CT information
@@ -223,17 +220,17 @@ def test_ct_interp():
             dq_hdr=ct_cal_tmp[2].header,
             input_dataset=dataset_ct_tmp)
         # Now we can interpolate the missing values
-        # Test with linear mapping of radii
+        # Test with linear mapping of radii (values are different)
         interpolated_value = ct_cal_file_in.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
-        # Good to within test_perc % (values are different)
-        assert interpolated_value == pytest.approx(missing_core_throughput, abs=test_perc/100), f'Error more than {test_perc}% (linear radii mapping)'
+        # Good to within 5% 
+        assert interpolated_value == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
-        # constructing the interpolant.
+        # constructing the interpolant (values are different)
         interpolated_value_log = ct_cal_file_in.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
-        # Good to within test_perc % (values are different)
-        assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=test_perc/100), f'Error more than {test_perc}% (logarithmic radii mapping)'
+        # Good to within 5%
+        assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (logarithmic radii mapping)'
 
 
     # Test that if the radius is out of the range then an error is thrown
@@ -248,8 +245,58 @@ def test_ct_interp():
         #Too small
         ct_cal_file_in.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
 
-    # Add test to confirm that the angular mod produces the expected results
-    # (eg: sample at 0, 60; requesting 80 will produce the interpolated value for 20)
+    # Test that something with an azimuth out of range returns the same result
+    # as within the range
+    azimuths = np.arctan2(y_grid, x_grid)
+    azimuths -= azimuths.min()
+    x_new_out = 0.9*np.max(radii)*np.cos(np.max(azimuths)+0.1)
+    y_new_out = 0.9*np.max(radii)*np.sin(np.max(azimuths)+0.1)
+    interpolated_value_out = ct_cal_file_in.InterpolateCT(
+        x_new_out, y_new_out, dataset_cor, fpam_fsam_cal)[0]
+
+    x_new_in = 0.9*np.max(radii)*np.cos(0.1)
+    y_new_in = 0.9*np.max(radii)*np.sin(0.1)
+    interpolated_value_in = ct_cal_file_in.InterpolateCT(
+        x_new_in, y_new_in, dataset_cor, fpam_fsam_cal)[0]
+
+    assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than 1% error"
+
+    # Make sure it still works with a non-zero starting azimuth 
+    data_ct = []
+    # Add synthetic pupil images with same FPAM/FSAM values as coronagraphic
+    data_ct += dataset_ct[0:2]
+    data_ct_interp = create_ct_interp(
+        n_radii=n_radii,
+        n_azimuths=n_azimuths,
+        min_angle=-0.1,
+        max_angle=max_angle,
+        norm=norm_pupil)[0]
+    data_ct += data_ct_interp
+    dataset_ct_az = Dataset(data_ct)
+    # Generate core throughput calibration file
+    ct_cal_az = corethroughput.generate_ct_cal(dataset_ct_az)
+    # Input PSF cube, header, and CT information
+    ct_cal_file_az = CoreThroughputCalibration(ct_cal_az[0].data,
+        pri_hdr=dataset_ct_az[0].pri_hdr,
+        ext_hdr=ct_cal_az[0].header,
+        input_hdulist=ct_cal_az[1],
+        dq=ct_cal_az[2].data,
+        dq_hdr=ct_cal_az[2].header,
+        input_dataset=dataset_ct_az)
+
+    # Out of range of the new shifted azimuths
+    x_az_out = 0.9*np.max(radii) * np.cos(max_angle + 0.2)
+    y_az_out = 0.9*np.max(radii) * np.sin(max_angle + 0.2)
+    interpolated_value_az_out = ct_cal_file_az.InterpolateCT(
+        x_az_out, y_az_out, dataset_cor, fpam_fsam_cal)[0]
+
+    # In range of the new shifted azimuths
+    x_az_in = 0.9*np.max(radii) * np.cos(0.2)
+    y_az_in = 0.9*np.max(radii) * np.sin(0.2)
+    interpolated_value_az_in = ct_cal_file_az.InterpolateCT(
+        x_az_in, y_az_in, dataset_cor, fpam_fsam_cal)[0]
+    
+    assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
 
 def test_psf_pix_and_ct():
     """
