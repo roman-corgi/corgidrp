@@ -1593,8 +1593,10 @@ class CoreThroughputCalibration(Image):
           delta_pix = M @ delta_pam
         
         Args:
-          corDataset (): a dataset containing some coronagraphic observations.
-          fpamfsamcal (): an instance of the FpamFsamCal class.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class.
 
         Returns:
             Returns the FPM's center during a Core throughput observing sequence.
