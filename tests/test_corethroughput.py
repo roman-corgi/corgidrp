@@ -194,14 +194,10 @@ def test_ct_interp():
         x_grid = ct_cal_inputs[1][0].data[0,:] - 512
         y_grid = ct_cal_inputs[1][0].data[1,:] - 512
         core_throughput = ct_cal_inputs[1][0].data[2,:]
-        # Make a copy of the x_grid and y_grid with the random indices copied out of it
-        x_grid_copy = x_grid.copy()
-        y_grid_copy = y_grid.copy()
-        core_throughput_copy = core_throughput.copy()
-        # Copy the missing value
-        missing_x = x_grid_copy[random_indices_flat]
-        missing_y = y_grid_copy[random_indices_flat]
-        missing_core_throughput = core_throughput_copy[random_indices_flat]
+        # Record the missing value
+        missing_x = x_grid[random_indices_flat]
+        missing_y = y_grid[random_indices_flat]
+        missing_core_throughput = core_throughput[random_indices_flat]
         # Generate CT dataset w/o the latter (needed to call the interpolant
         # without this location)
         # PSF for CT map interpolation
@@ -239,7 +235,19 @@ def test_ct_interp():
         # Good to within test_perc % (values are different)
         assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=test_perc/100), f'Error more than {test_perc}% (logarithmic radii mapping)'
 
-    # Add the other tests from Max, including:
+
+    # Test that if the radius is out of the range then an error is thrown
+    # Pick a data point that is out of the range. For instance, set y to zero
+    # and x to a value that is greater than the maximum radius
+    radii = np.sqrt(x_grid**2 + y_grid**2)
+    with pytest.raises(ValueError):
+        # Too Big
+        ct_cal_file_in.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal) 
+             
+    with pytest.raises(ValueError):
+        #Too small
+        ct_cal_file_in.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
+
     # Add test to confirm that the angular mod produces the expected results
     # (eg: sample at 0, 60; requesting 80 will produce the interpolated value for 20)
 

@@ -1707,17 +1707,17 @@ class CoreThroughputCalibration(Image):
        
         # Remove interpolation locations that are outside the radius range
         r_good = radius_cor >= radii.min()
-        if len(r_good) == 0:
+        if len(x_cor[r_good]) == 0:
             raise ValueError('All target radius are less than the minimum '
-                'radius in the core throughout data {:.2f}'.format(radii.min()))
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor
         x_cor = x_cor[r_good]
         y_cor = y_cor[r_good]
         r_good = radius_cor <= radii.max()
-        if len(r_good) == 0:
+        if len(x_cor[r_good]) == 0:
             raise ValueError('All target radius are greater than the maximum '
-                'radius in the core throughout data {:.2f}'.format(radii.max()))
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.max()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor
         x_cor = x_cor[r_good]
@@ -1741,9 +1741,9 @@ class CoreThroughputCalibration(Image):
        
         # Raise ValueError if CT < 0, CT> 1
         if np.any(interpolated_values < 0) or np.any(interpolated_values > 1): 
-             raise ValueError('Some interpolated core throughput values are '
-                 f'out of bounds (0,1): ({interpolated_values.min():.2f}, '
-                 f'{interpolated_values.max():.2f})')
+            raise ValueError('Some interpolated core throughput values are '
+                f'out of bounds (0,1): ({interpolated_values.min():.2f}, '
+                f'{interpolated_values.max():.2f})')
 
         # Raise ValueError if all CT are NaN
         if np.all(np.isnan(interpolated_values)):
