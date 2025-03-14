@@ -2822,10 +2822,12 @@ def create_ct_interp(
     data_psf = []
 
     #Create a dataset
-    radii = np.logspace(np.log10(2), np.log10(9),n_radii) #From 2 to 9 lambda/D
+    # From 2 to 9 lambda/D
+    radii = np.logspace(np.log10(2), np.log10(9),n_radii)
     # lambda/D ~ 2.3 EXCAM pixels for Band 1 and HLC
     radii *= 2.3
-    azimuths = np.linspace(min_angle, max_angle, n_azimuths) #Threefold symmetry
+    # Threefold symmetry
+    azimuths = np.linspace(min_angle, max_angle, n_azimuths)
     
     # Create 2D grids for the radii and azimuths
     r_grid, theta_grid = np.meshgrid(radii, azimuths)
