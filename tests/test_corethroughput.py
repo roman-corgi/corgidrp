@@ -152,6 +152,8 @@ def setup_module():
 
 def test_ctmap():
     """ Tests the creation of a core throughput map."""
+    # TBD
+    breakpoint()
 
 
 def test_psf_pix_and_ct():
