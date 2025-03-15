@@ -1651,7 +1651,7 @@ class CoreThroughputCalibration(Image):
           x_cor (numpy.ndarray): Values of the first dimension of the
               target locations where the CT will be interpolated. Locations are
               EXCAM pixels measured with respect to the FPM's center.
-          x_cor (numpy.ndarray): Values of the second dimension of the
+          y_cor (numpy.ndarray): Values of the second dimension of the
               target locations where the CT will be interpolated. Locations are
               EXCAM pixels measured with respect to the FPM's center.
           corDataset (corgidrp.data.Dataset): a dataset containing some

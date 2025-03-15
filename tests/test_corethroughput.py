@@ -145,8 +145,8 @@ def setup_module():
     exthd['FSAM_H'] = exthd_pupil['FSAM_H']
     exthd['FSAM_V'] = exthd_pupil['FSAM_V']
     # FPM center
-    exthd['MASKLOCX'] = 512
-    exthd['MASKLOCY'] = 512
+    exthd['STARLOCX'] = 512
+    exthd['STARLOCY'] = 512
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
     dataset_cor_interp = Dataset(data_cor)
 
@@ -371,8 +371,6 @@ def test_ct_interp():
     n_random = 50
     # Set seed for reproducibility of test data
     rng = np.random.default_rng(0)
-    err_interp = []
-    err_interp_log = []
     # Grid used to generate the Dataset with create_ct_interp
     x_grid = ct_cal_in.ct_excam[0,:] - 512
     y_grid = ct_cal_in.ct_excam[1,:] - 512
@@ -408,14 +406,12 @@ def test_ct_interp():
         interpolated_value = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
         # Good to within 5% 
-        err_interp += [interpolated_value - missing_core_throughput]
         assert interpolated_value == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
         # constructing the interpolant (values are different)
         interpolated_value_log = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
         # Good to within 5%
-        err_interp_log += [interpolated_value_log - missing_core_throughput]
         assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (logarithmic radii mapping)'
 
     # Test that if the radius is out of the range then an error is thrown
