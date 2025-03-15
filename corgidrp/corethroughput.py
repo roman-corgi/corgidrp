@@ -413,4 +413,41 @@ def generate_ct_cal(
 
     return ct_cal
 
-#def CreateCTMap()
+def CreateCTMap(
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal,
+        logr=False))
+    """
+    Create a CT map: Given a core throughput calibration file and a coronagraphic
+      dataset, derive 3-D list (x,y,ct) where (x,y) are some target locations
+      on EXCAM relative to the FPM's center and with valid values of the core
+      throughput.
+
+    The creation of the core throughput map relies on InterpolateCT(), a 
+      method of the CoreThroughputCalibration class in data.py. Valid core
+     throughput values are within the minimum and maxium radial distance from
+     the FPM's center in the core throughput dataset used to generate the
+     core throughput calibration file. Its options are inluded in the call of
+     this method too.
+
+    Args:
+      x_cor (numpy.ndarray): Values of the first dimension of the
+          target locations where the CT will be interpolated. Locations are
+          EXCAM pixels measured with respect to the FPM's center.
+      y_cor (numpy.ndarray): Values of the second dimension of the
+          target locations where the CT will be interpolated. Locations are
+          EXCAM pixels measured with respect to the FPM's center.
+      corDataset (corgidrp.data.Dataset): a dataset containing some
+          coronagraphic observations.
+      fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+          FpamFsamCal class.
+      logr (bool) (optional): If True, radii are mapped into their logarithmic
+          values before constructing the interpolant.
+
+    Returns:
+        A core throughput map with (x,y,ct) where x and y are locations
+        on EXCAM relative to the FPM's center with valid interpolated values of
+        the core throughput.
+    """

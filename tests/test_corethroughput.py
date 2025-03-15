@@ -150,6 +150,10 @@ def setup_module():
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
     dataset_cor_interp = Dataset(data_cor)
 
+def test_ctmap():
+    """ Tests the creation of a core throughput map."""
+
+
 def test_psf_pix_and_ct():
     """
     Test 1090881 - Given a core throughput dataset consisting of M clean frames
@@ -495,5 +499,6 @@ if __name__ == '__main__':
     test_fpm_pos()
     test_cal_file()
     test_ct_interp()
+    test_ct_map()
 
 
