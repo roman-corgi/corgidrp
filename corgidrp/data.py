@@ -1662,7 +1662,8 @@ class CoreThroughputCalibration(Image):
               values before constructing the interpolant.
 
         Returns:
-            Returns interpolated value of the CT and positions for valid locations.
+          Returns interpolated value of the CT and positions for valid
+            locations as a numpy ndarray.
         """
         if isinstance(x_cor, np.ndarray) is False:
             if isinstance(x_cor, int) or isinstance(x_cor, float):
@@ -1754,7 +1755,9 @@ class CoreThroughputCalibration(Image):
 
         # Extrapolation: Remove NaN values
         is_valid = np.where(np.isnan(interpolated_values) == False)[0]
-        return interpolated_values[is_valid], x_cor[is_valid], y_cor[is_valid]
+        return np.array([interpolated_values[is_valid],
+            x_cor[is_valid],
+            y_cor[is_valid]])
 
 class PyKLIPDataset(pyKLIP_Data):
     """
