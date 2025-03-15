@@ -480,4 +480,4 @@ def CreateCTMap(
             target_pix[0], target_pix[1], corDataset, fpamfsamcal, logr=logr)
 
     # Re-order output to match (x,y,ct)
-    return np.array(ct_interp)[[1,2,0]]
+    return ct_interp[[1,2,0]]

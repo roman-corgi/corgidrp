@@ -162,6 +162,13 @@ def test_ct_map():
 
     # Create CT map
     ct_map = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal)
+    
+    # CT values are within [0,1]
+    assert ct_map[2].min() >= 0
+    assert ct_map[2].max() <= 1
+    # Verify CT valuea are within the range of the input CT values
+    assert ct_map[2].min() >= ct_cal.ct_excam[2].min()
+    assert ct_map[2].max() <= ct_cal.ct_excam[2].max()
 
     # TBD
     breakpoint()

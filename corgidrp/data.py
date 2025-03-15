@@ -1662,7 +1662,7 @@ class CoreThroughputCalibration(Image):
               values before constructing the interpolant.
 
         Returns:
-          Returns interpolated value of the CT and positions for valid
+          Returns interpolated value of the CT, first, and positions for valid
             locations as a numpy ndarray.
         """
         if isinstance(x_cor, np.ndarray) is False:
