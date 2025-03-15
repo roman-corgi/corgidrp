@@ -414,10 +414,9 @@ def generate_ct_cal(
     return ct_cal
 
 def CreateCTMap(
-        x_cor,
-        y_cor,
         corDataset,
         fpamfsamcal,
+        
         logr=False))
     """
     Create a CT map: Given a core throughput calibration file and a coronagraphic
@@ -451,3 +450,5 @@ def CreateCTMap(
         on EXCAM relative to the FPM's center with valid interpolated values of
         the core throughput.
     """
+
+
