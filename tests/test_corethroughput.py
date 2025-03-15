@@ -116,8 +116,8 @@ def setup_module():
     exthd['FSAM_H'] = 29387
     exthd['FSAM_V'] = 12238
     # FPM center
-    exthd['MASKLOCX'] = 509
-    exthd['MASKLOCY'] = 513
+    exthd['STARLOCX'] = 509
+    exthd['STARLOCY'] = 513
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
     dataset_cor = Dataset(data_cor)
 
@@ -189,8 +189,8 @@ def test_fpm_pos():
    
     # test 2:
     # Using values within the range should return a meaningful value. Tested 10 times
-    FPM_center_pos_pix = np.array([dataset_cor[0].ext_hdr['MASKLOCX'],
-            dataset_cor[0].ext_hdr['MASKLOCY']])
+    FPM_center_pos_pix = np.array([dataset_cor[0].ext_hdr['STARLOCX'],
+            dataset_cor[0].ext_hdr['STARLOCY']])
     FPAM_center_pos_um = np.array([dataset_cor[0].ext_hdr['FPAM_H'],
             dataset_cor[0].ext_hdr['FPAM_V']])
     FSAM_center_pos_um =  np.array([dataset_cor[0].ext_hdr['FSAM_H'],
