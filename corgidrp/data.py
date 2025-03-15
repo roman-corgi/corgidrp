@@ -1066,7 +1066,7 @@ class DetectorParams(Image):
         default_values (dict): default values for detector parameters (fallback values)
         back_compat_mapping (dict): values to make test FITS files comply with new header standard
     """
-     # default detector params
+    # default detector params
     default_values = {
         'KGAINPAR' : 8.7,
         'FWC_PP_E' : 90000.,
@@ -1378,6 +1378,255 @@ class FluxcalFactor(Image):
             # use the start date for the filename by default
             self.filedir = "."
             self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
+
+class FpamFsamCal(Image):
+    """
+    Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
+    CGI model was consistent with FFT/TVAC tests. Transformation matrices are
+    a 2x2 array with real values. Model cases are fpam_to_excam_modelbased and
+    fsam_to_excam_modelbased, see below.
+
+    Args:
+        data_or_filepath (dict or str): either a filepath string corresponding to an
+                                        existing FpamFsamCal file saved to disk or an
+                                        array with the FPAM and FSAM rotation matrices
+        date_valid (astropy.time.Time): date after which these parameters are valid
+
+    Attributes:
+         fpam_to_excam_modelbased (array): default values for FPAM rotation matrices.
+         fsam_to_excam_modelbased (array): default values for FSAM rotation matrices.
+         default_trans (array): array collecting fpam_to_excam_modelbased and
+           fsam_to_excam_modelbased.
+    """
+    # default transformation matrices (model is consistent with FFT/TVAC tests)
+    # Signs +/- have been double checked against FFT/TVAC data
+    fpam_to_excam_modelbased = np.array([[ 0.        ,  0.12285012],
+       [-0.12285012, 0.        ]], dtype=float)
+    # Signs -/- have been double checked against FFT/TVAC data
+    fsam_to_excam_modelbased = np.array([[-0.        , -0.09509319],
+       [-0.09509319, 0.        ]], dtype=float)
+    default_trans = np.array([fpam_to_excam_modelbased, fsam_to_excam_modelbased])
+
+    ###################
+    ### Constructor ###
+    ###################
+
+    def __init__(self, data_or_filepath, date_valid=None):
+        if date_valid is None:
+            date_valid = time.Time.now()
+        # if filepath passed in, just load in from disk as usual
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+
+            # double check that this is actually a FpamFsamCal file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError('File that was loaded was not a FpamFsamCal file.')
+            if self.ext_hdr['DATATYPE'] != 'FpamFsamCal':
+                raise ValueError('File that was loaded was not a FpamFsamCal file.')
+        else:
+            if len(data_or_filepath) == 0:
+                data_or_filepath = self.default_trans
+            elif not isinstance(data_or_filepath, np.ndarray):
+                raise ValueError('Input should either be an array or a filepath string.')
+            if data_or_filepath.shape != (2,2,2):
+                raise ValueError('FpamFsamCal must be a 2x2x2 array')
+            prihdr = fits.Header()
+            exthdr = fits.Header()
+            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
+            exthdr['DRPVERSN'] =  corgidrp.__version__
+            exthdr['DRPCTIME'] =  time.Time.now().isot
+
+            # fill caldb required keywords with dummy data
+            prihdr['OBSID'] = 0
+            exthdr["EXPTIME"] = 0
+            exthdr['OPMODE'] = ""
+            exthdr['CMDGAIN'] = 1.0
+            exthdr['EXCAMT'] = 40.0
+
+            self.pri_hdr = prihdr
+            self.ext_hdr = exthdr
+            self.data = data_or_filepath
+            self.dq = self.data * 0
+            self.err = self.data * 0
+
+            self.err_hdr = fits.Header()
+            self.dq_hdr = fits.Header()
+
+            self.hdu_list = fits.HDUList()
+
+        # if this is a new FpamFsamCal file, we need to bookkeep it in the
+        # header b/c of logic in the super.__init__, we just need to check this
+        # to see if it is a new FpamFsamCal file
+        if isinstance(data_or_filepath, np.ndarray):
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'FpamFsamCal' 
+
+            # add to history
+            self.ext_hdr['HISTORY'] = 'FPAM/FSAM rotation matrices file created'
+
+            # use the start date for the filename by default
+            self.filedir = '.'
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+class CoreThroughputCalibration(Image):
+    """
+    Class containing a core throughput calibration file
+
+    A CoreThroughput calibration file has two main data arrays:
+
+    3-d cube of PSF images, e.g, a N1xN1xN array where N1= +/- 3l/D about
+      PSF's centroid in EXCAM pixels. The N PSF images are the ones in the CT
+      dataset.
+
+    N sets of (x, y, CT measurements). The (x, y) are pixel coordinates of the
+      PSF images in the CT dataset wrt EXCAM (0,0) pixel during core throughput
+      observation.
+
+    Args:
+      data_or_filepath (array or str): either a filepath string corresponding
+        to an existing CoreThroughputCalibration file saved to disk or an array
+        with the elements of the core throughput calibration file.
+      hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that
+        contains the elements of the core throughput calibration file.
+    """
+
+    ###################
+    ### Constructor ###
+    ###################
+
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None,
+        dq=None, err_hdr=None, dq_hdr=None, input_hdulist=None,
+        input_dataset=None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+            err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr,
+            input_hdulist=input_hdulist)
+
+        # Verify the extension header corresponds to the PSF cube
+        if self.ext_hdr['EXTNAME'] != 'PSFCUBE':
+            raise ValueError('The input data does not seem to contain the PSF '
+                'cube of measurements')
+
+        # CT array measurements on EXCAM
+        idx_hdu = 0
+        if self.hdu_list[idx_hdu].name == 'CTEXCAM':
+            self.ct_excam = self.hdu_list[idx_hdu].data
+            self.ct_excam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the CT '
+                'array of measurements')
+        # FPAM positions during CT observations
+        idx_hdu = 1
+        if self.hdu_list[idx_hdu].name == 'CTFPAM':
+            self.ct_fpam = self.hdu_list[idx_hdu].data
+            self.ct_fpam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the FPAM '
+                'value during core throughput observations')
+        # FSAM positions during CT observations
+        idx_hdu = 2
+        if self.hdu_list[idx_hdu].name == 'CTFSAM':
+            self.ct_fsam = self.hdu_list[idx_hdu].data
+            self.ct_fsam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the FPAM '
+                'value during core throughput observations')
+
+        # File format checks 
+        # Check PSF basis is a 3D set
+        if self.data.ndim != 3:
+            raise ValueError('The PSF basis is an (N,N1,N1) array with N PSFs, '
+                'each with N1 pixels x N1 pixels.')
+        # Check CT array is a 3xN set
+        if len(self.ct_excam) != 3:
+            raise ValueError('The core throughput array of measurements is a '
+                'Nx3 array.')
+        # Check the CT map has the same number of elements as the PSF cube
+        if self.ct_excam.shape[1] != self.data.shape[0]:
+            raise ValueError('The core throughput map must have one PSF location '
+                'and CT value for each PSF.')
+
+        # Additional bookkeeping for a calibration file:
+        # If this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if
+        # it is a new CoreThroughputCalibration file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError('This appears to be a new Core Throughput calibration'
+                                 'File. The dataset of input files needs'
+                                 'to be passed in to the input_dataset keyword'
+                                 'to record history of this calibration file.')
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'CoreThroughputCalibration'
+
+            # log all the data that went into making this calibration file
+            self._record_parent_filenames(input_dataset)
+
+            # add to history if not present
+            if not 'HISTORY' in self.ext_hdr:
+                self.ext_hdr['HISTORY'] = ('Core Throughput calibration derived '
+                    f'from a set of frames on {self.ext_hdr["DATETIME"]}')
+
+            # Default convention: replace _L3_.fits from the filename of the
+            # input dataset by _CTP_CAL.fits
+            self.filedir = '.'
+            self.filename = input_dataset[0].filename[:-8] + 'CTP_CAL.fits'
+
+        # double check that this is actually a NonLinearityCalibration file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
+        if self.ext_hdr['DATATYPE'] != 'CoreThroughputCalibration':
+            raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
+
+    ###############
+    ### Methods ###
+    ###############
+
+    def GetCTFPMPosition(self,
+        corDataset,
+        fpamfsamcal):
+        """ Gets the FPM's center during a Core throughput observing sequence.
+
+        The use of the delta FPAM/FSAM positions and the rotation matrices is
+        based on the prescription provided on 1/14/25: "H/V values to EXCAM
+        row/column pixels"
+
+          delta_pam = np.array([[dh], [dv]]) # fill these in
+          M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
+          delta_pix = M @ delta_pam
+        
+        Args:
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class.
+
+        Returns:
+            Returns the FPM's center during a Core throughput observing sequence.
+        """
+        # Read FPM location during the coronagraphic observations
+        cor_fpm_center = np.array([corDataset[0].ext_hdr['STARLOCX'],
+            corDataset[0].ext_hdr['STARLOCY']])
+        # Read FPAM and FSAM values during the coronagraphic observations
+        cor_fpam = np.array([corDataset[0].ext_hdr['FPAM_H'],
+            corDataset[0].ext_hdr['FPAM_V']])
+        cor_fsam = np.array([corDataset[0].ext_hdr['FSAM_H'],
+            corDataset[0].ext_hdr['FSAM_V']])
+        # Compute delta FPAM and delta FSAM
+        delta_fpam_um = self.ct_fpam - cor_fpam
+        delta_fsam_um = self.ct_fsam - cor_fsam
+        # Follow the array prescription from the doc string
+        delta_fpam_um = np.array([delta_fpam_um]).transpose()
+        delta_fsam_um = np.array([delta_fsam_um]).transpose()
+        # Get the shift in EXCAM pixels for FPAM and FSAM
+        delta_fpam_excam = (fpamfsamcal.data[0] @ delta_fpam_um).transpose()[0]
+        delta_fsam_excam = (fpamfsamcal.data[1] @ delta_fsam_um).transpose()[0]
+        # Return the FPAM and FSAM centers during the core throughput observations
+        return cor_fpm_center + delta_fpam_excam, cor_fpm_center + delta_fsam_excam
 
 class PyKLIPDataset(pyKLIP_Data):
     """
@@ -1873,8 +2122,10 @@ datatypes = { "Image" : Image,
               "FlatField" : FlatField,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
-              "TrapCalibration": TrapCalibration,
-              "FluxcalFactor": FluxcalFactor,
+              "TrapCalibration" : TrapCalibration,
+              "FluxcalFactor" : FluxcalFactor,
+              "FpamFsamCal" : FpamFsamCal,
+              "CoreThroughputCalibration": CoreThroughputCalibration,
               "NDFilterSweetSpot": NDFilterSweetSpotDataset}
 
 def autoload(filepath):
