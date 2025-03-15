@@ -7,6 +7,7 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
+import corgidrp.flat as flat
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 import photutils.centroids as centr
 
@@ -51,7 +52,7 @@ def test_create_flatfield_neptune():
         filter=flat_dataset_all[i].pri_hdr['FILTER']
         if planet==target and band==filter: 
             flat_dataset.append(flat_dataset_all[i])
-    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=1024, N=1, rad_mask=1.26,  planet_rad=50, n_pix=165, n_pad=0)
+    onskyflat_field = flat.create_onsky_flatfield(flat_dataset, planet='neptune',band='1',up_radius=55, im_size=1024, N=1, rad_mask=1.26,  planet_rad=50, n_pix=165, n_pad=0)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels
@@ -143,7 +144,7 @@ def test_create_flatfield_uranus():
         filter=flat_dataset_all[i].pri_hdr['FILTER']
         if planet==target and band==filter: 
             flat_dataset.append(flat_dataset_all[i])
-    onskyflat_field = detector.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=1024, N=1, rad_mask=1.75,  planet_rad=65, n_pix=165)
+    onskyflat_field = flat.create_onsky_flatfield(flat_dataset, planet='uranus',band='4',up_radius=55, im_size=1024, N=1, rad_mask=1.75,  planet_rad=65, n_pix=165)
 
     assert np.nanmean(onskyflat_field.data) == pytest.approx(1, abs=1e-2)
     assert np.size(np.where(np.isnan(onskyflat_field.data))) == 0 # no bad pixels

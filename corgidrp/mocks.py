@@ -12,11 +12,13 @@ from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
 from astropy.table import Table
 from astropy.convolution import convolve_fft
+from astropy.modeling import models
 import astropy.units as u
 import photutils.centroids as centr
 import corgidrp.data as data
-from corgidrp.data import Image
+from corgidrp.data import Image, Dataset
 import corgidrp.detector as detector
+import corgidrp.flat as flat
 from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
 from pyklip.instruments.utils.wcsgen import generate_wcs
@@ -908,7 +910,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             centroid=centr.centroid_com(planet_image)
             xc=centroid[0]
             yc=centroid[1]
-            planet_image = convolve_fft(planet_image, detector.raster_kernel(raster_radius, planet_image))
+            planet_image = convolve_fft(planet_image, flat.raster_kernel(raster_radius, planet_image))
             if planet == 'neptune':
                 planetrad=radius; snrcon=snr_constant
                 planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
@@ -2707,6 +2709,76 @@ def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 
 
     return frame
 
+def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
+    """
+    Create simulated data for core throughput calibration. This is a set of
+    individual, noiseless 2D Gaussians, one per image.  
+
+    Args:
+        fwhm_mas (float): PSF's FWHM in mas
+        cfam_name (str) (optional): CFAM filter name.
+        n_psfs (int) (optional): Number of simulated PSFs.
+
+    Returns:
+        corgidrp.data.Image: The simulated PSF Images
+        np.array: PSF locations
+        np.array: PSF CT values
+    """
+    # Default headers
+    prhd, exthd = create_default_L3_headers()
+    # cfam filter
+    exthd['CFAMNAME'] = cfam_name
+    # Mock ERR
+    err = np.ones([1024,1024])
+    # Mock DQ
+    dq = np.zeros([1024,1024], dtype = np.uint16)
+
+    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
+    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
+    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    y, x = np.indices(imshape)
+
+    # Following astropy documentation:
+    # Generate random source model list. Random amplitues and centers within a pixel
+    # PSF's final location on SCI frame is moved by more than one pixel below. This
+    # is the fractional part that only needs a smaller array of non-zero values
+    # Set seed for reproducibility of mock data
+    rng = np.random.default_rng(0)
+    model_params = [
+        dict(amplitude=rng.uniform(1,10),
+        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        x_stddev=fwhm_mas/21.8/2.335,
+        y_stddev=fwhm_mas/21.8/2.335)
+        for _ in range(n_psfs)]
+
+    model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
+    # Render models to image using full evaluation
+    psf_loc = []
+    half_psf = []
+    data_psf = []
+    for model in model_list:
+        # Skip any PSFs with 0 amplitude (if any)
+        if model.amplitude == 0:
+            continue
+        psf = np.zeros(imshape)
+        model.bounding_box = None
+        model.render(psf)
+        image = np.zeros([1024, 1024])
+        # Insert PSF at random location within the SCI frame
+        y_image, x_image = rng.integers(100), rng.integers(100)
+        image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
+            512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
+        # List of known positions and list of known PSF volume
+        psf_loc += [[512+x_image+model.x_mean.value-imshape[0]//2,
+            512+y_image+model.y_mean.value-imshape[0]//2]]
+        # Add half PSF volume for 2D Gaussian (numerator of core throughput)
+        half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
+        # Build up the Dataset
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
+
+    return data_psf, np.array(psf_loc), np.array(half_psf)
+
 default_wcs_string = """WCSAXES =                    2 / Number of coordinate axes                      
 CRPIX1  =                  0.0 / Pixel coordinate of reference point            
 CRPIX2  =                  0.0 / Pixel coordinate of reference point            
@@ -2717,7 +2789,6 @@ CRVAL2  =                  0.0 / Coordinate value at reference point
 LATPOLE =                 90.0 / [deg] Native latitude of celestial pole        
 MJDREF  =                  0.0 / [d] MJD of fiducial time
 """
-
 
 def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
                           wcs_header = None,
