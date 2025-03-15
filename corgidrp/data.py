@@ -1602,8 +1602,8 @@ class CoreThroughputCalibration(Image):
             Returns the FPM's center during a Core throughput observing sequence.
         """
         # Read FPM location during the coronagraphic observations
-        cor_fpm_center = np.array([corDataset[0].ext_hdr['MASKLOCX'],
-            corDataset[0].ext_hdr['MASKLOCY']])
+        cor_fpm_center = np.array([corDataset[0].ext_hdr['STARLOCX'],
+            corDataset[0].ext_hdr['STARLOCY']])
         # Read FPAM and FSAM values during the coronagraphic observations
         cor_fpam = np.array([corDataset[0].ext_hdr['FPAM_H'],
             corDataset[0].ext_hdr['FPAM_V']])

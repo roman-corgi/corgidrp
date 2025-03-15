@@ -265,7 +265,9 @@ def generate_psf_cube(
     # 3-d cube of PSF images cut around the PSF's location
     psf_cube = []
     dq_cube = []
-    # Pixels arounf PSF's location +/- n_pix_psf in both dimensions
+    # Pixels arounf PSF's location +/- n_pix_psf in both dimensions that
+    # correspond to 3 lambda/D in units of EXCAM pixels:
+    # 3 * lambda_mean_nm * 1e-9 / D * rad_to_mas / EXCAM_pixel_pitch in mas
     n_pix_psf = int(np.ceil(3*get_cfam(cfam_name=cfam_name,
         cfam_version=cfam_version)[0].mean()*1e-9/2.36*180/np.pi*3600e3/21.8))
     i_psf = 0
