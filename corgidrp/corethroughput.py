@@ -414,14 +414,15 @@ def generate_ct_cal(
     return ct_cal
 
 def CreateCTMap(
-        corDataset,
-        fpamfsamcal,
-        ct_cal,
-        x_range=[-23,23],
-        y_range=[-23,23],
-        n_gridx=47,
-        n_gridy=47,
-        logr=False))
+    corDataset,
+    fpamfsamcal,
+    ct_cal,
+    x_range=[-23,23],
+    y_range=[-23,23],
+    n_gridx=47,
+    n_gridy=47,
+    target_pix=None,
+    logr=False):
     """
       Create a CT map: Given a core throughput calibration file and a coronagraphic
       dataset, derive 3-D list (x,y,ct) where (x,y) are some target locations
@@ -475,7 +476,8 @@ def CreateCTMap(
         y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
         target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
     # Get interpolated CT values at valid positions
-    
+    ct_interp = ct_cal.InterpolateCT(
+            target_pix[0], target_pix[1], corDataset, fpamfsamcal, logr=logr)
 
-    return ct_map_interp
-
+    # Re-order output to match (x,y,ct)
+    return np.array(ct_interp)[[1,2,0]]

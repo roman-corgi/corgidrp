@@ -131,12 +131,12 @@ def setup_module():
     n_azimuths = 5
     max_angle = 2/3*np.pi
     norm_pupil = 0.5*(pupil_image_1.sum()+pupil_image_2.sum())
-    data_ct_interp = create_ct_interp(
+    data_ct_interp = dataset_pupil
+    data_ct_interp += create_ct_interp(
         n_radii=n_radii,
         n_azimuths=n_azimuths,
         max_angle=max_angle,
         norm=norm_pupil)[0]
-    data_ct_interp += dataset_pupil
     dataset_ct_interp = Dataset(data_ct_interp)
     # Coronagraphic dataset for interpolation (only headers will be used)
     # FPM's shifts are tested in another test
@@ -150,10 +150,24 @@ def setup_module():
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
     dataset_cor_interp = Dataset(data_cor)
 
-def test_ctmap():
-    """ Tests the creation of a core throughput map."""
+def test_ct_map():
+    """ Tests the creation of a core throughput map. The method InterpolateCT()
+      has its own unit test and can be considered as tested in the following. """
+    # Generate core throughput calibration file
+    ct_cal = corethroughput.generate_ct_cal(dataset_ct_interp)
+
+    # FPAM/FSAM
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+
+    # Create CT map
+    ct_map = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal)
+
     # TBD
     breakpoint()
+
+    # If the target pixels are the same as the ones in the CT file, the
+    # CT values must agree with the ones in the CT file
 
 
 def test_psf_pix_and_ct():
