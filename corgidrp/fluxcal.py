@@ -444,7 +444,7 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
             'centroid_roi_radius': 5
         }
     
-    star_name = image.ext_hdr["TARGET"]
+    star_name = image.pri_hdr["TARGET"]
     filter_name = image.ext_hdr["CFAMNAME"]
     filter_file = get_filter_name(image)
     
@@ -552,7 +552,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         'centroid_roi_radius': 5
     }
 
-    star_name = image.ext_hdr["TARGET"]
+    star_name = image.pri_hdr["TARGET"]
     filter_file = get_filter_name(image)
     
     wave, filter_trans = read_filter_curve(filter_file)

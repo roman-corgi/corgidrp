@@ -23,6 +23,7 @@ master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_data
 # save master dark to disk to be loaded later
 master_dark.save(filedir=calibdir, filename="mockdark.fits")
 
+
 def test_caldb_create_default():
     """
     Test caldb creation when no filepath is passed in (uses default path)
