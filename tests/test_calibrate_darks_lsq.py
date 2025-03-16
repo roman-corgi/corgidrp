@@ -134,22 +134,22 @@ def test_expected_results_sub():
     # check headers
     assert(noise_maps.data.ndim == 3)
     assert('DetectorNoiseMaps' in noise_maps.filename)
-    assert(noise_maps.ext_hdr["BUNIT"] == "detected electrons")
-    assert(noise_maps.err_hdr["BUNIT"] == "detected electrons")
+    assert(noise_maps.ext_hdr["BUNIT"] == "Detected Electrons")
+    assert(noise_maps.err_hdr["BUNIT"] == "Detected Electrons")
     assert("DetectorNoiseMaps" in str(noise_maps.ext_hdr["HISTORY"]))
     assert(noise_maps.ext_hdr['B_O_UNIT'] == 'DN')
 
     assert(nm_open.data.ndim == 3)
     assert('DetectorNoiseMaps' in nm_open.filename)
-    assert(nm_open.ext_hdr["BUNIT"] == "detected electrons")
-    assert(nm_open.err_hdr["BUNIT"] == "detected electrons")
+    assert(nm_open.ext_hdr["BUNIT"] == "Detected Electrons")
+    assert(nm_open.err_hdr["BUNIT"] == "Detected Electrons")
     assert("DetectorNoiseMaps" in str(nm_open.ext_hdr["HISTORY"]))
     assert(nm_open.ext_hdr['B_O_UNIT'] == 'DN')
 
 def test_sub_stack_len():
     """datasets should have at least 4 sub-stacks."""
     data_set = dataset.copy()
-    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     # make a dataset with only 2 distinct combos
     dataset_few = Dataset([ds[0].frames[k] for k in range(len(ds[0]))] + [ds[1].frames[k] for k in range(len(ds[1]))])
     with pytest.raises(CalDarksLSQException):
@@ -158,25 +158,25 @@ def test_sub_stack_len():
 def test_g_arr_unique():
     '''EM gains must have at least 2 unique elements.'''
     data_set = dataset.copy()
-    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     for j in range(len(ds)):
         for d in ds[j].frames:
-            d.ext_hdr['CMDGAIN'] = 4
+            d.ext_hdr['EMGAIN_C'] = 4
     with pytest.raises(CalDarksLSQException):
         calibrate_darks_lsq(data_set, detector_params, dat)
 
 def test_g_gtr_1():
     '''EM gains must all be bigger than 1.'''
     data_set = dataset.copy()
-    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
-    ds[0].frames[0].ext_hdr['CMDGAIN'] = 1
+    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+    ds[0].frames[0].ext_hdr['EMGAIN_C'] = 1
     with pytest.raises(CalDarksLSQException):
         calibrate_darks_lsq(data_set, detector_params, dat)
 
 def test_t_arr_unique():
     '''Exposure times must have at least 2 unique elements.'''
     data_set = dataset.copy()
-    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     for j in range(len(ds)):
         for d in ds[j].frames:
             d.ext_hdr['EXPTIME'] = 4
@@ -186,7 +186,7 @@ def test_t_arr_unique():
 def test_t_gtr_0():
     '''Exposure times must all be bigger than 0.'''
     data_set = dataset.copy()
-    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     ds[0].frames[0].ext_hdr['EXPTIME'] = 0
     with pytest.raises(CalDarksLSQException):
         calibrate_darks_lsq(data_set, detector_params, dat)
@@ -195,8 +195,8 @@ def test_t_gtr_0():
 def test_k_gtr_0():
     '''K gains must all be bigger than 0.'''
     data_set = dataset.copy()
-    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
-    ds[0].frames[0].ext_hdr['KGAIN'] = 0
+    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+    ds[0].frames[0].ext_hdr['KGAINPAR'] = 0
     with pytest.raises(CalDarksLSQException):
         calibrate_darks_lsq(data_set, detector_params, dat)
 
@@ -205,7 +205,8 @@ def test_mean_num():
     that dq values are as expected, too.
     '''
     data_set = dataset.copy()
-    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+
+    ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     # tag 48 of the 49 sub-stacks as bad pixel all the
     # way through for one pixel (7,8)
     # And mask (10,12) to get flag value of 256

@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import warnings
 import datetime
+import datetime
 import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
@@ -172,7 +173,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -351,7 +352,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -481,13 +482,14 @@ def create_default_L2a_headers(arrtype="SCI"):
 
     prihdr, exthdr = create_default_L1_headers(arrtype)
 
+    exthdr['BSCALE']        = 1             # Linear scaling factor
+    exthdr['BZERO']         = 0             # 64 bit data
+    exthdr['NAXIS1']        = 1024          # Axis 1 size
+    exthdr['NAXIS2']        = 1024          # Axis 2 size
     exthdr['DATALVL']       = 'L2a'         # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
-    exthdr['DESMEAR']       = False         # Whether desmearing was used
-    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
-    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '1.1.2'       # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
@@ -510,8 +512,12 @@ def create_default_L2b_headers(arrtype="SCI"):
 
     """
     # TO DO: Update this once L2a headers have been finalized
-    prihdr, exthdr = create_default_L1_headers(arrtype)
+    prihdr, exthdr = create_default_L2a_headers(arrtype)
 
+    exthdr['BUNIT'] = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['DESMEAR']       = False         # Whether desmearing was used
+    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
+    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['DATALVL']      = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['PCTHRESH']     = 0.0            # Photon-counting threshold (electrons)
 
@@ -537,6 +543,7 @@ def create_default_L3_headers(arrtype="SCI"):
 
     prihdr['TARGET'] = ''
     
+    exthdr['BUNIT'] = 'Photoelectrons / s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
@@ -590,7 +597,6 @@ def create_default_calibration_product_headers():
             exthdr (fits.Header): Extension FITS Header
     '''
     # TO DO: update when this has been more defined
-    # TO DO: Update this once L2a headers have been finalized
     prihdr, exthdr = create_default_L1_headers()
     exthdr['DATALVL']    = 'Calibration Product'
     exthdr['DATATYPE']    = 'Image'              # What type of calibration product, just do image for now, mock codes will update
@@ -617,32 +623,28 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
         corgidrp.data.DetectorNoiseMaps instance
     '''
 
-    prihdr, exthdr = create_default_headers()
+    prihdr, exthdr = create_default_calibration_product_headers()
     # taken from end of calibrate_darks_lsq()
-    exthdr['EXPTIME'] = None
-    if 'EMGAIN_M' in exthdr.keys():
-        exthdr['EMGAIN_M'] = None
-    exthdr['CMDGAIN'] = None
-    exthdr['KGAIN'] = None
-    exthdr['BUNIT'] = 'detected electrons'
-    exthdr['HIERARCH DATA_LEVEL'] = None
-    # simulate raw data filenames
-    exthdr['DRPNFILE'] = 2
-    exthdr['FILE0'] = '0.fits'
-    exthdr['FILE1'] = '1.fits'
+
+    err_hdr = fits.Header()
+    err_hdr['BUNIT']        = 'Photoelectrons'
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
+    exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
+    exthdr['DATALVL']      = 'CalibrationProduct'
+    exthdr['DATATYPE']      = 'DetectorNoiseMaps'
+    exthdr['DRPNFILE']      = "Mocks"         # What files are used to create this calibration product 
+    exthdr['FILE0']         = "Mock0.fits"
+    exthdr['FILE1']         = "Mock1.fits"
     exthdr['B_O'] = 0.01
     exthdr['B_O_UNIT'] = 'DN'
     exthdr['B_O_ERR'] = 0.001
-
-    err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
-    exthdr['DATATYPE'] = 'DetectorNoiseMaps'
     input_data = np.stack([FPN_map, CIC_map, DC_map])
     err = np.stack([[FPN_map_err, CIC_map_err, DC_map_err]])
     dq = np.stack([FPN_map_dq, CIC_map_dq, DC_map_dq])
     noise_maps = data.DetectorNoiseMaps(input_data, pri_hdr=prihdr, ext_hdr=exthdr, err=err,
                               dq=dq, err_hdr=err_hdr)
     return noise_maps
+
 
 def create_synthesized_master_dark_calib(detector_areas):
     '''
@@ -714,16 +716,17 @@ def create_synthesized_master_dark_calib(detector_areas):
             frame_dn_dark *= eperdn
 
             # Now make this into a bunch of corgidrp.Dataset stacks
-            prihdr, exthdr = create_default_headers()
+            prihdr, exthdr = create_default_calibration_product_headers()
             frame = data.Image(frame_dn_dark, pri_hdr=prihdr,
                             ext_hdr=exthdr)
-            frame.ext_hdr['CMDGAIN'] = EMgain_arr[i]
+            frame.ext_hdr['EMGAIN_C'] = EMgain_arr[i]
             frame.ext_hdr['EXPTIME'] = exptime_arr[i]
-            frame.ext_hdr['KGAIN'] = eperdn
+            frame.ext_hdr['KGAINPAR'] = eperdn
             frame_list.append(frame)
     dataset = data.Dataset(frame_list)
 
     return dataset
+
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
@@ -745,8 +748,9 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
-        exthdr['KGAIN'] = 7
+        prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
+        prihdr["OBSNUM"] = 000
+        exthdr['KGAINPAR'] = 7
         #np.random.seed(456+i); 
         sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -755,6 +759,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
+
 
 def create_simflat_dataset(filedir=None, numfiles=10):
     """
@@ -775,7 +780,7 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     filepattern = "sim_flat_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         # generate images in normal distribution with mean 1 and std 0.01
         #np.random.seed(456+i); 
         sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
@@ -869,6 +874,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
+
 def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=3, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40, raster_subexps=1):
     """
     Create simulated data to check the flat division
@@ -929,7 +935,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
     filepattern= planet+'_'+band+"_"+"raster_scan_{0:01d}.fits"
     frames=[]
     for i in range(numfiles*raster_subexps):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         sim_data=planet_rot_images[i]
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         pl=planet
@@ -941,6 +947,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
         frames.append(frame)
     raster_dataset = data.Dataset(frames)
     return raster_dataset
+
 
 def create_flatfield_dummy(filedir=None, numfiles=2):
 
@@ -963,7 +970,7 @@ def create_flatfield_dummy(filedir=None, numfiles=2):
     filepattern= "flat_field_{0:01d}.fits"
     frames=[]
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         #np.random.seed(456+i); 
         sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -995,9 +1002,10 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     filepattern = "simcal_nonlin_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
-        #Add the CMDGAIN to the headers
-        exthdr['CMDGAIN'] = em_gain
+        prihdr, exthdr = create_default_L1_headers()
+        #Add the commanded gain to the headers
+        exthdr['EMGAIN_C'] = em_gain
+        exthdr['OBSNAME'] = 'NONLIN'
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])
@@ -1026,6 +1034,7 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     dataset = data.Dataset(frames)
     return dataset
 
+
 def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
@@ -1049,9 +1058,9 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
 
     detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
 
-    kgain = detector_params.params['kgain']
-    fwc_em_dn = detector_params.params['fwc_em'] / kgain
-    fwc_pp_dn = detector_params.params['fwc_pp'] / kgain
+    kgain = detector_params.params['KGAINPAR']
+    fwc_em_dn = detector_params.params['FWC_EM_E'] / kgain
+    fwc_pp_dn = detector_params.params['FWC_PP_E'] / kgain
     fwc = np.min([fwc_em_dn,em_gain*fwc_pp_dn])
     dataset = create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=numfiles,em_gain=em_gain)
 
@@ -1088,6 +1097,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
 
     return dataset
 
+
 def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
     """
     Create simulated raw data.
@@ -1120,7 +1130,7 @@ def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
 
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers(arrtype=arrtype)
+        prihdr, exthdr = create_default_L1_headers(arrtype=arrtype)
         sim_data = np.random.poisson(lam=150., size=size).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
@@ -1256,7 +1266,9 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    prihdr, exthdr = create_default_headers()
+    prihdr, exthdr = create_default_calibration_product_headers()
+    exthdr['DATATYPE']      = 'BadPixelMap'
+
     sim_data = np.zeros([1024,1024], dtype = np.uint16)
     if col_bp is not None and row_bp is not None:
         for i_col in col_bp:
@@ -1270,6 +1282,7 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     badpixelmap = data.Dataset([frame])
 
     return badpixelmap
+
 
 def nonlin_coefs(filename,EMgain,order):
     """
@@ -1313,6 +1326,7 @@ def nonlin_coefs(filename,EMgain,order):
 
     return coeffs, DNs, fitVals
 
+
 def nonlin_factor(coeffs,DN):
     """ 
     Takes array of nonlinearity coefficients (from nonlin_coefs function)
@@ -1339,17 +1353,9 @@ def nonlin_factor(coeffs,DN):
 
     return f_nonlin
 
-def make_fluxmap_image(
-        f_map,
-        bias,
-        kgain,
-        rn,
-        emgain, 
-        time,
-        coeffs,
-        nonlin_flag=False,
-        divide_em=False,
-        ):
+
+def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag=False,
+        divide_em=False):
     """ 
     This function makes a SCI-sized frame with simulated noise and a fluxmap. It
     also performs bias-subtraction and division by EM gain if required. It is used
@@ -1397,9 +1403,10 @@ def make_fluxmap_image(
     if divide_em:
         frame = frame/emgain
 
-    prhd, exthd = create_default_headers()
+    # TO DO: Determine what level this image should be
+    prhd, exthd = create_default_L2b_headers()
     # Record actual commanded EM
-    exthd['CMDGAIN'] = emgain
+    exthd['EMGAIN_C'] = emgain
     # Record actual exposure time
     exthd['EXPTIME'] = time
     # Mock error maps
@@ -1532,13 +1539,29 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
 
     # load as an image object
     frames = []
-    prihdr, exthdr = create_default_headers()
+    # TO DO: Determine what level this image should be
+    prihdr, exthdr = create_default_L3_headers()
     prihdr['VISTYPE'] = 'BORESITE'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
+    exthdr['CD1_1'] = cdmatrix[0,0]
+    exthdr['CD1_2'] = cdmatrix[0,1]
+    exthdr['CD2_1'] = cdmatrix[1,0]
+    exthdr['CD2_2'] = cdmatrix[1,1]
 
-    newhdr = fits.Header(new_hdr)
-    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+    exthdr['CRPIX1'] = center[0]
+    exthdr['CRPIX2'] = center[1]
+
+    exthdr['CTYPE1'] = 'RA---TAN'
+    exthdr['CTYPE2'] = 'DEC--TAN'
+
+    exthdr['CDELT1'] = (platescale * 0.001) / 3600
+    exthdr['CDELT2'] = (platescale * 0.001) / 3600
+
+    exthdr['CRVAL1'] = target[0]
+    exthdr['CRVAL2'] = target[1]
+
+    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
     filename = "simcal_astrom.fits"
     if filedir is not None:
         # save source SkyCoord locations and pixel location estimates
@@ -1555,6 +1578,8 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
     dataset = data.Dataset(frames)
 
     return dataset
+
+
 def create_not_normalized_dataset(filedir=None, numfiles=10):
     """
     Create simulated data not normalized for the exposure time.
@@ -1570,7 +1595,8 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     filepattern = "simcall_not_normalized_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
+        # TO DO: Determine what level this image should be
+        prihdr, exthdr = create_default_L1_headers()
 
         sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024,1024)), dtype=float)
         sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024,1024)), dtype=float)
@@ -1583,6 +1609,7 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     dataset = data.Dataset(frames)
 
     return dataset
+
 
 def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10, 
                                  read_noise = 100, eperdn = 6, e2emode=False, 
@@ -2391,13 +2418,13 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     output_dn = readout_emccd.readout(gain_counts)
                 else:
                     output_dn = temps[temp][sc][i]
-                prihdr, exthdr = create_default_headers(arrtype)
+                prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
                 prim = fits.PrimaryHDU(header = prihdr)
                 hdr_img = fits.ImageHDU(output_dn, header=exthdr)
                 hdul = fits.HDUList([prim, hdr_img])
                 ## Fill in the headers that matter to corgidrp
                 hdul[1].header['EXCAMT']  = temp
-                hdul[1].header['CMDGAIN'] = EMgain
+                hdul[1].header['EMGAIN_C'] = EMgain
                 hdul[1].header['ARRTYPE'] = arrtype
                 for j in range(1, 5):
                     if sc == j:
@@ -2428,6 +2455,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                         hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
                 else:
                     hdul.writeto(filename, overwrite = True)
+
 
 def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
@@ -2491,7 +2519,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
     if smear:
         #simulate smear to fluxmap
         detector_params = DetectorParams({})
-        rowreadtime = detector_params.params['rowreadtime']
+        rowreadtime = detector_params.params['ROWREADT']
         smear = np.zeros_like(fluxmap)
         m = len(smear)
         for r in range(m):
@@ -2504,7 +2532,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
     
     frame_e_list = []
     frame_e_dark_list = []
-    prihdr, exthdr = create_default_headers()
+    prihdr, exthdr = create_default_L1_headers()
     for i in range(Nbrights):
         # Simulate bright
         if full_frame:
@@ -2512,10 +2540,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         else:
             frame_dn = emccd.sim_sub_frame(fluxmap[:50,:50], exptime)
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
-        frame.ext_hdr['CMDGAIN'] = EMgain
+        frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
-        frame.ext_hdr['KGAIN'] = kgain
-        frame.ext_hdr['ISPC'] = True
+        frame.ext_hdr['KGAINPAR'] = kgain
+        frame.pri_hdr['PHTCNT'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
         frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
@@ -2527,10 +2555,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         else:
             frame_dn_dark = emccd.sim_sub_frame(np.zeros_like(fluxmap[:50,:50]), exptime)
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        frame_dark.ext_hdr['CMDGAIN'] = EMgain
+        frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
-        frame_dark.ext_hdr['KGAIN'] = kgain
-        frame_dark.ext_hdr['ISPC'] = True
+        frame_dark.ext_hdr['KGAINPAR'] = kgain
+        frame_dark.pri_hdr['PHTCNT'] = True
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
         frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)
@@ -2669,36 +2697,42 @@ def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 
     # Error map
     err = np.full(size, noise_scale)
 
-    # Define header
-    new_hdr = {
-        'TARGET': target_name,
-        'CFAMNAME': filter,
-        'FPAMNAME': fpamname,
-        'FPAM_H': 2503.7,
-        'FPAM_V': 6124.9,
-        'FSM_X': fsm_x,
-        'FSM_Y': fsm_y,
-        'EXPTIME': exptime,
-        'COL_COR': color_cor,
-        'CRPIX1': xpos,
-        'CRPIX2': ypos,
-        'CTYPE1': 'RA---TAN',
-        'CTYPE2': 'DEC--TAN',
-        'CDELT1': (platescale * 0.001) / 3600,
-        'CDELT2': (platescale * 0.001) / 3600,
-        'CRVAL1': target_location[0],
-        'CRVAL2': target_location[1],
-    }
-
-    newhdr = fits.Header(new_hdr)
+    # Get FPAM positions, not strictly necessary but
+    if fpamname == 'HOLE':
+        fpam_h = 40504.4
+        fpam_v = 9616.8
+    elif fpamname == 'ND225':
+        fpam_h = 61507.8
+        fpam_v = 25612.4
+    elif fpamname == 'ND475':
+        fpam_h = 2503.7
+        fpam_v = 6124.9
 
     # Create image object
-    prihdr, exthdr = create_default_headers()
-    prihdr['VISTYPE'] = 'FLUXCAL'
+    prihdr, exthdr = create_default_L3_headers()
+    prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
+    prihdr['TARGET'] = target_name
 
-    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=newhdr)
+    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
+    exthdr['FPAMNAME'] = fpamname
+    exthdr['FPAM_H']   = 2503.7
+    exthdr['FPAM_V']   = 6124.9
+    exthdr['FSM_X']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSM_Y']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined
+    exthdr['COL_COR']  = color_cor          # Ensure color_cor is defined
+    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
+    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
+    exthdr['CTYPE1']   = 'RA---TAN'
+    exthdr['CTYPE2']   = 'DEC--TAN'
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
+    exthdr['CRVAL2']   = target_location[1]
+
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
 
     # Save file
     # TO DO: update with file name conventions

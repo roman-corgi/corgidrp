@@ -16,7 +16,7 @@ from pathlib import Path
 import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
+from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 from corgidrp.calibrate_kgain import (calibrate_kgain, CalKgainException, kgain_params_default)
 
 
@@ -107,7 +107,7 @@ def setup_module():
         # Datetime cannot be duplicated
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
-        image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
+        image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
         frame_list.append(image_sim)
 
     index = 0
@@ -130,8 +130,8 @@ def setup_module():
                                 exp_time,coeffs,nonlin_flag=nonlin_flag,
                                 divide_em=True)
             image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
-            # OBSTYPE has no KGAIN value, but NONLIN
-            image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
+            # OBSNAME has no KGAIN value, but NONLIN
+            image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
             frame_list.append(image_sim)
     dataset_kg = Dataset(frame_list)
 

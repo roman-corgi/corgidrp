@@ -24,7 +24,7 @@ test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fit
 nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
 tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-pri_hdr, ext_hdr = mocks.create_default_headers()
+pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
 non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
 non_linearity_correction.save(filename = nonlin_fits_filepath)
 
@@ -349,8 +349,8 @@ def test_iit_vs_corgidrp():
     and check that output is consistent with results II&T code.
     """
 
-    fwc_em = detector_params.params['fwc_em'] / kgain
-    fwc_pp = detector_params.params['fwc_pp'] / kgain
+    fwc_em = detector_params.params['FWC_EM_E'] / kgain
+    fwc_pp = detector_params.params['FWC_PP_E'] / kgain
     em_gain = 500
 
     fwc = np.min([fwc_em, fwc_pp*em_gain])
@@ -475,8 +475,8 @@ def test_saturation_calc():
 
 ## Useful constructs from JPL II&T unit tests:
 
-fwc = detector_params.params['fwc_pp']
-fwcem = detector_params.params['fwc_em']
+fwc = detector_params.params['FWC_PP_E']
+fwcem = detector_params.params['FWC_EM_E']
 cosm_filter = 2
 plat_thresh = 0.85
 sat_thresh = 0.99
@@ -549,7 +549,7 @@ def test_mask_box():
     # using cosm_filter=2 and cosm_tail=20:
     check_mask[i_streak_rows_t[1], 50:50+2+20+1] = 1
     check_mask = check_mask.astype(int)
-    prihdr, exthdr = mocks.create_default_headers()
+    prihdr, exthdr = mocks.create_default_L1_headers()
     frame = data.Image(bs_image_box, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
@@ -589,7 +589,7 @@ def test_mask_box_corners():
     check_mask[-4:,0:4] = 1
     # cosmic head #3 and attempted box around it
     check_mask[0:3,-3:] = 1
-    prihdr, exthdr = mocks.create_default_headers()
+    prihdr, exthdr = mocks.create_default_L1_headers()
     frame = data.Image(image, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
@@ -614,7 +614,7 @@ def test_cosm_tail_2():
     check_mask[-2,0:0+2+1+1] = 1
     # cosmic head #2
     check_mask[-2,6:6+2+1+1] = 1
-    prihdr, exthdr = mocks.create_default_headers()
+    prihdr, exthdr = mocks.create_default_L1_headers()
     frame = data.Image(image, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])
@@ -663,7 +663,7 @@ def test_cosm_tail_bleed_over():
     check_mask[im_ending_row-3:im_ending_row+1,
                 im_ending_col-6:im_ending_col-1] = 1 # cosm_box=2
     
-    prihdr, exthdr = mocks.create_default_headers()
+    prihdr, exthdr = mocks.create_default_L1_headers()
     frame = data.Image(image, pri_hdr=prihdr,
                     ext_hdr=exthdr)
     dataset = data.Dataset([frame])

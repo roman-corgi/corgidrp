@@ -16,7 +16,7 @@ import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException, nonlin_params_default)
-from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
+from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 
 def setup_module():
     """
@@ -100,7 +100,7 @@ def setup_module():
         # Datetime cannot be duplicated
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
-        image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
+        image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
         frame_list.append(image_sim)
 
     init_nonlins = []
@@ -134,7 +134,7 @@ def setup_module():
                 image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                     nonlin_flag=nonlin_flag)
                 image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-            image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
+            image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
             frame_list.append(image_sim)
     # Join all frames in a Dataset
     dataset_nl = Dataset(frame_list) 

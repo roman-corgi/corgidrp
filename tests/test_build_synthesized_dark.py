@@ -32,7 +32,7 @@ dataset = create_dark_calib_files()
 g = 1
 t = 60
 for fr in dataset.frames:
-    fr.ext_hdr['KGAIN'] = 7
+    fr.ext_hdr['KGAINPAR'] = 7
 
 # convenience function for these tests
 def reset_g_t(d, g, t):
@@ -50,7 +50,7 @@ def reset_g_t(d, g, t):
     '''
     dset = d.copy()
     for fr in dset.frames:
-        fr.ext_hdr['CMDGAIN'] = g
+        fr.ext_hdr['EMGAIN_C'] = g
         fr.ext_hdr['EXPTIME'] = t
 
     return dset
@@ -98,15 +98,15 @@ def test_exact_case():
     assert(np.max(np.abs(M.data - target)) < tol)
     assert(np.max(np.abs(M.err - exp_err)) < tol)
     assert(np.max(np.abs(M.dq - exp_dq)) < tol)
-    assert(M.err_hdr['BUNIT'] == 'detected electrons')
+    assert(M.err_hdr['BUNIT'] == 'Detected Electrons')
     assert(M.ext_hdr['EXPTIME'] == t)
-    assert(M.ext_hdr['CMDGAIN'] == g)
+    assert(M.ext_hdr['EMGAIN_C'] == g)
     assert(M.ext_hdr['DATATYPE'] == 'Dark')
     assert(M.data.shape == (rows, cols))
-    assert(M.ext_hdr['NAXIS1'] == rows)
-    assert(M.ext_hdr['NAXIS2'] == cols)
+    assert(M.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
+    assert(M.ext_hdr['NAXIS2'] == rows)
     assert(M.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
-    assert(M.filename == '0_DetectorNoiseMaps_dark.fits')
+    assert(M.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
     assert('EM gain = '+str(g) in str(M.ext_hdr['HISTORY']))
     assert('exptime = '+str(t) in str(M.ext_hdr['HISTORY']))
 
@@ -114,16 +114,16 @@ def test_exact_case():
     assert(np.max(np.abs(M_copy.data - target)) < tol)
     assert(np.max(np.abs(M_copy.err - exp_err)) < tol)
     assert(np.max(np.abs(M_copy.dq - exp_dq)) < tol)
-    assert(M_copy.err_hdr['BUNIT'] == 'detected electrons')
+    assert(M_copy.err_hdr['BUNIT'] == 'Detected Electrons')
     assert(M_copy.ext_hdr['EXPTIME'] == t)
-    assert(M_copy.ext_hdr['CMDGAIN'] == g)
+    assert(M_copy.ext_hdr['EMGAIN_C'] == g)
     assert(M_copy.ext_hdr['DATATYPE'] == 'Dark')
     assert(M_copy.data.shape == (rows, cols))
-    assert(M_copy.ext_hdr['NAXIS1'] == rows)
-    assert(M_copy.ext_hdr['NAXIS2'] == cols)
+    assert(M_copy.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
+    assert(M_copy.ext_hdr['NAXIS2'] == rows)
     assert(M_copy.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
-    assert(M_copy.filename == '0_DetectorNoiseMaps_dark.fits')
-    assert('EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
+    assert(M_copy.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
+    assert('commanded EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
     assert('exptime = '+str(t) in str(M_copy.ext_hdr['HISTORY']))
     pass
     
@@ -180,7 +180,7 @@ def test_c_doesnt_change_with_g_or_t():
     tol = 1e-13
     noise_maps0 = create_noise_maps(0*Fd, Ferr, Fdq, Cd,
                                         Cerr, Cdq, 0*Dd, Derr, Ddq)
-
+    
     M = build_synthesized_dark(reset_g_t(dataset, 1, t), noise_maps0)
     G2 = build_synthesized_dark(reset_g_t(dataset, 2, t), noise_maps0)
     G4 = build_synthesized_dark(reset_g_t(dataset, 4, t), noise_maps0)

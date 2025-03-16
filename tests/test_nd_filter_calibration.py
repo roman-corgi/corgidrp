@@ -555,20 +555,20 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    #run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
-    #run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
-    #run_test(test_average_od_within_tolerance, stars_dataset_cached)
+    run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
+    run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
+    run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
-    #for method in ["Aperture", "Gaussian"]:
-    #    run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
+    for method in ["Aperture", "Gaussian"]:
+        run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
 
     for test_od in [1.0, 3.0]:
         run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
 
-    #for aper_radius in [5, 10]:
-    #    run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
+    for aper_radius in [5, 10]:
+        run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
-    #run_test(test_od_stability, stars_dataset_cached)
+    run_test(test_od_stability, stars_dataset_cached)
 
     #run_test(test_background_effect, background_tmp_dir)
 
