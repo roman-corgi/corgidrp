@@ -1,8 +1,10 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
 
 from pyklip.klip import rotate
+
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
+#from corgidrp.klip_fm import inject_fakes, recover_fakes
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
@@ -175,7 +177,8 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
                        numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
                        do_crop=True,
-                       crop_sizexy=None
+                       crop_sizexy=None,
+                       measure_klip_thrupt=True
                        ):
     """
     
@@ -259,8 +262,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     sci_dataset_masked = nan_flags(sci_dataset)
     ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
 
-    # Run pyklip
+    # Initialize pyklip dataset class
     pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
+    
+    # Run pyklip
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
                               calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
