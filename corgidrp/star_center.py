@@ -779,11 +779,12 @@ def calc_spot_separation(spotArray, xOffset, yOffset, tuningParamDict):
     return spotSepEst
 
 
+import numpy as np
+
 def star_center_from_satellite_spots(
     img_ref,
     img_sat_spot,
-    xOffsetGuess,
-    yOffsetGuess,
+    star_coordinate_guess,
     thetaOffsetGuess,
     satellite_spot_parameters,
     observing_mode='NFOV',
@@ -792,76 +793,83 @@ def star_center_from_satellite_spots(
     Estimates the star center and spot locations from satellite spot images and science data.
 
     Args:
-        img_ref (numpy.ndarray): 
+        img_ref (numpy.ndarray):
             2D image representing a clean occulted focal-plane image with a base DM setting.
-        img_sat_spot (numpy.ndarray): 
+        img_sat_spot (numpy.ndarray):
             2D image representing a clean occulted focal-plane image with a relative satellite-spot DM setting added.
-        xOffsetGuess (float): 
-            Starting guess for the number of pixels in the x direction that the star is offset from the center pixel of the spots image.
-        yOffsetGuess (float): 
-            Starting guess for the number of pixels in the y direction that the star is offset from the center pixel of the spots image.
-        thetaOffsetGuess (float): 
-            Theta rotation (in degrees) of spot locations on the camera, which might be different from expected due to clocking error between the DM and the camera.
-        satellite_spot_parameters (dict): 
+        star_coordinate_guess (tuple of float):
+            Starting guess for the absolute (x, y) coordinate of the star (in pixels).
+            The offset calculation is referenced to the image center, which is assumed
+            to be (image_size // 2, image_size // 2).
+        thetaOffsetGuess (float):
+            Theta rotation (in degrees) of spot locations on the camera, which might be different
+            from expected due to clocking error between the DM and the camera.
+        satellite_spot_parameters (dict):
             Dictionary containing tuning parameters for spot separation and offset estimation.
-        observing_mode (str, optional): 
+        observing_mode (str, optional):
             Mode for selecting the satellite spot parameters from the `satellite_spot_parameters` dictionary.
+            Defaults to 'NFOV'.
 
     Returns:
-        numpy.ndarray: 
-            Estimated lateral offsets of the stellar center from the center pixel of the spots image.
-        numpy.ndarray: 
-            List of spot locations.
+        numpy.ndarray:
+            Estimated absolute coordinates [x, y] of the star center in the spots image.
+        numpy.ndarray:
+            Array of spot locations in [x, y] format.
     """
 
     # check inputs
     img_shp = img_ref.shape
     if img_sat_spot.shape != img_shp:
-        raise TypeError("Satellite spot image not same shape as science image.")
- 
-    # subtract reference image from satellite spot image to highlight satellite spots
+        raise TypeError("Satellite spot image not the same shape as the science image.")
+
+    # Unpack the star guess and calculate offsets relative to image center
+    xGuess, yGuess = star_coordinate_guess
+    img_center_x = img_sat_spot.shape[1] // 2
+    img_center_y = img_sat_spot.shape[0] // 2
+    xOffsetGuess = xGuess - img_center_x
+    yOffsetGuess = yGuess - img_center_y
+
+    # Subtract reference image from satellite spot image to highlight satellite spots
     img_spots = img_sat_spot - img_ref
 
+    # Grab the relevant tuning parameters
     tuningParamDict = satellite_spot_parameters[observing_mode]
-    # estimate star location
-    # xOffsetEst, yOffsetEst are relative to image center, fft style
-    # was using fn_offset_YAML
+
+    # estimate star location:
+    # calc_star_location_from_spots should return (xOffsetEst, yOffsetEst)
     xOffsetEst, yOffsetEst = calc_star_location_from_spots(
         img_spots, xOffsetGuess, yOffsetGuess, tuningParamDict['offset']
     )
 
-    # estimate spot separation (from the star, i.e. radius)
-    # was using fn_separation_YAML
+    # estimate spot separation (from the star, i.e., radius)
     spotRadiusEst = calc_spot_separation(
         img_spots, xOffsetEst, yOffsetEst, tuningParamDict['separation']
     )
 
-    # get spot theta values from input YAML
-    # tuningParamDict = loadyaml(fn_separation_YAML)
+    # get spot rotation vector (angles in degrees)
     probeRotVecDeg = tuningParamDict['separation']["probeRotVecDeg"]
-    # check.oneD_array(probeRotVecDeg, 'probeRotVecDeg',
-    #                  TypeError) # check is redundant
 
     # calculate locations of spot pairs
     list_spots_xy = []
     for theta_deg in probeRotVecDeg:
         theta = (theta_deg + thetaOffsetGuess) * np.pi / 180.0
-        list_spots_xy.append(
-            [
-                spotRadiusEst * np.cos(theta) + xOffsetEst,
-                spotRadiusEst * np.sin(theta) + yOffsetEst,
-            ],
-        )
-        list_spots_xy.append(
-            [
-                spotRadiusEst * np.cos(theta + np.pi) + xOffsetEst,
-                spotRadiusEst * np.sin(theta + np.pi) + yOffsetEst,
-            ],
-        )
+        # One spot
+        list_spots_xy.append([
+            spotRadiusEst * np.cos(theta) + xOffsetEst,
+            spotRadiusEst * np.sin(theta) + yOffsetEst,
+        ])
+        # Opposite spot (theta + pi)
+        list_spots_xy.append([
+            spotRadiusEst * np.cos(theta + np.pi) + xOffsetEst,
+            spotRadiusEst * np.sin(theta + np.pi) + yOffsetEst,
+        ])
 
-    star_xy = [xOffsetEst + img_sat_spot.shape[1]//2,
-               yOffsetEst + img_sat_spot.shape[0]//2]
-    star_xy = np.array(star_xy, dtype='float')
+    # Convert estimated offsets back to absolute coordinates
+    star_xy = np.array([
+        xOffsetEst + img_center_x,
+        yOffsetEst + img_center_y
+    ], dtype='float')
+
     list_spots_xy = np.array(list_spots_xy, dtype='float')
 
     return star_xy, list_spots_xy

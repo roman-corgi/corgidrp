@@ -37,14 +37,13 @@ def test_find_star():
             angle_offset=0,
             amplitude_multiplier=100)
 
-    # Set initial guesses for offsets
-    xOffsetGuess = injected_position[0] - image_shape[1] // 2
-    yOffsetGuess = injected_position[1] - image_shape[0] // 2
+    # Set initial guesses for angle offset
     thetaOffsetGuess = 0
 
     dataset_with_center = find_star(
-        input_dataset=input_dataset, xOffsetGuess=xOffsetGuess,
-        yOffsetGuess=yOffsetGuess, thetaOffsetGuess=thetaOffsetGuess)
+        input_dataset=input_dataset, 
+        star_coordinate_guess=injected_position,
+        thetaOffsetGuess=thetaOffsetGuess)
 
     measured_x, measured_y = (dataset_with_center.frames[0].ext_hdr['STARLOCX'],
                             dataset_with_center.frames[0].ext_hdr['STARLOCY'])
