@@ -2,7 +2,7 @@
 import os
 import pickle
 import numpy as np
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L1_headers
 import corgidrp.data as data
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 import pytest
@@ -13,7 +13,7 @@ def test_kgain():
     test the KGain class and the calibration file and the unit conversion
     """
     #test KGain class and cal file
-    prhd, exthd = create_default_headers()
+    prhd, exthd = create_default_L1_headers()
     dat = np.ones([1024,1024]) * 2
     err = np.ones([1,1024,1024]) * 0.5
     ptc = np.ones([2,1024])
@@ -85,7 +85,7 @@ def test_kgain():
     #test header updates
     assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
-    assert gain_dataset[0].ext_hdr["KGAIN"] == k_gain
+    assert gain_dataset[0].ext_hdr["KGAINPAR"] == k_gain
     assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error[0]
     assert gain_dataset[0].ext_hdr["RN"] > 0
     assert gain_dataset[0].ext_hdr["RN_ERR"] > 0

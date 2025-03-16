@@ -1,0 +1,2 @@
+fpam_to_excam_modelbased.fits filter=lfs diff=lfs merge=lfs -text
+fsam_to_excam_modelbased.fits filter=lfs diff=lfs merge=lfs -text
