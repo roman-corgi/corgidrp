@@ -33,6 +33,7 @@ def distortion_correction(input_dataset, distortion_calibration):
 def find_star(input_dataset,
               star_coordinate_guess=None,
               thetaOffsetGuess=0,
+              satellite_spot_parameters=None,
               drop_satspots_frames=False):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
@@ -56,6 +57,54 @@ def find_star(input_dataset,
         thetaOffsetGuess (float, optional):
             Initial guess for any angular rotation of the star center 
             (in degrees, for example). Defaults to 0.
+        satellite_spot_parameters (dict, optional):
+            Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
+            should have the following structure:
+
+            offset : dict
+                Parameters for estimating the offset of the star center:
+
+                spotSepPix : float
+                    Expected (model-based) separation of the satellite spots from the star.
+                    Units: pixels.
+                roiRadiusPix : float
+                    Radius of the region of interest around each satellite spot.
+                    Units: pixels.
+                probeRotVecDeg : array_like
+                    Angles (degrees CCW from x-axis) specifying the position of satellite spot pairs.
+                nSubpixels : int
+                    Number of subpixels across for calculating region-of-interest mask edges.
+                nSteps : int
+                    Number of points in grid search along each direction.
+                stepSize : float
+                    Step size for the grid search.
+                    Units: pixels.
+                nIter : int
+                    Number of iterations refining the radial separation.
+
+            separation : dict
+                Parameters for estimating the separation of satellite spots from the star:
+
+                spotSepPix : float
+                    Expected separation between star and satellite spots.
+                    Units: pixels.
+                roiRadiusPix : float
+                    Radius of the region of interest around each satellite spot.
+                    Units: pixels.
+                probeRotVecDeg : array_like
+                    Angles (degrees CCW from x-axis) specifying the position of satellite spot pairs.
+                nSubpixels : int
+                    Number of subpixels across for calculating region-of-interest mask edges.
+                nSteps : int
+                    Number of points in grid search along each direction.
+                stepSize : float
+                    Step size for the grid search.
+                    Units: pixels.
+                nIter : int
+                    Number of iterations refining the radial separation.
+
+            If None, default parameters corresponding to the specified observing_mode will be used.
+        
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
             the returned dataset. Defaults to False.
@@ -83,6 +132,29 @@ def find_star(input_dataset,
 
     # Copy input dataset
     dataset = input_dataset.copy()
+
+    satellite_spot_parameters_defaults = {
+        "NFOV": {
+            "offset": {
+                "spotSepPix": 14.79,
+                "roiRadiusPix": 4.5,
+                "probeRotVecDeg": [0, 90],
+                "nSubpixels": 100,
+                "nSteps": 7,
+                "stepSize": 1,
+                "nIter": 6,
+            },
+            "separation": {
+                "spotSepPix": 14.79,
+                "roiRadiusPix": 1.5,
+                "probeRotVecDeg": [0, 90],
+                "nSubpixels": 100,
+                "nSteps": 21,
+                "stepSize": 0.25,
+                "nIter": 5,
+            }
+        }
+    }
 
     # Separate the dataset into frames with and without satellite spots
     sci_frames = []
@@ -112,11 +184,18 @@ def find_star(input_dataset,
     img_ref = np.median(sci_dataset.all_data, axis=0)
     img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
 
-    satellite_spot_parameters = star_center.satellite_spot_parameters
-
     # Default star_coordinate_guess to center of img_sat_spot if None
     if star_coordinate_guess is None:
         star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
+
+    # See if the satellite spot parameters are provided, if not used defaults
+    if satellite_spot_parameters is None:
+        satellite_spot_parameters_used = satellite_spot_parameters_defaults  
+    # If the parameters are provided, check if they are in the correct format
+    else:
+        assert star_center.validate_satellite_spot_parameters(satellite_spot_parameters), "Wrong dictionary format for satellite_spot_parameters."
+        satellite_spot_parameters_used = {}
+        satellite_spot_parameters_used[observing_mode] = satellite_spot_parameters
 
     # Find star center
     star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
@@ -124,8 +203,7 @@ def find_star(input_dataset,
         img_sat_spot=img_sat_spot,
         star_coordinate_guess=star_coordinate_guess,
         thetaOffsetGuess=thetaOffsetGuess,
-        satellite_spot_parameters=satellite_spot_parameters,
-        observing_mode=observing_mode,
+        satellite_spot_parameters=satellite_spot_parameters_used[observing_mode],
     )
 
     # Add star location to frame headers
