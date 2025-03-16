@@ -3143,15 +3143,9 @@ def create_satellite_spot_observing_sequence(
     satspot_frames = []
     
     # Example of setting up headers
-    prihdr, exthdr = create_default_headers()
-    prihdr['TELESCOP'] = 'ROMAN'
-    prihdr['INSTRUME'] = 'CGI'
-    prihdr['FILENAME'] = ''
+    prihdr, exthdr = create_default_L3_headers(arrtype="SCI")
     prihdr['NAXIS1'] = image_shape[1]
     prihdr['NAXIS2'] = image_shape[0]
-    exthdr['BUNIT'] = 'MJy/sr'
-    exthdr["HIERARCH DATA_LEVEL"] = 'L3'
-
     prihdr["SATSPOTS"] = 0  # 0 if no satellite spots, 1 if satellite spots
     exthdr['FSMPRFL'] = f'{observing_mode}'  # Needed for initial guess of satellite spot parameters
 
