@@ -296,7 +296,7 @@ def create_mock_ct_dataset_and_cal_file(
     # ----------------------------
     # B) Create the unocculted/pupil frames
     # ----------------------------
-    # We'll do 1024x1024 arrays with uniform “patches”
+    # So 1024x1024 arrays with uniform “patches”
     shape = (1024, 1024)
     pupil_image_1 = np.zeros(shape)
     pupil_image_2 = np.zeros(shape)
@@ -312,11 +312,6 @@ def create_mock_ct_dataset_and_cal_file(
     # ----------------------------
     # C) Create a set of off-axis PSFs
     # ----------------------------
-    # create_ct_psfs(...) is your existing function that returns:
-    #   data_psf (list of Image objects),
-    #   psf_loc_in (array of shape (N, 2)),
-    #   half_psf (some flux array)
-    # We pass fwhm=..., cfam_name=..., n_psfs=..., etc.
     data_psf, psf_locs, half_psf = create_ct_psfs(
         fwhm_mas=fwhm,
         cfam_name=cfam_name,
@@ -435,11 +430,9 @@ def test_measure_companions_wcs():
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, 'mock_l4_companions.fits')
 
-    # -------------------------------------------------
+
     # A) Generate/measure a "direct star image"
-    # -------------------------------------------------
-    # Here, we assume mock_flux_image(...) returns an unocculted star image (or close to it).
-    # `flux_image` is a list of Image objects, typically with length=1.
+    # mock_flux_image(...) should return an unocculted star image.
     flux_image_list = mock_flux_image(
         exptime=5,
         filter_used="3C",
@@ -453,8 +446,8 @@ def test_measure_companions_wcs():
     flux_image_list = l2b_to_l3.divide_by_exptime(Dataset(flux_image_list))
     direct_star_image = flux_image_list[0]  # Just take the first for star flux
 
-    # Do an aperture measurement to get star_flux_e_s in e-/s
-    # (might choose a large radius or a known encircled-energy radius)
+    # Do a measurement of some kind to get star_flux_e_s in e-/s, maybe this will
+    # just known flux / flux cal, not sure yet
     star_flux, star_flux_err, _ = fluxcal.aper_phot(
         direct_star_image,
         encircled_radius=10,
@@ -464,12 +457,12 @@ def test_measure_companions_wcs():
         background_sub=True,
         r_in=12,
         r_out=20,
-        centering_method='xy',  # or 'xy' if you know star coords
+        centering_method='xy',  
         centroid_roi_radius=10
     )
     print(f"\nMeasured host star flux from direct image: {star_flux:.5f} e-/s")
 
-    # Also get a fluxcal_factor, which might give us a zero point:
+    # Also get a fluxcal_factor, which might tbd return a zero point:
     if PHOT_METHOD == "Aperture":
         fluxcal_factor = fluxcal.calibrate_fluxcal_aper(
             direct_star_image,
@@ -486,10 +479,9 @@ def test_measure_companions_wcs():
     zero_point = fluxcal_factor.ext_hdr.get('ZP', None)
     print(f"Derived fluxcal_factor: {fluxcal_factor.data} | ZP={zero_point}")
 
-    # -------------------------------------------------
     # B) Create the coronagraphic/PSF-sub image with companion(s) injected
-    # -------------------------------------------------
-    # We'll interpret create_mock_psfsub_image_wcs as returning a mock *post-sub* image
+
+    # create_mock_psfsub_image_wcs returns a mock post-sub image
     # with negative hole near the star center and faint Gaussian companions.
     injected = [
         inject_companion_mag(120, 80, mag=3,  test_zero_point=zero_point),
@@ -522,10 +514,8 @@ def test_measure_companions_wcs():
 
     # Create mock fpam to excam cal 
     FpamFsamCal = create_mock_fpamfsam_cal(save_file=False)
-    
-    # -------------------------------------------------
+
     # C) Run measure_companions
-    # -------------------------------------------------
     # Pass the measured star_flux_e_s so that measure_companions can compute flux_ratio
     # and (if zero_point is present) an apparent magnitude as well.
     result_table = measure_companions.measure_companions(
@@ -537,8 +527,8 @@ def test_measure_companions_wcs():
         cor_dataset = dataset_ct,
         FpamFsamCal = FpamFsamCal,
         fluxcal_factor=fluxcal_factor,
-        star_flux_e_s=star_flux,     # needed for computing flux ratios
-        # star_mag=...               # If you want to do companion mag = star_mag - 2.5log10(ratio)
+        star_flux_e_s=star_flux,    
+        # star_mag=...               # If want to do companion mag = star_mag - 2.5log10(ratio)
         verbose=True
     )
 
