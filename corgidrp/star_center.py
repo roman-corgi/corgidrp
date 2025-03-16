@@ -1,59 +1,52 @@
 import numpy as np
 from scipy.optimize import minimize
 
-"""
-spotSepGuessPix : float
-    Expected (i.e., model-based) separation of the satellite spots from the
-    star. Used as the starting point for the separation for the center of
-    the region of interest. Units of pixels. Compute beforehand as
-    separation in lambda/D multiplied by pixels per lambda/D.
-    6.5*(51.46*0.575/13)
-roiRadiusPix : float
-    Radius of each region of interest used when summing the intensity of a
-    satellite spot. Units of pixels.
-probeRotVecDeg : array_like
-    1-D array of how many degrees counterclockwise from the x-axis to
-    rotate the regions of interest used when summing the satellite spots.
-    Note that a pair of satellite spots is given by just one value. For
-    example, for a single pair of satellite spots along the x-axis use
-    [0, ] and not [0, 180]. And for a plus-shaped layout of spots,
-    use [0, 90].
-nSubpixels : int
-    Number of subpixels across used to make edge values of the region-of-
-    interest mask. The value of the edge pixels in the ROI is the mean of
-    all the subpixel values.
-nSteps : int
-    Number of points used along each direction for the grid search.
-    Odd numbers are better to provide symmetry of values when the array is
-    truly centered.
-stepSize : float
-    The step size used in the grid search. Units of pixels.
-nIter : int
-    Number of iterations in the loop that hones in on the radial separation
-    of the satellite spots.
-"""
-satellite_spot_parameters = {
-    "NFOV": {
+
+def validate_satellite_spot_parameters(params):
+    """
+    Checks if a dictionary conforms to the required satellite spot parameters format.
+
+    Args:
+        params (dict): Dictionary to validate.
+
+    Returns:
+        bool: True if valid, False otherwise.
+    """
+    required_structure = {
         "offset": {
-            "spotSepPix": 14.79,
-            "roiRadiusPix": 4.5,
-            "probeRotVecDeg": [0, 90],
-            "nSubpixels": 100,
-            "nSteps": 7,
-            "stepSize": 1,
-            "nIter": 6,
+            "spotSepPix": float,
+            "roiRadiusPix": float,
+            "probeRotVecDeg": list,
+            "nSubpixels": int,
+            "nSteps": int,
+            "stepSize": float,
+            "nIter": int,
         },
         "separation": {
-            "spotSepPix": 14.79,
-            "roiRadiusPix": 1.5,
-            "probeRotVecDeg": [0, 90],
-            "nSubpixels": 100,
-            "nSteps": 21,
-            "stepSize": 0.25,
-            "nIter": 5,
+            "spotSepPix": float,
+            "roiRadiusPix": float,
+            "probeRotVecDeg": list,
+            "nSubpixels": int,
+            "nSteps": int,
+            "stepSize": float,
+            "nIter": int,
         }
     }
-}
+
+    if not isinstance(params, dict):
+        return False
+
+    for section in ['offset', 'separation']:
+        if section not in params or not isinstance(params[section], dict):
+            return False
+        for key, expected_type in validate_satellite_spot_parameters.__annotations__[section].items():
+            if key not in params[section]:
+                return False
+            if not isinstance(params[section][key], expected_type):
+                return False
+
+    return True
+
 
 def circle(nx, ny, roiRadiusPix, xShear, yShear, nSubpixels=100):
     """
@@ -779,15 +772,12 @@ def calc_spot_separation(spotArray, xOffset, yOffset, tuningParamDict):
     return spotSepEst
 
 
-import numpy as np
-
 def star_center_from_satellite_spots(
     img_ref,
     img_sat_spot,
     star_coordinate_guess,
     thetaOffsetGuess,
-    satellite_spot_parameters,
-    observing_mode='NFOV',
+    satellite_spot_parameters=None,
 ):
     """
     Estimates the star center and spot locations from satellite spot images and science data.
@@ -801,20 +791,60 @@ def star_center_from_satellite_spots(
             Starting guess for the absolute (x, y) coordinate of the star (in pixels).
             The offset calculation is referenced to the image center, which is assumed
             to be (image_size // 2, image_size // 2).
+        satellite_spot_parameters (dict, optional):
+            Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
+            should have the following structure:
+
+            offset : dict
+                Parameters for estimating the offset of the star center:
+
+                spotSepPix : float
+                    Expected (model-based) separation of the satellite spots from the star.
+                    Units: pixels.
+                roiRadiusPix : float
+                    Radius of the region of interest around each satellite spot.
+                    Units: pixels.
+                probeRotVecDeg : array_like
+                    Angles (degrees CCW from x-axis) specifying the position of satellite spot pairs.
+                nSubpixels : int
+                    Number of subpixels across for calculating region-of-interest mask edges.
+                nSteps : int
+                    Number of points in grid search along each direction.
+                stepSize : float
+                    Step size for the grid search.
+                    Units: pixels.
+                nIter : int
+                    Number of iterations refining the radial separation.
+
+            separation : dict
+                Parameters for estimating the separation of satellite spots from the star:
+
+                spotSepPix : float
+                    Expected separation between star and satellite spots.
+                    Units: pixels.
+                roiRadiusPix : float
+                    Radius of the region of interest around each satellite spot.
+                    Units: pixels.
+                probeRotVecDeg : array_like
+                    Angles (degrees CCW from x-axis) specifying the position of satellite spot pairs.
+                nSubpixels : int
+                    Number of subpixels across for calculating region-of-interest mask edges.
+                nSteps : int
+                    Number of points in grid search along each direction.
+                stepSize : float
+                    Step size for the grid search.
+                    Units: pixels.
+                nIter : int
+                    Number of iterations refining the radial separation.
         thetaOffsetGuess (float):
             Theta rotation (in degrees) of spot locations on the camera, which might be different
             from expected due to clocking error between the DM and the camera.
-        satellite_spot_parameters (dict):
-            Dictionary containing tuning parameters for spot separation and offset estimation.
-        observing_mode (str, optional):
-            Mode for selecting the satellite spot parameters from the `satellite_spot_parameters` dictionary.
-            Defaults to 'NFOV'.
 
     Returns:
         numpy.ndarray:
             Estimated absolute coordinates [x, y] of the star center in the spots image.
         numpy.ndarray:
-            Array of spot locations in [x, y] format.
+            Calculated locations of the satellite spots.
     """
 
     # check inputs
@@ -833,7 +863,7 @@ def star_center_from_satellite_spots(
     img_spots = img_sat_spot - img_ref
 
     # Grab the relevant tuning parameters
-    tuningParamDict = satellite_spot_parameters[observing_mode]
+    tuningParamDict = satellite_spot_parameters
 
     # estimate star location:
     # calc_star_location_from_spots should return (xOffsetEst, yOffsetEst)

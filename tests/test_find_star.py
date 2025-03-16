@@ -17,7 +17,30 @@ def test_find_star():
     corgidrp.track_individual_errors = True # this test uses individual error components
 
     # Read initial parameters for testing
-    satellite_spot_parameters = star_center.satellite_spot_parameters
+
+    satellite_spot_parameters = {
+        "NFOV": {
+            "offset": {
+                "spotSepPix": 14.79,
+                "roiRadiusPix": 4.5,
+                "probeRotVecDeg": [0, 90],
+                "nSubpixels": 100,
+                "nSteps": 7,
+                "stepSize": 1,
+                "nIter": 6,
+            },
+            "separation": {
+                "spotSepPix": 14.79,
+                "roiRadiusPix": 1.5,
+                "probeRotVecDeg": [0, 90],
+                "nSubpixels": 100,
+                "nSteps": 21,
+                "stepSize": 0.25,
+                "nIter": 5,
+            }
+        }
+    }
+
     separation = satellite_spot_parameters['NFOV']['separation']['spotSepPix']
 
     # Set the star center position for injection of satellite spots
