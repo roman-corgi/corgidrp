@@ -1,18 +1,22 @@
 import os
 import sys
 import numpy as np
+import astropy.time as time
 from astropy.io import fits
 from astropy.table import Table
 from scipy.ndimage import gaussian_filter
 
 from pyklip.instruments.utils.wcsgen import generate_wcs
 
+import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.measure_companions as measure_companions
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
-from corgidrp.data import Image, Dataset
+from corgidrp.data import Image, Dataset, FpamFsamCal, CoreThroughputCalibration
+from corgidrp.mocks import create_default_L3_headers, create_ct_psfs
+from corgidrp import corethroughput
 
 INPUT_STARS = ['109 Vir']
 FWHM = 3
@@ -45,6 +49,7 @@ elif PHOT_METHOD == "Gaussian":
         "centering_initial_guess": None
     }
 
+#### CREATE MOCKS - move these to mocks.py most likely ####
 def create_mock_psfsub_image_wcs(
         ny=200, nx=200,
         star_center=None,
@@ -222,6 +227,185 @@ def mock_flux_image(exptime, filter_used, cal_factor, save_mocks, output_path=No
         flux_star_images.append(flux_image)
     return flux_star_images
 
+
+def create_mock_ct_dataset_and_cal_file(
+    fwhm=50,
+    n_psfs=100,
+    cfam_name='1F',
+    pupil_value_1=1,
+    pupil_value_2=3,
+    seed=None,
+    save_cal_file=False,
+    cal_filename=None
+):
+    """
+    Create a mock dataset suitable for generating a Core Throughput calibration file,
+    then generate and return that calibration file in-memory.
+
+    Parameters
+    ----------
+    fwhm : float, optional
+        The FWHM (in mas) for the mock off-axis PSFs (used by create_ct_psfs).
+    n_psfs : int, optional
+        Number of off-axis PSFs to generate.
+    cfam_name : str, optional
+        CFAM filter name to store in the header.
+    pupil_value_1 : float, optional
+        A value to fill in the first pupil image (used to simulate unocculted frames).
+    pupil_value_2 : float, optional
+        A value to fill in the second pupil image.
+    seed : int, optional
+        Random seed for reproducibility (used if create_ct_psfs has random offsets).
+    save_cal_file : bool, optional
+        Whether to save the generated calibration file to disk.
+    cal_filename : str, optional
+        Filename to use if saving the calibration file. If None, a default is generated.
+
+    Returns
+    -------
+    dataset_ct : corgidrp.data.Dataset
+        The constructed dataset containing pupil frames + off-axis PSFs.
+    ct_cal : corgidrp.data.CoreThroughputCalibration
+        The generated core throughput calibration object (in-memory).
+    """
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # ----------------------------
+    # A) Create the base headers
+    # ----------------------------
+    prhd, exthd = create_default_L3_headers()
+    exthd['DRPCTIME'] = time.Time.now().isot
+    exthd['DRPVERSN'] = corgidrp.__version__
+    exthd['CFAMNAME'] = cfam_name
+
+    # For example, choose some FPAM/FSAM positions during CT observations
+    # (just arbitrary or from real test data)
+    exthd['FPAM_H'] = 6854
+    exthd['FPAM_V'] = 22524
+    exthd['FSAM_H'] = 29471
+    exthd['FSAM_V'] = 12120
+
+    # Make a pupil header so we can mark these frames as unocculted
+    exthd_pupil = exthd.copy()
+    exthd_pupil['DPAMNAME'] = 'PUPIL'
+    exthd_pupil['LSAMNAME'] = 'OPEN'
+    exthd_pupil['FSAMNAME'] = 'OPEN'
+    exthd_pupil['FPAMNAME'] = 'OPEN_12'
+
+    # ----------------------------
+    # B) Create the unocculted/pupil frames
+    # ----------------------------
+    # We'll do 1024x1024 arrays with uniform “patches”
+    shape = (1024, 1024)
+    pupil_image_1 = np.zeros(shape)
+    pupil_image_2 = np.zeros(shape)
+    # fill some patch with pupil_value_1
+    pupil_image_1[510:530, 510:530] = pupil_value_1
+    pupil_image_2[510:530, 510:530] = pupil_value_2
+    err = np.ones(shape)
+
+    # Build Images
+    im_pupil1 = Image(pupil_image_1, pri_hdr=prhd, ext_hdr=exthd_pupil, err=err)
+    im_pupil2 = Image(pupil_image_2, pri_hdr=prhd, ext_hdr=exthd_pupil, err=err)
+
+    # ----------------------------
+    # C) Create a set of off-axis PSFs
+    # ----------------------------
+    # create_ct_psfs(...) is your existing function that returns:
+    #   data_psf (list of Image objects),
+    #   psf_loc_in (array of shape (N, 2)),
+    #   half_psf (some flux array)
+    # We pass fwhm=..., cfam_name=..., n_psfs=..., etc.
+    data_psf, psf_locs, half_psf = create_ct_psfs(
+        fwhm_mas=fwhm,
+        cfam_name=cfam_name,
+        n_psfs=n_psfs
+    )
+
+    # Combine all frames into a single Dataset
+    data_ct = [im_pupil1, im_pupil2] + data_psf
+    dataset_ct = Dataset(data_ct)
+
+    # ----------------------------
+    # D) Generate the CT cal file
+    # ----------------------------
+    ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct)
+
+    # Optionally save it to disk
+    if save_cal_file:
+        if not cal_filename:
+            # e.g. "CoreThroughputCalibration_<ISOTIME>.fits"
+            cal_filename = f"CoreThroughputCalibration_{time.Time.now().isot}.fits"
+        cal_filepath = os.path.join(corgidrp.default_cal_dir, cal_filename)
+        ct_cal_tmp.save(filedir=corgidrp.default_cal_dir, filename=cal_filename)
+        print(f"Saved CT cal file to: {cal_filepath}")
+
+    return dataset_ct, ct_cal_tmp
+
+
+def create_mock_fpamfsam_cal(
+    fpam_matrix=None,
+    fsam_matrix=None,
+    date_valid=None,
+    save_file=False,
+    output_dir=None,
+    filename=None
+):
+    """
+    Create and optionally save a mock FpamFsamCal object.
+
+    Parameters
+    ----------
+    fpam_matrix : np.ndarray of shape (2,2) or None
+        The custom transformation matrix from FPAM to EXCAM. 
+        If None, defaults to FpamFsamCal.fpam_to_excam_modelbased.
+    fsam_matrix : np.ndarray of shape (2,2) or None
+        The custom transformation matrix from FSAM to EXCAM.
+        If None, defaults to FpamFsamCal.fsam_to_excam_modelbased.
+    date_valid : astropy.time.Time or None
+        Date/time from which this calibration is valid.
+        If None, defaults to the current time.
+    save_file : bool, optional
+        If True, save the generated calibration file to disk.
+    output_dir : str, optional
+        Directory in which to save the file if save_file=True. Defaults to current dir.
+    filename : str, optional
+        Filename to use if saving to disk. If None, a default name is generated.
+
+    Returns
+    -------
+    FpamFsamCal
+        The newly-created FpamFsamCal object (in memory).
+    """
+    if fpam_matrix is None:
+        fpam_matrix = FpamFsamCal.fpam_to_excam_modelbased
+    if fsam_matrix is None:
+        fsam_matrix = FpamFsamCal.fsam_to_excam_modelbased
+
+    # Ensure the final shape is (2, 2, 2):
+    # [ [fpam_matrix], [fsam_matrix] ]
+    combined_array = np.array([fpam_matrix, fsam_matrix])  # shape (2,2,2)
+
+    # Create the calibration object in-memory
+    fpamfsam_cal = FpamFsamCal(data_or_filepath=combined_array, date_valid=date_valid)
+
+    if save_file:
+        # By default, use the filename from the object's .filename unless overridden
+        if not filename:
+            filename = fpamfsam_cal.filename  # e.g. "FpamFsamCal_<ISOTIME>.fits"
+
+        if not output_dir:
+            output_dir = '.'
+
+        # Save the calibration file
+        filepath = os.path.join(output_dir, filename)
+        fpamfsam_cal.save(filedir=output_dir, filename=filename)
+        print(f"Saved FpamFsamCal to {filepath}")
+
+    return fpamfsam_cal
+
+
 def inject_companion_mag(x, y, mag, test_zero_point=20):
     """
     Helper to compute a companion flux (in e-/s) for a given 'test zero point' scenario.
@@ -238,43 +422,83 @@ def inject_companion_mag(x, y, mag, test_zero_point=20):
     flux_e_s = 10**(-0.4 * (mag - test_zero_point))
     return {'x': x, 'y': y, 'flux': flux_e_s}
 
+
 def test_measure_companions_wcs():
     """
-      1) Inject 2 companions in the image.
-      2) Also define them as "detected_companions" with SNR + location,
-         so the SNYX### keywords get created.
-      3) Save multi-extension FITS with ERR + DQ HDUs.
-      5) Call measure_companions.
+    1) Generate a mock 'direct star image' (flux_image) to measure star flux.
+    2) Inject 2 companions in the coronagraphic (or PSF-sub) image.
+    3) Define them as "detected_companions" so SNYX### keywords get created.
+    4) Save multi-extension FITS with ERR + DQ HDUs.
+    5) Call measure_companions and compute flux ratios + magnitudes.
     """
     out_dir = os.path.join('corgidrp', 'data', 'L4TestInput')
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, 'mock_l4_companions.fits')
 
-    # Get a fluxcal factor calibration product
-    flux_image = mock_flux_image(5, "3C", CAL_FACTOR, True, output_path='/Users/jmilton/Github/corgidrp/corgidrp/data/L4TestInput', 
-                           background_val=0, add_gauss_noise_val=False)
-    
-    flux_image = l2b_to_l3.divide_by_exptime(Dataset(flux_image))
+    # -------------------------------------------------
+    # A) Generate/measure a "direct star image"
+    # -------------------------------------------------
+    # Here, we assume mock_flux_image(...) returns an unocculted star image (or close to it).
+    # `flux_image` is a list of Image objects, typically with length=1.
+    flux_image_list = mock_flux_image(
+        exptime=5,
+        filter_used="3C",
+        cal_factor=CAL_FACTOR,
+        save_mocks=True,
+        output_path='/Users/jmilton/Github/corgidrp/corgidrp/data/L4TestInput',
+        background_val=0,
+        add_gauss_noise_val=False
+    )
+    # Convert from total counts to count rate if needed
+    flux_image_list = l2b_to_l3.divide_by_exptime(Dataset(flux_image_list))
+    direct_star_image = flux_image_list[0]  # Just take the first for star flux
 
+    # Do an aperture measurement to get star_flux_e_s in e-/s
+    # (might choose a large radius or a known encircled-energy radius)
+    star_flux, star_flux_err, _ = fluxcal.aper_phot(
+        direct_star_image,
+        encircled_radius=10,
+        frac_enc_energy=1.0,
+        method='subpixel',
+        subpixels=5,
+        background_sub=True,
+        r_in=12,
+        r_out=20,
+        centering_method='xy',  # or 'xy' if you know star coords
+        centroid_roi_radius=10
+    )
+    print(f"\nMeasured host star flux from direct image: {star_flux:.5f} e-/s")
+
+    # Also get a fluxcal_factor, which might give us a zero point:
     if PHOT_METHOD == "Aperture":
-        fluxcal_factor = fluxcal.calibrate_fluxcal_aper(flux_image[0], flux_or_irr = FLUX_OR_IRR, phot_kwargs=PHOT_ARGS)
+        fluxcal_factor = fluxcal.calibrate_fluxcal_aper(
+            direct_star_image,
+            flux_or_irr=FLUX_OR_IRR,
+            phot_kwargs=PHOT_ARGS
+        )
     else:
-        fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(flux_image[0], flux_or_irr = FLUX_OR_IRR, phot_kwargs=PHOT_ARGS)
+        fluxcal_factor = fluxcal.calibrate_fluxcal_gauss2d(
+            direct_star_image,
+            flux_or_irr=FLUX_OR_IRR,
+            phot_kwargs=PHOT_ARGS
+        )
 
-    print("fluxcal factor", fluxcal_factor.data, fluxcal_factor.ext_hdr['ZP'])
+    zero_point = fluxcal_factor.ext_hdr.get('ZP', None)
+    print(f"Derived fluxcal_factor: {fluxcal_factor.data} | ZP={zero_point}")
 
-    # Get the zero point
-    zero_point = fluxcal_factor.ext_hdr['ZP']
-
+    # -------------------------------------------------
+    # B) Create the coronagraphic/PSF-sub image with companion(s) injected
+    # -------------------------------------------------
+    # We'll interpret create_mock_psfsub_image_wcs as returning a mock *post-sub* image
+    # with negative hole near the star center and faint Gaussian companions.
     injected = [
-        inject_companion_mag(120, 80, mag=3, test_zero_point=zero_point),
+        inject_companion_mag(120, 80, mag=3,  test_zero_point=zero_point),
         inject_companion_mag(90, 130, mag=1, test_zero_point=zero_point),
     ]
 
-    # Generate the HDUList
     hdul = create_mock_psfsub_image_wcs(
         ny=200, nx=200,
-        star_center=None,
+        star_center=None,   # default = image center
         roll_angle=10.0,
         platescale=0.0218,
         injected_companions=injected,
@@ -282,27 +506,53 @@ def test_measure_companions_wcs():
         noise_std=0.01,
         background_level=0.0
     )
-
-    # Write to disk
     hdul.writeto(out_path, overwrite=True)
-    print(f"Mock file saved to {out_path}")
+    print(f"Mock post-sub file saved to {out_path}")
 
-    input_image = Image(out_path)
+    # Wrap in corgidrp.data.Image
+    psf_sub_image = Image(out_path)
 
-    # Run measure_companions
+    # Create core throughput cal product
+    dataset_ct, ct_cal = create_mock_ct_dataset_and_cal_file(
+        fwhm=50,
+        n_psfs=20,
+        cfam_name='3C',
+        save_cal_file=False
+    )
+
+    # Create mock fpam to excam cal 
+    FpamFsamCal = create_mock_fpamfsam_cal(save_file=False)
+    
+    # -------------------------------------------------
+    # C) Run measure_companions
+    # -------------------------------------------------
+    # Pass the measured star_flux_e_s so that measure_companions can compute flux_ratio
+    # and (if zero_point is present) an apparent magnitude as well.
     result_table = measure_companions.measure_companions(
-        image=input_image,
-        method='aperture',
+        image=psf_sub_image,
+        method='aperture',           # or 'psf_fit' or 'forward_model'
         apply_throughput=True,
         apply_fluxcal=True,
-        fluxcal_factor = fluxcal_factor,
+        ct_cal = ct_cal,
+        cor_dataset = dataset_ct,
+        FpamFsamCal = FpamFsamCal,
+        fluxcal_factor=fluxcal_factor,
+        star_flux_e_s=star_flux,     # needed for computing flux ratios
+        # star_mag=...               # If you want to do companion mag = star_mag - 2.5log10(ratio)
         verbose=True
     )
-    print("\nResult Table:\n", result_table)
 
+    print("\nResult Table:\n", result_table)
     assert len(result_table) == 2, "Expected 2 measured companions"
 
+    # Inspect results
+    for row in result_table:
+        print(f"ID={row['id']} | (x,y)=({row['x']:.1f},{row['y']:.1f}) "
+              f"| flux_raw={row['flux_raw']:.3f} e-/s | ratio={row['flux_ratio']:.3e} "
+              f"| mag={row['mag']}")
+
     print("Test completed successfully")
+
 
 '''
 @pytest.mark.parametrize("known_mag, test_zp", [

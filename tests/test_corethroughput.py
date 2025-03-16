@@ -316,6 +316,7 @@ def teardown_module():
     del ct_in, ct_syn
 
 if __name__ == '__main__':
+    setup_module()
     test_psf_pix_and_ct()
     test_fpm_pos()
     test_cal_file()
