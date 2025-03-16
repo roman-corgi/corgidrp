@@ -5,7 +5,7 @@ import astropy.io.fits as fits
 import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L2a_headers
 from corgidrp.data import Image, Dataset, DetectorParams
 import corgidrp.caldb as caldb
 from corgidrp.darks import build_trad_dark
@@ -20,7 +20,7 @@ err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1
-prhd, exthd = create_default_headers()
+prhd, exthd = create_default_L2a_headers()
 errhd = fits.Header()
 errhd["CASE"] = "test"
 dqhd = fits.Header()
@@ -61,11 +61,6 @@ def test_err_dq_creation():
     image1.save(filename='test_image1.fits')
 
     image2 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err, dq = dq1, err_hdr = errhd, dq_hdr = dqhd)
-    print("data", image2.data)
-    print("error", image2.err)
-    print("dq", image2.dq)
-    print("err_hdr", image2.err_hdr)
-    print("dq_hdr", image2.dq_hdr)
     # test the user defined error and dq headers
     assert image2.err_hdr["CASE"] == errhd["CASE"]
     assert image2.dq_hdr["CASE"] == dqhd["CASE"]
@@ -167,8 +162,6 @@ def test_get_masked_data():
     """
     image2 = Image('test_image2.fits')
     masked_data = image2.get_masked_data()
-    print("masked data", masked_data.data)
-    print("mask", masked_data.mask)
     assert masked_data.data[0,1] == 2
     #check that pixel 0,0 is masked and not considered
     assert masked_data.mask[0,0] == True
@@ -232,7 +225,6 @@ def test_err_array_sizes():
     if not os.path.exists(calibdir):
             os.mkdir(calibdir)
     dark_frame.save(filedir=calibdir, filename=dark_filename)
-
 
     ##### Scan the caldb ##### - This tests for previous bug that darks weren't in the right format.
     testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
