@@ -4,7 +4,6 @@ from corgidrp.l3_to_l4 import northup
 from astropy.wcs import WCS
 from matplotlib import pyplot as plt
 import numpy as np
-import warnings
 
 # same function as Amanda's step function, will be imported once merged
 def create_wcs(input_dataset, astrom_calibration):
@@ -76,13 +75,14 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
     ang_list = [0,45,90,135,180,270]
     north_angle = 30
     updated_datalist = []
+
+    # make a mock dataset
+    mock_dataset_ori = mocks.create_astrom_data(fieldpath, rotation=north_angle)
+    # run the boresight calibration to get an AstrometricCalibration file
+    astrom_cal = astrom.boresight_calibration(mock_dataset_ori, fieldpath, find_threshold=10)
+
     for ang in ang_list:
-
-       # make a mock dataset
-       mock_dataset = mocks.create_astrom_data(fieldpath, rotation=north_angle)
-
-       # run the boresight calibration to get an AstrometricCalibration file
-       astrom_cal = astrom.boresight_calibration(mock_dataset, fieldpath, find_threshold=10)
+       mock_dataset =  mock_dataset_ori.copy()
 
        # add an angle offset
        mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
@@ -118,12 +118,9 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         dq_derot = derot_data.dq
 
         sci_hd = input_data.ext_hdr
-        try:
-            xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY']
-        except KeyError:
-            warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
-            ylen, xlen = sci_input.shape
-            xcen, ycen = xlen/2, ylen/2
+	# rotate around the center of the image
+        ylen, xlen = sci_input.shape
+        xcen, ycen = xlen/2, ylen/2 
 
         # check the angle offset
         astr_hdr = WCS(sci_hd)
