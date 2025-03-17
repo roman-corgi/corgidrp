@@ -158,7 +158,7 @@ def test_ct_map():
     # randomly distributed (dataset_ct) and the one used for CT interpolation
     # that has a set of PSFs with pre-stablished CT and locations (dataset_ct_interp)
 
-    for dataset in [dataset_ct_interp, dataset_ct_interp]:
+    for dataset in [dataset_ct, dataset_ct_interp]:
         # Generate core throughput calibration file
         ct_cal = corethroughput.generate_ct_cal(dataset)
     
