@@ -1737,7 +1737,8 @@ class CoreThroughputCalibration(Image):
         # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
         azimuth_cor = np.arctan2(y_cor, x_cor) - azimuth0
        
-        # MOD this azimuth so that we're in the right range. 
+        # MOD this azimuth so that we're in the right range: all angles will be
+        # within [0, azimuths.max()), including negative values
         azimuth_cor = azimuth_cor % azimuths.max()
        
         if logr: 
