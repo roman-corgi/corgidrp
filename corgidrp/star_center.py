@@ -50,34 +50,42 @@ def validate_satellite_spot_parameters(params):
 
 def update_parameters(params, new_values):
     """
-    Updates a dictionary of parameters with new values.
+    Updates a nested dictionary of parameters with new values.
 
     Args:
         params (dict):
-            Original dictionary containing initial parameter values.
+            Original nested dictionary containing initial parameter values.
+            Structure: {key1: {subkey1: val, subkey2: val}, key2: {...}}
+
         new_values (dict):
-            Dictionary containing new parameter values to update.
+            Nested dictionary containing new parameter values to update.
+            Must match the structure of `params`.
 
     Returns:
-        dict: The updated dictionary.
+        dict: The updated nested dictionary.
 
     Raises:
-        KeyError: If `new_values` contains keys not present in `params`.
+        KeyError: If `new_values` contains keys or subkeys not present in `params`.
 
     Example:
-        >>> params = {'x': 1, 'y': 2}
-        >>> new_values = {'x': 10}
+        >>> params = {'a': {'x': 1, 'y': 2}, 'b': {'z': 3}}
+        >>> new_values = {'a': {'x': 10}}
         >>> update_parameters(params, new_values)
-        {'x': 10, 'y': 2}
+        {'a': {'x': 10, 'y': 2}, 'b': {'z': 3}}
 
-        >>> new_values = {'z': 5}
+        >>> new_values = {'b': {'w': 5}}
         >>> update_parameters(params, new_values)
-        KeyError: "Key 'z' is not a valid parameter."
+        KeyError: "Subkey 'w' is not a valid parameter under key 'b'."
     """
-    for key in new_values:
+    for key, subdict in new_values.items():
         if key not in params:
             raise KeyError(f"Key '{key}' is not a valid parameter.")
-        params[key] = new_values[key]
+
+        for subkey, value in subdict.items():
+            if subkey not in params[key]:
+                raise KeyError(f"Subkey '{subkey}' is not a valid parameter under key '{key}'.")
+
+            params[key][subkey] = value
 
     return params
 
@@ -825,6 +833,9 @@ def star_center_from_satellite_spots(
             Starting guess for the absolute (x, y) coordinate of the star (in pixels).
             The offset calculation is referenced to the image center, which is assumed
             to be (image_size // 2, image_size // 2).
+        thetaOffsetGuess (float):
+            Theta rotation (in degrees) of spot locations on the camera, which might be different
+            from expected due to clocking error between the DM and the camera.
         satellite_spot_parameters (dict, optional):
             Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
             should have the following structure:
@@ -870,9 +881,6 @@ def star_center_from_satellite_spots(
                     Units: pixels.
                 nIter : int
                     Number of iterations refining the radial separation.
-        thetaOffsetGuess (float):
-            Theta rotation (in degrees) of spot locations on the camera, which might be different
-            from expected due to clocking error between the DM and the camera.
 
     Returns:
         numpy.ndarray:
