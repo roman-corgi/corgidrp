@@ -29,11 +29,11 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
 
         # Make sure all frames in dataset have the same filter and target
         filter_name = fluxcal.get_filter_name(mag_data[0])
-        target_name = mag_data[0].ext_hdr["TARGET"]
+        target_name = mag_data[0].pri_hdr["TARGET"]
         
         for img in mag_data:
             img_filter = fluxcal.get_filter_name(img)
-            img_target = img.ext_hdr["TARGET"]
+            img_target = img.pri_hdr["TARGET"]
 
             if img_filter != filter_name:
                 raise ValueError(f"All images in dataset must be taken with the same CFAMNAME for calculating"

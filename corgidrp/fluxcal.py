@@ -422,7 +422,7 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
 
     Returns:
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
-            flux calibration factor in (TO DO: what units should this be in, if any??)
+            flux calibration factor in (TO DO: what units should this be in)
     """
     if isinstance(dataset_or_image, corgidrp.data.Dataset):
         image = dataset_or_image[0]
@@ -532,7 +532,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
                 
     Returns:
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
-            flux calibration factor in (TO DO: what units should this be in, if any??)
+            flux calibration factor in (TO DO: what units should this be in)
     """
     if isinstance(dataset_or_image, corgidrp.data.Dataset):
         image = dataset_or_image[0]

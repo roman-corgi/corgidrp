@@ -11,6 +11,7 @@ from pyklip.instruments.utils.wcsgen import generate_wcs
 import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.l2b_to_l3 as l2b_to_l3
+import corgidrp.l4_to_tda as l4_to_tda
 import corgidrp.measure_companions as measure_companions
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
@@ -50,145 +51,324 @@ elif PHOT_METHOD == "Gaussian":
     }
 
 #### CREATE MOCKS - move these to mocks.py most likely ####
-def create_mock_psfsub_image_wcs(
-        ny=200, nx=200,
-        star_center=None,
-        roll_angle=0.0,
-        platescale=0.0218,
-        injected_companions=None,
-        add_noise=False,
-        noise_std=0.01,
-        background_level=0.0
-    ):
+
+def generate_coron_dataset_with_companions(
+    n_frames=1,
+    shape=(200, 200),
+    star_center=None,
+    companion_xy=None,
+    companion_flux=100.0,
+    star_flux=1e5,
+    roll_angles=None,
+    platescale=0.0218,
+    add_noise=False,
+    noise_std=1.0e-2,
+    outdir=None
+):
     """
-    Create a mock PSF-subtracted image with WCS, error, and DQ HDUs.
+    Create a mock "coronagraphic" dataset with a star behind a coronagraph, plus one or more companions.
+
+    - If the plan is to do forward modeling, pass this dataset to the
+      PSF-subtraction pipeline (pyKLIP) to see how the companion is subtracted.
+    - If you only have one frame, that’s not ideal for ADI, but you can still do RDI if you have references.
 
     Parameters
     ----------
-    ny, nx : int
-        Image dimensions.
-    star_center : (y, x) or None
-        Location of star center. Default = center of array.
-    roll_angle : float
-        Roll angle in degrees for the WCS.
+    n_frames : int
+        Number of frames (images) to create. If >1, you can vary roll angles or
+        do ADI-like analysis.
+    shape : (ny, nx)
+        Size of each frame in pixels.
+    star_center : (x, y) or None
+        Pixel coordinates of the star center. If None, defaults to the image center.
+    companion_xy : list of (x, y) or None
+        One or more companion coordinates. E.g. [(120, 80), (90, 130)].
+        If None, no companion is injected.
+    companion_flux : float or list of float
+        Flux for each companion. If multiple companions, pass a list with same length.
+    star_flux : float
+        Flux of the star. (Used to create a Gaussian approximation or something simpler.)
+    roll_angles : list of float or None
+        If n_frames>1, pass a list of roll angles. If None, defaults to all 0.
     platescale : float
-        Plate scale in arcsec/pixel. (21.8 mas/px = 0.0218 arcsec/px)
-    injected_companions : list of dict or None
-        List of dictionaries defining injected sources. 
-        Example: [{'x':120, 'y':80, 'flux':0.2}, ...]
-    add_noise : bool, optional
-        Whether to add Gaussian noise to the image (default: True). Haven't really figured 
-        out a good way to do this yet so i don't recommend using this option.
-    noise_std : float, optional
-        Standard deviation of the Gaussian noise (default: 0.01).
+        Plate scale in arcsec/pixel.
+    add_noise : bool
+        Whether to add random noise.
+    noise_std : float
+        Stddev of the noise if add_noise=True.
+    outdir : str or None
+        If not None, saves the resulting frames to disk in outdir. If None, does not save.
 
     Returns
     -------
-    hdul : fits.HDUList
-        [HDU0: Primary (no data),
-         HDU1: Science data,
-         HDU2: Error array,
-         HDU3: Data-quality array]
+    Dataset
+        A corgidrp.data.Dataset with n_frames of coronagraphic images, each with a star and optional companions.
     """
-    # Default star center
+    ny, nx = shape
     if star_center is None:
-        star_center = (ny // 2, nx // 2)
+        star_center = (nx / 2, ny / 2)  # (x, y)
 
-    # 1) Build a mock science data array
-    data = np.full((ny, nx), background_level, dtype=np.float32)
+    # If companion_xy is a list of coordinates:
+    if companion_xy is None:
+        # No companion by default
+        companion_xy = []
+    # If companion_flux is a single float but multiple companions exist, unify
+    if isinstance(companion_flux, (int, float)):
+        companion_flux = [companion_flux] * len(companion_xy)
 
-    # Create an artificial hole at the star center
-    rr, cc = np.indices(data.shape)
-    rr_off = rr - star_center[0]
-    cc_off = cc - star_center[1]
-    star_hole = np.exp(-(rr_off**2 + cc_off**2) / (2 * (5.0**2)))
-    data -= 0.5 * star_hole.astype(np.float32)
+    if roll_angles is None:
+        roll_angles = [0.0]*n_frames
+    elif len(roll_angles) != n_frames:
+        raise ValueError("roll_angles must be length n_frames or None.")
 
-    # Inject faint companions with Gaussian profiles
-    if injected_companions:
-        for comp in injected_companions:
-            yy, xx = comp['y'], comp['x']
-            flux = comp['flux']
-            r2 = (rr - yy)**2 + (cc - xx)**2
-            
-            # Normalize Gaussian PSF so that total flux sums to desired value
-            gaus = (flux / (2 * np.pi * (1.5**2))) * np.exp(-r2 / (2 * (1.5**2)))
-            data += gaus.astype(np.float32)
+    frames = []
+    for i in range(n_frames):
+        # Build a data array
+        data_arr = np.zeros((ny, nx), dtype=np.float32)
 
-    # Apply a slight blur to simulate realistic conditions
-    data = gaussian_filter(data, sigma=0.5)
+        # (A) Insert a star + coronagraph
+        # For simplicity, do a 2D Gaussian for the star, or a "hole" in the center, etc. 
+        xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
+        # standard deviation for star? e.g. FWHM=3 => sigma=3/(2sqrt(2ln2)) ~ 1.27
+        sigma = 1.2
+        r2 = (xgrid - star_center[0])**2 + (ygrid - star_center[1])**2
+        star_gaus = (star_flux / (2*np.pi*sigma**2)) * np.exp(-0.5*r2/sigma**2)
+        # reduce star flux at the center. doing a partial mask for demonstration:
+        # if you want a hole radius=5:
+        hole_mask = r2 < 5**2
+        star_gaus[hole_mask] *= 0.01  # 99% blocked in the center
+        data_arr += star_gaus.astype(np.float32)
 
-    # Add Gaussian noise if enabled
-    if add_noise:
-        noise = np.random.normal(0., noise_std, data.shape)
-        data += noise.astype(np.float32)
+        # (B) Insert companion(s)
+        for j, (cx, cy) in enumerate(companion_xy):
+            flux_c = companion_flux[j]
+            # simple Gaussian companion
+            sigma_c = 1.0
+            r2c = (xgrid - cx)**2 + (ygrid - cy)**2
+            comp_gaus = (flux_c / (2*np.pi*sigma_c**2)) * np.exp(-0.5*r2c/sigma_c**2)
+            data_arr += comp_gaus.astype(np.float32)
 
-    # 2) Create L4 headers
+        # (C) Add noise if requested
+        if add_noise:
+            noise = np.random.normal(0., noise_std, data_arr.shape)
+            data_arr += noise.astype(np.float32)
+
+        # (D) Build primary & extension headers
+        prihdr, exthdr = mocks.create_default_L3_headers()
+        # Minimal keywords
+        prihdr["FILENAME"] = f"mock_coron_{i:03d}.fits"
+        exthdr["ROLL"] = roll_angles[i]
+        exthdr["PLTSCALE"] = platescale
+        exthdr["STARLOCX"] = star_center[0]
+        exthdr["STARLOCY"] = star_center[1]
+        exthdr["CFAMNAME"] = "1F"  # example
+        exthdr["DATALVL"] = "L3"  # or L2, depending on your pipeline convention
+
+        # optional WCS
+        wcs_obj = generate_wcs(
+            roll_angles[i],
+            [star_center[0], star_center[1]],
+            platescale=platescale
+        )
+        wcs_header = wcs_obj.to_header()
+        exthdr.update(wcs_header)
+
+        # Make a corgidrp Image
+        frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
+        frames.append(frame)
+
+    dataset = Dataset(frames)
+
+    # Optionally save
+    if outdir is not None:
+        os.makedirs(outdir, exist_ok=True)
+        # you can either save each frame individually or combine them in a single FITS
+        file_list = [f"mock_coron_{i:03d}.fits" for i in range(n_frames)]
+        dataset.save(filedir=outdir, filenames=file_list)
+        print(f"Saved {n_frames} coronagraphic frames to {outdir}")
+
+    return dataset
+
+
+def generate_psfsub_image_with_companions(
+    nx=200, ny=200,
+    star_center=None,
+    star_flux=1e5,          # Arbitrary star flux
+    star_sub_scale=0.7,
+    # Companion position/flux vs. magnitude
+    companion_xy=None,
+    companion_flux=None,
+    companion_mags=None,
+    zero_point=25.0,
+    # If you have star flux/mag & want F_comp = F_star * 10^-0.4(m_c - m_s),
+    # you can do that here. For simplicity, we do a fixed zero_point approach.
+    
+    ct_cal=None,            # Optional CoreThroughputCalibration
+    use_ct_cal=False,       # Whether to apply throughput from ct_cal
+    cor_dataset = None,     # Dataset used to make the CoreThroughputCalibration
+    FpamFsamCal = None,
+    blur_sigma=0.5,
+    noise_std=1e-7,
+    outdir=None,
+    roll_angle=0.0,
+    platescale=0.0218,
+    hole_radius=None,
+):
+    """
+    Create a single mock PSF-subtracted residual image with star mostly removed 
+    and faint companions. We simulate the star + companions prior to subtraction,
+    then apply a global factor star_sub_scale to mimic the star's partial removal
+    (thus also removing some fraction of the companions).
+
+    Optionally:
+      - Convert companion magnitudes to flux using a zero point.
+      - Apply a throughput factor from a CoreThroughputCalibration object.
+
+    Parameters
+    ----------
+    nx, ny : int
+        Image size in pixels.
+    star_center : (x, y) or None
+        If None, defaults to image center.
+    star_flux : float
+        Total flux of the star prior to PSF subtraction.
+    star_sub_scale : float
+        Fraction of the star’s flux (and companion flux) that remains after subtraction.
+        E.g., 0.7 => 70% remains => partial under-subtraction. 
+        If <0, we get negative residual (over-subtraction).
+    companion_xy : list of (x, y) or None
+        Pixel coords of each companion.
+    companion_flux : float or list of float, optional
+        Direct flux for each companion (pre-throughput).
+    companion_mags : float or list of float, optional
+        Apparent magnitudes for each companion, which we’ll convert to flux via zero_point.
+        If present, we ignore companion_flux (unless you want to combine them, but typically no).
+    zero_point : float
+        Photometric zero point used if companion_mags is specified. 
+        e.g. F = 10^-0.4 (mag - ZP)
+    ct_cal : CoreThroughputCalibration or None
+        If provided and use_ct_cal=True, apply throughput factor at each companion location.
+    use_ct_cal : bool
+        If True, apply the throughput factor from ct_cal for each companion location.
+    blur_sigma : float
+        Gaussian blur at the end to mimic real instrumentation.
+    noise_std : float
+        Standard deviation of random noise to add.
+    outdir : str or None
+        If a directory is given, we save the final image there.
+    roll_angle : float
+        For WCS generation in degrees.
+    platescale : float
+        Arcsec per pixel.
+    hole_radius : float or None
+        If set, reduce flux in a circular region by some factor (e.g. 0.1).
+
+    Returns
+    -------
+    frame : corgidrp.data.Image
+        The final post-sub image in a corgidrp Image object (with SCI/ERR/DQ).
+    """
+
+    # 1) Grid for the image
+    if star_center is None:
+        star_center = (nx / 2, ny / 2)
+    xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
+    r2 = (xgrid - star_center[0])**2 + (ygrid - star_center[1])**2
+
+    # 2) Create star PSF
+    sigma_star = 2.0
+    star_psf = star_flux / (2 * np.pi * sigma_star**2) * np.exp(-0.5 * r2 / sigma_star**2)
+
+    # 3) Initialize companion arrays
+    if companion_xy is None:
+        companion_xy = []
+    # Convert single float => list
+    if isinstance(companion_flux, (int, float)):
+        companion_flux = [companion_flux] * len(companion_xy)
+    if isinstance(companion_mags, (int, float)):
+        companion_mags = [companion_mags] * len(companion_xy)
+
+    # If user provided magnitudes, convert them to flux
+    # ignoring companion_flux if both are provided:
+    comp_flux_list = []
+    if companion_mags is not None:
+        # Convert each mag => flux via zero point
+        for mag in companion_mags:
+            flux_c = 10**(-0.4*(mag - zero_point))  # e-/s, for example
+            comp_flux_list.append(flux_c)
+    elif companion_flux is not None:
+        comp_flux_list = companion_flux[:]
+    else:
+        # No companions
+        comp_flux_list = []
+
+    # 4) If desired, apply a core throughput factor for each companion
+    #    That is, the pre-sub flux is scaled by the coronagraph's throughput at that offset
+
+    # 5) Add companions to the star image (pre-sub)
+    for (cx, cy), flux_c in zip(companion_xy, comp_flux_list):
+        # optional throughput factor
+        if not use_ct_cal or ct_cal is None:
+            throughput_factor = 1.0
+        else:
+            throughput_factor = measure_companions.measure_core_throughput_at_location(
+                cx, cy,
+                ct_cal,
+                cor_dataset,
+                FpamFsamCal,
+                flux_c
+            )
+        print("throughput factor for making mocks", throughput_factor)
+        flux_c_actual = flux_c * throughput_factor
+
+        print(f"Companion at ({cx:.2f}, {cy:.2f}) - Input Flux Before CT: {flux_c:.6g} e-")
+        print(f"Companion at ({cx:.2f}, {cy:.2f}) - Flux After CT: {flux_c_actual:.6g} e-")
+
+        # simple 2D Gaussian
+        sigma_c = 1.2
+        rr2c = (xgrid - cx)**2 + (ygrid - cy)**2
+        comp_gaus = flux_c_actual / (2 * np.pi * sigma_c ** 2) * np.exp(-0.5 * rr2c / sigma_c ** 2)
+        star_psf += comp_gaus  
+
+    # 6) "PSF subtraction": we scale the star+companions by star_sub_scale
+    residual_image = star_sub_scale * star_psf
+    print(f"Companion at ({cx:.2f}, {cy:.2f}) - Flux After CT and PSF sub: {flux_c_actual*star_sub_scale:.6g} e-")
+
+    # 7) Optional hole in center
+    if hole_radius is not None and hole_radius > 0:
+        hole_mask = (r2 <= hole_radius**2)
+        residual_image[hole_mask] *= 0.1  # arbitrary fraction
+
+    # 8) Final blur + noise
+    from scipy.ndimage import gaussian_filter
+    residual_image = gaussian_filter(residual_image, sigma=blur_sigma).astype(np.float32)
+    residual_image += np.random.normal(0., noise_std, residual_image.shape).astype(np.float32)
+
+    # 9) Build corgidrp Image
+
     prihdr, exthdr = mocks.create_default_L4_headers()
-    exthdr.update({
-        'NAXIS': 2,
-        'NAXIS1': nx,
-        'NAXIS2': ny,
-        'DATALVL': 'L4',
-        'BUNIT': 'ELECTRONS/S',
-        'STARLOCX': star_center[1],
-        'STARLOCY': star_center[0]
-    })
-
-    # 3) Generate WCS from pyKLIP
-    px_center = [star_center[1], star_center[0]]  # (x, y)
-    wcs_obj = generate_wcs(roll_angle, px_center, platescale=platescale)
+    exthdr["STARLOCX"] = star_center[0]
+    exthdr["STARLOCY"] = star_center[1]
+    wcs_obj = generate_wcs(roll_angle, [star_center[0], star_center[1]], platescale=platescale)
     wcs_header = wcs_obj.to_header()
+    exthdr.update(wcs_header)
 
-    # Mapping of WCS header keys to exthdr keys
-    wcs_mapping = {
-        "WCSAXES": "WCSAXES",
-        "CRPIX1": "CRPIX1",
-        "CRPIX2": "CRPIX2",
-        "PC1_1": "CD1_1",  # Rename from PC1_1 to CD1_1?
-        "PC1_2": "CD1_2",  # Rename from PC1_2 to CD1_2?
-        "PC2_1": "CD2_1",  # Rename from PC2_1 to CD2_1?
-        "PC2_2": "CD2_2",  # Rename from PC2_2 to CD2_2?
-        "CDELT1": "CDELT1",
-        "CDELT2": "CDELT2",
-        "CUNIT1": "CUNIT1",
-        "CUNIT2": "CUNIT2",
-        "CTYPE1": "CTYPE1",
-        "CTYPE2": "CTYPE2",
-        "CRVAL1": "CRVAL1",
-        "CRVAL2": "CRVAL2",
-        "LONPOLE": "LONPOLE",
-        "LATPOLE": "LATPOLE",
-        "MJDREF": "MJDREF",
-        "RADESYS": "RADESYS"
-    }
+    # Record companion location in the header
+    for i, (cx, cy) in enumerate(companion_xy, start=1):
+        exthdr[f"SNYX{i:03d}"] = f"5.0,{cx},{cy}"
 
-    # Copy only existing keys from wcs_header to exthdr, applying renaming where needed
-    exthdr.update({exthdr_key: wcs_header[wcs_key] for wcs_key, exthdr_key in 
-                   wcs_mapping.items() if wcs_key in wcs_header})
+    err_data = np.full_like(residual_image, noise_std, dtype=np.float32)
+    dq_data  = np.zeros_like(residual_image, dtype=np.uint16)
 
-    # Add custom platescale value
-    exthdr["PLTSCALE"] = platescale
+    frame = Image(residual_image, pri_hdr=prihdr, ext_hdr=exthdr, err=err_data, dq=dq_data)
 
-    # 4) Insert detected companion metadata
-    if injected_companions:
-        for i, dcomp in enumerate(injected_companions, start=1):
-            snr = dcomp.get('snr', 5.0)
-            exthdr[f'SNYX{i:03d}'] = f"{snr:.1f},{dcomp['x']},{dcomp['y']}"
+    # 10) Save if requested
+    if outdir is not None:
+        os.makedirs(outdir, exist_ok=True)
+        frame.save(filedir=outdir, filename=f"mock_psfsub_{i:03d}.fits")
+        print(f"Saved PSF-subtracted frame to", os.path.join(outdir, f"mock_psfsub_{i:03d}.fits"))
 
-    # 5) Create placeholder error & DQ arrays
-    err_data = np.full_like(data, noise_std if add_noise else 0.01, dtype=np.float32)
-    dq_data  = np.zeros_like(data, dtype=np.uint16)
-
-    # Construct FITS HDU list
-    hdul = fits.HDUList([
-        fits.PrimaryHDU(header=prihdr),
-        fits.ImageHDU(data=data, header=exthdr, name="SCI"),
-        fits.ImageHDU(data=err_data, header=fits.Header({'EXTNAME': 'ERR'})),
-        fits.ImageHDU(data=dq_data, header=fits.Header({'EXTNAME': 'DQ'}))
-    ])
-
-    return hdul
+    return frame
 
 
 def mock_flux_image(exptime, filter_used, cal_factor, save_mocks, output_path=None, 
@@ -401,23 +581,6 @@ def create_mock_fpamfsam_cal(
     return fpamfsam_cal
 
 
-def inject_companion_mag(x, y, mag, test_zero_point=20):
-    """
-    Helper to compute a companion flux (in e-/s) for a given 'test zero point' scenario.
-
-    Args:
-        x, y (float): Pixel location of the companion.
-        mag (float): Desired apparent magnitude.
-        test_zero_point (float): Arbitrary zero point used for flux injection.
-
-    Returns:
-        dict: e.g. {'x': 120, 'y': 80, 'flux': ...}
-    """
-    # flux_e_s = 10^[-0.4 * (m - ZP_TEST)]
-    flux_e_s = 10**(-0.4 * (mag - test_zero_point))
-    return {'x': x, 'y': y, 'flux': flux_e_s}
-
-
 def test_measure_companions_wcs():
     """
     1) Generate a mock 'direct star image' (flux_image) to measure star flux.
@@ -428,25 +591,29 @@ def test_measure_companions_wcs():
     """
     out_dir = os.path.join('corgidrp', 'data', 'L4TestInput')
     os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, 'mock_l4_companions.fits')
 
-
-    # A) Generate/measure a "direct star image"
-    # mock_flux_image(...) should return an unocculted star image.
+    # A) Generate a direct unocculted star image (from known standard stars for now)
     flux_image_list = mock_flux_image(
         exptime=5,
         filter_used="3C",
         cal_factor=CAL_FACTOR,
         save_mocks=True,
-        output_path='/Users/jmilton/Github/corgidrp/corgidrp/data/L4TestInput',
+        output_path=out_dir,
         background_val=0,
         add_gauss_noise_val=False
     )
+
     # Convert from total counts to count rate if needed
     flux_image_list = l2b_to_l3.divide_by_exptime(Dataset(flux_image_list))
     direct_star_image = flux_image_list[0]  # Just take the first for star flux
 
-    # Do a measurement of some kind to get star_flux_e_s in e-/s, maybe this will
+    # Calculate star AP_MAG
+    # TO DO: what if the unocculted star image isn't a standard star? use the zero point idea maybe
+    image_with_mag = l4_to_tda.determine_app_mag(direct_star_image, direct_star_image.pri_hdr["TARGET"])
+    host_star_ap_mag = image_with_mag[0].ext_hdr['APP_MAG']
+    print("Host star ap mag,", host_star_ap_mag)
+
+    # Do a measurement of some kind to get star_flux_e in e-, maybe this will
     # just known flux / flux cal, not sure yet
     star_flux, star_flux_err, _ = fluxcal.aper_phot(
         direct_star_image,
@@ -460,7 +627,7 @@ def test_measure_companions_wcs():
         centering_method='xy',  
         centroid_roi_radius=10
     )
-    print(f"\nMeasured host star flux from direct image: {star_flux:.5f} e-/s")
+    print(f"\nMeasured host star flux from direct image photometry: {star_flux:.5f} photoelectrons")
 
     # Also get a fluxcal_factor, which might tbd return a zero point:
     if PHOT_METHOD == "Aperture":
@@ -479,31 +646,6 @@ def test_measure_companions_wcs():
     zero_point = fluxcal_factor.ext_hdr.get('ZP', None)
     print(f"Derived fluxcal_factor: {fluxcal_factor.data} | ZP={zero_point}")
 
-    # B) Create the coronagraphic/PSF-sub image with companion(s) injected
-
-    # create_mock_psfsub_image_wcs returns a mock post-sub image
-    # with negative hole near the star center and faint Gaussian companions.
-    injected = [
-        inject_companion_mag(120, 80, mag=3,  test_zero_point=zero_point),
-        inject_companion_mag(90, 130, mag=1, test_zero_point=zero_point),
-    ]
-
-    hdul = create_mock_psfsub_image_wcs(
-        ny=200, nx=200,
-        star_center=None,   # default = image center
-        roll_angle=10.0,
-        platescale=0.0218,
-        injected_companions=injected,
-        add_noise=False,
-        noise_std=0.01,
-        background_level=0.0
-    )
-    hdul.writeto(out_path, overwrite=True)
-    print(f"Mock post-sub file saved to {out_path}")
-
-    # Wrap in corgidrp.data.Image
-    psf_sub_image = Image(out_path)
-
     # Create core throughput cal product
     dataset_ct, ct_cal = create_mock_ct_dataset_and_cal_file(
         fwhm=50,
@@ -515,11 +657,49 @@ def test_measure_companions_wcs():
     # Create mock fpam to excam cal 
     FpamFsamCal = create_mock_fpamfsam_cal(save_file=False)
 
+    print("Star mag at (120,80): ", (-2.5 * np.log10(star_flux/2) + zero_point))
+    print("Star mag at (90,130): ", (-2.5 * np.log10(star_flux/3) + zero_point))
+
+    # B) Create the coronagraphic/PSF-sub image with companion(s) injected
+    psf_sub_frame = generate_psfsub_image_with_companions(
+        nx=200, ny=200,
+        star_center=None,
+        star_flux=star_flux,        
+        star_sub_scale=0.7,
+        # Companion position/flux vs. magnitude
+        companion_xy=[(120,80), (90,130)],
+        companion_flux=[star_flux/2, star_flux/3],
+        companion_mags=[(-2.5 * np.log10(star_flux/2) + zero_point), (-2.5 * np.log10(star_flux/3) + zero_point)],
+        zero_point=zero_point,
+        ct_cal=ct_cal,            # Optional CoreThroughputCalibration
+        use_ct_cal=True,       # Whether to apply throughput from ct_cal
+        cor_dataset = dataset_ct,     # Dataset used to make the CoreThroughputCalibration
+        FpamFsamCal = FpamFsamCal,
+        blur_sigma=0.5,
+        noise_std=1e-8,
+        outdir=out_dir,
+        roll_angle=0.0,
+        platescale=0.0218,
+        hole_radius=None,
+    )
+
+    coron_data = generate_coron_dataset_with_companions(
+        n_frames=1,
+        shape=(200,200),
+        companion_xy=[(120,80)],
+        companion_flux=2000.,
+        star_flux=1e5,
+        roll_angles=[10.0],
+        add_noise=True,
+        noise_std=5.,
+        outdir=out_dir
+    )
+
     # C) Run measure_companions
-    # Pass the measured star_flux_e_s so that measure_companions can compute flux_ratio
+    # Pass the measured star_flux_e so that measure_companions can compute flux_ratio
     # and (if zero_point is present) an apparent magnitude as well.
     result_table = measure_companions.measure_companions(
-        image=psf_sub_image,
+        image=psf_sub_frame,
         method='aperture',           # or 'psf_fit' or 'forward_model'
         apply_throughput=True,
         apply_fluxcal=True,
@@ -527,7 +707,8 @@ def test_measure_companions_wcs():
         cor_dataset = dataset_ct,
         FpamFsamCal = FpamFsamCal,
         fluxcal_factor=fluxcal_factor,
-        star_flux_e_s=star_flux,    
+        star_flux_e=star_flux,    
+        apply_psf_sub_eff= True,
         # star_mag=...               # If want to do companion mag = star_mag - 2.5log10(ratio)
         verbose=True
     )
@@ -535,13 +716,6 @@ def test_measure_companions_wcs():
     print("\nResult Table:\n", result_table)
     assert len(result_table) == 2, "Expected 2 measured companions"
 
-    # Inspect results
-    for row in result_table:
-        print(f"ID={row['id']} | (x,y)=({row['x']:.1f},{row['y']:.1f}) "
-              f"| flux_raw={row['flux_raw']:.3f} e-/s | ratio={row['flux_ratio']:.3e} "
-              f"| mag={row['mag']}")
-
-    print("Test completed successfully")
 
 
 '''
@@ -572,33 +746,28 @@ def test_validate_zero_point(known_mag, test_zp):
     print(f"\n *** Validating known zero points: known_mag={known_mag}, test_zp={test_zp} ***")
 
     # Output directory for the test FITS file
-    out_path = os.path.join('corgidrp', 'data', 'L4TestInput', f'mock_l4_zp_{test_zp}_mag_{known_mag}.fits')
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    out_dir = os.path.join('corgidrp', 'data', 'L4TestInput')
+    os.makedirs(os.path.dirname(out_dir), exist_ok=True)
 
     # Compute expected flux based on magnitude and zero point
     known_flux = 10**(-0.4 * (known_mag - test_zp))
 
-    # Inject a single test source
-    injected = [inject_companion_mag(120, 80, mag=known_mag, test_zero_point=test_zp)]
-    print(f"Injected source at (120, 80) with flux {injected[0]['flux']:.6f} e-/s")
-
-    # Create a mock image with injected source (no noise for this test)
-    hdul = create_mock_psfsub_image_wcs(
-        ny=200, nx=200,
-        star_center=None,
-        roll_angle=10.0,
-        platescale=0.0218,
-        injected_companions=injected,
-        add_noise=False,
-        noise_std=0.01,
-        background_level=0.0
+    # Create a mock image with injected source
+    coron_data = generate_coron_dataset_with_companions(
+        n_frames=1,
+        shape=(200,200),
+        companion_xy=[(120,80)],
+        companion_flux=2000.,
+        star_flux=1e5,
+        roll_angles=[10.0],
+        add_noise=True,
+        noise_std=5.,
+        outdir=out_dir
     )
-    hdul.writeto(out_path, overwrite=True)
-    input_image = Image(out_path)
 
     # Measure the flux using aperture photometry
     flux, flux_err, _ = fluxcal.aper_phot(
-        input_image,
+        coron_data,
         encircled_radius=5,
         frac_enc_energy=1.0,
         method='subpixel',
