@@ -228,6 +228,37 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
+def get_polar_dist(seppa1,seppa2):
+    """Computes the linear distance between two points in polar coordinates.
+
+    Args:
+        seppa1 (tuple): Separation (in any units) and position angle (in degrees) of the first point.
+        seppa2 (tuple): Separation (in same units as above) and position angle (in degrees) of the second point.
+
+    Returns:
+        float: Distance between the two points in the input separation units.
+    """
+    sep1, pa1 = seppa1
+    sep2, pa2 = seppa2
+
+    return np.sqrt(sep1**2 + sep2**2 - (2 * sep1 * sep2 * np.cos((pa1-pa2)*np.pi/180.)))
+
+def seppa2dxdy(sep_pix,pa_deg):
+    """Converts position in separation (pixels from some center) and position angle 
+    (counterclockwise from north) to separation in x and y pixels from the center.
+
+    Args:
+        sep_pix (float): Separation in pixels
+        pa_deg (float): Position angle in degrees (counterclockwise from North)
+
+    Returns:
+        tuple: delta x and delta y (pixels) from the center 
+    """
+    dx = sep_pix * np.sin(pa_deg * np.pi/180.)
+    dy = sep_pix * np.cos(pa_deg * np.pi/180.)
+
+    return dx, dy
+
 def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     ''' 
     Used to find to [pixel, pixel] locations of the sources in an image
