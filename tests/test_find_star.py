@@ -203,6 +203,56 @@ def test_find_star_offset():
 
     corgidrp.track_individual_errors = old_err_tracking
 
+
+def test_overwrite_parameters():
+    """
+    Generate mock input data and pass into find_star function
+    """
+    corgidrp.track_individual_errors = True # this test uses individual error components
+
+    # Set the star center position for injection of satellite spots
+
+    injected_position = (image_shape[1] // 2, image_shape[0] // 2)
+    guess_position = (image_shape[1] // 2, image_shape[0] // 2)
+
+    satellite_spot_angle_offset = 0
+    guess_angle_offset = 0
+
+    # Change some parameters
+    overwrite_parameters = {"offset": {"roiRadiusPix": 4.5, "nSteps": 3, "stepSize": 1, "nIter": 6},
+                            "separation": {"roiRadiusPix": 2.5}}
+
+    modes = ['NFOV']
+
+    for mode in modes:
+        separation = satellite_spot_parameters_defaults[mode]['separation']['spotSepPix']
+
+        # Generate test data
+        input_dataset = mocks.create_satellite_spot_observing_sequence(
+                n_sci_frames=3,
+                n_satspot_frames=3, 
+                image_shape=image_shape,
+                bg_sigma=1.0,
+                bg_offset=10.0,
+                gaussian_fwhm=5.0,
+                separation=separation,
+                star_center=injected_position,
+                angle_offset=satellite_spot_angle_offset,
+                amplitude_multiplier=100,
+                observing_mode=mode)
+
+        # Set initial guesses for angle offset
+        thetaOffsetGuess = guess_angle_offset
+
+        _ = find_star(
+            input_dataset=input_dataset, 
+            star_coordinate_guess=guess_position,
+            thetaOffsetGuess=thetaOffsetGuess,
+            satellite_spot_parameters=overwrite_parameters)
+
+    corgidrp.track_individual_errors = old_err_tracking
+
 if __name__ == "__main__":
-    test_find_star_exact()
-    test_find_star_offset()
+    # test_find_star_exact()
+    # test_find_star_offset()
+    test_overwrite_parameters()
