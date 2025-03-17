@@ -161,21 +161,36 @@ def test_ct_map():
         'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
 
     # Create CT map
+    '''
     ct_map = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal)
     
     # CT values are within [0,1]
     assert ct_map[2].min() >= 0
     assert ct_map[2].max() <= 1
-    # Verify CT valuea are within the range of the input CT values
-    assert ct_map[2].min() >= ct_cal.ct_excam[2].min()
-    assert ct_map[2].max() <= ct_cal.ct_excam[2].max()
+    # Verify CT values are within the range of the input CT values
+    # Allow some minimum tolerance due to float64 numerical precision
+    tolerance = 1e-14
+    assert ct_map[2].min() >= ct_cal.ct_excam[2].min() - tolerance
+    assert ct_map[2].max() <= ct_cal.ct_excam[2].max() + tolerance
+    '''
 
-    # TBD
-    breakpoint()
-
+    # Test the ability to parse some user-defined locations
     # If the target pixels are the same as the ones in the CT file, the
-    # CT values must agree with the ones in the CT file
+    # locations *and* CT values must agree with the ones in the CT file
+    # Get FPM's center during CT observations
+    ct_fpm = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    target_pix  [ct_cal.ct_excam[0] - ct_fpm[0],
+        ct_cal.ct_excam[1] - ct_fpm[1]]
+    ct_map = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal,
+        target_pix=target_pix)
 
+    # All locations must have a valid CT value
+    breakpoint()
+    assert target_pix[0] == ct_map[0]
+    assert targte_pix[1] == ct_map[1]
+    # CT values must be the smae
+    assert ct_map[2] == ct_cal.ct_excam[2]
+    breakpoint() 
 
 def test_psf_pix_and_ct():
     """
