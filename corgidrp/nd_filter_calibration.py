@@ -30,30 +30,38 @@ def load_transformation_matrix_from_fits(file_path):
             data = hdul[1].data
         return np.array(data)
 
-
-def group_by_keyword(dataset, keyword, header_type = "pri"):
+def group_by_keyword(dataset, prihdr_keyword=None, exthdr_keyword=None):
     """
-    Split the dataset by the keyword given and return a dictionary {target: subset}.
+    Split the dataset by either a primary header (prihdr) or extension header (exthdr) keyword
+    and return a dictionary {target: subset}.
 
     Parameters:
         dataset (Dataset): The dataset to be split.
-        keyword (String): FITS header keyword to split the dataset on.
-        header_type (String): keyword in primary "pri" or extension "ext" header
+        prihdr_keyword (str, optional): FITS primary header keyword to split the dataset on.
+        exthdr_keyword (str, optional): FITS extension header keyword to split the dataset on.
 
     Returns:
         dict: A dictionary where keys are unique target values and values are the 
             corresponding dataset subsets.
+    
+    Raises:
+        ValueError: If neither keyword is provided.
     """
-    if header_type == "pri":
-        split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=[keyword])
-    elif header_type == "ext":
-        split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=[keyword])
+    if not prihdr_keyword and not exthdr_keyword:
+        raise ValueError("At least one of 'prihdr_keyword' or 'exthdr_keyword' must be provided.")
+
+    # Determine the splitting method
+    if prihdr_keyword:
+        split_datasets, unique_vals = dataset.split_dataset(prihdr_keywords=[prihdr_keyword])
     else:
-        raise ValueError(header_type + " wrong header_type, should be called pri or ext")
+        split_datasets, unique_vals = dataset.split_dataset(exthdr_keywords=[exthdr_keyword])
+
+    # Construct dictionary {target: subset}
     groups = {}
     for key, sub_ds in zip(unique_vals, split_datasets):
         target = key[0] if isinstance(key, tuple) else key
         groups[target] = sub_ds
+
     return groups
 
 
@@ -415,9 +423,9 @@ def create_nd_filter_cal(stars_dataset,
     dim_stars_dataset = []
     bright_stars_dataset = []
     try:
-        grouped_nd_files = group_by_keyword(stars_dataset, 'FPAMNAME', header_type = "ext")
+        grouped_nd_files = group_by_keyword(stars_dataset, prihdr_keyword=None, exthdr_keyword='FPAMNAME')
     except:
-        grouped_nd_files = group_by_keyword(stars_dataset, 'FSAMNAME', header_type = "ext")
+        grouped_nd_files = group_by_keyword(stars_dataset, prihdr_keyword=None, exthdr_keyword='FSAMNAME')
         
     dim_stars_dataset = []
     bright_stars_dataset = []
@@ -441,7 +449,7 @@ def create_nd_filter_cal(stars_dataset,
                                                     phot_kwargs)
 
     # 3. Process bright star frames
-    grouped_files = group_by_keyword(bright_stars_dataset, 'TARGET')
+    grouped_files = group_by_keyword(bright_stars_dataset, prihdr_keyword='TARGET', exthdr_keyword=None)
     flux_results = {}
     aggregated_data_list = []
     common_metadata = {}
