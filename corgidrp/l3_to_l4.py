@@ -59,7 +59,8 @@ def find_star(input_dataset,
             (in degrees, for example). Defaults to 0.
         satellite_spot_parameters (dict, optional):
             Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
-            should have the following structure:
+            can contain the following keys and structure. Only provided parameters will be changed,
+            otherwise defaults for the mode will be used:
 
             offset : dict
                 Parameters for estimating the offset of the star center:
@@ -133,10 +134,16 @@ def find_star(input_dataset,
     # Copy input dataset
     dataset = input_dataset.copy()
 
+    # Spot separation in pixels
+    # sep in lambda/D and multiply by pix per lambda/D
+    spot_separation_nfov = 6.5*(51.46*0.575/13) # 14.79
+    spot_separation_spec = 6.0*(51.46*0.730/13) # 17.34
+    spot_separation_wfov = 13*(51.46*0.825/13) # 42.4545
+
     satellite_spot_parameters_defaults = {
         "NFOV": {
             "offset": {
-                "spotSepPix": 14.79,
+                "spotSepPix": spot_separation_nfov,
                 "roiRadiusPix": 4.5,
                 "probeRotVecDeg": [0, 90],
                 "nSubpixels": 100,
@@ -145,8 +152,68 @@ def find_star(input_dataset,
                 "nIter": 6,
             },
             "separation": {
-                "spotSepPix": 14.79,
+                "spotSepPix": spot_separation_nfov,
                 "roiRadiusPix": 1.5,
+                "probeRotVecDeg": [0, 90],
+                "nSubpixels": 100,
+                "nSteps": 21,
+                "stepSize": 0.25,
+                "nIter": 5,
+            }
+        },
+        "SPEC660": {
+            "offset": {
+                "spotSepPix": spot_separation_spec,
+                "roiRadiusPix": 6,
+                "probeRotVecDeg": [0,],
+                "nSubpixels": 100,
+                "nSteps": 9,
+                "stepSize": 1,
+                "nIter": 6,
+            },
+            "separation": {
+                "spotSepPix": spot_separation_spec,
+                "roiRadiusPix": 4,
+                "probeRotVecDeg": [0,],
+                "nSubpixels": 100,
+                "nSteps": 21,
+                "stepSize": 0.25,
+                "nIter": 5,
+            }
+        },
+        "SPEC730": {
+            "offset": {
+                "spotSepPix": spot_separation_spec,
+                "roiRadiusPix": 6,
+                "probeRotVecDeg": [0,],
+                "nSubpixels": 100,
+                "nSteps": 9,
+                "stepSize": 1,
+                "nIter": 6,
+            },
+            "separation": {
+                "spotSepPix": spot_separation_spec,
+                "roiRadiusPix": 4,
+                "probeRotVecDeg": [0,],
+                "nSubpixels": 100,
+                "nSteps": 21,
+                "stepSize": 0.25,
+                "nIter": 5,
+            }
+        },
+        "WFOV": {
+            "offset": {
+                "spotSepPix": spot_separation_wfov,
+                "roiRadiusPix": 4.5,
+                "probeRotVecDeg": [0, 90],
+                "nSubpixels": 100,
+                "nSteps": 7,
+                "stepSize": 1,
+                "nIter": 6,
+            },
+            "separation": {
+                "spotSepPix": spot_separation_wfov,
+                "roiRadiusPix": 4.5,
                 "probeRotVecDeg": [0, 90],
                 "nSubpixels": 100,
                 "nSteps": 21,
@@ -188,14 +255,10 @@ def find_star(input_dataset,
     if star_coordinate_guess is None:
         star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
 
+    tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
     # See if the satellite spot parameters are provided, if not used defaults
-    if satellite_spot_parameters is None:
-        satellite_spot_parameters_used = satellite_spot_parameters_defaults  
-    # If the parameters are provided, check if they are in the correct format
-    else:
-        assert star_center.validate_satellite_spot_parameters(satellite_spot_parameters), "Wrong dictionary format for satellite_spot_parameters."
-        satellite_spot_parameters_used = {}
-        satellite_spot_parameters_used[observing_mode] = satellite_spot_parameters
+    if satellite_spot_parameters is not None:
+        tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
 
     # Find star center
     star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
@@ -203,7 +266,7 @@ def find_star(input_dataset,
         img_sat_spot=img_sat_spot,
         star_coordinate_guess=star_coordinate_guess,
         thetaOffsetGuess=thetaOffsetGuess,
-        satellite_spot_parameters=satellite_spot_parameters_used[observing_mode],
+        satellite_spot_parameters=tuningParamDict,
     )
 
     # Add star location to frame headers
