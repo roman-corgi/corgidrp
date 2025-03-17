@@ -1,6 +1,7 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
 
 from pyklip.klip import rotate
+from astropy.wcs import WCS
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
@@ -313,66 +314,80 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     
     return dataset_out
 
-def northup(input_dataset,correct_wcs=False):
+def northup(input_dataset,use_wcs=True):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
-    Now tentatively assuming 'ROLL' in the primary header incorporates all the angle offset, and the center of the FoV is the star position.
-    WCS correction is not yet implemented - TBD.
-
+    The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
+    With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
+  
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-	correct_wcs: if you want to correct WCS solutions after rotation, set True. Now hardcoded with not using astr_hdr.
+        use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
     
     """
-    
+
     # make a copy 
     processed_dataset = input_dataset.copy()
 
     new_all_data = []; new_all_err = []; new_all_dq = []
     for processed_data in processed_dataset:
-        # read the roll angle parameter, assuming this info is recorded in the primary header as requested
-        roll_angle = processed_data.pri_hdr['ROLL']
 
         ## image extension ##
-        im_hd = processed_data.ext_hdr
-        im_data = processed_data.data
-        ylen, xlen = im_data.shape
+        sci_hd = processed_data.ext_hdr
+        sci_data = processed_data.data
+        ylen, xlen = sci_data.shape
 
         # define the center for rotation
         try: 
-            xcen, ycen = im_hd['STARLOCX'], im_hd['STARLOCY'] 
+            xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
         except KeyError:
             warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             xcen, ycen = xlen/2, ylen/2
     
         # look for WCS solutions
-        if correct_wcs is False: 
-            astr_hdr = None 
+        if use_wcs is True:
+            astr_hdr = WCS(sci_hd)
+            CD1_2 = sci_hd['CD1_2']
+            CD2_2 = sci_hd['CD2_2']
+            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
+
         else:
-            astr_hdr = None # hardcoded now, no WCS information in the header
+            astr_hdr = None
+            # read the roll angle parameter, assuming this info is recorded in the primary header as requested
+            roll_angle = processed_data.pri_hdr['ROLL']
 
         # derotate
-        im_derot = rotate(im_data,-roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
-        new_all_data.append(im_derot)
-        ##############
+        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        new_all_data.append(sci_derot)
+
+        log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
+        sci_hd['HISTORY'] = log 
+
+        # update WCS solutions
+        if use_wcs:
+            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
+            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
+            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
+            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
+        #############
 
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = np.expand_dims(rotate(err_data[0],-roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        err_derot = np.expand_dims(rotate(err_data[0],roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
         #############
 
         ## HDU DQ ##
-	# all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
+        # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
-        if xcen != xlen/2 or ycen != ylen/2: 
+        if xcen != xlen/2 or ycen != ylen/2:
                 # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
                 # calculate shift values
                 xshift = xcen-xlen/2; yshift = ycen-ylen/2
-		
+
                 # pad and shift
                 pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
                 dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=np.nan)
@@ -381,22 +396,21 @@ def northup(input_dataset,correct_wcs=False):
                 # define slices for cropping
                 crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
 
-                # rotate, re-shift, and crop
-                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan),\
+                # rotate (invserse direction to pyklip.rotate), re-shift, and crop
+                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=np.nan),\
                  (yshift,xshift),order=0,mode='constant',cval=np.nan)[crop_y,crop_x]
-        else: 
+        else:
                 # simply rotate 
-                dq_derot = rotate_scipy(dq_data, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan)
-        	
+                dq_derot = rotate_scipy(dq_data, -roll_angle, order=0, mode='constant', reshape=False, cval=np.nan)
+
         new_all_dq.append(dq_derot)
         ############
 
-    hisotry_msg = f'FoV rotated by {-roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
-    
-    processed_dataset.update_after_processing_step(hisotry_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
+    history_msg = 'North is Up and East is Left'
+    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
                                                    new_all_dq=np.array(new_all_dq))
-    
-    return processed_dataset
+
+    return processed_dataset 
 
 def update_to_l4(input_dataset):
     """
