@@ -9,7 +9,7 @@ import corgidrp.nd_filter_calibration as nd_filter_calibration
 INPUT_STARS = ['109 Vir']
 FWHM = 3
 CAL_FACTOR = 0.8
-PHOT_METHOD = "Aperture"
+PHOT_METHOD = "Gaussian"
 FLUX_OR_IRR = 'irr'
 
 PHOT_ARGS = {
@@ -169,18 +169,20 @@ def test_validate_zero_point(known_mag, test_zp, out_dir):
     # Measure the injected companion’s flux using aperture photometry
     phot_args = PHOT_ARGS.copy()
     phot_args["centering_initial_guess"] = (120, 80)
-
-    flux, flux_err, _ = fluxcal.aper_phot(
-        coron_data[0], **phot_args
-    )
+    if PHOT_METHOD == "Aperture":
+        counts, counts_err, _ = fluxcal.aper_phot(
+            coron_data[0], **phot_args
+        )
+    else:
+        counts, counts_err, _ = fluxcal.phot_by_gauss2d_fit(coron_data[0], **phot_args)
 
     # Compute expected and measured zero points
     expected_zp = known_mag + 2.5 * np.log10(known_counts)
-    measured_zp = known_mag + 2.5 * np.log10(flux)
+    measured_zp = known_mag + 2.5 * np.log10(counts)
 
     # Print results concisely
     print(f"\nValidating Zero Point: Known Mag={known_mag}, Test ZP={test_zp}")
-    print(f"Expected Counts: {known_counts:.6g} e-, Measured Counts: {flux:.6g} ± {flux_err:.6g} e-")
+    print(f"Expected Counts: {known_counts:.6g} e-, Measured Counts: {counts:.6g} ± {counts_err:.6g} e-")
     print(f"Expected ZP: {expected_zp:.3f}, Measured ZP: {measured_zp:.3f}")
 
     # Validate within tolerance
