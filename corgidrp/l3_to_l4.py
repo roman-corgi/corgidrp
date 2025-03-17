@@ -4,7 +4,7 @@ from pyklip.klip import rotate
 
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
-#from corgidrp.klip_fm import inject_fakes, recover_fakes
+from corgidrp.klip_fm import meas_klip_thrupt
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
@@ -173,12 +173,14 @@ def crop(input_dataset,sizexy=None,centerxy=None):
     
     return output_dataset
 
-def do_psf_subtraction(input_dataset, reference_star_dataset=None,
+def do_psf_subtraction(input_dataset, 
+                       ct_calibration,
+                       reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
                        numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
                        do_crop=True,
                        crop_sizexy=None,
-                       measure_klip_thrupt=True
+                       measure_klip_thrupt=True,
                        ):
     """
     
@@ -266,9 +268,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
     
     # Run pyklip
+    calibrate_flux = False
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
-                              calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
+                              calibrate_flux=calibrate_flux, mode=mode,psf_library=pyklip_dataset._psflib,
                               fileprefix=fileprefix)
     
     # Construct corgiDRP dataset from pyKLIP result
@@ -301,6 +304,29 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
         ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
     
+    if measure_klip_thrupt:
+        
+        # Determine flux of objects to inject (units?)
+        inj_contrast = 1e-8
+        inject_flux = star_flux * inj_contrast
+        # Use same KLIP parameters
+        klip_params = {
+            'outputdir':outdir,'fileprefix':fileprefix,
+            'annuli':annuli, 'subsections':subsections, 
+            'movement':movement, 'numbasis':numbasis,
+            'mode':mode,'calibrate_flux':calibrate_flux, 
+            
+        }
+        measure_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
+                            ct_calibration,
+                            inject_flux,
+                            klip_params,
+                            seps=None, # in pixels from mask center
+                            pas=None,
+                            cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
+                            )
+    
+
     # Construct Image and Dataset object
     frame = data.Image(pyklip_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
