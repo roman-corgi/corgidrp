@@ -17,7 +17,7 @@ def measure_companions(
     apply_psf_sub_eff=False,
     psf_fwhm=3.0,
     aperture_radius=5.0,
-    star_flux_e_s=None,
+    star_flux_e=None,
     star_mag=None,
     # Arguments to handle off-axis star modeling
     direct_star_image=None,
@@ -61,10 +61,10 @@ def measure_companions(
         Approximate PSF FWHM in pixels. Used for psf-fit initialization or aperture defaults.
     aperture_radius : float, optional
         Aperture radius (in pixels) if using aperture photometry.
-    star_flux_e_s : float, optional
-        The star's flux in e-/s (integrated over the same band). Used for flux_ratios.
+    star_flux_e : float, optional
+        The star's measured flux in e-. Used for flux_ratios.
     star_mag : float, optional
-        The star's apparent magnitude. If provided (with star_flux_e_s), we can compute the companion's apparent mag.
+        The star's apparent magnitude. If provided (with star_flux_e), we can compute the companion's apparent mag.
     direct_star_image : corgidrp.data.Image, optional
         A direct (unocculted) image of the host star (in e-/s/pixel). If you want to measure star flux consistently.
     reference_psf : corgidrp.data.Image, optional
@@ -85,16 +85,16 @@ def measure_companions(
             - flux_raw : companion flux in e-/s (post-subtraction)
             - flux_err : estimated flux uncertainty
             - flux_corr : flux after throughput correction
-            - flux_ratio : flux_corr / star_flux_e_s (if star_flux_e_s is given)
+            - flux_ratio : flux_corr / star_flux_e (if star_flux_e is given)
             - mag : apparent magnitude (computed via star_mag or zero point or fluxcal_factor)
     """
 
-    # 1) Possibly measure star_flux_e_s from direct_star_image if not given:
-    if star_flux_e_s is None and direct_star_image is not None:
+    # 1) Possibly measure star_flux_e from direct_star_image if not given:
+    if star_flux_e is None and direct_star_image is not None:
         if verbose:
             print("Measuring total star flux from direct star image...")
         # Example: Aperture or other method on direct_star_image
-        star_flux_e_s = measure_star_flux(direct_star_image)
+        star_flux_e = measure_star_flux(direct_star_image)
 
     # 2) Possibly measure flux from reference_psf if not given. 
     #    This is used to figure out how to scale an off-axis PSF.
@@ -159,7 +159,7 @@ def measure_companions(
                 image,
                 x_c, y_c,
                 reference_psf_flux=reference_psf_flux,
-                star_flux_e_s=star_flux_e_s,
+                star_flux_e=star_flux_e,
                 do_klip=True, 
                 verbose=verbose
             )
@@ -192,6 +192,7 @@ def measure_companions(
                 centroid_roi_radius=5,
                 centering_initial_guess=(x_c, y_c)
             )
+            print(f"Companion at ({x_c:.2f}, {y_c:.2f}) - Measured Flux by Aperture Phot: {flux_val:.6g} e-")
 
         # Store raw flux
         comp_ids.append(cid)
@@ -207,16 +208,21 @@ def measure_companions(
         dy = ys[i] - star_center[1]
         sep_pix = np.hypot(dx, dy)
 
-        if apply_throughput:
-            flux_corr = apply_core_throughput_correction(xs[i], ys[i], ct_cal, cor_dataset, 
-                                                         FpamFsamCal, flux_raws[i])
-
         if apply_psf_sub_eff:
             # apply an additional correction factor for PSF-subtraction efficiency?
             psf_sub_eff = get_psf_sub_eff(sep_pix)
             if psf_sub_eff <= 0:
                 raise ValueError("Invalid PSF-subtraction efficiency")
             flux_corr /= psf_sub_eff
+
+            print(f"Companion at ({xs[i]:.2f}, {ys[i]:.2f}) - Measured Flux Corrected for PSF sub: {flux_corr:.6g} e-")
+
+        if apply_throughput:
+            throughput_factor = measure_core_throughput_at_location(xs[i], ys[i], ct_cal, cor_dataset, 
+                                                         FpamFsamCal, flux_raws[i])
+            flux_corr = flux_corr / throughput_factor
+
+            print(f"Companion at ({xs[i]:.2f}, {ys[i]:.2f}) - Measured Flux Corrected for PSF sub and CT: {flux_corr:.6g} e-")
 
         flux_corrs.append(flux_corr)
 
@@ -227,10 +233,10 @@ def measure_companions(
 
     for i in range(len(companion_list)):
         f_c = flux_corrs[i]
-        # flux ratio if star_flux_e_s is given
+        # flux ratio if star_flux_e is given
         fratio = None
-        if star_flux_e_s:
-            fratio = f_c / star_flux_e_s
+        if star_flux_e:
+            fratio = f_c / star_flux_e
         flux_ratios.append(fratio)
 
         # magnitude from zero_point if we have it
@@ -238,7 +244,7 @@ def measure_companions(
         if zero_point is not None and f_c > 0:
             mag_comp = -2.5 * np.log10(f_c) + zero_point
 
-        # or from star_mag if we have star_flux_e_s
+        # or from star_mag if we have star_flux_e
         if mag_comp is None and (star_mag is not None) and (fratio is not None) and (fratio > 0):
             mag_comp = star_mag - 2.5 * np.log10(fratio)
         mags.append(mag_comp)
@@ -290,7 +296,7 @@ def forward_model_flux(
     x_c, y_c,
     FpamFsamCal = None,
     reference_psf_flux=None,
-    star_flux_e_s=None,
+    star_flux_e=None,
     do_klip=True,
     verbose=True
 ):
@@ -312,8 +318,8 @@ def forward_model_flux(
 
     # 2) Scale off-axis PSF by ratio of (star_flux / reference_psf_flux)
     #    so it represents how bright the star would look if placed at (x_c, y_c)
-    if reference_psf_flux and reference_psf_flux != 0 and star_flux_e_s is not None:
-        ratio = star_flux_e_s / reference_psf_flux
+    if reference_psf_flux and reference_psf_flux != 0 and star_flux_e is not None:
+        ratio = star_flux_e / reference_psf_flux
         offaxis_psf_scaled = offaxis_psf * ratio
     else:
         offaxis_psf_scaled = offaxis_psf
@@ -334,7 +340,7 @@ def forward_model_flux(
     return flux_estimate, flux_err_est
 
 
-def apply_core_throughput_correction(
+def measure_core_throughput_at_location(
     x_c, y_c,
     ct_cal,
     cor_dataset,
@@ -361,8 +367,8 @@ def apply_core_throughput_correction(
 
     Returns
     -------
-    flux_corrected : float
-        The flux after applying the throughput correction factor.
+    throughput_factor : float
+        The core throughput factor at the specified location (dimensionless).
     """
 
     # Get the FPM center arrays from the calibration vs. the cor_dataset
@@ -385,8 +391,7 @@ def apply_core_throughput_correction(
     if throughput_factor <= 0:
         throughput_factor = 1.0  # fallback
 
-    flux_corrected = flux_raw / throughput_factor
-    return flux_corrected
+    return throughput_factor
 
 
 def get_psf_sub_eff(rad_pix):
@@ -396,5 +401,5 @@ def get_psf_sub_eff(rad_pix):
     """
     # e.g. near the star, the companion is more heavily subtracted, etc.
     # Return a factor in (0,1].
-    efficiency = 1.0 - 0.1*(rad_pix / 50.)
-    return max(efficiency, 0.05)
+    efficiency = 0.7
+    return efficiency

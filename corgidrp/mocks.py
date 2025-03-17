@@ -2595,7 +2595,7 @@ def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 
                       background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
-    and Gaussian noise.
+    and Gaussian noise. Frame is returned in units of photoelectrons.
 
     Args:
         star_flux (float): Flux of the point source in erg/(s*cm^2*AA)
@@ -2616,7 +2616,7 @@ def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 
         file_save (bool): Whether to save the image (default: False)
 
     Returns:
-        corgidrp.data.Image: The simulated image
+        corgidrp.data.Image: The simulated image in units of photoelectrons.
     """
 
     # Create directory if needed
@@ -2637,12 +2637,10 @@ def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 
     # star_flux_erg_s_cm2 = integrated band flux from CALSPEC
     # multiply by telescope area => ergs/s
     # multiply by cal_factor => e-/s (assuming that quantum efficiency is also incorporated here)
-    # multiply by exptime => total e-? Do that after
+    # multiply by exptime => total e-
     flux_per_s = flux_erg_s_cm2 * area_cm2 * cal_factor
     # also incorporate color_correction if desired
     flux_per_s /= color_cor
-
-    # Then multiply by exptime => total e- in the image. 
     star_electrons = flux_per_s * exptime  # total e- from star in the filter band
 
     # Image properties
