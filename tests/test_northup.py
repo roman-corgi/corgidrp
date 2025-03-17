@@ -145,6 +145,8 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         assert(sci_input[y_value1,x_value1] != sci_derot[y_value1,x_value1])
         assert(dq_input[y_value1,x_value1] != dq_derot[y_value1,x_value1])
 
+        print(f'ang:{ang_list[i]}, x: {x_test}, y: {y_test}')
+        print(sci_derot[y_test-5:y_test+5,x_test-5:x_test+5])
         assert(math.isclose(sci_derot[y_test,x_test],sci_input[y_value1,x_value1],rel_tol=0.01))
         assert(dq_input[y_value1,x_value1] == dq_derot[y_test,x_test])
 
