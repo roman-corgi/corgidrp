@@ -8,7 +8,6 @@ from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
 import numpy as np
-import glob
 import pyklip.rdi
 import os
 from astropy.io import fits
@@ -314,7 +313,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     
     return dataset_out
 
-def northup(input_dataset,use_wcs=True):
+def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
     The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
@@ -323,6 +322,7 @@ def northup(input_dataset,use_wcs=True):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
+	rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
@@ -341,12 +341,18 @@ def northup(input_dataset,use_wcs=True):
         ylen, xlen = sci_data.shape
 
         # define the center for rotation
-        try: 
-            xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
-        except KeyError:
-            warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
+        if rot_center == 'im_center':
             xcen, ycen = xlen/2, ylen/2
-    
+        elif rot_center == 'starloc':
+            try:
+                xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
+            except KeyError:
+                warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
+                xcen, ycen = xlen/2, ylen/2
+        else:
+            xcen = rot_center[0]
+            ycen = rot_center[1]
+
         # look for WCS solutions
         if use_wcs is True:
             astr_hdr = WCS(sci_hd)
