@@ -48,6 +48,40 @@ def validate_satellite_spot_parameters(params):
     return True
 
 
+def update_parameters(params, new_values):
+    """
+    Updates a dictionary of parameters with new values.
+
+    Args:
+        params (dict):
+            Original dictionary containing initial parameter values.
+        new_values (dict):
+            Dictionary containing new parameter values to update.
+
+    Returns:
+        dict: The updated dictionary.
+
+    Raises:
+        KeyError: If `new_values` contains keys not present in `params`.
+
+    Example:
+        >>> params = {'x': 1, 'y': 2}
+        >>> new_values = {'x': 10}
+        >>> update_parameters(params, new_values)
+        {'x': 10, 'y': 2}
+
+        >>> new_values = {'z': 5}
+        >>> update_parameters(params, new_values)
+        KeyError: "Key 'z' is not a valid parameter."
+    """
+    for key in new_values:
+        if key not in params:
+            raise KeyError(f"Key '{key}' is not a valid parameter.")
+        params[key] = new_values[key]
+
+    return params
+
+
 def circle(nx, ny, roiRadiusPix, xShear, yShear, nSubpixels=100):
     """
     Generates a circular aperture with an antialiased edge at specified offsets.
