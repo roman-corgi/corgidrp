@@ -355,6 +355,7 @@ def northup(input_dataset,use_wcs=True):
             roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
 
         else:
+            warnings.warn('use "ROLL" instead of WCS to estimate the north position angle')
             astr_hdr = None
             # read the roll angle parameter, assuming this info is recorded in the primary header as requested
             roll_angle = processed_data.pri_hdr['ROLL']
