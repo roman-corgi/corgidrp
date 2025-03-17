@@ -101,7 +101,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
        updated_datalist.append(updated_dataset[0])
 
     input_dataset = data.Dataset(updated_datalist)
-    derot_dataset = northup(input_dataset)
+    derot_dataset = northup(input_dataset,use_wcs=True)
 
     # save fits file
     if save_derot_dataset:
