@@ -1,6 +1,7 @@
 import numpy as np
 
 import corgidrp
+from corgidrp import star_center
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 from corgidrp.l3_to_l4 import find_star
@@ -9,96 +10,7 @@ old_err_tracking = corgidrp.track_individual_errors
 
 # Static parameters for testing
 image_shape = (201, 201)
-
-# Spot separation in pixels
-# sep in lambda/D and multiply by pix per lambda/D
-spot_separation_nfov = 6.5*(51.46*0.575/13) # 14.79
-spot_separation_spec = 6.0*(51.46*0.730/13) # 17.34
-spot_separation_wfov = 13*(51.46*0.825/13) # 42.4545
-
-satellite_spot_parameters_defaults = {
-    "NFOV": {
-        "offset": {
-            "spotSepPix": spot_separation_nfov,
-            "roiRadiusPix": 4.5,
-            "probeRotVecDeg": [0, 90],
-            "nSubpixels": 100,
-            "nSteps": 7,
-            "stepSize": 1,
-            "nIter": 6,
-        },
-        "separation": {
-            "spotSepPix": spot_separation_nfov,
-            "roiRadiusPix": 1.5,
-            "probeRotVecDeg": [0, 90],
-            "nSubpixels": 100,
-            "nSteps": 21,
-            "stepSize": 0.25,
-            "nIter": 5,
-        }
-    },
-    "SPEC660": {
-        "offset": {
-            "spotSepPix": spot_separation_spec,
-            "roiRadiusPix": 6,
-            "probeRotVecDeg": [0,],
-            "nSubpixels": 100,
-            "nSteps": 9,
-            "stepSize": 1,
-            "nIter": 6,
-        },
-        "separation": {
-            "spotSepPix": spot_separation_spec,
-            "roiRadiusPix": 4,
-            "probeRotVecDeg": [0,],
-            "nSubpixels": 100,
-            "nSteps": 21,
-            "stepSize": 0.25,
-            "nIter": 5,
-        }
-    },
-    "SPEC730": {
-        "offset": {
-            "spotSepPix": spot_separation_spec,
-            "roiRadiusPix": 6,
-            "probeRotVecDeg": [0,],
-            "nSubpixels": 100,
-            "nSteps": 9,
-            "stepSize": 1,
-            "nIter": 6,
-        },
-        "separation": {
-            "spotSepPix": spot_separation_spec,
-            "roiRadiusPix": 4,
-            "probeRotVecDeg": [0,],
-            "nSubpixels": 100,
-            "nSteps": 21,
-            "stepSize": 0.25,
-            "nIter": 5,
-        }
-    },
-    "WFOV": {
-        "offset": {
-            "spotSepPix": spot_separation_wfov,
-            "roiRadiusPix": 4.5,
-            "probeRotVecDeg": [0, 90],
-            "nSubpixels": 100,
-            "nSteps": 7,
-            "stepSize": 1,
-            "nIter": 6,
-        },
-        "separation": {
-            "spotSepPix": spot_separation_wfov,
-            "roiRadiusPix": 4.5,
-            "probeRotVecDeg": [0, 90],
-            "nSubpixels": 100,
-            "nSteps": 21,
-            "stepSize": 0.25,
-            "nIter": 5,
-        }
-    }
-}
-
+satellite_spot_parameters_defaults = star_center.satellite_spot_parameters_defaults
 
 def test_find_star_offset():
     """
