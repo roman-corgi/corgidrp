@@ -120,7 +120,7 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
         sci_hd = input_data.ext_hdr
         try:
             xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY']
-	    print(f'STARLOCX/Y found: {xcen, ycen}')
+            print(f'STARLOCX/Y found: {xcen, ycen}')
         except KeyError:
             warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
             ylen, xlen = sci_input.shape
