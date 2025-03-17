@@ -153,44 +153,46 @@ def setup_module():
 def test_ct_map():
     """ Tests the creation of a core throughput map. The method InterpolateCT()
       has its own unit test and can be considered as tested in the following. """
-    # Generate core throughput calibration file
-    ct_cal = corethroughput.generate_ct_cal(dataset_ct_interp)
 
-    # FPAM/FSAM
-    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    # I run the test for two completely different CT datasets: 2D PSFs
+    # randomly distributed (dataset_ct) and the one used for CT interpolation
+    # that has a set of PSFs with pre-stablished CT and locations (dataset_ct_interp)
 
-    # Create CT map
-    '''
-    ct_map = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal)
+    for dataset in [dataset_ct_interp, dataset_ct_interp]:
+        # Generate core throughput calibration file
+        ct_cal = corethroughput.generate_ct_cal(dataset)
     
-    # CT values are within [0,1]
-    assert ct_map[2].min() >= 0
-    assert ct_map[2].max() <= 1
-    # Verify CT values are within the range of the input CT values
-    # Allow some minimum tolerance due to float64 numerical precision
-    tolerance = 1e-14
-    assert ct_map[2].min() >= ct_cal.ct_excam[2].min() - tolerance
-    assert ct_map[2].max() <= ct_cal.ct_excam[2].max() + tolerance
-    '''
+        # FPAM/FSAM
+        fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+            'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    
+        # Create CT map for the HLC area (default)
+        ct_map_def = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal)
 
-    # Test the ability to parse some user-defined locations
-    # If the target pixels are the same as the ones in the CT file, the
-    # locations *and* CT values must agree with the ones in the CT file
-    # Get FPM's center during CT observations
-    ct_fpm = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
-    target_pix  [ct_cal.ct_excam[0] - ct_fpm[0],
-        ct_cal.ct_excam[1] - ct_fpm[1]]
-    ct_map = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal,
-        target_pix=target_pix)
-
-    # All locations must have a valid CT value
-    breakpoint()
-    assert target_pix[0] == ct_map[0]
-    assert targte_pix[1] == ct_map[1]
-    # CT values must be the smae
-    assert ct_map[2] == ct_cal.ct_excam[2]
-    breakpoint() 
+        # CT values are within [0,1]
+        assert ct_map_def[2].min() >= 0
+        assert ct_map_def[2].max() <= 1
+        # Verify CT values are within the range of the input CT values
+        # Allow some minimum tolerance due to float64 numerical precision
+        tolerance = 1e-14
+        assert ct_map_def[2].min() >= ct_cal.ct_excam[2].min() - tolerance
+        assert ct_map_def[2].max() <= ct_cal.ct_excam[2].max() + tolerance
+    
+        # Test the ability to parse some user-defined locations
+        # If the target pixels are the same as the ones in the CT file, the
+        # locations *and* CT values must agree with the ones in the CT file
+        # Get FPM's center during CT observations
+        ct_fpm = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+        target_pix = [ct_cal.ct_excam[0] - ct_fpm[0],
+            ct_cal.ct_excam[1] - ct_fpm[1]]
+        ct_map_targ = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal,
+            target_pix=target_pix)
+    
+        # All locations must have a valid CT value
+        assert target_pix[0] == pytest.approx(ct_map_targ[0], abs=1e-14)
+        assert target_pix[1] == pytest.approx(ct_map_targ[1], abs=1e-14)
+        # CT values must be the same
+        assert ct_cal.ct_excam[2] == pytest.approx(ct_map_targ[2], abs=1e-14)
 
 def test_psf_pix_and_ct():
     """
