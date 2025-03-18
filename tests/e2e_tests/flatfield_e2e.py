@@ -76,6 +76,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Neptune"
         base_image.pri_hdr['FILTER'] = 4
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
 
@@ -105,7 +106,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -120,11 +121,21 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
+    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    ext_hdr['RN'] = 100
+    ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
-    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(kgain, to_disk=False)
+    this_caldb.save()
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
@@ -246,6 +257,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
         base_image.pri_hdr['TARGET'] = "Uranus"
         base_image.pri_hdr['FILTER'] = 1
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
 
@@ -275,7 +287,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -290,11 +302,21 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
+    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    ext_hdr['RN'] = 100
+    ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
-    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(kgain, to_disk=False)
+    this_caldb.save()
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
@@ -355,7 +377,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder'
+    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
