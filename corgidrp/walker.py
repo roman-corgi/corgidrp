@@ -243,8 +243,6 @@ def guess_template(dataset):
             recipe_filename = "l1_to_boresight.json"
         elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
-        elif image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
-            recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
             if image.pri_hdr['PHTCNT']:
@@ -262,7 +260,7 @@ def guess_template(dataset):
                 recipe_filename = "l1_to_l2b.json"    
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
-            _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+            _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
             if image.pri_hdr['PHTCNT']:
                 recipe_filename = "l2a_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
@@ -274,6 +272,9 @@ def guess_template(dataset):
                 recipe_filename = "l2a_to_l2b_pc.json"
             else:
                 recipe_filename = "l2a_to_l2b.json"
+    elif image.ext_hdr['DATALVL'] == "L2b":
+        if image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
+            recipe_filename = "l2b_to_fluxcal_factor.json"
     else:
         raise NotImplementedError()
 

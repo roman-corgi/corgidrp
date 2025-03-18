@@ -2688,7 +2688,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fpam_v = 6124.9
 
     # Create image object
-    prihdr, exthdr = create_default_L3_headers()
+    prihdr, exthdr = create_default_L2b_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
@@ -2698,8 +2698,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['FPAMNAME'] = fpamname
     exthdr['FPAM_H']   = 2503.7
     exthdr['FPAM_V']   = 6124.9
-    exthdr['FSM_X']    = fsm_x              # Ensure fsm_x is defined
-    exthdr['FSM_Y']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
     exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
