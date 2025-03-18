@@ -483,8 +483,6 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
         meas_offset (np.array): A (2 x N) array of (x, y) pixel offset from the first star position for N star pairs
         sky_offset (np.array): A (2 x N) array of (sep, pa) true sky offsets in [mas] and [deg] from the first star position for N pairs 
         meas_errs (np.array): A (2 x N) array of (x, y) pixel errors in measured offsets from the first star position for N pairs
-        x0 (int): The x pixel value for the center of the image/ detector
-        y0 (int): The y pixel value for the center of the image/ detector
 
     Returns:
         residuals (list): List of residuals between true and measured star positions
