@@ -1,6 +1,7 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
 
 from pyklip.klip import rotate
+import scipy.ndimage
 from astropy.wcs import WCS
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
@@ -13,20 +14,78 @@ import os
 from astropy.io import fits
 import warnings
 
-def distortion_correction(input_dataset, distortion_calibration):
+def distortion_correction(input_dataset, astrom_calibration):
     """
     
     Apply the distortion correction to the dataset.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        distortion_calibration (corgidrp.data.DistortionCalibration): a DistortionCalibration calibration file to model the distortion
+        astrom_calibration (corgidrp.data.AstrometricCalibration): an AstrometricCalibration calibration file to model the distortion
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the distortion correction applied
     """
+    undistorted_dataset = input_dataset.copy()
+    distortion_coeffs = astrom_calibration.distortion_coeffs[:-1]
+    distortion_order = int(astrom_calibration.distortion_coeffs[-1])
 
-    return input_dataset.copy()
+    undistorted_ims = []
+
+    # apply the distortion correction to each image in the dataset
+    for undistorted_data in undistorted_dataset:
+
+        im_data = undistorted_data.data
+        imgsizeX, imgsizeY = im_data.shape
+
+        # set image size to the largest axis if not square imagea
+        if (imgsizeX >= imgsizeY): imgsize = imgsizeX
+        else: imgsize = imgsizeY
+
+        yorig, xorig = np.indices(im_data.shape)
+        y0, x0 = imgsize//2, imgsize//2
+        yorig -= y0
+        xorig -= x0
+
+        ### compute the distortion map based on the calibration file passed in
+        fitparams = (distortion_order + 1)**2
+
+            # reshape the coefficient arrays
+        x_params = distortion_coeffs[:fitparams]
+        x_params = x_params.reshape(distortion_order+1, distortion_order+1)
+
+        total_orders = np.arange(distortion_order+1)[:,None] + np.arange(distortion_order+1)[None,:]
+        x_params = x_params / 500**(total_orders)
+
+            # evaluate the legendre polynomial at all pixel positions
+        x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), x_params)
+        x_corr = x_corr.reshape(xorig.shape)
+
+        distmapX = x_corr - xorig
+
+            # reshape and evaluate the same way for the y coordinates
+        y_params = distortion_coeffs[fitparams:]
+        y_params = y_params.reshape(distortion_order+1, distortion_order+1)
+        y_params = y_params /500**(total_orders)
+
+        y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), y_params)
+        y_corr = y_corr.reshape(yorig.shape)
+        distmapY = y_corr - yorig
+
+        # apply the distortion grid to the image indeces and map the image
+        gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
+        gridx = gridx - distmapX
+        gridy = gridy - distmapY
+
+        undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
+
+        undistorted_ims.append(undistorted_image)
+
+    history_msg = 'Distortion correction completed'
+
+    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims))
+
+    return undistorted_dataset
 
 def find_star(input_dataset):
     """
