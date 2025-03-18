@@ -27,8 +27,8 @@ def distortion_correction(input_dataset, astrom_calibration):
         corgidrp.data.Dataset: a version of the input dataset with the distortion correction applied
     """
     undistorted_dataset = input_dataset.copy()
-    distortion_coeffs = astrom_calibration.distortion_coeffs[0]
-    distortion_order = int(astrom_calibration.distortion_coeffs[1])
+    distortion_coeffs = astrom_calibration.distortion_coeffs[:-1]
+    distortion_order = int(astrom_calibration.distortion_coeffs[-1])
 
     undistorted_ims = []
 
