@@ -2793,17 +2793,24 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
 
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
-def create_ct_cal(fwhm_mas, cfam_name='1F'):
+def create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx = 50.5,ceny=50.5,
+                  nx=21,ny=21):
     # Default headers
     prhd, exthd = create_default_L3_headers()
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
     exthd.set('EXTNAME','PSFCUBE')
 
+    # Need nx, ny to be odd
+    assert nx%2 == 1
+    assert ny%2 == 1
+
     x_arr = []
     y_arr = []
-    for x in np.linspace(10,50,21):
-        for y in np.linspace(10,50,21):
+
+    for x in np.linspace(cenx-(nx-1)/2,cenx+(nx-1)/2,nx):
+        for y in np.linspace(ceny-(ny-1)/2,ceny+(ny-1)/2,ny):
             x_arr.append(x)
             y_arr.append(y)
     x_arr = np.array(x_arr)
