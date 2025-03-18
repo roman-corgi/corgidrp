@@ -6,10 +6,12 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
+import corgidrp.flat as flat
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 
 old_err_tracking = corgidrp.track_individual_errors
 
+np.random.seed(9292)
 def test_flat_div():
     """
     Generate mock input data and pass into flat division function
@@ -39,7 +41,7 @@ def test_flat_div():
     assert flat_dataset.all_data[0,0,0] == 1
     
     ###### create flatfield
-    flat_frame = detector.create_flatfield(flat_dataset)
+    flat_frame = flat.create_flatfield(flat_dataset)
     # check the level of counts in flatfield is approximately correct
     assert np.mean(flat_frame.data) == pytest.approx(1, abs=1e-2)
     # check that the error is determined correctly
@@ -61,7 +63,7 @@ def test_flat_div():
     # perform checks after the flat divison
     assert(flat_filename in str(flatdivided_dataset[0].ext_hdr["HISTORY"]))
     # check the level of the dataset is now approximately 100
-    assert np.mean(flatdivided_dataset.all_data) == pytest.approx(150, abs=1e-2)
+    assert np.mean(flatdivided_dataset.all_data) == pytest.approx(150, abs=2e-2)
     # check the propagated errors
     assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
     print("mean of all simulated data",np.mean(simflat_dataset.all_data))

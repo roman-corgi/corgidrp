@@ -2,11 +2,14 @@
 Test the data level specification
 """
 import pytest
+import numpy as np
 import corgidrp.mocks as mocks
 import corgidrp.l1_to_l2a as l1_to_l2a
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.l3_to_l4 as l3_to_l4
+
+np.random.seed(456)
 
 def test_l1_to_l4():
     """
@@ -21,26 +24,26 @@ def test_l1_to_l4():
     l2a_dataset = l1_to_l2a.update_to_l2a(l1_dataset)
 
     for frame in l2a_dataset:
-        assert frame.ext_hdr['DATA_LEVEL'] == "L2a"
+        assert frame.ext_hdr['DATALVL'] == "L2a"
         assert "L2a" in frame.filename
     
 
     l2b_dataset = l2a_to_l2b.update_to_l2b(l2a_dataset)
 
     for frame in l2b_dataset:
-        assert frame.ext_hdr['DATA_LEVEL'] == "L2b"
+        assert frame.ext_hdr['DATALVL'] == "L2b"
         assert "L2b" in frame.filename
 
     l3_dataset = l2b_to_l3.update_to_l3(l2b_dataset)
 
     for frame in l3_dataset:
-        assert frame.ext_hdr['DATA_LEVEL'] == "L3"
+        assert frame.ext_hdr['DATALVL'] == "L3"
         assert "L3" in frame.filename
 
     l4_dataset = l3_to_l4.update_to_l4(l3_dataset)
 
     for frame in l4_dataset:
-        assert frame.ext_hdr['DATA_LEVEL'] == "L4"
+        assert frame.ext_hdr['DATALVL'] == "L4"
         assert "L4" in frame.filename
 
 def test_l1_to_l2a_bad():
@@ -49,7 +52,7 @@ def test_l1_to_l2a_bad():
     """
     l2a_dataset = mocks.create_dark_calib_files(numfiles=2)
     for frame in l2a_dataset:
-        frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        frame.ext_hdr['DATALVL'] = "L2a"
     
     # expect an exception
     with pytest.raises(ValueError):
@@ -87,5 +90,8 @@ def test_l3_to_l4_bad():
 
 
 if __name__ == "__main__":
-    # test_l1_to_l4()
+    test_l1_to_l4()
     test_l1_to_l2a_bad()
+    test_l1a_to_l2b_bad()
+    test_l2b_to_l3_bad()
+    test_l3_to_l4_bad()

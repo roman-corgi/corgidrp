@@ -1,7 +1,9 @@
 import pytest
+import numpy as np
 import corgidrp.mocks as mocks
 from corgidrp.l2a_to_l2b import frame_select
 
+np.random.seed(123)
 
 def test_no_selection():
     """
@@ -75,8 +77,8 @@ def test_tt_rms():
     # add tt rms header
     tt_rms = 0
     for frame in default_dataset:
-        frame.ext_hdr['RESZ2RMS'] = tt_rms
-        frame.ext_hdr['RESZ3RMS'] = tt_rms
+        frame.ext_hdr['Z2VAR'] = tt_rms
+        frame.ext_hdr['Z3VAR'] = tt_rms
         tt_rms += 1
 
     # does nothing
@@ -97,8 +99,8 @@ def test_tt_bias():
     # add tt rms header
     tt_rms = 0
     for frame in default_dataset:
-        frame.ext_hdr['RESZ2'] = tt_rms
-        frame.ext_hdr['RESZ3'] = tt_rms
+        frame.ext_hdr['Z2RES'] = tt_rms
+        frame.ext_hdr['Z3RES'] = tt_rms
         tt_rms += 1
 
     # does nothing
@@ -123,8 +125,8 @@ def test_remove_all():
     # add tt rms header
     tt_rms = 0
     for frame in default_dataset:
-        frame.ext_hdr['RESZ2RMS'] = tt_rms
-        frame.ext_hdr['RESZ3RMS'] = tt_rms
+        frame.ext_hdr['Z2VAR'] = tt_rms
+        frame.ext_hdr['Z3VAR'] = tt_rms
         tt_rms += 1
     # add overexp
     default_dataset[1].ext_hdr['OVEREXP'] = True
@@ -148,8 +150,8 @@ def test_marking():
     # add tt rms header
     tt_rms = 0
     for frame in default_dataset:
-        frame.ext_hdr['RESZ2'] = tt_rms
-        frame.ext_hdr['RESZ3'] = tt_rms
+        frame.ext_hdr['Z2RES'] = tt_rms
+        frame.ext_hdr['Z3RES'] = tt_rms
         tt_rms += 1
 
     # does nothing

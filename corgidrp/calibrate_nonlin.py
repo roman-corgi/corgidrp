@@ -12,11 +12,10 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from corgidrp import check
 import corgidrp.data as data
-from corgidrp.mocks import create_default_headers
 from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
-nonlin_params = {
+nonlin_params_default = {
     # ROI constants
     'rowroi1': 305,
     'rowroi2': 736,
@@ -44,41 +43,44 @@ nonlin_params = {
     'min_mask_factor': 1.1,
     }
  
-def check_nonlin_params(
-    ):
-    """ Checks integrity of kgain parameters in the dictionary nonlin_params. """
+def check_nonlin_params(nonlin_params):
+    """ Checks integrity of kgain parameters in the dictionary nonlin_params. 
+
+    Args:
+        nonlin_params (dict):  Dictionary of parameters used for calibrating nonlinearity.
+    """
     if 'rowroi1' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi2.')
     if 'colroi1' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi1.')
     if 'colroi2' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi2.')
     if 'rowback11' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback11.')
     if 'rowback12' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback12.')
     if 'rowback21' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback21.')
     if 'rowback22' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowback22.')
     if 'colback11' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback11.')
     if 'colback12' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback12.')
     if 'colback21' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback21.')
     if 'colback22' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colback22.')
     if 'min_exp_time' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  min_exp_time.')
     if 'num_bins' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  num_bins.')
     if 'min_bin' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  min_bin.')
     if 'min_mask_factor' not in nonlin_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  min_mask_factor.')
     
     if not isinstance(nonlin_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
@@ -124,56 +126,55 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=True, plot_outdir='figures', show_plot=False,
-                     verbose=False):
+                     verbose=False, nonlin_params=None):
     """
-    Given a large array of stacks with 1 or more EM gains, and sub-stacks of 
-    frames ranging over exposure time, each sub-stack having at least 1 illuminated 
-    pupil SCI-sized L1 frame for each exposure time, this function processes the 
-    frames to create a nonlinearity table. A mean pupil array is created from a 
-    separate stack of frames of constant exposure time and used to make a mask; 
-    the mask is used to select pixels in each frame in the large array of stacks 
-    in order to calculate its mean signal.
+    Function that derives the non-linearity calibration table for a set of DN
+    and EM values.
 
-    The frames are bias-subtracted.
-
-    Two sub-stacks/groups of frames at each EM gain value contain noncontiguous 
-    frames with the same (repeated) exposure time, taken near the start and end 
-    of the frame sequence. Their mean signals are computed and used to correct for 
-    illumination brightness/sensor sensitivity drifts for all the frames for a 
-    given EM gain, depending on when the frames were taken. The repeated exposure 
-    time frames should only be repeated once (as opposed to 3 times, etc) and 
-    other sets of exposure times for each EM gain should not be repeated.
-    Note, it is assumed that the frames for the large array of stacks are 
-    collected in a systematic way, such that frames having the same exposure 
-    time for a given EM gain are collected contiguously (with the exception of 
-    the repeated group of frames noted above). The frames within each EM gain 
-    group must also be time ordered. For best results, the mean signal in the 
-    pupil region for the longest exposure time at each EM gain setting should 
-    be between 8000 and 10000 DN.
-    A linear fit is applied to the corrected mean signals versus exposure time. 
-    Relative gain values are calculated from the ratio of the mean signals 
-    to the linear fit. Nonlinearity is then calculated from the inverse of
-    the relative gain and output as an array. The nonlinearity values, along with 
-    the actual EM gain for each column and mean counts in DN for each row, are 
-    returned as two arrays. One array contains the column headers with 
-    actual/measured EM gain, and the other array contains the means in DN and the 
-    nonlinearity values. The mean values start with min_write and run through 
-    max_write.
-    
     Args:
-      dataset_nl (corgidrp.Dataset): dataset, which is implicitly 
-        subdivided into smaller ranges of grouped frames. The frames are EXCAM 
-        illuminated pupil L1 SCI frames. There must be one or more unique EM 
-        gain values and at least 20 unique exposure times for each EM gain. The 
-        number of frames for each EM gain can vary. The size of dataset_cal is: 
-        Sum(N_t[g]) x 1200 x 2200, where N_t[g] is the number of frames having 
-        EM gain value g, and the sum is over g. Each substack of dataset_cal must
-        have a group of frames with a repeated exposure time. In addition, there's
-        a set of at least 30 frames used to generate a mean frame. These frames
-        have the same exp time, such that the mean signal in the pupil regions
-        is a few thousand DN, which helps identify the pixels containing the 
-        pupil image. They also have unity EM gain. These frames are
-        identified with the kewyord 'OBSTYPE'='MNFRAME' (TBD).
+      dataset_nl (corgidrp.Dataset): The frames in the dataset are
+        bias-subtracted. The dataset contains frames belonging to two different
+        sets -- Mean frame, a large array of unity gain frames, and set with
+        non-unity gain frames.
+        Mean frame -- Unity gain frames with constant exposure time. These frames
+        are used to create a mean pupil image. The mean frame is used to select
+        pixels in each frame of the large array of unity gain frames (see next)
+        to calculate its mean signal. In general, it is expected that at least
+        30 frames or more will be taken for this set. In TVAC, 30 frames, each
+        with an exposure time of 5.0 sec were taken.
+        Large array of unity gain frames: Set of unity gain frames with subsets
+        of equal exposure times. Data for each subset should be taken sequentially:
+        Each subset must have at least 5 frames. All frames for a subset are taken
+        before moving to the next subset. Two of the subsets have the same (repeated)
+        exposure time. These two subsets are not contiguous: The first subset is
+        taken near the start of the data collection and the second one is taken
+        at the end of the data collection (see TVAC example below). The mean
+        signal of these two subsets is used to correct for illumination
+        brightness/sensor sensitivity drifts for all the frames in the whole set,
+        depending on when the frames were taken. There should be no other repeated
+        exposure time among the subsets. In TVAC, a total of 110 frames were taken
+        within this category. The 110 frames consisted of 22 subsets, each with
+        5 frames. All 5 frames had the same exposure time. The exposure times in
+        TVAC in seconds were, each repeated 5 times to collect 5 frames in each
+        subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
+        6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
+        13.846, 14.615, 15.385, and 1.538 (again).
+        Set with non-unity gain frames:: a set of subsets of frames. All frames
+        in each subset have a unique, non-unity EM gain. For instance, in TVAC,
+        11 subsets were considered with EM values (CMDGAIN): 1.65, 5.24, 8.60,
+        16.70, 27.50, 45.26, 87.50, 144.10, 237.26, 458.70 and 584.40. These
+        correspond to a range of actual EM gains from about 2 to 7000. Each subset
+        collects the same number of frames, which is at least 20 frames. In TVAC,
+        each non-unity EM value had 22 frames. In each subset, there are two
+        repeated exposure times: one near the start of the data collection and
+        one at the very end. The exposure times of the frames in each EM subset
+        do not need to be the same. For EM=1.65, the values of the exposure times
+        in seconds were: 0.076, 0.758, 1.515, 2.273, 3.031, 3.789, 4.546, 5.304,
+        6.062, 6.820, 7.577, 8.335, 9.093, 9.851, 10.608, 11.366, 12.124, 12.881,
+        13.639, 14.397, 15.155, and 1.515 (repeated). And for EM=5.24, the 22
+        values of the exposure times in seconds were: 0.070, 0.704, 1.408, 2.112,
+        2.816, 3.520, 4.225, 4.929, 5.633, 6.337, 7.041, 7.745, 8.449, 9.153,
+        9.857, 10.561, 11.265, 11.969, 12.674, 13.378, 14.082, and 1.408 (repeated).
       n_cal (int):
         Minimum number of sub-stacks used to calibrate Non-Linearity. The default
         value is 20.
@@ -211,6 +212,16 @@ def calibrate_nonlin(dataset_nl,
       show_plot (bool): (Optional) display the plots. Default is False.
       verbose (bool): (Optional) display various diagnostic print messages.
         Default is False.
+      nonlin_params (dict): (Optional) Dictionary of row and col specifications
+        for the region of interest (indicated by 'roi') where the frame is illuminated and for 
+        two background regions (indicated by 'back1' and 'back2') where the frame is not illuminated.  
+        Must contain 'rowroi1','rowroi2','colroi1','colroi2','rowback11','rowback12',
+        'rowback21','rowback22','colback11','colback12','colback21',and 'colback22'.
+        The 'roi' needs one square region specified, and 'back' needs two square regions, 
+        where a '1' ending indicates the smaller of two values, and a '2' ending indicates the larger 
+        of two values.  The coordinates of each square are specified by matching 
+        up as follows: (rowroi1, colroi1), (rowroi1, colroi2), (rowback11, colback11), 
+        (rowback11, colback12), etc. Defaults to nonlin_params_default specified in this file.
     
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
@@ -218,6 +229,11 @@ def calibrate_nonlin(dataset_nl,
         input signal in DN is the first column. Signal values start with min_write
         and run through max_write in steps of 20 DN.
     """
+    if nonlin_params is None:
+        nonlin_params = nonlin_params_default
+        
+    check_nonlin_params(nonlin_params)
+
     # dataset_nl.all_data must be 3-D 
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
@@ -246,15 +262,15 @@ def calibrate_nonlin(dataset_nl,
         raise TypeError('cal_arr must be an ndarray.')
     if np.ndim(cal_arr) != 3:
         raise CalNonlinException('cal_arr must be 3-D')
-    # mean_frame_arr must have at least 30 frames
-    if len(cal_arr) < n_cal:
-        raise Exception(f'mean_frame_arr must have at least {n_cal} frames')
-    if np.sum(len_list) != len(cal_arr):
-        raise CalNonlinException('Number of sub-stacks in cal_arr must '
-                'equal the sum of the elements in len_list')
     if len(len_list) < 1:
         raise CalNonlinException('Number of elements in len_list must '
                 'be greater than or equal to 1.')
+    if np.sum(len_list) != len(cal_arr):
+        raise CalNonlinException('Number of sub-stacks in cal_arr must '
+                'equal the sum of the elements in len_list')
+    # cal_arr must have at least 20 frames for each EM gain
+    if np.any(np.array(len_list) < n_cal):
+        raise Exception(f'cal_arr must have at least {n_cal} frames for each EM value')
     if len(np.unique(datetime_arr)) != len(datetime_arr):
         raise CalNonlinException('All elements of datetime_arr must be unique.')
     for g_index in range(len(len_list)):
@@ -274,6 +290,7 @@ def calibrate_nonlin(dataset_nl,
     if np.ndim(mean_frame_arr) != 3:
         raise CalNonlinException('mean_frame_arr must be 3-D (i.e., a stack of '
                 '2-D sub-stacks')
+    # mean_frame_arr must have at least 30 frames
     if len(mean_frame_arr) < n_mean:
         raise CalNonlinException(f'Number of frames in mean_frame_arr must '
                 'be at least {n_mean}.')
@@ -836,7 +853,7 @@ def nonlin_dataset_2_stack(dataset):
     """
     # Split Dataset
     dataset_cp = dataset.copy()
-    split = dataset_cp.split_dataset(exthdr_keywords=['CMDGAIN'])
+    split = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     
     # Calibration data
     stack = []
@@ -857,17 +874,17 @@ def nonlin_dataset_2_stack(dataset):
         len_cal_frames = 0
         record_gain = True 
         for frame in data_set.frames:
-            if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
+            if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
                 if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
                     raise Exception('Frames used to build the mean frame must have the same exposure time')
-                if frame.ext_hdr['CMDGAIN'] != 1:
+                if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-            elif (frame.pri_hdr['OBSTYPE'] == 'KGAIN' or
-                frame.pri_hdr['OBSTYPE'] == 'NONLIN'):
+            elif (frame.pri_hdr['OBSNAME'] == 'KGAIN' or
+                frame.pri_hdr['OBSNAME'] == 'NONLIN'):
                 len_cal_frames += 1
                 sub_stack.append(frame.data)
                 exp_time = frame.ext_hdr['EXPTIME']
@@ -885,13 +902,13 @@ def nonlin_dataset_2_stack(dataset):
                     try: # if EM gain measured directly from frame TODO change hdr name if necessary
                         gains.append(frame.ext_hdr['EMGAIN_M'])
                     except:
-                        try: # use applied EM gain if available
+                        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
                             gains.append(frame.ext_hdr['EMGAIN_A'])
-                        except: # use commanded gain otherwise
-                            gains.append(frame.ext_hdr['CMDGAIN'])
-                    record_gain = False
+                        else: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['EMGAIN_C'])
+                        record_gain = False
             else:
-                raise Exception('OBSTYPE can only be MNFRAME or NONLIN in non-linearity')
+                raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
         
         # First layer (array of unique EM values)
         if len(sub_stack):
