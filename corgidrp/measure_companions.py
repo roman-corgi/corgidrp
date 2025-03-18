@@ -13,17 +13,17 @@ import astropy.io.fits as fits
 
 
 def measure_companions(
+    direct_star_image,
     psf_sub_image,
-    coronagraphic_dataset=None,
+    reference_psf,
+    ct_dataset,
+    ct_cal,
     phot_method='aperture',
+    coronagraphic_dataset=None,
     fluxcal_factor=None,
-    ct_cal = None,
-    ct_dataset = None,
     FpamFsamCal = None,
     host_star_in_calspec=True,
     forward_model=False,
-    direct_star_image=None,
-    reference_psf=None,
     output_dir = ".",
     verbose=True
 ):
@@ -39,31 +39,22 @@ def measure_companions(
       5) Measure the companion count ratio & apparent magnitude.
 
     Args:
+        direct_star_image (corgidrp.data.Image): A direct (unocculted) image of the host star (in e-). 
         psf_sub_image (corgidrp.data.Image): The final (or intermediate) PSF-subtracted image with companions
-            in e-/s/pixel, with .data, .hdr, .ext_hdr.
+            in e-, with .data, .hdr, .ext_hdr.
+        reference_psf (corgidrp.data.Image): An off-axis calibration PSF of a star at some known 
+            separation where mask effects are negligible (it is near 6 lam/D).
+        ct_dataset (corgidrp.data.Dataset, optional): A dataset containing some coronagraphic observations.
+        ct_cal (corgidrp.data.CoreThroughputCalibration, optional): A Core Throughput calibration file containing 
+            PSFs at different distances from the mask and their corresponding positions and throughputs.
         phot_method ({'aperture', 'gauss2d'}, optional): Photometry method for measuring 
             companion counts on the (already) PSF-subtracted image.
-        apply_throughput (bool, optional): If True, apply a radial throughput correction or a 
-            user-supplied method.
-        apply_fluxcal (bool, optional): If True, convert from e- to magnitudes using fluxcal_factor 
-            (which may have ext_hdr['ZP']). TO DO
-        ct_cal (corgidrp.data.CoreThroughputCalibration): A Core Throughput calibration file containing 
-            PSFs at different distances from the mask and their corresponding positions and throughputs.
+        coronagraphic_dataset (corgidrp.data.Dataset, optional): Coronagraphic images with companions. 
         fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): Fluxcal factor with .ext_hdr['ZP'].
-        ct_dataset (corgidrp.data.Dataset, optional): A dataset containing some coronagraphic observations.
-        FpamFsamCal (corgidrp.data.FpamFsamCal): FPAM to EXCAM transformation matrix.
-        apply_psf_sub_eff (bool, optional): If True, apply an additional correction factor for 
-            PSF-subtraction efficiency.
-        psf_fwhm (float, optional): Approximate PSF FWHM in pixels. Used for psf-fit initialization or 
-            aperture defaults.
-        aperture_radius (float, optional): Aperture radius (in pixels) if using aperture photometry.
-        host_star_counts (float, optional): The star's measured counts in e-. Used for count_ratios.
-        host_star_apmag (float, optional): The star's apparent magnitude. If provided (with host_star_counts), 
-            we can compute the companion's apparent mag.
-        direct_star_image (corgidrp.data.Image, optional): A direct (unocculted) image of the host star (in e-). 
-        reference_psf (corgidrp.data.Image, optional): An off-axis calibration PSF of a star at some known 
-            separation where mask effects are negligible (it is near 6 lam/D).
-        out_dir (str):
+        FpamFsamCal (corgidrp.data.FpamFsamCal, optional): FPAM to EXCAM transformation matrix.
+        host_star_in_calspec (bool, optional):
+        forward_model (bool, optional):
+        output_dir (str, optional): Output directory path.
         verbose (bool, optional): If True, print progress messages.
 
     Returns:
@@ -175,7 +166,7 @@ def measure_counts(input_image_or_dataset, phot_method, initial_xy_guess, **kwar
             The image or dataset where the companion exists.
         phot_method (str): The measurement method ('forward_model', 'psf_fit', or 'aperture').
         initial_xy_guess (tuple): Initial (x, y) guess for the companion location.
-        **kwargs (dict): Additional method-specific parameters.
+        kwargs (dict): Additional method-specific parameters.
 
     Returns:
         counts_val (float): Estimated counts of the companion.
@@ -227,7 +218,7 @@ def forward_model_psf(
     outputdir=".",
     fileprefix="companion-fm",
     numbasis=[1, 7, 100],
-    method="maxl",
+    method="mcmc",
     annulus_halfwidth=15,   # half-width (in pixels) of annulus centered on guesssep
     movement=4,             # exclusion criterion in KLIP
     stamp_size=13,          # size of fitting stamp
@@ -398,7 +389,8 @@ def measure_core_throughput_at_location(
     at the companion location (x_c, y_c) and return the corresponding frame.
 
     Args:
-        x_c, y_c (float): The companion's pixel location in the coronagraphic image.
+        x_c (float): The companion's pixel x location in the coronagraphic image.
+        y_c (float): The companion's pixel y location in the coronagraphic image.
         ct_dataset (corgidrp.data.Dataset): The dataset used for the coronagraphic 
             observation, or at least the first frame's header info.
         ct_cal (corgidrp.data.CoreThroughputCalibration): The loaded calibration file with 
