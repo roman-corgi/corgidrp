@@ -203,6 +203,7 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     '''
     # create a place to store the location arrays and use a copy of the input image
     image = np.copy(image_data)
+    image_shape = np.shape(image)
     xs = np.empty(threshold) * np.nan
     ys = np.empty(threshold) * np.nan
     
@@ -284,10 +285,30 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     sources = astropy.table.Table()
     sources['x'] = xs[~np.isnan(xs)]
     sources['y'] = ys[~np.isnan(ys)]
-    
-    return sources
 
-def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.0075, platescale_guess=21.8, platescale_tol=0.1):
+    fit_xs = np.empty(len(xs[~np.isnan(xs)]))
+    fit_ys = np.empty(len(ys[~np.isnan(ys)]))
+
+    # fit a gaussian to the guess to find true pixel pos
+    # pad the image to fit stars along the edge
+
+    pad = 25
+    full_frame = np.zeros([image_shape[1]+(pad*2), image_shape[0]+(pad*2)])
+    full_frame[pad:-pad, pad:-pad] = image_data
+    fit_gauss_image = np.copy(full_frame)
+
+    for i, (gx, gy) in enumerate(zip(xs[~np.isnan(xs)], ys[~np.isnan(ys)])):
+        pf, fw, x, y = fakes.gaussfit2d(frame= fit_gauss_image, xguess= gx+pad, yguess=gy+pad)
+        fit_xs[i] = x - pad
+        fit_ys[i] = y - pad
+
+    found_sources = astropy.table.Table()
+    found_sources['x'] = fit_xs
+    found_sources['y'] = fit_ys
+    
+    return found_sources
+
+def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012, platescale_guess=21.8, platescale_tol=0.1):
     ''' 
     Function to find the corresponding RA/Dec positions to image sources, given a particular field.
 
