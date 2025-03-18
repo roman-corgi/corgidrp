@@ -15,20 +15,25 @@ def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
     rel_x_arr = x_arr - cenx
     rel_y_arr = y_arr - ceny
 
-    dists = np.sqrt((rel_x_arr-dx)**2 + (rel_y_arr-dy))
+    dists = np.sqrt((rel_x_arr-dx)**2 + (rel_y_arr-dy)**2)
 
     arg_closest = np.argmin(dists)
 
     return ct_calibration.data[arg_closest] 
 
-def inject_psf(frame, ct_calibration, flux, sep_pix,pa_deg):
+def inject_psf(frame_in, ct_calibration, flux, sep_pix,pa_deg):
+
+    frame = frame_in.copy()
 
     frame_roll = frame.ext_hdr['ROLL']
     rel_pa = frame_roll - pa_deg
 
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
-    psf_model = get_closest_psf(ct_calibration,dx,dy) * flux 
+    psf_model = get_closest_psf(ct_calibration,
+                                frame.ext_hdr['STARLOCX'],
+                                frame.ext_hdr['STARLOCY'],
+                                dx,dy) * flux 
     total_counts = np.sum(psf_model)
     
     psf_cenyx = np.array(psf_model.shape)/2 - 0.5 # Assume PSF is centered in the data cutout for now
@@ -45,11 +50,11 @@ def inject_psf(frame, ct_calibration, flux, sep_pix,pa_deg):
     shifted_psf_only_frame = shift(psf_only_frame,psf_shift)
 
     # Add to input frame
-    outframe = frame.data + shifted_psf_only_frame
+    frame.data += shifted_psf_only_frame
 
-    return outframe, psf_model, psf_center_inframe, total_counts
+    return frame, psf_model, psf_center_inframe, total_counts
 
-def measure_noise(frame, sep_pix, fwhm):
+def measure_noise(frame, klmode_index, sep_pix, fwhm):
     """Calculates the noise (standard deviation of counts) for an 
         annulus at a given separation
         TODO: Correct for small sample statistics?
@@ -63,14 +68,16 @@ def measure_noise(frame, sep_pix, fwhm):
         float: noise level at the specified separation
     """
 
+    data = frame.data[klmode_index]
+
     cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
 
     # Mask data outside the specified annulus
-    y, x = np.indices(frame.data.shape)
+    y, x = np.indices(data.shape)
     sep_map = np.sqrt((y-ceny)**2 + (x-cenx)**2)
     r_inner = sep_pix - fwhm
     r_outer = sep_pix + fwhm
-    masked_data = np.where(sep_map<r_outer and sep_map>r_inner, frame.data,np.nan)
+    masked_data = np.where(np.logical_and(sep_map<r_outer,sep_map>r_inner), data,np.nan)
     
     # Calculate standard deviation
     std = np.nanstd(masked_data)
@@ -109,7 +116,12 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             for sep in seps:
 
                 # Measure noise at this separation in psf subtracted dataset (for this kl mode)
-                noise = measure_noise(psfsub_dataset[0].data[k],sep)
+                d = 2.36 #m
+                lam = 573.8e-9 #m
+                pixscale_arcsec = 0.0218
+                fwhm_mas = 1.22 * lam / d * 206265 * 1000
+                fwhm_pix = fwhm_mas * 0.001 * pixscale_arcsec
+                noise = measure_noise(psfsub_dataset[0],k,sep,fwhm_pix)
 
                 inject_counts = noise * inject_snr
                 for pa in pas:
@@ -121,12 +133,12 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                             seppas_skipped.append(inject_loc)
                             continue
                     
-                    frame, psf_model, psf_center_inframe, total_counts = inject_psf(frame, ct_calibration, inject_counts, inject_loc)
+                    frame, psf_model, psf_center_inframe, total_counts = inject_psf(frame, ct_calibration, inject_counts, *inject_loc)
         
                 # Save this to divide later
                 this_klmode_injectcounts.append(inject_counts)
                 
-            sci_dataset[i].data = frame
+            sci_dataset[i].data[:] = frame.data[:]
                     
         # Init pyklip dataset
         pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)

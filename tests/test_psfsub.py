@@ -402,7 +402,7 @@ def test_psf_sub_ADI_nocrop():
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
 
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ADI',
                                 do_crop=False,
@@ -468,7 +468,8 @@ def test_psf_sub_RDI_nocrop():
                                 st_amp=st_amp
                                 )
 
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,
+                                reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_RDI',
                                 do_crop=False,
@@ -559,7 +560,7 @@ def test_psf_sub_ADIRDI_nocrop():
     analytical_result2 = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2                         
     analytical_results = [analytical_result1,analytical_result2]
     
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ADI+RDI',
                                 do_crop=False,
@@ -621,7 +622,7 @@ def test_psf_sub_withcrop():
     rolls = [270+13,270-13]
     mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
 
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_withcrop',
                                 measure_klip_thrupt=False)
@@ -650,7 +651,7 @@ def test_psf_sub_badmode():
     
 
     with pytest.raises(Exception):
-        _ = do_psf_subtraction(mock_sci,mock_ref,
+        _ = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 mode='SDI',
                                 fileprefix='test_SDI',
