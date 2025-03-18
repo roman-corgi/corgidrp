@@ -2799,6 +2799,8 @@ def create_ct_interp(
     min_angle=0,
     max_angle=6.2831853072,
     norm=1,
+    fpm_shift_x=0,
+    fpm_shift_y=0,
     pop_index=None,
     ):
     """
@@ -2817,6 +2819,10 @@ def create_ct_interp(
         norm (float): Factor to multiply the CT profile. Useful if one
           wants the CT to be between 0 and 1 after the division by the total counts
           that happens when estimating the CT of the Dataset in corethroughput.py.
+        fpm_shift_x (float): Shift in (fractional) EXCAM pixels of the FPM
+          location: First dimension.
+        fpm_shift_y (float): Shift in (fractional) EXCAM pixels of the FPM
+          location: Second dimension.
         pop_index (int) (optional): the Dataset skips the PSF with this index.
           Useful when testing interpolation by popping some PSFs and comparing
           the interpolated values with the original ones at the same location.
@@ -2867,8 +2873,8 @@ def create_ct_interp(
     r_grid, theta_grid = np.meshgrid(radii, azimuths)
     
     # Convert polar coordinates to Cartesian coordinates
-    x_grid = np.round(r_grid * np.cos(theta_grid)).flatten()
-    y_grid = np.round(r_grid * np.sin(theta_grid)).flatten()
+    x_grid = np.round(fpm_shift_x + r_grid * np.cos(theta_grid)).flatten()
+    y_grid = np.round(fpm_shift_y + r_grid * np.sin(theta_grid)).flatten()
     
     # Make up a core throughput dataset
     core_throughput = r_grid.flatten()/r_grid.max()
