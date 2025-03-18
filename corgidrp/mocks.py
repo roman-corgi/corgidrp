@@ -1618,10 +1618,11 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     # set these to have no effect, then use these with their input values at the end
     later_eperdn = eperdn
     if e2emode: 
+        arrtype = 'ENG'
         eperdn = 1
         cic = 0.02
-        num_pumps = 50000 #120000#90000#15000#5000
-        inj_charge = 27000 #31000#70000#45000#8000 #num_pumps/2 # more than num_pumps/4, so no mean_field input needed
+        num_pumps = 50000 #120000#90000#15000#5000    #640
+        inj_charge = 27000 #31000#70000#45000#8000   #1400   #num_pumps/2 # more than num_pumps/4, so no mean_field input needed
         multiple = 1
         g = 1
         rn = 0
@@ -2485,6 +2486,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.ext_hdr['CMDGAIN'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
         frame.ext_hdr['KGAIN'] = kgain
+        frame.ext_hdr['RN'] = 100
         frame.ext_hdr['ISPC'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
         frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
@@ -2500,6 +2502,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark.ext_hdr['CMDGAIN'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
         frame_dark.ext_hdr['KGAIN'] = kgain
+        frame_dark.ext_hdr['RN'] = 100
         frame_dark.ext_hdr['ISPC'] = True
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
         frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)

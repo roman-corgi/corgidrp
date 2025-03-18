@@ -46,7 +46,7 @@ def divide_by_exptime(input_dataset):
         all_data_new[i] = data.frames[i].data
         all_err_new[i] = data.frames[i].err
 
-        data.frames[i].ext_hdr.set('BUNIT', 'electrons/s')
+        data.frames[i].ext_hdr.set('BUNIT', 'photoelectrons/s')
     
     history_msg = 'divided by the exposure time'
     data.update_after_processing_step(history_msg, new_all_data = all_data_new, new_all_err = all_err_new)
