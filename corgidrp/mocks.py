@@ -1038,12 +1038,12 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfi
         gridy = gridy + distmapy
 
         sim_data = scipy.ndimage.map_coordinates(sim_data, [gridy, gridx])
-
+        # translated_pix = scipy.ndimage.map_coordinates()
         # transform the source coordinates
         dist_xpix, dist_ypix = [], []
         for (x,y) in zip(xpix, ypix):
-            x_new = x + distmapx[int(y)][int(x)]
-            y_new = y + distmapy[int(y)][int(x)]
+            x_new = x - distmapx[round(y)][round(x)]
+            y_new = y - distmapy[round(y)][round(x)]
 
             dist_xpix.append(x_new)
             dist_ypix.append(y_new)
