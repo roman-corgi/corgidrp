@@ -6,7 +6,9 @@ import numpy as np
 import astropy.io.fits as fits
 import corgidrp
 from corgidrp.data import Image, Dataset
-from corgidrp.mocks import create_default_headers, create_dark_calib_files
+from corgidrp.mocks import create_default_L1_headers, create_dark_calib_files
+
+np.random.seed(123)
 
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024])
@@ -16,7 +18,7 @@ err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1
-prhd, exthd = create_default_headers()
+prhd, exthd = create_default_L1_headers()
 errhd = fits.Header()
 errhd["CASE"] = "test"
 dqhd = fits.Header()
@@ -67,58 +69,58 @@ def test_split_dataset():
     # prihdr['OBSID'] = 0
 
     ## slice it into 2
-    image1.pri_hdr['OBSID'] = 0
+    image1.pri_hdr['OBSNUM'] = 0
     image1.ext_hdr['EXPTIME'] = 60.0
 
-    image2.pri_hdr['OBSID'] = 1
+    image2.pri_hdr['OBSNUM'] = 1
     image2.ext_hdr['EXPTIME'] = 120.
 
-    image3.pri_hdr['OBSID'] = 0
+    image3.pri_hdr['OBSNUM'] = 0
     image3.ext_hdr['EXPTIME'] = 60.0
 
-    image4.pri_hdr['OBSID'] = 1
+    image4.pri_hdr['OBSNUM'] = 1
     image4.ext_hdr['EXPTIME'] = 120.
 
-    sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',], prihdr_keywords=['OBSID',])
+    sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',], prihdr_keywords=['OBSNUM',])
     assert len(sliced_datasets) == 2
 
     sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',])
     assert len(sliced_datasets) == 2
 
-    sliced_datasets, unique_combos = orig_dataset.split_dataset(prihdr_keywords=['OBSID',])
+    sliced_datasets, unique_combos = orig_dataset.split_dataset(prihdr_keywords=['OBSNUM',])
     assert len(sliced_datasets) == 2
 
     ## slice it into 3
-    image1.pri_hdr['OBSID'] = 0
+    image1.pri_hdr['OBSNUM'] = 0
     image1.ext_hdr['EXPTIME'] = 60.0
 
-    image2.pri_hdr['OBSID'] = 1
+    image2.pri_hdr['OBSNUM'] = 1
     image2.ext_hdr['EXPTIME'] = 60.0
 
-    image3.pri_hdr['OBSID'] = 0
+    image3.pri_hdr['OBSNUM'] = 0
     image3.ext_hdr['EXPTIME'] = 60.0
 
-    image4.pri_hdr['OBSID'] = 1
+    image4.pri_hdr['OBSNUM'] = 1
     image4.ext_hdr['EXPTIME'] = 120.
 
 
-    sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',], prihdr_keywords=['OBSID',])
+    sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',], prihdr_keywords=['OBSNUM',])
     assert len(sliced_datasets) == 3
 
     ## slice it into 4
-    image1.pri_hdr['OBSID'] = 0
+    image1.pri_hdr['OBSNUM'] = 0
     image1.ext_hdr['EXPTIME'] = 60.0
 
-    image2.pri_hdr['OBSID'] = 1
+    image2.pri_hdr['OBSNUM'] = 1
     image2.ext_hdr['EXPTIME'] = 60.0
 
-    image3.pri_hdr['OBSID'] = 0
+    image3.pri_hdr['OBSNUM'] = 0
     image3.ext_hdr['EXPTIME'] = 120.
 
-    image4.pri_hdr['OBSID'] = 1
+    image4.pri_hdr['OBSNUM'] = 1
     image4.ext_hdr['EXPTIME'] = 120.
 
-    sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',], prihdr_keywords=['OBSID',])
+    sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',], prihdr_keywords=['OBSNUM',])
     assert len(sliced_datasets) == 4
 
     sliced_datasets, unique_combos = orig_dataset.split_dataset(exthdr_keywords=['EXPTIME',])

@@ -34,6 +34,48 @@ def centroid(frame):
     
     return xcen, ycen
 
+
+def centroid_with_roi(frame, roi_radius=5):
+    """
+    Finds the centroid in a sub-region around the brightest pixel.
+
+    Args:
+        frame (np.ndarray): 2D array to compute centering.
+        roi_radius (int or float): Half-size of the box around the peak,
+                                   in pixels. Adjust based on desired λ/D.
+
+    Returns:
+        tuple:
+            xcen (float): X centroid coordinate.
+            ycen (float): Y centroid coordinate.
+    """
+    # 1) Find coordinates of the brightest pixel (peak)
+    peak_y, peak_x = np.unravel_index(np.argmax(frame), frame.shape)
+
+    # 2) Define the subarray (region of interest) around the peak
+    y_min = max(0, peak_y - roi_radius)
+    y_max = min(frame.shape[0], peak_y + roi_radius + 1)
+    x_min = max(0, peak_x - roi_radius)
+    x_max = min(frame.shape[1], peak_x + roi_radius + 1)
+    sub_frame = frame[y_min:y_max, x_min:x_max]
+
+    # 3) Create index arrays for sub_frame, offset so they match the full-frame coords
+    y_indices, x_indices = np.indices(sub_frame.shape)
+    y_indices += y_min
+    x_indices += x_min
+
+    # 4) Compute flux-weighted centroid in the subarray
+    total_flux = np.sum(sub_frame)
+    if total_flux == 0:
+        # Edge case: empty or zero frame
+        return peak_x, peak_y
+
+    xcen = np.sum(x_indices * sub_frame) / total_flux
+    ycen = np.sum(y_indices * sub_frame) / total_flux
+
+    return xcen, ycen
+
+
 def shift_psf(frame, dx, dy, flux, fitsize=10, stampsize=10):
     """
     Creates a template for matching psfs.
