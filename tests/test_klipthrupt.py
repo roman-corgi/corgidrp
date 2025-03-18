@@ -1,45 +1,17 @@
-from corgidrp.mocks import create_psfsub_dataset,gaussian_array
+from corgidrp.mocks import create_psfsub_dataset,create_ct_cal
+from corgidrp.klip_fm import meas_klip_thrupt, get_closest_psf
 from corgidrp.l3_to_l4 import do_psf_subtraction
-from corgidrp.data import PyKLIPDataset, Image, Dataset
-from corgidrp.detector import nan_flags, flag_nans
-from corgidrp.klip_fm import meas_klip_thrupt
-from scipy.ndimage import shift, rotate
 import pytest
 import numpy as np
 
 ## Helper functions/quantities
-
-def create_circular_mask(h, w, center=None, r=None):
-    """Creates a circular mask
-
-    Args:
-        h (int): array height
-        w (int): array width
-        center (list of float, optional): Center of mask. Defaults to the 
-            center of the array.
-        r (float, optional): radius of mask. Defaults to the minimum distance 
-            from the center to the edge of the array.
-
-    Returns:
-        np.array: boolean array with True inside the circle, False outside.
-    """
-
-    if center is None: # use the middle of the image
-        center = (w/2, h/2)
-    if r is None: # use the smallest distance between the center and image walls
-        r = min(center[0], center[1], w-center[0], h-center[1])
-
-    Y, X = np.ogrid[:h, :w]
-    dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-
-    mask = dist_from_center <= r
-    return mask
 
 iwa_lod = 3.
 owa_lod = 9.7
 d = 2.36 #m
 lam = 573.8e-9 #m
 pixscale_arcsec = 0.0218
+fwhm_mas = 1.22 * lam / d * 206265 * 1000
 
 iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
 owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
@@ -48,45 +20,76 @@ st_amp = 100.
 noise_amp=1e-11
 pl_contrast=1e-4
 
-stamp = gaussian_array(array_shape=[20,20],sigma=1,amp=100.,xoffset=0.,yoffset=0.)
+# Mock CT calibration
 
-ct_calibration = { # Assume these are in 
-    'dx' : [10,20,30,10,20,30,10,20,30],
-    'dy' : [10,10,10,20,20,20,30,30,30],
-    'psfs' : [
-        stamp,
-        stamp,
-        stamp,
-        stamp,
-        stamp,
-        stamp,
-        stamp,
-        stamp,
-        stamp
-    ],
-    'input_flux' : 1.
-}
+ct_cal = create_ct_cal(fwhm_mas)
+outdir = 'klipcal_output'
+fileprefix = 'FAKE'
+annuli = 1
+subsections = 1
+movement = 1
+calibrate_flux = False
+mode = 'ADI+RDI'
+
+st_amp = 100.
+noise_amp = 1e-6
+pl_contrast = 1e-4
+rolls = [0,90,0,0]
+numbasis = [1,2]
+inject_snr = 5
+klip_params = {
+            'outputdir':outdir,'fileprefix':fileprefix,
+            'annuli':annuli, 'subsections':subsections, 
+            'movement':movement, 'numbasis':numbasis,
+            'mode':mode,'calibrate_flux':calibrate_flux}
+        
+mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+                                        st_amp=st_amp,
+                                        noise_amp=noise_amp,
+                                        pl_contrast=pl_contrast)
+
+psfsub_dataset = do_psf_subtraction(mock_sci,mock_ref,
+                            numbasis=numbasis,
+                            fileprefix='test_ADI+RDI',
+                            do_crop=False,
+                            measure_klip_thrupt=False)
 
 ## pyKLIP data class tests
 
-def test_meas_klip_ADI():
-    """Tests that psf subtraction step can correctly split an input dataset into
-    science and reference dataset, if they are not passed in separately.
-    """
+def test_create_ct_cal():
+    pass
 
-    numbasis = [1,4,8]
-    inject_contrast = 1e-7
-    rolls = [60,70]
-    mock_sci,_ = create_psfsub_dataset(2,0,rolls,
-                                              st_amp=st_amp,
-                                              noise_amp=noise_amp,
-                                              pl_contrast=pl_contrast)
+def test_get_closest_psf():
+    
+    # Should get the first PSF
+    cenx = 50.5
+    ceny = 40.5
+    goal_xy = (-100,-100)
+    psf = get_closest_psf(ct_cal,cenx,ceny,*goal_xy)
+    print(np.sum(psf))
+
+    # Should get the last PSF
+    goal_xy = (100,100)
+    psf = get_closest_psf(ct_cal,cenx,ceny,*goal_xy)
+    print(np.sum(psf))
+
+def test_inject_psf():
+    pass
+
+def test_measure_noise():
+    pass
+
+def test_meas_klip_RDI():
+    pass
+
+def test_meas_klip_ADIRDI():
+
     
 
-
-    meas_klip_thrupt(mock_sci, # pre-psf-subtracted dataset
-                     ct_calibration,
-                     inject_contrast,
+    meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+                     psfsub_dataset, # post-subtraction dataset
+                     ct_cal,
+                     inject_snr,
                      numbasis,
                      seps=[20.], # in pixels from mask center
                      pas=[30.], # Degrees
@@ -96,4 +99,6 @@ def test_meas_klip_ADI():
     pass
 
 if __name__ == '__main__':  
-    test_meas_klip_ADI()
+    test_get_closest_psf()
+    test_meas_klip_ADIRDI()
+    pass

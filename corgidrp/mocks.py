@@ -2793,6 +2793,67 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
 
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
+def create_ct_cal(fwhm_mas, cfam_name='1F'):
+    # Default headers
+    prhd, exthd = create_default_L3_headers()
+    # cfam filter
+    exthd['CFAMNAME'] = cfam_name
+    exthd.set('EXTNAME','PSFCUBE')
+
+    x_arr = []
+    y_arr = []
+    for x in np.linspace(10,50,21):
+        for y in np.linspace(10,50,21):
+            x_arr.append(x)
+            y_arr.append(y)
+    x_arr = np.array(x_arr)
+    y_arr = np.array(y_arr)
+
+    n_psfs = len(x_arr)
+    
+    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
+    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
+    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    psf = gaussian_array(array_shape=imshape,sigma=fwhm_pix,amp=1.,xoffset=0.,yoffset=0.)
+
+    psf_cube = np.ones((n_psfs,*imshape))
+    psf_cube *= psf
+    amps = np.arange(1,len(psf_cube)+1)
+    psf_cube = np.array([psf_cube[i] * amps[i] for i in range(len(psf_cube))])
+
+    err_cube = np.zeros_like(psf_cube)
+    err_hdr = fits.Header()
+    dq_cube = np.zeros_like(psf_cube)
+    dq_hdr = fits.Header()
+
+    ct_excam = np.array([x_arr,y_arr,np.ones_like(x_arr).astype(float)])
+    ct_hdr = fits.Header()
+    ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
+    
+    fpam_hv = [0., 0.]
+    fpam_hdr = fits.Header()
+    fpam_hdr['COMMENT'] = 'FPAM H and V values during the core throughput observations'
+    fpam_hdr['UNITS'] = 'micrometer'
+    ct_hdu_list += [fits.ImageHDU(data=fpam_hv, header=fpam_hdr, name='CTFPAM')]
+
+    fsam_hv = [0., 0.]
+    fsam_hdr = fits.Header()
+    fsam_hdr['COMMENT'] = 'FSAM H and V values during the core throughput observations'
+    fsam_hdr['UNITS'] = 'micrometer'
+    ct_hdu_list += [fits.ImageHDU(data=fsam_hv, header=fsam_hdr, name='CTFSAM')]
+
+    ct_cal = data.CoreThroughputCalibration(psf_cube,
+        pri_hdr=prhd,
+        ext_hdr=exthd,
+        input_hdulist=ct_hdu_list,
+        dq=dq_cube,
+        dq_hdr=dq_hdr,
+        input_dataset=data.Dataset([data.Image(np.array([0.]),
+                                 pri_hdr=fits.Header(),
+                                 ext_hdr=fits.Header())]))
+    
+    return ct_cal
+
 default_wcs_string = """WCSAXES =                    2 / Number of coordinate axes                      
 CRPIX1  =                  0.0 / Pixel coordinate of reference point            
 CRPIX2  =                  0.0 / Pixel coordinate of reference point            

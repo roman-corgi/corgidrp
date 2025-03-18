@@ -361,7 +361,8 @@ def test_psf_sub_split_dataset():
     result = do_psf_subtraction(mock_sci_and_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_single_dataset',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False)
     
     # Should choose ADI+RDI
     for frame in result:
@@ -372,7 +373,8 @@ def test_psf_sub_split_dataset():
     result = do_psf_subtraction(mock_sci,
                                 numbasis=numbasis,
                                 fileprefix='test_sci_only_dataset',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False)
     
     # Should choose ADI
     for frame in result:
@@ -384,7 +386,8 @@ def test_psf_sub_split_dataset():
         _ = do_psf_subtraction(mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ref_only_dataset',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False)
 
 def test_psf_sub_ADI_nocrop():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
@@ -402,7 +405,8 @@ def test_psf_sub_ADI_nocrop():
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ADI',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False)
 
     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
                               [0.5,0.5],
@@ -467,7 +471,8 @@ def test_psf_sub_RDI_nocrop():
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_RDI',
-                                do_crop=False
+                                do_crop=False,
+                                measure_klip_thrupt=False
                                 )
     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
     
@@ -557,7 +562,8 @@ def test_psf_sub_ADIRDI_nocrop():
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ADI+RDI',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False)
     
     for i,frame in enumerate(result):
 
@@ -617,7 +623,8 @@ def test_psf_sub_withcrop():
 
     result = do_psf_subtraction(mock_sci,mock_ref,
                                 numbasis=numbasis,
-                                fileprefix='test_withcrop')
+                                fileprefix='test_withcrop',
+                                measure_klip_thrupt=False)
 
     for i,frame in enumerate(result):
     
@@ -647,7 +654,8 @@ def test_psf_sub_badmode():
                                 numbasis=numbasis,
                                 mode='SDI',
                                 fileprefix='test_SDI',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False)
     
 if __name__ == '__main__':  
     # test_pyklipdata_ADI()
@@ -667,10 +675,10 @@ if __name__ == '__main__':
     # test_flagnans_3D()
     # test_flagnans_flagval2()
 
-    test_psf_sub_split_dataset()
+    #test_psf_sub_split_dataset()
 
     # test_psf_sub_ADI_nocrop()
-    # test_psf_sub_RDI_nocrop()
-    # test_psf_sub_ADIRDI_nocrop()
+    test_psf_sub_RDI_nocrop()
+    test_psf_sub_ADIRDI_nocrop()
     # test_psf_sub_withcrop()
     # test_psf_sub_badmode()

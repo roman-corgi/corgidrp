@@ -174,7 +174,7 @@ def crop(input_dataset,sizexy=None,centerxy=None):
     return output_dataset
 
 def do_psf_subtraction(input_dataset, 
-                       ct_calibration,
+                       ct_calibration=None,
                        reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
                        numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
@@ -213,6 +213,10 @@ def do_psf_subtraction(input_dataset,
 
     sci_dataset = input_dataset.copy()
     
+    # Need CT calibration object to measure KLIP throughput
+    if measure_klip_thrupt:
+        assert ct_calibration != None
+
     # Use input reference dataset if provided
     if not reference_star_dataset is None:
         ref_dataset = reference_star_dataset.copy()
@@ -304,29 +308,6 @@ def do_psf_subtraction(input_dataset,
         history_str = str(sci_dataset[0].ext_hdr['HISTORY'])
         ext_hdr['HISTORY'] = ''.join(history_str.split('\n'))
     
-    if measure_klip_thrupt:
-        
-        # Determine flux of objects to inject (units?)
-        inj_contrast = 1e-8
-        inject_flux = star_flux * inj_contrast
-        # Use same KLIP parameters
-        klip_params = {
-            'outputdir':outdir,'fileprefix':fileprefix,
-            'annuli':annuli, 'subsections':subsections, 
-            'movement':movement, 'numbasis':numbasis,
-            'mode':mode,'calibrate_flux':calibrate_flux, 
-            
-        }
-        measure_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
-                            ct_calibration,
-                            inject_flux,
-                            klip_params,
-                            seps=None, # in pixels from mask center
-                            pas=None,
-                            cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
-                            )
-    
-
     # Construct Image and Dataset object
     frame = data.Image(pyklip_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
@@ -339,8 +320,35 @@ def do_psf_subtraction(input_dataset,
     dataset_out = nan_flags(dataset_out,threshold=1)
     
     history_msg = f'PSF subtracted via pyKLIP {mode}.'
-    
     dataset_out.update_after_processing_step(history_msg)
+    
+    if measure_klip_thrupt:
+        
+        # Determine flux of objects to inject (units?)
+        inject_snr = 5.0
+
+        # Use same KLIP parameters
+        klip_params = {
+            'outputdir':outdir,'fileprefix':fileprefix,
+            'annuli':annuli, 'subsections':subsections, 
+            'movement':movement, 'numbasis':numbasis,
+            'mode':mode,'calibrate_flux':calibrate_flux}
+        
+        klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
+                            dataset_out,
+                            ct_calibration,
+                            inject_snr,
+                            klip_params,
+                            seps=None, # in pixels from mask center
+                            pas=None,
+                            cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
+                            )
+    
+        # Save throughput as an extension on the psf-subtracted Image
+
+        # Add history msg
+        history_msg = f'KLIP throughput measured and saved to Image class extension.'
+        dataset_out.update_after_processing_step(history_msg)
     
     return dataset_out
 
