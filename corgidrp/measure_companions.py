@@ -265,7 +265,7 @@ def forward_model_psf(
         corr_len_guess (float): Initial guess of the Gaussian Process correlation length.
         x_range (float): Bounds for x/y offsets in linear space (uniform prior).
         y_range (float): Bounds for x/y offsets in linear space (uniform prior).
-        flux_range(float): Bounds for log10 priors on flux length.
+        flux_range (float): Bounds for log10 priors on flux length.
         corr_len_range (float): Bounds for log10 priors on correlation length.
         nwalkers (int): MCMC hyperparameters if method="mcmc".
         nburn (int): MCMC hyperparameters if method="mcmc".
