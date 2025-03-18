@@ -1415,17 +1415,19 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
         dq = dq)
     return image
 
-def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescale=21.8, rotation=45, add_gauss_noise=True):
+def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfield_radius=0.02, platescale=21.8, rotation=45, add_gauss_noise=True, distortion_coeffs_path=None):
     """
     Create simulated data for astrometric calibration.
 
     Args:
         field_path (str): Full path to directory with test field data (ra, dec, vmag, etc.)
         filedir (str): (Optional) Full path to directory to save to.
+        image_shape (tuple of ints): The desired shape of the image (num y pixels, num x pixels), (default: (1024, 1024))
         subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
         rotation (float): The north angle of the created image data (default: 45 [deg])
         add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
+        distortion_coeffs_path (str): Full path to csv with the distortion coefficients and the order of polynomial used to describe distortion (default: None))
 
     Returns:
         corgidrp.data.Dataset:
@@ -1440,9 +1442,8 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
         os.mkdir(filedir)
     
     # hard coded image properties
-    size = (1024, 1024)
-    sim_data = np.zeros(size)
-    ny, nx = size
+    sim_data = np.zeros(image_shape)
+    ny, nx = image_shape
     center = [nx //2, ny //2]
     target = (80.553428801, -69.514096821)
     fwhm = 3
@@ -1485,6 +1486,8 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
 
     xpix = xpix[pix_inds]
     ypix = ypix[pix_inds]
+    ras = cal_SkyCoords[pix_inds]
+    decs = cal_SkyCoords[pix_inds]
 
     amplitudes = np.power(10, ((subfield['VMAG'][pix_inds] - 22.5) / (-2.5))) * 10  
 
@@ -1533,8 +1536,68 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
         noise_rng = np.random.default_rng(10)
         gain = 1
         ref_flux = 10
-        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= size)
+        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= image_shape)
         sim_data = sim_data + noise
+
+    # add distortion (optional)
+    if distortion_coeffs_path is not None:
+        # load in distortion coeffs and fitorder
+        coeff_data = np.genfromtxt(distortion_coeffs_path, delimiter=',', dtype=None)
+        fitorder = int(coeff_data[-1])
+
+        # convert legendre polynomials into distortin maps in x and y 
+        yorig, xorig = np.indices(image_shape)
+        y0, x0 = image_shape[0]//2, image_shape[1]//2
+        yorig -= y0
+        xorig -= x0
+
+        # get the number of fitting params from the order
+        fitparams = (fitorder + 1)**2
+        
+        # reshape the coeff arrays
+        best_params_x = coeff_data[:fitparams]
+        best_params_x = best_params_x.reshape(fitorder+1, fitorder+1)
+        
+        total_orders = np.arange(fitorder+1)[:,None] + np.arange(fitorder+1)[None, :]
+        
+        best_params_x = best_params_x / 500**(total_orders)
+
+        # evaluate the polynomial at all pixel positions
+        x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), best_params_x)
+        x_corr = x_corr.reshape(xorig.shape)
+        distmapx = x_corr - xorig
+        
+        # reshape and evaluate the same for y
+        best_params_y = coeff_data[fitparams:-1]
+        best_params_y = best_params_y.reshape(fitorder+1, fitorder+1)
+    
+        best_params_y = best_params_y / 500**(total_orders)
+
+        # evaluate the polynomial at all pixel positions
+        y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), best_params_y)
+        y_corr = y_corr.reshape(yorig.shape)
+        distmapy = y_corr - yorig
+
+        ## distort image based on coeffs
+        if (nx >= ny): imgsize = nx
+        else: imgsize = ny
+
+        gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
+        gridx = gridx + distmapx
+        gridy = gridy + distmapy
+
+        sim_data = scipy.ndimage.map_coordinates(sim_data, [gridy, gridx])
+        # translated_pix = scipy.ndimage.map_coordinates()
+        # transform the source coordinates
+        dist_xpix, dist_ypix = [], []
+        for (x,y) in zip(xpix, ypix):
+            x_new = x - distmapx[round(y)][round(x)]
+            y_new = y - distmapy[round(y)][round(x)]
+
+            dist_xpix.append(x_new)
+            dist_ypix.append(y_new)
+
+        xpix, ypix = dist_xpix, dist_ypix
 
     # load as an image object
     frames = []
@@ -1543,33 +1606,23 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
     prihdr['VISTYPE'] = 'BORESITE'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
-    exthdr['CD1_1'] = cdmatrix[0,0]
-    exthdr['CD1_2'] = cdmatrix[0,1]
-    exthdr['CD2_1'] = cdmatrix[1,0]
-    exthdr['CD2_2'] = cdmatrix[1,1]
+    prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
 
-    exthdr['CRPIX1'] = center[0]
-    exthdr['CRPIX2'] = center[1]
-
-    exthdr['CTYPE1'] = 'RA---TAN'
-    exthdr['CTYPE2'] = 'DEC--TAN'
-
-    exthdr['CDELT1'] = (platescale * 0.001) / 3600
-    exthdr['CDELT2'] = (platescale * 0.001) / 3600
-
-    exthdr['CRVAL1'] = target[0]
-    exthdr['CRVAL2'] = target[1]
-
+    # newhdr = fits.Header(new_hdr)
+    # frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+        ## save a default ext_hdr
     frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
     filename = "simcal_astrom.fits"
+    guessname = "guesses.csv"
     if filedir is not None:
         # save source SkyCoord locations and pixel location estimates
         guess = Table()
-        guess['x'] = [int(x) for x in xpix]
-        guess['y'] = [int(y) for y in ypix]
-        guess['RA'] = cal_SkyCoords[pix_inds].ra
-        guess['DEC'] = cal_SkyCoords[pix_inds].dec
-        ascii.write(guess, filedir+'/guesses.csv', overwrite=True)
+        guess['x'] = [x for x in xpix]
+        guess['y'] = [y for y in ypix]
+        guess['RA'] = ras.ra
+        guess['DEC'] = decs.dec
+        guess['VMAG'] = subfield['VMAG'][pix_inds]
+        ascii.write(guess, filedir+'/'+guessname, overwrite=True)
 
         frame.save(filedir=filedir, filename=filename)
 
