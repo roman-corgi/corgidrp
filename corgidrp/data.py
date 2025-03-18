@@ -1442,7 +1442,7 @@ class FpamFsamCal(Image):
             prihdr['OBSID'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
-            exthdr['CMDGAIN'] = 1.0
+            exthdr['EMGAIN_C'] = 1.0
             exthdr['EXCAMT'] = 40.0
 
             self.pri_hdr = prihdr

@@ -43,7 +43,7 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
 
     ####### Run the DRP walker
     print('Running walker')
-    walker.walk_corgidrp(flux_data_filelist, '', fluxcal_outputdir, template="l2b_to_fluxcal_factor.json")
+    walker.walk_corgidrp(flux_data_filelist, '', fluxcal_outputdir)
     
         ####### Load in the output data. It should be the latest kgain file produced.
     fluxcal_file = glob.glob(os.path.join(fluxcal_outputdir, '*FluxcalFactor*.fits'))[0]
