@@ -27,6 +27,32 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 metadata_path = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'tests', 'test_data', "metadata_eng.yaml")
 #metadata_path = os.path.join(os.path.abspath(os.path.dirname(__name__)), 'tests', 'test_data', "metadata_test.yaml")
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        # exthdr['KGAINPAR'] = exthdr['KGAIN']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        prihdr['PHTCNT'] = False
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 @pytest.mark.e2e
 def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True, sim_data_on_the_fly=True):
     '''When e2e=True, the end-to-end test is run, which uses more realistic simulated data compared 
@@ -131,6 +157,9 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True, sim_data_on_the_
             f = os.path.join(root, name)
             trap_pump_data_filelist.append(f)
 
+    # update headers from TVAC data
+    fix_headers_for_tvac(trap_pump_data_filelist)
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make a new nonlinear calibration file using
@@ -140,7 +169,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True, sim_data_on_the_
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -269,7 +298,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
 
     if False: # making e2e simulated data, which is ENG and includes nonlinearity
         nonlin_path = os.path.join(tvacdata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")

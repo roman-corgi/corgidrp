@@ -149,7 +149,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         subset_frames = input_dataset.frames[bin_size*i:bin_size*(i+1)]
         sub_dataset = data.Dataset(subset_frames)
 
-        test_dataset, _ = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN', 'RN'])
+        test_dataset, _ = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
         if len(test_dataset) > 1:
             raise PhotonCountException('All frames must have the same exposure time, '
                                     'commanded EM gain, and k gain.')
@@ -164,9 +164,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if val[0] != 'DARK':
             if inputmode != 'illuminated':
                 raise PhotonCountException('Inputmode is not \'illuminated\', but the input dataset has \'VISTYPE\' not equal to \'DARK\'.')
-        if 'ISPC' in datasets[0].frames[0].ext_hdr:
-            if datasets[0].frames[0].ext_hdr['ISPC'] != True:
-                raise PhotonCountException('\'ISPC\' header value must be True if these frames are to be photon-counted.')
+        if 'PHTCNT' in datasets[0].frames[0].pri_hdr:
+            if datasets[0].frames[0].ext_hdr['PHTCNT'] != True:
+                raise PhotonCountException('\'PHTCNT\' header value must be True if these frames are to be photon-counted.')
 
         dataset = datasets[0]
         
@@ -177,11 +177,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         # photon-counting threshold
         if T_factor is None:
             detector_params = data.DetectorParams({})
-            T_factor = detector_params.params['T_factor']
+            T_factor = detector_params.params['TFACTOR']
         # getting maximum allowed electrons/pixel/frame for photon counting
         if pc_ecount_max is None:
             detector_params = data.DetectorParams({})
-            pc_ecount_max = detector_params.params['pc_ecount_max']
+            pc_ecount_max = detector_params.params['PCECNTMX']
         if mask_filepath is None:
             mask = np.zeros_like(dataset.frames[0].data)
         else:
@@ -197,10 +197,12 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         
         if 'EMGAIN_M' in dataset.frames[0].ext_hdr: # if EM gain measured directly from frame TODO change hdr name if necessary
             em_gain = dataset.frames[0].ext_hdr['EMGAIN_M']
-        elif 'EMGAIN_A' in dataset.frames[0].ext_hdr: # use applied EM gain if available
+        else:
             em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']
-        elif 'CMDGAIN' in dataset.frames[0].ext_hdr: # use commanded gain otherwise
-            em_gain = dataset.frames[0].ext_hdr['CMDGAIN']
+            if em_gain > 0: # use applied EM gain if available
+                em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']
+            else: # use commanded gain otherwise
+                em_gain = dataset.frames[0].ext_hdr['EMGAIN_C']
 
         if thresh >= em_gain:
             if safemode:

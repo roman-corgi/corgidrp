@@ -61,7 +61,7 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
 
     # KGain
     kgain_val = 7 # default value used in mocks.create_photon_countable_frames()
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(l1_data_ill_filelist)
@@ -100,7 +100,7 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     nonlin_fits_filepath = os.path.join(tests_dir, "test_data", test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     new_nonlinearity.pri_hdr = pri_hdr
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    tvacdata_dir =  "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    tvacdata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,

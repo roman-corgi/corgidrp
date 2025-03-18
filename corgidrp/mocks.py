@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import warnings
 import datetime
+import datetime
 import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
@@ -12,14 +13,18 @@ from astropy.coordinates import SkyCoord
 import astropy.wcs as wcs
 from astropy.table import Table
 from astropy.convolution import convolve_fft
+from astropy.modeling import models
 import astropy.units as u
 import photutils.centroids as centr
 import corgidrp.data as data
-from corgidrp.data import Image
+from corgidrp.data import Image, Dataset
 import corgidrp.detector as detector
+import corgidrp.flat as flat
 from corgidrp.detector import imaging_area_geom, unpack_geom
 from corgidrp.pump_trap_calibration import (P1, P1_P1, P1_P2, P2, P2_P2, P3, P2_P3, P3_P3, tau_temp)
+from pyklip.instruments.utils.wcsgen import generate_wcs
 from corgidrp.data import DetectorParams
+
 
 from emccd_detect.emccd_detect import EMCCDDetect
 from emccd_detect.util.read_metadata_wrapper import MetadataWrapper
@@ -167,7 +172,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -346,7 +351,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -476,13 +481,14 @@ def create_default_L2a_headers(arrtype="SCI"):
 
     prihdr, exthdr = create_default_L1_headers(arrtype)
 
+    exthdr['BSCALE']        = 1             # Linear scaling factor
+    exthdr['BZERO']         = 0             # 64 bit data
+    exthdr['NAXIS1']        = 1024          # Axis 1 size
+    exthdr['NAXIS2']        = 1024          # Axis 2 size
     exthdr['DATALVL']       = 'L2a'         # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['FWC_PP_E']      = 0.0           # Full well capacity of detector EM gain register
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
-    exthdr['DESMEAR']       = False         # Whether desmearing was used
-    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
-    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
     exthdr['DRPVERSN']      = '1.1.2'       # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
@@ -505,8 +511,12 @@ def create_default_L2b_headers(arrtype="SCI"):
 
     """
     # TO DO: Update this once L2a headers have been finalized
-    prihdr, exthdr = create_default_L1_headers(arrtype)
+    prihdr, exthdr = create_default_L2a_headers(arrtype)
 
+    exthdr['BUNIT'] = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['DESMEAR']       = False         # Whether desmearing was used
+    exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
+    exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['DATALVL']      = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['PCTHRESH']     = 0.0            # Photon-counting threshold (electrons)
 
@@ -532,6 +542,7 @@ def create_default_L3_headers(arrtype="SCI"):
 
     prihdr['TARGET'] = ''
     
+    exthdr['BUNIT'] = 'Photoelectrons / s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
@@ -585,7 +596,6 @@ def create_default_calibration_product_headers():
             exthdr (fits.Header): Extension FITS Header
     '''
     # TO DO: update when this has been more defined
-    # TO DO: Update this once L2a headers have been finalized
     prihdr, exthdr = create_default_L1_headers()
     exthdr['DATALVL']    = 'Calibration Product'
     exthdr['DATATYPE']    = 'Image'              # What type of calibration product, just do image for now, mock codes will update
@@ -612,32 +622,28 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
         corgidrp.data.DetectorNoiseMaps instance
     '''
 
-    prihdr, exthdr = create_default_headers()
+    prihdr, exthdr = create_default_calibration_product_headers()
     # taken from end of calibrate_darks_lsq()
-    exthdr['EXPTIME'] = None
-    if 'EMGAIN_M' in exthdr.keys():
-        exthdr['EMGAIN_M'] = None
-    exthdr['CMDGAIN'] = None
-    exthdr['KGAIN'] = None
-    exthdr['BUNIT'] = 'detected electrons'
-    exthdr['HIERARCH DATA_LEVEL'] = None
-    # simulate raw data filenames
-    exthdr['DRPNFILE'] = 2
-    exthdr['FILE0'] = '0.fits'
-    exthdr['FILE1'] = '1.fits'
+
+    err_hdr = fits.Header()
+    err_hdr['BUNIT']        = 'Photoelectrons'
+    exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
+    exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
+    exthdr['DATALVL']      = 'CalibrationProduct'
+    exthdr['DATATYPE']      = 'DetectorNoiseMaps'
+    exthdr['DRPNFILE']      = "Mocks"         # What files are used to create this calibration product 
+    exthdr['FILE0']         = "Mock0.fits"
+    exthdr['FILE1']         = "Mock1.fits"
     exthdr['B_O'] = 0.01
     exthdr['B_O_UNIT'] = 'DN'
     exthdr['B_O_ERR'] = 0.001
-
-    err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
-    exthdr['DATATYPE'] = 'DetectorNoiseMaps'
     input_data = np.stack([FPN_map, CIC_map, DC_map])
     err = np.stack([[FPN_map_err, CIC_map_err, DC_map_err]])
     dq = np.stack([FPN_map_dq, CIC_map_dq, DC_map_dq])
     noise_maps = data.DetectorNoiseMaps(input_data, pri_hdr=prihdr, ext_hdr=exthdr, err=err,
                               dq=dq, err_hdr=err_hdr)
     return noise_maps
+
 
 def create_synthesized_master_dark_calib(detector_areas):
     '''
@@ -709,16 +715,17 @@ def create_synthesized_master_dark_calib(detector_areas):
             frame_dn_dark *= eperdn
 
             # Now make this into a bunch of corgidrp.Dataset stacks
-            prihdr, exthdr = create_default_headers()
+            prihdr, exthdr = create_default_calibration_product_headers()
             frame = data.Image(frame_dn_dark, pri_hdr=prihdr,
                             ext_hdr=exthdr)
-            frame.ext_hdr['CMDGAIN'] = EMgain_arr[i]
+            frame.ext_hdr['EMGAIN_C'] = EMgain_arr[i]
             frame.ext_hdr['EXPTIME'] = exptime_arr[i]
-            frame.ext_hdr['KGAIN'] = eperdn
+            frame.ext_hdr['KGAINPAR'] = eperdn
             frame_list.append(frame)
     dataset = data.Dataset(frame_list)
 
     return dataset
+
 
 def create_dark_calib_files(filedir=None, numfiles=10):
     """
@@ -740,8 +747,9 @@ def create_dark_calib_files(filedir=None, numfiles=10):
     filepattern = "simcal_dark_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
-        exthdr['KGAIN'] = 7
+        prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
+        prihdr["OBSNUM"] = 000
+        exthdr['KGAINPAR'] = 7
         #np.random.seed(456+i); 
         sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -750,6 +758,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
+
 
 def create_simflat_dataset(filedir=None, numfiles=10):
     """
@@ -770,7 +779,7 @@ def create_simflat_dataset(filedir=None, numfiles=10):
     filepattern = "sim_flat_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         # generate images in normal distribution with mean 1 and std 0.01
         #np.random.seed(456+i); 
         sim_data = np.random.poisson(lam=150., size=(1024, 1024)).astype(np.float64)
@@ -780,7 +789,6 @@ def create_simflat_dataset(filedir=None, numfiles=10):
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
-
 
 def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=None,mask_size=420,snr=250,planet=None, band=None, radius=None, snr_constant=None):
     """Performs raster scan of Neptune or Uranus images
@@ -865,6 +873,7 @@ def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,
     
     return dither_stack_norm,cents
     
+
 def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size=420, d=None, n_dith=3, radius=None, snr=250, snr_constant=None, flat_map=None, raster_radius=40, raster_subexps=1):
     """
     Create simulated data to check the flat division
@@ -906,7 +915,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             centroid=centr.centroid_com(planet_image)
             xc=centroid[0]
             yc=centroid[1]
-            planet_image = convolve_fft(planet_image, detector.raster_kernel(raster_radius, planet_image))
+            planet_image = convolve_fft(planet_image, flat.raster_kernel(raster_radius, planet_image))
             if planet == 'neptune':
                 planetrad=radius; snrcon=snr_constant
                 planet_repoint_current = create_raster(qe_prnu_fsm_raster,planet_image,row_cent=yc+(d//2),col_cent=xc+(d//2), dither_sizex=d, dither_sizey=d,n_dith=n_dith,mask_size=n,snr=snr,planet=target,band=filter,radius=planetrad, snr_constant=snrcon)
@@ -925,18 +934,19 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
     filepattern= planet+'_'+band+"_"+"raster_scan_{0:01d}.fits"
     frames=[]
     for i in range(numfiles*raster_subexps):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         sim_data=planet_rot_images[i]
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
         pl=planet
         band=band
-        frame.pri_hdr.append(('TARGET', pl), end=True)
+        frame.pri_hdr.set('TARGET', pl)
         frame.pri_hdr.append(('FILTER', band), end=True)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
         frames.append(frame)
     raster_dataset = data.Dataset(frames)
     return raster_dataset
+
 
 def create_flatfield_dummy(filedir=None, numfiles=2):
 
@@ -959,7 +969,7 @@ def create_flatfield_dummy(filedir=None, numfiles=2):
     filepattern= "flat_field_{0:01d}.fits"
     frames=[]
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         #np.random.seed(456+i); 
         sim_data = np.random.normal(loc=1.0, scale=0.01, size=(1024, 1024))
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -991,9 +1001,10 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     filepattern = "simcal_nonlin_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
-        #Add the CMDGAIN to the headers
-        exthdr['CMDGAIN'] = em_gain
+        prihdr, exthdr = create_default_L1_headers()
+        #Add the commanded gain to the headers
+        exthdr['EMGAIN_C'] = em_gain
+        exthdr['OBSNAME'] = 'NONLIN'
         # Create a default
         size = 1024
         sim_data = np.zeros([size,size])
@@ -1022,6 +1033,7 @@ def create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=2,em_gain=2
     dataset = data.Dataset(frames)
     return dataset
 
+
 def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, em_gain=500, numCRs=5, plateau_length=10):
     """
     Create simulated non-linear data with cosmic rays to test CR detection.
@@ -1045,9 +1057,9 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
 
     detector_params = data.DetectorParams({}, date_valid=Time("2023-11-01 00:00:00"))
 
-    kgain = detector_params.params['kgain']
-    fwc_em_dn = detector_params.params['fwc_em'] / kgain
-    fwc_pp_dn = detector_params.params['fwc_pp'] / kgain
+    kgain = detector_params.params['KGAINPAR']
+    fwc_em_dn = detector_params.params['FWC_EM_E'] / kgain
+    fwc_pp_dn = detector_params.params['FWC_PP_E'] / kgain
     fwc = np.min([fwc_em_dn,em_gain*fwc_pp_dn])
     dataset = create_nonlinear_dataset(nonlin_filepath, filedir=None, numfiles=numfiles,em_gain=em_gain)
 
@@ -1084,6 +1096,7 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
 
     return dataset
 
+
 def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
     """
     Create simulated raw data.
@@ -1116,7 +1129,7 @@ def create_prescan_files(filedir=None, numfiles=2, arrtype="SCI"):
 
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers(arrtype=arrtype)
+        prihdr, exthdr = create_default_L1_headers(arrtype=arrtype)
         sim_data = np.random.poisson(lam=150., size=size).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
@@ -1154,11 +1167,27 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
         NAXIS2 = 2200
 
     # fill in prihdr
+    prihdr['AUXFILE'] = 'mock_auxfile.fits'
     prihdr['OBSID'] = 0
     prihdr['BUILD'] = 0
     # prihdr['OBSTYPE'] = arrtype
     prihdr['VISTYPE'] = vistype
     prihdr['MOCK'] = True
+    prihdr['TELESCOP'] = 'ROMAN'
+    prihdr['INSTRUME'] = 'CGI'
+    prihdr['OBSNAME'] = 'MOCK'
+    prihdr['TARGET'] = 'MOCK'
+    prihdr['OBSNUM'] = '000'
+    prihdr['CAMPAIGN'] = '000'
+    prihdr['PROGNUM'] = '00000'
+    prihdr['SEGMENT'] = '000'
+    prihdr['VISNUM'] = '000'
+    prihdr['EXECNUM'] = '00'
+    prihdr['VISITID'] = prihdr['PROGNUM'] + prihdr['EXECNUM'] + prihdr['CAMPAIGN'] + prihdr['SEGMENT'] + prihdr['OBSNUM'] + prihdr['VISNUM']
+    prihdr['PSFREF'] = False
+    prihdr['SIMPLE'] = True
+    prihdr['NAXIS'] = 0
+        
 
     # fill in exthdr
     exthdr['NAXIS'] = 2
@@ -1201,12 +1230,22 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr['CFAM_V'] = 1.0
     exthdr['DPAM_H'] = 1.0
     exthdr['DPAM_V'] = 1.0
+    exthdr['CFAMNAME'] = '1F' # Color filter for band 1
+    exthdr['DPAMNAME'] = 'IMAGING' 
+    exthdr['FPAMNAME'] = 'HLC12_C2R1' # Focal plane mask for NFOV
+    exthdr['FSAMNAME'] = 'R1C1' # Circular field stop for NFOV
+    exthdr['LSAMNAME'] = 'NFOV' # Lyot stop for NFOV observations
+    exthdr['SPAMNAME'] = 'OPEN' # Used for NFOV observations
+    
+
+
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
     exthdr['HIERARCH DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
     exthdr['BUNIT'] = ""
 
     return prihdr, exthdr
+
 def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     """
     Create simulated bad pixel map data. Code value is 4.
@@ -1226,7 +1265,9 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    prihdr, exthdr = create_default_headers()
+    prihdr, exthdr = create_default_calibration_product_headers()
+    exthdr['DATATYPE']      = 'BadPixelMap'
+
     sim_data = np.zeros([1024,1024], dtype = np.uint16)
     if col_bp is not None and row_bp is not None:
         for i_col in col_bp:
@@ -1240,6 +1281,7 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     badpixelmap = data.Dataset([frame])
 
     return badpixelmap
+
 
 def nonlin_coefs(filename,EMgain,order):
     """
@@ -1283,6 +1325,7 @@ def nonlin_coefs(filename,EMgain,order):
 
     return coeffs, DNs, fitVals
 
+
 def nonlin_factor(coeffs,DN):
     """ 
     Takes array of nonlinearity coefficients (from nonlin_coefs function)
@@ -1309,17 +1352,9 @@ def nonlin_factor(coeffs,DN):
 
     return f_nonlin
 
-def make_fluxmap_image(
-        f_map,
-        bias,
-        kgain,
-        rn,
-        emgain, 
-        time,
-        coeffs,
-        nonlin_flag=False,
-        divide_em=False,
-        ):
+
+def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag=False,
+        divide_em=False):
     """ 
     This function makes a SCI-sized frame with simulated noise and a fluxmap. It
     also performs bias-subtraction and division by EM gain if required. It is used
@@ -1367,9 +1402,10 @@ def make_fluxmap_image(
     if divide_em:
         frame = frame/emgain
 
-    prhd, exthd = create_default_headers()
+    # TO DO: Determine what level this image should be
+    prhd, exthd = create_default_L2b_headers()
     # Record actual commanded EM
-    exthd['CMDGAIN'] = emgain
+    exthd['EMGAIN_C'] = emgain
     # Record actual exposure time
     exthd['EXPTIME'] = time
     # Mock error maps
@@ -1502,13 +1538,29 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
 
     # load as an image object
     frames = []
-    prihdr, exthdr = create_default_headers()
+    # TO DO: Determine what level this image should be
+    prihdr, exthdr = create_default_L3_headers()
     prihdr['VISTYPE'] = 'BORESITE'
     prihdr['RA'] = target[0]
     prihdr['DEC'] = target[1]
+    exthdr['CD1_1'] = cdmatrix[0,0]
+    exthdr['CD1_2'] = cdmatrix[0,1]
+    exthdr['CD2_1'] = cdmatrix[1,0]
+    exthdr['CD2_2'] = cdmatrix[1,1]
 
-    newhdr = fits.Header(new_hdr)
-    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
+    exthdr['CRPIX1'] = center[0]
+    exthdr['CRPIX2'] = center[1]
+
+    exthdr['CTYPE1'] = 'RA---TAN'
+    exthdr['CTYPE2'] = 'DEC--TAN'
+
+    exthdr['CDELT1'] = (platescale * 0.001) / 3600
+    exthdr['CDELT2'] = (platescale * 0.001) / 3600
+
+    exthdr['CRVAL1'] = target[0]
+    exthdr['CRVAL2'] = target[1]
+
+    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
     filename = "simcal_astrom.fits"
     if filedir is not None:
         # save source SkyCoord locations and pixel location estimates
@@ -1525,6 +1577,8 @@ def create_astrom_data(field_path, filedir=None, subfield_radius=0.02, platescal
     dataset = data.Dataset(frames)
 
     return dataset
+
+
 def create_not_normalized_dataset(filedir=None, numfiles=10):
     """
     Create simulated data not normalized for the exposure time.
@@ -1540,7 +1594,8 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     filepattern = "simcall_not_normalized_{0:04d}.fits"
     frames = []
     for i in range(numfiles):
-        prihdr, exthdr = create_default_headers()
+        # TO DO: Determine what level this image should be
+        prihdr, exthdr = create_default_L1_headers()
 
         sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024,1024)), dtype=float)
         sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024,1024)), dtype=float)
@@ -1553,6 +1608,7 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     dataset = data.Dataset(frames)
 
     return dataset
+
 
 def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10, 
                                  read_noise = 100, eperdn = 6, e2emode=False, 
@@ -2362,13 +2418,13 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     output_dn = readout_emccd.readout(gain_counts)
                 else:
                     output_dn = temps[temp][sc][i]
-                prihdr, exthdr = create_default_headers(arrtype)
+                prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
                 prim = fits.PrimaryHDU(header = prihdr)
                 hdr_img = fits.ImageHDU(output_dn, header=exthdr)
                 hdul = fits.HDUList([prim, hdr_img])
                 ## Fill in the headers that matter to corgidrp
                 hdul[1].header['EXCAMT']  = temp
-                hdul[1].header['CMDGAIN'] = EMgain
+                hdul[1].header['EMGAIN_C'] = EMgain
                 hdul[1].header['ARRTYPE'] = arrtype
                 for j in range(1, 5):
                     if sc == j:
@@ -2399,6 +2455,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                         hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
                 else:
                     hdul.writeto(filename, overwrite = True)
+
 
 def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
@@ -2462,7 +2519,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
     if smear:
         #simulate smear to fluxmap
         detector_params = DetectorParams({})
-        rowreadtime = detector_params.params['rowreadtime']
+        rowreadtime = detector_params.params['ROWREADT']
         smear = np.zeros_like(fluxmap)
         m = len(smear)
         for r in range(m):
@@ -2475,7 +2532,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
     
     frame_e_list = []
     frame_e_dark_list = []
-    prihdr, exthdr = create_default_headers()
+    prihdr, exthdr = create_default_L1_headers()
     for i in range(Nbrights):
         # Simulate bright
         if full_frame:
@@ -2483,11 +2540,11 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         else:
             frame_dn = emccd.sim_sub_frame(fluxmap[:50,:50], exptime)
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
-        frame.ext_hdr['CMDGAIN'] = EMgain
+        frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
-        frame.ext_hdr['KGAIN'] = kgain
         frame.ext_hdr['RN'] = 100
-        frame.ext_hdr['ISPC'] = True
+        frame.ext_hdr['KGAINPAR'] = kgain
+        frame.pri_hdr['PHTCNT'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
         frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
@@ -2499,11 +2556,11 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         else:
             frame_dn_dark = emccd.sim_sub_frame(np.zeros_like(fluxmap[:50,:50]), exptime)
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
-        frame_dark.ext_hdr['CMDGAIN'] = EMgain
+        frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
-        frame_dark.ext_hdr['KGAIN'] = kgain
         frame_dark.ext_hdr['RN'] = 100
-        frame_dark.ext_hdr['ISPC'] = True
+        frame_dark.ext_hdr['KGAINPAR'] = kgain
+        frame_dark.pri_hdr['PHTCNT'] = True
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
         frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)
@@ -2513,75 +2570,89 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
 
     return ill_dataset, dark_dataset, ill_mean, dark_mean
 
-def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1., platescale=21.8, add_gauss_noise=True, noise_scale=1., background = 0., file_save=False):
-    """
-    Create simulated data for absolute flux calibration. This is a point source in the image center with a 2D-Gaussian PSF
-    and Gaussian noise and a background.
+def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.):
+    """Generate a 2D square array with a centered gaussian surface (for mock PSF data).
 
     Args:
-        star_flux (float): flux of point source in erg/(s*cm^2*AA)
-        fwhm (float): FWHM of the centroid
-        cal_factor (float): calibration factor erg/(s*cm^2*AA)/electrons
-        filedir (str): (Optional) Full path to directory to save to.
-        color_cor (float): (Optional) the color correction factor
-        platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
-        add_gauss_noise (boolean): Argument to determine if Gaussian noise should be added to the data (default: True)
-        noise_scale (float): spread of the Gaussian noise
+        array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
+        sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
+        amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
+        xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
+        yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
+        
+    Returns:
+        np.array: 2D array of a gaussian surface.
+    """
+    x, y = np.meshgrid(np.linspace(-array_shape[0]/2+0.5, array_shape[0]/2-0.5, array_shape[0]),
+                        np.linspace(-array_shape[1]/2+0.5, array_shape[1]/2-0.5, array_shape[1]))
+    dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
+
+    # Calculate Gaussian 
+    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp / (2.0 * np.pi * sigma**2)
+    
+    return gauss
+
+def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
+                      fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
+                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
+    """
+    Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
+    and Gaussian noise.
+
+    Args:
+        star_flux (float): Flux of the point source in erg/(s*cm^2*AA)
+        fwhm (float): Full width at half max (FWHM) of the centroid
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electrons
+        filter (str): (Optional) The CFAM filter used.
+        fpamname (str): (Optional) Position of the FPAM
+        target_name (str): (Optional) Name of the calspec star
+        fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
+        fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
+        exptime (float): (Optional) Exposure time (s)
+        filedir (str): (Optional) Directory path to save the output file
+        color_cor (float): (Optional) Color correction factor
+        platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
         background (float): optional additive background value
-        file_save (boolean): save the simulated Image or not (default: False)
+        add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
+        noise_scale (float): Spread of the Gaussian noise
+        file_save (bool): Whether to save the image (default: False)
 
     Returns:
-        corgidrp.data.Image:
-            The simulated image
-
+        corgidrp.data.Image: The simulated image
     """
-    # Make filedir if it does not exist
-    if (filedir is not None) and (not os.path.exists(filedir)):
+
+    # Create directory if needed
+    if filedir is not None and not os.path.exists(filedir):
         os.mkdir(filedir)
-    
-    # hard coded image properties
+
+    # Image properties
     size = (1024, 1024)
     sim_data = np.zeros(size)
     ny, nx = size
-    center = [nx //2, ny //2]
-    target = (80.553428801, -69.514096821)
+    center = [nx // 2, ny // 2]  # Default image center
+    target_location = (80.553428801, -69.514096821)
 
-    new_hdr = {}
-    new_hdr['TARGET'] = 'Vega'
-    new_hdr['CFAMNAME'] = '3C'
-    new_hdr['FPAMNAME'] = 'ND475'
-    new_hdr['COL_COR'] = color_cor
-    new_hdr['CRPIX1'] = center[0]
-    new_hdr['CRPIX2'] = center[1]
+    # Convert FSM shifts from mas to pixels
+    fsm_x_shift = fsm_x * 0.001 / (platescale * 0.001)  # Convert mas to degrees, then to pixels
+    fsm_y_shift = fsm_y * 0.001 / (platescale * 0.001)
 
-    new_hdr['CTYPE1'] = 'RA---TAN'
-    new_hdr['CTYPE2'] = 'DEC--TAN'
+    # New star position
+    xpos = center[0] + fsm_x_shift
+    ypos = center[1] + fsm_y_shift
 
-    new_hdr['CDELT1'] = (platescale * 0.001) / 3600
-    new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+    # Convert flux from calspec units to photo-electrons
+    flux = (star_flux * exptime / color_cor) / cal_factor
 
-    new_hdr['CRVAL1'] = target[0]
-    new_hdr['CRVAL2'] = target[1]
-
-    w = wcs.WCS(new_hdr)
-
-    xpos = center[0]
-    ypos = center[1]
-
-    #convert flux in calspec units to photo-electrons
-    flux = star_flux/cal_factor/color_cor #in photo-electrons
-
-    # inject gaussian psf star
+    # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
     sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
-    amplitude = flux/(2. * np.pi * sigma**2)
-    
+
     # coordinate system
     y, x = np.indices([stampsize, stampsize])
     y -= stampsize // 2
     x -= stampsize // 2
-    
-    # find nearest pixel
+
+    # Find nearest pixel
     x_int = int(round(xpos))
     y_int = int(round(ypos))
     x += x_int
@@ -2592,30 +2663,336 @@ def create_flux_image(star_flux, fwhm, cal_factor, filedir=None, color_cor = 1.,
     ymin = y[0][0]
     ymax = y[-1][-1]
         
-    psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+    psf = gaussian_array((stampsize,stampsize),sigma,flux)
 
-    # inject the star into the image
+    # Inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
-    #add a background
+    # Add background
     sim_data += background
-    if add_gauss_noise:
-        # add Gaussian random noise
-        noise_rng = np.random.default_rng(10)
-        noise = noise_rng.normal(scale= noise_scale, size= size)
-        sim_data = sim_data + noise
-    err = np.zeros(size)
-    err[:] = noise_scale
-    # load as an image object
-    prihdr, exthdr = create_default_headers()
-    prihdr['VISTYPE'] = 'FLUXCAL'
-    prihdr['RA'] = target[0]
-    prihdr['DEC'] = target[1]
 
-    newhdr = fits.Header(new_hdr)
-    frame = data.Image(sim_data, err = err, pri_hdr= prihdr, ext_hdr= newhdr)
-    filename = "sim_fluxcal.fits"
+    # Add Gaussian noise
+    if add_gauss_noise:
+        noise_rng = np.random.default_rng(10)
+        noise = noise_rng.normal(scale=noise_scale, size=size)
+        sim_data += noise
+
+    # Error map
+    err = np.full(size, noise_scale)
+
+    # Get FPAM positions, not strictly necessary but
+    if fpamname == 'HOLE':
+        fpam_h = 40504.4
+        fpam_v = 9616.8
+    elif fpamname == 'ND225':
+        fpam_h = 61507.8
+        fpam_v = 25612.4
+    elif fpamname == 'ND475':
+        fpam_h = 2503.7
+        fpam_v = 6124.9
+
+    # Create image object
+    prihdr, exthdr = create_default_L3_headers()
+    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['RA'] = target_location[0]
+    prihdr['DEC'] = target_location[1]
+    prihdr['TARGET'] = target_name
+
+    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
+    exthdr['FPAMNAME'] = fpamname
+    exthdr['FPAM_H']   = 2503.7
+    exthdr['FPAM_V']   = 6124.9
+    exthdr['FSM_X']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSM_Y']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined
+    exthdr['COL_COR']  = color_cor          # Ensure color_cor is defined
+    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
+    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
+    exthdr['CTYPE1']   = 'RA---TAN'
+    exthdr['CTYPE2']   = 'DEC--TAN'
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
+    exthdr['CRVAL2']   = target_location[1]
+
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    # Save file
+    # TO DO: update with file name conventions
     if filedir is not None and file_save:
+        safe_target_name = target_name.replace(' ', '_')
+        filename = os.path.join(f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}_.fits")
         frame.save(filedir=filedir, filename=filename)
 
     return frame
+
+def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
+    """
+    Create simulated data for core throughput calibration. This is a set of
+    individual, noiseless 2D Gaussians, one per image.  
+
+    Args:
+        fwhm_mas (float): PSF's FWHM in mas
+        cfam_name (str) (optional): CFAM filter name.
+        n_psfs (int) (optional): Number of simulated PSFs.
+
+    Returns:
+        corgidrp.data.Image: The simulated PSF Images
+        np.array: PSF locations
+        np.array: PSF CT values
+    """
+    # Default headers
+    prhd, exthd = create_default_L3_headers()
+    # cfam filter
+    exthd['CFAMNAME'] = cfam_name
+    # Mock ERR
+    err = np.ones([1024,1024])
+    # Mock DQ
+    dq = np.zeros([1024,1024], dtype = np.uint16)
+
+    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
+    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
+    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    y, x = np.indices(imshape)
+
+    # Following astropy documentation:
+    # Generate random source model list. Random amplitues and centers within a pixel
+    # PSF's final location on SCI frame is moved by more than one pixel below. This
+    # is the fractional part that only needs a smaller array of non-zero values
+    # Set seed for reproducibility of mock data
+    rng = np.random.default_rng(0)
+    model_params = [
+        dict(amplitude=rng.uniform(1,10),
+        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        x_stddev=fwhm_mas/21.8/2.335,
+        y_stddev=fwhm_mas/21.8/2.335)
+        for _ in range(n_psfs)]
+
+    model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
+    # Render models to image using full evaluation
+    psf_loc = []
+    half_psf = []
+    data_psf = []
+    for model in model_list:
+        # Skip any PSFs with 0 amplitude (if any)
+        if model.amplitude == 0:
+            continue
+        psf = np.zeros(imshape)
+        model.bounding_box = None
+        model.render(psf)
+        image = np.zeros([1024, 1024])
+        # Insert PSF at random location within the SCI frame
+        y_image, x_image = rng.integers(100), rng.integers(100)
+        image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
+            512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
+        # List of known positions and list of known PSF volume
+        psf_loc += [[512+x_image+model.x_mean.value-imshape[0]//2,
+            512+y_image+model.y_mean.value-imshape[0]//2]]
+        # Add half PSF volume for 2D Gaussian (numerator of core throughput)
+        half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
+        # Build up the Dataset
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
+
+    return data_psf, np.array(psf_loc), np.array(half_psf)
+
+default_wcs_string = """WCSAXES =                    2 / Number of coordinate axes                      
+CRPIX1  =                  0.0 / Pixel coordinate of reference point            
+CRPIX2  =                  0.0 / Pixel coordinate of reference point            
+CDELT1  =                  1.0 / Coordinate increment at reference point        
+CDELT2  =                  1.0 / Coordinate increment at reference point        
+CRVAL1  =                  0.0 / Coordinate value at reference point            
+CRVAL2  =                  0.0 / Coordinate value at reference point            
+LATPOLE =                 90.0 / [deg] Native latitude of celestial pole        
+MJDREF  =                  0.0 / [d] MJD of fiducial time
+"""
+
+def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhole_reffiles=None,
+                          wcs_header = None,
+                          data_shape = [100,100],
+                          centerxy = None,
+                          outdir = None,
+                          st_amp = 100.,
+                          noise_amp = 1.,
+                          ref_psf_spread=1. ,
+                          pl_contrast=1e-3
+                          ):
+    """Generate a mock science and reference dataset ready for the PSF subtraction step.
+    TODO: reference a central pixscale number, rather than hard code.
+
+    Args:
+        n_sci (int): number of science frames, must be >= 1.
+        n_ref (int): nummber of reference frames, must be >= 0.
+        roll_angles (list-like): list of the roll angles of each science and reference 
+            frame, with the science frames listed first. 
+        darkhole_scifiles (list of str, optional): Filepaths to the darkhole science frames. 
+            If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
+        darkhole_reffiles (list of str, optional): Filepaths to the darkhole reference frames. 
+            If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
+        wcs_header (astropy.fits.Header, optional): Fits header object containing WCS 
+            information. If not provided, a mock header will be created. Defaults to None.
+        data_shape (list of int): desired shape of data array. Must have length 2. Defaults to 
+            [100,100].
+        centerxy (list of float): Desired PSF center in xy order. Must have length 2. Defaults 
+            to image center.
+        outdir (str, optional): Desired output directory. If not provided, data will not be 
+            saved. Defaults to None.
+        st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 100.
+        noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1.
+        ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
+            reference PSFs. Defaults to 1.
+        pl_contrast (float): Flux ratio between planet and starlight incident on the detector. 
+            Defaults to 1e-3.
+
+        
+    Returns:
+        tuple: corgiDRP science Dataset object and reference Dataset object.
+    """
+
+    assert len(data_shape) == 2
+    
+    if roll_angles is None:
+        roll_angles = [0.] * (n_sci+n_ref)
+
+    # mask_center = np.array(data_shape)/2
+    # star_pos = mask_center
+    pixscale = 0.0218 # arcsec
+
+    # Build each science/reference frame
+    sci_frames = []
+    ref_frames = []
+    for i in range(n_sci+n_ref):
+
+        # Create default headers
+        prihdr, exthdr = create_default_headers()
+        
+        # Read in darkhole data, if provided
+        if i<n_sci and not darkhole_scifiles is None:
+            fpath = darkhole_scifiles[i]
+            _,fname = os.path.split(fpath)
+            darkhole = fits.getdata(fpath)
+            
+            fill_value = np.nanmin(darkhole)
+            img_data = np.full(data_shape,fill_value)
+
+            # Overwrite center of array with the darkhole data
+            cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
+            if centerxy is None:
+                full_arr_center = np.array(img_data.shape) // 2 
+            else:
+                full_arr_center = (centerxy[1],centerxy[0])
+            start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
+            img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
+            psfcenty, psfcentx = cr_psf_pix + start_psf_ind
+        
+        elif i>=n_sci and not darkhole_reffiles is None:
+            fpath = darkhole_reffiles[i-n_sci]
+            _,fname = os.path.split(fpath)
+            darkhole = fits.getdata(fpath)
+            fill_value = np.nanmin(darkhole)
+            img_data = np.full(data_shape,fill_value)
+
+            # Overwrite center of array with the darkhole data
+            cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
+            if centerxy is None:
+                full_arr_center = np.array(img_data.shape) // 2 
+            else:
+                full_arr_center = (centerxy[1],centerxy[0])
+            start_psf_ind = full_arr_center - np.array(darkhole.shape) // 2
+            img_data[start_psf_ind[0]:start_psf_ind[0]+darkhole.shape[0],start_psf_ind[1]:start_psf_ind[1]+darkhole.shape[1]] = darkhole
+            psfcenty, psfcentx = cr_psf_pix + start_psf_ind
+
+        # Otherwise generate a 2D gaussian for a fake PSF
+        else:
+            sci_sigma = 2.5
+            ref_sigma = sci_sigma * ref_psf_spread
+            pl_amp = st_amp * pl_contrast
+
+            label = 'ref' if i>= n_sci else 'sci'
+            sigma = ref_sigma if i>= n_sci else sci_sigma
+            fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
+            arr_center = np.array(data_shape) / 2 - 0.5
+            if centerxy is None:
+                psfcenty,psfcentx = arr_center
+            else:
+                psfcentx,psfcenty = centerxy
+            
+            psf_off_xy = (psfcentx-arr_center[1],psfcenty-arr_center[0])
+            img_data = gaussian_array(array_shape=data_shape,
+                                      xoffset=psf_off_xy[0],
+                                      yoffset=psf_off_xy[1],
+                                      sigma=sigma,
+                                      amp=st_amp)
+            
+            # Add some noise
+            rng = np.random.default_rng(seed=123+2*i)
+            noise = rng.normal(0,noise_amp,img_data.shape)
+            img_data += noise
+
+            # Add fake planet to sci files
+            if i<n_sci:
+                pa_deg = -roll_angles[i]
+                sep_pix = 10
+                xoff,yoff = sep_pix * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
+                planet_psf = gaussian_array(array_shape=data_shape,
+                                            amp=pl_amp,
+                                            xoffset=xoff+psf_off_xy[0],
+                                            yoffset=yoff+psf_off_xy[1])
+                img_data += planet_psf
+        
+                # Assign PSFREF flag
+                prihdr['PSFREF'] = 0
+            else:
+                prihdr['PSFREF'] = 1
+
+        # Add necessary header keys
+        prihdr['TELESCOP'] = 'ROMAN'
+        prihdr['INSTRUME'] = 'CGI'
+        prihdr['XOFFSET'] = 0.0
+        prihdr['YOFFSET'] = 0.0
+        prihdr['FILENAME'] = fname
+        
+        exthdr['BUNIT'] = 'MJy/sr'
+        exthdr['MASKLOCX'] = psfcentx
+        exthdr['MASKLOCY'] = psfcenty
+        exthdr['STARLOCX'] = psfcentx
+        exthdr['STARLOCY'] = psfcenty
+        exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
+        exthdr["ROLL"] = roll_angles[i]
+        exthdr["HIERARCH DATA_LEVEL"] = 'L3'
+        
+        # Add WCS header info, if provided
+        if wcs_header is None:
+            wcs_header = generate_wcs(roll_angles[i], 
+                                      [psfcentx,psfcenty],
+                                      platescale=0.0218).to_header()
+            
+            # wcs_header._cards = wcs_header._cards[-1]
+        exthdr.extend(wcs_header)
+
+        # Make a corgiDRP Image frame
+        frame = data.Image(img_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+        # Add it to the correct dataset
+        if i < n_sci:
+            sci_frames.append(frame)
+        else:
+            ref_frames.append(frame)
+
+    sci_dataset = data.Dataset(sci_frames)
+
+    if len(ref_frames) > 0:
+        ref_dataset = data.Dataset(ref_frames)
+    else:
+        ref_dataset = None
+
+    # Save datasets if outdir was provided
+    if not outdir is None:
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+            
+        sci_dataset.save(filedir=outdir, filenames=['mock_psfsub_L2b_sci_input_dataset.fits'])
+        if len(ref_frames) > 0:
+            ref_dataset.save(filedir=outdir, filenames=['mock_psfsub_L2b_ref_input_dataset.fits'])
+
+    return sci_dataset,ref_dataset
