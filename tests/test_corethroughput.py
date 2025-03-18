@@ -194,6 +194,14 @@ def test_ct_map():
         # CT values must be the same
         assert ct_cal.ct_excam[2] == pytest.approx(ct_map_targ[2], abs=1e-14)
 
+    # Test it can be saved
+    default_filepath = os.path.join(corgidrp.default_cal_dir, 'ct_map.csv')
+    ct_map_def = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal,
+        save = True)
+    assert os.path.exists(default_filepath), f"File not found: {default_filepath}"
+
+    # Add open the file and compare content
+
 def test_psf_pix_and_ct():
     """
     Test 1090881 - Given a core throughput dataset consisting of M clean frames

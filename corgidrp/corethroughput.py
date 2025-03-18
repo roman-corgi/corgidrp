@@ -422,12 +422,16 @@ def CreateCTMap(
     n_gridx=47,
     n_gridy=47,
     target_pix=None,
-    logr=False):
+    logr=False,
+    filepath=None,
+    save=False):
     """
-      Create a CT map: Given a core throughput calibration file and a coronagraphic
-      dataset, derive 3-D list (x,y,ct) where (x,y) are some target locations
-      on EXCAM relative to the FPM's center and with valid values of the core
-      throughput.
+      Create a core throughput map: Given a core throughput calibration file and
+      a coronagraphic dataset, derive 3-D list (x,y,ct) where (x,y) are some
+      target locations on EXCAM relative to the FPM's center and with valid
+      values of the throughput.
+
+        The core throughmap may be saved, optionally, as a CSV file.
 
         The creation of the core throughput map relies on InterpolateCT(), a 
       method of the CoreThroughputCalibration class in data.py. Valid core
@@ -463,7 +467,10 @@ def CreateCTMap(
         matplotlib.pyplot, target_pix[0] is the horizontal axis (x), and
         target_pix[1] is the vertical axis (y).
       logr (bool) (optional): If True, radii are mapped into their logarithmic
-          values before constructing the interpolant.
+        values before constructing the interpolant.
+      filepath (string) (optional): String with the path and filename of the 
+        file that will store the core throughput map as a CSV file.
+      save (bool) (optionla): Whether the core throughput map will be stored or not.
 
     Returns:
         A core throughput map with (x,y,ct) where x and y are locations
@@ -479,5 +486,15 @@ def CreateCTMap(
     ct_interp = ct_cal.InterpolateCT(
             target_pix[0], target_pix[1], corDataset, fpamfsamcal, logr=logr)
 
-    # Re-order output to match (x,y,ct)
-    return ct_interp[[1,2,0]]
+    # Re-order output to match the required order: (x,y,ct)
+    ct_map = ct_interp[[1,2,0]]
+    
+    # Optionally, store it
+    if save:
+        if filepath == None:
+            # Choose a default location and filename
+            filepath = os.path.join(corgidrp.default_cal_dir, 'ct_map.csv')
+            np.savetxt(filepath, ct_map, delimiter=',', header='x, y, ct')
+            print(f'CT map saved in {filepath:s}')
+    
+    return ct_map
