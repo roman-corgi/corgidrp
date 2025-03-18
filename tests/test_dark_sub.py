@@ -119,8 +119,8 @@ def test_dark_sub():
     assert(np.mean(darkest_dataset.all_err) == pytest.approx(np.mean(dark_frame.err), abs = 1e-2))
     #print("mean of all data:", np.mean(darkest_dataset.all_data))
     #print("mean of all errors:", np.mean(darkest_dataset.all_err))
-    assert darkest_dataset[0].ext_hdr["BUNIT"] == "photoelectrons"
-    assert darkest_dataset[0].err_hdr["BUNIT"] == "photoelectrons"
+    assert darkest_dataset[0].ext_hdr["BUNIT"] == "Photoelectrons"
+    assert darkest_dataset[0].err_hdr["BUNIT"] == "Photoelectrons"
     #print(darkest_dataset[0].ext_hdr)
 
     # If too many masked in a stack for a given pixel, warning raised. Checks
@@ -141,11 +141,11 @@ def test_dark_sub():
     EMgain = 10
     exptime = 4
     frame = (noise_maps.FPN_map + noise_maps.CIC_map*EMgain + noise_maps.DC_map*exptime*EMgain)/EMgain
-    prihdr, exthdr = mocks.create_default_headers()
+    prihdr, exthdr = mocks.create_default_calibration_product_headers()
     image_frame = data.Image(frame, prihdr, exthdr)
-    image_frame.ext_hdr['CMDGAIN'] = EMgain
+    image_frame.ext_hdr['EMGAIN_C'] = EMgain
     image_frame.ext_hdr['EXPTIME'] = exptime
-    image_frame.ext_hdr['KGAIN'] = 7
+    image_frame.ext_hdr['KGAINPAR'] = 7
     dataset_from_noisemap = data.Dataset([image_frame])
     nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
     # check the level of the dataset is now approximately 0, leaving off telemetry row
