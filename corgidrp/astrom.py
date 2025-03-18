@@ -415,6 +415,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
+    # new_hdr['CRPIX1'] = (np.shape(image.data)[1]-1) // 2
+    # new_hdr['CRPIX2'] = (np.shape(image.data)[0]-1) // 2
     new_hdr['CRPIX1'] = targetx
     new_hdr['CRPIX2'] = targety
     new_hdr['CTYPE1'] = 'RA---TAN'
