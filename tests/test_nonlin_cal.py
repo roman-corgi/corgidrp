@@ -16,127 +16,157 @@ import test_check
 from corgidrp import check
 from corgidrp.data import Image, Dataset
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException, nonlin_params_default)
-from corgidrp.mocks import (create_default_headers, make_fluxmap_image, nonlin_coefs)
+from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 
-############################# prepare simulated frames #######################
+def setup_module():
+    """
+    Sets module up and defines variables
+    """
+    global n_cal, n_mean
+    global init_nonlins_arr
+    global rms_test
+    global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
+    global dataset_nl
+    global norm_val, min_write, max_write
 
-# path to nonlin table made from running calibrate_nonlin.py on TVAC frames
-# table used only to choose parameters to make analytic nonlin functions
-here = os.path.abspath(os.path.dirname(__file__))
-nonlin_table_path = Path(here,'test_data','nonlin_table_TVAC.txt')
-nonlin_flag = True # True adds nonlinearity to simulated frames
+    ############################# prepare simulated frames #######################
 
-# Load the arrays needed for calibrate_nonlin function from the .npz file
-loaded = np.load(Path(here,'test_data','nonlin_arrays_ut.npz'))
-# Access the arrays needed for calibrate_nonlin function
-exp_time_stack_arr0 = loaded['array1']
-time_stack_arr0 = loaded['array2']
-len_list0 = loaded['array3']
-gain_arr0 = loaded['array4'] # G = 1, 2, 10, 20
-# Reducing the number of frames used in unit tests (each has 5 substacks)
-n_cal = 1 
-idx_0 = 0
-idx_1 = 0
-# Turn into False and the test runs a similar amount of data as with real data in IIT (~40 Gb RAM)
-rms_test = 0.0035 # Value used when using an equivalent dataset as in IIT
-# Usual number of frames to deal with real rn values is ~200
-rn = 130 # read noise in e-
-if True:
-    rms_test = 0.04 # Less strict comparison due to having significantly less frames
+    # path to nonlin table made from running calibrate_nonlin.py on TVAC frames
+    # table used only to choose parameters to make analytic nonlin functions
+    here = os.path.abspath(os.path.dirname(__file__))
+    nonlin_table_path = Path(here,'test_data','nonlin_table_TVAC.txt')
+    nonlin_flag = True # True adds nonlinearity to simulated frames
+
+    # Load the arrays needed for calibrate_nonlin function from the .npz file
+    loaded = np.load(Path(here,'test_data','nonlin_arrays_ut.npz'))
+    # Access the arrays needed for calibrate_nonlin function
+    exp_time_stack_arr0 = loaded['array1']
+    time_stack_arr0 = loaded['array2']
+    len_list0 = loaded['array3']
+    gain_arr0 = loaded['array4'] # G = 1, 2, 10, 20
+    # Reducing the number of frames used in unit tests (each has 5 substacks)
+    n_cal = 1 
+    idx_0 = 0
+    idx_1 = 0
+    # Turn into False and the test runs a similar amount of data as with real data in IIT (~40 Gb RAM)
+    rms_test = 0.0035 # Value used when using an equivalent dataset as in IIT
     # Usual number of frames to deal with real rn values is ~200
-    rn = 130/np.sqrt(200/n_cal) # read noise in e-
-    for iG in range(len(len_list0)):
-        time_stack_arr0[idx_0:idx_0+n_cal*5] = time_stack_arr0[idx_1:idx_1+n_cal*5]
-        for i_cal in range(n_cal):
-            # There must be at least two frames with the same exposure time
-            exp_time_stack_arr0[idx_0:idx_0+2] = exp_time_stack_arr0[idx_1]
-            exp_time_stack_arr0[idx_0+2:idx_0+5] = exp_time_stack_arr0[idx_1]+ 0.05
-            idx_0 += 5
-        idx_1 += len_list0[iG]
-    # Remove unused data
-    exp_time_stack_arr0 = np.delete(exp_time_stack_arr0, idx_0 + np.arange(idx_1-idx_0))
-    time_stack_arr0 = np.delete(time_stack_arr0, idx_0 + np.arange(idx_1-idx_0))
-    # Update len_list0
-    len_list0[:] = n_cal*5
+    rn = 130 # read noise in e-
+    if True:
+        rms_test = 0.04 # Less strict comparison due to having significantly less frames
+        # Usual number of frames to deal with real rn values is ~200
+        rn = 130/np.sqrt(200/n_cal) # read noise in e-
+        for iG in range(len(len_list0)):
+            time_stack_arr0[idx_0:idx_0+n_cal*5] = time_stack_arr0[idx_1:idx_1+n_cal*5]
+            for i_cal in range(n_cal):
+                # There must be at least two frames with the same exposure time
+                exp_time_stack_arr0[idx_0:idx_0+2] = exp_time_stack_arr0[idx_1]
+                exp_time_stack_arr0[idx_0+2:idx_0+5] = exp_time_stack_arr0[idx_1]+ 0.05
+                idx_0 += 5
+            idx_1 += len_list0[iG]
+        # Remove unused data
+        exp_time_stack_arr0 = np.delete(exp_time_stack_arr0, idx_0 + np.arange(idx_1-idx_0))
+        time_stack_arr0 = np.delete(time_stack_arr0, idx_0 + np.arange(idx_1-idx_0))
+        # Update len_list0
+        len_list0[:] = n_cal*5
 
-# Load the flux map
-fluxmap_init = np.load(Path(here,'test_data','FluxMap1024.npy'))
-fluxmap_init[fluxmap_init < 50] = 0 # cleanup flux map a bit
-fluxMap1 = 0.8*fluxmap_init # e/s/px, for G = 1
-fluxMap2 = 0.4*fluxmap_init # e/s/px, for G = 2
-fluxMap3 = 0.08*fluxmap_init # e/s/px, for G = 10
-fluxMap4 = 0.04*fluxmap_init # e/s/px, for G = 20
+    # Load the flux map
+    fluxmap_init = np.load(Path(here,'test_data','FluxMap1024.npy'))
+    fluxmap_init[fluxmap_init < 50] = 0 # cleanup flux map a bit
+    fluxMap1 = 0.8*fluxmap_init # e/s/px, for G = 1
+    fluxMap2 = 0.4*fluxmap_init # e/s/px, for G = 2
+    fluxMap3 = 0.08*fluxmap_init # e/s/px, for G = 10
+    fluxMap4 = 0.04*fluxmap_init # e/s/px, for G = 20
 
-# detector parameters
-kgain = 8.7 # e-/DN
-bias = 2000 # e-
+    # detector parameters
+    kgain = 8.7 # e-/DN
+    bias = 2000 # e-
 
-# cubic function nonlinearity for emgain of 1
-if nonlin_flag:
-    coeffs_1, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
-else:
-    coeffs_1 = [0.0, 0.0, 0.0, 1.0]
-    _, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
-
-# commanded EM gain
-emgain = 1.0
-frame_list = []
-# make some uniform frames with emgain = 1 (must be unity)
-n_mean = 3
-for j in range(n_mean):
-    image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
-        nonlin_flag=nonlin_flag)
-    # Datetime cannot be duplicated
-    image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
-    # Temporary keyword value. Mean frame is TBD
-    image_sim.pri_hdr['OBSTYPE'] = 'MNFRAME'
-    frame_list.append(image_sim)
-
-init_nonlins = []
-index = 0
-for iG in range(len(gain_arr0)):
-    g = gain_arr0[iG]
-    exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
-    time_stack_test = time_stack_arr0[index:index+len_list0[iG]]
-    index = index + len_list0[iG]
+    # cubic function nonlinearity for emgain of 1
     if nonlin_flag:
-        coeffs, _, vals = nonlin_coefs(nonlin_table_path,g,3)
+        coeffs_1, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
     else:
-        coeffs = [0.0, 0.0, 0.0, 1.0]
-        vals = np.ones(len(DNs))
-    init_nonlins.append(vals)
-    for idx_t, t in enumerate(exp_time_loop):
-        # Simulate full frame
-        if iG == 0:
-            image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        elif iG == 1:
-            image_sim = make_fluxmap_image(fluxMap2,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        elif iG == 2:
-            image_sim = make_fluxmap_image(fluxMap3,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        else:
-            image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
-                nonlin_flag=nonlin_flag)
-            image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
-        image_sim.pri_hdr['OBSTYPE'] = 'NONLIN'
-        frame_list.append(image_sim)
-# Join all frames in a Dataset
-dataset_nl = Dataset(frame_list) 
-init_nonlins_arr = np.transpose(np.array(init_nonlins))
+        coeffs_1 = [0.0, 0.0, 0.0, 1.0]
+        _, DNs, _ = nonlin_coefs(nonlin_table_path,1.0,3)
 
-# set input parameters for calibrate_nonlin
-local_path = os.path.dirname(os.path.realpath(__file__))
-exp_time_stack_arr = exp_time_stack_arr0
-time_stack_arr = time_stack_arr0
-len_list = len_list0
-norm_val = 3000
-min_write = 800
-max_write = 10000
+    # commanded EM gain
+    emgain = 1.0
+    frame_list = []
+    # make some uniform frames with emgain = 1 (must be unity)
+    n_mean = 3
+    for j in range(n_mean):
+        image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
+            nonlin_flag=nonlin_flag)
+        # Datetime cannot be duplicated
+        image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
+        # Temporary keyword value. Mean frame is TBD
+        image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
+        frame_list.append(image_sim)
+
+    init_nonlins = []
+    index = 0
+    for iG in range(len(gain_arr0)):
+        g = gain_arr0[iG]
+        exp_time_loop = exp_time_stack_arr0[index:index+len_list0[iG]]
+        time_stack_test = time_stack_arr0[index:index+len_list0[iG]]
+        index = index + len_list0[iG]
+        if nonlin_flag:
+            coeffs, _, vals = nonlin_coefs(nonlin_table_path,g,3)
+        else:
+            coeffs = [0.0, 0.0, 0.0, 1.0]
+            vals = np.ones(len(DNs))
+        init_nonlins.append(vals)
+        for idx_t, t in enumerate(exp_time_loop):
+            # Simulate full frame
+            if iG == 0:
+                image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,g,t,coeffs,
+                    nonlin_flag=nonlin_flag)
+                image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            elif iG == 1:
+                image_sim = make_fluxmap_image(fluxMap2,bias,kgain,rn,g,t,coeffs,
+                    nonlin_flag=nonlin_flag)
+                image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            elif iG == 2:
+                image_sim = make_fluxmap_image(fluxMap3,bias,kgain,rn,g,t,coeffs,
+                    nonlin_flag=nonlin_flag)
+                image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            else:
+                image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
+                    nonlin_flag=nonlin_flag)
+                image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
+            frame_list.append(image_sim)
+    # Join all frames in a Dataset
+    dataset_nl = Dataset(frame_list) 
+    init_nonlins_arr = np.transpose(np.array(init_nonlins))
+
+    # set input parameters for calibrate_nonlin
+    local_path = os.path.dirname(os.path.realpath(__file__))
+    exp_time_stack_arr = exp_time_stack_arr0
+    time_stack_arr = time_stack_arr0
+    len_list = len_list0
+    norm_val = 3000
+    min_write = 800
+    max_write = 10000
+
+
+def teardown_module():
+    """
+    Runs at the end. Deletes variables
+    """
+    global n_cal, n_mean
+    global init_nonlins_arr
+    global rms_test
+    global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
+    global dataset_nl
+    global norm_val, min_write, max_write
+
+    del n_cal, n_mean
+    del init_nonlins_arr
+    del rms_test
+    del exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
+    del dataset_nl
+    del norm_val, min_write, max_write
 
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
@@ -217,6 +247,25 @@ def test_expected_results_time_sub():
     assert np.less(rms3,rms_test)
     assert np.less(rms4,rms_test)
   
+
+def teardown_module():
+    """
+    Run at end of tests. Deletes variables
+
+    """
+    global n_cal, n_mean
+    global init_nonlins_arr
+    global rms_test
+    global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
+    global dataset_nl
+
+    del n_cal, n_mean
+    del init_nonlins_arr
+    del rms_test
+    del exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
+    del dataset_nl
+
+
 def test_norm_val():
     """norm_val must be divisible by 20."""
     norm_not_div_20 = 2010

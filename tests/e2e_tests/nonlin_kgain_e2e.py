@@ -36,6 +36,29 @@ def set_vistype_for_tvac(
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
 def test_nonlin_and_kgain_e2e(
@@ -91,6 +114,7 @@ def test_nonlin_and_kgain_e2e(
 
     # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
+    fix_headers_for_tvac(pupilimg_l1_list)
 
    
     # Run the walker on some test_data
