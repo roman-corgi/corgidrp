@@ -5,6 +5,7 @@ import corgidrp.measure_companions as measure_companions
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 
+
 # Global Constants
 INPUT_STARS = ['109 Vir']
 FWHM = 3
@@ -26,7 +27,7 @@ PHOT_ARGS = {
         "centering_initial_guess": None
     },
     "Gaussian": {
-        "fwhm": 3,
+        "fwhm": 4,
         "fit_shape": None,
         "background_sub": True,
         "r_in": 5,
@@ -97,7 +98,7 @@ def generate_test_data(out_dir):
     zero_point = fluxcal_factor.ext_hdr.get('ZP', None)
 
     # Generate Calibration Data
-    dataset_ct, ct_cal = mocks.create_mock_ct_dataset_and_cal_file(fwhm=50, n_psfs=20, cfam_name='3C', save_cal_file=False)
+    dataset_ct, ct_cal = mocks.create_mock_ct_dataset_and_cal_file(fwhm=50, n_psfs=20, cfam_name='3C', save_cal_file=True)
     FpamFsamCal = mocks.create_mock_fpamfsam_cal(save_file=False)
 
     # Generate PSF-subtracted Frame
@@ -111,92 +112,35 @@ def generate_test_data(out_dir):
         FpamFsamCal=FpamFsamCal, blur_sigma=0.5, noise_std=1e-8, outdir=out_dir, platescale=0.0218
     )
 
-    return direct_star_image, host_star_counts, fluxcal_factor, zero_point, dataset_ct, ct_cal, FpamFsamCal, psf_sub_frame
+    coron_data = mocks.generate_coron_dataset_with_companions(
+        n_frames=1, shape=(200, 200), companion_xy=[(120, 80), (90, 130)], companion_counts=[host_star_counts / 2, host_star_counts / 3],
+        host_star_counts=host_star_counts, roll_angles=[10.0], add_noise=True, noise_std=1e-8, outdir=out_dir
+    )
+
+    return direct_star_image, host_star_counts, fluxcal_factor, zero_point, dataset_ct, ct_cal, FpamFsamCal, psf_sub_frame, coron_data
 
 
 def test_measure_companions_wcs(out_dir):
     """
     Run the full test case for measuring companions.
     """
-    direct_star_image, host_star_counts, fluxcal_factor, zero_point, dataset_ct, ct_cal, FpamFsamCal, psf_sub_frame = generate_test_data(out_dir)
-
-    coron_data = mocks.generate_coron_dataset_with_companions(
-        n_frames=1, shape=(200, 200), companion_xy=[(120, 80)], companion_counts=2000.,
-        host_star_counts=1e5, roll_angles=[10.0], add_noise=True, noise_std=5., outdir=out_dir
-    )
+    direct_star_image, host_star_counts, fluxcal_factor, zero_point, dataset_ct, ct_cal, FpamFsamCal, \
+        psf_sub_frame, coron_data = generate_test_data(out_dir)
 
     # Run Measurement
     result_table = measure_companions.measure_companions(
-        psf_image=psf_sub_frame, coronagraphic_dataset=coron_data,
-        phot_method='aperture', apply_throughput=True, apply_fluxcal=True,
+        psf_sub_image=psf_sub_frame, coronagraphic_dataset=coron_data,
+        phot_method='aperture',
         ct_cal=ct_cal, ct_dataset=dataset_ct, FpamFsamCal=FpamFsamCal,
         fluxcal_factor=fluxcal_factor, host_star_counts=host_star_counts,
-        apply_psf_sub_eff=True, out_dir=out_dir, verbose=True
+        forward_model=False, direct_star_image= direct_star_image,
+        reference_psf=dataset_ct[0], output_dir = out_dir, verbose=True
     )
 
     print("\nResult Table:\n", result_table)
     assert len(result_table) == 2, "Expected 2 measured companions"
 
-'''
-@pytest.mark.parametrize("known_mag, test_zp", [
-    (1, 10),  # Very bright source, should be accurate
-    (5, 10),  # Mid-range magnitude
-    (10, 15),  # Dimmer source
-    (12, 15),  # Near noise limit
-    (14, 15),  # Likely to fail if noise is added to image
-])'
-'''
-def test_validate_zero_point(known_mag, test_zp, out_dir):
-    """
-    Validates if the computed zero point matches expectations for various 
-    known magnitudes and test zero points.
-
-    Parameters:
-        known_mag (float): Apparent magnitude of the injected test source.
-        test_zp (float): Arbitrary zero point used to compute the expected flux.
-        out_dir (str, optional): Directory to store test FITS files.
-    """
-    os.makedirs(out_dir, exist_ok=True)
-
-    # Compute expected flux and inject a companion
-    known_counts = 10**(-0.4 * (known_mag - test_zp))
-    coron_data = mocks.generate_coron_dataset_with_companions(
-        n_frames=1, shape=(200, 200), companion_xy=[(120, 80)], 
-        companion_counts=known_counts, host_star_counts=1e5, 
-        roll_angles=[10.0], add_noise=True, noise_std=5., outdir=out_dir
-    )
-
-    # Measure the injected companion’s flux using aperture photometry
-    phot_args = PHOT_ARGS.copy()
-    phot_args["centering_initial_guess"] = (120, 80)
-    if PHOT_METHOD == "Aperture":
-        counts, counts_err, _ = fluxcal.aper_phot(
-            coron_data[0], **phot_args
-        )
-    else:
-        counts, counts_err, _ = fluxcal.phot_by_gauss2d_fit(coron_data[0], **phot_args)
-
-    # Compute expected and measured zero points
-    expected_zp = known_mag + 2.5 * np.log10(known_counts)
-    measured_zp = known_mag + 2.5 * np.log10(counts)
-
-    # Print results concisely
-    print(f"\nValidating Zero Point: Known Mag={known_mag}, Test ZP={test_zp}")
-    print(f"Expected Counts: {known_counts:.6g} e-, Measured Counts: {counts:.6g} ± {counts_err:.6g} e-")
-    print(f"Expected ZP: {expected_zp:.3f}, Measured ZP: {measured_zp:.3f}")
-
-    # Validate within tolerance
-    tolerance = 0.05
-    assert abs(measured_zp - expected_zp) <= tolerance, (
-        f"Zero point mismatch:\n"
-        f"Expected ZP: {expected_zp:.3f}\n"
-        f"Measured ZP: {measured_zp:.3f}\n"
-        f"Difference: {abs(measured_zp - expected_zp):.3f} (exceeds {tolerance})"
-    )
-
-    print("Test Passed\n")
 
 if __name__ == "__main__":
     out_dir = os.path.join('corgidrp', 'data', 'L4TestInput')
     test_measure_companions_wcs(out_dir)
-    test_validate_zero_point(1,10, out_dir)

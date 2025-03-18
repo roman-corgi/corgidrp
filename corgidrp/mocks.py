@@ -3012,6 +3012,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
     return sci_dataset,ref_dataset
 
+
 def generate_coron_dataset_with_companions(
     n_frames=1,
     shape=(200, 200),
@@ -3240,7 +3241,7 @@ def generate_psfsub_image_with_companions(
         if not use_ct_cal or ct_cal is None:
             throughput_factor = 1.0
         else:
-            throughput_factor = measure_companions.measure_core_throughput_at_location(
+            throughput_factor, nearest_frame = measure_companions.measure_core_throughput_at_location(
                 cx, cy,
                 ct_cal,
                 cor_dataset,

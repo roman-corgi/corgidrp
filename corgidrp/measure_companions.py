@@ -1,30 +1,35 @@
+import os
 import numpy as np
 from astropy.table import Table
 import corgidrp.fluxcal as fluxcal
-import pyklip.klip as klip
 from pyklip.parallelized import klip_dataset
-import pyklip.fakes as fakes
+import pyklip.fm as fm
+import pyklip.klip as klip
+import pyklip.fmlib.fmpsf as fmpsf
+import pyklip.fitpsf as fitpsf
+from scipy.optimize import curve_fit
 from corgidrp.data import PyKLIPDataset, Dataset, Image, CoreThroughputCalibration
 import numpy as np
 import corgidrp.fluxcal as fluxcal
+import corgidrp.l4_to_tda as l4_to_tda    
+import astropy.io.fits as fits
+from scipy.optimize import curve_fit
 
 
 def measure_companions(
-    psf_image,
+    psf_sub_image,
     coronagraphic_dataset=None,
     phot_method='aperture',
-    apply_throughput=False,
-    apply_fluxcal=False,
     fluxcal_factor=None,
     ct_cal = None,
     ct_dataset = None,
     FpamFsamCal = None,
-    apply_psf_sub_eff=False,
     host_star_counts=None,
-    host_star_apmag=None,
+    host_star_in_calspec=True,
+    forward_model=False,
     direct_star_image=None,
     reference_psf=None,
-    out_dir = None,
+    output_dir = ".",
     verbose=True
 ):
     """
@@ -40,9 +45,9 @@ def measure_companions(
 
     Parameters
     ----------
-    psf_image (corgidrp.data.Image): The final (or intermediate) PSF-subtracted image in e-/s/pixel, with 
-        .data, .hdr, .ext_hdr.
-    phot_method ({'aperture', 'psf_fit', 'forward_model'}, optional): Photometry method for measuring 
+    psf_sub_image (corgidrp.data.Image): The final (or intermediate) PSF-subtracted image with companions
+        in e-/s/pixel, with .data, .hdr, .ext_hdr.
+    phot_method ({'aperture', 'gauss2d'}, optional): Photometry method for measuring 
         companion counts on the (already) PSF-subtracted image.
     apply_throughput (bool, optional): If True, apply a radial throughput correction or a 
         user-supplied method.
@@ -63,7 +68,7 @@ def measure_companions(
         we can compute the companion's apparent mag.
     direct_star_image (corgidrp.data.Image, optional): A direct (unocculted) image of the host star (in e-). 
     reference_psf (corgidrp.data.Image, optional): An off-axis calibration PSF of a star at some known 
-        separation where mask effects are negligible.
+        separation where mask effects are negligible (it is near 6 lam/D).
     out_dir (str):
     verbose (bool, optional): If True, print progress messages.
 
@@ -79,47 +84,95 @@ def measure_companions(
             - counts_ratio : counts_corr / host_star_counts (if host_star_counts is given)
             - mag : apparent magnitude (computed via host_star_apmag or zero point or fluxcal_factor)
     """
+    phot_method_kwargs = get_photometry_kwargs(phot_method)
 
-   # Measure host star counts if not provided
+    # i. Select reference PSF: assume off-axis PSF with highest CT has negligible effect from the mask 
+    # (it is near 6 lam/D see Figs. 9 and 11 in John Krist's paper), or use simulated PSF w/o FPM masks
+   
+    # ii. Measure host star counts if not provided
     if host_star_counts is None and direct_star_image is not None:
         if verbose: print("Measuring total star counts from direct star image...")
-        host_star_counts, _ = measure_counts(direct_star_image, "aperture", None)
+        host_star_counts, _ = measure_counts(direct_star_image, phot_method, None, **phot_method_kwargs)
 
-    # Measure reference PSF counts if provided
+    # iii. Measure reference PSF counts if provided. An off-axis calibration PSF of a star at some known 
+    #    separation where mask effects are negligible
     reference_psf_counts = None
     if reference_psf:
-        reference_psf_counts, _ = measure_counts(reference_psf, "aperture", None)
-        if verbose: print(f"Measured reference PSF counts: {reference_psf_counts:.2f} e-/s")
+        reference_psf_counts, _ = measure_counts(reference_psf, phot_method, None, **phot_method_kwargs)
 
-    # Parse companion positions from headers
-    star_center = (psf_image.ext_hdr.get('STARLOCX', psf_image.data.shape[1] / 2),
-                   psf_image.ext_hdr.get('STARLOCY', psf_image.data.shape[0] / 2))
-    
+    # iv. Compute the ratio of photometry_host_star/photometry_reference_PSF
+    host_psf_ratio = host_star_counts/reference_psf_counts
+
+    ### Parse companion positions from headers
     companions = [{"id": key, "x": float(x), "y": float(y)}
-                  for key, val in psf_image.ext_hdr.items() if key.startswith('SNYX')
+                  for key, val in psf_sub_image.ext_hdr.items() if key.startswith('SNYX')
                   for _, x, y in [val.split(',')]]
 
     if verbose: print(f"Found {len(companions)} companion(s) in header.")
 
-    # Loop over companions and measure counts
+    ### Loop over companions 
     results = []
     for comp in companions:
         x_c, y_c = comp['x'], comp['y']
-        input_data = coronagraphic_dataset if phot_method == 'forward_model' else psf_image
 
-        method_kwargs = get_photometry_kwargs(phot_method, out_dir)
-        counts_raw, counts_err = measure_counts(input_data, phot_method, (x_c, y_c), **method_kwargs)
+        # v. Get/interpolate the off-axis PSF at the separation of the companion
+        throughput_factor, nearest_frame = measure_core_throughput_at_location(x_c, y_c, ct_cal, 
+                                                                               ct_dataset, FpamFsamCal)
+        
+        # vi. Scale the off-axis PSF by the computed ratio above to get the off-axis PSF of the host 
+        # star if it was at the same position as the companion
+        scaled_psf_data = nearest_frame.data * host_psf_ratio  
 
-        counts_corr = apply_throughput_correction(x_c, y_c, counts_raw, star_center, ct_cal, ct_dataset,
-                                                  FpamFsamCal, apply_psf_sub_eff, apply_throughput)
+        ## Create a new Image object with the same headers and error maps (if applicable)
+        scaled_psf_at_companion_loc = Image(
+            data_or_filepath=scaled_psf_data, 
+            pri_hdr=nearest_frame.pri_hdr, 
+            ext_hdr=nearest_frame.ext_hdr, 
+            err=nearest_frame.err if hasattr(nearest_frame, 'err') else None
+            )
+       
+        # vii. Do PSF subtraction for the scaled_psf_at_companion_location, either though forward modeling
+        # or through classical PSF subtraction
+        
+        if forward_model == True:
+            # Get star location from headers
+            x_star = scaled_psf_at_companion_loc.ext_hdr.get('STARLOCX', None)
+            y_star = scaled_psf_at_companion_loc.ext_hdr.get('STARLOCY', None)
+            guesssep = np.sqrt((x_c - x_star) ** 2 + (y_c - y_star) ** 2)
+            guesspa = np.degrees(np.arctan2(x_c - x_star, y_star - y_c)) % 360  # Ensures PA is [0, 360] degrees
+            psf_guess_counts, _ = measure_counts(scaled_psf_at_companion_loc, phot_method, (x_c, y_c), 
+                                                                 **phot_method_kwargs)
 
-        counts_ratio = counts_corr / host_star_counts if host_star_counts else None
-        companion_mag = compute_companion_magnitude(counts_corr, counts_ratio, host_star_apmag, fluxcal_factor)
+            print("checking star loc", x_star, y_star)
 
-        results.append((comp['id'], x_c, y_c, counts_raw, counts_err, counts_corr, counts_ratio, companion_mag))
+            fit = forward_model_psf(coronagraphic_dataset, scaled_psf_at_companion_loc, guesssep, guesspa,
+                                    psf_guess_counts, outputdir=output_dir)
+            print("forward model fit", fit)
+        else:
+            psf_sub_star_at_companion_loc, efficiency = classical_psf_sub(scaled_psf_at_companion_loc)
 
-    return Table(rows=results, names=['id', 'x', 'y', 'counts_raw', 'counts_err',
-                                      'counts_corr', 'counts_ratio', 'mag'])
+        # viii. Measure flux ratio of companion to host star
+        psf_sub_star_at_companion_loc_counts, _ = measure_counts(psf_sub_star_at_companion_loc, 
+                                                                 phot_method, None, **phot_method_kwargs)
+        psf_sub_companion_counts, _ = measure_counts(psf_sub_image, phot_method, (x_c, y_c), 
+                                                                 **phot_method_kwargs)
+        
+        companion_host_ratio = psf_sub_companion_counts / psf_sub_star_at_companion_loc_counts
+
+        # ix. Calculate companion's apparent magnitude
+        if host_star_in_calspec == True:
+            apmag_data = l4_to_tda.determine_app_mag(direct_star_image, direct_star_image.pri_hdr['TARGET'])
+            host_star_apmag = apmag_data[0].ext_hdr['APP_MAG']
+            companion_mag = host_star_apmag - 2.5 * np.log10(companion_host_ratio)
+        else:
+            zero_point = fluxcal_factor.ext_hdr.get('ZP') if fluxcal_factor else None
+            counts_corr = psf_sub_companion_counts # TO DO: look at Commit 3de7490 for how to correct these counts
+            companion_mag = -2.5 * np.log10(counts_corr) + zero_point
+
+        results.append((comp['id'], x_c, y_c, psf_sub_companion_counts, psf_sub_star_at_companion_loc_counts, companion_host_ratio, companion_mag))
+
+    return Table(rows=results, names=['id', 'x', 'y', 'psf_sub_companion_counts', 'psf_sub_host_star_at_companion_loc_counts',
+                                      'counts_ratio', 'mag'])
 
 
 # ---------------- Helper functions -------------------------------------- #
@@ -140,11 +193,8 @@ def measure_counts(input_image_or_dataset, phot_method, initial_xy_guess, **kwar
     counts_err (float): Estimated counts uncertainty.
     """
 
-    if phot_method == 'forward_model':
-        return forward_model_counts(input_image_or_dataset, initial_xy_guess, **kwargs)
-
-    elif phot_method == 'psf_fit':
-        return fluxcal.phot_by_gauss2d_fit(input_image_or_dataset, initial_guess=initial_xy_guess, **kwargs)[:2]
+    if phot_method == 'gauss2d':
+        return fluxcal.phot_by_gauss2d_fit(input_image_or_dataset, centering_initial_guess=initial_xy_guess, **kwargs)[:2]
 
     elif phot_method == 'aperture':
         return fluxcal.aper_phot(input_image_or_dataset, centering_initial_guess=initial_xy_guess, **kwargs)[:2]
@@ -152,14 +202,13 @@ def measure_counts(input_image_or_dataset, phot_method, initial_xy_guess, **kwar
     raise ValueError(f"Invalid photometry method: {phot_method}")
 
 
-def get_photometry_kwargs(phot_method, out_dir):
+def get_photometry_kwargs(phot_method):
     """
     Returns method-specific keyword arguments for different photometry methods.
 
     Parameters:
     phot_method (str): The photometry method to be used. Options are:
-        - 'forward_model': Uses KLIP-based forward modeling.
-        - 'psf_fit': Uses a 2D Gaussian fit.
+        - 'gauss2d': Uses a 2D Gaussian fit.
         - 'aperture': Uses aperture photometry.
     out_dir (str): The directory where outputs should be saved (only applicable for 'forward_model').
 
@@ -170,8 +219,7 @@ def get_photometry_kwargs(phot_method, out_dir):
     common_kwargs = {'centering_method': 'xy', 'centroid_roi_radius': 5}
 
     photometry_options = {
-        'forward_model': {'out_dir': out_dir, 'do_klip': True, 'kl_modes': (5, 10)},
-        'psf_fit': {'psf_fwhm': 3, 'background_sub': True, 'r_in': 5, 'r_out': 10, **common_kwargs},
+        'gauss2d': {'fwhm': 3, 'background_sub': True, 'r_in': 5, 'r_out': 10, **common_kwargs},
         'aperture': {'encircled_radius': 4, 'frac_enc_energy': 1, 'subpixels': 5, 'background_sub': True,
                      'r_in': 6, 'r_out': 12, **common_kwargs}
     }
@@ -182,109 +230,197 @@ def get_photometry_kwargs(phot_method, out_dir):
     return photometry_options[phot_method]
 
 
-def forward_model_counts(
-    image_or_dataset,
-    companion_xy,
-    out_dir = None,
-    reference_psf_counts=None,
-    host_star_counts=None,
-    fwhm=3.5,  # Default PSF FWHM in pixels
-    do_klip=True,
-    kl_modes=(5,),
-    verbose=True
+def forward_model_psf(
+    coronagraphic_dataset,
+    off_axis_psf,
+    guesssep,
+    guesspa,
+    guessflux,
+    outputdir=".",
+    fileprefix="companion-fm",
+    numbasis=[1, 7, 100],
+    method="mcmc",
+    annulus_halfwidth=15,   # half-width (in pixels) of annulus centered on guesssep
+    movement=4,             # exclusion criterion in KLIP
+    stamp_size=13,          # size of fitting stamp
+    corr_len_guess=3.0,     # initial guess for correlation length
+    x_range=1.5,            # prior range for X offset
+    y_range=1.5,            # prior range for Y offset
+    flux_range=1.0,         # log10 prior range for flux
+    corr_len_range=1.0,     # log10 prior range for correlation length
+    # If method == "mcmc":
+    nwalkers=100,
+    nburn=200,
+    nsteps=800,
+    numthreads=1,
+    # Calibration error propagation (placeholders)
+    star_center_err=0.05,   # in pixels
+    platescale=21.8,        # mas/pixel 
+    platescale_err=0.02,    # mas/pixel
+    pa_offset=0.0,          # known absolute offset in degrees
+    pa_uncertainty=0.1      # PA calibration uncertainty in degrees
 ):
     """
-    Forward-model a companion at (x_c, y_c) by injecting a synthetic companion
-    (off-axis star) into the raw frames, running KLIP, and measuring the counts
-    in the final residual.
-
-    Parameters
-    ----------
-    image_or_dataset (corgidrp.data.Image or corgidrp.data.Dataset): A coronagraphic 
-        dataset containing one or more science frames where the companions exist.
-    companion_xy (tuple (x, y)): Pixel coordinates in the science image of the 
-        companion to forward-model.
-    out_dir (str): Output directory path for pyklip.
-    reference_psf_counts (float or None): If you have measured counts from a reference 
-        PSF that is known to be effectively off-axis, can scale by (host_star_counts / 
-        reference_psf_counts).
-    host_star_counts (float or None): The unocculted, direct star counts of the host star 
-        from a calibration image, before any coronagraph is applied and before any PSF 
-        subtraction. Counts should be in e- (or e-/s, but use the convention consistently). 
-        Used to scale the off-axis star injection.
-    fwhm (float): Full Width at Half Maximum (FWHM) of the PSF, in pixels.
-    do_klip (bool): Whether to run KLIP. If False, skip the actual subtraction step 
-        (useful for debugging).
-    kl_modes (tuple): The KL modes used in klip.klip_dataset.
-    verbose (bool): Print debug messages.
-
-    Returns:
-    counts_val (float): Estimated counts of the forward-modeled companion in e- (or e-/s) 
-        after the KLIP subtraction.
-    counts_err (float): Estimated counts uncertainty.
-    """
-    x_c, y_c = companion_xy
-    science_dataset = image_or_dataset if isinstance(image_or_dataset, Dataset) else Dataset([image_or_dataset])
-    pk_data = PyKLIPDataset(science_dataset, highpass=False)
-
-    dx, dy = x_c - pk_data.centers[0][0], y_c - pk_data.centers[0][1]
-    separation, position_angle = np.hypot(dx, dy), np.degrees(np.arctan2(dx, -dy)) % 360
-
-    injected_counts = (host_star_counts / reference_psf_counts) if reference_psf_counts else 100.0
-
-    fakes.inject_planet(pk_data.input, pk_data.centers, injected_counts, pk_data.wcs, separation, position_angle,
-                        fwhm=fwhm)
-
-    if verbose:
-        print(f"[ForwardModel] Injected planet at {separation:.2f} px, PA={position_angle:.2f}, counts={injected_counts:.3g}")
-
-    if do_klip:
-        klip_dataset(pk_data, outputdir=out_dir, fileprefix="fwdmodel_injected", numbasis=kl_modes)
-        sub_img = Image(pk_data.output[-1])
-    else:
-        sub_img = Image(pk_data.input[0])
-
-    return fluxcal.aper_phot(sub_img, encircled_radius=fwhm, r_in=fwhm*1.5, r_out=fwhm*2.5,
-                             centering_initial_guess=(x_c, y_c), background_sub=True)[:2]
-
-
-def apply_throughput_correction(x, y, counts, star_center, ct_cal, ct_dataset, FpamFsamCal,
-                                apply_psf_sub_eff, apply_throughput):
-    """
-    Applies throughput and PSF-subtraction efficiency corrections to measured counts.
+    Forward model an off-axis PSF through KLIP-FM to extract astrometry/photometry 
+    of a known companion in a coronagraphic dataset.
 
     Parameters:
-    x (float): X-coordinate of the companion in the image (pixels).
-    y (float): Y-coordinate of the companion in the image (pixels).
-    counts (float): Measured companion counts (e- or e-/s) before correction.
-    star_center (tuple (float, float)): Coordinates of the star center in the 
-        image (pixels).
-    ct_cal (corgidrp.data.CoreThroughputCalibration): Core throughput calibration 
-        object, containing PSF throughput information.
-    ct_dataset (corgidrp.data.Dataset): Dataset used for generating the throughput 
-        calibration.
-    FpamFsamCal (corgidrp.data.FpamFsamCal): Calibration object used for mapping 
-        FPAM to EXCAM coordinates.
-    apply_psf_sub_eff (bool): Whether to apply a correction for PSF-subtraction 
-        efficiency.
-    apply_throughput (bool): Whether to apply a radial throughput correction using 
-        `ct_cal`.
+    coronagraphic_dataset (corgidrp.Dataset): The dataset containing coronagraphic images 
+        (with known companion(s)). 
+    off_axis_psf (corgidrp.Image): The off-axis PSF image (scaled to approximate the companion 
+        flux). This will serve as the 'template' for the forward-modeled PSF.
+    guesssep (float): Initial guess at companion separation (in pixels).
+    guesspa (float): Initial guess at companion position angle (in degrees).
+    guessflux (float): Initial guess at companion flux scaling (dimension depends on how
+        off_axis_psf has been normalized).
+    outputdir (str): Directory to store intermediate KLIP-FM outputs (optional).
+    fileprefix (str): Prefix for output files.
+    numbasis (list of int): List of KL basis sizes to use.
+    method ({"mcmc", "maxl"}): “mcmc” = Bayesian (emcee) MCMC fit,
+        “maxl” = frequentist maximum-likelihood fit
+    annulus_halfwidth (float): Half-width of the annulus (in pixels) around `guesssep` in 
+        which KLIP will be performed.
+    movement (float): Angular exclusion criterion for PSF subtraction in pyKLIP.
+    stamp_size (int): Size of the extracted stamp (in pixels) around the companion for 
+        fitting.
+    corr_len_guess (float): Initial guess of the Gaussian Process correlation length.
+    x_range (float): Bounds for x/y offsets in linear space (uniform prior).
+    y_range (float): Bounds for x/y offsets in linear space (uniform prior).
+    flux_range(float): Bounds for log10 priors on flux length.
+    corr_len_range (float): Bounds for log10 priors on correlation length.
+    nwalkers (int): MCMC hyperparameters if method="mcmc".
+    nburn (int): MCMC hyperparameters if method="mcmc".
+    nsteps (int): MCMC hyperparameters if method="mcmc".
+    numthreads (int): Parallel threads for MCMC.
+    star_center_err (float): Uncertainty on star center (in pixels), for post-fit error 
+        propagation.
+    platescale (float): Plate scale in mas/pixel, for converting pixel offsets to mas.
+    platescale_err (float): Plate scale uncertainty in mas/pixel.
+    pa_offset (float): Known absolute offset in instrument position angle (in degrees).
+    pa_uncertainty (float): Additional systematic uncertainty in position angle (in degrees).
 
     Returns:
-    counts (float): Corrected companion counts (e- or e-/s) after applying throughput 
-        and PSF-sub efficiency.
-
+    fit (pyklip.fitpsf.FMAstrometry): The fitting object containing best-fit parameters, 
+        chains (if MCMC),and raw/final astrometry with uncertainties.
     """
-    dx, dy = x - star_center[0], y - star_center[1]
-    sep_pix = np.hypot(dx, dy)
+    if not os.path.exists(outputdir):
+        os.makedirs(outputdir)
 
-    if apply_psf_sub_eff:
-        counts /= get_psf_sub_eff(sep_pix)
+    # 1) Wrap coronagraphic_dataset in PyKLIP dataset
+    coronagraphic_dataset = PyKLIPDataset(coronagraphic_dataset, highpass=False)
 
-    if apply_throughput:
-        counts /= measure_core_throughput_at_location(x, y, ct_cal, ct_dataset, FpamFsamCal)
+    # 2) Prepare the 'psfs' argument for FMPlanetPSF
+    #    off_axis_psf might be 2D or 3D (if multi-wavelength)?
+    psf_array = off_axis_psf.data 
+    dataset_shape = coronagraphic_dataset.input.shape 
 
-    return counts
+    # May (or may not) need multiple wavelength channels:
+    # For now assume single-channel data:
+    # Otherwise, replace wvs=[some_array_of_wavelengths].
+    wvs = [1.0]  # placeholder single wavelength
+
+    # 3) Initialize the Forward Model Planet PSF class
+    fm_class = fmpsf.FMPlanetPSF(
+        dataset_shape,
+        numbasis,
+        guesssep,
+        guesspa,
+        guessflux,
+        psf_array,
+        wvs,
+        # dn_per_contrast=...,  
+        star_spt=None,         # if not relevant
+        spectrallib=None       # if not relevant (single-wavelength)
+    )
+
+    # 4) Run KLIP-FM on the coronagraphic dataset
+    annuli = [[guesssep - annulus_halfwidth, guesssep + annulus_halfwidth]]
+
+    fm.klip_dataset(
+        coronagraphic_dataset,   
+        fm_class,
+        outputdir=outputdir,
+        fileprefix=fileprefix,
+        numbasis=numbasis,
+        annuli=annuli,
+        subsections=1,
+        padding=0,
+        movement=movement
+    )
+
+    # 5) Read the forward-modeled results and the PSF-subtracted data
+    fm_filename = os.path.join(outputdir, f"{fileprefix}-fmpsf-KLmodes-all.fits")
+    klip_filename = os.path.join(outputdir, f"{fileprefix}-klipped-KLmodes-all.fits")
+
+    # For now, select the second extension => numbasis=7
+    kl_index = 1
+
+    fm_hdu = fits.open(fm_filename)
+    data_hdu = fits.open(klip_filename)
+
+    fm_frame = fm_hdu[1].data[kl_index]
+    fm_centx = fm_hdu[1].header['PSFCENTX']
+    fm_centy = fm_hdu[1].header['PSFCENTY']
+
+    data_frame = data_hdu[1].data[kl_index]
+    data_centx = data_hdu[1].header["PSFCENTX"]
+    data_centy = data_hdu[1].header["PSFCENTY"]
+
+    # these are the guessed values from the FM header
+    guesssep = fm_hdu[0].header['FM_SEP']
+    guesspa  = fm_hdu[0].header['FM_PA']
+
+    fm_hdu.close()
+    data_hdu.close()
+
+    # 6) Build the FMAstrometry fitting object
+    fit = fitpsf.FMAstrometry(guesssep, guesspa, stamp_size, method=method)
+
+    # Generate FM stamp (the forward-modeled PSF for the companion)
+    fit.generate_fm_stamp(fm_frame, [fm_centx, fm_centy], padding=5)
+
+    # Generate data stamp (the PSF-subtracted image of the companion)
+    fit.generate_data_stamp(data_frame, [data_centx, data_centy], 
+                            dr=4,               # radial annulus for local noise estimate
+                            exclusion_radius=10 # exclude actual companion location
+    )
+
+    # 7) Setup a Gaussian Process kernel
+    fit.set_kernel("matern32", [corr_len_guess], [r"$l$"])
+
+    # 8) Set up prior bounds (or parameter bounds for max-likelihood)
+    fit.set_bounds(x_range, y_range, flux_range, [corr_len_range])
+
+    # 9) Perform the fit
+    if method == "mcmc":
+        fit.fit_astrometry(nwalkers=nwalkers, nburn=nburn, nsteps=nsteps, numthreads=numthreads)
+    else:
+        fit.fit_astrometry()
+
+    # Omitting plotting to check MCMC
+
+    # 10) Propagate calibration uncertainties (star center, platescale, etc.)
+    fit.propogate_errs(
+        star_center_err=star_center_err,
+        platescale=platescale,
+        platescale_err=platescale_err,
+        pa_offset=pa_offset,
+        pa_uncertainty=pa_uncertainty
+    )
+
+    # Print out final results
+    print("\n---------- Raw Fit Results (pixels) ----------")
+    print(f" RA offset  = {fit.raw_RA_offset.bestfit:.4f} ± {fit.raw_RA_offset.error:.4f} px")
+    print(f" Dec offset = {fit.raw_Dec_offset.bestfit:.4f} ± {fit.raw_Dec_offset.error:.4f} px")
+    print(f" Flux scale = {fit.raw_flux.bestfit:.3e} ± {fit.raw_flux.error:.3e}")
+
+    print("\n---------- Final Fit Results (with calibration) ----------")
+    print(f" RA [mas] = {fit.RA_offset.bestfit:.2f} ± {fit.RA_offset.error:.2f}")
+    print(f" Dec [mas]= {fit.Dec_offset.bestfit:.2f} ± {fit.Dec_offset.error:.2f}")
+    print(f" Sep [mas]= {fit.sep.bestfit:.2f} ± {fit.sep.error:.2f}")
+    print(f" PA [deg] = {fit.PA.bestfit:.3f} ± {fit.PA.error:.3f}")
+
+    return fit
 
 
 def measure_core_throughput_at_location(
@@ -294,67 +430,65 @@ def measure_core_throughput_at_location(
     FpamFsamCal
 ):
     """
-    Apply the core throughput factor from a loaded CoreThroughputCalibration object
-    at the companion location (x_c, y_c).
+    Get the core throughput factor from a loaded CoreThroughputCalibration object
+    at the companion location (x_c, y_c) and return the corresponding frame.
 
     Parameters:
     x_c, y_c (float): The companion's pixel location in the coronagraphic image.
-    ct_dataset (corgidrp.data.Dataset): The same dataset used for the coronagraphic 
+    ct_dataset (corgidrp.data.Dataset): The dataset used for the coronagraphic 
         observation, or at least the first frame's header info.
     ct_cal (corgidrp.data.CoreThroughputCalibration): The loaded calibration file with 
         PSF basis and arrays of throughput.
     FpamFsamCal (corgidrp.data.FpamFsamCal): The object to help map FPAM changes to 
         EXCAM pixel offsets.
-    counts_raw (float): The raw measured companion counts (in e-/s) before throughput 
-        correction.
 
     Returns:
     throughput_factor (float): The core throughput factor at the specified location 
         (dimensionless).
+    nearest_frame (corgidrp.data.Image): The frame from the dataset corresponding 
+        to the nearest neighbor PSF location.
     """
+    # Get the star center position
     star_center = ct_cal.GetCTFPMPosition(ct_dataset, FpamFsamCal)[0]
     dx, dy = x_c - star_center[0], y_c - star_center[1]
 
+    # Separate pupil images from PSF images
+    psf_frames = []
+    psf_frame_indices = []  # Keep track of their original indices
+
+    for i, img in enumerate(ct_dataset):
+        if img.ext_hdr.get('DPAMNAME', '') != 'PUPIL':  # Only keep PSF frames
+            psf_frames.append(img)
+            psf_frame_indices.append(i)
+
+    # Extract the coordinates and throughput values
     xyvals, throughvals = ct_cal.ct_excam[:2], ct_cal.ct_excam[2]
+
+    # Find the nearest PSF location
     idx_best = np.argmin(np.hypot(xyvals[0] - dx, xyvals[1] - dy))
 
-    return max(throughvals[idx_best], 1.0)
+    # Get the best throughput factor, ensuring it's at least 1.0
+    throughput_factor = max(throughvals[idx_best], 1.0)
+
+    # Retrieve the corresponding frame from the original dataset using stored indices
+    nearest_frame = ct_dataset[psf_frame_indices[idx_best]]
+
+    return throughput_factor, nearest_frame
 
 
-def get_psf_sub_eff(rad_pix):
+def classical_psf_sub(psf_frame):
     """
     Placeholder for a PSF-subtraction efficiency factor function.
     """
     # e.g. near the star, the companion is more heavily subtracted, etc.
     # Return a factor in (0,1].
     efficiency = 0.7
-    return efficiency
+    psf_sub_frame = psf_frame.data * efficiency
 
-
-def compute_companion_magnitude(counts_corr, counts_ratio, host_star_apmag, fluxcal_factor):
-    """
-    Computes the apparent magnitude of a companion based on either the host star's magnitude 
-    and counts ratio or a flux calibration zero point.
-
-    Parameters:
-    counts_corr (float): Corrected companion counts (e- or e-/s) after applying throughput 
-        and PSF-sub efficiency.
-    counts_ratio (float or None): Ratio of the companion's corrected counts to the host star's 
-        counts (counts_corr / host_star_counts).
-    host_star_apmag (float or None): Apparent magnitude of the host star, used for computing 
-        the companion magnitude if counts_ratio is provided.
-    fluxcal_factor (corgidrp.data.FluxcalFactor or None): Flux calibration factor object 
-        containing the zero point (ext_hdr['ZP']) for absolute magnitude conversion.
-
-    Returns:
-    (float): Apparent magnitude of the companion.
-    """
-    zero_point = fluxcal_factor.ext_hdr.get('ZP') if fluxcal_factor else None
-
-    if host_star_apmag and counts_ratio:
-        return host_star_apmag - 2.5 * np.log10(counts_ratio)
-
-    if zero_point and counts_corr > 0:
-        return -2.5 * np.log10(counts_corr) + zero_point
-
-    raise ValueError("Cannot compute magnitude; missing required parameters.")
+    psf_sub_image = Image(
+        data_or_filepath=psf_sub_frame, 
+        pri_hdr=psf_frame.pri_hdr, 
+        ext_hdr=psf_frame.ext_hdr, 
+        err=psf_frame.err if hasattr(psf_frame, 'err') else None
+        )
+    return psf_sub_image, efficiency
