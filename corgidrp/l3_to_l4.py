@@ -181,6 +181,7 @@ def do_psf_subtraction(input_dataset,
                        do_crop=True,
                        crop_sizexy=None,
                        measure_klip_thrupt=True,
+                       measure_1d_core_thrupt=True
                        ):
     """
     
@@ -213,8 +214,8 @@ def do_psf_subtraction(input_dataset,
 
     sci_dataset = input_dataset.copy()
     
-    # Need CT calibration object to measure KLIP throughput
-    if measure_klip_thrupt:
+    # Need CT calibration object to measure KLIP throughput and 1D core throughput
+    if measure_klip_thrupt or measure_1d_core_thrupt:
         assert ct_calibration != None
 
     # Use input reference dataset if provided
@@ -349,6 +350,9 @@ def do_psf_subtraction(input_dataset,
         # Add history msg
         history_msg = f'KLIP throughput measured and saved to Image class extension.'
         dataset_out.update_after_processing_step(history_msg)
+
+    if measure_1d_core_thrupt:
+        raise Warning('1D core throughput not configured.')
     
     return dataset_out
 
