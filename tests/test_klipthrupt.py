@@ -276,6 +276,14 @@ def test_measure_noise():
     assert noise_profile[:3] == pytest.approx(std2,rel=0.05)
     assert noise_profile[3:] == pytest.approx(std1,rel=0.05)
 
+    # Specify a different particular KL mode
+    noise_profile = measure_noise(frame, seps, fwhm,klmode_index=1)
+
+    # Check data shape
+    assert noise_profile.shape == (5,)
+    assert noise_profile[:3] == pytest.approx(std4,rel=0.05)
+    assert noise_profile[3:] == pytest.approx(std3,rel=0.05)
+
     pass
 
 

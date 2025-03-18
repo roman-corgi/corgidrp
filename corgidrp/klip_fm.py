@@ -148,6 +148,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # Inject planets:
         seppas_skipped = []
         this_klmode_injectcounts = []
+        this_klmode_psfmodels = []
+        this_klmode_psfcenters = []
         for i,frame in enumerate(sci_dataset):
             for sep in seps:
 
@@ -157,10 +159,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                 pixscale_arcsec = 0.0218
                 fwhm_mas = 1.22 * lam / d * 206265 * 1000
                 fwhm_pix = fwhm_mas * 0.001 * pixscale_arcsec
-                #noise = measure_noise(psfsub_dataset[0],k,sep,fwhm_pix)
-                noise = 10.
-
+                noise = measure_noise(psfsub_dataset[0],sep,fwhm_pix,k)[0]
+                
                 inject_counts = noise * inject_snr
+
                 for pa in pas:
                     inject_loc = (sep,pa)
                     # Check that we're not too close to a candidate
@@ -172,9 +174,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                     
                     frame, psf_model, psf_center_inframe = inject_psf(frame, ct_calibration, inject_counts, *inject_loc)
 
-                # Save this to divide later
+                # Save these for later
                 this_klmode_injectcounts.append(inject_counts)
-                
+                this_klmode_psfmodels.append(psf_model)
+                this_klmode_psfcenters.append(psf_center_inframe)
+
             sci_dataset[i].data[:] = frame.data[:]
                     
         # Init pyklip dataset
