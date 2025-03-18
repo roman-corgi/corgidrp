@@ -30,7 +30,7 @@ def setup_module():
     cfam_name = '1F'
     # CT and coronagraphic datasets
     global dataset_ct, dataset_ct_syn, dataset_ct_interp
-    global dataset_cor, dataset_cor_interp
+    global dataset_cor, dataset_pupil_interp
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
     global ct_in, ct_syn
@@ -125,30 +125,172 @@ def setup_module():
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
     dataset_cor = Dataset(data_cor)
 
-    # PSF for CT map interpolation
+    # PSF for CT map interpolation: We want its own dataset because the test
+    # will remove an off-axis PSF at a time, estimate the CT and compare with
+    # the original value.
+    # Add pupil image
+    pupil_image = np.zeros([1024, 1024])
+    # Set it to some known value for a selected range of pixels
+    pupil_image[510:530, 510:530]=1
+    prhd, exthd_pupil = create_default_L3_headers()
+    # DRP
+    exthd_pupil['DRPCTIME'] = time.Time.now().isot
+    exthd_pupil['DRPVERSN'] = corgidrp.__version__
+    # cfam filter
+    exthd_pupil['CFAMNAME'] = cfam_name
+    # Add specific values for pupil images:
+    # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+    exthd_pupil['DPAMNAME'] = 'PUPIL'
+    exthd_pupil['LSAMNAME'] = 'OPEN'
+    exthd_pupil['FSAMNAME'] = 'OPEN'
+    exthd_pupil['FPAMNAME'] = 'OPEN_12'
+    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
+    exthd_pupil['FPAM_H'] = 5854
+    exthd_pupil['FPAM_V'] = 22524
+    exthd_pupil['FSAM_H'] = 29471
+    exthd_pupil['FSAM_V'] = 12120
+    # Mock error
+    err = np.ones([1024,1024])
+    # The pupil dataset that will be re-used when generating new CT cal files
+    # during the test by removing an off-axis PSF every time
+    dataset_pupil_interp = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+    # Reference dataset for the CT interpolation test
+    data_ct_interp = dataset_pupil_interp
     # Synthetic psfs with known CT values (mock.py)
     n_radii = 9
     n_azimuths = 5
     max_angle = 2/3*np.pi
     norm_pupil = 0.5*(pupil_image_1.sum()+pupil_image_2.sum())
-    data_ct_interp = create_ct_interp(
+    data_ct_interp += create_ct_interp(
         n_radii=n_radii,
         n_azimuths=n_azimuths,
         max_angle=max_angle,
         norm=norm_pupil)[0]
-    data_ct_interp += dataset_pupil
     dataset_ct_interp = Dataset(data_ct_interp)
-    # Coronagraphic dataset for interpolation (only headers will be used)
-    # FPM's shifts are tested in another test
-    exthd['FPAM_H'] = exthd_pupil['FPAM_H']
-    exthd['FPAM_V'] = exthd_pupil['FPAM_V']
-    exthd['FSAM_H'] = exthd_pupil['FSAM_H']
-    exthd['FSAM_V'] = exthd_pupil['FSAM_V']
-    # FPM center
-    exthd['STARLOCX'] = 512
-    exthd['STARLOCY'] = 512
-    data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
-    dataset_cor_interp = Dataset(data_cor)
+
+def test_ct_interp():
+    """ Tests the interpolation within the standard range by popping out data
+    points and checking that the interpolation is < 5% error. The core
+    throughput changes linearly across the radius.
+    """
+
+    # Generate core throughput calibration file
+    ct_cal_in = corethroughput.generate_ct_cal(dataset_ct_interp)
+    # Get CT FPM center
+    # FPAM/FSAM
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    fpam_ct_pix = ct_cal_in.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    # Reference grid to test the interpolation: The one used in create_ct_interp
+    # wrt CT FPM because the positions used to interpolate are wrt the FPM
+    x_grid = ct_cal_in.ct_excam[0,:] - fpam_ct_pix[0]
+    y_grid = ct_cal_in.ct_excam[1,:] - fpam_ct_pix[1]
+    core_throughput = ct_cal_in.ct_excam[2,:]
+    
+    # In this test, we will estimate the CT at a location that agrees with one
+    # of the locations used to build the CT interpolation set by removing
+    # the data point and estimating the CT with the remaining set, which remains
+    # unchanged. 
+
+    # Generate random indices between 0 and the number of radii and azimuths,
+    # excluding the edge cases 
+    n_random = 50
+    # Set seed for reproducibility of test data
+    rng = np.random.default_rng(0)
+    for i in range(n_random):
+        random_index_radius = rng.choice(np.arange(1, n_radii-1), 1)
+        random_index_az = rng.choice(np.arange(1, n_azimuths-1), 1)
+     
+        #Convert these to flattned indices
+        random_indices_flat = random_index_radius + random_index_az*n_radii
+        
+        # Record the missing value
+        missing_x = x_grid[random_indices_flat]
+        missing_y = y_grid[random_indices_flat]
+        missing_core_throughput = core_throughput[random_indices_flat]
+        # Generate CT dataset w/o the latter (needed to call the interpolant
+        # without this location)
+        # Dataset for CT map interpolation: pupil images plus off-axis PSFs
+        data_ct = data_pupil_interp
+        data_ct += create_ct_interp(
+            n_radii=n_radii,
+            n_azimuths=n_azimuths,
+            max_angle=max_angle,
+            norm=pupil_image.sum(),
+            fpm_x_shift=fpm_x_shift,
+            fpm_y_shift=fpm_y_shift,
+            pop_index=random_indices_flat)[0]
+        dataset_ct_tmp = Dataset(data_ct)
+        # Generate core throughput calibration file
+        ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct_tmp)
+        # Now we can interpolate the missing values
+        # Test with linear mapping of radii (values are different)
+        interpolated_value = ct_cal_tmp.InterpolateCT(
+            missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
+        # Good to within 5% 
+        assert interpolated_value == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (linear radii mapping)'
+        # Test with radii mapped into their logarithmic values before
+        # constructing the interpolant (values are different)
+        interpolated_value_log = ct_cal_tmp.InterpolateCT(
+            missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
+        # Good to within 5%
+        assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (logarithmic radii mapping)'
+
+    # Test that if the radius is out of the range then an error is thrown
+    # Pick a data point that is out of the range. For instance, set y to zero
+    # and x to a value that is greater than the maximum radius
+    radii = np.sqrt(x_grid**2 + y_grid**2)
+    with pytest.raises(ValueError):
+        # Too Big
+        ct_cal_tmp.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal) 
+             
+    with pytest.raises(ValueError):
+        #Too small
+        ct_cal_tmp.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
+
+    # Test that something with an azimuth out of range returns the same result
+    # as within the range
+    azimuths = np.arctan2(y_grid, x_grid)
+    azimuths -= azimuths.min()
+    x_new_out = 0.9*np.max(radii)*np.cos(np.max(azimuths)+0.1)
+    y_new_out = 0.9*np.max(radii)*np.sin(np.max(azimuths)+0.1)
+    interpolated_value_out = ct_cal_tmp.InterpolateCT(
+        x_new_out, y_new_out, dataset_cor, fpam_fsam_cal)[0]
+
+    x_new_in = 0.9*np.max(radii)*np.cos(0.1)
+    y_new_in = 0.9*np.max(radii)*np.sin(0.1)
+    interpolated_value_in = ct_cal_tmp.InterpolateCT(
+        x_new_in, y_new_in, dataset_cor, fpam_fsam_cal)[0]
+
+    assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than 1% error"
+    # Make sure it still works with a non-zero starting azimuth: min_angle below
+    data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil,
+            err = err)]
+    data_ct_interp = create_ct_interp(
+        n_radii=n_radii,
+        n_azimuths=n_azimuths,
+        min_angle=-0.1,
+        max_angle=max_angle,
+        norm=pupil_image.sum())[0]
+    data_ct += data_ct_interp
+    dataset_ct_az = Dataset(data_ct)
+    # Generate core throughput calibration file
+    ct_cal_az = corethroughput.generate_ct_cal(dataset_ct_az)
+
+    # Out of range of the new shifted azimuths
+    x_az_out = 0.9*np.max(radii) * np.cos(max_angle + 0.2)
+    y_az_out = 0.9*np.max(radii) * np.sin(max_angle + 0.2)
+    interpolated_value_az_out = ct_cal_az.InterpolateCT(
+        x_az_out, y_az_out, dataset_cor, fpam_fsam_cal)[0]
+
+    # In range of the new shifted azimuths
+    x_az_in = 0.9*np.max(radii) * np.cos(0.2)
+    y_az_in = 0.9*np.max(radii) * np.sin(0.2)
+    interpolated_value_az_in = ct_cal_az.InterpolateCT(
+        x_az_in, y_az_in, dataset_cor, fpam_fsam_cal)[0]
+    
+    assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
 
 def test_psf_pix_and_ct():
     """
@@ -328,147 +470,6 @@ def test_cal_file():
 
     print('Tests about the CT cal file passed')
 
-def test_ct_interp():
-    """ Tests the interpolation within the standard range by popping out data
-    points and checking that the interpolation is < 5% error. The core
-    throughput changes linearly across the radius.
-    """
-
-    # Generate core throughput calibration file
-    ct_cal_in = corethroughput.generate_ct_cal(dataset_ct_interp)
-
-    # FPAM/FSAM
-    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
-
-    # Add pupil image(s) of the unocculted source's observation to test that
-    # the corethroughput calibration function can handle more than one pupil image
-    pupil_image = np.zeros([1024, 1024])
-    # Set it to some known value for some known pixels
-    pupil_image[510:530, 510:530]=1
-    prhd, exthd_pupil = create_default_L3_headers()
-    # DRP
-    exthd_pupil['DRPCTIME'] = time.Time.now().isot
-    exthd_pupil['DRPVERSN'] = corgidrp.__version__
-    # cfam filter
-    exthd_pupil['CFAMNAME'] = cfam_name
-    # Add specific values for pupil images:
-    # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
-    exthd_pupil['DPAMNAME'] = 'PUPIL'
-    exthd_pupil['LSAMNAME'] = 'OPEN'
-    exthd_pupil['FSAMNAME'] = 'OPEN'
-    exthd_pupil['FPAMNAME'] = 'OPEN_12'
-    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
-    exthd_pupil['FPAM_H'] = 6854
-    exthd_pupil['FPAM_V'] = 22524
-    exthd_pupil['FSAM_H'] = 29471
-    exthd_pupil['FSAM_V'] = 12120
-    # Mock error
-    err = np.ones([1024,1024])
-
-    # Generate random indices between 0 and the number of radii and azimuths,
-    # excluding the edge cases 
-    n_random = 50
-    # Set seed for reproducibility of test data
-    rng = np.random.default_rng(0)
-    # Grid used to generate the Dataset with create_ct_interp
-    x_grid = ct_cal_in.ct_excam[0,:] - 512
-    y_grid = ct_cal_in.ct_excam[1,:] - 512
-    core_throughput = ct_cal_in.ct_excam[2,:]
-    for i in range(50):
-        random_index_radius = rng.choice(np.arange(1, n_radii-1), 1)
-        random_index_az = rng.choice(np.arange(1, n_azimuths-1), 1)
-     
-        #Convert these to flattned indices
-        random_indices_flat = random_index_radius + random_index_az*n_radii
-        
-        # Record the missing value
-        missing_x = x_grid[random_indices_flat]
-        missing_y = y_grid[random_indices_flat]
-        missing_core_throughput = core_throughput[random_indices_flat]
-        # Generate CT dataset w/o the latter (needed to call the interpolant
-        # without this location)
-        # PSF for CT map interpolation
-        data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil,
-            err = err)]
-        data_ct_tmp = create_ct_interp(
-            n_radii=n_radii,
-            n_azimuths=n_azimuths,
-            max_angle=max_angle,
-            norm=pupil_image.sum(),
-            pop_index=random_indices_flat)[0]
-        data_ct += data_ct_tmp
-        dataset_ct_tmp = Dataset(data_ct)
-        # Generate core throughput calibration file
-        ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct_tmp)
-        # Now we can interpolate the missing values
-        # Test with linear mapping of radii (values are different)
-        interpolated_value = ct_cal_tmp.InterpolateCT(
-            missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
-        # Good to within 5% 
-        assert interpolated_value == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (linear radii mapping)'
-        # Test with radii mapped into their logarithmic values before
-        # constructing the interpolant (values are different)
-        interpolated_value_log = ct_cal_tmp.InterpolateCT(
-            missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
-        # Good to within 5%
-        assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (logarithmic radii mapping)'
-
-    # Test that if the radius is out of the range then an error is thrown
-    # Pick a data point that is out of the range. For instance, set y to zero
-    # and x to a value that is greater than the maximum radius
-    radii = np.sqrt(x_grid**2 + y_grid**2)
-    with pytest.raises(ValueError):
-        # Too Big
-        ct_cal_tmp.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal) 
-             
-    with pytest.raises(ValueError):
-        #Too small
-        ct_cal_tmp.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
-
-    # Test that something with an azimuth out of range returns the same result
-    # as within the range
-    azimuths = np.arctan2(y_grid, x_grid)
-    azimuths -= azimuths.min()
-    x_new_out = 0.9*np.max(radii)*np.cos(np.max(azimuths)+0.1)
-    y_new_out = 0.9*np.max(radii)*np.sin(np.max(azimuths)+0.1)
-    interpolated_value_out = ct_cal_tmp.InterpolateCT(
-        x_new_out, y_new_out, dataset_cor, fpam_fsam_cal)[0]
-
-    x_new_in = 0.9*np.max(radii)*np.cos(0.1)
-    y_new_in = 0.9*np.max(radii)*np.sin(0.1)
-    interpolated_value_in = ct_cal_tmp.InterpolateCT(
-        x_new_in, y_new_in, dataset_cor, fpam_fsam_cal)[0]
-
-    assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than 1% error"
-    # Make sure it still works with a non-zero starting azimuth: min_angle below
-    data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil,
-            err = err)]
-    data_ct_interp = create_ct_interp(
-        n_radii=n_radii,
-        n_azimuths=n_azimuths,
-        min_angle=-0.1,
-        max_angle=max_angle,
-        norm=pupil_image.sum())[0]
-    data_ct += data_ct_interp
-    dataset_ct_az = Dataset(data_ct)
-    # Generate core throughput calibration file
-    ct_cal_az = corethroughput.generate_ct_cal(dataset_ct_az)
-
-    # Out of range of the new shifted azimuths
-    x_az_out = 0.9*np.max(radii) * np.cos(max_angle + 0.2)
-    y_az_out = 0.9*np.max(radii) * np.sin(max_angle + 0.2)
-    interpolated_value_az_out = ct_cal_az.InterpolateCT(
-        x_az_out, y_az_out, dataset_cor, fpam_fsam_cal)[0]
-
-    # In range of the new shifted azimuths
-    x_az_in = 0.9*np.max(radii) * np.cos(0.2)
-    y_az_in = 0.9*np.max(radii) * np.sin(0.2)
-    interpolated_value_az_in = ct_cal_az.InterpolateCT(
-        x_az_in, y_az_in, dataset_cor, fpam_fsam_cal)[0]
-    
-    assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
-
 def teardown_module():
     """
     Deletes variables
@@ -480,13 +481,15 @@ def teardown_module():
     # CT and coronagraphic datasets
     global dataset_ct, dataset_ct_syn, dataset_ct_interp
     del dataset_ct, dataset_ct_syn, dataset_ct_interp
-    global dataset_cor, dataset_cor_interp
-    del dataset_cor, dataset_cor_interp
+    global dataset_cor, dataset_pupil_interp
+    del dataset_cor, dataset_pupil_interp
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
     del psf_loc_in, psf_loc_syn
+    # CT values
     global ct_in, ct_syn
     del ct_in, ct_syn
+    # Counts from the pupil
     global norm_pupil
     del norm_pupil
 
@@ -495,5 +498,3 @@ if __name__ == '__main__':
     test_fpm_pos()
     test_cal_file()
     test_ct_interp()
-
-

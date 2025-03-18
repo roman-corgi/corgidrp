@@ -1704,6 +1704,7 @@ class CoreThroughputCalibration(Image):
         x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
         y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
         core_throughput = self.ct_excam[2,:]
+        breakpoint()
         # Algorithm
         radii = np.sqrt(x_grid**2 + y_grid**2)
 
