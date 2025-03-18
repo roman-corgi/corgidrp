@@ -1,5 +1,7 @@
 import numpy as np
 import os
+import sys
+sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 
 import corgidrp.data
 
@@ -345,6 +347,10 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     # define a search field and load in RA, DEC, Vmag
     field = ascii.read(field_path)
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
+    
+    ymid, xmid = image.data.shape   # fit gaussian to find target x,y location (assuming near center)
+    pf, fw, targetx, targety = fakes.gaussfit2d(frame= image.data, xguess= (xmid-1)//2, yguess= (ymid-1)//2)
+
     target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
 
@@ -375,7 +381,7 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
         # make sure plate scale is within tolerance of the guess or else discard this possibility
         if ((len1 / l1) > platescale_guess* (1 + platescale_tol)) or ((len2 / l2) > platescale_guess* (1 + platescale_tol)) or ((len3 / l3) > platescale_guess* (1 + platescale_tol)):
             ap, bp, cp = 0, 0, 0
-        elif ((len1 / l1) < platescale_guess* (platescale_tol)) or ((len2 / l2) < platescale_guess* (platescale_tol)) or ((len3 / l3) < platescale_guess* (platescale_tol)):
+        if ((len1 / l1) < platescale_guess* (1 - platescale_tol)) or ((len2 / l2) < platescale_guess* (1 - platescale_tol)) or ((len3 / l3) < platescale_guess* (1 - platescale_tol)):
             ap, bp, cp = 0, 0, 0
 
         # find the best fit to the brightest image triangle
@@ -390,9 +396,10 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     initial_platescale = np.mean(np.array([best_l1 / l1, best_l2 / l2, best_l3 / l3]))  # [deg/mas]
 
     # find pseudo north angle from difference in triangle rotations from the target value
-    # assume target star is at the center of the image
-    ymid, xmid = image.data.shape
-    rot_image = np.array([angle_between((xmid //2, ymid //2), (s['x'], s['y'])) for s in [source1, source2, source3]])
+    # using found target pixel
+  
+    # rot_image = np.array([angle_between(((xmid-1) //2, (ymid-1) //2), (s['x'], s['y'])) for s in [source1, source2, source3]])
+    rot_image = np.array([angle_between((targetx, targety), (s['x'], s['y'])) for s in [source1, source2, source3]])
     rot_field = np.array([target_skycoord.position_angle(t).deg for t in skycoords[[best_sky_ind]]])
 
     initial_northangle = np.abs(np.mean(rot_field - rot_image))
@@ -408,8 +415,8 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     new_hdr['CD1_2'] = cdmatrix[0,1]
     new_hdr['CD2_1'] = cdmatrix[1,0]
     new_hdr['CD2_2'] = cdmatrix[1,1]
-    new_hdr['CRPIX1'] = np.shape(image.data)[1] // 2
-    new_hdr['CRPIX2'] = np.shape(image.data)[0] // 2
+    new_hdr['CRPIX1'] = targetx
+    new_hdr['CRPIX2'] = targety
     new_hdr['CTYPE1'] = 'RA---TAN'
     new_hdr['CTYPE2'] = 'DEC--TAN'
     new_hdr['CDELT1'] = (initial_platescale * 0.001) / 3600.
@@ -496,9 +503,12 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
 
     residuals = []
 
-    binary_offsets = meas_offset.T
-    star1_pos = pos1.T
-    
+    binary_offsets = np.copy(meas_offset).T
+    star1_pos = np.copy(pos1).T
+    # center to center of detector
+    star1_pos[:,0] -= 511.        # because leg coeffs are defined around (0,0)
+    star1_pos[:,1] -= 511.        # make a new param in the function to pass in detector shape?
+
     # derive star2 position
     star2_pos = star1_pos + binary_offsets
 
@@ -512,10 +522,11 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
 
     # translate offsets from [mas] sep, pa to [pixel] sep, pa
     sky_sep = sky_offset[0]
+    # this cant be negative by definition, but is defined from north to east while corr_pa starts at (1,0) 
     sky_pa = sky_offset[1]
     
     true_offset_sep = sky_sep / platescale
-    true_offset_pa = sky_pa - rotangle
+    true_offset_pa = sky_pa - rotangle  # this is in degrees
     
     # translate star_pos_corr from x, y to sep, pa
     corr_offset_x = star2_pos_corr[:,0] - star1_pos_corr[:,0] 
@@ -523,6 +534,7 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
     
     corr_offset_sep = np.sqrt(corr_offset_x**2 + corr_offset_y**2)
     corr_offset_pa = np.degrees(np.arctan2(-corr_offset_x, corr_offset_y))
+    # corr_offset_pa = np.degrees(np.arctan2(corr_offset_y, corr_offset_x))  # this is in degrees
 
     res_sep = corr_offset_sep - true_offset_sep  # this is in pixels
     
@@ -531,12 +543,25 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
     res_pa = np.arctan(res_pa_arctan_num / res_pa_arctan_denom) # this is in radians
 
     # translate pixel error in measurement to sep pa errs
-    sep_err = np.sqrt(meas_errs[0]**2 + meas_errs[1]**2)
-    pa_err = np.arctan2(-meas_errs[0],  meas_errs[1]) # this is in radians
-    
+    # sep_err = np.sqrt(meas_errs[0]**2 + meas_errs[1]**2) # this is in 
+    sep_err = np.mean([meas_errs[0], meas_errs[1]], axis=0)
+    # should be the mean of two errors also 
+
+    ## can assume equal errors in cartesian 
+
+    # pa_err = np.arctan2(-meas_errs[0],  meas_errs[1]) # this is in radians
+    # pa_err = np.arctan2(meas_errs[1],  meas_errs[0]) # this is in radians
+    pa_err = sep_err / true_offset_sep
+    # should be avg of errors divided by sep --> pa err is delta arclength ~~ np.avg(m[1], m[0]) /sep
+    # or fit x y res instead of sep pa
+
     res_sep /= sep_err
     res_pa /= pa_err
-    
+    ## translate this back to pixels x/y
+    res_x = np.cos(res_pa) * res_sep # this is in pixels now
+    res_y = np.sin(res_pa) * res_sep # this is in pixels now
+    ## have to compute x y first and then subtract for actual res_x, res_y
+
     residuals = np.append(residuals, np.array([res_sep, res_pa]).ravel())
 
     return residuals
@@ -587,8 +612,8 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
     # Platescale calculation
     # create random combinations of stars
     all_combinations = list(compute_combinations(sub_guesses))
-    if len(all_combinations) > 100:
-        rand_inds = np.random.randint(low=0, high=len(all_combinations), size=100)
+    if len(all_combinations) > 200:
+        rand_inds = np.random.randint(low=0, high=len(all_combinations), size=200)
         combo_list = np.array(all_combinations)[rand_inds]
     else:
         combo_list = np.array(all_combinations)
@@ -642,7 +667,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
     # find the pixel position angles
     pa_pixel = np.empty(len(sub_guesses))
     for i, (x, y) in enumerate(zip(xs, ys)):
-        pa = angle_between((np.shape(image)[0]//2, np.shape(image)[1]//2), (x,y))
+        pa = angle_between(((np.shape(image)[0]-1)//2, (np.shape(image)[1]-1)//2), (x,y))
         pa_pixel[i] = pa
 
     # find the difference between the measured and true positon angles
@@ -655,10 +680,13 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
 
     for i, (sky, pix) in enumerate(zip(pa_sky, pa_pixel)):
         if i != same_ind:
-            if sky > pix:
-                north_offset = sky - pix
-            else:
-                north_offset = sky - pix + 360 
+            numerator = np.sin(np.radians(sky - pix))
+            denominator = np.cos(np.radians(sky - pix))
+            north_offset = np.degrees(np.arctan(numerator / denominator))
+            # if sky > pix:
+            #     north_offset = sky - pix
+            # else:
+            #     north_offset = sky - pix + 360 
             offset[i] = north_offset
 
     # get rid of the comparison with self if it exists
@@ -792,7 +820,7 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
             x_guess = star2['x'] - star1['x']
             y_guess = star2['y'] - star1['y']
         
-            (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star1['x'], star1['y'], x_guess, y_guess, guessflux=10000)
+            (dx, dy), (xfit_err, yfit_err, _) = measure_offset(input_image, star2['x'], star2['y'], x_guess, y_guess, guessflux=10000)
     
             # get the true sky offset [mas]
             true1 = target_coord
@@ -868,7 +896,7 @@ def compute_distortion(input_dataset, pos1, meas_offset, sky_offset, meas_errs, 
   
   
 def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', field_matches=None, find_threshold=10, fwhm=7, mask_rad=1, 
-                          comparison_threshold=50, search_rad=0.0075, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
+                          comparison_threshold=50, search_rad=0.012, platescale_guess=21.8, platescale_tol=0.1, center_radius=0.9, 
                           frames_to_combine=None, find_distortion=False, fitorder=3, position_error=None, initial_dist_guess=None):
     """
     Perform the boresight calibration of a dataset.
@@ -953,6 +981,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     astroms = []
     target_coord_tables = []
 
+    hold_matches = []
     for i in range(len(dataset)):
         in_dataset = corgidrp.data.Dataset([dataset[i]])
         image = dataset[i].data
@@ -960,23 +989,35 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         # call the target coordinates from the image header
         target_coordinate = (dataset[i].pri_hdr['RA'], dataset[i].pri_hdr['DEC'])
         target_coord_tab = astropy.table.Table()
-        target_coord_tab['x'] = [np.shape(image)[1] // 2 ]    # assume the target is at the center of the image
-        target_coord_tab['y'] = [np.shape(image)[0] // 2]
+        target_coord_tab['x'] = [(np.shape(image)[1]-1) // 2]    # assume the target is at the center of the image
+        target_coord_tab['y'] = [(np.shape(image)[0]-1) // 2]
         target_coord_tab['RA'] = [target_coordinate[0]]
         target_coord_tab['DEC'] = [target_coordinate[1]]
         target_coord_tables.append(target_coord_tab)
 
         # run automated source finder if field_matches are passed but distortion is also being computed
+        # since we want to use the auto found sources in the plate scale and north angle computation even though 
+        # matches are passed in for the distortion 
 
-        if field_matches is not None and find_distortion is False:
-            matched_sources = matched_sources_multiframe[i]
-        else:
-            found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
-            matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
+
+        # if field_matches is not None:
+
+        # if field_matches is not None and find_distortion is True: # this is the case when matched sources are passed specifically for ps and na
+        #     matched_sources = matched_sources_multiframe[i]
+        # else: # this is the case when the initially passed matches are only meant for the distortion computation, so we want auto found matches for ps 
+        #     found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
+        #     matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
+            
+            
             # matched_sources_multiframe.append(matched_sources)  ## dont need to append these to the larger list because they are only used here for ps and na
             # maybe there has to be a third case where we havent passed in matches but want distortion correction so we need to use the auto ones
 
         # compute the calibration properties
+        found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
+        matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
+        if len(hold_matches) < 1:
+            hold_matches.append(matched_sources)
+
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
 
@@ -993,7 +1034,10 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # compute the distortion map coeffs
     if find_distortion:
-        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, matched_sources_multiframe, ref_star_pos=target_coord_tables, position_error=position_error)
+        # use the passed in matched sources for distortion
+        # matched_sources = matched_sources_multiframe
+        matched_sources = hold_matches
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=matched_sources, ref_star_pos=target_coord_tables, position_error=position_error)
         distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         # set default coeffs to produce zero distortion
