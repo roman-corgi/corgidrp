@@ -2598,7 +2598,7 @@ def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 
     and Gaussian noise. Frame is returned in units of photoelectrons.
 
     Args:
-        star_flux (float): Flux of the point source in erg/(s*cm^2*AA)
+        flux_erg_s_cm2 (float): Flux of the point source in erg/(s*cm^2*AA)
         fwhm (float): Full width at half max (FWHM) of the centroid
         cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electrons
         filter (str): (Optional) The CFAM filter used.
@@ -3043,7 +3043,7 @@ def generate_coron_dataset_with_companions(
             If None, no companion is injected.
         companion_counts (float or list of float): Counts for each companion. If multiple companions, 
             pass a list with same length.
-        star_counts (float): Counts of the star in e-. Used to create a Gaussian approximation.
+        host_star_counts (float): Counts of the star in e-. Used to create a Gaussian approximation.
         roll_angles (list of float or None): If n_frames>1, pass a list of roll angles. If None, 
             defaults to all 0.
         platescale (float): Plate scale in arcsec/pixel.
@@ -3170,7 +3170,8 @@ def generate_psfsub_image_with_companions(
       - Apply a throughput factor from a CoreThroughputCalibration object.
 
     Args:
-        nx, ny (int): Image size in pixels.
+        nx (int): Image size x in pixels.
+        ny (int): Image size y in pixels.
         host_star_center ((x, y) or None): If None, defaults to image center.
         host_star_counts (float): Total counts (e-) of the star prior to PSF subtraction.
         psf_sub_scale (float): Fraction of the star’s counts (and companion counts) that 
@@ -3184,6 +3185,8 @@ def generate_psfsub_image_with_companions(
         ct_cal (corgidrp.data.CoreThroughputCalibration or None): If provided and use_ct_cal=True, 
             apply throughput factor at each companion location.
         use_ct_cal (bool): If True, apply the throughput factor from ct_cal for each companion location.
+        cor_dataset (corgidrp.data.Dataset or None): dataset of images from CoreThroughputCalibration.
+        FpamFsamCal (corgidrp.data.FpamFsamCal): FPAM to EXCAM/ FSAM to EXCAM calibration product
         blur_sigma (float): Gaussian blur at the end to mimic real instrumentation.
         noise_std (float): Standard deviation of random noise to add.
         outdir (str or None): If a directory is given, we save the final image there.
