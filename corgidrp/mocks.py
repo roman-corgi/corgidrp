@@ -3046,3 +3046,25 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             ref_dataset.save(filedir=outdir, filenames=['mock_psfsub_L2b_ref_input_dataset.fits'])
 
     return sci_dataset,ref_dataset
+
+def format_FTIMEUTC(FTIMEUTC_str):
+    """
+    Convert FTIMEUTC (ISO 8601 format) to the required yyyymmddThhmmsss format.
+    
+    Args:
+        FTIMEUTC_str (str): FTIMEUTC string in ISO 8601 format (e.g., '2025-03-18T22:46:46.352490+00:00')
+
+    Returns:
+        str: Formatted TimeUTC string in 'yyyymmddThhmmsss' format.
+    """
+    # Parse the ISO 8601 string into a datetime object
+    dt = datetime.datetime.fromisoformat(FTIMEUTC_str.replace("Z", "+00:00"))
+
+    # Round microseconds to the nearest 0.1 second
+    rounded_microseconds = round(dt.microsecond / 100000) * 100000
+    dt = dt.replace(microsecond=rounded_microseconds)
+
+    # Format into yyyymmddThhmmsss
+    formatted_time = dt.strftime('%Y%m%dT%H%M%S') + str(dt.microsecond // 100000)
+
+    return formatted_time
