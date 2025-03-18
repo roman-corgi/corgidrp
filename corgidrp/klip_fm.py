@@ -41,7 +41,9 @@ def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
     return ct_calibration.data[arg_closest] 
 
 
-def inject_psf(frame_in, ct_calibration, flux, sep_pix,pa_deg):
+def inject_psf(frame_in, ct_calibration, amp, 
+               sep_pix,pa_deg,
+               norm='sum'):
 
     frame = frame_in.copy()
 
@@ -56,8 +58,15 @@ def inject_psf(frame_in, ct_calibration, flux, sep_pix,pa_deg):
                                 dx,dy) 
     
     # Scale counts
-    total_counts = np.sum(psf_model)
-    psf_model *= flux / total_counts
+    if norm == 'sum':
+        total_counts = np.nansum(psf_model)
+        psf_model *= amp / total_counts
+    elif norm == 'peak':
+        peak_count = np.nanmax(psf_model)
+        psf_model *= amp / peak_count
+    else:
+        raise UserWarning('Invalid norm provided to inject_psf().')
+
 
     # Assume PSF is centered in the data cutout for now
     shape_arr = np.array(psf_model.shape)
@@ -127,7 +136,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                      inject_snr = 5,
                      seps=None, # in pixels from mask center
                      pas=None,
-                     cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
+                     cand_locs = [] # list of tuples (sep_pix,pa_deg) of known off-axis source locations
                      ):
     
     res_elem = 5. # pix, update this with value for NFOV, Band 1 mode
@@ -142,15 +151,17 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     sci_dataset = sci_dataset_in.copy()
     ref_dataset = ref_dataset_in.copy()
 
+    rolls = [frame.ext_hdr['ROLL'] for frame in sci_dataset]
+
     thrupts = []
     for k,klmode in enumerate(klip_params['numbasis']):
         
         # Inject planets:
         seppas_skipped = []
-        this_klmode_injectcounts = []
+        this_klmode_seppas = []
         this_klmode_psfmodels = []
-        this_klmode_psfcenters = []
         for i,frame in enumerate(sci_dataset):
+
             for sep in seps:
 
                 # Measure noise at this separation in psf subtracted dataset (for this kl mode)
@@ -158,26 +169,38 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                 lam = 573.8e-9 #m
                 pixscale_arcsec = 0.0218
                 fwhm_mas = 1.22 * lam / d * 206265 * 1000
-                fwhm_pix = fwhm_mas * 0.001 * pixscale_arcsec
-                noise = measure_noise(psfsub_dataset[0],sep,fwhm_pix,k)[0]
+                fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
+                noise = measure_noise(psfsub_dataset[0],[sep],fwhm_pix,k)[0]
                 
-                inject_counts = noise * inject_snr
+                inject_peak = noise * inject_snr
 
                 for pa in pas:
                     inject_loc = (sep,pa)
-                    # Check that we're not too close to a candidate
-                    for cand_loc in cand_locs:
-                        dist = get_polar_dist(cand_loc,inject_loc)
-                        if dist < res_elem:
+                    # Check that we're not too close to a candidate during the first frame
+                    if i==0:
+                        too_close = False
+                        for cand_sep, cand_pa in cand_locs:
+                            # Account for telescope roll angles, skip if any are too close
+                            for roll in rolls:
+                                cand_pa_adj = cand_pa - roll
+                                dist = get_polar_dist((cand_sep,cand_pa_adj),inject_loc)
+                                if dist < res_elem:
+                                    too_close=True
+                                    break
+                            if too_close:
+                                break
+                        if too_close:
                             seppas_skipped.append(inject_loc)
                             continue
                     
-                    frame, psf_model, psf_center_inframe = inject_psf(frame, ct_calibration, inject_counts, *inject_loc)
+                    frame, psf_model, _ = inject_psf(frame, ct_calibration, 
+                                                    inject_peak, *inject_loc,
+                                                    norm='peak')
 
-                # Save these for later
-                this_klmode_injectcounts.append(inject_counts)
-                this_klmode_psfmodels.append(psf_model)
-                this_klmode_psfcenters.append(psf_center_inframe)
+                    # Save these for later (only for first sci frame)
+                    if i==0:
+                        this_klmode_psfmodels.append(psf_model)
+                        this_klmode_seppas.append(inject_loc)
 
             sci_dataset[i].data[:] = frame.data[:]
                     
@@ -197,10 +220,12 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
 
         # Load pyklip output
         pyklip_fpath = os.path.join(klip_params['outdir'],f"FAKE_{klmode}KLMODES-KLmodes-all.fits")
-        pyklip_data = fits.getdata(pyklip_fpath)
-        pyklip_hdr = hdr = fits.getheader(pyklip_fpath)
+        pyklip_data = fits.getdata(pyklip_fpath)[0]
+        pyklip_hdr = fits.getheader(pyklip_fpath)
 
-
+        import matplotlib.pyplot as plt
+        plt.imshow(pyklip_data,origin='lower')
+        
         this_klmode_outcounts = []
         for sep in seps:
             this_sep_outcounts = []

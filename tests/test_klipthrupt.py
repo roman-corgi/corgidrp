@@ -16,13 +16,9 @@ d = 2.36 #m
 lam = 573.8e-9 #m
 pixscale_arcsec = 0.0218
 fwhm_mas = 1.22 * lam / d * 206265 * 1000
-fwhm_pix = fwhm_mas * 0.001 * pixscale_arcsec
+fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
 iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
 owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
-
-st_amp = 100.
-noise_amp=1e-11
-pl_contrast=1e-4
 
 # Mock CT calibration
 
@@ -38,9 +34,9 @@ if not os.path.exists(outdir):
     os.mkdir(outdir)
 
 st_amp = 100.
-noise_amp = 1e-6
-pl_contrast = 1e-4
-rolls = [0,90,0,0]
+noise_amp = 1e-3
+pl_contrast = 1e-2
+rolls = [0,15.,0,0]
 numbasis = [1,2]
 inject_snr = 5
 klip_params = {
@@ -300,6 +296,7 @@ def test_meas_klip_ADIRDI():
                   nx=nx,ny=ny)
     
     mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+                                            fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
                                             pl_contrast=pl_contrast)
@@ -309,17 +306,17 @@ def test_meas_klip_ADIRDI():
                                 numbasis=numbasis,
                                 fileprefix='test_ADI+RDI',
                                 do_crop=False,
-                                measure_klip_thrupt=False)
-    
-    
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
+
     meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
                      inject_snr,
-                     seps=[15.], # in pixels from mask center
-                     pas=[30.], # Degrees
-                     )
+                     seps=[15.,25.], # in pixels from mask center
+                     pas=[0.,60.,120.,180.,240.,300.], # Degrees
+                     cand_locs=[(15.,0.)])
 
     # See if it runs
     pass
@@ -331,7 +328,8 @@ if __name__ == '__main__':
     
     # test_inject_psf()
 
-    test_measure_noise()
+    # test_measure_noise()
 
-    #test_meas_klip_ADIRDI()
+    test_meas_klip_ADIRDI()
+
     pass

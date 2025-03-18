@@ -2879,6 +2879,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                           outdir = None,
                           st_amp = 100.,
                           noise_amp = 1.,
+                          fwhm_pix = 2.5,
                           ref_psf_spread=1. ,
                           pl_contrast=1e-3
                           ):
@@ -2969,7 +2970,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Otherwise generate a 2D gaussian for a fake PSF
         else:
-            sci_sigma = 2.5
+            sci_sigma = fwhm_pix
             ref_sigma = sci_sigma * ref_psf_spread
             pl_amp = st_amp * pl_contrast
 
@@ -3001,6 +3002,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                 xoff,yoff = sep_pix * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
                 planet_psf = gaussian_array(array_shape=data_shape,
                                             amp=pl_amp,
+                                            sigma=sigma,
                                             xoffset=xoff+psf_off_xy[0],
                                             yoffset=yoff+psf_off_xy[1])
                 img_data += planet_psf
