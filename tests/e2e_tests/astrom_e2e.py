@@ -13,6 +13,33 @@ import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+    # exthdr['KGAINPAR'] = exthdr['KGAIN']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        prihdr['PHTCNT'] = False
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
+
 @pytest.mark.e2e
 def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
@@ -76,12 +103,15 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     sim_data_filelist = [os.path.join(rawdata_dir, f) for f in os.listdir(rawdata_dir)] # full paths to simulated data
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
 
+    # update headers of TVAC data
+    fix_headers_for_tvac(sim_data_filelist)
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
