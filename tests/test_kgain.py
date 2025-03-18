@@ -82,11 +82,16 @@ def test_kgain():
     assert np.mean(gain_dataset[0].data) == pytest.approx(k_gain * np.mean(dataset[0].data), abs = 1e-4)
     assert np.mean(gain_dataset[0].err) == pytest.approx(k_gain * np.mean(dataset[0].err), abs = 1e-4)
 
+    # test error propagation
+    assert gain_dataset[0].err[0,10,10] == np.sqrt(dataset[0].err[0,10,10]**2 * k_gain**2 + kgain.err**2 * gain_dataset[0].data[10,10]**2)
+     
     #test header updates
     assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
+
     assert gain_dataset[0].ext_hdr["KGAINPAR"] == k_gain
-    assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error[0]
+    assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error
+
     assert gain_dataset[0].ext_hdr["RN"] > 0
     assert gain_dataset[0].ext_hdr["RN_ERR"] > 0
     assert("converted" in str(gain_dataset[0].ext_hdr["HISTORY"]))
