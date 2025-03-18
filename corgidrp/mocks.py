@@ -3033,29 +3033,28 @@ def generate_coron_dataset_with_companions(
     If the plan is to do forward modeling, pass this dataset to the
     PSF-subtraction pipeline (pyKLIP) to see how the companion is subtracted.
 
-    Parameters
-    ----------
-    n_frames (int):  Number of frames (images) to create. If >1, can vary roll angles or
-        do ADI-like analysis.
-    shape (ny, nx): Size of each frame in pixels.
-    host_star_center ((x, y) or None): Pixel coordinates of the host star center. If None, 
-        defaults to the image center.
-    companion_xy (list of (x, y) or None): One or more companion coordinates. E.g. [(120, 80), (90, 130)].
-        If None, no companion is injected.
-    companion_counts (float or list of float): Counts for each companion. If multiple companions, 
-        pass a list with same length.
-    star_counts (float): Counts of the star in e-. Used to create a Gaussian approximation.
-    roll_angles (list of float or None): If n_frames>1, pass a list of roll angles. If None, 
-        defaults to all 0.
-    platescale (float): Plate scale in arcsec/pixel.
-    add_noise (bool): Whether to add random noise.
-    noise_std (float): Stddev of the noise if add_noise=True.
-    outdir (str or None): If not None, saves the resulting frames to disk in outdir. 
-        If None, does not save.
+    Args:
+        n_frames (int):  Number of frames (images) to create. If >1, can vary roll angles or
+            do ADI-like analysis.
+        shape (ny, nx): Size of each frame in pixels.
+        host_star_center ((x, y) or None): Pixel coordinates of the host star center. If None, 
+            defaults to the image center.
+        companion_xy (list of (x, y) or None): One or more companion coordinates. E.g. [(120, 80), (90, 130)].
+            If None, no companion is injected.
+        companion_counts (float or list of float): Counts for each companion. If multiple companions, 
+            pass a list with same length.
+        star_counts (float): Counts of the star in e-. Used to create a Gaussian approximation.
+        roll_angles (list of float or None): If n_frames>1, pass a list of roll angles. If None, 
+            defaults to all 0.
+        platescale (float): Plate scale in arcsec/pixel.
+        add_noise (bool): Whether to add random noise.
+        noise_std (float): Stddev of the noise if add_noise=True.
+        outdir (str or None): If not None, saves the resulting frames to disk in outdir. 
+            If None, does not save.
 
-    Returns
-    -------
-    Dataset (corgidrp.data.Dataset): n_frames of coronagraphic images, each with a star and optional companions.
+    Returns:
+        Dataset (corgidrp.data.Dataset): n_frames of coronagraphic images, each with a star 
+        and optional companions.
     """
     ny, nx = shape
     if host_star_center is None:
@@ -3170,33 +3169,31 @@ def generate_psfsub_image_with_companions(
     Optionally:
       - Apply a throughput factor from a CoreThroughputCalibration object.
 
-    Parameters
-    ----------
-    nx, ny (int): Image size in pixels.
-    host_star_center ((x, y) or None): If None, defaults to image center.
-    host_star_counts (float): Total counts (e-) of the star prior to PSF subtraction.
-    psf_sub_scale (float): Fraction of the star’s counts (and companion counts) that 
-        remains after subtraction. E.g., 0.7 => 70% remains.
-    companion_xy (list of (x, y) or None): Pixel coords of each companion.
-    companion_counts (float or list of float, optional): Total counts for each companion 
-        (pre-throughput).
-    companion_mags (float or list of float, optional): Apparent magnitudes for each companion, 
-        which will be converted to counts via zero_point. If present, companion_counts are ignored.
-    zero_point (float, optional): Photometric zero point used if companion_mags is specified. 
-    ct_cal (corgidrp.data.CoreThroughputCalibration or None): If provided and use_ct_cal=True, 
-        apply throughput factor at each companion location.
-    use_ct_cal (bool): If True, apply the throughput factor from ct_cal for each companion location.
-    blur_sigma (float): Gaussian blur at the end to mimic real instrumentation.
-    noise_std (float): Standard deviation of random noise to add.
-    outdir (str or None): If a directory is given, we save the final image there.
-    roll_angle (float): For WCS generation in degrees.
-    platescale (float): Arcsec per pixel.
-    hole_radius (float or None): If set, reduce flux in a circular region by some factor (e.g. 0.1).
+    Args:
+        nx, ny (int): Image size in pixels.
+        host_star_center ((x, y) or None): If None, defaults to image center.
+        host_star_counts (float): Total counts (e-) of the star prior to PSF subtraction.
+        psf_sub_scale (float): Fraction of the star’s counts (and companion counts) that 
+            remains after subtraction. E.g., 0.7 => 70% remains.
+        companion_xy (list of (x, y) or None): Pixel coords of each companion.
+        companion_counts (float or list of float, optional): Total counts for each companion 
+            (pre-throughput).
+        companion_mags (float or list of float, optional): Apparent magnitudes for each companion, 
+            which will be converted to counts via zero_point. If present, companion_counts are ignored.
+        zero_point (float, optional): Photometric zero point used if companion_mags is specified. 
+        ct_cal (corgidrp.data.CoreThroughputCalibration or None): If provided and use_ct_cal=True, 
+            apply throughput factor at each companion location.
+        use_ct_cal (bool): If True, apply the throughput factor from ct_cal for each companion location.
+        blur_sigma (float): Gaussian blur at the end to mimic real instrumentation.
+        noise_std (float): Standard deviation of random noise to add.
+        outdir (str or None): If a directory is given, we save the final image there.
+        roll_angle (float): For WCS generation in degrees.
+        platescale (float): Arcsec per pixel.
+        hole_radius (float or None): If set, reduce flux in a circular region by some factor (e.g. 0.1).
 
-    Returns
-    -------
-    frame (corgidrp.data.Image): The final post- PSF sub image in a corgidrp Image object 
-        (with SCI/ERR/DQ).
+    Returns:
+        frame (corgidrp.data.Image): The final post- PSF sub image in a corgidrp Image object 
+            (with SCI/ERR/DQ).
     """
 
     # 1) Grid for the image
@@ -3306,28 +3303,22 @@ def create_mock_fpamfsam_cal(
     """
     Create and optionally save a mock FpamFsamCal object.
 
-    Parameters
-    ----------
-    fpam_matrix : np.ndarray of shape (2,2) or None
-        The custom transformation matrix from FPAM to EXCAM. 
-        If None, defaults to FpamFsamCal.fpam_to_excam_modelbased.
-    fsam_matrix : np.ndarray of shape (2,2) or None
-        The custom transformation matrix from FSAM to EXCAM.
-        If None, defaults to FpamFsamCal.fsam_to_excam_modelbased.
-    date_valid : astropy.time.Time or None
-        Date/time from which this calibration is valid.
-        If None, defaults to the current time.
-    save_file : bool, optional
-        If True, save the generated calibration file to disk.
-    output_dir : str, optional
-        Directory in which to save the file if save_file=True. Defaults to current dir.
-    filename : str, optional
-        Filename to use if saving to disk. If None, a default name is generated.
+    Args:
+        fpam_matrix (np.ndarray of shape (2,2) or None): The custom transformation matrix 
+            from FPAM to EXCAM. If None, defaults to FpamFsamCal.fpam_to_excam_modelbased.
+        fsam_matrix (np.ndarray of shape (2,2) or None): The custom transformation matrix 
+            from FSAM to EXCAM. If None, defaults to FpamFsamCal.fsam_to_excam_modelbased.
+        date_valid (astropy.time.Time or None): Date/time from which this calibration is 
+            valid. If None, defaults to the current time.
+        save_file (bool, optional): If True, save the generated calibration file to disk.
+        output_dir (str, optional): Directory in which to save the file if save_file=True. 
+            Defaults to current dir.
+        filename (str, optional): Filename to use if saving to disk. If None, a default 
+            name is generated.
 
-    Returns
-    -------
-    FpamFsamCal
-        The newly-created FpamFsamCal object (in memory).
+    Returns:
+        FpamFsamCal (corgidrp.data.FpamFsamCal object): The newly-created FpamFsamCal 
+            object (in memory).
     """
     if fpam_matrix is None:
         fpam_matrix = FpamFsamCal.fpam_to_excam_modelbased
@@ -3370,31 +3361,24 @@ def create_mock_ct_dataset_and_cal_file(
     Create a mock dataset suitable for generating a Core Throughput calibration file,
     then generate and return that calibration file in-memory.
 
-    Parameters
-    ----------
-    fwhm : float, optional
-        The FWHM (in mas) for the mock off-axis PSFs (used by create_ct_psfs).
-    n_psfs : int, optional
-        Number of off-axis PSFs to generate.
-    cfam_name : str, optional
-        CFAM filter name to store in the header.
-    pupil_value_1 : float, optional
-        A value to fill in the first pupil image (used to simulate unocculted frames).
-    pupil_value_2 : float, optional
-        A value to fill in the second pupil image.
-    seed : int, optional
-        Random seed for reproducibility (used if create_ct_psfs has random offsets).
-    save_cal_file : bool, optional
-        Whether to save the generated calibration file to disk.
-    cal_filename : str, optional
-        Filename to use if saving the calibration file. If None, a default is generated.
+    Args:
+        fwhm (float, optional): The FWHM (in mas) for the mock off-axis PSFs (used by create_ct_psfs).
+        n_psfs (int, optional): Number of off-axis PSFs to generate.
+        cfam_name (str, optional): CFAM filter name to store in the header.
+        pupil_value_1 (float, optional): A value to fill in the first pupil image (used to simulate 
+            unocculted frames).
+        pupil_value_2 (float, optional): A value to fill in the second pupil image.
+        seed (int, optional): Random seed for reproducibility (used if create_ct_psfs has random 
+            offsets).
+        save_cal_file (bool, optional): Whether to save the generated calibration file to disk.
+        cal_filename (str, optional): Filename to use if saving the calibration file. If None, a 
+            default is generated.
 
-    Returns
-    -------
-    dataset_ct : corgidrp.data.Dataset
-        The constructed dataset containing pupil frames + off-axis PSFs.
-    ct_cal : corgidrp.data.CoreThroughputCalibration
-        The generated core throughput calibration object (in-memory).
+    Returns: 
+        dataset_ct (corgidrp.data.Dataset): The constructed dataset containing pupil frames + 
+            off-axis PSFs.
+        ct_cal (corgidrp.data.CoreThroughputCalibration): The generated core throughput calibration 
+            object (in-memory).
     """
     if seed is not None:
         np.random.seed(seed)
@@ -3463,6 +3447,14 @@ def create_mock_ct_dataset_and_cal_file(
         cal_filepath = os.path.join(corgidrp.default_cal_dir, cal_filename)
         ct_cal_tmp.save(filedir=corgidrp.default_cal_dir, filename=cal_filename)
         print(f"Saved CT cal file to: {cal_filepath}")
+
+    # Create a new Dataset from the PSF cube (which are (19,19) images)
+    psf_cube = ct_cal_tmp.data  # shape (N, 19, 19)
+    psf_images = []
+    for i in range(psf_cube.shape[0]):
+        psf_img = Image(psf_cube[i], pri_hdr=ct_cal_tmp.pri_hdr, ext_hdr=ct_cal_tmp.ext_hdr)
+        psf_images.append(psf_img)
+    dataset_ct = Dataset(psf_images)
 
     return dataset_ct, ct_cal_tmp
 

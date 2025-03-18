@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import corgidrp.mocks as mocks
+from corgidrp.data import Image
 import corgidrp.measure_companions as measure_companions
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
@@ -43,15 +44,15 @@ def get_fluxcal_factor(image, method, phot_args, flux_or_irr):
     """
     Compute flux calibration factor.
 
-    Parameters:
-    image (corgidrp.data.Image): The direct star image.
-    method (str): Photometry method ('Aperture' or 'Gaussian').
-    phot_args (dict): Arguments for the photometry method.
-    flux_or_irr (str): 'flux' or 'irr'.
+    Args:
+        image (corgidrp.data.Image): The direct star image.
+        method (str): Photometry method ('Aperture' or 'Gaussian').
+        phot_args (dict): Arguments for the photometry method.
+        flux_or_irr (str): 'flux' or 'irr'.
 
     Returns:
-    fluxcal_factor (corgidrp.fluxcal.FluxcalFactor): Flux calibration
-        factor.
+        fluxcal_factor (corgidrp.fluxcal.FluxcalFactor): Flux calibration
+            factor.
     """
     if method == "Aperture":
         return fluxcal.calibrate_fluxcal_aper(image, flux_or_irr=flux_or_irr, phot_kwargs=phot_args)
@@ -62,16 +63,16 @@ def generate_test_data(out_dir):
     """
     Generate mock test data: direct star image and PSF-subtracted frame.
 
-    Parameters:
-    out_dir (str): Output directory for saved FITS files.
+    Args:
+        out_dir (str): Output directory for saved FITS files.
 
     Returns:
-    direct_star_image (corgidrp.data.Image):
-    host_star_counts (float):
-    zero_point (float):
-    ct_cal (corgidrp.data.CoreThroughputCalibration):
-    FpamFsamCal (corgidrp.data.FpamFsamCal):
-    psf_sub_frame (corgidrp.data.Image):
+        direct_star_image (corgidrp.data.Image):
+        host_star_counts (float):
+        zero_point (float):
+        ct_cal (corgidrp.data.CoreThroughputCalibration):
+        FpamFsamCal (corgidrp.data.FpamFsamCal):
+        psf_sub_frame (corgidrp.data.Image):
     """
     os.makedirs(out_dir, exist_ok=True)
 
@@ -101,6 +102,9 @@ def generate_test_data(out_dir):
     dataset_ct, ct_cal = mocks.create_mock_ct_dataset_and_cal_file(fwhm=50, n_psfs=20, cfam_name='3C', save_cal_file=True)
     FpamFsamCal = mocks.create_mock_fpamfsam_cal(save_file=False)
 
+    print("Companion 1 AP Mag:", (-2.5 * np.log10(host_star_counts / 2) + zero_point))
+    print("Companion 2 AP Mag:", (-2.5 * np.log10(host_star_counts / 3) + zero_point))
+
     # Generate PSF-subtracted Frame
     psf_sub_frame = mocks.generate_psfsub_image_with_companions(
         nx=200, ny=200, host_star_center=None, host_star_counts=host_star_counts,
@@ -126,15 +130,21 @@ def test_measure_companions_wcs(out_dir):
     """
     direct_star_image, host_star_counts, fluxcal_factor, zero_point, dataset_ct, ct_cal, FpamFsamCal, \
         psf_sub_frame, coron_data = generate_test_data(out_dir)
+    
+    # Get reference psf (it is near 6 lam/D), assume off-axis PSF with highest CT has negligible 
+    # effect from the mask. For now I am identifying it here and passing it in, but maybe we can 
+    # just pass in the whole dataset and pick it out using distance or highest CT.
+    reference_psf = ct_cal.data[0]
+    reference_psf = Image(data_or_filepath=reference_psf, pri_hdr=ct_cal.pri_hdr, ext_hdr=ct_cal.ext_hdr)
 
     # Run Measurement
     result_table = measure_companions.measure_companions(
         psf_sub_image=psf_sub_frame, coronagraphic_dataset=coron_data,
         phot_method='aperture',
         ct_cal=ct_cal, ct_dataset=dataset_ct, FpamFsamCal=FpamFsamCal,
-        fluxcal_factor=fluxcal_factor, host_star_counts=host_star_counts,
+        fluxcal_factor=fluxcal_factor,
         forward_model=False, direct_star_image= direct_star_image,
-        reference_psf=dataset_ct[0], output_dir = out_dir, verbose=True
+        reference_psf=reference_psf, output_dir = out_dir, verbose=True
     )
 
     print("\nResult Table:\n", result_table)
