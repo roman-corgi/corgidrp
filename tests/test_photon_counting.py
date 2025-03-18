@@ -63,10 +63,10 @@ def test_pc():
     dataset_err.all_dq[:, 2, 2] = 1 #masked all the way through for (2,2)
     for f in dataset_err.frames: 
         f.ext_hdr['RN'] = 100
-        f.ext_hdr['KGAIN'] = 7
+        f.ext_hdr['KGAINPAR'] = 7
     for f in dark_dataset_err.frames: 
         f.ext_hdr['RN'] = 100
-        f.ext_hdr['KGAIN'] = 7
+        f.ext_hdr['KGAINPAR'] = 7
     # process the frames to make PC dark
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
     assert pc_dark.frames[0].ext_hdr['PC_STAT'] == 'photon-counted master dark'
@@ -97,11 +97,11 @@ def test_pc():
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, pc_master_dark=pc_dark, inputmode='darks')
     # must have same 'CMDGAIN' and other header values throughout input dataset
-    dark_dataset_err.frames[0].ext_hdr['CMDGAIN'] = 4999
+    dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 4999
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, inputmode='dark')
     # change back:
-    dark_dataset_err.frames[0].ext_hdr['CMDGAIN'] = 5000
+    dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 5000
 
     # test to make sure PC dark's threshold matches the one used for illuminated frames 
     with pytest.raises(PhotonCountException):
@@ -146,10 +146,10 @@ def test_pc():
         get_pc_mean(dataset_err, safemode=False)
     # test ISPC header value
     with pytest.raises(PhotonCountException):
-        dataset_err.frames[0].ext_hdr['ISPC'] = False
+        dataset_err.frames[0].pri_hdr['PHTCNT'] = False
         get_pc_mean(dataset_err, pc_master_dark=pc_dark)
     # set to True now
-    dataset_err.frames[0].ext_hdr['ISPC'] = True
+    dataset_err.frames[0].pri_hdr['PHTCNT'] = True
     # test inputmode's compatibility with dataset type
     with pytest.raises(PhotonCountException):
         get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='darks')
