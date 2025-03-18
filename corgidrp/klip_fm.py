@@ -9,8 +9,27 @@ from corgidrp.astrom import get_polar_dist, seppa2dxdy
 from corgidrp.fluxcal import phot_by_gauss2d_fit
 
 def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
-    x_arr = ct_calibration.ct_excam[0]
-    y_arr = ct_calibration.ct_excam[1]
+    """_summary_
+    NOTE: CT excam locations have (0,0) as the bottom left corner 
+      of the bottom left pixel
+
+    TODO: Calculate subpixel shifts if star or PSF model aren't
+        perfectly in the center of a pixel
+
+    Args:
+        ct_calibration (_type_): _description_
+        cenx (_type_): _description_
+        ceny (_type_): _description_
+        dx (_type_): _description_
+        dy (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+
+    # Shift so (0,0) is the center of the bottom left pixel
+    x_arr = ct_calibration.ct_excam[0] - 0.5
+    y_arr = ct_calibration.ct_excam[1] - 0.5
 
     rel_x_arr = x_arr - cenx
     rel_y_arr = y_arr - ceny
@@ -21,68 +40,85 @@ def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
 
     return ct_calibration.data[arg_closest] 
 
+
 def inject_psf(frame_in, ct_calibration, flux, sep_pix,pa_deg):
 
     frame = frame_in.copy()
 
+    # Get closest psf model
     frame_roll = frame.ext_hdr['ROLL']
     rel_pa = frame_roll - pa_deg
-
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
     psf_model = get_closest_psf(ct_calibration,
                                 frame.ext_hdr['STARLOCX'],
                                 frame.ext_hdr['STARLOCY'],
-                                dx,dy) * flux 
-    total_counts = np.sum(psf_model)
+                                dx,dy) 
     
-    psf_cenyx = np.array(psf_model.shape)/2 - 0.5 # Assume PSF is centered in the data cutout for now
-    psf_center_inframe = np.array([frame.ext_hdr['STARLOCY'],frame.ext_hdr['STARLOCX']]) + np.array([dy,dx])
+    # Scale counts
+    total_counts = np.sum(psf_model)
+    psf_model *= flux / total_counts
+
+    # Assume PSF is centered in the data cutout for now
+    shape_arr = np.array(psf_model.shape)
+    psf_cenyx_ind = (np.array(shape_arr)/2 - 0.5).astype(int) 
+    psf_cenyx_inframe = np.array([frame.ext_hdr['STARLOCY'],frame.ext_hdr['STARLOCX']]) + np.array([dy,dx])
+    injected_psf_cenyx_ind = np.round(psf_cenyx_inframe).astype(int)
+    starty, startx = injected_psf_cenyx_ind - psf_cenyx_ind
 
     # Insert into correct frame size array 
     psf_only_frame = np.zeros_like(frame.data)
-    starty, endy = (int(frame.ext_hdr['STARLOCY']),int(frame.ext_hdr['STARLOCY'])+psf_model.shape[0])
-    startx, endx = (int(frame.ext_hdr['STARLOCX']),int(frame.ext_hdr['STARLOCX'])+psf_model.shape[1])
-    psf_only_frame[starty:endy,startx:endx] = psf_model
-    injected_psf_center = psf_cenyx + np.array([starty,startx]).astype(float)
-    psf_shift = injected_psf_center - psf_center_inframe
-
+    psf_only_frame[starty:starty+shape_arr[0],startx:startx+shape_arr[1]] = psf_model
+    
+    # TODO: Calculate subpixel shift:
+    psf_shift = (0,0) # Hardcode 0 shift for now
     shifted_psf_only_frame = shift(psf_only_frame,psf_shift)
 
     # Add to input frame
     frame.data += shifted_psf_only_frame
 
-    return frame, psf_model, psf_center_inframe, total_counts
+    psf_cenxy = [psf_cenyx_inframe[1],psf_cenyx_inframe[0]]
+    return frame, psf_model, psf_cenxy
 
-def measure_noise(frame, klmode_index, sep_pix, fwhm):
+
+def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
     """Calculates the noise (standard deviation of counts) for an 
         annulus at a given separation
         TODO: Correct for small sample statistics?
     
     Args:
         frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" in header
-        sep_pix (float): Separation (in pixels from mask center) at which to calculate the noise level
+        seps_pix (float): Separations (in pixels from mask center) at which to calculate the noise level
         fwhm (float): halfwidth of the annulus to use for noise calculation, based on FWHM.
 
     Returns:
         float: noise level at the specified separation
     """
 
-    data = frame.data[klmode_index]
-
     cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
 
     # Mask data outside the specified annulus
-    y, x = np.indices(data.shape)
+    y, x = np.indices(frame.data.shape[1:])
     sep_map = np.sqrt((y-ceny)**2 + (x-cenx)**2)
-    r_inner = sep_pix - fwhm
-    r_outer = sep_pix + fwhm
-    masked_data = np.where(np.logical_and(sep_map<r_outer,sep_map>r_inner), data,np.nan)
-    
-    # Calculate standard deviation
-    std = np.nanstd(masked_data)
+    sep_map3d = np.ones_like(frame.data) * sep_map
 
-    return std
+    stds = []
+    for sep_pix in seps_pix:
+        r_inner = sep_pix - fwhm
+        r_outer = sep_pix + fwhm
+        masked_data = np.where(np.logical_and(sep_map3d<r_outer,sep_map3d>r_inner), frame.data,np.nan)
+        
+        # Calculate standard deviation
+        std = np.nanstd(masked_data,axis=(1,2))
+        stds.append(std)
+
+    stds_arr = np.array(stds)
+
+    if klmode_index != None:
+        return stds_arr[:,klmode_index]
+    
+    return stds_arr
+
 
 def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                      psfsub_dataset,
@@ -121,7 +157,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                 pixscale_arcsec = 0.0218
                 fwhm_mas = 1.22 * lam / d * 206265 * 1000
                 fwhm_pix = fwhm_mas * 0.001 * pixscale_arcsec
-                noise = measure_noise(psfsub_dataset[0],k,sep,fwhm_pix)
+                #noise = measure_noise(psfsub_dataset[0],k,sep,fwhm_pix)
+                noise = 10.
 
                 inject_counts = noise * inject_snr
                 for pa in pas:
@@ -133,8 +170,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                             seppas_skipped.append(inject_loc)
                             continue
                     
-                    frame, psf_model, psf_center_inframe, total_counts = inject_psf(frame, ct_calibration, inject_counts, *inject_loc)
-        
+                    frame, psf_model, psf_center_inframe = inject_psf(frame, ct_calibration, inject_counts, *inject_loc)
+
                 # Save this to divide later
                 this_klmode_injectcounts.append(inject_counts)
                 
@@ -153,6 +190,12 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                                 fileprefix=f"FAKE_{klmode}KLMODES")
         
         # Get photometry of each injected source
+
+        # Load pyklip output
+        pyklip_fpath = os.path.join(klip_params['outdir'],f"FAKE_{klmode}KLMODES-KLmodes-all.fits")
+        pyklip_data = fits.getdata(pyklip_fpath)
+        pyklip_hdr = hdr = fits.getheader(pyklip_fpath)
+
 
         this_klmode_outcounts = []
         for sep in seps:
