@@ -4,11 +4,17 @@ import numpy as np
 from astropy.io import fits
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers, create_synthetic_satellite_spot_image
+import corgidrp.mocks as mocks
+import corgidrp.caldb as caldb
+import corgidrp.astrom as astrom
+import corgidrp.data as corgidata
+import pytest
+
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_l2b_to_l4(test_data_path, e2eoutput_path):
+def test_l2b_to_l4(os11_data_path, e2e_path):
     '''
     Data needed: 
         - Coronagraphic dataset
@@ -19,21 +25,55 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
         - AstrometricCalibration
     '''
 
-    #TODO: Generate mock astrometric calibration data. 
+    e2e_data_path = os.path.join(e2e_path, "l2_files")
+    if not os.path.exists(e2e_data_path):
+        os.mkdir(e2e_data_path)
+
+    e2eoutput_path = os.path.join(e2e_path, "l2b_to_l4_output")
+    if not os.path.exists(e2eoutput_path):
+        os.mkdir(e2eoutput_path)
+
+    ##################################################
+    #### Generate an astrometric calibration file ####
+    ##################################################
+
+    # create a simulated image with source guesses and true positions
+    # check that the simulated image folder exists and create if not
+
+    field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
+
+    #Create the mock dataset
+    mocks.create_astrom_data(field_path=field_path, filedir=e2eoutput_path)
+    image_path = os.path.join(e2eoutput_path, 'simcal_astrom.fits')
+
+    # open the image
+    dataset = corgidata.Dataset([image_path])
+    # perform the astrometric calibration
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
+
+    astrom_cal.save(filedir=e2eoutput_path, filename="mock_nonlinearcal.fits" )
+
+    # add calibration file to caldb
+    this_caldb = caldb.CalDB()
+    this_caldb.create_entry(astrom_cal)
 
     # Read in the os11 data and format it into a dataset
     # Reading things in based on hlc_os11_example.py
 
+    ############################################
+    #### Put the OS 11 data into L2B format ####
+    ############################################
+
     #Read in the PSFs
     input_file = 'hlc_os11_frames_with_planets.fits'
-    input_hdul = fits.open(os.path.join(test_data_path,input_file), header = True, ignore_missing_end = True)
+    input_hdul = fits.open(os.path.join(os11_data_path,input_file), header = True, ignore_missing_end = True)
     input_images = input_hdul[0].data
     header = input_hdul[0].header
     psf_center_x = header['PSF_CEN_X']
     psf_center_y = header['PSF_CEN_Y']
     
     #Get the auxilliary data
-    data = np.loadtxt(os.path.join(test_data_path,'hlc_os11_batch_muf_info.txt'), skiprows=2)
+    data = np.loadtxt(os.path.join(os11_data_path,'hlc_os11_batch_muf_info.txt'), skiprows=2)
     batch = data[:,0].astype(int)
     star = data[:,2].astype(int)
     roll = data[:,3]
@@ -42,7 +82,7 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
 
     mock_pri_header, mock_ext_header = create_default_L2b_headers()
 
-    nbatch = 5 #We'll just do one reference and 2x 2 rolls for now. 
+    nbatch = 5 #We'll just do one reference and 2 x 2 rolls for now, that consists of the first 5 "batches"
 
     istart = 0
     nframes_per_batch = 2 #Limit the number of frames we're going to generate for now. 
@@ -83,15 +123,11 @@ def test_l2b_to_l4(test_data_path, e2eoutput_path):
             new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
             new_image.pri_hdr.set('ROLL',roll[ibatch])
 
-            #TODO add header keywords that WCS wants. 
-
             #If Reference star then flag it. 
             if star[ibatch] == 2:
                 new_image.pri_hdr.set('PSFREF', 1)
 
             image_list.append(new_image)
-
-
 
         istart = istart + nframes[ibatch] 
 
@@ -135,6 +171,7 @@ if __name__ == "__main__":
 
 
     outputdir = thisfile_dir
+    os11_dir = "/Users/maxwellmb/Data/corgi/corgidrp/os11_data/"
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
 
@@ -143,3 +180,5 @@ if __name__ == "__main__":
     
     args = ap.parse_args()
     outputdir = args.outputdir
+
+    test_l2b_to_l4(os11_dir, outputdir)
