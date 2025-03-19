@@ -1415,7 +1415,7 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
         dq = dq)
     return image
 
-def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target = (80.553428801, -69.514096821), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
+def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
                        distortion_coeffs_path=None, dither_pointings=0):
     """
     Create simulated data for astrometric calibration.
@@ -1452,7 +1452,6 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     # load in the field data and restrict to 0.02 [deg] radius around target
     cal_field = ascii.read(field_path)
     subfield = cal_field[((cal_field['RA'] >= target[0] - subfield_radius) & (cal_field['RA'] <= target[0] + subfield_radius) & (cal_field['DEC'] >= target[1] - subfield_radius) & (cal_field['DEC'] <= target[1] + subfield_radius))]
-
     cal_SkyCoords = SkyCoord(ra= subfield['RA'], dec= subfield['DEC'], unit='deg', frame='icrs')  # save these subfield skycoords somewhere
 
     # create the simulated image header
@@ -1489,6 +1488,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     frame_decs = []
     frame_amps = []
     frame_mags = []
+    frame_targs = []
 
     # compute pixel positions and sky locations for the undithered image
     pix_inds = np.where((xpix_full >= 0) & (xpix_full <= nx) & (ypix_full >= 0) & (ypix_full <= ny))[0]
@@ -1501,41 +1501,72 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
 
     frame_xpixels.append(np.array(xpix))    # add pixel locations to all frame list
     frame_ypixels.append(np.array(ypix))
-    frame_ras.append(np.array(ras))
-    frame_decs.append(np.array(decs))
+    frame_ras.append(ras)
+    frame_decs.append(decs)
     frame_amps.append(np.array(amplitudes))
     frame_mags.append(np.array(mags))
+    frame_targs.append(np.array(target))
+
+    # find the dither RA/DEC pointings (assume we know this)
+    # one FoV roughly translates to 
+    ra_fov = 0.01741774460001011  #[deg]
+    dec_fov = 0.00617760699999792  #[deg]
+    ## assume the target coord has moved by half ra/dec fov based on direction
+    dither_target_ras = [target[0], target[0], target[0]+(ra_fov/2), target[0]-(ra_fov/2)]
+    dither_target_decs = [target[1]+(dec_fov/2), target[1]-(dec_fov/2), target[1], target[1]]
+
 
     # create dithered images if dither_pointings > 0
     for i in range(dither_pointings):
-        # define directions to move based on how many dithers to add
-        # for now only consider half a FoV N, S, W, E of the target
-        dither_xoff = [0, 0, ((nx-1)//2), -((nx-1)//2)]
-        dither_yoff = [((ny-1)/2), -((ny-1)//2), 0, 0]
 
-        dx = dither_xoff[i]
-        dy = dither_yoff[i]
+        # simulate header with same image properties but around the dither target coord
+        new_hdr = {}
+        new_hdr['CD1_1'] = cdmatrix[0,0]
+        new_hdr['CD1_2'] = cdmatrix[0,1]
+        new_hdr['CD2_1'] = cdmatrix[1,0]
+        new_hdr['CD2_2'] = cdmatrix[1,1]
+        
+        new_hdr['CRPIX1'] = center[0]
+        new_hdr['CRPIX2'] = center[1]
+        
+        new_hdr['CTYPE1'] = 'RA---TAN'
+        new_hdr['CTYPE2'] = 'DEC--TAN'
+        
+        new_hdr['CDELT1'] = (platescale * 0.001) / 3600
+        new_hdr['CDELT2'] = (platescale * 0.001) / 3600
+        
+        new_hdr['CRVAL1'] = dither_target_ras[i]
+        new_hdr['CRVAL2'] = dither_target_decs[i]
+        
+        w = wcs.WCS(new_hdr)
+        
+        # create the image data
+        xpix_full, ypix_full = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
 
-        dither_inds = np.where((xpix_full >= (0+dx)) & (xpix_full <= (nx+dx)) & (ypix_full >= (0+dy)) & (ypix_full <= (ny+dy)))
-        dxpix = xpix_full[dither_inds] - dx
-        dypix = ypix_full[dither_inds] - dy
+        dither_inds = np.where((xpix_full >= 0) & (xpix_full <= 1024) & (ypix_full >= 0) & (ypix_full <= 1024))[0]
+
+        dxpix = xpix_full[dither_inds]
+        dypix = ypix_full[dither_inds]
         dras = cal_SkyCoords[dither_inds]
         ddecs = cal_SkyCoords[dither_inds]
         dmags = subfield['VMAG'][dither_inds]
         damplitudes = np.power(10, ((dmags - 22.5) / (-2.5))) * 10
-
+   
         frame_xpixels.append(np.array(dxpix))
         frame_ypixels.append(np.array(dypix))
-        frame_ras.append(np.array(dras))
-        frame_decs.append(np.array(ddecs))
+        frame_ras.append(dras)
+        frame_decs.append(ddecs)
         frame_amps.append(np.array(damplitudes))
         frame_mags.append(np.array(dmags))
+        frame_targs.append(np.array([dither_target_ras[i], dither_target_decs[i]]))
+
 
     # create a place to save the image frames
     image_frames = []
 
     for i, (xp, yp, amps) in enumerate(zip(frame_xpixels, frame_ypixels, frame_amps)):
         sim_data = np.zeros(image_shape)
+
         # inject gaussian psf stars
         for xpos, ypos, amplitude in zip(xp, yp, amps):  
             stampsize = int(np.ceil(3 * fwhm))
@@ -1635,9 +1666,9 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
             # translated_pix = scipy.ndimage.map_coordinates()
             # transform the source coordinates
             dist_xpix, dist_ypix = [], []
-            for (x,y) in zip(xpix, ypix):
-                x_new = x - distmapx[round(y)][round(x)]
-                y_new = y - distmapy[round(y)][round(x)]
+            for (x,y) in zip(xp, yp):
+                x_new = x - distmapx[int(y)][int(x)]
+                y_new = y - distmapy[int(y)][int(x)]
 
                 dist_xpix.append(x_new)
                 dist_ypix.append(y_new)
@@ -1650,8 +1681,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         # TO DO: Determine what level this image should be
         prihdr, exthdr = create_default_L3_headers()
         prihdr['VISTYPE'] = 'BORESITE'
-        prihdr['RA'] = target[0]  # assume we will know something about the 
-        prihdr['DEC'] = target[1]
+        prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
+        prihdr['DEC'] = np.array(frame_targs).T[1][i]
         prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
 
         ## save as an Image object
