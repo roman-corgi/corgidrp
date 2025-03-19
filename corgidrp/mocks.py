@@ -3091,11 +3091,22 @@ def generate_coron_dataset_with_companions(
         data_arr += star_gaus.astype(np.float32)
 
         # (B) Insert companion(s)
+        angle_i = roll_angles[i]
         for j, (cx, cy) in enumerate(companion_xy):
             flux_c = companion_counts[j]
+
+            theta = np.radians(angle_i)
+            dx = cx - host_star_center[0]
+            dy = cy - host_star_center[1]
+
+            # Standard 2D rotation about origin: (x', y') = (x*cosθ - y*sinθ, x*sinθ + y*cosθ)
+            # Then shift back by star_x, star_y.
+            x_rot = dx * np.cos(theta) - dy * np.sin(theta) + host_star_center[0]
+            y_rot = dx * np.sin(theta) + dy * np.cos(theta) + host_star_center[1]
+
             # simple Gaussian companion
             sigma_c = 1.0
-            r2c = (xgrid - cx)**2 + (ygrid - cy)**2
+            r2c = (xgrid - x_rot)**2 + (ygrid - y_rot)**2
             comp_gaus = (flux_c / (2*np.pi*sigma_c**2)) * np.exp(-0.5*r2c/sigma_c**2)
             data_arr += comp_gaus.astype(np.float32)
 
@@ -3108,7 +3119,7 @@ def generate_coron_dataset_with_companions(
         prihdr, exthdr = create_default_L3_headers()
         # Minimal keywords
         prihdr["FILENAME"] = f"mock_coron_{i:03d}.fits"
-        exthdr["ROLL"] = roll_angles[i]
+        exthdr["ROLL"] = angle_i
         exthdr["PLTSCALE"] = platescale
         exthdr["STARLOCX"] = host_star_center[0]
         exthdr["STARLOCY"] = host_star_center[1]
