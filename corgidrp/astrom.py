@@ -618,8 +618,8 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
         image (numpy.ndarray): 2D array of image data 
         source_info (astropy.table.Table): Estimated pixel positions of sources and true sky positions, must have column names 'x', 'y', 'RA', 'DEC'
         center_coord (tuple):
-            (float): RA coordinate of the target source
-            (float): Dec coordinate of the target source
+            (float): RA coordinate of the target pointing
+            (float): Dec coordinate of the target pointing
         center_radius (float): Percent of the image radius used to crop the image and compute plate scale and north angle from (default: 1 -- ie: the full image is used)
 
     Returns:
@@ -638,6 +638,7 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
         guesses = source_info
         skycoords = SkyCoord(ra = guesses['RA'], dec= guesses['DEC'], unit='deg', frame='icrs')
 
+    # translate the center_coord param into a skycoord
     if type(center_coord) != tuple:
         raise TypeError('center_coord must be a tuple coordinate (RA,DEC)')
     else:
@@ -748,8 +749,8 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
         image (numpy.ndarray): 2D array of image data
         source_info (astropy.table.Table): Estimated pixel positions of sources and true sky positions, must have column names 'x', 'y', 'RA', 'DEC'
         target_coordinate (tuple): 
-            (float): RA coordinate of the target source
-            (float): DEC coordinate of the target source
+            (float): RA coordinate of the target pointing
+            (float): DEC coordinate of the target pointing
         cal_properties (tuple):
             (float): Platescale
             (float): North angle
