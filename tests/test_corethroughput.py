@@ -340,9 +340,9 @@ def teardown_module():
     del ct_in, ct_syn
 
 if __name__ == '__main__':
-    # test_psf_pix_and_ct()
-    # test_fpm_pos()
-    # test_cal_file()
+    test_psf_pix_and_ct()
+    test_fpm_pos()
+    test_cal_file()
     test_get_1d_ct()
 
 

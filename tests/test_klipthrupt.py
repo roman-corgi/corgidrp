@@ -404,7 +404,7 @@ def test_meas_klip_ADIRDI():
     # See if it runs\-
     pass
 
-def test_psfsub_withklipmeas():
+def test_psfsub_withklipandctmeas():
 
     mode = 'ADI+RDI'
 
@@ -427,7 +427,12 @@ def test_psfsub_withklipmeas():
                                 mode=mode,
                                 do_crop=False,
                                 measure_klip_thrupt=True,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=True)
+    
+    # Check that klip and ct separations are the same
+
+    # Check that array shapes are correct
+    
     pass
 
 if __name__ == '__main__':  
@@ -440,6 +445,6 @@ if __name__ == '__main__':
     # test_meas_klip_ADI()
     # test_meas_klip_ADIRDI()
 
-    test_psfsub_withklipmeas()
+    test_psfsub_withklipandctmeas()
 
     pass
