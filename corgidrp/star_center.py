@@ -145,8 +145,7 @@ def update_parameters(params, new_values):
     Args:
         params (dict):
             Original nested dictionary containing initial parameter values.
-            Structure: {key1: {subkey1: val, subkey2: val}, key2: {...}}
-
+            The structure should be: {key1: {subkey1: val, subkey2: val}, key2: {...}}
         new_values (dict):
             Nested dictionary containing new parameter values to update.
             Must match the structure of `params`.
@@ -909,7 +908,7 @@ def star_center_from_satellite_spots(
     img_sat_spot,
     star_coordinate_guess,
     thetaOffsetGuess,
-    satellite_spot_parameters=None,
+    satellite_spot_parameters,
 ):
     """
     Estimates the star center and spot locations from satellite spot images and science data.

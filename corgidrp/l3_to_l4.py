@@ -93,7 +93,7 @@ def find_star(input_dataset,
               star_coordinate_guess=None,
               thetaOffsetGuess=0,
               satellite_spot_parameters=None,
-              drop_satspots_frames=False):
+              drop_satspots_frames=True):
     """
     Determines the star position within a coronagraphic dataset by analyzing frames that 
     contain satellite spots (indicated by ``SATSPOTS=1`` in the primary header). The 
@@ -163,8 +163,7 @@ def find_star(input_dataset,
                 nIter : int
                     Number of iterations refining the radial separation.
 
-            If None, default parameters corresponding to the specified observing_mode will be used.
-        
+            If None, default parameters corresponding to the specified observing_mode will be used.     
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
             the returned dataset. Defaults to False.
