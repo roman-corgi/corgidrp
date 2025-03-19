@@ -29,12 +29,18 @@ column_names = list(column_dtypes.keys())
 
 labels = {data.Dark: "Dark",
           data.NonLinearityCalibration: "NonLinearityCalibration",
-          data.BadPixelMap: "BadPixelMap",
           data.KGain : "KGain",
+          data.BadPixelMap: "BadPixelMap",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
-          data.DetectorParams : "DetectorParams",
           data.FlatField : "FlatField",
-          data.TrapCalibration : "TrapCalibration"}
+          data.DetectorParams : "DetectorParams",
+          data.AstrometricCalibration : "AstrometricCalibration",
+          data.TrapCalibration : "TrapCalibration",
+          data.FluxcalFactor : "FluxcalFactor",
+          data.FpamFsamCal : "FpamFsamCal",
+          data.CoreThroughputCalibration: "CoreThroughputCalibration",
+          data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
+          }
 
 class CalDB:
     """
