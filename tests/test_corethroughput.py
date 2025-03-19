@@ -206,6 +206,19 @@ def test_ct_map():
         tolerance = 1e-14
         assert ct_map_def[2].min() >= ct_cal.ct_excam[2].min() - tolerance
         assert ct_map_def[2].max() <= ct_cal.ct_excam[2].max() + tolerance
+
+        # Additional test to compate the CT map with the expected model from
+        # create_ct_interp (predefined to be radial and linear). The other
+        # dataset, dataset_ct is not suitable for this specific test because
+        # it's made of random 2D Gaussians
+        if dataset == dataset_ct_interp:
+            r_def = np.sqrt(ct_map_def[0]**2 + ct_map_def[1]**2)
+            ct_def = r_def/r_def.max()
+            # create_ct_interp did not include the pupil lens to imaging lens ratio
+            ct_def /= corethroughput.di_over_pil_transmission(cfam_name)
+  
+            # Differences below 1% are good
+            assert ct_map_def[2] == pytest.approx(ct_def, abs=0.01), 'Differences are greater than 1%' 
     
         # Test the ability to parse some user-defined locations
         # If the target pixels are the same as the ones in the CT file, the
@@ -230,6 +243,8 @@ def test_ct_map():
     assert os.path.exists(default_filepath), f"File not found: {default_filepath}"
 
     # Add open the file and compare content
+    ct_map_saved = np.loadtxt(default_filepath, delimiter=',')
+    assert np.all(ct_map_saved == ct_map_def)
 
 def test_psf_pix_and_ct():
     """
