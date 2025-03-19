@@ -1037,29 +1037,12 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         target_coord_tab['RA'] = [target_coordinate[0]]
         target_coord_tab['DEC'] = [target_coordinate[1]]
         target_coord_tables.append(target_coord_tab)
-
-        # run automated source finder if field_matches are passed but distortion is also being computed
-        # since we want to use the auto found sources in the plate scale and north angle computation even though 
-        # matches are passed in for the distortion 
-
-
-        # if field_matches is not None:
-
-        # if field_matches is not None and find_distortion is True: # this is the case when matched sources are passed specifically for ps and na
-        #     matched_sources = matched_sources_multiframe[i]
-        # else: # this is the case when the initially passed matches are only meant for the distortion computation, so we want auto found matches for ps 
-        #     found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
-        #     matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
-            
-            
-            # matched_sources_multiframe.append(matched_sources)  ## dont need to append these to the larger list because they are only used here for ps and na
-            # maybe there has to be a third case where we havent passed in matches but want distortion correction so we need to use the auto ones
-
+   
         # compute the calibration properties
         found_sources = find_source_locations(image, threshold=find_threshold, fwhm=fwhm, mask_rad=mask_rad)
         matched_sources = match_sources(dataset[i], found_sources, field_path, comparison_threshold=comparison_threshold, rad=search_rad, platescale_guess=platescale_guess, platescale_tol=platescale_tol)
-        if len(hold_matches) < 1:
-            hold_matches.append(matched_sources)
+        # if len(hold_matches) < 1:
+        hold_matches.append(matched_sources)
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
@@ -1077,10 +1060,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # compute the distortion map coeffs
     if find_distortion:
-        # use the passed in matched sources for distortion
-        # matched_sources = matched_sources_multiframe
-        matched_sources = hold_matches
-        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=matched_sources, ref_star_pos=target_coord_tables, position_error=position_error)
+        # use the found matches for distortion
+        first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=hold_matches, ref_star_pos=target_coord_tables, position_error=position_error)
         distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         # set default coeffs to produce zero distortion
