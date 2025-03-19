@@ -77,9 +77,9 @@ def generate_test_data(out_dir):
     os.makedirs(out_dir, exist_ok=True)
 
     # Generate Direct Star Image
-    star_flux = nd_filter_calibration.compute_expected_band_irradiance(INPUT_STARS[0], "3C")
+    star_flux = nd_filter_calibration.compute_expected_band_irradiance(INPUT_STARS[0], "1F")
     direct_star_image = mocks.create_flux_image(
-        star_flux, FWHM, CAL_FACTOR, "3C", "HOLE", INPUT_STARS[0],
+        star_flux, FWHM, CAL_FACTOR, "1F", "HOLE", INPUT_STARS[0],
         fsm_x=0, fsm_y=0, exptime=5, filedir=out_dir,
         color_cor=1.0, platescale=21.8, background=0,
         add_gauss_noise=False, noise_scale=1.0, file_save=True
@@ -99,7 +99,7 @@ def generate_test_data(out_dir):
     zero_point = fluxcal_factor.ext_hdr.get('ZP', None)
 
     # Generate Calibration Data
-    dataset_ct, ct_cal = mocks.create_mock_ct_dataset_and_cal_file(fwhm=50, n_psfs=20, cfam_name='3C', save_cal_file=True)
+    dataset_ct, ct_cal = mocks.create_mock_ct_dataset_and_cal_file(fwhm=50, n_psfs=20, cfam_name='1F', save_cal_file=True)
     FpamFsamCal = mocks.create_mock_fpamfsam_cal(save_file=False)
 
     print("Companion 1 AP Mag:", (-2.5 * np.log10(host_star_counts / 2) + zero_point))
@@ -135,7 +135,24 @@ def test_measure_companions_wcs(out_dir):
     # effect from the mask. For now I am identifying it here and passing it in, but maybe we can 
     # just pass in the whole dataset and pick it out using distance or highest CT.
     reference_psf = ct_cal.data[0]
-    reference_psf = Image(data_or_filepath=reference_psf, pri_hdr=ct_cal.pri_hdr, ext_hdr=ct_cal.ext_hdr)
+    pri_hdr=ct_cal.pri_hdr
+    ext_hdr=ct_cal.ext_hdr
+    pri_hdr['FILENAME'] = 'MockReferencePSF.fits'
+    ext_hdr['PLTSCALE'] = 0.0218
+    ext_hdr['WCSAXES'] = 2
+    ext_hdr['CTYPE1']  = 'RA---TAN'
+    ext_hdr['CTYPE2']  = 'DEC--TAN'
+    ext_hdr['CRPIX1']  = 100       # Set the reference pixel at the center
+    ext_hdr['CRPIX2']  = 100
+    ext_hdr['CRVAL1']  = 0.0       # Reference coordinate (e.g., 0 deg)
+    ext_hdr['CRVAL2']  = 0.0
+    ext_hdr['CDELT1']  = -0.00027778  # Pixel scale in degrees (approx 1 arcsec/pixel; negative for RA)
+    ext_hdr['CDELT2']  = 0.00027778   # Pixel scale in degrees
+    ext_hdr['PC1_1']   = 1.0
+    ext_hdr['PC1_2']   = 0.0
+    ext_hdr['PC2_1']   = 0.0
+    ext_hdr['PC2_2']   = 1.0
+    reference_psf = Image(data_or_filepath=reference_psf, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
     # Run Measurement
     result_table = measure_companions.measure_companions(
@@ -143,7 +160,7 @@ def test_measure_companions_wcs(out_dir):
         phot_method='aperture',
         ct_cal=ct_cal, ct_dataset=dataset_ct, FpamFsamCal=FpamFsamCal,
         fluxcal_factor=fluxcal_factor,
-        forward_model=False, direct_star_image= direct_star_image,
+        forward_model=True, direct_star_image= direct_star_image,
         reference_psf=reference_psf, output_dir = out_dir, verbose=True
     )
 
