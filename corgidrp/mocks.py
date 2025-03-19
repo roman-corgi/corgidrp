@@ -1415,7 +1415,8 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
         dq = dq)
     return image
 
-def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfield_radius=0.02, platescale=21.8, rotation=45, add_gauss_noise=True, distortion_coeffs_path=None):
+def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target = (80.553428801, -69.514096821), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
+                       distortion_coeffs_path=None, dither_pointings=0):
     """
     Create simulated data for astrometric calibration.
 
@@ -1428,6 +1429,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfi
         rotation (float): The north angle of the created image data (default: 45 [deg])
         add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
         distortion_coeffs_path (str): Full path to csv with the distortion coefficients and the order of polynomial used to describe distortion (default: None))
+        dither_pointings (int): Number of dithers to include with the dataset. Dither offset is assumed to be half the FoV.
 
     Returns:
         corgidrp.data.Dataset:
@@ -1445,9 +1447,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfi
     sim_data = np.zeros(image_shape)
     ny, nx = image_shape
     center = [nx //2, ny //2]
-    target = (80.553428801, -69.514096821)
     fwhm = 3
-    subfield_radius = 0.02 #[deg]
     
     # load in the field data and restrict to 0.02 [deg] radius around target
     cal_field = ascii.read(field_path)
@@ -1481,153 +1481,200 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), subfi
     w = wcs.WCS(new_hdr)
 
     # create the image data
-    xpix, ypix = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
-    pix_inds = np.where((xpix >= 0) & (xpix <= 1024) & (ypix >= 0) & (ypix <= 1024))[0]
+    xpix_full, ypix_full = wcs.utils.skycoord_to_pixel(cal_SkyCoords, wcs=w)
 
-    xpix = xpix[pix_inds]
-    ypix = ypix[pix_inds]
+    frame_xpixels = []  # place to hold the source pixel locations for different frames
+    frame_ypixels = []
+    frame_ras = []      # place to hold matching ra/decs for guesses.csv file
+    frame_decs = []
+    frame_amps = []
+    frame_mags = []
+
+    # compute pixel positions and sky locations for the undithered image
+    pix_inds = np.where((xpix_full >= 0) & (xpix_full <= nx) & (ypix_full >= 0) & (ypix_full <= ny))[0]
+    xpix = xpix_full[pix_inds]
+    ypix = ypix_full[pix_inds]
     ras = cal_SkyCoords[pix_inds]
     decs = cal_SkyCoords[pix_inds]
+    mags = subfield['VMAG'][pix_inds]
+    amplitudes = np.power(10, ((mags - 22.5) / (-2.5))) * 10 
 
-    amplitudes = np.power(10, ((subfield['VMAG'][pix_inds] - 22.5) / (-2.5))) * 10  
+    frame_xpixels.append(np.array(xpix))    # add pixel locations to all frame list
+    frame_ypixels.append(np.array(ypix))
+    frame_ras.append(np.array(ras))
+    frame_decs.append(np.array(decs))
+    frame_amps.append(np.array(amplitudes))
+    frame_mags.append(np.array(mags))
 
-    # inject gaussian psf stars
-    for xpos, ypos, amplitude in zip(xpix, ypix, amplitudes):  
-        stampsize = int(np.ceil(3 * fwhm))
-        sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+    # create dithered images if dither_pointings > 0
+    for i in range(dither_pointings):
+        # define directions to move based on how many dithers to add
+        # for now only consider half a FoV N, S, W, E of the target
+        dither_xoff = [0, 0, ((nx-1)//2), -((nx-1)//2)]
+        dither_yoff = [((ny-1)/2), -((ny-1)//2), 0, 0]
+
+        dx = dither_xoff[i]
+        dy = dither_yoff[i]
+
+        dither_inds = np.where((xpix_full >= (0+dx)) & (xpix_full <= (nx+dx)) & (ypix_full >= (0+dy)) & (ypix_full <= (ny+dy)))
+        dxpix = xpix_full[dither_inds] - dx
+        dypix = ypix_full[dither_inds] - dy
+        dras = cal_SkyCoords[dither_inds]
+        ddecs = cal_SkyCoords[dither_inds]
+        dmags = subfield['VMAG'][dither_inds]
+        damplitudes = np.power(10, ((dmags - 22.5) / (-2.5))) * 10
+
+        frame_xpixels.append(np.array(dxpix))
+        frame_ypixels.append(np.array(dypix))
+        frame_ras.append(np.array(dras))
+        frame_decs.append(np.array(ddecs))
+        frame_amps.append(np.array(damplitudes))
+        frame_mags.append(np.array(dmags))
+
+    # create a place to save the image frames
+    image_frames = []
+
+    for i, (xp, yp, amps) in enumerate(zip(frame_xpixels, frame_ypixels, frame_amps)):
+        sim_data = np.zeros(image_shape)
+        # inject gaussian psf stars
+        for xpos, ypos, amplitude in zip(xp, yp, amps):  
+            stampsize = int(np.ceil(3 * fwhm))
+            sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+            
+            # coordinate system
+            y, x = np.indices([stampsize, stampsize])
+            y -= stampsize // 2
+            x -= stampsize // 2
+            
+            # find nearest pixel
+            x_int = int(xpos)
+            y_int = int(ypos)
+            x += x_int
+            y += y_int
+            
+            xmin = x[0][0]
+            xmax = x[-1][-1]
+            ymin = y[0][0]
+            ymax = y[-1][-1]
+            
+            psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+
+            # crop the edge of the injection at the edge of the image
+            if xmin <= 0:
+                psf = psf[:, -xmin:]
+                xmin = 0
+            if ymin <= 0:
+                psf = psf[-ymin:, :]
+                ymin = 0
+            if xmax >= nx:
+                psf = psf[:, :-(xmax-nx + 1)]
+                xmax = nx - 1
+            if ymax >= ny:
+                psf = psf[:-(ymax-ny + 1), :]
+                ymax = ny - 1
+
+            # inject the stars into the image
+            sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
+
+        if add_gauss_noise:
+            # add Gaussian random noise
+            noise_rng = np.random.default_rng(10)
+            gain = 1
+            ref_flux = 10
+            noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= image_shape)
+            sim_data = sim_data + noise
+
+        # add distortion (optional)
+        if distortion_coeffs_path is not None:
+            # load in distortion coeffs and fitorder
+            coeff_data = np.genfromtxt(distortion_coeffs_path, delimiter=',', dtype=None)
+            fitorder = int(coeff_data[-1])
+
+            # convert legendre polynomials into distortin maps in x and y 
+            yorig, xorig = np.indices(image_shape)
+            y0, x0 = image_shape[0]//2, image_shape[1]//2
+            yorig -= y0
+            xorig -= x0
+
+            # get the number of fitting params from the order
+            fitparams = (fitorder + 1)**2
+            
+            # reshape the coeff arrays
+            best_params_x = coeff_data[:fitparams]
+            best_params_x = best_params_x.reshape(fitorder+1, fitorder+1)
+            
+            total_orders = np.arange(fitorder+1)[:,None] + np.arange(fitorder+1)[None, :]
+            
+            best_params_x = best_params_x / 500**(total_orders)
+
+            # evaluate the polynomial at all pixel positions
+            x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), best_params_x)
+            x_corr = x_corr.reshape(xorig.shape)
+            distmapx = x_corr - xorig
+            
+            # reshape and evaluate the same for y
+            best_params_y = coeff_data[fitparams:-1]
+            best_params_y = best_params_y.reshape(fitorder+1, fitorder+1)
         
-        # coordinate system
-        y, x = np.indices([stampsize, stampsize])
-        y -= stampsize // 2
-        x -= stampsize // 2
+            best_params_y = best_params_y / 500**(total_orders)
+
+            # evaluate the polynomial at all pixel positions
+            y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), best_params_y)
+            y_corr = y_corr.reshape(yorig.shape)
+            distmapy = y_corr - yorig
+
+            ## distort image based on coeffs
+            if (nx >= ny): imgsize = nx
+            else: imgsize = ny
+
+            gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
+            gridx = gridx + distmapx
+            gridy = gridy + distmapy
+
+            sim_data = scipy.ndimage.map_coordinates(sim_data, [gridy, gridx])
+            # translated_pix = scipy.ndimage.map_coordinates()
+            # transform the source coordinates
+            dist_xpix, dist_ypix = [], []
+            for (x,y) in zip(xpix, ypix):
+                x_new = x - distmapx[round(y)][round(x)]
+                y_new = y - distmapy[round(y)][round(x)]
+
+                dist_xpix.append(x_new)
+                dist_ypix.append(y_new)
+
+            frame_xpixels[i] = np.array(dist_xpix)
+            frame_ypixels[i] = np.array(dist_ypix)
+
+        # image_frames.append(sim_data)
+
+        # TO DO: Determine what level this image should be
+        prihdr, exthdr = create_default_L3_headers()
+        prihdr['VISTYPE'] = 'BORESITE'
+        prihdr['RA'] = target[0]  # assume we will know something about the 
+        prihdr['DEC'] = target[1]
+        prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
+
+        ## save as an Image object
+        frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
+        filename = "simcal_astrom.fits"
         
-        # find nearest pixel
-        x_int = int(round(xpos))
-        y_int = int(round(ypos))
-        x += x_int
-        y += y_int
-        
-        xmin = x[0][0]
-        xmax = x[-1][-1]
-        ymin = y[0][0]
-        ymax = y[-1][-1]
-        
-        psf = amplitude * np.exp(-((x - xpos)**2. + (y - ypos)**2.) / (2. * sigma**2))
+        if filedir is not None:
+            # save source SkyCoord locations and pixel location estimates
+            guess = Table()
+            guess['x'] = frame_xpixels[i]
+            guess['y'] = frame_ypixels[i]
+            guess['RA'] = frame_ras[i].ra
+            guess['DEC'] = frame_decs[i].dec
+            guess['VMAG'] = frame_mags[i]
+            # guessname = "guesses.csv"
+            ascii.write(guess, filedir+'/guesses'+str(i)+'.csv', overwrite=True)
 
-        # crop the edge of the injection at the edge of the image
-        if xmin <= 0:
-            psf = psf[:, -xmin:]
-            xmin = 0
-        if ymin <= 0:
-            psf = psf[-ymin:, :]
-            ymin = 0
-        if xmax >= nx:
-            psf = psf[:, :-(xmax-nx + 1)]
-            xmax = nx - 1
-        if ymax >= ny:
-            psf = psf[:-(ymax-ny + 1), :]
-            ymax = ny - 1
+            frame.save(filedir=filedir, filename=filename)
 
-        # inject the stars into the image
-        sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
+        image_frames.append(frame)
 
-    if add_gauss_noise:
-        # add Gaussian random noise
-        noise_rng = np.random.default_rng(10)
-        gain = 1
-        ref_flux = 10
-        noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= image_shape)
-        sim_data = sim_data + noise
-
-    # add distortion (optional)
-    if distortion_coeffs_path is not None:
-        # load in distortion coeffs and fitorder
-        coeff_data = np.genfromtxt(distortion_coeffs_path, delimiter=',', dtype=None)
-        fitorder = int(coeff_data[-1])
-
-        # convert legendre polynomials into distortin maps in x and y 
-        yorig, xorig = np.indices(image_shape)
-        y0, x0 = image_shape[0]//2, image_shape[1]//2
-        yorig -= y0
-        xorig -= x0
-
-        # get the number of fitting params from the order
-        fitparams = (fitorder + 1)**2
-        
-        # reshape the coeff arrays
-        best_params_x = coeff_data[:fitparams]
-        best_params_x = best_params_x.reshape(fitorder+1, fitorder+1)
-        
-        total_orders = np.arange(fitorder+1)[:,None] + np.arange(fitorder+1)[None, :]
-        
-        best_params_x = best_params_x / 500**(total_orders)
-
-        # evaluate the polynomial at all pixel positions
-        x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), best_params_x)
-        x_corr = x_corr.reshape(xorig.shape)
-        distmapx = x_corr - xorig
-        
-        # reshape and evaluate the same for y
-        best_params_y = coeff_data[fitparams:-1]
-        best_params_y = best_params_y.reshape(fitorder+1, fitorder+1)
-    
-        best_params_y = best_params_y / 500**(total_orders)
-
-        # evaluate the polynomial at all pixel positions
-        y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), best_params_y)
-        y_corr = y_corr.reshape(yorig.shape)
-        distmapy = y_corr - yorig
-
-        ## distort image based on coeffs
-        if (nx >= ny): imgsize = nx
-        else: imgsize = ny
-
-        gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
-        gridx = gridx + distmapx
-        gridy = gridy + distmapy
-
-        sim_data = scipy.ndimage.map_coordinates(sim_data, [gridy, gridx])
-        # translated_pix = scipy.ndimage.map_coordinates()
-        # transform the source coordinates
-        dist_xpix, dist_ypix = [], []
-        for (x,y) in zip(xpix, ypix):
-            x_new = x - distmapx[round(y)][round(x)]
-            y_new = y - distmapy[round(y)][round(x)]
-
-            dist_xpix.append(x_new)
-            dist_ypix.append(y_new)
-
-        xpix, ypix = dist_xpix, dist_ypix
-
-    # load as an image object
-    frames = []
-    # TO DO: Determine what level this image should be
-    prihdr, exthdr = create_default_L3_headers()
-    prihdr['VISTYPE'] = 'BORESITE'
-    prihdr['RA'] = target[0]
-    prihdr['DEC'] = target[1]
-    prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
-
-    # newhdr = fits.Header(new_hdr)
-    # frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= newhdr)
-        ## save a default ext_hdr
-    frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
-    filename = "simcal_astrom.fits"
-    guessname = "guesses.csv"
-    if filedir is not None:
-        # save source SkyCoord locations and pixel location estimates
-        guess = Table()
-        guess['x'] = [x for x in xpix]
-        guess['y'] = [y for y in ypix]
-        guess['RA'] = ras.ra
-        guess['DEC'] = decs.dec
-        guess['VMAG'] = subfield['VMAG'][pix_inds]
-        ascii.write(guess, filedir+'/'+guessname, overwrite=True)
-
-        frame.save(filedir=filedir, filename=filename)
-
-    frames.append(frame)
-    dataset = data.Dataset(frames)
+    # frames.append(frame)
+    dataset = data.Dataset(image_frames)
 
     return dataset
 
