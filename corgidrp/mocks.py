@@ -2926,10 +2926,10 @@ def create_ct_interp(
     # Convert polar coordinates to Cartesian coordinates
     x_grid = np.round(fpm_x + r_grid * np.cos(theta_grid)).flatten()
     y_grid = np.round(fpm_y + r_grid * np.sin(theta_grid)).flatten()
-    # Derive the final radial distance after the shift
-    r_grid_w_shift = np.sqrt(x_grid**2 + y_grid**2)
+    # Derive the final radial distance from the FPM's center
+    r_grid_from_fpm = np.sqrt((x_grid-fpm_x)**2 + (y_grid-fpm_y)**2)
     # Make up a core throughput dataset
-    core_throughput = r_grid_w_shift.flatten()/r_grid_w_shift.max()
+    core_throughput = r_grid_from_fpm.flatten()/r_grid_from_fpm.max()
     # Normalize to 1 by accounting for the contribution of the PSF to the CT
     core_throughput /= psf_model[psf_model>=psf_model.max()/2].sum()
     # Optionally, take into account an additional factor

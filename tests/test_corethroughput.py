@@ -442,15 +442,15 @@ def test_ct_interp():
         # Test with linear mapping of radii
         interpolated_value = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
-        # Values are different. Good to within 5% 
+        # Good to within 2% 
         assert interpolated_value == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
         # constructing the interpolant 
         interpolated_value_log = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
-        # Values are different. Good to within 5%
+        # Good to within 2%
         assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (logarithmic radii mapping)'
-
+        
     # Test that if the radius is out of the range then an error is thrown
     # Pick a data point that is out of the range. For instance, set y to zero
     # and x to a value that is greater than the maximum radius
