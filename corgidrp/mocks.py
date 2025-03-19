@@ -2853,6 +2853,116 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
 
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
+def create_ct_interp(
+    n_radii=9,
+    n_azimuths=5,
+    min_angle=0,
+    max_angle=6.2831853072,
+    norm=1,
+    fpm_x=0,
+    fpm_y=0,
+    pop_index=None,
+    ):
+    """
+    Create simulated data to test the class function that does core throughput
+    interpolation. We want to set the CT to a known function. We accomplish it
+    by using a synthetic PSF shape with a well defined CT profile. The PSF is
+    needed because the interpolation function takes a CT cal file that is
+    generated from a Dataset of PSF images.
+
+    Args:
+        n_radii (int): Number of divisions along a radial direction.
+        n_azimuths (int): Number of divisions along the azimuth, from
+          zero to max_angle.
+        min_angle (float): Minimum angle in radians to be considered.
+        max_angle (float): Maximum angle in radians to be considered.
+        norm (float): Factor to multiply the CT profile. Useful if one
+          wants the CT to be between 0 and 1 after the division by the total counts
+          that happens when estimating the CT of the Dataset in corethroughput.py.
+        fpm_x (float): FPM location in EXCAM (fractional) pixels. First dimension.
+        fpm_y (float): FPM location in EXCAM (fractional) pixels. Second dimension.
+        pop_index (int) (optional): the Dataset skips the PSF with this index.
+          Useful when testing interpolation by popping some PSFs and comparing
+          the interpolated values with the original ones at the same location.
+
+    Returns:
+        corgidrp.data.Image: The simulated PSF Images
+        np.array: PSF locations
+        np.array: PSF CT values
+    """
+    if max_angle > 2*np.pi:
+        print('You may have set a maximum angle in degrees instead of radians. '
+            'Please check the value of max_angle is the one intended.')
+
+    # The shape of all PSFs is the same, and irrelevant
+    # Their amplitude will be adjusted to a specific CT profiledepending on
+    # their location
+    imshape=(7,7)
+    psf_model = np.zeros(imshape)
+    # Set of known values at selected locations
+    psf_model[imshape[1]//2 - 3:imshape[1]//2 + 4,
+        imshape[0]//2 - 3:imshape[0]//2 + 4] = 1
+    psf_model[imshape[1]//2 - 2:imshape[1]//2 + 3,
+        imshape[0]//2 - 2:imshape[0]//2 + 3] = 2
+    psf_model[imshape[1]//2 - 1:imshape[1]//2 + 2,
+        imshape[0]//2 - 1:imshape[0]//2 + 2] = 3
+    psf_model[imshape[1]//2, imshape[0]//2] = 4
+
+    # Default headers
+    prhd, exthd = create_default_L2b_headers()
+    exthd['CFAMNAME'] = '1F'
+    # Mock error
+    err = np.ones([1024,1024])
+
+    # Simulate PSFs within two radii
+    psf_loc = []
+    half_psf = []
+    data_psf = []
+
+    #Create a dataset
+    # From 2 to 9 lambda/D
+    radii = np.logspace(np.log10(2), np.log10(9),n_radii)
+    # lambda/D ~ 2.3 EXCAM pixels for Band 1 and HLC
+    radii *= 2.3
+    # Threefold symmetry
+    azimuths = np.linspace(min_angle, max_angle, n_azimuths)
+    
+    # Create 2D grids for the radii and azimuths
+    r_grid, theta_grid = np.meshgrid(radii, azimuths)
+    
+    # Convert polar coordinates to Cartesian coordinates
+    x_grid = np.round(fpm_x + r_grid * np.cos(theta_grid)).flatten()
+    y_grid = np.round(fpm_y + r_grid * np.sin(theta_grid)).flatten()
+    # Derive the final radial distance from the FPM's center
+    r_grid_from_fpm = np.sqrt((x_grid-fpm_x)**2 + (y_grid-fpm_y)**2)
+    # Make up a core throughput dataset
+    core_throughput = r_grid_from_fpm.flatten()/r_grid_from_fpm.max()
+    # Normalize to 1 by accounting for the contribution of the PSF to the CT
+    core_throughput /= psf_model[psf_model>=psf_model.max()/2].sum()
+    # Optionally, take into account an additional factor
+    core_throughput *= norm
+    for i_psf in range(r_grid.size):
+        if pop_index is not None:
+            if i_psf == pop_index:
+                print('Skipping 1 PSF (interpolation test)')
+                continue
+        image = np.zeros([1024, 1024])
+        # Insert PSF at random location within the SCI frame
+        x_image = int(x_grid[i_psf])
+        y_image = int(y_grid[i_psf])
+        image[y_image-imshape[0]//2:y_image+imshape[0]//2+1,
+            x_image-imshape[1]//2:x_image+imshape[1]//2+1] = psf_model
+        # Adjust intensity following some radial profile
+        image *= core_throughput[i_psf]
+        # List of known positions
+        psf_loc += [[x_image-imshape[0]//2, y_image-imshape[0]//2]]
+        # Add numerator of core throughput
+        half_psf += [image[image>=image.max()/2].sum()]
+        # Build up the Dataset
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
+
+    return data_psf, np.array(psf_loc), np.array(half_psf)
+
 default_wcs_string = """WCSAXES =                    2 / Number of coordinate axes                      
 CRPIX1  =                  0.0 / Pixel coordinate of reference point            
 CRPIX2  =                  0.0 / Pixel coordinate of reference point            
