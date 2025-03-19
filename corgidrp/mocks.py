@@ -271,7 +271,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
     exthdr['DATALVL']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
-
+    exthdr["ISPC"] = False                  # Flag from telemetry saying whether the frame was photon-counted or not
     return prihdr, exthdr
 
 
