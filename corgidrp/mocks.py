@@ -2803,8 +2803,8 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
     exthd.set('EXTNAME','PSFCUBE')
 
     # Need nx, ny to be odd
-    assert nx%2 == 1
-    assert ny%2 == 1
+    assert nx%2 == 1, 'nx must be odd'
+    assert ny%2 == 1, 'ny must be odd'
 
     x_arr = []
     y_arr = []
@@ -2833,7 +2833,8 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
     dq_cube = np.zeros_like(psf_cube)
     dq_hdr = fits.Header()
 
-    ct_excam = np.array([x_arr,y_arr,np.ones_like(x_arr).astype(float)])
+    cts = np.linspace(1.,0.01,len(x_arr))
+    ct_excam = np.array([x_arr,y_arr,cts])
     ct_hdr = fits.Header()
     ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
     

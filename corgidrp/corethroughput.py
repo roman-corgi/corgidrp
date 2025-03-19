@@ -412,3 +412,24 @@ def generate_ct_cal(
         input_dataset=dataset)
 
     return ct_cal
+
+def get_1d_ct(ct_cal,cenxy,seps,
+              method='nearest'):
+
+    x, y, ct = ct_cal.ct_excam
+    xcen, ycen = cenxy
+
+    ct_seps = np.sqrt((x-xcen)**2 + (y-ycen)**2)
+
+    if method == 'nearest':
+        cts_out = []
+        for sep in seps:
+            argmin = np.argmin(np.abs(sep-ct_seps))
+            ct_out = ct[argmin]
+            cts_out.append(ct_out)
+        
+        ct_arr_out = np.array([seps,cts_out])
+        return ct_arr_out
+    else:
+        raise NotImplementedError
+
