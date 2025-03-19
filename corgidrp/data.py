@@ -8,6 +8,7 @@ import pandas as pd
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
 from pyklip.instruments.utils.wcsgen import generate_wcs
+from scipy.interpolate import LinearNDInterpolator
 from astropy import wcs
 import copy
 import corgidrp
@@ -1631,6 +1632,145 @@ class CoreThroughputCalibration(Image):
         delta_fsam_excam = (fpamfsamcal.data[1] @ delta_fsam_um).transpose()[0]
         # Return the FPAM and FSAM centers during the core throughput observations
         return cor_fpm_center + delta_fpam_excam, cor_fpm_center + delta_fsam_excam
+
+    def InterpolateCT(self,
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal,
+        logr=False):
+        """ Interpolate CT value at a desired position of a coronagraphic
+            observation.
+
+        First implementation based on Max Millar-Blanchaer's suggestions
+        https://collaboration.ipac.caltech.edu/display/romancoronagraph/Max%27s+Interpolation+idea
+
+        Here we assume that the core throughput measurements with the star
+        located along a series of radial spikes at various azimuths. 
+
+        It throws an error if the radius of the new points is outside the range
+        of the input radii. If the azimuth is greater than the maximum azimuth
+        of the core throughput dataset, it will mod the azimuth to be within
+        the range of the input azimuths.
+
+        Assumes that the input core_thoughput is between 0 and 1.
+
+        # TODO: review accuracy of the method with simulated data that are more
+        # representative of future mission data, including error budget and 
+        # expected azimuthal dependence on the CT.
+
+        Args:
+          x_cor (numpy.ndarray): Values of the first dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          y_cor (numpy.ndarray): Values of the second dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+          logr (bool) (optional): If True, radii are mapped into their logarithmic
+              values before constructing the interpolant.
+
+        Returns:
+          Returns interpolated value of the CT, first, and positions for valid
+            locations as a numpy ndarray.
+        """
+        if isinstance(x_cor, np.ndarray) is False:
+            if isinstance(x_cor, int) or isinstance(x_cor, float):
+                x_cor = np.array([x_cor])
+            elif isinstance(x_cor, list):
+                x_cor = np.array(x_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+        if isinstance(y_cor, np.ndarray) is False:
+            if isinstance(y_cor, int) or isinstance(y_cor, float):
+                y_cor = np.array([y_cor])
+            elif isinstance(y_cor, list):
+                y_cor = np.array(y_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+
+        if len(x_cor) != len(y_cor):
+            raise ValueError('Target locations must have the same number of '
+                'elements')
+  
+        # Get FPM's center during CT observations
+        fpam_ct_pix_out = self.GetCTFPMPosition(
+                corDataset,
+                fpamfsamcal)[0]
+        # Get CT measurements relative to CT FPM's center
+        x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
+        y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
+        core_throughput = self.ct_excam[2,:]
+        # Algorithm
+        radii = np.sqrt(x_grid**2 + y_grid**2)
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero. 
+        azimuths = np.arctan2(y_grid, x_grid)
+        azimuth0 = azimuths.min()
+        azimuths = azimuths - azimuth0
+        # Now we can create a 2D array of the radii and azimuths
+        
+        # Calculate the new datapoint in the right radius and azimuth coordinates
+        radius_cor = np.sqrt(x_cor**2 + y_cor**2)
+       
+        # Remove interpolation locations that are outside the radius range
+        r_good = radius_cor >= radii.min()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are less than the minimum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_good = radius_cor <= radii.max()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are greater than the maximum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.max()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
+        azimuth_cor = np.arctan2(y_cor, x_cor) - azimuth0
+       
+        # MOD this azimuth so that we're in the right range: all angles will be
+        # within [0, azimuths.max()), including negative values
+        azimuth_cor = azimuth_cor % azimuths.max()
+       
+        if logr: 
+            radii = np.log10(radii)
+            radius_cor = np.log10(radius_cor)
+       
+        rad_az = np.c_[radii, azimuths]
+        # Make the interpolator
+        interpolator = LinearNDInterpolator(rad_az, core_throughput)
+        # Now interpolate: 
+        interpolated_values = interpolator(radius_cor, azimuth_cor)
+       
+        # Raise ValueError if CT < 0, CT> 1
+        if np.any(interpolated_values < 0) or np.any(interpolated_values > 1): 
+            raise ValueError('Some interpolated core throughput values are '
+                f'out of bounds (0,1): ({interpolated_values.min():.2f}, '
+                f'{interpolated_values.max():.2f})')
+
+        # Raise ValueError if all CT are NaN
+        if np.all(np.isnan(interpolated_values)):
+            raise ValueError('There are no valid target positions within the ' +
+                'range of input PSF locations')
+
+        # Extrapolation: Remove NaN values
+        is_valid = np.where(np.isnan(interpolated_values) == False)[0]
+        return np.array([interpolated_values[is_valid],
+            x_cor[is_valid],
+            y_cor[is_valid]])
 
 class PyKLIPDataset(pyKLIP_Data):
     """
