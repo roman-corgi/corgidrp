@@ -1708,7 +1708,6 @@ class CoreThroughputCalibration(Image):
         x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
         y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
         core_throughput = self.ct_excam[2,:]
-        breakpoint()
         # Algorithm
         radii = np.sqrt(x_grid**2 + y_grid**2)
 
@@ -1758,6 +1757,7 @@ class CoreThroughputCalibration(Image):
        
         # Raise ValueError if CT < 0, CT> 1
         if np.any(interpolated_values < 0) or np.any(interpolated_values > 1): 
+            breakpoint()
             raise ValueError('Some interpolated core throughput values are '
                 f'out of bounds (0,1): ({interpolated_values.min():.2f}, '
                 f'{interpolated_values.max():.2f})')
