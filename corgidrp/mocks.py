@@ -2561,7 +2561,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     return gauss
 
 def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
+                      fsm_y=0.0, exptime=1.0, filedir=None, platescale=21.8, 
                       background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
@@ -2578,7 +2578,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
         exptime (float): (Optional) Exposure time (s)
         filedir (str): (Optional) Directory path to save the output file
-        color_cor (float): (Optional) Color correction factor
         platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
         background (float): optional additive background value
         add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
@@ -2609,7 +2608,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     ypos = center[1] + fsm_y_shift
 
     # Convert flux from calspec units to photo-electrons
-    flux = (star_flux * exptime / color_cor) / cal_factor
+    flux = (star_flux * exptime) / cal_factor
 
     # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
@@ -2648,36 +2647,29 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # Error map
     err = np.full(size, noise_scale)
 
-    # Define header
-    new_hdr = {
-        'TARGET': target_name,
-        'CFAMNAME': filter,
-        'FPAMNAME': fpamname,
-        'FPAM_H': 2503.7,
-        'FPAM_V': 6124.9,
-        'FSM_X': fsm_x,
-        'FSM_Y': fsm_y,
-        'EXPTIME': exptime,
-        'COL_COR': color_cor,
-        'CRPIX1': xpos,
-        'CRPIX2': ypos,
-        'CTYPE1': 'RA---TAN',
-        'CTYPE2': 'DEC--TAN',
-        'CDELT1': (platescale * 0.001) / 3600,
-        'CDELT2': (platescale * 0.001) / 3600,
-        'CRVAL1': target_location[0],
-        'CRVAL2': target_location[1],
-    }
-
-    newhdr = fits.Header(new_hdr)
-
     # Create image object
-    prihdr, exthdr = create_default_headers()
-    prihdr['VISTYPE'] = 'FLUXCAL'
+    prihdr, exthdr = create_default_L2b_headers()
+    
+    prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
-
-    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=newhdr)
+    prihdr['TARGET'] = target_name
+    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
+    exthdr['FPAMNAME'] = fpamname
+    exthdr['FPAM_H']   = 2503.7
+    exthdr['FPAM_V']   = 6124.9
+    exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
+    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
+    exthdr['CTYPE1']   = 'RA---TAN'
+    exthdr['CTYPE2']   = 'DEC--TAN'
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
+    exthdr['CRVAL2']   = target_location[1]
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
 
     # Save file
     # TO DO: update with file name conventions
