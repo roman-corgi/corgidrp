@@ -18,6 +18,31 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        prihdr['PHTCNT'] = False
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 @pytest.mark.e2e
 def test_trad_dark(tvacdata_path, e2eoutput_path):
     '''There is no official II&T code for creating a "traditional" master dark (i.e., a dark made from taking the 
@@ -61,6 +86,10 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
+    # modify headers from TVAC to in-flight headers
+    fix_headers_for_tvac(trad_dark_data_filelist)
+
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make a new nonlinear calibration file using
@@ -70,7 +99,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -150,8 +179,8 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     exptime = 100.0 # read off header from TVAC files
     fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
     fwc_em_e = 100000  # same as what is in DRP's DetectorParams
-    telem_rows_start = detector_params.params['telem_rows_start']
-    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows_start = detector_params.params['TELRSTRT']
+    telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
     proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
                  bias_offset, em_gain, exptime,
@@ -237,6 +266,10 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
+    # modify headers from TVAC to in-flight headers
+    fix_headers_for_tvac(trad_dark_data_filelist)
+
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make a new nonlinear calibration file using
@@ -246,7 +279,7 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -326,8 +359,8 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     exptime = 100.0 # read off header from TVAC files
     fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
     fwc_em_e = 100000  # same as what is in DRP's DetectorParams
-    telem_rows_start = detector_params.params['telem_rows_start']
-    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows_start = detector_params.params['TELRSTRT']
+    telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
     proc_dark = Process(bad_pix, eperdn, fwc_em_e, fwc_pp_e,
                  bias_offset, em_gain, exptime,
@@ -376,7 +409,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
 
     outputdir = thisfile_dir
 
