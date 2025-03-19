@@ -43,12 +43,16 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        if 'OBSNUM' not in prihdr:
+            prihdr['OBSNUM'] = prihdr['OBSID']
+        if 'EMGAIN_C' not in exthdr:
+            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        if 'DATALVL' not in exthdr:
+            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         # exthdr['KGAINPAR'] = exthdr['KGAIN']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        if 'OBSNAME' not in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
         # Update FITS file
