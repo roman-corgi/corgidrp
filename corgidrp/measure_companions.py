@@ -4,6 +4,7 @@ import math
 from skimage.transform import resize
 from astropy.table import Table
 import corgidrp.fluxcal as fluxcal
+import pyklip
 import pyklip.fm as fm
 import pyklip.fmlib.fmpsf as fmpsf
 import pyklip.fitpsf as fitpsf
@@ -107,7 +108,11 @@ def measure_companions(
         # star if it was at the same position as the companion
         scaled_psf_data = nearest_frame.data * host_psf_ratio  
 
-        ## Create a new Image object with the same headers and error maps (if applicable)
+        ## FOR DEBUGGING, remove these lines
+        artificial_factor = 1e6
+        scaled_psf_data*= artificial_factor
+
+        ## Create a new Image object with the same headers and error maps
         scaled_psf_at_companion_loc = Image(
             data_or_filepath=scaled_psf_data, 
             pri_hdr=nearest_frame.pri_hdr, 
@@ -123,6 +128,9 @@ def measure_companions(
             x_star = coronagraphic_dataset[0].ext_hdr.get('STARLOCX', None)
             y_star = coronagraphic_dataset[0].ext_hdr.get('STARLOCY', None)
             print("star center", x_star, y_star)
+            r_comp = np.sqrt( (x_c - x_star)**2 + (y_c - y_star)**2 )
+            print("Companion radius:", r_comp)
+
             guesssep = np.sqrt((x_c - x_star) ** 2 + (y_c - y_star) ** 2)
             #guesspa = np.degrees(np.arctan2(x_c - x_star, y_star - y_c)) % 360  # Ensures PA is [0, 360] degrees
             guesspa = 315
@@ -134,8 +142,6 @@ def measure_companions(
             print("guess sep, guess pa", guesssep, guesspa)
             print("max of scaled_psf_data:", np.nanmax(scaled_psf_data))
             print("psf_guess_counts:", psf_guess_counts)
-
-            psf_ref_input_dataset = create_noisy_dataset(scaled_psf_at_companion_loc, noise_std=0.01)
 
             fit = forward_model_psf(coronagraphic_dataset, scaled_psf_at_companion_loc, guesssep, guesspa,
                                     guess_flux, outputdir=output_dir)
@@ -328,12 +334,17 @@ def forward_model_psf(
     print("PAs:", pyklip_sci.PAs)
     print("Wavelengths (wvs):", pyklip_sci.wvs)
 
-    # We'll take the star center from the first frame in the dataset
+    # star center from the first frame in the dataset
     star_center = pyklip_sci.centers[0]
+
     # Compute approximate companion location from guesssep, guesspa
     theta_rad = math.radians(guesspa)
-    y_guess = star_center[0] + guesssep * math.sin(theta_rad)
     x_guess = star_center[1] + guesssep * math.cos(theta_rad)
+    y_guess = star_center[0] + guesssep * math.sin(theta_rad)
+
+    # for debugging
+    print("After computing guesssep/guesspa, trying to inject planet at", x_guess, y_guess)
+    print("max(off_axis_psf.data) =", np.nanmax(off_axis_psf.data))
 
     # ------------------- 2) Prepare the off-axis PSF data ------------------- #
     dataset_shape = pyklip_sci.input.shape[-2:]  # e.g. (200, 200)
@@ -342,8 +353,8 @@ def forward_model_psf(
     # If the off-axis PSF is smaller or bigger than science frames, resize to match
     psf_resized = resize(psf_array, dataset_shape, anti_aliasing=True)
 
-    # Multiply by guessflux to get initial scale
-    psf_scaled = psf_resized[np.newaxis, np.newaxis, :, :] * guessflux
+    # Multiply by guessflux to get initial scale? maybe? this is for debugging
+    psf_scaled = psf_resized[np.newaxis, np.newaxis, :, :]
 
     # ------------------- 3) Initialize the FMPlanetPSF object ------------------- #
     fm_class = fmpsf.FMPlanetPSF(
@@ -362,8 +373,10 @@ def forward_model_psf(
     annulus_inner = max(0, guesssep - annulus_halfwidth)
     annulus_outer = guesssep + annulus_halfwidth
     annuli = [[annulus_inner, annulus_outer]]
+    annuli = 1
 
     print(f"\nRunning KLIP-FM in ADI mode, annulus = [{annulus_inner}, {annulus_outer}]")
+    '''
     fm.klip_dataset(
         pyklip_sci,
         fm_class,
@@ -372,10 +385,17 @@ def forward_model_psf(
         numbasis=numbasis,
         annuli=annuli,
         subsections=1,
-        padding=0,
-        movement=None,   # or some small angle if you want
-        mode="ADI"
-    )
+        #padding=0,
+        movement=0,   
+        #mode="ADI"
+    )'
+    '''
+
+    pyklip.parallelized.klip_dataset(pyklip_sci, outputdir=outputdir,
+                              annuli=annuli, subsections=1, movement=0, numbasis=numbasis,
+                              calibrate_flux=False, mode='ADI',
+                              fileprefix=fileprefix)
+    
     print("Parallactic Angles (PAs):", pyklip_sci.PAs)
 
     # ------------------- 5) Load the resulting FM & KLIP-sub images ----------- #
