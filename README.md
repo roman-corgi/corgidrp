@@ -15,15 +15,21 @@ That configuration directory will be used to locate things on your computer such
 
 ### For Developers
 
-Large binary files (used in tests) are stored in Git LFS. [Install Git LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage) if it isn't already installed.  You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
+ 1. Large binary files (used in tests) are stored in Git LFS. [Install Git LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage) if it isn't already installed.  You may need to run `git lfs pull` after checking out the repository to download the latest large binary files, or the unit tests may fail.
 
-To run the existing end-to-end tests, you also need the II&T code, which is used directly for comparing results. This also requires Git LFS to be installed first. Then install the II&T code by doing the following while in the top-level folder:
+ 2. To lint your code locally, you'll need to install `flake8`:
+
+```
+pip install flake8 flake8-docstrings-complete
+```
+
+ 3. To run the existing end-to-end tests, you also need the II&T code, which is used directly for comparing results. This also requires Git LFS to be installed first. Then install the II&T code by doing the following while in the top-level folder. This will install the II&T repositories `cal` and `proc_cgi_frame`. 
 
 ```
 pip install -r requirements_e2etests.txt corgidrp
 ```
 
-This will install the II&T repositories `cal` and `proc_cgi_frame`.  
+
 
 ### Troubleshooting
 
