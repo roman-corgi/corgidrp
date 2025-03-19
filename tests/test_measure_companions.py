@@ -116,9 +116,10 @@ def generate_test_data(out_dir):
         FpamFsamCal=FpamFsamCal, blur_sigma=0.5, noise_std=1e-8, outdir=out_dir, platescale=0.0218
     )
 
+    rolls = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]
     coron_data = mocks.generate_coron_dataset_with_companions(
-        n_frames=1, shape=(200, 200), companion_xy=[(120, 80), (90, 130)], companion_counts=[host_star_counts / 2, host_star_counts / 3],
-        host_star_counts=host_star_counts, roll_angles=[10.0], add_noise=True, noise_std=1e-8, outdir=out_dir
+        n_frames=10, shape=(200, 200), companion_xy=[(120, 80), (90, 130)], companion_counts=[host_star_counts / 2, host_star_counts / 3],
+        host_star_counts=host_star_counts, roll_angles=rolls, add_noise=True, noise_std=1e-8, outdir=out_dir
     )
 
     return direct_star_image, host_star_counts, fluxcal_factor, zero_point, dataset_ct, ct_cal, FpamFsamCal, psf_sub_frame, coron_data

@@ -1,11 +1,13 @@
 import os
 import numpy as np
+import math
 from skimage.transform import resize
 from astropy.table import Table
 import corgidrp.fluxcal as fluxcal
 import pyklip.fm as fm
 import pyklip.fmlib.fmpsf as fmpsf
 import pyklip.fitpsf as fitpsf
+import pyklip.rdi as rdi
 from corgidrp.data import PyKLIPDataset, Image, Dataset
 import numpy as np
 import corgidrp.fluxcal as fluxcal
@@ -122,17 +124,22 @@ def measure_companions(
             y_star = coronagraphic_dataset[0].ext_hdr.get('STARLOCY', None)
             print("star center", x_star, y_star)
             guesssep = np.sqrt((x_c - x_star) ** 2 + (y_c - y_star) ** 2)
-            guesspa = np.degrees(np.arctan2(x_c - x_star, y_star - y_c)) % 360  # Ensures PA is [0, 360] degrees
+            #guesspa = np.degrees(np.arctan2(x_c - x_star, y_star - y_c)) % 360  # Ensures PA is [0, 360] degrees
+            guesspa = 315
             psf_guess_counts, _ = measure_counts(scaled_psf_at_companion_loc, phot_method, None, 
                                                                  **phot_method_kwargs)
             guess_flux = psf_guess_counts #psf_guess_counts /fluxcal_factor.data # TO DO: but then do we need to scale the entire image by fluxcal factor?
 
             print("checking star loc", x_star, y_star)
+            print("guess sep, guess pa", guesssep, guesspa)
+            print("max of scaled_psf_data:", np.nanmax(scaled_psf_data))
+            print("psf_guess_counts:", psf_guess_counts)
 
             psf_ref_input_dataset = create_noisy_dataset(scaled_psf_at_companion_loc, noise_std=0.01)
 
-            fit = forward_model_psf(coronagraphic_dataset, psf_ref_input_dataset, scaled_psf_at_companion_loc, guesssep, guesspa,
+            fit = forward_model_psf(coronagraphic_dataset, scaled_psf_at_companion_loc, guesssep, guesspa,
                                     guess_flux, outputdir=output_dir)
+
             print("forward model fit", fit)
         else:
             psf_sub_star_at_companion_loc, efficiency = classical_psf_sub(scaled_psf_at_companion_loc)
@@ -251,7 +258,6 @@ def create_noisy_dataset(base_image, noise_std=0.01):
 
 def forward_model_psf(
     coronagraphic_dataset,
-    reference_dataset,  # <-- NEW: Reference PSF dataset for RDI
     off_axis_psf,
     guesssep,
     guesspa,
@@ -259,23 +265,20 @@ def forward_model_psf(
     outputdir=".",
     fileprefix="companion-fm",
     numbasis=[1, 3],
-    method="mcmc",          # 'mcmc' or 'maxl' 
-    annulus_halfwidth=15,   # half-width (in pixels) of annulus centered on guesssep
-    movement=0,             # exclusion criterion in KLIP
-    stamp_size=19,          # size of fitting stamp
-    corr_len_guess=3.0,     # initial guess for correlation length
-    x_range=1.5,            # prior range for X offset
-    y_range=1.5,            # prior range for Y offset
-    flux_range=20.0,         # prior range for flux
-    corr_len_range=1.0,     # log10 prior range for correlation length
-    # If method == "mcmc":
+    method="mcmc",          # or "maxl"
+    annulus_halfwidth=15,
+    stamp_size=40,
+    corr_len_guess=3.0,
+    x_range=1.5,
+    y_range=1.5,
+    flux_range=20.0,
+    corr_len_range=1.0,
     nwalkers=100,
     nburn=200,
     nsteps=800,
     numthreads=1,
-    # Calibration error propagation (placeholders)
     star_center_err=0.05,   # in pixels
-    platescale=21.8,        # mas/pixel 
+    platescale=21.8,        # mas/pixel
     platescale_err=0.02,    # mas/pixel
     pa_offset=0.0,          # known absolute offset in degrees
     pa_uncertainty=0.1      # PA calibration uncertainty in degrees
@@ -309,109 +312,117 @@ def forward_model_psf(
     Returns:
         fit (pyklip.fitpsf.FMAstrometry): Fit object containing best-fit parameters.
     """
-    # Ensure output directory exists
+    # 0) Make sure output directory exists
     os.makedirs(outputdir, exist_ok=True)
 
-    # Wrap science dataset in PyKLIP
-    coronagraphic_dataset = PyKLIPDataset(coronagraphic_dataset, highpass=False)
+    # ------------------- 1) Wrap science dataset in PyKLIP ------------------- #
+    pyklip_sci = PyKLIPDataset(coronagraphic_dataset, highpass=False)
 
-    # Wrap reference dataset in PyKLIP
-    reference_dataset = PyKLIPDataset(reference_dataset, highpass=False)
+    # Manually read roll angles from each frame's ext_hdr["ROLL"] (if not already set):
+    roll_angles = [frame.ext_hdr.get("ROLL", 0.0) for frame in coronagraphic_dataset]
+    pyklip_sci.PAs = np.array(roll_angles, dtype=float)
 
-    # For RDI, we need to pass the reference library explicitly.
-    psf_library = reference_dataset.input
+    print("\n--- Debugging coronagraphic_dataset ---")
+    print("Input shape:", pyklip_sci.input.shape)
+    print("Centers:", pyklip_sci.centers)
+    print("PAs:", pyklip_sci.PAs)
+    print("Wavelengths (wvs):", pyklip_sci.wvs)
 
-    # 2) Prepare the off-axis PSF
-    #psf_array = off_axis_psf.data  # Extract raw data
-    dataset_shape = coronagraphic_dataset.input.shape[-2:]  # Get dataset spatial dimensions
+    # We'll take the star center from the first frame in the dataset
+    star_center = pyklip_sci.centers[0]
+    # Compute approximate companion location from guesssep, guesspa
+    theta_rad = math.radians(guesspa)
+    y_guess = star_center[0] + guesssep * math.sin(theta_rad)
+    x_guess = star_center[1] + guesssep * math.cos(theta_rad)
 
-    # Resize the PSF to match dataset dimensions
-    #psf_resized = resize(psf_array, dataset_shape, anti_aliasing=True)
-    #psf_resized = psf_resized[np.newaxis, np.newaxis, :, :]  # (1, 1, H, W)
+    # ------------------- 2) Prepare the off-axis PSF data ------------------- #
+    dataset_shape = pyklip_sci.input.shape[-2:]  # e.g. (200, 200)
+    psf_array = off_axis_psf.data
 
-    # Scale the PSF based on the guessed flux
-    #psf_scaled = psf_resized * guessflux
+    # If the off-axis PSF is smaller or bigger than science frames, resize to match
+    psf_resized = resize(psf_array, dataset_shape, anti_aliasing=True)
 
-    # Debug: Print PSF properties
-    #print("Resized Off-Axis PSF Shape:", psf_scaled.shape)
-    #print("Off-Axis PSF Min:", np.nanmin(psf_scaled), "Max:", np.nanmax(psf_scaled))
+    # Multiply by guessflux to get initial scale
+    psf_scaled = psf_resized[np.newaxis, np.newaxis, :, :] * guessflux
 
-    # 3) Initialize Forward Model Planet PSF class
+    # ------------------- 3) Initialize the FMPlanetPSF object ------------------- #
     fm_class = fmpsf.FMPlanetPSF(
-        dataset_shape, 
-        np.array(numbasis), 
-        guesssep, 
-        guesspa, 
+        dataset_shape,
+        np.array(numbasis),
+        guesssep,
+        guesspa,
         guessflux,
-        psf_scaled, 
-        [1.0], 
-        star_spt=None, 
+        psf_scaled,   # Pass the scaled/resized PSF
+        [1.0],        # Single-wavelength only
+        star_spt=None,
         spectrallib=None
     )
 
-    # 4) Run KLIP-FM in RDI mode
-    print("Running KLIP-FM with RDI...")
+    # ------------------- 4) Run KLIP-FM in ADI mode (no library) -------------- #
+    annulus_inner = max(0, guesssep - annulus_halfwidth)
+    annulus_outer = guesssep + annulus_halfwidth
+    annuli = [[annulus_inner, annulus_outer]]
 
-    # Define annuli, ensuring the lower bound is non-negative.
-    annuli = [[max(guesssep - annulus_halfwidth, 0), guesssep + annulus_halfwidth]]
-    
+    print(f"\nRunning KLIP-FM in ADI mode, annulus = [{annulus_inner}, {annulus_outer}]")
     fm.klip_dataset(
-        coronagraphic_dataset,
+        pyklip_sci,
         fm_class,
-        psf_library=psf_library,  # <-- Pass the reference PSF library here
-        mode="RDI",              # RDI mode requires an external PSF library
         outputdir=outputdir,
         fileprefix=fileprefix,
         numbasis=numbasis,
         annuli=annuli,
         subsections=1,
         padding=0,
-        movement=None          # Typically None for RDI
+        movement=None,   # or some small angle if you want
+        mode="ADI"
     )
+    print("Parallactic Angles (PAs):", pyklip_sci.PAs)
 
-    # 5) Read KLIP-FM output files
+    # ------------------- 5) Load the resulting FM & KLIP-sub images ----------- #
     fm_filename = os.path.join(outputdir, f"{fileprefix}-fmpsf-KLmodes-all.fits")
     klip_filename = os.path.join(outputdir, f"{fileprefix}-klipped-KLmodes-all.fits")
+    print(f"\nFM FITS file: {fm_filename}")
+    print(f"KLIP-subtracted file: {klip_filename}")
 
-    fm_hdu = fits.open(fm_filename)
-    data_hdu = fits.open(klip_filename)
+    with fits.open(fm_filename) as fm_hdu:
+        fm_hdu.info()
+        # if numbasis=[1,3], fm_hdu[0].data has shape (2, y, x)
+        # pick the 2nd "KL mode" for the fit?
+        fm_frame = fm_hdu[0].data[1]
 
-    fm_frame = fm_hdu[0].data[1]  # Extract KLIP-FM model frame
-    data_frame = data_hdu[0].data[1]  # Extract KLIP-subtracted data frame
+    with fits.open(klip_filename) as data_hdu:
+        data_hdu.info()
+        data_frame = data_hdu[0].data[1]
 
-    fm_hdu.close()
-    data_hdu.close()
-
-    # Save FITS files for debugging
-    fits.writeto(os.path.join(outputdir, "fm_frame.fits"), fm_frame, overwrite=True)
-    fits.writeto(os.path.join(outputdir, "psf_subtracted.fits"), data_frame, overwrite=True)
-
-    print("Saved FITS files: fm_frame.fits and psf_subtracted.fits")
-    print("FM Frame Mean:", np.nanmean(fm_frame))
-    print("Data Frame Mean:", np.nanmean(data_frame))
-
-    # Plot the images
+    # ------------------- 6) Quick plot ------------------- #
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    axes[0].imshow(fm_frame, cmap='inferno', origin='lower')
-    axes[0].set_title("Forward-Modeled PSF")
-    axes[1].imshow(data_frame, cmap='inferno', origin='lower')
-    axes[1].set_title("PSF-Subtracted Data")
+    axes[0].imshow(fm_frame, origin='lower')
+    axes[0].set_title("Forward-Modeled PSF (ADI)")
+    axes[1].imshow(data_frame, origin='lower')
+    axes[1].set_title("PSF-Subtracted Data (ADI)")
     plt.show()
 
-    # 6) Fit astrometry with the KLIP-FM output
+    # ------------------- 7) Fit astrometry with FMAstrometry ------------------ #
+    # Center the stamps near the guessed companion coords
     fit = fitpsf.FMAstrometry(guesssep, guesspa, stamp_size, method=method)
-    fit.generate_fm_stamp(fm_frame, [100, 100], padding=5)
-    fit.generate_data_stamp(data_frame, [100, 100], dr=4, exclusion_radius=10)
+
+    # Extract stamp_size around (x_guess, y_guess)
+    fit.generate_fm_stamp(fm_frame, [x_guess, y_guess], padding=5)
+    fit.generate_data_stamp(data_frame, [x_guess, y_guess], dr=4, exclusion_radius=10)
+
+    # MCMC kernel
     fit.set_kernel("matern32", [corr_len_guess], [r"$l$"])
     fit.set_bounds(x_range, y_range, flux_range, [corr_len_range])
 
-    # 7) Run the fit
+    print("\nFitting astrometry with FMAstrometry ...")
     fit.fit_astrometry(nwalkers=nwalkers, nburn=nburn, nsteps=nsteps, numthreads=numthreads)
 
     # 8) Propagate calibration uncertainties
     fit.propogate_errs(star_center_err, platescale, platescale_err, pa_offset, pa_uncertainty)
+    print("ADI-based forward modeling is complete.")
 
     return fit
+
 
 def measure_core_throughput_at_location(
     x_c, y_c,
