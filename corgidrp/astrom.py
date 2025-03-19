@@ -50,15 +50,10 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
     """
 
     # 1) Unpack initial guess or fall back to brightest pixel
-    if centering_initial_guess is not None:
-        x_init, y_init = centering_initial_guess
+    if centering_initial_guess is not None and None not in centering_initial_guess:
+        peak_x, peak_y = int(round(centering_initial_guess[0])), int(round(centering_initial_guess[1]))
     else:
-        x_init, y_init = None, None
-
-    if x_init is None or y_init is None:
         peak_y, peak_x = np.unravel_index(np.argmax(frame), frame.shape)
-    else:
-        peak_x, peak_y = int(round(x_init)), int(round(y_init))
 
     # 2) Define the subarray (region of interest) around the peak
     y_min = max(0, peak_y - roi_radius)

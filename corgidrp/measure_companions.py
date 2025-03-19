@@ -1,15 +1,17 @@
 import os
 import numpy as np
+from skimage.transform import resize
 from astropy.table import Table
 import corgidrp.fluxcal as fluxcal
 import pyklip.fm as fm
 import pyklip.fmlib.fmpsf as fmpsf
 import pyklip.fitpsf as fitpsf
-from corgidrp.data import PyKLIPDataset, Image
+from corgidrp.data import PyKLIPDataset, Image, Dataset
 import numpy as np
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda    
 import astropy.io.fits as fits
+import matplotlib.pyplot as plt
 
 
 def measure_companions(
@@ -116,17 +118,21 @@ def measure_companions(
         
         if forward_model == True:
             # Get star location from headers
-            x_star = scaled_psf_at_companion_loc.ext_hdr.get('STARLOCX', None)
-            y_star = scaled_psf_at_companion_loc.ext_hdr.get('STARLOCY', None)
+            x_star = coronagraphic_dataset[0].ext_hdr.get('STARLOCX', None)
+            y_star = coronagraphic_dataset[0].ext_hdr.get('STARLOCY', None)
+            print("star center", x_star, y_star)
             guesssep = np.sqrt((x_c - x_star) ** 2 + (y_c - y_star) ** 2)
             guesspa = np.degrees(np.arctan2(x_c - x_star, y_star - y_c)) % 360  # Ensures PA is [0, 360] degrees
             psf_guess_counts, _ = measure_counts(scaled_psf_at_companion_loc, phot_method, None, 
                                                                  **phot_method_kwargs)
+            guess_flux = psf_guess_counts #psf_guess_counts /fluxcal_factor.data # TO DO: but then do we need to scale the entire image by fluxcal factor?
 
             print("checking star loc", x_star, y_star)
 
-            fit = forward_model_psf(coronagraphic_dataset, scaled_psf_at_companion_loc, guesssep, guesspa,
-                                    psf_guess_counts, outputdir=output_dir)
+            psf_ref_input_dataset = create_noisy_dataset(scaled_psf_at_companion_loc, noise_std=0.01)
+
+            fit = forward_model_psf(coronagraphic_dataset, psf_ref_input_dataset, scaled_psf_at_companion_loc, guesssep, guesspa,
+                                    guess_flux, outputdir=output_dir)
             print("forward model fit", fit)
         else:
             psf_sub_star_at_companion_loc, efficiency = classical_psf_sub(scaled_psf_at_companion_loc)
@@ -209,19 +215,54 @@ def get_photometry_kwargs(phot_method):
     return photometry_options[phot_method]
 
 
+def create_noisy_dataset(base_image, noise_std=0.01):
+    """
+    Create a corgidrp.data.Dataset using base_image as the first item and a noisy
+    version of it as the second item.
+
+    Args:
+        base_image (corgidrp.data.Image): The input image.
+        noise_std (float): Standard deviation of the Gaussian noise to add.
+
+    Returns:
+        corgidrp.data.Dataset: A dataset containing the original and noisy images.
+    """
+    # Extract image data
+    base_data = base_image.data
+
+    # Generate Gaussian noise
+    noise = np.random.normal(scale=noise_std, size=base_data.shape)
+
+    # Create noisy image data
+    noisy_data = base_data + noise
+
+    # Create a new Image object for the noisy frame
+    noisy_image = Image(
+        data_or_filepath=noisy_data,
+        pri_hdr=base_image.pri_hdr,  # Keep the original headers
+        ext_hdr=base_image.ext_hdr
+    )
+
+    # Create a dataset with both images
+    dataset = Dataset([base_image, noisy_image])
+
+    return dataset
+
+
 def forward_model_psf(
     coronagraphic_dataset,
+    reference_dataset,  # <-- NEW: Reference PSF dataset for RDI
     off_axis_psf,
     guesssep,
     guesspa,
     guessflux,
     outputdir=".",
     fileprefix="companion-fm",
-    numbasis=[1, 7, 100],
-    method="mcmc",
+    numbasis=[1, 3],
+    method="mcmc",          # 'mcmc' or 'maxl' 
     annulus_halfwidth=15,   # half-width (in pixels) of annulus centered on guesssep
-    movement=4,             # exclusion criterion in KLIP
-    stamp_size=13,          # size of fitting stamp
+    movement=0,             # exclusion criterion in KLIP
+    stamp_size=19,          # size of fitting stamp
     corr_len_guess=3.0,     # initial guess for correlation length
     x_range=1.5,            # prior range for X offset
     y_range=1.5,            # prior range for Y offset
@@ -240,143 +281,137 @@ def forward_model_psf(
     pa_uncertainty=0.1      # PA calibration uncertainty in degrees
 ):
     """
-    Forward model an off-axis PSF through KLIP-FM to extract astrometry/photometry 
-    of a known companion in a coronagraphic dataset.
+    Forward model an off-axis PSF through KLIP-FM using Reference Differential Imaging (RDI)
+    to extract astrometry/photometry of a known companion in a coronagraphic dataset.
 
     Args:
-        coronagraphic_dataset (corgidrp.Dataset): The dataset containing coronagraphic images 
-            (with known companion(s)). 
-        off_axis_psf (corgidrp.Image): The off-axis PSF image (scaled to approximate the companion 
-            flux). This will serve as the 'template' for the forward-modeled PSF.
+        coronagraphic_dataset (corgidrp.Dataset): Science dataset with the companion.
+        reference_dataset (corgidrp.Dataset): Separate dataset containing reference PSFs for RDI.
+        off_axis_psf (corgidrp.Image): Off-axis PSF scaled to approximate the companion flux.
         guesssep (float): Initial guess at companion separation (in pixels).
         guesspa (float): Initial guess at companion position angle (in degrees).
-        guessflux (float): Initial guess at companion flux scaling (dimension depends on how
-            off_axis_psf has been normalized).
-        outputdir (str): Directory to store intermediate KLIP-FM outputs (optional).
+        guessflux (float): Initial guess at companion flux scaling.
+        outputdir (str): Directory to store intermediate KLIP-FM outputs.
         fileprefix (str): Prefix for output files.
-        numbasis (list of int): List of KL basis sizes to use.
-        method ({"mcmc", "maxl"}): “mcmc” = Bayesian (emcee) MCMC fit,
-            “maxl” = frequentist maximum-likelihood fit
-        annulus_halfwidth (float): Half-width of the annulus (in pixels) around `guesssep` in 
-            which KLIP will be performed.
-        movement (float): Angular exclusion criterion for PSF subtraction in pyKLIP.
-        stamp_size (int): Size of the extracted stamp (in pixels) around the companion for 
-            fitting.
-        corr_len_guess (float): Initial guess of the Gaussian Process correlation length.
-        x_range (float): Bounds for x/y offsets in linear space (uniform prior).
-        y_range (float): Bounds for x/y offsets in linear space (uniform prior).
-        flux_range (float): Bounds for log10 priors on flux length.
-        corr_len_range (float): Bounds for log10 priors on correlation length.
-        nwalkers (int): MCMC hyperparameters if method="mcmc".
-        nburn (int): MCMC hyperparameters if method="mcmc".
-        nsteps (int): MCMC hyperparameters if method="mcmc".
-        numthreads (int): Parallel threads for MCMC.
-        star_center_err (float): Uncertainty on star center (in pixels), for post-fit error 
-            propagation.
-        platescale (float): Plate scale in mas/pixel, for converting pixel offsets to mas.
-        platescale_err (float): Plate scale uncertainty in mas/pixel.
-        pa_offset (float): Known absolute offset in instrument position angle (in degrees).
-        pa_uncertainty (float): Additional systematic uncertainty in position angle (in degrees).
+        numbasis (list of int): KL basis sizes to use.
+        method ({"mcmc", "maxl"}): Bayesian (MCMC) or frequentist (MaxL) fit method.
+        annulus_halfwidth (float): Half-width of the annulus around `guesssep`.
+        movement (float): Angular exclusion criterion in pyKLIP (not used for RDI).
+        stamp_size (int): Size of the extracted stamp for fitting.
+        corr_len_guess (float): Initial guess for correlation length.
+        x_range (float), y_range (float): Prior range for astrometry offsets.
+        flux_range (float): Prior range for log10 flux.
+        corr_len_range (float): Prior range for correlation length.
+        nwalkers, nburn, nsteps, numthreads: MCMC hyperparameters.
+        star_center_err (float), platescale (float), platescale_err (float),
+        pa_offset (float), pa_uncertainty (float): Calibration uncertainty parameters.
 
     Returns:
-        fit (pyklip.fitpsf.FMAstrometry): The fitting object containing best-fit parameters, 
-            chains (if MCMC),and raw/final astrometry with uncertainties.
+        fit (pyklip.fitpsf.FMAstrometry): Fit object containing best-fit parameters.
     """
-    if not os.path.exists(outputdir):
-        os.makedirs(outputdir)
+    # Ensure output directory exists
+    os.makedirs(outputdir, exist_ok=True)
 
-    # 1) Wrap coronagraphic_dataset in PyKLIP dataset
+    # Wrap science dataset in PyKLIP
     coronagraphic_dataset = PyKLIPDataset(coronagraphic_dataset, highpass=False)
 
-    # 2) Prepare the 'psfs' argument for FMPlanetPSF
-    #    off_axis_psf might be 2D or 3D (if multi-wavelength)?
-    psf_array = off_axis_psf.data 
-    dataset_shape = coronagraphic_dataset.input.shape 
-    dataset_shape = coronagraphic_dataset.input.shape[-2:]
+    # Wrap reference dataset in PyKLIP
+    reference_dataset = PyKLIPDataset(reference_dataset, highpass=False)
 
-    # May (or may not) need multiple wavelength channels:
-    # For now assume single-channel data:
-    # Otherwise, replace wvs=[some_array_of_wavelengths].
-    wvs = [1.0]  # placeholder single wavelength
+    # For RDI, we need to pass the reference library explicitly.
+    psf_library = reference_dataset.input
 
-    if psf_array.data.ndim == 2:
-        psf_4d = psf_array[np.newaxis, np.newaxis, :, :]
-    else:
-        psf_4d = psf_array
+    # 2) Prepare the off-axis PSF
+    #psf_array = off_axis_psf.data  # Extract raw data
+    dataset_shape = coronagraphic_dataset.input.shape[-2:]  # Get dataset spatial dimensions
 
-    # 3) Initialize the Forward Model Planet PSF class
-    fm_class = fmpsf.FMPlanetPSF(dataset_shape, np.array(numbasis), guesssep,
-        guesspa, guessflux, psf_4d, wvs, star_spt=None, spectrallib=None)
+    # Resize the PSF to match dataset dimensions
+    #psf_resized = resize(psf_array, dataset_shape, anti_aliasing=True)
+    #psf_resized = psf_resized[np.newaxis, np.newaxis, :, :]  # (1, 1, H, W)
 
-    # 4) Run KLIP-FM on the coronagraphic dataset
-    annuli = [[guesssep - annulus_halfwidth, guesssep + annulus_halfwidth]]
+    # Scale the PSF based on the guessed flux
+    #psf_scaled = psf_resized * guessflux
 
-    fm.klip_dataset(coronagraphic_dataset, fm_class, outputdir=outputdir,
-        fileprefix=fileprefix, numbasis=numbasis, annuli=annuli, subsections=1,
-        padding=0, movement=movement)
+    # Debug: Print PSF properties
+    #print("Resized Off-Axis PSF Shape:", psf_scaled.shape)
+    #print("Off-Axis PSF Min:", np.nanmin(psf_scaled), "Max:", np.nanmax(psf_scaled))
 
-    # 5) Read the forward-modeled results and the PSF-subtracted data
+    # 3) Initialize Forward Model Planet PSF class
+    fm_class = fmpsf.FMPlanetPSF(
+        dataset_shape, 
+        np.array(numbasis), 
+        guesssep, 
+        guesspa, 
+        guessflux,
+        psf_scaled, 
+        [1.0], 
+        star_spt=None, 
+        spectrallib=None
+    )
+
+    # 4) Run KLIP-FM in RDI mode
+    print("Running KLIP-FM with RDI...")
+
+    # Define annuli, ensuring the lower bound is non-negative.
+    annuli = [[max(guesssep - annulus_halfwidth, 0), guesssep + annulus_halfwidth]]
+    
+    fm.klip_dataset(
+        coronagraphic_dataset,
+        fm_class,
+        psf_library=psf_library,  # <-- Pass the reference PSF library here
+        mode="RDI",              # RDI mode requires an external PSF library
+        outputdir=outputdir,
+        fileprefix=fileprefix,
+        numbasis=numbasis,
+        annuli=annuli,
+        subsections=1,
+        padding=0,
+        movement=None          # Typically None for RDI
+    )
+
+    # 5) Read KLIP-FM output files
     fm_filename = os.path.join(outputdir, f"{fileprefix}-fmpsf-KLmodes-all.fits")
     klip_filename = os.path.join(outputdir, f"{fileprefix}-klipped-KLmodes-all.fits")
-
-    kl_index = 1
 
     fm_hdu = fits.open(fm_filename)
     data_hdu = fits.open(klip_filename)
 
-    fm_frame = fm_hdu[0].data[kl_index]
-    fm_centx = fm_hdu[0].header['PSFCENTX']
-    fm_centy = fm_hdu[0].header['PSFCENTY']
-
-    data_frame = data_hdu[0].data[kl_index]
-    data_centx = data_hdu[0].header["PSFCENTX"]
-    data_centy = data_hdu[0].header["PSFCENTY"]
-
-    # these are the guessed values from the FM header
-    guesssep = fm_hdu[0].header['FM_SEP']
-    guesspa  = fm_hdu[0].header['FM_PA']
+    fm_frame = fm_hdu[0].data[1]  # Extract KLIP-FM model frame
+    data_frame = data_hdu[0].data[1]  # Extract KLIP-subtracted data frame
 
     fm_hdu.close()
     data_hdu.close()
 
-    # 6) Build the FMAstrometry fitting object
-    #fit = fitpsf.FMAstrometry(guesssep, guesspa, stamp_size, method=method)
+    # Save FITS files for debugging
+    fits.writeto(os.path.join(outputdir, "fm_frame.fits"), fm_frame, overwrite=True)
+    fits.writeto(os.path.join(outputdir, "psf_subtracted.fits"), data_frame, overwrite=True)
 
+    print("Saved FITS files: fm_frame.fits and psf_subtracted.fits")
+    print("FM Frame Mean:", np.nanmean(fm_frame))
+    print("Data Frame Mean:", np.nanmean(data_frame))
+
+    # Plot the images
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(fm_frame, cmap='inferno', origin='lower')
+    axes[0].set_title("Forward-Modeled PSF")
+    axes[1].imshow(data_frame, cmap='inferno', origin='lower')
+    axes[1].set_title("PSF-Subtracted Data")
+    plt.show()
+
+    # 6) Fit astrometry with the KLIP-FM output
     fit = fitpsf.FMAstrometry(guesssep, guesspa, stamp_size, method=method)
-
-    # Generate FM stamp (the forward-modeled PSF for the companion)
-    fit.generate_fm_stamp(fm_frame, [fm_centx, fm_centy], padding=5)
-
-    # Generate data stamp (the PSF-subtracted image of the companion)
-    fit.generate_data_stamp(data_frame, [data_centx, data_centy], 
-                            dr=4,               # radial annulus for local noise estimate
-                            exclusion_radius=10 # exclude actual companion location
-    )
-
-    # 7) Setup a Gaussian Process kernel
+    fit.generate_fm_stamp(fm_frame, [100, 100], padding=5)
+    fit.generate_data_stamp(data_frame, [100, 100], dr=4, exclusion_radius=10)
     fit.set_kernel("matern32", [corr_len_guess], [r"$l$"])
-
-    # 8) Set up prior bounds (or parameter bounds for max-likelihood)
     fit.set_bounds(x_range, y_range, flux_range, [corr_len_range])
 
-    # 9) Perform the fit
-    if method == "mcmc":
-        fit.fit_astrometry(nwalkers=nwalkers, nburn=nburn, nsteps=nsteps, numthreads=numthreads)
-    else:
-        fit.fit_astrometry()
+    # 7) Run the fit
+    fit.fit_astrometry(nwalkers=nwalkers, nburn=nburn, nsteps=nsteps, numthreads=numthreads)
 
-
-    # 10) Propagate calibration uncertainties (star center, platescale, etc.)
-    fit.propogate_errs(
-        star_center_err=star_center_err,
-        platescale=platescale,
-        platescale_err=platescale_err,
-        pa_offset=pa_offset,
-        pa_uncertainty=pa_uncertainty
-    )
+    # 8) Propagate calibration uncertainties
+    fit.propogate_errs(star_center_err, platescale, platescale_err, pa_offset, pa_uncertainty)
 
     return fit
-
 
 def measure_core_throughput_at_location(
     x_c, y_c,
