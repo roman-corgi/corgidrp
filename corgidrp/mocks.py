@@ -2852,6 +2852,8 @@ def create_ct_interp(
     min_angle=0,
     max_angle=6.2831853072,
     norm=1,
+    fpm_x=0,
+    fpm_y=0,
     pop_index=None,
     ):
     """
@@ -2870,6 +2872,8 @@ def create_ct_interp(
         norm (float): Factor to multiply the CT profile. Useful if one
           wants the CT to be between 0 and 1 after the division by the total counts
           that happens when estimating the CT of the Dataset in corethroughput.py.
+        fpm_x (float): FPM location in EXCAM (fractional) pixels. First dimension.
+        fpm_y (float): FPM location in EXCAM (fractional) pixels. Second dimension.
         pop_index (int) (optional): the Dataset skips the PSF with this index.
           Useful when testing interpolation by popping some PSFs and comparing
           the interpolated values with the original ones at the same location.
@@ -2920,11 +2924,12 @@ def create_ct_interp(
     r_grid, theta_grid = np.meshgrid(radii, azimuths)
     
     # Convert polar coordinates to Cartesian coordinates
-    x_grid = np.round(r_grid * np.cos(theta_grid)).flatten()
-    y_grid = np.round(r_grid * np.sin(theta_grid)).flatten()
-    
+    x_grid = np.round(fpm_x + r_grid * np.cos(theta_grid)).flatten()
+    y_grid = np.round(fpm_y + r_grid * np.sin(theta_grid)).flatten()
+    # Derive the final radial distance from the FPM's center
+    r_grid_from_fpm = np.sqrt((x_grid-fpm_x)**2 + (y_grid-fpm_y)**2)
     # Make up a core throughput dataset
-    core_throughput = r_grid.flatten()/r_grid.max()
+    core_throughput = r_grid_from_fpm.flatten()/r_grid_from_fpm.max()
     # Normalize to 1 by accounting for the contribution of the PSF to the CT
     core_throughput /= psf_model[psf_model>=psf_model.max()/2].sum()
     # Optionally, take into account an additional factor
@@ -2938,12 +2943,12 @@ def create_ct_interp(
         # Insert PSF at random location within the SCI frame
         x_image = int(x_grid[i_psf])
         y_image = int(y_grid[i_psf])
-        image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
-            512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf_model
+        image[y_image-imshape[0]//2:y_image+imshape[0]//2+1,
+            x_image-imshape[1]//2:x_image+imshape[1]//2+1] = psf_model
         # Adjust intensity following some radial profile
         image *= core_throughput[i_psf]
         # List of known positions
-        psf_loc += [[512+x_image-imshape[0]//2, 512+y_image-imshape[0]//2]]
+        psf_loc += [[x_image-imshape[0]//2, y_image-imshape[0]//2]]
         # Add numerator of core throughput
         half_psf += [image[image>=image.max()/2].sum()]
         # Build up the Dataset
