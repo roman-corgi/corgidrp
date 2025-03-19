@@ -187,7 +187,8 @@ def do_psf_subtraction(input_dataset,
     
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
-        Handle nans & propagate DQ array
+        Handle propagate DQ array
+        Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
         
@@ -326,11 +327,11 @@ def do_psf_subtraction(input_dataset,
     if measure_klip_thrupt:
         
         # Determine flux of objects to inject (units?)
-        inject_snr = 5.0
+        inject_snr = 10.0
 
         # Use same KLIP parameters
         klip_params = {
-            'outputdir':outdir,'fileprefix':fileprefix,
+            'outdir':outdir,'fileprefix':fileprefix,
             'annuli':annuli, 'subsections':subsections, 
             'movement':movement, 'numbasis':numbasis,
             'mode':mode,'calibrate_flux':calibrate_flux}
@@ -338,17 +339,26 @@ def do_psf_subtraction(input_dataset,
         klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,
                             ct_calibration,
-                            inject_snr,
                             klip_params,
+                            inject_snr,
                             seps=None, # in pixels from mask center
                             pas=None,
                             cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
                             )
+        thrupt_hdr = fits.Header()
+        # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+        # wrt FPM's center 
+        thrupt_hdr['COMMENT'] = ('KLIP Throughput as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2])')
+        thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1.'
+        thrupt_hdu_list = [fits.ImageHDU(data=klip_thpt, header=thrupt_hdr, name='KL_THRU')]
+        
+        dataset_out[0].hdu_list.extend(thrupt_hdu_list)
     
         # Save throughput as an extension on the psf-subtracted Image
 
         # Add history msg
-        history_msg = f'KLIP throughput measured and saved to Image class extension.'
+        history_msg = f'KLIP throughput measured and saved to Image class HDU List extension "KL_THRU".'
         dataset_out.update_after_processing_step(history_msg)
 
     if measure_1d_core_thrupt:

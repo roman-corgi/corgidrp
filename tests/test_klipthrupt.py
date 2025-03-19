@@ -38,7 +38,6 @@ noise_amp = 1e-3
 pl_contrast = 1e-2
 rolls = [0,15.,0,0]
 numbasis = [1,2]
-inject_snr = 5
 klip_params = {
             'outdir':outdir,'fileprefix':fileprefix,
             'annuli':annuli, 'subsections':subsections, 
@@ -283,11 +282,91 @@ def test_measure_noise():
     pass
 
 
+def test_meas_klip_ADI():
+
+    mode = 'ADI'
+
+    nx,ny = (21,21)
+    cenx, ceny = (25.,30.)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast)
+
+    psfsub_dataset = do_psf_subtraction(mock_sci,
+                                reference_star_dataset=mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=mode,
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
+
+    inject_snr = 20
+
+    klip_params['mode'] = mode
+    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+                     psfsub_dataset, # post-subtraction dataset
+                     ctcal,
+                     klip_params,
+                     inject_snr,
+                     seps=[15.,25.,35.], # in pixels from mask center
+                     pas=[0.,60.,120.,180.,240.,300.], # Degrees
+                     cand_locs=[(15.,0.)])
+
+    # See if it runs\-
+    pass
+
+
 def test_meas_klip_RDI():
+
+    mode = 'RDI'
+
+    nx,ny = (21,21)
+    cenx, ceny = (25.,30.)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast)
+
+    psfsub_dataset = do_psf_subtraction(mock_sci,
+                                reference_star_dataset=mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=mode,
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
+
+    inject_snr = 20
+
+    klip_params['mode'] = mode
+    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+                     psfsub_dataset, # post-subtraction dataset
+                     ctcal,
+                     klip_params,
+                     inject_snr,
+                     seps=[15.,25.,35.], # in pixels from mask center
+                     pas=[0.,60.,120.,180.,240.,300.], # Degrees
+                     cand_locs=[(15.,0.)])
+
+    # See if it runs\-
     pass
 
 
 def test_meas_klip_ADIRDI():
+
+    mode = 'ADI+RDI'
 
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
@@ -304,32 +383,63 @@ def test_meas_klip_ADIRDI():
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
-                                fileprefix='test_ADI+RDI',
+                                fileprefix='test_KL_THRU',
+                                mode=mode,
                                 do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
 
-    meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+    inject_snr = 20
+
+    klip_params['mode'] = mode
+    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
                      inject_snr,
-                     seps=[15.,25.], # in pixels from mask center
+                     seps=[15.,25.,35.], # in pixels from mask center
                      pas=[0.,60.,120.,180.,240.,300.], # Degrees
                      cand_locs=[(15.,0.)])
 
-    # See if it runs
+    # See if it runs\-
+    pass
+
+def test_psfsub_withklipmeas():
+
+    mode = 'ADI+RDI'
+
+    nx,ny = (21,21)
+    cenx, ceny = (25.,30.)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast)
+
+    psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
+                                reference_star_dataset=mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=mode,
+                                do_crop=False,
+                                measure_klip_thrupt=True,
+                                measure_1d_core_thrupt=False)
     pass
 
 if __name__ == '__main__':  
     # test_create_ct_cal()
-    
     # test_get_closest_psf()
-    
     # test_inject_psf()
-
     # test_measure_noise()
 
-    test_meas_klip_ADIRDI()
+    # test_meas_klip_RDI()
+    # test_meas_klip_ADI()
+    # test_meas_klip_ADIRDI()
+
+    test_psfsub_withklipmeas()
 
     pass
