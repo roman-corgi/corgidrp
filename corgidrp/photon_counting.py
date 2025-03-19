@@ -164,9 +164,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if val[0] != 'DARK':
             if inputmode != 'illuminated':
                 raise PhotonCountException('Inputmode is not \'illuminated\', but the input dataset has \'VISTYPE\' not equal to \'DARK\'.')
-        if 'PHTCNT' in datasets[0].frames[0].pri_hdr:
-            if datasets[0].frames[0].pri_hdr['PHTCNT'] != True:
-                raise PhotonCountException('\'PHTCNT\' header value must be True if these frames are to be photon-counted.')
+        if 'ISPC' in datasets[0].frames[0].ext_hdr:
+            if datasets[0].frames[0].ext_hdr['ISPC'] != True:
+                raise PhotonCountException('\'ISPC\' header value must be True if these frames are to be processed as photon-counted.')
 
         dataset = datasets[0]
         

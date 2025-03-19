@@ -17,7 +17,7 @@ try:
     from cal.tpumpanalysis.tpump_final import tpump_analysis
 except:
     pass
-# Adjust the system's limit of open files. We need to load 2000 files at once. 
+# Adjust the system's limit of open files. We need to load 200 files at once. 
 # some systems don't like that. 
 import resource
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -50,6 +50,7 @@ def fix_headers_for_tvac(
         # exthdr['KGAINPAR'] = exthdr['KGAIN']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
+        exthdr['ISPC'] = False
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -109,7 +110,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True, sim_data_on_the_
 
     ####### run II&T code
     time_head = 'TPTAU'#PHASE_T'
-    emgain_head = 'CMDGAIN'#'EM_GAIN'
+    emgain_head = 'EMGAIN_C'#'EM_GAIN'
     meta_path_eng = os.path.join(os.path.split(thisfile_dir)[0], 'test_data', 'metadata_eng.yaml')
     tau_fit_thresh = 0.8#0.9#0.9#0.8
     cs_fit_thresh = 0.8
@@ -298,7 +299,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    tvacdata_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     if False: # making e2e simulated data, which is ENG and includes nonlinearity
         nonlin_path = os.path.join(tvacdata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")

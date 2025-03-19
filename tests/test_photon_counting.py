@@ -146,10 +146,10 @@ def test_pc():
         get_pc_mean(dataset_err, safemode=False)
     # test ISPC header value
     with pytest.raises(PhotonCountException):
-        dataset_err.frames[0].pri_hdr['PHTCNT'] = False
+        dataset_err.frames[0].ext_hdr['ISPC'] = False
         get_pc_mean(dataset_err, pc_master_dark=pc_dark)
     # set to True now
-    dataset_err.frames[0].pri_hdr['PHTCNT'] = True
+    dataset_err.frames[0].ext_hdr['ISPC'] = True
     # test inputmode's compatibility with dataset type
     with pytest.raises(PhotonCountException):
         get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='darks')
