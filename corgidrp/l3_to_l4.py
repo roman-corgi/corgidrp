@@ -104,24 +104,11 @@ def find_star(input_dataset,
     The star's (x, y) location is stored in each frame's extension header under 
     ``STARLOCX`` and ``STARLOCY``.
 
-    Args:
-        input_dataset (corgidrp.data.Dataset):
-            A dataset of L3-level frames. Frames should be labeled in their primary 
-            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1`` 
-            (satellite spot frames).
-        star_coordinate_guess (tuple of float or None, optional):
-            Initial guess for the star's (x, y) location as absolute coordinates.
-            If ``None``, defaults to the center of the median satellite spot image.
-            Defaults to None.
-        thetaOffsetGuess (float, optional):
-            Initial guess for any angular rotation of the star center 
-            (in degrees, for example). Defaults to 0.
-        satellite_spot_parameters (dict, optional):
-            Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
-            can contain the following keys and structure. Only provided parameters will be changed,
-            otherwise defaults for the mode will be used:
+    You can replace many of the default settings for by adjusting the satellite_spot_parameters 
+    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
 
-            offset : dict
+    satellite_spot_parameters of the form: 
+         offset : dict
                 Parameters for estimating the offset of the star center:
 
                 spotSepPix : float
@@ -163,6 +150,24 @@ def find_star(input_dataset,
                 nIter : int
                     Number of iterations refining the radial separation.
 
+    
+
+    Args:
+        input_dataset (corgidrp.data.Dataset):
+            A dataset of L3-level frames. Frames should be labeled in their primary 
+            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1`` 
+            (satellite spot frames).
+        star_coordinate_guess (tuple of float or None, optional):
+            Initial guess for the star's (x, y) location as absolute coordinates.
+            If ``None``, defaults to the center of the median satellite spot image.
+            Defaults to None.
+        thetaOffsetGuess (float, optional):
+            Initial guess for any angular rotation of the star center 
+            (in degrees, for example). Defaults to 0.
+        satellite_spot_parameters (dict, optional):
+            Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
+            can contain the following keys and structure. Only provided parameters will be changed,
+            otherwise defaults for the mode will be used:
             If None, default parameters corresponding to the specified observing_mode will be used.     
         drop_satspots_frames (bool, optional):
             If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
