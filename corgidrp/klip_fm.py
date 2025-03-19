@@ -249,8 +249,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             data_img = Image(data_cutout,pri_hdr=fits.Header(),ext_hdr=fits.Header())
 
             preklip_amp, preklip_err, preklip_bg = phot_by_gauss2d_fit(model_img,fwhm_pix,background_sub=True,fit_shape=psf_model.shape)
-            postklip_amp, postklip_err, postklip_bg = phot_by_gauss2d_fit(data_img,fwhm_pix,background_sub=True,fit_shape=data_cutout.shape)
-
+            try:
+                postklip_amp, postklip_err, postklip_bg = phot_by_gauss2d_fit(data_img,fwhm_pix,background_sub=True,fit_shape=data_cutout.shape)
+            except:
+                postklip_amp = np.nan
             thrupt = postklip_amp/preklip_amp
 
             this_klmode_thrupts.append(thrupt)

@@ -6,6 +6,7 @@ from astropy.wcs import WCS
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
 from corgidrp.klip_fm import meas_klip_thrupt
+from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
@@ -327,7 +328,7 @@ def do_psf_subtraction(input_dataset,
     if measure_klip_thrupt:
         
         # Determine flux of objects to inject (units?)
-        inject_snr = 10.0
+        inject_snr = 20.0
 
         # Use same KLIP parameters
         klip_params = {
@@ -362,8 +363,32 @@ def do_psf_subtraction(input_dataset,
         dataset_out.update_after_processing_step(history_msg)
 
     if measure_1d_core_thrupt:
-        raise Warning('1D core throughput not configured.')
+        
+        # Use the same separations as for KLIP throughput
+        if measure_klip_thrupt:
+            seps = dataset_out[0].hdu_list['KL_THRU'].data[0]
+        else:
+            seps = []
+
+        cenxy = (dataset_out[0].ext_hdr['STARLOCX'],dataset_out[0].ext_hdr['STARLOCY'])
+        ct_1d = get_1d_ct(ct_calibration,cenxy,seps)
+
+        ct_hdr = fits.Header()
+        # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+        # wrt FPM's center 
+        ct_hdr['COMMENT'] = ('KLIP Throughput as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2])')
+        ct_hdr['UNITS'] = 'Separation: EXCAM pixels. CT throughput: values between 0 and 1.'
+        ct_hdu_list = [fits.ImageHDU(data=ct_1d, header=ct_hdr, name='CT_THRU')]
+        
+        dataset_out[0].hdu_list.extend(ct_hdu_list)
     
+        # Save throughput as an extension on the psf-subtracted Image
+
+        # Add history msg
+        history_msg = f'1D CT throughput measured and saved to Image class HDU List extension "CT_THRU".'
+        dataset_out.update_after_processing_step(history_msg)
+            
     return dataset_out
 
 def northup(input_dataset,use_wcs=True,rot_center='im_center'):
