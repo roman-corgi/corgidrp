@@ -1,4 +1,5 @@
 import os
+import warnings
 from astropy.io import fits
 import numpy as np
 import matplotlib.pyplot as plt
@@ -150,17 +151,17 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     res_elem = 5 * fwhm_pix # pix, update this with value for NFOV, Band 1 mode
     
     if pas == None:
-        pas = np.array([0.,60.,120.])
+        pas = np.array([60.,180.,300.])
     if seps == None:
         seps = np.arange(iwa,owa,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
-    sci_dataset = sci_dataset_in.copy()
-    ref_dataset = ref_dataset_in.copy() if not ref_dataset_in is None else None
-
-    rolls = [frame.ext_hdr['ROLL'] for frame in sci_dataset]
-
     thrupts = []
     for k,klmode in enumerate(klip_params['numbasis']):
+        
+        sci_dataset = sci_dataset_in.copy()
+        ref_dataset = ref_dataset_in.copy() if not ref_dataset_in is None else None
+
+        rolls = [frame.ext_hdr['ROLL'] for frame in sci_dataset]
         
         # Inject planets:
         seppas_skipped = []
@@ -168,16 +169,24 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         this_klmode_psfmodels = []
         for i,frame in enumerate(sci_dataset):
 
-            for sep in seps:
-
-                # Measure noise at this separation in psf subtracted dataset (for this kl mode)
+            # Initialize PA offset to spiral the injections
+            pa_off = 0.
+            pa_step = 360. / len(pas) / 2
+            
+            # Measure noise at this separation in psf subtracted dataset (for this kl mode)
+            noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k)
+            
+            for s,sep in enumerate(seps):
                 
-                noise = measure_noise(psfsub_dataset[0],[sep],fwhm_pix,k)[0]
-                
-                inject_peak = noise * inject_snr
+                inject_peak = noise_vals[s] * inject_snr
 
                 for pa in pas:
+                    pa = (pa + pa_off) % 360.
                     inject_loc = (sep,pa)
+
+                    if inject_loc in seppas_skipped:
+                        continue
+                    
                     # Check that we're not too close to a candidate during the first frame
                     if i==0:
                         too_close = False
@@ -203,6 +212,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                     if i==0:
                         this_klmode_psfmodels.append(psf_model)
                         this_klmode_seppas.append(inject_loc)
+                
+                pa_off += pa_step
 
             sci_dataset[i].data[:] = frame.data[:]
                     
@@ -225,9 +236,17 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         pyklip_data = fits.getdata(pyklip_fpath)[0]
         pyklip_hdr = fits.getheader(pyklip_fpath)
 
-        # import matplotlib.pyplot as plt
-        # plt.imshow(pyklip_data,origin='lower')
+        import matplotlib.pyplot as plt
+        plt.imshow(pyklip_data,origin='lower')
+        plt.title(f'{klmode} KL Modes with fakes')
+        plt.colorbar()
+
+        plt.show()
         
+        this_klmode_peakin = []
+        this_klmode_sumin = []
+        this_klmode_influxs = []
+        this_klmode_outfluxs = []
         this_klmode_thrupts = []
         for ll,loc in enumerate(this_klmode_seppas):
             
@@ -248,17 +267,31 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             model_img = Image(psf_model,pri_hdr=fits.Header(),ext_hdr=fits.Header())
             data_img = Image(data_cutout,pri_hdr=fits.Header(),ext_hdr=fits.Header())
 
+            # Try pyklip flux measurement functions: fakes.2dgaussianfit, retrieve planet flux
             preklip_amp, preklip_err, preklip_bg = phot_by_gauss2d_fit(model_img,fwhm_pix,background_sub=True,fit_shape=psf_model.shape)
             try:
                 postklip_amp, postklip_err, postklip_bg = phot_by_gauss2d_fit(data_img,fwhm_pix,background_sub=True,fit_shape=data_cutout.shape)
             except:
+                warnings.warn('Amplitude of fake after KLIP subtraction not recovered.')
                 postklip_amp = np.nan
             thrupt = postklip_amp/preklip_amp
 
+            this_klmode_peakin.append(np.max(psf_model))
+            this_klmode_sumin.append(np.sum(psf_model))
+            this_klmode_influxs.append(preklip_amp)
+            this_klmode_outfluxs.append(postklip_amp)
             this_klmode_thrupts.append(thrupt)
 
         seppas_arr = np.array(this_klmode_seppas)
         seps_arr = seppas_arr[:,0]
+
+
+        fig,ax = plt.subplots()
+        plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
+        plt.scatter(seps_arr,this_klmode_outfluxs,label='Recovered counts')
+        plt.xlabel('separation (pixels)')
+        plt.legend()
+        plt.show()
 
         mean_thrupts = []
         # TODO: If no measurements available for a given sep
