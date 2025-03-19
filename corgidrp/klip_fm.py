@@ -2,10 +2,10 @@ import os
 from astropy.io import fits
 import numpy as np
 import matplotlib.pyplot as plt
-from corgidrp import data 
+from corgidrp.data import PyKLIPDataset, Image 
 from pyklip.parallelized import klip_dataset
 from scipy.ndimage import shift
-from corgidrp.astrom import get_polar_dist, seppa2dxdy
+from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
 from corgidrp.fluxcal import phot_by_gauss2d_fit
 
 def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
@@ -139,17 +139,23 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                      cand_locs = [] # list of tuples (sep_pix,pa_deg) of known off-axis source locations
                      ):
     
-    res_elem = 5. # pix, update this with value for NFOV, Band 1 mode
     iwa = 10. # pix, update real number
-    owa = 25. # pix, update with real number
+    owa = 50. # pix, update with real number
 
+    d = 2.36 #m
+    lam = 573.8e-9 #m
+    pixscale_arcsec = 0.0218
+    fwhm_mas = 1.22 * lam / d * 206265 * 1000
+    fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
+    res_elem = 5 * fwhm_pix # pix, update this with value for NFOV, Band 1 mode
+    
     if pas == None:
         pas = np.array([0.,60.,120.])
     if seps == None:
-        seps = np.arange(iwa,owa,res_elem) # Some linear spacing between the IWA & OWA, around 2x the resolution element
+        seps = np.arange(iwa,owa,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
     sci_dataset = sci_dataset_in.copy()
-    ref_dataset = ref_dataset_in.copy()
+    ref_dataset = ref_dataset_in.copy() if not ref_dataset_in is None else None
 
     rolls = [frame.ext_hdr['ROLL'] for frame in sci_dataset]
 
@@ -165,11 +171,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             for sep in seps:
 
                 # Measure noise at this separation in psf subtracted dataset (for this kl mode)
-                d = 2.36 #m
-                lam = 573.8e-9 #m
-                pixscale_arcsec = 0.0218
-                fwhm_mas = 1.22 * lam / d * 206265 * 1000
-                fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
+                
                 noise = measure_noise(psfsub_dataset[0],[sep],fwhm_pix,k)[0]
                 
                 inject_peak = noise * inject_snr
@@ -205,7 +207,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             sci_dataset[i].data[:] = frame.data[:]
                     
         # Init pyklip dataset
-        pyklip_dataset = data.PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
+        pyklip_dataset = PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
         
         # Run pyklip
         klip_dataset(pyklip_dataset, outputdir=klip_params['outdir'],
@@ -223,28 +225,50 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         pyklip_data = fits.getdata(pyklip_fpath)[0]
         pyklip_hdr = fits.getheader(pyklip_fpath)
 
-        import matplotlib.pyplot as plt
-        plt.imshow(pyklip_data,origin='lower')
+        # import matplotlib.pyplot as plt
+        # plt.imshow(pyklip_data,origin='lower')
         
-        this_klmode_outcounts = []
-        for sep in seps:
-            this_sep_outcounts = []
+        this_klmode_thrupts = []
+        for ll,loc in enumerate(this_klmode_seppas):
+            
+            psf_model = this_klmode_psfmodels[ll]
+            
+            # Crop data around location to be same as psf_model cutout
+            locxy = seppa2xy(*loc,pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
 
-            for pa in pas:
-                loc = (sep,pa)
-                if loc in seppas_skipped:
-                    continue
+            # Crop the data
+            cutout_shape = np.array(psf_model.shape)
+            start_ind = (locxy - cutout_shape//2).astype(int)
+            end_ind = (locxy + cutout_shape//2 + 1).astype(int)
+            x1,y1 = start_ind
+            x2,y2 = end_ind
+            data_cutout = pyklip_data[y1:y2,x1:x2]
 
-                this_sep_outcounts.append(phot_by_gauss2d_fit(frame,loc))
+            # Temporarily load into Image obj
+            model_img = Image(psf_model,pri_hdr=fits.Header(),ext_hdr=fits.Header())
+            data_img = Image(data_cutout,pri_hdr=fits.Header(),ext_hdr=fits.Header())
 
-            if len(this_sep_outcounts) == 0:
-                raise Warning(f'No flux measurements at separation {sep} pixels.')
-            this_klmode_outcounts.append(np.mean(this_sep_outcounts))
-    
-        this_klmode_thrupts = np.array(this_klmode_outcounts/this_klmode_injectcounts)
+            preklip_amp, preklip_err, preklip_bg = phot_by_gauss2d_fit(model_img,fwhm_pix,background_sub=True,fit_shape=psf_model.shape)
+            postklip_amp, postklip_err, postklip_bg = phot_by_gauss2d_fit(data_img,fwhm_pix,background_sub=True,fit_shape=data_cutout.shape)
 
-        thrupts.append(this_klmode_thrupts)
+            thrupt = postklip_amp/preklip_amp
+
+            this_klmode_thrupts.append(thrupt)
+
+        seppas_arr = np.array(this_klmode_seppas)
+        seps_arr = seppas_arr[:,0]
+
+        mean_thrupts = []
+        # TODO: If no measurements available for a given sep
+        # show warning and add np.nan 
+        for sep in np.unique(seps_arr):
+            this_sep_thrupts = np.where(seps_arr==sep,this_klmode_thrupts,np.nan)
+            mean_thrupt = np.nanmean(this_sep_thrupts)
+            mean_thrupts.append(mean_thrupt)
+
+        thrupts.append(mean_thrupts)
 
     thrupt_arr = np.array([seps,*thrupts])
 
+    return thrupt_arr
 
