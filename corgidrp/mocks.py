@@ -2966,6 +2966,22 @@ def create_ct_interp(
 def create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx = 50.5,ceny=50.5,
                   nx=21,ny=21):
+    """
+    Creates a mock CoreThroughputCalibration object with gaussian PSFs.
+
+    Args:
+        fwhm_mas (float): FWHM in milliarcseconds
+        cfam_name (str, optional): CFAM name, defaults to '1F'.
+        cenx (float, optional): EXCAM mask center X location (measured from bottom left corner of bottom left pixel)
+        ceny (float, optional): EXCAM mask center Y location (measured from bottom left corner of bottom left pixel)
+        nx (int, optional): Number of x positions at which to simulate mock PSFs. Must be an odd number. 
+            PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
+        ny (int, optional): Number of y positions at which to simulate mock PSFs. Must be an odd number. 
+            PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
+    Returns:
+        corgidrp.data.CoreThroughputCalibration: mock CoreThroughputCalibration object 
+
+    """
     # Default headers
     prhd, exthd = create_default_L3_headers()
     # cfam filter
@@ -2973,8 +2989,8 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
     exthd.set('EXTNAME','PSFCUBE')
 
     # Need nx, ny to be odd
-    assert nx%2 == 1, 'nx must be odd'
-    assert ny%2 == 1, 'ny must be odd'
+    assert nx%2 == 1, 'nx must be an odd integer'
+    assert ny%2 == 1, 'ny must be an odd integer'
 
     x_arr = []
     y_arr = []
