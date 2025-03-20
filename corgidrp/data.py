@@ -1976,8 +1976,8 @@ class PyKLIPDataset(pyKLIP_Data):
             # Get metadata.
             input_all += [data]
             centers_all += [centers]
-            filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [shead['ROLL']] * NINTS
+            filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            PAs_all += [phead['ROLL']] * NINTS
 
             if INSTRUME != "CGI":
                 raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
@@ -2060,7 +2060,7 @@ class PyKLIPDataset(pyKLIP_Data):
 
                 psflib_data_all += [data]
                 psflib_centers_all += [centers]
-                psflib_filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+                psflib_filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             
             psflib_data_all = np.concatenate(psflib_data_all)
             if psflib_data_all.ndim != 3:
