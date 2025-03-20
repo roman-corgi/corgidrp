@@ -15,6 +15,7 @@ from astropy.table import Table
 from astropy.convolution import convolve_fft
 from astropy.modeling import models
 import astropy.units as u
+from astropy.modeling.models import Gaussian2D
 import photutils.centroids as centr
 import corgidrp.data as data
 from corgidrp.data import Image, Dataset
@@ -637,6 +638,10 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     exthdr['B_O'] = 0.01
     exthdr['B_O_UNIT'] = 'DN'
     exthdr['B_O_ERR'] = 0.001
+
+    err_hdr = fits.Header()
+    err_hdr['BUNIT'] = 'detected electrons'
+    exthdr['DATATYPE'] = 'DetectorNoiseMaps'
     input_data = np.stack([FPN_map, CIC_map, DC_map])
     err = np.stack([[FPN_map_err, CIC_map_err, DC_map_err]])
     dq = np.stack([FPN_map_dq, CIC_map_dq, DC_map_dq])
@@ -789,6 +794,7 @@ def create_simflat_dataset(filedir=None, numfiles=10):
         frames.append(frame)
     dataset = data.Dataset(frames)
     return dataset
+
 
 def create_raster(mask,data,dither_sizex=None,dither_sizey=None,row_cent = None,col_cent = None,n_dith=None,mask_size=420,snr=250,planet=None, band=None, radius=None, snr_constant=None):
     """Performs raster scan of Neptune or Uranus images
@@ -2723,6 +2729,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     # Add Gaussian noise
     if add_gauss_noise:
+        # add Gaussian random noise
         noise_rng = np.random.default_rng(10)
         noise = noise_rng.normal(scale=noise_scale, size=size)
         sim_data += noise
@@ -2843,6 +2850,116 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
         half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
         # Build up the Dataset
         data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
+
+    return data_psf, np.array(psf_loc), np.array(half_psf)
+
+def create_ct_interp(
+    n_radii=9,
+    n_azimuths=5,
+    min_angle=0,
+    max_angle=6.2831853072,
+    norm=1,
+    fpm_x=0,
+    fpm_y=0,
+    pop_index=None,
+    ):
+    """
+    Create simulated data to test the class function that does core throughput
+    interpolation. We want to set the CT to a known function. We accomplish it
+    by using a synthetic PSF shape with a well defined CT profile. The PSF is
+    needed because the interpolation function takes a CT cal file that is
+    generated from a Dataset of PSF images.
+
+    Args:
+        n_radii (int): Number of divisions along a radial direction.
+        n_azimuths (int): Number of divisions along the azimuth, from
+          zero to max_angle.
+        min_angle (float): Minimum angle in radians to be considered.
+        max_angle (float): Maximum angle in radians to be considered.
+        norm (float): Factor to multiply the CT profile. Useful if one
+          wants the CT to be between 0 and 1 after the division by the total counts
+          that happens when estimating the CT of the Dataset in corethroughput.py.
+        fpm_x (float): FPM location in EXCAM (fractional) pixels. First dimension.
+        fpm_y (float): FPM location in EXCAM (fractional) pixels. Second dimension.
+        pop_index (int) (optional): the Dataset skips the PSF with this index.
+          Useful when testing interpolation by popping some PSFs and comparing
+          the interpolated values with the original ones at the same location.
+
+    Returns:
+        corgidrp.data.Image: The simulated PSF Images
+        np.array: PSF locations
+        np.array: PSF CT values
+    """
+    if max_angle > 2*np.pi:
+        print('You may have set a maximum angle in degrees instead of radians. '
+            'Please check the value of max_angle is the one intended.')
+
+    # The shape of all PSFs is the same, and irrelevant
+    # Their amplitude will be adjusted to a specific CT profiledepending on
+    # their location
+    imshape=(7,7)
+    psf_model = np.zeros(imshape)
+    # Set of known values at selected locations
+    psf_model[imshape[1]//2 - 3:imshape[1]//2 + 4,
+        imshape[0]//2 - 3:imshape[0]//2 + 4] = 1
+    psf_model[imshape[1]//2 - 2:imshape[1]//2 + 3,
+        imshape[0]//2 - 2:imshape[0]//2 + 3] = 2
+    psf_model[imshape[1]//2 - 1:imshape[1]//2 + 2,
+        imshape[0]//2 - 1:imshape[0]//2 + 2] = 3
+    psf_model[imshape[1]//2, imshape[0]//2] = 4
+
+    # Default headers
+    prhd, exthd = create_default_L2b_headers()
+    exthd['CFAMNAME'] = '1F'
+    # Mock error
+    err = np.ones([1024,1024])
+
+    # Simulate PSFs within two radii
+    psf_loc = []
+    half_psf = []
+    data_psf = []
+
+    #Create a dataset
+    # From 2 to 9 lambda/D
+    radii = np.logspace(np.log10(2), np.log10(9),n_radii)
+    # lambda/D ~ 2.3 EXCAM pixels for Band 1 and HLC
+    radii *= 2.3
+    # Threefold symmetry
+    azimuths = np.linspace(min_angle, max_angle, n_azimuths)
+    
+    # Create 2D grids for the radii and azimuths
+    r_grid, theta_grid = np.meshgrid(radii, azimuths)
+    
+    # Convert polar coordinates to Cartesian coordinates
+    x_grid = np.round(fpm_x + r_grid * np.cos(theta_grid)).flatten()
+    y_grid = np.round(fpm_y + r_grid * np.sin(theta_grid)).flatten()
+    # Derive the final radial distance from the FPM's center
+    r_grid_from_fpm = np.sqrt((x_grid-fpm_x)**2 + (y_grid-fpm_y)**2)
+    # Make up a core throughput dataset
+    core_throughput = r_grid_from_fpm.flatten()/r_grid_from_fpm.max()
+    # Normalize to 1 by accounting for the contribution of the PSF to the CT
+    core_throughput /= psf_model[psf_model>=psf_model.max()/2].sum()
+    # Optionally, take into account an additional factor
+    core_throughput *= norm
+    for i_psf in range(r_grid.size):
+        if pop_index is not None:
+            if i_psf == pop_index:
+                print('Skipping 1 PSF (interpolation test)')
+                continue
+        image = np.zeros([1024, 1024])
+        # Insert PSF at random location within the SCI frame
+        x_image = int(x_grid[i_psf])
+        y_image = int(y_grid[i_psf])
+        image[y_image-imshape[0]//2:y_image+imshape[0]//2+1,
+            x_image-imshape[1]//2:x_image+imshape[1]//2+1] = psf_model
+        # Adjust intensity following some radial profile
+        image *= core_throughput[i_psf]
+        # List of known positions
+        psf_loc += [[x_image-imshape[0]//2, y_image-imshape[0]//2]]
+        # Add numerator of core throughput
+        half_psf += [image[image>=image.max()/2].sum()]
+        # Build up the Dataset
+        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]
 
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
@@ -3047,24 +3164,177 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
     return sci_dataset,ref_dataset
 
-def format_FTIMEUTC(FTIMEUTC_str):
+def create_synthetic_satellite_spot_image(
+    image_shape,
+    bg_sigma,
+    bg_offset,
+    gaussian_fwhm,
+    separation,
+    star_center=None,
+    angle_offset=0,
+    amplitude_multiplier=10,
+):
     """
-    Convert FTIMEUTC (ISO 8601 format) to the required yyyymmddThhmmsss format.
-    
+    Creates a synthetic 2D image with Gaussian background noise, a constant background,
+    and four symmetric Gaussians.
+
     Args:
-        FTIMEUTC_str (str): FTIMEUTC string in ISO 8601 format (e.g., '2025-03-18T22:46:46.352490+00:00')
+        image_shape (tuple of int):  
+            The (ny, nx) shape of the image.
+        bg_sigma (float):  
+            Standard deviation of the background Gaussian noise.
+        bg_offset (float):  
+            Constant background level added to the entire image.
+        gaussian_fwhm (float):  
+            Full width at half maximum (FWHM) for the 2D Gaussian sources (in pixels).
+        separation (float):  
+            Radial separation (in pixels) of each Gaussian from the specified center.
+        star_center (tuple of float, optional):  
+            Absolute (x, y) position in the image at which the four Gaussians will be centered.
+            If None, defaults to the image center (nx//2, ny//2).
+        angle_offset (float, optional):  
+            An additional angle (in degrees) to add to each default position angle.  
+            The default Gaussians are at [0, 90, 180, 270] degrees; the final angles will be these 
+            plus the `angle_offset`. Positive offsets rotate the Gaussians counterclockwise.
+        amplitude_multiplier (float, optional):  
+            Multiplier for the amplitude of the Gaussians relative to `bg_sigma`. By default, each 
+            Gaussian’s amplitude is 10 * `bg_sigma`.
 
     Returns:
-        str: Formatted TimeUTC string in 'yyyymmddThhmmsss' format.
+        numpy.ndarray:  
+            The synthetic image (2D NumPy array) with background noise, a constant background, 
+            and four added Gaussians.
     """
-    # Parse the ISO 8601 string into a datetime object
-    dt = datetime.datetime.fromisoformat(FTIMEUTC_str.replace("Z", "+00:00"))
+    # Create the background noise image with an added constant offset.
+    image = np.random.normal(loc=0, scale=bg_sigma, size=image_shape) + bg_offset
 
-    # Round microseconds to the nearest 0.1 second
-    rounded_microseconds = round(dt.microsecond / 100000) * 100000
-    dt = dt.replace(microsecond=rounded_microseconds)
+    ny, nx = image_shape
 
-    # Format into yyyymmddThhmmsss
-    formatted_time = dt.strftime('%Y%m%dT%H%M%S') + str(dt.microsecond // 100000)
+    # Determine the center for the satellite spots. Default to image center if not specified.
+    if star_center is None:
+        center_x = nx // 2
+        center_y = ny // 2
+    else:
+        center_x, center_y = star_center
 
-    return formatted_time
+    # Define the default position angles (in degrees) and add any additional angle offset.
+    default_angles_deg = np.array([0, 90, 180, 270])
+    angles_rad = np.deg2rad(default_angles_deg + angle_offset)
+
+    # Compute the amplitude and convert FWHM to standard deviation.
+    amplitude = amplitude_multiplier * bg_sigma
+    # FWHM = 2 * sqrt(2 * ln(2)) * stddev  --> stddev = FWHM / (2*sqrt(2*ln(2)))
+    stddev = gaussian_fwhm / (2 * np.sqrt(2 * np.log(2)))
+
+    # Create a grid of (x, y) pixel coordinates.
+    y_indices, x_indices = np.indices(image_shape)
+
+    # Add four Gaussians at the computed positions.
+    for angle in angles_rad:
+        dx = separation * np.cos(angle)
+        dy = separation * np.sin(angle)
+        gauss_center_x = center_x + dx
+        gauss_center_y = center_y + dy
+
+        gauss = Gaussian2D(
+            amplitude=amplitude,
+            x_mean=gauss_center_x,
+            y_mean=gauss_center_y,
+            x_stddev=stddev,
+            y_stddev=stddev,
+            theta=0,
+        )
+        image += gauss(x_indices, y_indices)
+
+    return image
+
+
+def create_satellite_spot_observing_sequence(
+        n_sci_frames, n_satspot_frames, 
+        image_shape=(201, 201), bg_sigma=1.0, bg_offset=10.0,
+        gaussian_fwhm=5.0, separation=14.79, star_center=None, angle_offset=0,
+        amplitude_multiplier=100, observing_mode='NFOV'):
+    """
+    Creates a single dataset of synthetic observing frames. The dataset contains:
+
+        • Science frames (with amplitude_multiplier=0), simulating no satellite spots.
+        • Satellite spot frames (with amplitude_multiplier > 0), simulating the presence of spots.
+
+    Synthetic frames are generated using the create_synthetic_satellite_spot_image function, 
+    with added Gaussian noise and adjustable parameters for background level, spot separation, 
+    and overall amplitude scaling.
+
+    Args:
+        n_sci_frames (int): 
+            Number of science frames without satellite spots.
+        n_satspot_frames (int): 
+            Number of frames with satellite spots.
+        image_shape (tuple, optional): 
+            Shape of the synthetic image (height, width). Defaults to (201, 201).
+        bg_sigma (float, optional): 
+            Standard deviation of the background noise. Defaults to 1.0.
+        bg_offset (float, optional): 
+            Offset of the background noise. Defaults to 10.0.
+        gaussian_fwhm (float, optional): 
+            Full width at half maximum of the Gaussian spot. Defaults to 5.0.
+        separation (float, optional): 
+            Separation between the satellite spots. Defaults to 14.79.
+        star_center (tuple of float, optional):  
+            Absolute (x, y) position in the image at which the four Gaussians will be centered.
+            If None, defaults to the image center (nx//2, ny//2).
+        angle_offset (float, optional): 
+            Offset of the spot angles. Defaults to 0.
+        amplitude_multiplier (int, optional): 
+            Amplitude multiplier for the satellite spots. Defaults to 100.
+        observing_mode (str, optional): 
+            Observing mode. Must be one of ['NFOV', 'WFOV', 'SPEC660', 'SPEC730']. 
+            Defaults to 'NFOV'.
+
+    Returns:
+        data.Dataset: 
+            A single dataset object containing both science frames (no satellite spots) 
+            and satellite spot frames. The science frames have header value "SATSPOTS" set to 0, 
+            while the satellite spot frames have "SATSPOTS" set to 1.
+    """
+
+    assert len(image_shape) == 2, "Data shape needs to have two values"
+    assert observing_mode in ['NFOV', 'WFOV', 'SPEC660', 'SPEC730'], \
+        "Invalid mode. Mode has to be one of 'NFOV', 'WFOV', 'SPEC660', 'SPEC730'"
+
+    sci_frames = []
+    satspot_frames = []
+    
+    # Example of setting up headers
+    prihdr, exthdr = create_default_L3_headers(arrtype="SCI")
+    prihdr['NAXIS1'] = image_shape[1]
+    prihdr['NAXIS2'] = image_shape[0]
+    prihdr["SATSPOTS"] = 0  # 0 if no satellite spots, 1 if satellite spots
+    exthdr['FSMPRFL'] = f'{observing_mode}'  # Needed for initial guess of satellite spot parameters
+
+    # Make science images (no satellite spots)
+    for i in range(n_sci_frames):
+        sci_image = create_synthetic_satellite_spot_image(
+            image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+            separation, star_center, angle_offset,
+            amplitude_multiplier=0
+        )
+        sci_frame = data.Image(sci_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+        sci_frame.pri_hdr["SATSPOTS"] = 0
+        sci_frame.filename = f"sci_frame_{i}.fits"
+        sci_frames.append(sci_frame)
+
+    # Make satellite spot images
+    for i in range(n_satspot_frames):
+        satspot_image = create_synthetic_satellite_spot_image(
+            image_shape, bg_sigma, bg_offset, gaussian_fwhm,
+            separation, star_center, angle_offset, amplitude_multiplier
+        )
+        satspot_frame = data.Image(satspot_image, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
+        satspot_frame.pri_hdr["SATSPOTS"] = 1
+        satspot_frame.filename = f"plus_frame_{i}.fits"
+        satspot_frames.append(satspot_frame)
+    
+    all_frames = sci_frames + satspot_frames
+    dataset = data.Dataset(all_frames)
+
+    return dataset
