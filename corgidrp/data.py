@@ -1772,6 +1772,111 @@ class CoreThroughputCalibration(Image):
             x_cor[is_valid],
             y_cor[is_valid]])
 
+def GetPSF(self,
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal):
+        """ Get a PSF at a given (x,y) location on HLC in a coronagraphic
+        observation given a CT calibration file and the PAM transformation from
+        encoder values to EXCAM pixels.
+
+        First implementation: nearest PSF in a polar sense. Given an (x,y)
+        position wrt FPM's center, the associated PSF is the one in the CT
+        calibration dataset whose radial distance to the FPM's center is the
+        closest to sqrt(x**2+y**2). If there is more than one CT PSF at the same
+        radial distance, choose the one whose angular distance to the (x,y)
+        location is the smallest.
+
+        # TODO: Implement an interpolation method that takes into account other
+        # PSF than the nearest one. Comply with any required precision from the
+        # functions that will use the interpolated PSF. 
+
+        Args:
+          x_cor (numpy.ndarray): Values of the first dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          y_cor (numpy.ndarray): Values of the second dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+
+        Returns:
+          Returns interpolated PSF
+        """
+        if isinstance(x_cor, np.ndarray) is False:
+            if isinstance(x_cor, int) or isinstance(x_cor, float):
+                x_cor = np.array([x_cor])
+            elif isinstance(x_cor, list):
+                x_cor = np.array(x_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+        if isinstance(y_cor, np.ndarray) is False:
+            if isinstance(y_cor, int) or isinstance(y_cor, float):
+                y_cor = np.array([y_cor])
+            elif isinstance(y_cor, list):
+                y_cor = np.array(y_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+
+        if len(x_cor) != len(y_cor):
+            raise ValueError('Target locations must have the same number of '
+                'elements')
+
+        # We need to translate the PSF locations in the CT cal file to be with
+        # respect to the FPM's center during CT observations:
+        # Get FPM's center during CT observations
+        fpam_ct_pix_out = self.GetCTFPMPosition(
+                corDataset,
+                fpamfsamcal)[0]
+        # Get CT measurements relative to CT FPM's center
+        x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
+        y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
+        core_throughput = self.ct_excam[2,:]
+        # Algorithm
+        radii = np.sqrt(x_grid**2 + y_grid**2)
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
+        azimuths = np.arctan2(y_grid, x_grid)
+        azimuth0 = azimuths.min()
+        azimuths = azimuths - azimuth0
+        # Now we can create a 2D array of the radii and azimuths
+
+        # Calculate the new datapoint in the right radius and azimuth coordinates
+        radius_cor = np.sqrt(x_cor**2 + y_cor**2)
+
+        # Remove interpolation locations that are outside the radius range
+        r_good = radius_cor >= radii.min()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are less than the minimum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_good = radius_cor <= radii.max()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are greater than the maximum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.max()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
+        azimuth_cor = np.arctan2(y_cor, x_cor) - azimuth0
+
+        # MOD this azimuth so that we're in the right range: all angles will be
+        # within [0, azimuths.max()), including negative values
+        azimuth_cor = azimuth_cor % azimuths.max()
+
 class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.

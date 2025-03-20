@@ -179,6 +179,53 @@ def setup_module():
         norm=pupil_image_1.sum())[0]
     dataset_ct_interp = Dataset(data_ct_interp)
 
+def test_psf_interp():
+    """
+    Test the ability to recover a PSF at a given (x,y) location on HLC in a
+    coronagraphic observation given a CT calibration file and the PAM
+    transformation from encoder values to EXCAM pixels.
+    """
+    # Generate core throughput calibration file
+    ct_cal = corethroughput.generate_ct_cal(dataset_ct)
+
+    # We need to refer the PSF locations to the FPM's center
+    # Get PAM cal file
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    # Get CT FPM's center
+    fpam_ct_pix = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    # PSF locations with respect to the FPM's center. EXCAM pixels
+    x_psf = ct_cal.ct_excam[0,:] - fpam_ct_pix[0]
+    y_psf = ct_cal.ct_excam[1,:] - fpam_ct_pix[1]
+    
+    # Choose some arbitrary positions and check the returned PSF is the same
+    # as the nearest one
+    
+    # Array of random numbers, covering all quadrants with radial distances from
+    # the FPM within the range of the CT cal file
+    r_psf = np.sqrt(x_psf**2 + y_psf**2)
+    # Number of positions to test
+    n_rand = 100
+    rng = np.random.default_rng(0)
+    r_out = rng.uniform(r_psf.min(), r_psf.max(), n_rand)
+    az_out = rng.uniform(0, 2*np.pi, n_rand)
+    x_out = r_out * np.cos(az_out)
+    y_out = r_out * np.sin(az_out)
+
+    # Find closest ones
+
+    # Any with the same radial distance?
+
+    # Add test of equal radial distance (dataset_ct_interp), nearest angular distance (negative)
+
+    # Check that if the location is below r_min or above r_max, it fails
+
+    breakpoint()
+    interpolated_PSF = ct_cal.GetPSF(
+            x, y, dataset_cor, fpam_fsam_cal)[0]
+    
+    breakpoint()
+
 def test_psf_pix_and_ct():
     """
     Test 1090881 - Given a core throughput dataset consisting of M clean frames
@@ -535,3 +582,4 @@ if __name__ == '__main__':
     test_fpm_pos()
     test_cal_file()
     test_ct_interp()
+    test_psf_interp()
