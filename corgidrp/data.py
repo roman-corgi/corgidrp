@@ -1209,10 +1209,10 @@ class AstrometricCalibration(Image):
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
     Attrs:
-        boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
+        boresight (np.array): the average RA/DEC offset [deg] from target pointing across all frames
         platescale (float): the platescale value in [mas/pixel]
         northangle (float): the north angle value in [deg]
-        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map (if distortion map is not computed this is an array of nans), where the last value of the array is the order of polynomial used
+        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map, where the last value of the array is the order of polynomial used
 
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
