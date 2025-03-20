@@ -8,8 +8,9 @@ import corgidrp.mocks as mocks
 import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
+import corgidrp.walker as walker
 import pytest
-
+import glob
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -51,7 +52,7 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
     # perform the astrometric calibration
     astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
 
-    astrom_cal.save(filedir=e2eoutput_path, filename="mock_nonlinearcal.fits" )
+    astrom_cal.save(filedir=e2eoutput_path, filename="mock_astro.fits" )
 
     # add calibration file to caldb
     this_caldb = caldb.CalDB()
@@ -66,79 +67,85 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
 
     #Read in the PSFs
     input_file = 'hlc_os11_frames_with_planets.fits'
-    input_hdul = fits.open(os.path.join(os11_data_path,input_file), header = True, ignore_missing_end = True)
+    input_hdul = fits.open(os.path.join(os11_data_path,input_file))
     input_images = input_hdul[0].data
     header = input_hdul[0].header
-    psf_center_x = header['PSF_CEN_X']
-    psf_center_y = header['PSF_CEN_Y']
+    psf_center_x = header['XCENTER']
+    psf_center_y = header['YCENTER']
     
     #Get the auxilliary data
-    data = np.loadtxt(os.path.join(os11_data_path,'hlc_os11_batch_muf_info.txt'), skiprows=2)
+    data = np.loadtxt(os.path.join(os11_data_path,'hlc_os11_batch_info.txt'), skiprows=2)
     batch = data[:,0].astype(int)
     star = data[:,2].astype(int)
     roll = data[:,3]
     frame_exptime_sec = data[:,4]
     nframes = data[:,6].astype(int)
 
-    mock_pri_header, mock_ext_header = create_default_L2b_headers()
-
-    nbatch = 5 #We'll just do one reference and 2 x 2 rolls for now, that consists of the first 5 "batches"
+    nbatch = 22 #We'll just do one reference and 2 x 2 rolls for now, that consists of the first 5 "batches"
 
     istart = 0
-    nframes_per_batch = 2 #Limit the number of frames we're going to generate for now. 
+    nframes_per_batch = 12 #Limit the number of frames we're going to generate for now. 
 
     big_array_size = [1024,1024]
 
     image_list = []
     for ibatch in range(nbatch): 
-        iend = istart + nframes_per_batch
+        # iend = istart + nframes_per_batch
+        iend = istart + nframes[ibatch] 
 
         batch_images = input_images[istart:iend,:,:]
 
-        #Stick each one of these images into an L2b corgidrp Image object. 
-        for i in range(nframes_per_batch): 
+        #collapse these images and stick them into a big array.
+        psf_image = np.nanmedian(batch_images, axis=0)
 
-            big_array = np.zeros(big_array_size)
-            psf_image = batch_images[i,:,:]
+        big_array = np.zeros(big_array_size)
+        big_rows, big_cols = big_array_size
+        small_rows, small_cols = psf_image.shape
 
-            big_rows, big_cols = big_array_size
-            small_rows, small_cols = psf_image.shape
+        # Find the middle indices for the big array
+        row_start = (big_rows - small_rows) // 2
+        col_start = (big_cols - small_cols) // 2
 
-            # Find the middle indices for the big array
-            row_start = (big_rows - small_rows) // 2
-            col_start = (big_cols - small_cols) // 2
+        # Insert the small array into the middle of the big array
+        big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = psf_image
 
-            # Insert the small array into the middle of the big array
-            big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = psf_image
+        #Update the PSF Center. Might have columns and row mixed up; doesn't matter for now since psf_center_x and psf_center_y are the same. 
+        new_psf_center_x = psf_center_x + col_start
+        new_psf_center_y = psf_center_y + row_start
 
-            #Update the PSF Center. Might have columns and row mixed up; doesn't matter for now since psf_center_x and psf_center_y are the same. 
-            new_psf_center_x = psf_center_x + col_start
-            new_psf_center_y = psf_center_y + row_start
+        #Create the new Image object
+        mock_pri_header, mock_ext_header = create_default_L2b_headers()
+        new_image = Image(big_array, mock_pri_header, mock_ext_header)
+        # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
+        # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
+        new_image.pri_hdr.set('FRAMET', frame_exptime_sec[ibatch])
+        new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
+        new_image.pri_hdr.set('ROLL',-roll[ibatch])
+        new_image.ext_hdr.set('FSMPRFL','NFOV')
+        new_image.ext_hdr.set('LSAMNAME','NFOV')
+        new_image.ext_hdr.set('CFAMNAME','1F')
 
-            #Create the new Image object
-            new_image = Image(big_array, mock_pri_header, mock_ext_header)
-            new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
-            new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
-            new_image.pri_hdr.set('FRAMET', frame_exptime_sec[ibatch])
-            new_image.ext_hdr.set('EXPTIME', frame_exptime_sec[ibatch])
-            new_image.pri_hdr.set('ROLL',roll[ibatch])
+        #If Reference star then flag it. 
+        if star[ibatch] == 2:
+            new_image.pri_hdr.set('PSFREF', 1)
 
-            #If Reference star then flag it. 
-            if star[ibatch] == 2:
-                new_image.pri_hdr.set('PSFREF', 1)
+        # new_image.filename ="CGI_020000199900100{}00{}_20250415T0305102_L2b.fits".format(ibatch,i)
+        new_image.filename = "CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch)
 
-            image_list.append(new_image)
 
-        istart = istart + nframes[ibatch] 
+        image_list.append(new_image)
+
+        istart = iend
 
     #############################################
     #### Add a sat spot image to the dataset ####
     #############################################
+
     #For now assuming there's just one since the step function in progress doesn't break things up. 
     #We'll want it do later. 
 
     #Create a mock satellite spot image with the same center as the PSF images. 
-    satellite_spot_image = create_synthetic_satellite_spot_image([55,55],1e-4,0,2,14.79)
+    satellite_spot_image = create_synthetic_satellite_spot_image([55,55],1e-4,0,2,14.79,amplitude_multiplier=1000)
     big_array = np.zeros(big_array_size)
     big_rows, big_cols = big_array_size
     small_rows, small_cols = satellite_spot_image.shape
@@ -148,19 +155,35 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
     col_start = (big_cols - small_cols) // 2
 
     # Insert the small array into the middle of the big array
-    big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = psf_image
+    big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = satellite_spot_image
 
-    sat_spot_image = Image(big_array, mock_pri_header, mock_ext_header)
+    mock_satspot_pri_header, mock_satspot_ext_header = create_default_L2b_headers()
+    mock_satspot_pri_header['SATSPOTS'] = 1
+    mock_satspot_ext_header['FSMPRFL']='NFOV'
+
+    sat_spot_image = Image(big_array, mock_satspot_pri_header, mock_satspot_ext_header)
+    sat_spot_image.filename ="CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch+1)
     
     image_list.append(sat_spot_image)
 
-    mock_dataset = data.Dataset(image_list)
+    #########################################
+    #### Save the dataset to a directory ####
+    #########################################
+
+    mock_dataset = corgidata.Dataset(image_list)
+    mock_dataset.save(filedir=e2e_data_path)
 
     ## Next step run things through the walker. 
 
+    #####################################
+    #### Pass the data to the walker ####
+    #####################################
 
-    
+    l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_data_path, "*.fits")))
+    walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path, template="l2b_to_l4.json")
 
+    #Clean up
+    this_caldb.remove_entry(astrom_cal)
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -171,14 +194,17 @@ if __name__ == "__main__":
 
 
     outputdir = thisfile_dir
-    os11_dir = "/Users/maxwellmb/Data/corgi/corgidrp/os11_data/"
+    os11_dir = "/Users/maxmb/Data/corgi/corgidrp/os11_data/"
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
+    ap.add_argument("-os11", "--os11_dir", default=os11_dir,
+                    help="directory where you find your os11 data [%(default)s]")
 
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     
     args = ap.parse_args()
+    os11_dir = args.os11_dir
     outputdir = args.outputdir
 
     test_l2b_to_l4(os11_dir, outputdir)
