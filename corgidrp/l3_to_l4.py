@@ -571,8 +571,6 @@ def do_psf_subtraction(input_dataset,
                             ct_calibration,
                             klip_params,
                             inject_snr,
-                            seps=None, # in pixels from mask center
-                            pas=None,
                             cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
                             )
         thrupt_hdr = fits.Header()
