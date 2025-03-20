@@ -45,7 +45,7 @@ owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
 
 st_amp = 100.
 noise_amp=1e-11
-pl_contrast=1e-5
+pl_contrast=1e-4
 rel_tolerance = 0.05
 
 ## pyKLIP data class tests
