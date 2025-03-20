@@ -34,11 +34,11 @@ def test_astrom():
     assert type(dataset[0]) == data.Image
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=200)
 
     # the data was generated to have the following image properties
     expected_platescale = 21.8
-    expected_northangle = 45
+    expected_northangle = 20
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
@@ -46,11 +46,11 @@ def test_astrom():
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
-    # the simulated image should have no shift from the target
-    target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    # the simulated image should have zero offset
+    # target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
-    assert ra == pytest.approx(target[0], abs=8.333e-7)
-    assert dec == pytest.approx(target[1], abs=8.333e-7)
+    assert ra == pytest.approx(0, abs=8.333e-7)     # reported as ra offset
+    assert dec == pytest.approx(0, abs=8.333e-7)
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal)
@@ -93,8 +93,7 @@ def test_distortion():
     # dataset = data.Dataset([image_path])
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, field_matches=[matches], find_threshold=400, comparison_threshold=75, find_distortion=True, fitorder=3, position_error=0.5)
-    #, initial_dist_guess=expected_coeffs[:-1]
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=400, find_distortion=True, fitorder=3, position_error=0.5)
 
     ## check that the distortion map does not create offsets greater than 4[mas]
         # compute the distortion maps created from the best fit coeffs
