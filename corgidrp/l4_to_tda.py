@@ -184,9 +184,6 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0):
         psf (ndarray, optional): The PSF used for detection. If None, a Gaussian approximation is created.
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
-    
-    Returns:
-        Image: The header is updated with the approximate pixel locations and SNRs of the detected sources.
     """
     
     # Ensure an odd-sized box for PSF convolution
