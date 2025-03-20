@@ -1287,7 +1287,7 @@ class TrapCalibration(Image):
 
 class FluxcalFactor(Image):
     """
-    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
+    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electrons/s. 
 
     To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
@@ -1362,8 +1362,8 @@ class FluxcalFactor(Image):
                 orig_input_filename = input_dataset[0].filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
-            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron/s'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron/s'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 

@@ -194,6 +194,31 @@ def calculate_flux_ref(filter_wavelength, calspec_flux, wave_ref):
     flux_ref = np.interp(wave_ref, filter_wavelength, calspec_flux)
     return flux_ref
 
+def calculate_vega_mag(source_flux, filter_file):
+    """
+    determine the apparent Vega magnitude of the source with known flux in CALSPEC units (erg/(s * cm^2 *AA)
+    in the used filter band.
+    
+    Args:
+        source_flux (float): source flux usually determined by applying the FluxcalFactor
+        filter_file (str): name of the file with the transmission data of the corresponding color filter
+    
+    Returns:
+        float: the apparent VEGA magnitude
+    """
+    
+    wave, filter_trans = read_filter_curve(filter_file)
+    # calculate the flux of VEGA and the source star from the user given CALSPEC file binned on the wavelength grid of the filter
+    vega_filepath = get_calspec_file('Vega')
+    vega_sed = read_cal_spec(vega_filepath, wave)
+
+    vega_flux = calculate_band_flux(filter_trans, vega_sed, wave)
+    #calculate apparent vega magnitude
+    vega_mag = -2.5 * np.log10(source_flux/vega_flux)
+    
+    return vega_mag
+
+
 def compute_color_cor(filter_curve, filter_wavelength , flux_ref, wave_ref, flux_source):
     """
     Compute the color correction factor K given the filter bandpass, reference spectrum (CALSPEC),
@@ -384,7 +409,7 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by aperture photometry.
-    The band flux values are divided by the found photoelectrons.
+    The band flux values are divided by the found photoelectrons/s.
     Propagates also errors to flux calibration factor calfile.
     Background subtraction can be done optionally using a user defined circular annulus.
     
@@ -489,7 +514,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by fitting a 2D Gaussian.
-    The band flux values are divided by the found photoelectrons.
+    The band flux values are divided by the found photoelectrons/s.
     Propagates also errors to flux calibration factor calfile.
     Background subtraction can be done optionally using a user defined circular annulus.
     
