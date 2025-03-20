@@ -502,12 +502,6 @@ def test_psfsub_withklipandctmeas():
     pl_contrast = 0. # No planet
     rolls = [0,15.,0,0]
     numbasis = [1,2]
-    klip_params = {
-                'outdir':outdir,'fileprefix':fileprefix,
-                'annuli':annuli, 'subsections':subsections, 
-                'movement':movement, 'numbasis':numbasis,
-                'mode':mode,'calibrate_flux':calibrate_flux}
-    
     mock_sci_rdi,mock_ref_rdi = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
@@ -532,91 +526,27 @@ def test_psfsub_withklipandctmeas():
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True)
     
-    analytical_result_rdi = rotate(mock_sci_rdi[0].data - mock_ref_rdi[0].data,-rolls[0],reshape=False,cval=np.nan)
-    
-    # # Plot psf subtraction result
-    # for i,frame in enumerate(psfsub_dataset_rdi):
-
-    #     for k, img in enumerate(frame.data):
-    #         import matplotlib.pyplot as plt
-
-    #         fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-    #         im0 = axes[0].imshow(img,origin='lower')
-    #         plt.colorbar(im0,ax=axes[0],shrink=0.8)
-    #         axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-    #         axes[0].set_title(f'PSF Sub Result ({numbasis[k]} KL Modes)')
-
-    #         im1 = axes[1].imshow(analytical_result_rdi,origin='lower')
-    #         plt.colorbar(im1,ax=axes[1],shrink=0.8)
-    #         axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-    #         axes[1].set_title('Analytical result')
-
-    #         im2 = axes[2].imshow(img - analytical_result_rdi,origin='lower')
-    #         plt.colorbar(im2,ax=axes[2],shrink=0.8)
-    #         axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-    #         axes[2].set_title('Difference')
-
-    #         fig.suptitle(f"{frame.pri_hdr['KLIP_ALG']}, No Injections")
-
-    #         plt.show()
-    #         plt.close()
-        
-    
     # Check that klip and ct separations are the same
+    kt = psfsub_dataset_rdi[0].hdu_list['KL_THRU'].data
+    kt_seps = kt[0]
 
+    ct = psfsub_dataset_rdi[0].hdu_list['CT_THRU'].data
+    ct_seps = ct[0]
 
-    # Check that array shapes are correct
-
-    # Plot KL throughput
-    kt_arr_rdi = psfsub_dataset_rdi[0].hdu_list['KL_THRU'].data
-    seps = kt_arr_rdi[0]
-
-    # ADI
-    nsci, nref = (2,0)
-    mock_sci_adi,mock_ref_adi = create_psfsub_dataset(nsci,nref,rolls,
-                                            fwhm_pix=fwhm_pix,
-                                            st_amp=st_amp,
-                                            noise_amp=noise_amp,
-                                            pl_contrast=pl_contrast)
-
-    analytical_result_adi = shift((rotate(mock_sci_adi[0].data - mock_sci_adi[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci_adi[1].data - mock_sci_adi[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-                              [0.5,0.5],
-                              cval=np.nan)
+    assert np.all(kt_seps == ct_seps)
     
-    psfsub_dataset_adi = do_psf_subtraction(mock_sci_adi,ctcal,
-                                reference_star_dataset=mock_ref_adi,
-                                numbasis=numbasis,
-                                fileprefix='test_KL_THRU',
-                                mode=None,
-                                do_crop=False,
-                                measure_klip_thrupt=True,
-                                measure_1d_core_thrupt=True)
-    
-    kt_arr_adi = psfsub_dataset_adi[0].hdu_list['KL_THRU'].data
-
-    import matplotlib.pyplot as plt
-    fig,ax = plt.subplots(figsize=(6,4))
-    plt.plot(seps,kt_arr_rdi[1],label='RDI')
-    plt.plot(seps,kt_arr_adi[1],label='ADI')
-    plt.title('KLIP throughput')
-    plt.legend()
-    plt.xlabel('separation (pixels)')
-    plt.show()
-
-
-    pass
 
 if __name__ == '__main__':  
-    # test_create_ct_cal()
-    # test_get_closest_psf()
-    # test_inject_psf()
-    # test_measure_noise()
+    test_create_ct_cal()
+    test_get_closest_psf()
+    test_inject_psf()
+    test_measure_noise()
 
     test_meas_klip_ADI()
     test_meas_klip_RDI()
     test_compare_RDI_ADI()
-    # test_meas_klip_ADIRDI()
+    test_meas_klip_ADIRDI()
 
-    # test_psfsub_withklipandctmeas()
+    test_psfsub_withklipandctmeas()
 
     pass
