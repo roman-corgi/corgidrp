@@ -563,7 +563,7 @@ def do_psf_subtraction(input_dataset,
             'outdir':outdir,'fileprefix':fileprefix,
             'annuli':annuli, 'subsections':subsections, 
             'movement':movement, 'numbasis':numbasis,
-            'mode':mode,'calibrate_flux':calibrate_flux}
+            'mode':mode}
         
         klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,
