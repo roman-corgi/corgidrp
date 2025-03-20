@@ -417,8 +417,10 @@ def do_psf_subtraction(input_dataset,
         
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        ct_calibration (corgidrp.data.CoreThroughputCalibration, optional): core throughput calibration object. Required 
+            if measuring KLIP throughput or 1D core throughput. Defaults to None.
         reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
-            star [optional]
+            star. If not provided, references will be searched for in the input dataset.
         mode (str, optional): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously 
             if not specified.
         annuli (int, optional): number of concentric annuli to run separate subtractions on. Defaults to 1.
@@ -427,10 +429,15 @@ def do_psf_subtraction(input_dataset,
         numbasis (int or list of int, optional): number of KLIP modes to retain. Defaults to [1,4,8,16].
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
-        do_crop (bool): whether to crop data before PSF subtraction. Defaults to True.
+        do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
         crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
             None, which results in the step choosing a crop size based on the imaging mode. 
-
+        measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
+            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU']. 
+            Defaults to True.
+        measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
+            Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
+            Defaults to True.
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 

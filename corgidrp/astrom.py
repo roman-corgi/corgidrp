@@ -247,7 +247,7 @@ def get_polar_dist(seppa1,seppa2):
     return np.sqrt(sep1**2 + sep2**2 - (2 * sep1 * sep2 * np.cos((pa1-pa2)*np.pi/180.)))
 
 def seppa2dxdy(sep_pix,pa_deg):
-    """Converts position in separation (pixels from some center) and position angle 
+    """Converts position in separation (pixels from some reference center) and position angle 
     (counterclockwise from north) to separation in x and y pixels from the center.
 
     Args:
@@ -255,7 +255,7 @@ def seppa2dxdy(sep_pix,pa_deg):
         pa_deg (float or np.array): Position angle in degrees (counterclockwise from North)
 
     Returns:
-        tuple: delta x and delta y (pixels) from the center 
+        np.array: array of shape (2,) containing delta x and delta y in pixels from the center 
     """
     dx = -sep_pix * np.sin(pa_deg * np.pi/180.)
     dy = sep_pix * np.cos(pa_deg * np.pi/180.)
@@ -263,7 +263,7 @@ def seppa2dxdy(sep_pix,pa_deg):
     return np.array([dx, dy])
 
 def seppa2xy(sep_pix,pa_deg,cenx,ceny):
-    """Converts position in separation (pixels from some center) and position angle 
+    """Converts position in separation (pixels from some reference center) and position angle 
     (counterclockwise from north) to separation in x and y pixels from the center.
 
     Args:
@@ -273,7 +273,7 @@ def seppa2xy(sep_pix,pa_deg,cenx,ceny):
         ceny (float): Y location of center reference pixel. (0,0) is center of bottom left pixel
 
     Returns:
-        tuple: x and y pixel location. (0,0) is center of bottom left pixel.
+        np.array: x and y pixel location. (0,0) is center of bottom left pixel.
     """
     dx, dy = seppa2dxdy(sep_pix,pa_deg)
 
