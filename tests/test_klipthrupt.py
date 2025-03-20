@@ -19,6 +19,7 @@ lam = 573.8e-9 #m
 pixscale_arcsec = 0.0218
 fwhm_mas = 1.22 * lam / d * 206265 * 1000
 fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
+sig_pix = fwhm_pix / (2 * np.sqrt(2. * np.log(2.)))
 iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
 owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
 
@@ -30,13 +31,18 @@ annuli = 1
 subsections = 1
 movement = 1
 calibrate_flux = False
-mode = 'ADI+RDI'
+
+st_amp = 100.
+noise_amp = 1e-3
+pl_contrast = 0.0
+rolls = [0,15.,0,0]
+numbasis = [1]
+
+max_thrupt_tolerance = 1 + (noise_amp * (2*fwhm_pix)**2)
 
 if not os.path.exists(outdir):
     os.mkdir(outdir)
    
-
-
 ## pyKLIP data class tests
 
 def test_create_ct_cal():
@@ -275,31 +281,41 @@ def test_measure_noise():
 
 
 def test_meas_klip_ADI():
+    global kt_adi 
 
     mode = 'ADI'
+    nsci, nref = (2,0)
 
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
-    
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 0.0
-    rolls = [0,15.,0,0]
-    numbasis = [1,2]
+
     klip_params = {
                 'outdir':outdir,'fileprefix':fileprefix,
                 'annuli':annuli, 'subsections':subsections, 
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
                                             pl_contrast=pl_contrast)
+
+    # # Plot input dataset
+    # import matplotlib.pyplot as plt
+    # dataset_frames = mock_sci if mock_ref is None else (*mock_sci,*mock_ref)
+    # fig,axes = plt.subplots(1,len(dataset_frames),sharey=True,layout='constrained',figsize=(3*len(dataset_frames),3))
+    # for f,frame in enumerate(dataset_frames):
+    #     im0 = axes[f].imshow(frame.data,origin='lower')
+    #     plt.colorbar(im0,ax=axes[f],shrink=0.8)
+    #     axes[f].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'],s=1)
+    #     name = 'Sci' if f < len(mock_sci) else 'Ref'
+    #     n_frame = f if f < len(mock_sci) else f-len(mock_sci)
+    #     axes[f].set_title(f'{name} Input Frame {n_frame}')
+    # plt.show()
 
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
@@ -313,45 +329,71 @@ def test_meas_klip_ADI():
     inject_snr = 20
 
     klip_params['mode'] = mode
-    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+    kt_adi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
                      inject_snr,
-                     seps=[15.,25.,35.], # in pixels from mask center
-                     pas=[0.,120.,240.], # Degrees
-                     cand_locs=[])
+                     seps = None, # in pixels from mask center
+                     pas = None, # Degrees
+                     cand_locs=[],
+                     debug=True)
 
-    # See if it runs\-
-    pass
+    # # See if it runs\
+    # import matplotlib.pyplot as plt
+    # fig,ax = plt.subplots(figsize=(6,4))
+    # plt.plot(kt_adi[0],kt_adi[1],label='ADI')
+    # plt.title('KLIP throughput')
+    # plt.legend()
+    # plt.xlabel('separation (pixels)')
+    # plt.show()
+
+    # Check KL thrupt is <= 1 within noise tolerance
+    assert np.all(kt_adi[1:] < max_thrupt_tolerance)
+
+    # Check KL thrupt is > 0
+    assert np.all(kt_adi[1:] > 0.)
+
+    # Check KL thrupt increases with separation
+    for i in range(1,len(kt_adi[0])):
+        assert np.all(kt_adi[1:,i] > kt_adi[1:,i-1])
 
 
 def test_meas_klip_RDI():
-
+    global kt_rdi
     mode = 'RDI'
+    nsci, nref = (1,1)
 
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
-    
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 1e-2
-    rolls = [0,15.,0,0]
-    numbasis = [1,2]
+
     klip_params = {
                 'outdir':outdir,'fileprefix':fileprefix,
                 'annuli':annuli, 'subsections':subsections, 
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
                                             pl_contrast=pl_contrast)
+
+    # # Plot input dataset
+    # import matplotlib.pyplot as plt
+    # dataset_frames = mock_sci if mock_ref is None else (*mock_sci,*mock_ref)
+    # fig,axes = plt.subplots(1,len(dataset_frames),sharey=True,layout='constrained',figsize=(3*len(dataset_frames),3))
+    # for f,frame in enumerate(dataset_frames):
+    #     im0 = axes[f].imshow(frame.data,origin='lower')
+    #     plt.colorbar(im0,ax=axes[f],shrink=0.8)
+    #     axes[f].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'],s=1)
+    #     name = 'Sci' if f < len(mock_sci) else 'Ref'
+    #     n_frame = f if f < len(mock_sci) else f-len(mock_sci)
+    #     axes[f].set_title(f'{name} Input Frame {n_frame}')
+    # plt.show()
 
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
@@ -365,21 +407,34 @@ def test_meas_klip_RDI():
     inject_snr = 20
 
     klip_params['mode'] = mode
-    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+    kt_rdi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
                      inject_snr,
-                     seps=[15.,25.,35.], # in pixels from mask center
-                     pas=[0.,60.,120.,180.,240.,300.], # Degrees
-                     cand_locs=[(15.,0.)])
+                     seps = None, # in pixels from mask center
+                     pas = None, # Degrees
+                     cand_locs=[],
+                     debug=True)
 
-    # See if it runs\-
-    pass
+    # # See if it runs
+    # import matplotlib.pyplot as plt
+    # fig,ax = plt.subplots(figsize=(6,4))
+    # plt.plot(kt_rdi[0],kt_rdi[1],label='RDI')
+    # plt.title('KLIP throughput')
+    # plt.legend()
+    # plt.xlabel('separation (pixels)')
+    # plt.show()
+
+    # Check KL thrupt is <= 1 within noise tolerance
+    assert np.all(kt_rdi[1:] < max_thrupt_tolerance)
+
+    # Check KL thrupt > 0.8
+    assert np.all(kt_rdi[1:] > 0.8)
 
 
 def test_meas_klip_ADIRDI():
-
+    global kt_adirdi
     mode = 'ADI+RDI'
 
     nx,ny = (21,21)
@@ -429,10 +484,18 @@ def test_meas_klip_ADIRDI():
     # See if it runs\-
     pass
 
+def test_compare_RDI_ADI():
+
+    # Check that ADI thrupt < RDI thrupt
+    mean_adi = np.mean(kt_adi[1:])
+    mean_rdi = np.mean(kt_rdi[1:])
+    assert mean_adi < mean_rdi
 
 def test_psfsub_withklipandctmeas():
 
-    nsci, nref = (2,0)
+    # RDI
+    mode = 'RDI'
+    nsci, nref = (1,1)
  
     st_amp = 100.
     noise_amp = 1e-3
@@ -445,24 +508,13 @@ def test_psfsub_withklipandctmeas():
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+    mock_sci_rdi,mock_ref_rdi = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
                                             pl_contrast=pl_contrast)
 
-    # Plot input dataset
-    import matplotlib.pyplot as plt
-    dataset_frames = mock_sci if mock_ref is None else (*mock_sci,*mock_ref)
-    fig,axes = plt.subplots(1,len(dataset_frames),sharey=True,layout='constrained',figsize=(3*len(dataset_frames),3))
-    for f,frame in enumerate(dataset_frames):
-        im0 = axes[f].imshow(frame.data,origin='lower')
-        plt.colorbar(im0,ax=axes[f],shrink=0.8)
-        axes[f].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'],s=1)
-        name = 'Sci' if f < len(mock_sci) else 'Ref'
-        n_frame = f if f < len(mock_sci) else f-len(mock_sci)
-        axes[f].set_title(f'{name} Input Frame {n_frame}')
-    plt.show()
+    
 
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
@@ -471,8 +523,8 @@ def test_psfsub_withklipandctmeas():
                   nx=nx,ny=ny)
     
     
-    psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
-                                reference_star_dataset=mock_ref,
+    psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi,ctcal,
+                                reference_star_dataset=mock_ref_rdi,
                                 numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
                                 mode=None,
@@ -480,38 +532,34 @@ def test_psfsub_withklipandctmeas():
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True)
     
-    if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-        analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
-    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-        analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-                              [0.5,0.5],
-                              cval=np.nan)
+    analytical_result_rdi = rotate(mock_sci_rdi[0].data - mock_ref_rdi[0].data,-rolls[0],reshape=False,cval=np.nan)
+    
+    # # Plot psf subtraction result
+    # for i,frame in enumerate(psfsub_dataset_rdi):
 
-    for i,frame in enumerate(psfsub_dataset):
+    #     for k, img in enumerate(frame.data):
+    #         import matplotlib.pyplot as plt
 
-        for k, img in enumerate(frame.data):
-            import matplotlib.pyplot as plt
+    #         fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    #         im0 = axes[0].imshow(img,origin='lower')
+    #         plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    #         axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+    #         axes[0].set_title(f'PSF Sub Result ({numbasis[k]} KL Modes)')
 
-            fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-            im0 = axes[0].imshow(img,origin='lower')
-            plt.colorbar(im0,ax=axes[0],shrink=0.8)
-            axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-            axes[0].set_title(f'PSF Sub Result ({numbasis[k]} KL Modes)')
+    #         im1 = axes[1].imshow(analytical_result_rdi,origin='lower')
+    #         plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    #         axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+    #         axes[1].set_title('Analytical result')
 
-            im1 = axes[1].imshow(analytical_result,origin='lower')
-            plt.colorbar(im1,ax=axes[1],shrink=0.8)
-            axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-            axes[1].set_title('Analytical result')
+    #         im2 = axes[2].imshow(img - analytical_result_rdi,origin='lower')
+    #         plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    #         axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+    #         axes[2].set_title('Difference')
 
-            im2 = axes[2].imshow(img - analytical_result,origin='lower')
-            plt.colorbar(im2,ax=axes[2],shrink=0.8)
-            axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-            axes[2].set_title('Difference')
+    #         fig.suptitle(f"{frame.pri_hdr['KLIP_ALG']}, No Injections")
 
-            fig.suptitle(f"{frame.pri_hdr['KLIP_ALG']}, No Injections")
-
-            plt.show()
-            # plt.close()
+    #         plt.show()
+    #         plt.close()
         
     
     # Check that klip and ct separations are the same
@@ -520,17 +568,41 @@ def test_psfsub_withklipandctmeas():
     # Check that array shapes are correct
 
     # Plot KL throughput
-    kt_arr = psfsub_dataset[0].hdu_list['KL_THRU'].data
-    seps = kt_arr[0]
+    kt_arr_rdi = psfsub_dataset_rdi[0].hdu_list['KL_THRU'].data
+    seps = kt_arr_rdi[0]
 
+    # ADI
+    nsci, nref = (2,0)
+    mock_sci_adi,mock_ref_adi = create_psfsub_dataset(nsci,nref,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast)
+
+    analytical_result_adi = shift((rotate(mock_sci_adi[0].data - mock_sci_adi[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci_adi[1].data - mock_sci_adi[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+                              [0.5,0.5],
+                              cval=np.nan)
+    
+    psfsub_dataset_adi = do_psf_subtraction(mock_sci_adi,ctcal,
+                                reference_star_dataset=mock_ref_adi,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=None,
+                                do_crop=False,
+                                measure_klip_thrupt=True,
+                                measure_1d_core_thrupt=True)
+    
+    kt_arr_adi = psfsub_dataset_adi[0].hdu_list['KL_THRU'].data
+
+    import matplotlib.pyplot as plt
     fig,ax = plt.subplots(figsize=(6,4))
-    for arr in kt_arr[1:]:
-        plt.plot(seps,arr)
-
+    plt.plot(seps,kt_arr_rdi[1],label='RDI')
+    plt.plot(seps,kt_arr_adi[1],label='ADI')
     plt.title('KLIP throughput')
+    plt.legend()
     plt.xlabel('separation (pixels)')
-
     plt.show()
+
 
     pass
 
@@ -540,10 +612,11 @@ if __name__ == '__main__':
     # test_inject_psf()
     # test_measure_noise()
 
-    # test_meas_klip_RDI()
-    # test_meas_klip_ADI()
+    test_meas_klip_ADI()
+    test_meas_klip_RDI()
+    test_compare_RDI_ADI()
     # test_meas_klip_ADIRDI()
 
-    test_psfsub_withklipandctmeas()
+    # test_psfsub_withklipandctmeas()
 
     pass
