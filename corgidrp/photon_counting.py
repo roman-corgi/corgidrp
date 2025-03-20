@@ -59,7 +59,6 @@ def photon_count(e_image, thresh):
 
     return pc_image
 
-
 def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max=None, niter=2, mask_filepath=None, safemode=True, inputmode='illuminated'):
     """Take a stack of images, frames of the same exposure 
     time, k gain, read noise, and EM gain, and return the mean expected value per 
@@ -284,7 +283,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     if val[0] != "DARK":  
         new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                             dq_hdr=dq_hdr, input_hdulist=hdulist) 
-        new_image.filename = dataset[0].filename.split('.')[0]+'_pc'+filename_end+'.fits'
+        # NOTE - assuming input L2a dataset already has the same file format
+        new_image.filename = dataset[-1].filename.replace("L2a", "L2b") 
         new_image.ext_hdr['PCTHRESH'] = thresh
         new_image._record_parent_filenames(input_dataset) 
         pc_ill_dataset = data.Dataset([new_image])
