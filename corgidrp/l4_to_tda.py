@@ -142,7 +142,7 @@ def convert_to_flux(input_dataset, fluxcal_factor):
 
 def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None):
     """
-    Calculates the total number of photoelectrons of a point source and convert them to the flux in erg/(s * cm^2 * AA).
+    Calculates the total number of photoelectrons/s of a point source and convert them to the flux in erg/(s * cm^2 * AA).
     Write the flux and corresponding error in the header. Convert the flux to Vega magnitude and write it in the header.
     We assume that the source is the brightest point source in the field close to the center.
 
@@ -157,8 +157,6 @@ def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwar
     """
    # you should make a copy the dataset to start
     flux_dataset = input_dataset.copy()
-    flux_cube = flux_dataset.all_data
-    flux_error = flux_dataset.all_err
     if "COL_COR" in flux_dataset[0].ext_hdr:
         color_cor_fac = flux_dataset[0].ext_hdr['COL_COR']
     else: 
@@ -196,21 +194,23 @@ def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwar
         phot_values = [fluxcal.phot_by_gauss2d_fit(image, **phot_kwargs) for image in flux_dataset]
     else:
         raise ValueError(photo + " is not a valid photo parameter, choose aperture or 2dgauss")
-    print(phot_values)
     
     if phot_kwargs.get('background_sub', False):
         ap_sum, ap_sum_err, back = np.mean(np.array(phot_values),0)
     else:
         ap_sum, ap_sum_err = np.mean(np.array(phot_values),0)
         back = 0
- 
+    
     flux = ap_sum * factor
     flux_err = np.sqrt(ap_sum_err**2 * factor**2 + factor_error**2 *ap_sum**2)
+    #Also determine the apparent Vega magnitude
+    filter_file = fluxcal.get_filter_name(flux_dataset[0])
+    vega_mag = fluxcal.calculate_vega_mag(flux, filter_file)
     
-    history_msg = "star {0} flux calculated as {1} erg/(s * cm^2 * AA)".format(flux_dataset[0].pri_hdr["TARGET"],flux)
+    history_msg = "star {0} flux calculated as {1} erg/(s * cm^2 * AA) corresponding to {2} vega magnitude".format(flux_dataset[0].pri_hdr["TARGET"],flux, vega_mag)
 
     # update the output dataset with this converted data and update the history
-    flux_dataset.update_after_processing_step(history_msg, header_entries = {"FLUXFAC": fluxcal_factor.fluxcal_fac, "LOCBACK": back, "FLUX": flux, "FLUXERR": flux_err})
+    flux_dataset.update_after_processing_step(history_msg, header_entries = {"FLUXFAC": fluxcal_factor.fluxcal_fac, "LOCBACK": back, "FLUX": flux, "FLUXERR": flux_err, "APP_MAG": vega_mag})
     return flux_dataset
 
 
