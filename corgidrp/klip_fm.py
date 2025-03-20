@@ -45,8 +45,23 @@ def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
 
 
 def inject_psf(frame_in, ct_calibration, amp, 
-               sep_pix,pa_deg,
-               norm='sum'):
+               sep_pix,pa_deg):
+    """Injects a fake psf from the CT calibration object into a corgidrp Image with 
+    the desired position and amplitude. 
+
+    Args:
+        frame_in (corgidrp.data.Image): 2D image to inject a fake signal into.
+        ct_calibration (corgidrp.data.CoreThroughputCalibration): CT calibration object containing PSF samples.
+        amp (float): peak pixel amplitude of psf to inject.
+        sep_pix (float): separation from star in pixels to inject 
+        pa_deg (float): position angle to inject (counterclockise from north/up)
+
+    Raises:
+        UserWarning: _description_
+
+    Returns:
+        _type_: _description_
+    """
 
     frame = frame_in.copy()
 
@@ -61,15 +76,8 @@ def inject_psf(frame_in, ct_calibration, amp,
                                 dx,dy).copy() 
 
     # Scale counts
-    if norm == 'sum':
-        total_counts = np.nansum(psf_model)
-        psf_model *= amp / total_counts
-    elif norm == 'peak':
-        peak_count = np.nanmax(psf_model)
-        psf_model *= amp / peak_count
-    else:
-        raise UserWarning('Invalid norm provided to inject_psf().')
-
+    peak_count = np.nanmax(psf_model)
+    psf_model *= amp / peak_count
 
     # Assume PSF is centered in the data cutout for now
     shape_arr = np.array(psf_model.shape)
@@ -94,17 +102,21 @@ def inject_psf(frame_in, ct_calibration, amp,
 
 
 def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
-    """Calculates the noise (standard deviation of counts) for an 
-        annulus at a given separation
+    """Calculates the noise (standard deviation of counts) of an 
+        annulus at a given separation from the mask center.
         TODO: Correct for small sample statistics?
     
     Args:
         frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" in header
-        seps_pix (float): Separations (in pixels from mask center) at which to calculate the noise level
+        seps_pix (np.array of float): Separations (in pixels from mask center) at which to calculate 
+            the noise level.
         fwhm (float): halfwidth of the annulus to use for noise calculation, based on FWHM.
+        klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
+            the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
+            truncation choice.
 
     Returns:
-        float: noise level at the specified separation
+        np.array: noise levels at the specified separations. Array is of shape (len(seps_pix),) 
     """
 
     cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
@@ -139,8 +151,29 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                      inject_snr = 5,
                      seps=None, # in pixels from mask center
                      pas=None,
-                     cand_locs = [], # list of tuples (sep_pix,pa_deg) of known off-axis source locations
-                     debug=False):
+                     cand_locs = [] # list of tuples (sep_pix,pa_deg) of known off-axis source locations
+                    ):
+    """Measures the throughput of the KLIP algorithm via injection-recovery of fake off-axis sources. 
+
+    Args:
+        sci_dataset_in (corgidrp.data.Dataset): input dataset containing science observations
+        ref_dataset_in (corgidrp.data.Dataset): input dataset containing reference observations 
+            (set to None for ADI-only reductions)
+        psfsub_dataset (corgidrp.data.Dataset): dataset containing PSF subtraction result
+        ct_calibration (corgidrp.data.CoreThroughputCalibration): core throughput calibration object 
+            containing off-axis PSFs.
+        klip_params (dict): dictionary containing the same KLIP parameters used for PSF subtraction. Must 
+            contain the keywords 'mode','annuli','subsections','movement','numbasis','outdir'.
+            See corgidrp.l3_to_l4.do_psf_subtraction() for descriptions of each of these parameters.
+        inject_snr (int, optional): SNR at which to inject fake PSFs. Defaults to 5.
+        seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
+            PSFs. If not provided, a linear spacing of separations between the IWA & OWA will be chosen.
+        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
+            PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        
+    Returns:
+        np.array: _description_
+    """
     
     iwa = 10. # pix, update real number
     owa = 50. # pix, update with real number
@@ -244,7 +277,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                                 annuli=klip_params['annuli'], subsections=klip_params['subsections'], 
                                 movement=klip_params['movement'], 
                                 numbasis=[klmode],
-                                calibrate_flux=klip_params['calibrate_flux'], mode=klip_params['mode'],
+                                calibrate_flux=False, mode=klip_params['mode'],
                                 psf_library=pyklip_dataset._psflib,
                                 fileprefix=f"FAKE_{klmode}KLMODES")
         
@@ -265,7 +298,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # Subtract median
         medsubtracted_data = pyklip_data - bg_level
         
-        # if debug:
+        # 
         #     # Plot Psf subtraction with fakes
             
         #     if klip_params['mode'] == 'RDI':
