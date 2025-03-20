@@ -2819,9 +2819,11 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
     n_psfs = len(x_arr)
     
     fwhm_pix = int(np.ceil(fwhm_mas/21.8))
+    sig_pix = fwhm_pix / (2 * np.sqrt(2. * np.log(2.)))
+
     # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
     imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
-    psf = gaussian_array(array_shape=imshape,sigma=fwhm_pix,amp=1.,xoffset=0.,yoffset=0.)
+    psf = gaussian_array(array_shape=imshape,sigma=sig_pix,amp=1.,xoffset=0.,yoffset=0.)
 
     psf_cube = np.ones((n_psfs,*imshape))
     psf_cube *= psf
@@ -2971,12 +2973,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Otherwise generate a 2D gaussian for a fake PSF
         else:
-            sci_sigma = fwhm_pix
-            ref_sigma = sci_sigma * ref_psf_spread
+            sci_fwhm = fwhm_pix
+            ref_fwhm = sci_fwhm * ref_psf_spread
             pl_amp = st_amp * pl_contrast
 
             label = 'ref' if i>= n_sci else 'sci'
-            sigma = ref_sigma if i>= n_sci else sci_sigma
+            fwhm = ref_fwhm if i>= n_sci else sci_fwhm
+            sigma = fwhm / (2 * np.sqrt(2. * np.log(2.)))
             fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
             arr_center = np.array(data_shape) / 2 - 0.5
             if centerxy is None:

@@ -63,5 +63,37 @@ def test_astrom():
     pickled_astrom = pickle.loads(pickled)
     assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
 
+def test_seppa2dxdy():
+
+    seps = np.array([10.0,15.0])
+    pas = np.array([0.,90.])
+
+    expect_dx = np.array([0.,-15.0])
+    expect_dy = np.array([10.,0])
+
+    expect_dxdy = np.array([expect_dx,expect_dy])
+
+    dxdy = astrom.seppa2dxdy(seps,pas)
+
+    assert dxdy == pytest.approx(expect_dxdy)
+
+def test_seppa2xy():
+
+    seps = np.array([10.0,15.0])
+    pas = np.array([0.,90.])
+    cenx = 25.
+    ceny = 35.
+
+    expect_x = np.array([25.,10.0])
+    expect_y = np.array([45.,35.])
+
+    expect_xy = np.array([expect_x,expect_y])
+
+    dxdy = astrom.seppa2xy(seps,pas,cenx,ceny)
+
+    assert dxdy == pytest.approx(expect_xy)
+
 if __name__ == "__main__":
-    test_astrom()
+    #test_astrom()
+    test_seppa2dxdy()
+    test_seppa2xy()

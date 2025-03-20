@@ -248,24 +248,24 @@ def seppa2dxdy(sep_pix,pa_deg):
     (counterclockwise from north) to separation in x and y pixels from the center.
 
     Args:
-        sep_pix (float): Separation in pixels
-        pa_deg (float): Position angle in degrees (counterclockwise from North)
+        sep_pix (float or np.array): Separation in pixels
+        pa_deg (float or np.array): Position angle in degrees (counterclockwise from North)
 
     Returns:
         tuple: delta x and delta y (pixels) from the center 
     """
-    dx = sep_pix * np.sin(pa_deg * np.pi/180.)
+    dx = -sep_pix * np.sin(pa_deg * np.pi/180.)
     dy = sep_pix * np.cos(pa_deg * np.pi/180.)
 
-    return dx, dy
+    return np.array([dx, dy])
 
 def seppa2xy(sep_pix,pa_deg,cenx,ceny):
     """Converts position in separation (pixels from some center) and position angle 
     (counterclockwise from north) to separation in x and y pixels from the center.
 
     Args:
-        sep_pix (float): Separation in pixels
-        pa_deg (float): Position angle in degrees (counterclockwise from North)
+        sep_pix (float or np.array): Separation in pixels
+        pa_deg (float or np.array): Position angle in degrees (counterclockwise from North)
         cenx (float): X location of center reference pixel. (0,0) is center of bottom left pixel
         ceny (float): Y location of center reference pixel. (0,0) is center of bottom left pixel
 
@@ -277,7 +277,7 @@ def seppa2xy(sep_pix,pa_deg,cenx,ceny):
     x = dx + cenx
     y = dy + ceny
 
-    return x, y
+    return np.array([x, y])
 
 def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     ''' 

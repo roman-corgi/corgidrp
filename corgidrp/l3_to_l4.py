@@ -382,7 +382,6 @@ def do_psf_subtraction(input_dataset,
         ct_hdu_list = [fits.ImageHDU(data=ct_1d, header=ct_hdr, name='CT_THRU')]
         
         dataset_out[0].hdu_list.extend(ct_hdu_list)
-    
         # Save throughput as an extension on the psf-subtracted Image
 
         # Add history msg
