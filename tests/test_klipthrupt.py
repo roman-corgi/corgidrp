@@ -335,7 +335,6 @@ def test_meas_klip_ADI():
                      klip_params,
                      inject_snr,
                      seps = None, # in pixels from mask center
-                     pas = None, # Degrees
                      cand_locs=[])
 
     # # See if it runs\
@@ -412,7 +411,6 @@ def test_meas_klip_RDI():
                      klip_params,
                      inject_snr,
                      seps = None, # in pixels from mask center
-                     pas = None, # Degrees
                      cand_locs=[])
 
     # # See if it runs
@@ -476,7 +474,7 @@ def test_meas_klip_ADIRDI():
                      klip_params,
                      inject_snr,
                      seps=[15.,25.,35.], # in pixels from mask center
-                     pas=[0.,60.,120.,180.,240.,300.], # Degrees
+                     pas=np.array([0.,60.,120.,180.,240.,300.]), # Degrees
                      cand_locs=[(15.,0.)])
 
     # See if it runs\-
@@ -535,14 +533,14 @@ def test_psfsub_withklipandctmeas():
     
 
 if __name__ == '__main__':  
-    test_create_ct_cal()
-    test_get_closest_psf()
-    test_inject_psf()
-    test_measure_noise()
+    # test_create_ct_cal()
+    # test_get_closest_psf()
+    # test_inject_psf()
+    # test_measure_noise()
 
-    test_meas_klip_ADI()
-    test_meas_klip_RDI()
-    test_compare_RDI_ADI()
+    # test_meas_klip_ADI()
+    # test_meas_klip_RDI()
+    # test_compare_RDI_ADI()
     test_meas_klip_ADIRDI()
 
     test_psfsub_withklipandctmeas()
