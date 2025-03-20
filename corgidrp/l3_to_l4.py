@@ -438,7 +438,7 @@ def do_psf_subtraction(input_dataset,
         measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
             Defaults to True.
-            
+
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
@@ -597,7 +597,7 @@ def do_psf_subtraction(input_dataset,
         if measure_klip_thrupt:
             seps = dataset_out[0].hdu_list['KL_THRU'].data[0]
         else:
-            seps = []
+            seps = np.array([5.,10.,15.,20.,25.,30.,35.])
 
         cenxy = (dataset_out[0].ext_hdr['STARLOCX'],dataset_out[0].ext_hdr['STARLOCY'])
         ct_1d = get_1d_ct(ct_calibration,cenxy,seps)
