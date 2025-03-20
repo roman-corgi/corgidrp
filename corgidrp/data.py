@@ -1959,7 +1959,6 @@ class PyKLIPDataset(pyKLIP_Data):
             phead = frame.pri_hdr
             shead = frame.ext_hdr
                 
-            TELESCOP = phead['TELESCOP']
             INSTRUME = phead['INSTRUME']
             CFAMNAME = shead['CFAMNAME']
             data = frame.data
@@ -1980,7 +1979,7 @@ class PyKLIPDataset(pyKLIP_Data):
             filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             PAs_all += [shead['ROLL']] * NINTS
 
-            if TELESCOP != "ROMAN" or INSTRUME != "CGI":
+            if INSTRUME != "CGI":
                 raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
             
             # Get center wavelengths
