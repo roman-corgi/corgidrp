@@ -9,6 +9,7 @@ def make_snmap(image, psf_binarymask, coronagraph=True):
     Args:
         image (ndarray): The input image.
         psf_binarymask (ndarray): A binary mask for PSF convolution.
+        coronagraph (bool, optional): If True, an IWA is applied to derive the snmap. Defaults to True.
     
     Returns:
         ndarray: The computed S/N map.
@@ -44,6 +45,7 @@ def psf_scalesub(image, xy, psf, fwhm):
     Returns:
         ndarray: The image after PSF subtraction.
     """
+    
     # Compute distance map from PSF center
     x = np.arange(psf.shape[1]) ; y = np.arange(psf.shape[0])
     xx, yy = np.meshgrid(x, y)
