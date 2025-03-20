@@ -2211,8 +2211,11 @@ def get_flag_to_bit_map():
 
 def get_flag_to_value_map():
     """
-    Returns a dictionary mapping flag names to their decimal flag values.
+    Returns a dictionary mapping flag names to their decimal flag values. Example usage is as follows:
     
+    FLAG_TO_VALUE_MAP = get_flag_to_value_map()
+    flag_value = FLAG_TO_VALUE_MAP["TBD"]  # Gives the decimal value corresponding to "TBD"
+
     Returns:
         dict: A dictionary with flag names as keys and decimal values (int) as values.
     """
@@ -2220,7 +2223,12 @@ def get_flag_to_value_map():
 
 def get_value_to_flag_map():
     """
-    Returns a dictionary mapping flag decimal values to flag names.
+    Returns a dictionary mapping flag decimal values to flag names. Example usage is as follows:
+    
+    FLAG_TO_BIT_MAP = get_flag_to_bit_map()
+    bit_position = FLAG_TO_BIT_MAP["TBD"]  # Gives which index it should be in with the key. 
+    
+    Expected position of bit_position of the unpacked array = 63 - bit_position
     
     Returns:
         dict: A dictionary with decimal values (int) as keys and flag names as values.
@@ -2229,10 +2237,12 @@ def get_value_to_flag_map():
 
 def get_bit_to_flag_map():
     """
-    Returns a dictionary mapping bit positions to flag names.
+    Returns a dictionary mapping bit positions to flag names. Example usage is as follows:
+
+    BIT_TO_FLAG_MAP = get_bit_to_flag_map()
+    flag_name_from_bit = BIT_TO_FLAG_MAP[8]  # Expected: "TBD"
     
     Returns:
         dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
-    
