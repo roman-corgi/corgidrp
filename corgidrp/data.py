@@ -1876,14 +1876,14 @@ class CoreThroughputCalibration(Image):
             if method.lower() == 'nearest-polar':       
                 # Find the nearest radial position in the CT file (argmin() returns the first occurence only)
                 diff_r_abs = np.abs(r_cor[i_psf] - radii)
-                idx_min = np.argwhere(diff_r_abs == diff_r_abs.min())
+                idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
                 # If there's more than one case, select that one with the
                 # smallest angular distance
-                if len(idx) > 1:
+                if len(idx_near) > 1:
                     print(f'{len(idx)} PSFs at the same radial distance found')
                     breakpoint()
                 # Otherwise this is the interpolated PSF
-                elif len(idx) == 1:
+                elif len(idx_near) == 1:
                     psf_interp = self.data[i_psf]
                 # This should not happen b/c there should always be a cloest radius
                 else:
