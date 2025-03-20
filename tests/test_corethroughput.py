@@ -199,7 +199,7 @@ def test_psf_interp():
     y_psf = ct_cal.ct_excam[1,:] - fpam_ct_pix[1]
     
     # Choose some arbitrary positions and check the returned PSF is the same
-    # as the nearest one
+    # as the nearest one in the CT cal file:
     
     # Array of random numbers, covering all quadrants with radial distances from
     # the FPM within the range of the CT cal file
@@ -211,19 +211,15 @@ def test_psf_interp():
     az_out = rng.uniform(0, 2*np.pi, n_rand)
     x_out = r_out * np.cos(az_out)
     y_out = r_out * np.sin(az_out)
+    # Interpolated PSFs
+    interpolated_PSF = ct_cal.GetPSF(x_out, y_out, dataset_cor, fpam_fsam_cal)[0]
 
-    # Find closest ones
-
-    # Any with the same radial distance?
+    # Keep closest ones
 
     # Add test of equal radial distance (dataset_ct_interp), nearest angular distance (negative)
 
     # Check that if the location is below r_min or above r_max, it fails
 
-    breakpoint()
-    interpolated_PSF = ct_cal.GetPSF(
-            x, y, dataset_cor, fpam_fsam_cal)[0]
-    
     breakpoint()
 
 def test_psf_pix_and_ct():

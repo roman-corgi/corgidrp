@@ -1772,21 +1772,17 @@ class CoreThroughputCalibration(Image):
             x_cor[is_valid],
             y_cor[is_valid]])
 
-def GetPSF(self,
+    def GetPSF(self,
         x_cor,
         y_cor,
         corDataset,
-        fpamfsamcal):
+        fpamfsamcal,
+        method='nearest-polar'):
         """ Get a PSF at a given (x,y) location on HLC in a coronagraphic
         observation given a CT calibration file and the PAM transformation from
         encoder values to EXCAM pixels.
 
-        First implementation: nearest PSF in a polar sense. Given an (x,y)
-        position wrt FPM's center, the associated PSF is the one in the CT
-        calibration dataset whose radial distance to the FPM's center is the
-        closest to sqrt(x**2+y**2). If there is more than one CT PSF at the same
-        radial distance, choose the one whose angular distance to the (x,y)
-        location is the smallest.
+        First implementation: nearest PSF in a polar sense. See below.
 
         # TODO: Implement an interpolation method that takes into account other
         # PSF than the nearest one. Comply with any required precision from the
@@ -1803,7 +1799,14 @@ def GetPSF(self,
               coronagraphic observations.
           fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
               FpamFsamCal class. That is, a FpamFsamCal calibration file.
-
+          method (str): Interpolation method that will be used:
+              'polar-nearest': Given an (x,y) position wrt FPM's center, the
+               associated PSF is the one in the CT calibration dataset whose
+               radial distance to the FPM's center is the closest to
+               sqrt(x**2+y**2). If there is more than one CT PSF at the same
+               radial distance, choose the one whose angular distance to the
+               (x,y) location is the smallest.
+              
         Returns:
           Returns interpolated PSF
         """
@@ -1839,17 +1842,13 @@ def GetPSF(self,
         # Get CT measurements relative to CT FPM's center
         x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
         y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
-        core_throughput = self.ct_excam[2,:]
-        # Algorithm
+        # Algorithm:
+        # Radial distances wrt FPM's center
         radii = np.sqrt(x_grid**2 + y_grid**2)
-
-        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
+        # Azimuths
         azimuths = np.arctan2(y_grid, x_grid)
-        azimuth0 = azimuths.min()
-        azimuths = azimuths - azimuth0
-        # Now we can create a 2D array of the radii and azimuths
 
-        # Calculate the new datapoint in the right radius and azimuth coordinates
+        # Radial distances of the target locations
         radius_cor = np.sqrt(x_cor**2 + y_cor**2)
 
         # Remove interpolation locations that are outside the radius range
@@ -1869,13 +1868,38 @@ def GetPSF(self,
         # Update x_cor and y_cor
         x_cor = x_cor[r_good]
         y_cor = y_cor[r_good]
+        r_cor = np.sqrt(x_cor**2 + y_cor**2)
 
-        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
-        azimuth_cor = np.arctan2(y_cor, x_cor) - azimuth0
+        # Loop over target locations (let conditional inside the loop to collect
+        # the result for any method after interpolating)
+        for i_psf in range(len(x_cor)):
+            if method.lower() == 'nearest-polar':       
+                # Find the nearest radial position in the CT file (argmin() returns the first occurence only)
+                diff_r_abs = np.abs(r_cor[i_psf] - radii)
+                idx_min = np.argwhere(diff_r_abs == diff_r_abs.min())
+                # If there's more than one case, select that one with the
+                # smallest angular distance
+                if len(idx) > 1:
+                    print(f'{len(idx)} PSFs at the same radial distance found')
+                    breakpoint()
+                # Otherwise this is the interpolated PSF
+                elif len(idx) == 1:
+                    psf_interp = self.data[i_psf]
+                # This should not happen b/c there should always be a cloest radius
+                else:
+                    raise Exception('No closest radial distance found. Odd.')
+                breakpoint()
 
-        # MOD this azimuth so that we're in the right range: all angles will be
-        # within [0, azimuths.max()), including negative values
-        azimuth_cor = azimuth_cor % azimuths.max()
+            else:
+                raise ValueError(f'Unidentified method for the interpolation: {method}')
+
+            # Add valid case
+            psf_interp_list += [psf_interp]
+            x_interp_list += [x_cor[i_psf]]
+            y_interp_list += [y_cor[i_psf]]
+
+        breakpoint()
+        return np.array(psf_interp_list), np.array(x_interp_list), np.array(y_interp_list)
 
 class PyKLIPDataset(pyKLIP_Data):
     """
