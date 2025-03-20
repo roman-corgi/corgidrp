@@ -150,7 +150,7 @@ def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwar
         input_dataset (corgidrp.data.Dataset): a dataset of Images with the source
         fluxcal_factor (corgidrp.data.FluxcalFactor): flux calibration file
         photo (String): do either aperture photometry ("aperture") or 2DGaussian fit of the point source ("2dgauss")
-        phot_kwargs(dict): parameters of the photometry method
+        phot_kwargs (dict): parameters of the photometry method, for details see fluxcal.aper_phot and fluxcal.phot_by_gauss_2dfit
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in flux units
