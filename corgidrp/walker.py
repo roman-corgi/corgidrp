@@ -56,6 +56,7 @@ all_steps = {
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
     "find_star": corgidrp.l3_to_l4.find_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
+    "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
