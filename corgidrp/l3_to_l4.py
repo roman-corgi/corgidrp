@@ -504,10 +504,9 @@ def do_psf_subtraction(input_dataset,
     pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
     
     # Run pyklip
-    calibrate_flux = False
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
-                              calibrate_flux=calibrate_flux, mode=mode,psf_library=pyklip_dataset._psflib,
+                              calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
                               fileprefix=fileprefix)
     
     # Construct corgiDRP dataset from pyKLIP result
