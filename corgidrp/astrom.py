@@ -834,7 +834,7 @@ def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, positi
     Args:
         input_dataset (corgidrp.data.dataset): corgidrp dataset object with images to compute the distortion from
         source_matches (list of astropy.table.Table() objects): List of length N for N frames in the input dataset. Tables must columns 'x','y','RA','DEC' as pixel locations and corresponding sky positons
-        ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference star to compute pairs with
+        ref_star_pos (list of astropy.table.Table() objects): List of length N for N frames. Tables must have column names 'x', 'y', 'RA', 'DEC' for the position of the reference position to compute pairs with
         position_error (NoneType or int): If int, this is the uniform error value assumed for the offset between pairs of stars in both x and y
                         Should be changed later to accept non-uniform errors
         
