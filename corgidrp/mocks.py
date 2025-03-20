@@ -1422,14 +1422,15 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
 
     Args:
         field_path (str): Full path to directory with test field data (ra, dec, vmag, etc.)
-        filedir (str): (Optional) Full path to directory to save to.
+        filedir (str): (Optional) Full path to directory to save to. (default: None)
         image_shape (tuple of ints): The desired shape of the image (num y pixels, num x pixels), (default: (1024, 1024))
-        subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from
+        target (tuple): The original pointing target in RA/DEC [deg] (default: (80.553428801, -69.514096821))
+        subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from (default: 0.03 [deg])
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
         rotation (float): The north angle of the created image data (default: 45 [deg])
         add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
         distortion_coeffs_path (str): Full path to csv with the distortion coefficients and the order of polynomial used to describe distortion (default: None))
-        dither_pointings (int): Number of dithers to include with the dataset. Dither offset is assumed to be half the FoV.
+        dither_pointings (int): Number of dithers to include with the dataset. Dither offset is assumed to be half the FoV. (default: 0)
 
     Returns:
         corgidrp.data.Dataset:
