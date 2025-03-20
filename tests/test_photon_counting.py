@@ -76,6 +76,7 @@ def test_pc():
 
     # If first frame does not start with "CGI", skip the name test
     first_frame = pc_dataset_err.frames[0].filename
+
     if not first_frame.startswith("CGI"):
         pytest.skip("Skipping test: first frame does not start with 'CGI'. Currently working under the assumption that we have correctly named the input dataset")
 
