@@ -135,7 +135,7 @@ def test_inject_psf():
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
     
-    assert np.sum(frame_out.data) == pytest.approx(inj_flux)
+    assert np.max(frame_out.data) == pytest.approx(inj_flux)
 
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
     
@@ -336,8 +336,7 @@ def test_meas_klip_ADI():
                      inject_snr,
                      seps = None, # in pixels from mask center
                      pas = None, # Degrees
-                     cand_locs=[],
-                     debug=True)
+                     cand_locs=[])
 
     # # See if it runs\
     # import matplotlib.pyplot as plt
@@ -414,8 +413,7 @@ def test_meas_klip_RDI():
                      inject_snr,
                      seps = None, # in pixels from mask center
                      pas = None, # Degrees
-                     cand_locs=[],
-                     debug=True)
+                     cand_locs=[])
 
     # # See if it runs
     # import matplotlib.pyplot as plt
