@@ -251,8 +251,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                             continue
                     
                     frame, psf_model, psf_cenxy = inject_psf(frame, ct_calibration, 
-                                                    inject_peak, *inject_loc,
-                                                    norm='peak')
+                                                    inject_peak, *inject_loc)
 
                     # Save these for later
                     this_klmode_psfmodels[i].append(psf_model.copy())
