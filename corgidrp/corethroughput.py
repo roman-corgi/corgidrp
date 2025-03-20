@@ -415,7 +415,25 @@ def generate_ct_cal(
 
 def get_1d_ct(ct_cal,cenxy,seps,
               method='nearest'):
+    """Fetches core throughput values at specific separations from the mask center.
+    Currently only the 'nearest' method is configured. 
 
+    Args:
+        ct_cal (corgidrp.data.CoreThroughputCalibration): the core throughput calibration 
+            object.
+        cenxy (tuple of float): mask center location in CT calibration object, measured from 
+            the bottom left corner of the bottom left pixel of the full science area (1024x1024 
+            pixels) 
+        seps (np.array of float): separations (pixels from the mask center) at which to sample 
+            the CT curve.
+        method (str, optional): Method of calculating CT at a given separation. Defaults to 'nearest'.
+            'nearest': grabs the core throughput measured at a location nearest to the desired 
+            separation and assumes CT is radially symmetric.
+
+    Returns:
+        np.array: Array of shape (2,len(seps)), where the first row is the list of separations 
+            sampled, and the second row is the ct value for each separation.
+    """
     x, y, ct = ct_cal.ct_excam
     xcen, ycen = cenxy
 
