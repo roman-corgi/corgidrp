@@ -5,6 +5,7 @@ import scipy.ndimage
 from astropy.wcs import WCS
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
+from corgidrp import star_center
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
@@ -87,22 +88,184 @@ def distortion_correction(input_dataset, astrom_calibration):
 
     return undistorted_dataset
 
-def find_star(input_dataset):
+
+def find_star(input_dataset,
+              star_coordinate_guess=None,
+              thetaOffsetGuess=0,
+              satellite_spot_parameters=None,
+              drop_satspots_frames=True):
     """
+    Determines the star position within a coronagraphic dataset by analyzing frames that 
+    contain satellite spots (indicated by ``SATSPOTS=1`` in the primary header). The 
+    function computes the median of all science frames (``SATSPOTS=0``) and the median 
+    of all satellite spot frames (``SATSPOTS=1``), then estimates the star location 
+    based on these median images and the initial guess provided.
+
+    The star's (x, y) location is stored in each frame's extension header under 
+    ``STARLOCX`` and ``STARLOCY``.
+
+    You can replace many of the default settings for by adjusting the satellite_spot_parameters 
+    dictionary. You only need to replace the parameters of interest and the rest will stay as defaults. 
+
+    satellite_spot_parameters of the form: 
+         offset : dict
+                Parameters for estimating the offset of the star center:
+
+                spotSepPix : float
+                    Expected (model-based) separation of the satellite spots from the star.
+                    Units: pixels.
+                roiRadiusPix : float
+                    Radius of the region of interest around each satellite spot.
+                    Units: pixels.
+                probeRotVecDeg : array_like
+                    Angles (degrees CCW from x-axis) specifying the position of satellite spot pairs.
+                nSubpixels : int
+                    Number of subpixels across for calculating region-of-interest mask edges.
+                nSteps : int
+                    Number of points in grid search along each direction.
+                stepSize : float
+                    Step size for the grid search.
+                    Units: pixels.
+                nIter : int
+                    Number of iterations refining the radial separation.
+
+            separation : dict
+                Parameters for estimating the separation of satellite spots from the star:
+
+                spotSepPix : float
+                    Expected separation between star and satellite spots.
+                    Units: pixels.
+                roiRadiusPix : float
+                    Radius of the region of interest around each satellite spot.
+                    Units: pixels.
+                probeRotVecDeg : array_like
+                    Angles (degrees CCW from x-axis) specifying the position of satellite spot pairs.
+                nSubpixels : int
+                    Number of subpixels across for calculating region-of-interest mask edges.
+                nSteps : int
+                    Number of points in grid search along each direction.
+                stepSize : float
+                    Step size for the grid search.
+                    Units: pixels.
+                nIter : int
+                    Number of iterations refining the radial separation.
+
     
-    Find the star position in each Image in the dataset.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        input_dataset (corgidrp.data.Dataset):
+            A dataset of L3-level frames. Frames should be labeled in their primary 
+            headers with ``SATSPOTS=0`` (science frames) or ``SATSPOTS=1`` 
+            (satellite spot frames).
+        star_coordinate_guess (tuple of float or None, optional):
+            Initial guess for the star's (x, y) location as absolute coordinates.
+            If ``None``, defaults to the center of the median satellite spot image.
+            Defaults to None.
+        thetaOffsetGuess (float, optional):
+            Initial guess for any angular rotation of the star center 
+            (in degrees, for example). Defaults to 0.
+        satellite_spot_parameters (dict, optional):
+            Dictionary containing tuning parameters for spot separation and offset estimation. The dictionary
+            can contain the following keys and structure. Only provided parameters will be changed,
+            otherwise defaults for the mode will be used:
+            If None, default parameters corresponding to the specified observing_mode will be used.     
+        drop_satspots_frames (bool, optional):
+            If True, frames with satellite spots (``SATSPOTS=1``) will be removed from 
+            the returned dataset. Defaults to False.
 
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with the stars identified
-            in ext_hdr["STARLOCX/Y"]
+        corgidrp.data.Dataset:
+            The original dataset, augmented with the star's (x, y) location stored in 
+            the extension header (``ext_hdr``) of each frame under the keys 
+            ``STARLOCX`` and ``STARLOCY``.
+
+    Raises:
+        AssertionError:
+            If any frames have an invalid ``SATSPOTS`` keyword (not 0 or 1), or if 
+            the frames do not all share the same observing mode (as determined by 
+            the ``FSMPRFL`` keyword).
+
+    Notes:
+        • This function merges the science frames (for reference) and the satellite 
+          spot frames (for analysis) by taking a median image of each set.
+        • The star center is computed using the median images and the 
+          ``star_center.star_center_from_satellite_spots`` routine.
+        • Future enhancements may include separate handling of positive vs. negative 
+          satellite spot frames once the relevant metadata keywords are defined.
+        • This routine can fail, if the guess position is off by more than a few pixel.
+          A significantly wrong guess of the angle offset can also lead to failure.
     """
 
-    return input_dataset.copy()
+    # Copy input dataset
+    dataset = input_dataset.copy()
 
-def crop(input_dataset,sizexy=None,centerxy=None):
+    satellite_spot_parameters_defaults = star_center.satellite_spot_parameters_defaults
+
+    # Separate the dataset into frames with and without satellite spots
+    sci_frames = []
+    sat_spot_frames = []
+
+    observing_mode = []
+
+    for frame in dataset.frames:
+        if frame.pri_hdr["SATSPOTS"] == 0:
+            sci_frames.append(frame)
+            observing_mode.append(frame.ext_hdr['FSMPRFL'])
+        elif frame.pri_hdr["SATSPOTS"] == 1:
+            sat_spot_frames.append(frame)
+            observing_mode.append(frame.ext_hdr['FSMPRFL'])
+        else:
+            raise AssertionError("Input frames do not have a valid SATSPOTS keyword.")
+
+    assert all(mode == observing_mode[0] for mode in observing_mode), \
+        "All frames should have the same observing mode."
+
+    observing_mode = observing_mode[0]
+
+    sci_dataset = data.Dataset(sci_frames)
+    sat_spot_dataset = data.Dataset(sat_spot_frames)
+
+    # Compute median images
+    img_ref = np.median(sci_dataset.all_data, axis=0)
+    img_sat_spot = np.median(sat_spot_dataset.all_data, axis=0)
+
+    # Default star_coordinate_guess to center of img_sat_spot if None
+    if star_coordinate_guess is None:
+        star_coordinate_guess = (img_sat_spot.shape[1] // 2, img_sat_spot.shape[0] // 2)
+
+    tuningParamDict = satellite_spot_parameters_defaults[observing_mode]
+    # See if the satellite spot parameters are provided, if not used defaults
+    if satellite_spot_parameters is not None:
+        tuningParamDict = star_center.update_parameters(tuningParamDict, satellite_spot_parameters)
+
+    # Find star center
+    star_xy, list_spots_xy = star_center.star_center_from_satellite_spots(
+        img_ref=img_ref,
+        img_sat_spot=img_sat_spot,
+        star_coordinate_guess=star_coordinate_guess,
+        thetaOffsetGuess=thetaOffsetGuess,
+        satellite_spot_parameters=tuningParamDict,
+    )
+
+    # Add star location to frame headers
+    header_entries = {'STARLOCX': star_xy[0], 'STARLOCY': star_xy[1]}
+
+    if drop_satspots_frames:
+        dataset = sci_dataset
+
+    history_msg = (
+        f"Satellite spots analyzed. Star location at x={star_xy[0]} "
+        f"and y={star_xy[1]}."
+    )
+
+    dataset.update_after_processing_step(
+        history_msg,
+        header_entries=header_entries)
+
+    return dataset
+
+
+def crop(input_dataset, sizexy=None, centerxy=None):
     """
     
     Crop the Images in a Dataset to a desired field of view. Default behavior is to 
