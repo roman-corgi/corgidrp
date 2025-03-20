@@ -20,14 +20,16 @@ def get_closest_psf(ct_calibration,cenx,ceny,dx,dy):
         perfectly in the center of a pixel
 
     Args:
-        ct_calibration (_type_): _description_
-        cenx (_type_): _description_
-        ceny (_type_): _description_
-        dx (_type_): _description_
-        dy (_type_): _description_
+        ct_calibration (corgidrp.data.CoreThroughputCalibration): CT calibration object.
+        cenx (float): x location of mask center, measured from the center of the bottom 
+            left pixel of the 1024x1024 pixel science array.
+        ceny (float): y location of mask center, measured from the center of the bottom 
+            left pixel of the 1024x1024 pixel science array.
+        dx (float): x separation from the mask center in pixels
+        dy (float): y separation from the mask center in pixels
 
     Returns:
-        _type_: _description_
+        np.array: 2D PSF model closest to the desired location.
     """
 
     # Shift so (0,0) is the center of the bottom left pixel
@@ -56,11 +58,8 @@ def inject_psf(frame_in, ct_calibration, amp,
         sep_pix (float): separation from star in pixels to inject 
         pa_deg (float): position angle to inject (counterclockise from north/up)
 
-    Raises:
-        UserWarning: _description_
-
-    Returns:
-        _type_: _description_
+    Returns: 
+        corgidrp.data.Image: a copy of the input Image but with a fake PSF injected.
     """
 
     frame = frame_in.copy()
@@ -115,8 +114,7 @@ def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
             the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
             truncation choice.
 
-    Returns:
-        np.array: noise levels at the specified separations. Array is of shape (len(seps_pix),) 
+    Returns: np.array 
     """
 
     cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
@@ -168,11 +166,15 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         inject_snr (int, optional): SNR at which to inject fake PSFs. Defaults to 5.
         seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
             PSFs. If not provided, a linear spacing of separations between the IWA & OWA will be chosen.
+        pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
+            PSFs. If not provided, a linear spacing of separations between the IWA & OWA will be chosen.
         cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
             PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
         
-    Returns:
-        np.array: _description_
+    Returns: 
+        np.array: array of shape (N,n_seps), where N is 1 + the number of KL mode truncation choices and n_seps 
+        is the number of separations sampled. Index 0 contains the separations sampled, and each following index
+        contains the KLIP throughput measured at each separation for each KL mode truncation choice.
     """
     
     iwa = 10. # pix, update real number
