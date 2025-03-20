@@ -7,7 +7,7 @@ from scipy.signal import decimate
 
 import corgidrp
 import corgidrp.data as data
-from corgidrp.mocks import create_default_L3_headers, create_ct_psfs
+from corgidrp.mocks import create_default_L3_headers, create_ct_psfs, create_ct_cal
 from corgidrp.data import Image, Dataset, FpamFsamCal, CoreThroughputCalibration
 from corgidrp import corethroughput
 
@@ -299,6 +299,30 @@ def test_cal_file():
 
     print('Tests about the CT cal file passed')
 
+def test_get_1d_ct():
+    d = 2.36 #m
+    lam = 573.8e-9 #m
+    pixscale_arcsec = 0.0218
+    fwhm_mas = 1.22 * lam / d * 206265 * 1000
+    
+    nx,ny = (5,5)
+    cenx, ceny = (25.,30.)
+    ctcal = create_ct_cal(fwhm_mas,
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    seps = [0.,1.,1.41,2.,3.,4.]
+
+    expected_args = [12,7,6,2,0,0]
+
+    ct_1d = corethroughput.get_1d_ct(ctcal,(cenx,ceny),
+                                     seps)
+    
+    assert ct_1d.shape == (2,len(seps))
+
+    for i,arg in enumerate(expected_args):
+        assert ct_1d[1,i] == ctcal.ct_excam[2,arg]
+
 
 def teardown_module():
     """
@@ -320,5 +344,7 @@ if __name__ == '__main__':
     test_psf_pix_and_ct()
     test_fpm_pos()
     test_cal_file()
+    test_get_1d_ct()
+
 
 

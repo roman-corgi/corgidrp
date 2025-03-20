@@ -1,13 +1,16 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
 
 from pyklip.klip import rotate
+from astropy.wcs import WCS
+
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
+from corgidrp.klip_fm import meas_klip_thrupt
+from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
 import numpy as np
-import glob
 import pyklip.rdi
 import os
 from astropy.io import fits
@@ -171,17 +174,22 @@ def crop(input_dataset,sizexy=None,centerxy=None):
     
     return output_dataset
 
-def do_psf_subtraction(input_dataset, reference_star_dataset=None,
+def do_psf_subtraction(input_dataset, 
+                       ct_calibration=None,
+                       reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
                        numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
                        do_crop=True,
-                       crop_sizexy=None
+                       crop_sizexy=None,
+                       measure_klip_thrupt=True,
+                       measure_1d_core_thrupt=True
                        ):
     """
     
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
-        Handle nans & propagate DQ array
+        Handle propagate DQ array
+        Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
         
@@ -208,6 +216,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
 
     sci_dataset = input_dataset.copy()
     
+    # Need CT calibration object to measure KLIP throughput and 1D core throughput
+    if measure_klip_thrupt or measure_1d_core_thrupt:
+        assert ct_calibration != None
+
     # Use input reference dataset if provided
     if not reference_star_dataset is None:
         ref_dataset = reference_star_dataset.copy()
@@ -259,11 +271,14 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     sci_dataset_masked = nan_flags(sci_dataset)
     ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
 
-    # Run pyklip
+    # Initialize pyklip dataset class
     pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
+    
+    # Run pyklip
+    calibrate_flux = False
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
-                              calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
+                              calibrate_flux=calibrate_flux, mode=mode,psf_library=pyklip_dataset._psflib,
                               fileprefix=fileprefix)
     
     # Construct corgiDRP dataset from pyKLIP result
@@ -308,95 +323,179 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     dataset_out = nan_flags(dataset_out,threshold=1)
     
     history_msg = f'PSF subtracted via pyKLIP {mode}.'
-    
     dataset_out.update_after_processing_step(history_msg)
     
+    if measure_klip_thrupt:
+        
+        # Determine flux of objects to inject (units?)
+        inject_snr = 20.0
+
+        # Use same KLIP parameters
+        klip_params = {
+            'outdir':outdir,'fileprefix':fileprefix,
+            'annuli':annuli, 'subsections':subsections, 
+            'movement':movement, 'numbasis':numbasis,
+            'mode':mode,'calibrate_flux':calibrate_flux}
+        
+        klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
+                            dataset_out,
+                            ct_calibration,
+                            klip_params,
+                            inject_snr,
+                            seps=None, # in pixels from mask center
+                            pas=None,
+                            cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
+                            )
+        thrupt_hdr = fits.Header()
+        # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+        # wrt FPM's center 
+        thrupt_hdr['COMMENT'] = ('KLIP Throughput as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2])')
+        thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1.'
+        thrupt_hdu_list = [fits.ImageHDU(data=klip_thpt, header=thrupt_hdr, name='KL_THRU')]
+        
+        dataset_out[0].hdu_list.extend(thrupt_hdu_list)
+    
+        # Save throughput as an extension on the psf-subtracted Image
+
+        # Add history msg
+        history_msg = f'KLIP throughput measured and saved to Image class HDU List extension "KL_THRU".'
+        dataset_out.update_after_processing_step(history_msg)
+
+    if measure_1d_core_thrupt:
+        
+        # Use the same separations as for KLIP throughput
+        if measure_klip_thrupt:
+            seps = dataset_out[0].hdu_list['KL_THRU'].data[0]
+        else:
+            seps = []
+
+        cenxy = (dataset_out[0].ext_hdr['STARLOCX'],dataset_out[0].ext_hdr['STARLOCY'])
+        ct_1d = get_1d_ct(ct_calibration,cenxy,seps)
+
+        ct_hdr = fits.Header()
+        # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+        # wrt FPM's center 
+        ct_hdr['COMMENT'] = ('KLIP Throughput as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2])')
+        ct_hdr['UNITS'] = 'Separation: EXCAM pixels. CT throughput: values between 0 and 1.'
+        ct_hdu_list = [fits.ImageHDU(data=ct_1d, header=ct_hdr, name='CT_THRU')]
+        
+        dataset_out[0].hdu_list.extend(ct_hdu_list)
+    
+        # Save throughput as an extension on the psf-subtracted Image
+
+        # Add history msg
+        history_msg = f'1D CT throughput measured and saved to Image class HDU List extension "CT_THRU".'
+        dataset_out.update_after_processing_step(history_msg)
+            
     return dataset_out
 
-def northup(input_dataset,correct_wcs=False):
+def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
-    Now tentatively assuming 'ROLL' in the primary header incorporates all the angle offset, and the center of the FoV is the star position.
-    WCS correction is not yet implemented - TBD.
-
+    The northup function looks for 'STARLOCX' and 'STARLOCY' for the star location. If not, it uses the center of the FoV as the star location.
+    With use_wcs=True it uses WCS infomation to calculate the north position angle, or use just 'ROLL' header keyword if use_wcs is False (not recommended).
+  
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-	correct_wcs: if you want to correct WCS solutions after rotation, set True. Now hardcoded with not using astr_hdr.
+        use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
+	rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
     
     """
-    
+
     # make a copy 
     processed_dataset = input_dataset.copy()
 
     new_all_data = []; new_all_err = []; new_all_dq = []
     for processed_data in processed_dataset:
-        # read the roll angle parameter, assuming this info is recorded in the primary header as requested
-        roll_angle = processed_data.pri_hdr['ROLL']
 
         ## image extension ##
-        im_hd = processed_data.ext_hdr
-        im_data = processed_data.data
-        ylen, xlen = im_data.shape
+        sci_hd = processed_data.ext_hdr
+        sci_data = processed_data.data
+        ylen, xlen = sci_data.shape
 
         # define the center for rotation
-        try: 
-            xcen, ycen = im_hd['STARLOCX'], im_hd['STARLOCY'] 
-        except KeyError:
-            warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
+        if rot_center == 'im_center':
             xcen, ycen = xlen/2, ylen/2
-    
-        # look for WCS solutions
-        if correct_wcs is False: 
-            astr_hdr = None 
+        elif rot_center == 'starloc':
+            try:
+                xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
+            except KeyError:
+                warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
+                xcen, ycen = xlen/2, ylen/2
         else:
-            astr_hdr = None # hardcoded now, no WCS information in the header
+            xcen = rot_center[0]
+            ycen = rot_center[1]
+
+        # look for WCS solutions
+        if use_wcs is True:
+            astr_hdr = WCS(sci_hd)
+            CD1_2 = sci_hd['CD1_2']
+            CD2_2 = sci_hd['CD2_2']
+            roll_angle = -np.rad2deg(np.arctan2(-CD1_2, CD2_2)) # Compute North Position Angle from the WCS solutions
+
+        else:
+            warnings.warn('use "ROLL" instead of WCS to estimate the north position angle')
+            astr_hdr = None
+            # read the roll angle parameter, assuming this info is recorded in the primary header as requested
+            roll_angle = processed_data.pri_hdr['ROLL']
 
         # derotate
-        im_derot = rotate(im_data,-roll_angle,(xcen,ycen),astr_hdr=astr_hdr)
-        new_all_data.append(im_derot)
-        ##############
+        sci_derot = rotate(sci_data,roll_angle,(xcen,ycen),astr_hdr=astr_hdr) # astr_hdr is corrected at above lines
+        new_all_data.append(sci_derot)
+
+        log = f'FoV rotated by {roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
+        sci_hd['HISTORY'] = log 
+
+        # update WCS solutions
+        if use_wcs:
+            sci_hd['CD1_1'] = astr_hdr.wcs.cd[0,0]
+            sci_hd['CD1_2'] = astr_hdr.wcs.cd[0,1]
+            sci_hd['CD2_1'] = astr_hdr.wcs.cd[1,0]
+            sci_hd['CD2_2'] = astr_hdr.wcs.cd[1,1]
+        #############
 
         ## HDU ERR ##
         err_data = processed_data.err
-        err_derot = np.expand_dims(rotate(err_data[0],-roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
+        err_derot = np.expand_dims(rotate(err_data[0],roll_angle,(xcen,ycen)), axis=0) # err data shape is 1x1024x1024
         new_all_err.append(err_derot)
         #############
 
         ## HDU DQ ##
-	# all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
+        # all DQ pixels must have integers, use scipy.ndimage.rotate with order=0 instead of klip.rotate (rotating the other way)
         dq_data = processed_data.dq
-        if xcen != xlen/2 or ycen != ylen/2: 
+        if xcen != xlen/2 or ycen != ylen/2:
                 # padding, shifting (rot center to image center), rotating, re-shift (image center to rot center), and cropping
                 # calculate shift values
                 xshift = xcen-xlen/2; yshift = ycen-ylen/2
-		
+
                 # pad and shift
                 pad_x = int(np.ceil(abs(xshift))); pad_y = int(np.ceil(abs(yshift)))
-                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=np.nan)
-                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=np.nan)
+                dq_data_padded = np.pad(dq_data,pad_width=((pad_y, pad_y), (pad_x, pad_x)),mode='constant',constant_values=0)
+                dq_data_padded_shifted = shift(dq_data_padded,(-yshift,-xshift),order=0,mode='constant',cval=0)
 
                 # define slices for cropping
                 crop_x = slice(pad_x,pad_x+xlen); crop_y = slice(pad_y,pad_y+ylen)
 
-                # rotate, re-shift, and crop
-                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan),\
-                 (yshift,xshift),order=0,mode='constant',cval=np.nan)[crop_y,crop_x]
-        else: 
+                # rotate (invserse direction to pyklip.rotate), re-shift, and crop
+                dq_derot = shift(rotate_scipy(dq_data_padded_shifted, -roll_angle, order=0, mode='constant', reshape=False, cval=0),\
+                 (yshift,xshift),order=0,mode='constant',cval=0)[crop_y,crop_x]
+        else:
                 # simply rotate 
-                dq_derot = rotate_scipy(dq_data, roll_angle, order=0, mode='constant', reshape=False, cval=np.nan)
-        	
+                dq_derot = rotate_scipy(dq_data, -roll_angle, order=0, mode='constant', reshape=False, cval=0)
+
         new_all_dq.append(dq_derot)
         ############
 
-    hisotry_msg = f'FoV rotated by {-roll_angle}deg counterclockwise at a roll center {xcen, ycen}'
-    
-    processed_dataset.update_after_processing_step(hisotry_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
+    history_msg = 'North is Up and East is Left'
+    processed_dataset.update_after_processing_step(history_msg, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
                                                    new_all_dq=np.array(new_all_dq))
-    
-    return processed_dataset
+
+    return processed_dataset 
 
 def update_to_l4(input_dataset):
     """
