@@ -124,30 +124,36 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     # make PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")
+    # calDB was just updated with the PC Dark that was created with the walker above
+    master_dark_filename_list = []
+    master_dark_filepath_list = []
     for f in os.listdir(output_dir):
         if f.endswith('_pc_dark.fits'):
-            pc_dark_filename = f
-    # calDB was just updated with the PC Dark that was created with the walker above
-    pc_dark_file = os.path.join(output_dir, pc_dark_filename)
+            master_dark_filename_list.append(f)
+            master_dark_filepath_list.append(os.path.join(output_dir, f))
+    
 
     # make PC illuminated, subtracting the PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     walker.walk_corgidrp(l1_data_ill_filelist, '', output_dir)#, template="l1_to_l2b_pc.json")
     # get photon-counted frame
+    master_ill_filename_list = []
+    master_ill_filepath_list = []
     for f in os.listdir(output_dir):
         if f.endswith('_pc.fits'):
-            pc_filename = f
-    pc_file = os.path.join(output_dir, pc_filename)
-    pc_frame = fits.getdata(pc_file)
-    pc_frame_err = fits.getdata(pc_file, 'ERR')
-    pc_dark_frame = fits.getdata(pc_dark_file)
-    pc_dark_frame_err = fits.getdata(pc_dark_file, 'ERR')
+            master_ill_filename_list.append(f)
+            master_ill_filepath_list.append(os.path.join(output_dir, f))
+    for i in range(len(master_ill_filepath_list)):
+        pc_frame = fits.getdata(master_ill_filepath_list[i])
+        pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
+        pc_dark_frame = fits.getdata(master_dark_filepath_list[i])
+        pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
 
-    # more frames gets a better agreement; agreement to 1% for ~160 darks and illuminated
-    assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02) 
-    assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
-    assert pc_frame_err.min() >= 0
-    assert pc_dark_frame_err.min() >= 0
+        # more frames gets a better agreement; agreement to 1% for ~160 darks and illuminated
+        assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02) 
+        assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
+        assert pc_frame_err.min() >= 0
+        assert pc_dark_frame_err.min() >= 0
 
     # load in CalDB again to reflect the PC Dark that was implicitly added in (but not found in this_caldb, which was loaded before the Dark was created)
     post_caldb = caldb.CalDB()
@@ -156,8 +162,9 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     post_caldb.remove_entry(new_nonlinearity)
     post_caldb.remove_entry(flat)
     post_caldb.remove_entry(bp_map)
-    pc_dark = data.Dark(pc_dark_file)
-    post_caldb.remove_entry(pc_dark)
+    for filepath in master_dark_filepath_list:
+        pc_dark = data.Dark(filepath)
+        post_caldb.remove_entry(pc_dark)
 
 
 if __name__ == "__main__":
@@ -168,7 +175,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    tvacdata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
+    tvacdata_dir =  r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,

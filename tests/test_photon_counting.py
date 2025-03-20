@@ -33,7 +33,7 @@ def test_pc():
 
     Tests safemode, which makes the function issue warnings instead of crashing (useful for HOWFSC's iterative digging of dark holes).
 
-    Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='DARK' while also inputting a photon-counted master dark raises exception, exception raised when 'CMDGAIN' not the same for all frames.
+    Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='DARK' while also inputting a photon-counted master dark raises exception, exception raised when 'EMGAIN_C' not the same for all frames.
 
     Checks various metadata changes: the expected filename and history edit for the output is done (for case of dark subtraction and the case of no dark subtraction), the master dark is indicated as such via a header keyword 'PC_STAT'.
 
@@ -69,7 +69,7 @@ def test_pc():
         f.ext_hdr['KGAINPAR'] = 7
     # process the frames to make PC dark
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
-    assert pc_dark.frames[0].ext_hdr['PC_STAT'] == 'photon-counted master dark'
+    assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
     # now process illuminated frames and subtract the PC dark
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)
     assert pc_dataset_err.frames[0].filename[-7:] == 'pc.fits'
@@ -105,14 +105,14 @@ def test_pc():
 
     # test to make sure PC dark's threshold matches the one used for illuminated frames 
     with pytest.raises(PhotonCountException):
-        pc_dark[0].ext_hdr['PCTHRESH'] = 499
+        pc_dark.ext_hdr['PCTHRESH'] = 499
         get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='illuminated')
     # PC dark should have header 'PCTHRESH'
     with pytest.raises(PhotonCountException):
-        pc_dark[0].ext_hdr.pop("PCTHRESH")
+        pc_dark.ext_hdr.pop("PCTHRESH")
         get_pc_mean(dataset_err, pc_master_dark=pc_dark, inputmode='illuminated')
     # set it back:
-    pc_dark[0].ext_hdr['PCTHRESH'] = 500
+    pc_dark.ext_hdr['PCTHRESH'] = 500
     # to trigger pc_ecount_max error
     for f in dataset_err.frames[:-2]: #all but 2 of the frames
         f.data[22:40,23:49] = np.abs(f.data.astype(float)[22:40,23:49]*3000)
@@ -172,9 +172,8 @@ def test_pc_subsets():
     dark_dataset_bin.all_data = dark_dataset_bin.all_data.astype(float)*7 - 20000.
     # process darks and check NUM_FR
     pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
-    assert pc_dark.frames[0].ext_hdr['NUM_FR'] == 40
-    assert pc_dark.frames[-1].ext_hdr['NUM_FR'] == 40 # The 2 remainder frames ignored for consistent statistics among the PC-averaged output frames
-    assert 'Number of subsets: 4' in pc_dark.frames[0].ext_hdr['HISTORY'][-2]
+    assert pc_dark.ext_hdr['NUM_FR'] == 40 # The 2 remainder frames ignored for consistent statistics among the PC-averaged output frames
+    assert 'Number of subsets: 4' in pc_dark.ext_hdr['HISTORY'][-4]
     # now process illuminated frames and subtract the PC dark
     pc_dataset = get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=40)
     # bigger rtol below since we have fewer frames averaged over in each of the 161//40 = 162//40 = 4 frames in the output

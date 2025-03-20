@@ -93,7 +93,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             exposure time, EM gain, k gain, and read noise.  If the input dataset's header key 'VISTYPE' is equal to 'DARK', a 
             photon-counted master dark calibration product will be produced.  Otherwise, the input dataset is assumed to consist of illuminated 
             frames intended for photon-counting.
-        pc_master_dark (corgidrp.data.Dark): Photon-counted master dark to be used for dark subtraction.  
+        pc_master_dark (corgidrp.data.Dark): Dark containing photon-counted master dark(s) to be used for dark subtraction.  There is a 3-D cube 
+            of master darks, 1 2-D slice per subset of frames specified by the input bin_size (see below).
             If None, no dark subtraction is done.
         T_factor (float): The number of read noise standard deviations at which to set the threshold for photon counting.  If None, the value is drawn from corgidrp.data.DetectorParams. 
             Defaults to None.
@@ -144,6 +145,10 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     num_bins = len(input_dataset)//bin_size 
     
     list_new_image = []
+    list_err = [] # only used for dark processing case
+    list_dq = [] # only used for dark processing case
+    list_sub_dataset = [] # only used for dark processing case
+    index_of_last_frame_used = num_bins*(len(input_dataset)//num_bins)
     # this for loop ignores the remainder from the division above
     for i in range(num_bins):
         subset_frames = input_dataset.frames[bin_size*i:bin_size*(i+1)]
@@ -267,22 +272,22 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         dqs.append(dq)
         
         if pc_master_dark is not None:
-            if type(pc_master_dark[i]) is not data.Dark:
+            if type(pc_master_dark) is not data.Dark:
                 raise Exception('Input type for pc_master_dark must be a Dataset of corgidrp.data.Dark instances.')
-            if 'PC_STAT' not in pc_master_dark[i].ext_hdr:
+            if 'PC_STAT' not in pc_master_dark.ext_hdr:
                 raise PhotonCountException('\'PC_STAT\' must be a key in the extension header of each frame of pc_master_dark.')
-            if pc_master_dark[i].ext_hdr['PC_STAT'] != 'photon-counted master dark':
+            if pc_master_dark.ext_hdr['PC_STAT'] != 'photon-counted master dark':
                 raise PhotonCountException('Each frame of pc_master_dark must be a photon-counted master dark (i.e., '
                                         'the extension header key \'PC_STAT\' must be \'photon-counted master dark\').')
-            if 'PCTHRESH' not in pc_master_dark[i].ext_hdr:
+            if 'PCTHRESH' not in pc_master_dark.ext_hdr:
                 raise PhotonCountException('Threshold should be stored under the header \'PCTHRESH\'.')
-            if pc_master_dark[i].ext_hdr['PCTHRESH'] != thresh:
+            if pc_master_dark.ext_hdr['PCTHRESH'] != thresh:
                 raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
-            if pc_master_dark[i].ext_hdr['NUM_FR'] != len(sub_dataset):
+            if pc_master_dark.ext_hdr['NUM_FR'] != len(sub_dataset):
                 raise PhotonCountException('Number of frames that created the photon-counted master dark must match the number of illuminated frames in order for the result to be reliable.')
-            pc_means.append(pc_master_dark[i].data)
-            dqs.append(pc_master_dark[i].dq)
-            errs.append(pc_master_dark[i].err)
+            pc_means.append(pc_master_dark.data[i])
+            dqs.append(pc_master_dark.dq[i])
+            errs.append(pc_master_dark.err[0][i])
             dark_sub = "yes"
             filename_end = ''
         else:
@@ -312,22 +317,23 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             new_image._record_parent_filenames(sub_dataset) 
             list_new_image.append(new_image)
         else:
-            ext_hdr['PC_STAT'] = 'photon-counted master dark'
-            ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
-            ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
-            ext_hdr['PCTHRESH'] = thresh
-            ext_hdr['NUM_FR'] = len(sub_dataset) 
-            pc_dark = data.Dark(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, input_dataset=sub_dataset)
-            list_new_image.append(pc_dark)
+            list_new_image.append(combined_pc_mean)
+            list_err.append(combined_err)
+            list_dq.append(combined_dq)
     if val[0] != "DARK":
         pc_ill_dataset = data.Dataset(list_new_image)
         pc_ill_dataset.update_after_processing_step("Photon-counted {0} illuminated frames for each PC frame of the output dataset.  Number of subsets: {1}.  Total number of frames in input dataset: {2}. Using T_factor={3} and niter={4}. Dark-subtracted: {5}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter, dark_sub))
         
         return pc_ill_dataset
     else:
-        pc_dark_dataset = data.Dataset(list_new_image)
-        pc_dark_dataset.update_after_processing_step("Photon-counted {0} dark frames for each master dark of the output dataset.  Number of subsets: {1}.  Total number of master darks in input dataset: {2}. Using T_factor={3} and niter={4}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter))
-        return pc_dark_dataset
+        ext_hdr['PC_STAT'] = 'photon-counted master dark'
+        ext_hdr['NAXIS1'] = combined_pc_mean.shape[0]
+        ext_hdr['NAXIS2'] = combined_pc_mean.shape[1]
+        ext_hdr['PCTHRESH'] = thresh
+        ext_hdr['NUM_FR'] = len(sub_dataset) 
+        ext_hdr['HISTORY'] = "Photon-counted {0} dark frames for each master dark of the output dataset.  Number of subsets: {1}.  Total number of master darks in input dataset: {2}. Using T_factor={3} and niter={4}.".format(len(sub_dataset), num_bins, len(input_dataset), T_factor, niter)
+        pc_dark = data.Dark(np.stack(list_new_image), pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=np.stack([list_err]), dq=np.stack(list_dq), err_hdr=err_hdr, input_dataset=input_dataset[:index_of_last_frame_used])
+        return pc_dark
 
 def corr_photon_count(nobs, nfr, t, g, mask_indices, niter=2):
     """Correct photon counted images.
