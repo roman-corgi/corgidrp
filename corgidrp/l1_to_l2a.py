@@ -23,8 +23,6 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-    # Make a copy of the input dataset to operate on
-    output_dataset = input_dataset.copy()
 
     if detector_regions is None:
         detector_regions = detector_areas
@@ -39,11 +37,11 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     new_err_list = []
 
     # Iterate over frames
-    for i, frame in enumerate(output_dataset):
+    for i, frame in enumerate(input_dataset):
 
-        frame_data = frame.data
-        frame_err = frame.err
-        frame_dq = frame.dq
+        frame_data = np.copy(frame.data)
+        frame_err = np.copy(frame.err)
+        frame_dq = np.copy(frame.dq)
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
         arrtype = frame.ext_hdr['ARRTYPE']
@@ -123,15 +121,16 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         out_frames_dq.append(image_dq)
         out_frames_bias.append(bias[:,0]) # save 1D version of array
 
-        # Update header with new frame dimensions
-        frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
-        frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
-
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data)
     out_frames_err_arr = np.array(out_frames_err)
     out_frames_dq_arr = np.array(out_frames_dq)
     out_frames_bias_arr = np.array(out_frames_bias, dtype=np.float32)
+    # try to free some memory
+    del out_frames_data, out_frames_err, out_frames_dq, out_frames_bias
+
+    # Make a copy of the input dataset to operate on
+    output_dataset = input_dataset.copy()
 
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
@@ -143,6 +142,10 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         frame.dq = out_frames_dq_arr[i]
         # frame.bias = out_frames_bias_arr[i]
         frame.add_extension_hdu("BIAS",data=out_frames_bias_arr[i])
+
+        # Update header with new frame dimensions
+        frame.ext_hdr['NAXIS1'] = out_frames_data_arr[i].shape[1]
+        frame.ext_hdr['NAXIS2'] = out_frames_data_arr[i].shape[0]
 
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")
@@ -214,7 +217,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
     # Calculate the full well capacity for every frame in the dataset
     if k_gain is None:
-        kgain = detector_params.params['kgain']
+        kgain = detector_params.params['KGAINPAR']
     else:
         #get the kgain value from the k_gain calibration file
         kgain = k_gain.value
@@ -223,14 +226,14 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         try: # use measured gain if available TODO change hdr name if necessary
             emgain = frame.ext_hdr['EMGAIN_M']
         except:
-            try: # use applied EM gain if available
+            if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
                 emgain = frame.ext_hdr['EMGAIN_A']
-            except: # otherwise use commanded EM gain
-                emgain = frame.ext_hdr['CMDGAIN']
-        emgain_list.append(emgain)
+            else: # otherwise use commanded EM gain
+                emgain = frame.ext_hdr['EMGAIN_C']
+            emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
-    fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
-    fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
+    fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in crmasked_dataset])
+    fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in crmasked_dataset])
 
     fwcpp_dn_arr = fwcpp_e_arr / kgain
     fwcem_dn_arr = fwcem_e_arr / kgain
@@ -282,34 +285,42 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
 
     return crmasked_dataset
 
-def correct_nonlinearity(input_dataset, non_lin_correction):
+def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
     """
-    Perform non-linearity correction of a dataset using the corresponding non-linearity correction
+    Perform non-linearity correction of a dataset using the corresponding non-linearity correction. We check for non-linear pixel and flag them in the DQ. 
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
-        non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity
-
+        input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level).
+        non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity.
+        threshold (float): threshold for flagging pixels in the DQ array, value above this threshold will be flagged in the DQ map as too nonlinear. By default it is set to infinity, user can change it to a different value.
+    
     Returns:
-        corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
+        (corgidrp.data.Dataset): A non-linearity corrected version of the input dataset
     """
     #Copy the dataset to start
     linearized_dataset = input_dataset.copy()
 
     #Apply the non-linearity correction to the data
     linearized_cube = linearized_dataset.all_data
+
     #Check to see if EM gain is in the header, if not, raise an error
-    if "CMDGAIN" not in linearized_dataset[0].ext_hdr.keys():
+    if "EMGAIN_C" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
     for i in range(linearized_cube.shape[0]):
         try: # use measured gain if available TODO change hdr name if necessary
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
         except:
-            try: # use applied EM gain if available
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+            if em_gain > 0: # use applied EM gain if available
                 em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
-            except: # otherwise use commanded EM gain
-                em_gain = linearized_dataset[i].ext_hdr["CMDGAIN"]
+            else: # otherwise use commanded EM gain
+                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
+
+        # Flag pixels in the DQ array if they exceed the threshold
+        non_linear_flag = 64
+        current_value = linearized_dataset[i].dq[linearized_cube[i] > threshold]
+        linearized_dataset[i].dq[linearized_cube[i] > threshold] = np.bitwise_or(current_value, non_linear_flag)
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
     
     if non_lin_correction is not None:
@@ -333,8 +344,8 @@ def update_to_l2a(input_dataset):
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATA_LEVEL'] != "L1":
-            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+        if orig_frame.ext_hdr['DATALVL'] != "L1":
+            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -342,7 +353,7 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # update header
-        frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)
