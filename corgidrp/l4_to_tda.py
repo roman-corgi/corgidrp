@@ -2,8 +2,8 @@
 import corgidrp.fluxcal as fluxcal
 import numpy as np
 import warnings
-from pyklip.kpp.metrics.crossCorr import calculate_cc
-from pyklip.kpp.stat.statPerPix_utils import get_image_stat_map_perPixMasking
+
+from corgidrp.find_source import make_snmap, psf_scalesub
 
 def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     """
@@ -175,99 +175,46 @@ def update_to_tda(input_dataset):
     return updated_dataset
 
 
-def make_snmap(image, psf):
+def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0):
     """
-    Generates a signal-to-noise (S/N) map by convolving the image with the PSF.
+    Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
     
     Args:
-        image (ndarray): The input image.
-        psf (ndarray): The point spread function (PSF) for convolution.
-    
-    Returns:
-        ndarray: The computed S/N map.
-    """
-    image_convo = calculate_cc(image, psf, nans2zero=True)
-    image_snmap = get_image_stat_map_perPixMasking(image_convo)
-
-    return image_snmap
-
-
-def psf_scalesub(image, xy, psf, fwhm):
-    """
-    Scales and subtracts the PSF at a given location in the image.
-    
-    Args:
-        image (ndarray): The input image.
-        xy (tuple): The (y, x) coordinates where the PSF should be subtracted.
-        psf (ndarray): The point spread function.
-        fwhm (float): Full width at half maximum of the PSF.
-    
-    Returns:
-        ndarray: The image after PSF subtraction.
-    """
-    # Compute distance map from PSF center
-    x = np.arange(psf.shape[1]) ; y = np.arange(psf.shape[0])
-    xx, yy = np.meshgrid(x, y)
-    center = np.array(psf.shape) // 2
-    distance_map = np.sqrt((xx - center[1])**2 + (yy - center[0])**2)
-    
-    # Mask central region of the PSF
-    idx_masked = np.where( (distance_map < fwhm*.5) )
-
-    # Scale PSF to match local flux and subtract it
-    psf_window = psf.shape[0] // 2
-    psf_scaled = psf * np.nanmedian(image[
-        xy[0]-psf_window:xy[0]+psf_window+1,
-        xy[1]-psf_window:xy[1]+psf_window+1] / psf)
-    psf_scaled[idx_masked] = np.nan # Apply masking
-    
-    image[
-        xy[0]-psf_window:xy[0]+psf_window+1,
-        xy[1]-psf_window:xy[1]+psf_window+1] -= psf_scaled
-    
-    return image
-
-
-def find_source(image, psf=None, fwhm=3.5, nsigma_threshold=5.0):
-    """
-    Detects sources in an image based on a specified SNR threshold.
-    
-    Args:
-        image (ndarray): The input image to search for sources.
+        Image (corgidrp.data.Image): The input image to search for sources (L4-level).
         psf (ndarray, optional): The PSF used for detection. If None, a Gaussian approximation is created.
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
     
     Returns:
-        list: SNR values of detected sources.
-        list: Coordinates (y, x) of detected sources.
+        Image: The header is updated with the approximate pixel locations and SNRs of the detected sources.
     """
     
     # Ensure an odd-sized box for PSF convolution
     boxsize = int(fwhm * 3)
     boxsize += 1 if boxsize % 2 == 0 else 0 # Ensure an odd box size
-    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2))) # Convert FWHM to sigma
-
+    
     # Create coordinate grids
     y, x = np.indices((boxsize, boxsize))
     y -= boxsize // 2 ; x -= boxsize // 2
+    
     if psf is None:
+        sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2))) # Convert FWHM to sigma
         psf = np.exp(-(x**2 + y**2) / (2.0 * sigma**2))
 
     # Generate a binary mask for PSF convolution   
     distance_map = np.sqrt(x**2 + y**2)  
     idx = np.where( (distance_map <= fwhm*0.5) )   
-    psf_forconv = np.zeros_like(psf) ; psf_forconv[idx] = 1
-
+    psf_binarymask = np.zeros_like(psf) ; psf_binarymask[idx] = 1
 
     # Compute the SNR map using cross-correlation
-    image_residual = np.copy(image)
-    image_snmap = make_snmap(image_residual, psf_forconv)
+    image_residual = np.zeros_like(Image.data) + Image.data
+    image_snmap = make_snmap(image_residual, psf_binarymask)
     
     sn_source, xy_source = [], []
        
     # Iteratively detect sources above the SNR threshold
     while np.nanmax(image_snmap) >= nsigma_threshold:
+
         sn = np.nanmax(image_snmap)
         xy = np.unravel_index(np.nanargmax(image_snmap), image_snmap.shape)
         
@@ -277,9 +224,13 @@ def find_source(image, psf=None, fwhm=3.5, nsigma_threshold=5.0):
 
             # Scale and subtract the detected PSF from the image
             image_residual = psf_scalesub(image_residual, xy, psf, fwhm)
-                
+
             # Update the SNR map after source removal
             image_snmap = make_snmap(image_residual, psf)
 
-
-    return sn_source, xy_source
+    # Store detected sources in FITS header
+    for i in range(len(sn_source)):
+        Image.ext_hdr[f'snyx{i:03d}'] = f'{sn_source[i]:5.1f},{xy_source[i][0]:4d},{xy_source[i][1]:4d}'        
+    # names of the header keywords are tentative
+    
+    return
