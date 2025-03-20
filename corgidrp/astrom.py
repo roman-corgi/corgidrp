@@ -818,11 +818,15 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     # average all offsets in x,y directions
     boresight_x, boresight_y = np.mean(boresights[:,0]), np.mean(boresights[:,1])
 
-    # convert back to RA, DEC
-    image_center_RA = target_coordinate[0] - ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
-    image_center_DEC = target_coordinate[1] - ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
+    # convert back to corrected RA, DEC of target
+    # image_center_RA = target_coordinate[0] - ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
+    # image_center_DEC = target_coordinate[1] - ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
 
-    return image_center_RA, image_center_DEC
+    # report the offsets instead of the new RA/DEC
+    boresight_ra = ((boresight_x * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
+    boresight_dec = ((boresight_y * cal_properties[0]) * astropy.units.mas).to(astropy.units.deg).value
+
+    return boresight_ra, boresight_dec
 
 def format_distortion_inputs(input_dataset, source_matches, ref_star_pos, position_error=None):
     ''' Function that formats the input data for the distortion map computation * must be run before compute_distortion *
@@ -1024,7 +1028,9 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     astroms = []
     target_coord_tables = []
 
-    hold_matches = []
+    hold_matches = []   # place to hold the auto-found source matches for each frame
+    corrected_positions_boresight = []      # place to hold the corrected target position based on boresight offsets for each frame
+
     for i in range(len(dataset)):
         in_dataset = corgidrp.data.Dataset([dataset[i]])
         image = dataset[i].data
@@ -1046,6 +1052,9 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
         cal_properties = compute_platescale_and_northangle(image, source_info=matched_sources, center_coord=target_coordinate, center_radius=center_radius)
         ra, dec = compute_boresight(image, source_info=matched_sources, target_coordinate=target_coordinate, cal_properties=cal_properties)
+        # calculate the corrected target position based on ra, dec offsets
+        corr_ra, corr_dec = target_coordinate[0] - ra, target_coordinate[1] - dec
+        corrected_positions_boresight.append([corr_ra, corr_dec])
 
         # return a single AstrometricCalibration data file
         astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1], np.inf, np.inf])
@@ -1053,7 +1062,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         astroms.append(astrom_cal)
 
     # average the calibration properties over all frames
-    avg_ra = np.mean([astro.boresight[0] for astro in astroms])
+    avg_ra = np.mean([astro.boresight[0] for astro in astroms])  # this is the average ra offset [deg]
     avg_dec = np.mean([astro.boresight[1] for astro in astroms])
     avg_platescale = np.mean([astro.platescale for astro in astroms])
     avg_northangle = np.mean([astro.northangle for astro in astroms])
@@ -1074,6 +1083,10 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     astroms_dataset = corgidrp.data.Dataset(astroms)
     avg_cal = corgidrp.data.AstrometricCalibration(astromcal_data, pri_hdr=input_dataset[0].pri_hdr, ext_hdr=input_dataset[0].ext_hdr, input_dataset=astroms_dataset)
+    # add the corrected RA/DEC for each frame to the ext_hdr
+    for i, corr in enumerate(corrected_positions_boresight):
+        name = 'F'+str(i)+'POS'
+        avg_cal.ext_hdr[name] = tuple(corr)
         
     # update the history
     history_msg = "Boresight calibration completed"
