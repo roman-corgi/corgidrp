@@ -2444,10 +2444,11 @@ def unpackbits_64uint(arr, axis):
         axis (int): axis to unpack
 
     Returns:
-        _type_: np.ndarray of bits
+        np.ndarray of bits
     """
-    n = np.array(arr).view("u1")
-    return np.unpackbits(n, axis=axis, bitorder='little')
+    arr = arr.astype('>u8')
+    n = arr.view('u1')
+    return np.unpackbits(n, axis=axis, bitorder='big')
 
 def packbits_64uint(arr, axis):
     """
@@ -2458,6 +2459,63 @@ def packbits_64uint(arr, axis):
         axis (int): axis to pack
 
     Returns:
-        _type_: np.ndarray of 64-bit unsigned integers
+        np.ndarray of 64-bit unsigned integers
     """
-    return np.packbits(arr, axis=axis, bitorder='little').view(np.uint64)
+    return np.packbits(arr, axis=axis, bitorder='big').view('>u8')
+
+def get_flag_to_bit_map():
+    """
+    Returns a dictionary mapping flag names to bit positions.
+    
+    Returns:
+        dict: A dictionary with flag names as keys and bit positions (int) as values.
+    """
+    return {
+        "bad_pixel_unspecified": 0,
+        "data_replaced_by_filled_value": 1,
+        "bad_pixel": 2,
+        "hot_pixel": 3,
+        "not_used": 4,
+        "full_well_saturated_pixel": 5,
+        "non_linear_pixel": 6,
+        "pixel_affected_by_cosmic_ray": 7,
+        "TBD": 8,
+    }
+
+def get_flag_to_value_map():
+    """
+    Returns a dictionary mapping flag names to their decimal flag values. Example usage is as follows:
+    
+    FLAG_TO_VALUE_MAP = get_flag_to_value_map()
+    flag_value = FLAG_TO_VALUE_MAP["TBD"]  # Gives the decimal value corresponding to "TBD"
+
+    Returns:
+        dict: A dictionary with flag names as keys and decimal values (int) as values.
+    """
+    return {name: (1 << bit) for name, bit in get_flag_to_bit_map().items()}
+
+def get_value_to_flag_map():
+    """
+    Returns a dictionary mapping flag decimal values to flag names. Example usage is as follows:
+    
+    FLAG_TO_BIT_MAP = get_flag_to_bit_map()
+    bit_position = FLAG_TO_BIT_MAP["TBD"]  # Gives which index it should be in with the key. 
+    
+    Expected position of bit_position of the unpacked array = 63 - bit_position
+    
+    Returns:
+        dict: A dictionary with decimal values (int) as keys and flag names as values.
+    """
+    return {value: name for name, value in get_flag_to_value_map().items()}
+
+def get_bit_to_flag_map():
+    """
+    Returns a dictionary mapping bit positions to flag names. Example usage is as follows:
+
+    BIT_TO_FLAG_MAP = get_bit_to_flag_map()
+    flag_name_from_bit = BIT_TO_FLAG_MAP[8]  # Expected: "TBD"
+    
+    Returns:
+        dict: A dictionary with bit positions (int) as keys and flag names as values.
+    """
+    return {bit: name for name, bit in get_flag_to_bit_map().items()}
