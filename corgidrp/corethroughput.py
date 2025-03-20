@@ -433,3 +433,5 @@ def get_1d_ct(ct_cal,cenxy,seps,
     else:
         raise NotImplementedError
 
+
+#def CreateCTMap()
