@@ -2978,6 +2978,7 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
             PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
         ny (int, optional): Number of y positions at which to simulate mock PSFs. Must be an odd number. 
             PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
+    
     Returns:
         corgidrp.data.CoreThroughputCalibration: mock CoreThroughputCalibration object 
 
@@ -3093,6 +3094,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         outdir (str, optional): Desired output directory. If not provided, data will not be 
             saved. Defaults to None.
         st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 100.
+        fwhm_pix (float): FWHM of the stellar (and optional planet) PSF. Defaults to 2.5.
         noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1.
         ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
             reference PSFs. Defaults to 1.
