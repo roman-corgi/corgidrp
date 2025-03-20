@@ -9,6 +9,11 @@ from corgidrp.bad_pixel_calibration import create_bad_pixel_map
 from corgidrp.darks import build_trad_dark
 
 np.random.seed(456)
+
+# Get the flag to bit map and flag to value map
+FLAG_TO_BIT_MAP = data.get_flag_to_bit_map()
+FLAG_TO_VALUE_MAP = data.get_flag_to_value_map()
+
 def test_badpixelmap(): 
     '''
 
@@ -72,37 +77,61 @@ def test_badpixelmap():
 
     ###### make the badpixel map (input the flat_dataset just as a dummy):
     badpixelmap = create_bad_pixel_map(flat_dataset, dark_frame,flat_frame, dthresh=6) # you have integer in here
-    
-    current_value = badpixelmap.data[0,0]
-    badpixelmap.data[0,0] = 256 # a value to test uint64
 
-    # Use np.unpackbits to unpack the bits - big endien integer to binary
-    badpixelmap_bits = data.unpackbits_64uint(arr=badpixelmap.data[:, :, np.newaxis], axis=2)  # unit64 to binary
+    # # Use np.unpackbits to unpack the bits - big endien demical to binary
+    badpixelmap_bits = data.unpackbits_64uint(badpixelmap.data[:, :, np.newaxis], axis=2)  # unit64 to binary
     badpixelmap_repacked = data.packbits_64uint(badpixelmap_bits, axis=2).reshape(badpixelmap.data.shape)
-    assert np.array_equal(badpixelmap_repacked, badpixelmap.data)    # check if the repacked data is the same as the original
-
-    badpixelmap.data[0,0] = current_value
+    assert np.array_equal(badpixelmap_repacked, badpixelmap.data) # check if the repacked data is the same as the original
 
     # Checking that everywhere there's a badpixel is in one of the two lists
     bp_locations = np.argwhere(badpixelmap.data)
+    
     for ii in bp_locations[:,0]:
         assert ii in col_hot_pixels_test or ii in col_dead_pixel_test
     for jj in bp_locations[:,1]:
         assert jj in row_hot_pixels_test or jj in row_dead_pixel_test
 
-    # Checking that hot pixels are at the expected locations - bit #4
-    hot_pixel_locations = np.where(badpixelmap_bits[:,:,-4])
+    # Checking that hot pixels are at the expected locations - bit #3
+    hot_pixel_bit_position = 63 - FLAG_TO_BIT_MAP["hot_pixel"]
+    hot_pixel_locations = np.where(badpixelmap_bits[:,:,hot_pixel_bit_position])
     for ii in hot_pixel_locations[0]:
         assert ii in col_hot_pixels_test
     for jj in hot_pixel_locations[1]:
         assert jj in row_hot_pixels_test
 
-    # Checking that CR are at the expected locations - bit #3
-    dead_pixel_locations = np.where(badpixelmap_bits[:,:,-3])
+    # Checking that CR are at the expected locations - bit #2
+    dead_pixel_bit_position = 63 - FLAG_TO_BIT_MAP["bad_pixel"]
+    dead_pixel_locations = np.where(badpixelmap_bits[:,:,dead_pixel_bit_position])
     for ii in dead_pixel_locations[0]:
-        assert ii in col_dead_pixel_test
+        assert ii in col_dead_pixel_test 
     for jj in dead_pixel_locations[1]:
-        assert jj in row_dead_pixel_test 
+        assert jj in row_dead_pixel_test
+
+
+def test_packing_unpacking_uint64():
+    '''
+    Test the packing and unpacking of uint64 data
+    ''' 
+
+    # Checking whether we can assign demical higher than 255 to the badpixelmap to test our function for bit unpacking and packing
+    packed = np.zeros((3, 3), dtype='>u8')
+
+    # Get the bit position for 'TBD'
+    bit_position = FLAG_TO_BIT_MAP["TBD"]
+    flag_value = FLAG_TO_VALUE_MAP["TBD"]
+
+    packed[0, 0] = flag_value
+
+    unpacked_bits = data.unpackbits_64uint(packed[:, :, np.newaxis], axis=2)
+
+    # Compute the expected unpacked index for 'big' endian
+    expected_index = 63 - bit_position
+
+    # Check the expected bit index is set
+    assert unpacked_bits[0, 0, expected_index] == 1, f"Bit {bit_position} should be at index {expected_index}"
+
+    # Check that only one bit is set
+    assert np.sum(unpacked_bits[0, 0]) == 1, "Only one bit should be set"
 
 if __name__ == "__main__":
     test_badpixelmap()
