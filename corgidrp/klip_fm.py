@@ -147,8 +147,9 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                      ct_calibration,
                      klip_params,
                      inject_snr = 5,
+                     sep_spacing = 5.,
                      seps=None, # in pixels from mask center
-                     pas=None,
+                     pas=np.array([0.,90.,180.,270.]),
                      cand_locs = [] # list of tuples (sep_pix,pa_deg) of known off-axis source locations
                     ):
     """Measures the throughput of the KLIP algorithm via injection-recovery of fake off-axis sources. 
@@ -164,10 +165,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             contain the keywords 'mode','annuli','subsections','movement','numbasis','outdir'.
             See corgidrp.l3_to_l4.do_psf_subtraction() for descriptions of each of these parameters.
         inject_snr (int, optional): SNR at which to inject fake PSFs. Defaults to 5.
+        sep_spacing (float, optional): multiples of the FWHM at which to space separation samples. Defaults to 5. Overridden by passing in
         seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
             PSFs. If not provided, a linear spacing of separations between the IWA & OWA will be chosen.
         pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
-            PSFs. If not provided, a linear spacing of separations between the IWA & OWA will be chosen.
+            PSFs at each separation. Defaults to [0.,90.,180.,270.].
         cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
             PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
         
@@ -177,18 +179,18 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         contains the KLIP throughput measured at each separation for each KL mode truncation choice.
     """
     
+    # TODO: read these in instead of hard code.
     iwa = 10. # pix, update real number
     owa = 50. # pix, update with real number
-
     d = 2.36 #m
     lam = 573.8e-9 #m
     pixscale_arcsec = 0.0218
     fwhm_mas = 1.22 * lam / d * 206265 * 1000
     fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
-    res_elem = 5 * fwhm_pix # pix, update this with value for NFOV, Band 1 mode
     
-    if pas == None:
-        pas = np.array([0.,90.,180.,270.])
+    
+    res_elem = sep_spacing * fwhm_pix # pix, update this with value for NFOV, Band 1 mode
+    
     if seps == None:
         seps = np.arange(iwa,owa,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
