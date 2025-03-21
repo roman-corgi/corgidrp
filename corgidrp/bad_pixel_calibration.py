@@ -33,12 +33,12 @@ def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac 
 
     #Calculate the hot and warm bad pixel maps
     hot_warm_pixels_bool = detect_hot_warm_pixels_from_dark(dark_data, dthresh)
-    hot_warm_pixels = np.zeros_like(dark_data,dtype=np.uint64)
+    hot_warm_pixels = np.zeros_like(dark_data,dtype=np.uint8)
     hot_warm_pixels[hot_warm_pixels_bool] = 8 
 
     #Calculate the cold and dead pixels
     dead_pixels_bool = detect_dead_pixels_from_flat(flat_data, ffrac, fwidth)
-    dead_pixels = np.zeros_like(dark_data,dtype=np.uint64) 
+    dead_pixels = np.zeros_like(dark_data,dtype=np.uint8) 
     dead_pixels[dead_pixels_bool] = 4
 
     #Combined the two maps 
