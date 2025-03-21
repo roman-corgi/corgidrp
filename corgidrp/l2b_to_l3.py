@@ -19,7 +19,7 @@ def create_wcs(input_dataset, astrom_calibration):
     updated_dataset = input_dataset.copy()
 
     northangle = astrom_calibration.northangle
-    platescale = astrom_calibration.platescale
+    platescale_x, platescale_y = astrom_calibration.platescale
     ra_offset, dec_offset = astrom_calibration.avg_offset
 
     # create wcs for each image in the dataset
@@ -34,7 +34,7 @@ def create_wcs(input_dataset, astrom_calibration):
 
         vert_ang = np.radians(northangle + roll_ang)  ## might be -roll_ang
         pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
-        cdmatrix = pc * (platescale * 0.001) / 3600.
+        cdmatrix = pc * (platescale_x * 0.001) / 3600.  # assumes platescale is same along both axes
 
         # create dictionary with wcs information
         wcs_info = {}
@@ -49,13 +49,13 @@ def create_wcs(input_dataset, astrom_calibration):
         wcs_info['CTYPE1'] = 'RA---TAN'
         wcs_info['CTYPE2'] = 'DEC--TAN'
 
-        wcs_info['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
-        wcs_info['CDELT2'] = (platescale * 0.001) / 3600
+        wcs_info['CDELT1'] = (platescale_x * 0.001) / 3600  ## converting to degrees
+        wcs_info['CDELT2'] = (platescale_y * 0.001) / 3600
 
         wcs_info['CRVAL1'] = corrected_ra
         wcs_info['CRVAL2'] = corrected_dec
 
-        wcs_info['PLTSCALE'] = platescale  ## [mas] / pixel
+        wcs_info['PLTSCALE'] = platescale_x  ## [mas] / pixel
 
         # update the image header with wcs information
         for key, value in wcs_info.items():
