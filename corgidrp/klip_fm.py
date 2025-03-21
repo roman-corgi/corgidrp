@@ -388,43 +388,71 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             
             # Pad psf model with zeros so we can measure background
             model_shape = np.array(psf_model.shape)
-            cutout_shape = model_shape
+            cutout_shape = model_shape * 2 + 1
             cutoutcenyx = cutout_shape/2. - 0.5
 
             psf_model_padded = np.zeros(cutout_shape)
-            start_ind = (cutoutcenyx-model_shape//2).astype(int)
-            end_ind = (start_ind + model_shape).astype(int)
-            x1,y1 = start_ind
-            x2,y2 = end_ind
+            start_ind_model = (cutoutcenyx-model_shape//2).astype(int)
+            end_ind_model = (start_ind_model + model_shape).astype(int)
+            x1_model,y1_model = start_ind_model
+            x2_model,y2_model = end_ind_model
 
-            psf_model_padded[y1:y2,x1:x2] = psf_model
+            psf_model_padded[y1_model:y2_model,
+                             x1_model:x2_model] = psf_model
 
             # Crop data around location to be same as psf_model cutout
             locxy = seppa2xy(*loc,pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
 
-            # Crop the data
-            start_ind = (locxy - cutout_shape//2).astype(int)
-            end_ind = (locxy + cutout_shape//2 + 1).astype(int)
-            x1,y1 = start_ind
-            x2,y2 = end_ind
-            data_cutout = medsubtracted_data[y1:y2,x1:x2]
+            # Crop the data, pad with nans if we're cropping over the edge
+            cutout = np.zeros_like(psf_model_padded)
+            cutout[:] = np.nan
+            cutout_starty, cutout_startx = (0,0)
+            cutout_endy, cutout_endx = cutout.shape
 
-            # if debug:
-            #     import matplotlib.pyplot as plt
-            #     fig,ax = plt.subplots(1,2,
-            #                           sharey=True,
-            #                           layout='constrained',
-            #                           figsize=(8,4)
-            #                         )
-                
-            #     im0 = ax[0].imshow(psf_model_padded,origin='lower')
-            #     plt.colorbar(im0,ax=ax[0])
-            #     ax[0].set_title('PSF Model')
-            #     im1 = ax[1].imshow(data_cutout,origin='lower')
-            #     plt.colorbar(im1,ax=ax[1])
-            #     ax[1].set_title('Data Cutout')
-            #     plt.show()
-            #     pass
+            data_shape = medsubtracted_data.shape
+            data_center_indyx = np.array([locxy[1],locxy[0]]).astype(int)
+            data_start_indyx = (data_center_indyx - cutout_shape//2)
+            data_end_indyx = (data_start_indyx + cutout_shape)
+            data_starty,data_startx = data_start_indyx
+            data_endy,data_endx = data_end_indyx
+            
+            if data_starty < 0:
+                cutout_starty = -data_starty
+                data_starty = 0
+            
+            if data_startx < 0:
+                cutout_startx = -data_startx
+                data_startx = 0
+            
+            if data_endy >= data_shape[0]:
+                y_overhang = data_endy - medsubtracted_data.shape[0]
+                cutout_endy = cutout_shape[0] - y_overhang
+                data_endy = data_shape[0]
+
+            if data_endx >= data_shape[1]:
+                x_overhang = data_endx - medsubtracted_data.shape[1]
+                cutout_endx = cutout_shape[1] - x_overhang
+                data_endx = data_shape[1]
+
+
+            cutout[cutout_starty:cutout_endy,
+                        cutout_startx:cutout_endx] = medsubtracted_data[data_starty:data_endy,
+                                                            data_startx:data_endx]
+            
+            # import matplotlib.pyplot as plt
+            # fig,ax = plt.subplots(1,2,
+            #                       sharey=True,
+            #                       layout='constrained',
+            #                       figsize=(8,4)
+            #                     )
+            
+            # im0 = ax[0].imshow(psf_model_padded,origin='lower')
+            # plt.colorbar(im0,ax=ax[0])
+            # ax[0].set_title('PSF Model')
+            # im1 = ax[1].imshow(cutout,origin='lower')
+            # plt.colorbar(im1,ax=ax[1])
+            # ax[1].set_title('Data Cutout')
+            # plt.show()
                 
             # if x1<0. or y1<0. or x2>=cutout_shape[1] or y2>=cutout_shape[0]:
             #     print('!!!')
@@ -441,7 +469,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                 refinefit=True)
 
             postklip_peak, post_fwhm, post_xfit, post_yfit = gaussfit2d(
-                data_cutout, 
+                cutout, 
                 cutoutcenyx[1], 
                 cutoutcenyx[0], 
                 searchrad=5, 
