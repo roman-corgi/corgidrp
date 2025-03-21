@@ -1,0 +1,23 @@
+{
+    "name" : "l2b_to_fluxcal_factor",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name": "divide_by_exptime"
+        },
+        {
+            "name" : "calibrate_fluxcal_aper",
+               "keywords" : {
+                              "phot_kwargs" : {"encircled_radius" : 4}
+                            }
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

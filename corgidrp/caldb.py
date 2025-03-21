@@ -34,7 +34,8 @@ labels = {data.Dark: "Dark",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
           data.DetectorParams : "DetectorParams",
           data.FlatField : "FlatField",
-          data.TrapCalibration : "TrapCalibration"}
+          data.TrapCalibration : "TrapCalibration",
+          data.FluxcalFactor : "FluxcalFactor"}
 
 class CalDB:
     """
