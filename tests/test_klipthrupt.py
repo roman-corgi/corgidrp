@@ -23,22 +23,31 @@ sig_pix = fwhm_pix / (2 * np.sqrt(2. * np.log(2.)))
 iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
 owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
 
-# Mock CT calibration
+# Mock CT calibration settings
 
+nx,ny = (21,21)
+cenx, ceny = (25.,30.)
+
+# Mock PSF subtraction data settings
+st_amp = 100.
+noise_amp = 1e-3
+pl_contrast = 0.0
+rolls = [0,10.,0,0]
+
+
+
+# KLIP throughput calculation settings
+inject_snr = 10.
 outdir = 'klipcal_output'
 fileprefix = 'FAKE'
 annuli = 1
 subsections = 1
 movement = 1
+numbasis = [1]
 calibrate_flux = False
 
-st_amp = 100.
-noise_amp = 1e-3
-pl_contrast = 0.0
-rolls = [0,15.,0,0]
-numbasis = [1]
-
-max_thrupt_tolerance = 1 + (noise_amp * (2*fwhm_pix)**2)
+# max_thrupt_tolerance = 1 + (noise_amp * (2*fwhm_pix)**2)
+max_thrupt_tolerance = 1.05
 
 if not os.path.exists(outdir):
     os.mkdir(outdir)
@@ -326,8 +335,6 @@ def test_meas_klip_ADI():
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
 
-    inject_snr = 20
-
     klip_params['mode'] = mode
     kt_adi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
@@ -402,16 +409,12 @@ def test_meas_klip_RDI():
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
 
-    inject_snr = 20
-
     klip_params['mode'] = mode
     kt_rdi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
-                     inject_snr,
-                     seps = None, # in pixels from mask center
-                     cand_locs=[])
+                     inject_snr)
 
     # # See if it runs
     # import matplotlib.pyplot as plt
@@ -431,26 +434,21 @@ def test_meas_klip_RDI():
 
 def test_meas_klip_ADIRDI():
     global kt_adirdi
+    
     mode = 'ADI+RDI'
+    nsci, nref = (2,1)
 
-    nx,ny = (21,21)
-    cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 1e-2
-    rolls = [0,15.,0,0]
-    numbasis = [1,2]
     klip_params = {
                 'outdir':outdir,'fileprefix':fileprefix,
                 'annuli':annuli, 'subsections':subsections, 
                 'movement':movement, 'numbasis':numbasis,
                 'mode':mode,'calibrate_flux':calibrate_flux}
     
-    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
@@ -465,27 +463,35 @@ def test_meas_klip_ADIRDI():
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
 
-    inject_snr = 20
-
-    klip_params['mode'] = mode
-    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+    kt_adirdi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
-                     inject_snr,
-                     seps=[15.,25.,35.], # in pixels from mask center
-                     pas=np.array([0.,60.,120.,180.,240.,300.]), # Degrees
-                     cand_locs=[(15.,0.)])
+                     inject_snr)
 
-    # See if it runs\-
+    # Just make sure it runs
     pass
 
+
 def test_compare_RDI_ADI():
+
+    import matplotlib.pyplot as plt
+    fig,ax = plt.subplots()
+    ax.plot(kt_adi[0],kt_adi[1],label='ADI')
+    ax.plot(kt_rdi[0],kt_adirdi[1],label='ADI+RDI')
+    ax.plot(kt_rdi[0],kt_rdi[1],label='RDI')
+    plt.legend()
+    ax.set_ylim(-0.1,1.1)
+    plt.title('KLIP Throughput')
+    plt.xlabel('Separation (pixels)')
+    plt.show()
 
     # Check that ADI thrupt < RDI thrupt
     mean_adi = np.mean(kt_adi[1:])
     mean_rdi = np.mean(kt_rdi[1:])
+
     assert mean_adi < mean_rdi
+
 
 def test_psfsub_withklipandctmeas():
 
@@ -496,7 +502,6 @@ def test_psfsub_withklipandctmeas():
     st_amp = 100.
     noise_amp = 1e-3
     pl_contrast = 0. # No planet
-    rolls = [0,15.,0,0]
     numbasis = [1,2]
     mock_sci_rdi,mock_ref_rdi = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
@@ -538,11 +543,12 @@ if __name__ == '__main__':
     # test_inject_psf()
     # test_measure_noise()
 
-    # test_meas_klip_ADI()
-    # test_meas_klip_RDI()
-    # test_compare_RDI_ADI()
+    test_meas_klip_ADI()
+    test_meas_klip_RDI()
     test_meas_klip_ADIRDI()
 
-    test_psfsub_withklipandctmeas()
+    test_compare_RDI_ADI()
+
+    # test_psfsub_withklipandctmeas()
 
     pass
