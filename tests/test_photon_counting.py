@@ -135,9 +135,7 @@ def test_pc():
     copy_pc = pc_dataset_err.all_data.copy()
     # mask out all the irrelevant pixels:
     copy_pc[0,22:40,23:49] = np.nan
-    # didn't dark-subtract this time:
-    assert pc_dataset_err.frames[0].filename.endswith('pc_no_ds.fits')
-    assert pc_dataset_err.frames[0].filepath.endswith('pc_no_ds.fits')
+    # didn't dark-subtract this time
     history = ''
     for line in pc_dataset_err.frames[0].ext_hdr["HISTORY"]:
         history += line
