@@ -1537,8 +1537,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         new_hdr['CDELT1'] = (platescale * 0.001) / 3600
         new_hdr['CDELT2'] = (platescale * 0.001) / 3600
         
-        new_hdr['CRVAL1'] = dither_target_ras[i]
-        new_hdr['CRVAL2'] = dither_target_decs[i]
+        new_hdr['CRVAL1'] = dither_target_ras[i] + offset[0]
+        new_hdr['CRVAL2'] = dither_target_decs[i] + offset[1]
         
         w = wcs.WCS(new_hdr)
         
