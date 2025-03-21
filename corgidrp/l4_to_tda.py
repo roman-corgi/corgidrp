@@ -175,7 +175,7 @@ def update_to_tda(input_dataset):
     return updated_dataset
 
 
-def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
+def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
                 image_without_planet=None):
     """
     Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
@@ -187,6 +187,8 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
         nsigma_threshold (float, optional): The SNR threshold for source detection.
         image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
     """
+
+    new_image = input_image.copy()
     
     # Ensure an odd-sized box for PSF convolution
     boxsize = int(fwhm * 3)
@@ -206,7 +208,7 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     psf_binarymask = np.zeros_like(psf) ; psf_binarymask[idx] = 1
 
     # Compute the SNR map using cross-correlation
-    image_residual = np.zeros_like(Image.data) + Image.data
+    image_residual = np.zeros_like(new_image.data) + new_image.data
     image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
     
     sn_source, xy_source = [], []
@@ -229,7 +231,7 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
         
     # Store detected sources in FITS header
     for i in range(len(sn_source)):
-        Image.ext_hdr[f'snyx{i:03d}'] = f'{sn_source[i]:5.1f},{xy_source[i][0]:4d},{xy_source[i][1]:4d}'        
+        new_image.ext_hdr[f'snyx{i:03d}'] = f'{sn_source[i]:5.1f},{xy_source[i][0]:4d},{xy_source[i][1]:4d}'        
     # names of the header keywords are tentative
     
-    return
+    return new_image
