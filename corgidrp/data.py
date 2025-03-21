@@ -1872,6 +1872,9 @@ class CoreThroughputCalibration(Image):
 
         # Loop over target locations (let conditional inside the loop to collect
         # the result for any method after interpolating)
+        psf_interp_list = []
+        x_interp_list = []
+        y_interp_list = []
         for i_psf in range(len(x_cor)):
             if method.lower() == 'nearest-polar':       
                 # Find the nearest radial position in the CT file (argmin() returns the first occurence only)
@@ -1880,16 +1883,13 @@ class CoreThroughputCalibration(Image):
                 # If there's more than one case, select that one with the
                 # smallest angular distance
                 if len(idx_near) > 1:
-                    print(f'{len(idx)} PSFs at the same radial distance found')
                     breakpoint()
                 # Otherwise this is the interpolated PSF
                 elif len(idx_near) == 1:
-                    psf_interp = self.data[i_psf]
+                    psf_interp = np.squeeze(self.data[idx_near[0]])
                 # This should not happen b/c there should always be a cloest radius
                 else:
-                    raise Exception('No closest radial distance found. Odd.')
-                breakpoint()
-
+                    raise Exception('No closest radial distance found. This should not happen.')
             else:
                 raise ValueError(f'Unidentified method for the interpolation: {method}')
 
@@ -1898,7 +1898,6 @@ class CoreThroughputCalibration(Image):
             x_interp_list += [x_cor[i_psf]]
             y_interp_list += [y_cor[i_psf]]
 
-        breakpoint()
         return np.array(psf_interp_list), np.array(x_interp_list), np.array(y_interp_list)
 
 class PyKLIPDataset(pyKLIP_Data):

@@ -186,7 +186,7 @@ def test_psf_interp():
     transformation from encoder values to EXCAM pixels.
     """
     # Generate core throughput calibration file
-    ct_cal = corethroughput.generate_ct_cal(dataset_ct)
+    ct_cal = corethroughput.generate_ct_cal(dataset_ct_interp)
 
     # We need to refer the PSF locations to the FPM's center
     # Get PAM cal file
@@ -195,31 +195,71 @@ def test_psf_interp():
     # Get CT FPM's center
     fpam_ct_pix = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # PSF locations with respect to the FPM's center. EXCAM pixels
-    x_psf = ct_cal.ct_excam[0,:] - fpam_ct_pix[0]
-    y_psf = ct_cal.ct_excam[1,:] - fpam_ct_pix[1]
-    
-    # Choose some arbitrary positions and check the returned PSF is the same
-    # as the nearest one in the CT cal file:
+    x_ct = ct_cal.ct_excam[0,:] - fpam_ct_pix[0]
+    y_ct = ct_cal.ct_excam[1,:] - fpam_ct_pix[1]
+    r_ct = np.sqrt(x_ct**2 + y_ct**2)
+
+    # Number of positions to test (PSF stamps are small 15x15 pixels)
+    n_rand = 200
+    rng = np.random.default_rng(0)
+
+    # Check that if the location is below or above the range of radial distances
+    # in the input CT dataset used to generate the CT cal file, it fails
+    # Test 1/ Below minimum radial distance:
+    x_below = rng.uniform(0, r_ct.min()-0.001, n_rand)
+    y_below = r_ct.min() - x_below 
+    # All must fail
+    with pytest.raises(ValueError):
+        ct_cal.GetPSF(x_below, y_below, dataset_cor, fpam_fsam_cal)
+    x_below, y_below = 0, r_ct.min()-0.1
+
+    # Test 2/ Beyond maximum radial distance 
+    x_beyond = rng.uniform(r_ct.max()+0.001, 2*r_ct.max(), n_rand)
+    y_beyond = x_beyond - r_ct.max()
+    # All must fail
+    with pytest.raises(ValueError):
+        ct_cal.GetPSF(x_beyond, y_beyond, dataset_cor, fpam_fsam_cal)
+
+    # Test 3/ Equal radial distance should retrieve the one with the nearest
+    # angular distance
+
+    # Test 4/ Choose some arbitrary positions and check the returned PSF is the
+    # same as the nearest one in the CT cal file:
     
     # Array of random numbers, covering all quadrants with radial distances from
-    # the FPM within the range of the CT cal file
-    r_psf = np.sqrt(x_psf**2 + y_psf**2)
-    # Number of positions to test
-    n_rand = 100
-    rng = np.random.default_rng(0)
-    r_out = rng.uniform(r_psf.min(), r_psf.max(), n_rand)
-    az_out = rng.uniform(0, 2*np.pi, n_rand)
-    x_out = r_out * np.cos(az_out)
-    y_out = r_out * np.sin(az_out)
+    # the FPM within the range of the CT cal file including some locations that
+    # are invalid
+    r_test = rng.uniform(r_ct.min()-1, r_ct.max()+1, n_rand)
+    az_test = rng.uniform(0, 2*np.pi, n_rand)
+    x_test = r_test * np.cos(az_test)
+    y_test = r_test * np.sin(az_test)
+    # Number of locations outside the range of valid radial distances
+    n_invalid = ((r_test<r_ct.min()) + (r_test>r_ct.max())).sum()
+    if n_invalid == 0:
+        print('Target dataset should have some locations outside the radial range of the input dataset')
+
     # Interpolated PSFs
-    interpolated_PSF = ct_cal.GetPSF(x_out, y_out, dataset_cor, fpam_fsam_cal)[0]
+    interpolated_PSF, x_out, y_out = ct_cal.GetPSF(x_test, y_test, dataset_cor, fpam_fsam_cal)
+    # Test that the number of interpolated PSFs is the same as the number of
+    # valid positions
+    if n_invalid + len(interpolated_PSF) != n_rand:
+        raise Exception('Inconsistent number of interpolated PSFs')
 
-    # Keep closest ones
+    # Test agreement between interpolated PSFs and nearest one in the input set
+    for i_psf in range(len(x_out)):
+        # Radial distance difference with the input dataset
+        diff_r_abs = np.abs(np.sqrt(x_out[i_psf]**2 + y_out[i_psf]**2) - r_ct)
+        idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
+        # If there's more than one case, check the interpolated PSF is the one
+        # that has the shortest angular distance to the ones in the input dataset
+        # with the same radial distance
+        if len(idx_near) > 1:
+            breakpoint()
+        # Otherwise this is the interpolated PSF
+        else:
+            assert np.all(interpolated_PSF[i_psf] == ct_cal.data[idx_near])
 
-    # Add test of equal radial distance (dataset_ct_interp), nearest angular distance (negative)
-
-    # Check that if the location is below r_min or above r_max, it fails
-
+    print('Tests about PSF interpolation passed')
     breakpoint()
 
 def test_psf_pix_and_ct():
@@ -550,6 +590,8 @@ def test_ct_interp():
         x_az_in, y_az_in, dataset_cor, fpam_fsam_cal)[0]
     
     assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
+
+    print('Tests about CT interpolation and CT map passed')
 
 def teardown_module():
     """
