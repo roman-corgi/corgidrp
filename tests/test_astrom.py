@@ -178,11 +178,11 @@ def test_distortion():
 
 def test_seppa2dxdy():
 
-    seps = np.array([10.0,15.0])
-    pas = np.array([0.,90.])
+    seps = np.array([10.0,15.0,20,10,10])
+    pas = np.array([0.,90.,-90,45,-45])
 
-    expect_dx = np.array([0.,-15.0])
-    expect_dy = np.array([10.,0])
+    expect_dx = np.array([0.,-15.0,20.,-10./np.sqrt(2.),10./np.sqrt(2.)])
+    expect_dy = np.array([10.,0,0,10./np.sqrt(2.),10./np.sqrt(2.)])
 
     expect_dxdy = np.array([expect_dx,expect_dy])
 
@@ -192,13 +192,13 @@ def test_seppa2dxdy():
 
 def test_seppa2xy():
 
-    seps = np.array([10.0,15.0])
-    pas = np.array([0.,90.])
+    seps = np.array([10.0,15.0,20.,10,10])
+    pas = np.array([0.,90.,-90.,45,-45])
     cenx = 25.
     ceny = 35.
 
-    expect_x = np.array([25.,10.0])
-    expect_y = np.array([45.,35.])
+    expect_x = np.array([25.,10.0,45.,cenx-10./np.sqrt(2.),cenx+10./np.sqrt(2.)])
+    expect_y = np.array([45.,35.,35.,ceny+10./np.sqrt(2.),ceny+10./np.sqrt(2.)])
 
     expect_xy = np.array([expect_x,expect_y])
 
@@ -207,7 +207,7 @@ def test_seppa2xy():
     assert dxdy == pytest.approx(expect_xy)
 
 if __name__ == "__main__":
-    test_astrom()
-    test_distortion()
+    # test_astrom()
+    # test_distortion()
     test_seppa2dxdy()
     test_seppa2xy()
