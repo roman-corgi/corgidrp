@@ -224,26 +224,8 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
             # Scale and subtract the detected PSF from the image
             image_residual = psf_scalesub(image_residual, xy, psf, fwhm)
                 
-            show = True ; show = False # will be removed
-            if show:
-                import matplotlib.pyplot as plt
-                fig = plt.figure(figsize=(8,8)) ; cmap = "bwr"
-                plt.subplot(2, 2, 3)
-                plt.imshow(np.flip(image_snmap, 0), clim=(-5,5), cmap=cmap)
-                
             # Update the SNR map after source removal
             image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
-            
-            if show: # will be removed
-                clim = [np.nanmedian(image_residual)-np.nanstd(image_residual)*nsigma_threshold,
-                        np.nanmedian(image_residual)+np.nanstd(image_residual)*nsigma_threshold]
-                plt.subplot(2, 2, 1)
-                plt.imshow(np.flip(Image.data, 0), clim=(clim[0],clim[1]), cmap=cmap)
-                plt.subplot(2, 2, 2)
-                plt.imshow(np.flip(image_residual, 0), clim=(clim[0],clim[1]), cmap=cmap)
-                plt.subplot(2, 2, 4)
-                plt.imshow(np.flip(image_snmap, 0), clim=(-5,5), cmap=cmap)
-                plt.show()
         
     # Store detected sources in FITS header
     for i in range(len(sn_source)):
