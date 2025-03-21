@@ -284,7 +284,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                             dq_hdr=dq_hdr, input_hdulist=hdulist) 
         # NOTE - assuming input L2a dataset already has the same file format
-        new_image.filename = dataset[-1].filename.replace("L2a", "L2b") 
+        new_image.filename = dataset[-1].filename
         new_image.ext_hdr['PCTHRESH'] = thresh
         new_image._record_parent_filenames(input_dataset) 
         pc_ill_dataset = data.Dataset([new_image])
