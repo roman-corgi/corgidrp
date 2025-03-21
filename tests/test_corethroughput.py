@@ -32,7 +32,7 @@ def setup_module():
     global cfam_name
     cfam_name = '1F'
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_ct_interp
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_interp
     global dataset_cor
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
@@ -179,6 +179,44 @@ def setup_module():
         norm=pupil_image_1.sum())[0]
     dataset_ct_interp = Dataset(data_ct_interp)
 
+    # Needed for PSF interpolation
+    # Dataset with two PSFs at equal radial distance from the CT FPM's center
+    data_psf_interp = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+
+    # Default headers
+    prhd, exthd = create_default_L3_headers()
+    # cfam filter
+    exthd['CFAMNAME'] = cfam_name
+    # Mock ERR
+    err = np.ones([1024,1024])
+    # Mock DQ
+    dq = np.zeros([1024,1024], dtype = np.uint16)
+
+    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
+    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
+    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    y, x = np.indices(imshape)
+
+    # Following astropy documentation:
+    # Generate random source model list. Random amplitues and centers within a pixel
+    # PSF's final location on SCI frame is moved by more than one pixel below. This
+    # is the fractional part that only needs a smaller array of non-zero values
+    # Set seed for reproducibility of mock data
+    rng = np.random.default_rng(0)
+    model_params = [
+        dict(amplitude=rng.uniform(1,10),
+        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
+        x_stddev=fwhm_mas/21.8/2.335,
+        y_stddev=fwhm_mas/21.8/2.335)
+        for _ in range(n_psfs)]
+
+    model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
+    
+
+#    dataset_psf_interp
+
 def test_psf_interp():
     """
     Test the ability to recover a PSF at a given (x,y) location on HLC in a
@@ -222,6 +260,8 @@ def test_psf_interp():
 
     # Test 3/ Equal radial distance should retrieve the one with the nearest
     # angular distance
+
+    x_equal = r_
 
     # Test 4/ Choose some arbitrary positions and check the returned PSF is the
     # same as the nearest one in the CT cal file:
@@ -604,8 +644,8 @@ def teardown_module():
     global cfam_name
     del cfam_name
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_ct_interp
-    del dataset_ct, dataset_ct_syn, dataset_ct_interp
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_interp
+    del dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_interp
     global dataset_cor
     del dataset_cor
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
