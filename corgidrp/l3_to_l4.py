@@ -522,6 +522,9 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     frame = data.Image(pyklip_data,
                         pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                         err=err, dq=dq)
+    # NOTE: product of psfsubtraction should take: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
+    # upgrade to L4 should be done by a serpate receipe
+    frame.filename = sci_dataset.frames[-1].filename
     
     dataset_out = data.Dataset([frame])
 

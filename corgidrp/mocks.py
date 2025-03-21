@@ -3161,7 +3161,6 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
     return sci_dataset,ref_dataset
 
-
 def create_synthetic_satellite_spot_image(
     image_shape,
     bg_sigma,
