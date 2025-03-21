@@ -20,14 +20,16 @@ def create_wcs(input_dataset, astrom_calibration):
 
     northangle = astrom_calibration.northangle
     platescale = astrom_calibration.platescale
-    center_coord = astrom_calibration.boresight
+    ra_offset, dec_offset = astrom_calibration.boresight
 
     # create wcs for each image in the dataset
     for image in updated_dataset:
 
         im_data = image.data
-        image_shape = im_data.shape
-        center_pixel = [image_shape[1] // 2, image_shape[0] // 2]
+        image_y, image_x = im_data.shape
+        center_pixel = [(image_x-1) // 2, (image_y-1) // 2]
+        target_ra, target_dec = image.pri_hdr['RA'], image.pri_hdr['DEC']
+        corrected_ra, corrected_dec = target_ra - ra_offset, target_dec - dec_offset
         roll_ang = image.pri_hdr['ROLL']
 
         vert_ang = np.radians(northangle + roll_ang)  ## might be -roll_ang
@@ -50,8 +52,8 @@ def create_wcs(input_dataset, astrom_calibration):
         wcs_info['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
         wcs_info['CDELT2'] = (platescale * 0.001) / 3600
 
-        wcs_info['CRVAL1'] = center_coord[0]
-        wcs_info['CRVAL2'] = center_coord[1]
+        wcs_info['CRVAL1'] = corrected_ra
+        wcs_info['CRVAL2'] = corrected_dec
 
         wcs_info['PLTSCALE'] = platescale  ## [mas] / pixel
 
