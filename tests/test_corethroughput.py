@@ -183,22 +183,53 @@ def setup_module():
 
     # Needed for PSF interpolation
     # Dataset with two PSFs at equal radial distance from the CT FPM's center
+    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
+    # This test needs two PSFs at exactly the same rdial distance. Limitations
+    # due to pixelization, make it difficult unless the FPM's center are integer
+    # values. Arbitrary FPM locations are tested in test_ct_interp() and
+    # ct_map() in cases where we do not need identical radial distances. Obviously,
+    # in practice, we'll hradly have two PSFs with identical radial locations
+    # from the FPM's center, though we still test it. 
+    # Factors are derived from the inverting the FpamFsamCal coefficients. One
+    # of many choices:
+    exthd_pupil['FPAM_H'] = FPAM_H_CT - 1.1799975449759417 
+    exthd_pupil['FPAM_V'] = FPAM_V_CT + 4.43999924460695228
+    # Note: alternatively, one could choose to use the same FPM's center during
+    # CT and coronagraphic observations, though the final result is the same if
+    # the CT FPM's center can be set to be a (different) set of integer numbers
+    # Same would be:
+    # exthd_pupil['FPAM_H'] = FPAM_H_CT - 107
+    # exthd_pupil['FPAM_V'] = FPAM_V_CT + 37
     data_psf_interp = [Image(pupil_image,pri_hdr = prhd,
         ext_hdr = exthd_pupil, err = err)]
-
-    # Enough approximation (and to a good extent, irrelevant)
+    # We need to estimate the location of the FPM's center to create the PSFs
+    # at given predefined locatioins
+    data_ct_interp += [data_psf[0]]
+    ct_cal_tmp2 = corethroughput.generate_ct_cal(Dataset(data_ct_interp))
+    # FPM during the CT observations (different to the coronagraphic one since
+    # FPAM/FSAM H/V values are different)
+    fpm_ct_2 = ct_cal_tmp2.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    # Generate the mock data for CT interpolation knowing the CT FPM
+    data_ct_interp = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+    # Band 1 FWHM: Enough approximation (and to a good extent, irrelevant)
     fwhm_mas = 50
-    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
-    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    imshape = (19, 19)
     y, x = np.indices(imshape)
-
     # Following astropy documentation:
     # Generate 2 PSFs with the same radial distance to (0,0) and different A
+    fpm_ct_frac = fpm_ct_2 % 1
     model_params = [
-        dict(amplitude=11, x_mean=3-, y_mean=4, x_stddev=fwhm_mas/21.8/2.335,
-        y_stddev=fwhm_mas/21.8/2.335),
-        dict(amplitude=23, x_mean=4, y_mean=3, x_stddev=fwhm_mas/21.8/2.335,
-        y_stddev=fwhm_mas/21.8/2.335)]
+        dict(amplitude=11,
+            x_mean=imshape[1]//2 + fpm_ct_frac[1]+3,
+            y_mean=imshape[0]//2 + fpm_ct_frac[0]+4,
+            x_stddev=fwhm_mas/21.8/2.335,
+            y_stddev=fwhm_mas/21.8/2.335),
+        dict(amplitude=23,
+            x_mean=imshape[1]//2 + fpm_ct_frac[1]+4,
+            y_mean=imshape[0]//2 + fpm_ct_frac[0]+3,
+            x_stddev=fwhm_mas/21.8/2.335,
+            y_stddev=fwhm_mas/21.8/2.335)]
     model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
     # Render models to image using full evaluation
     for model in model_list:
@@ -207,8 +238,8 @@ def setup_module():
         model.render(psf)
         image = np.zeros([1024, 1024])
         # Insert PSF 
-        image[int(fpm_ct[0])-imshape[0]//2:int(fpm_ct[0])+imshape[0]//2+1,
-            int(fpm_ct[1])-imshape[1]//2:int(fpm_ct[1])+imshape[1]//2+1] = psf
+        image[int(fpm_ct_2[1])-imshape[1]//2:int(fpm_ct_2[1])+imshape[1]//2+1,
+            int(fpm_ct_2[0])-imshape[0]//2:int(fpm_ct_2[0])+imshape[0]//2+1] = psf
         # Build up the Dataset
         data_psf_interp += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]    
 
@@ -232,10 +263,9 @@ def test_psf_interp():
     # Get CT FPM's center
     fpam_ct_pix_eq = ct_cal_eq.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # PSF locations with respect to the FPM's center. EXCAM pixels
-    x_ct_eq = ct_cal_eq.ct_excam[0,:] - fpam_ct_pix_eq[0]
-    y_ct_eq = ct_cal_eq.ct_excam[1,:] - fpam_ct_pix_eq[1]
+    x_ct_eq = ct_cal_eq.ct_excam[0] - fpam_ct_pix_eq[0]
+    y_ct_eq = ct_cal_eq.ct_excam[1] - fpam_ct_pix_eq[1]
     r_ct_eq = np.sqrt(x_ct_eq**2 + y_ct_eq**2)
-
 
     breakpoint()
 
