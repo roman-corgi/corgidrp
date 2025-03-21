@@ -1300,7 +1300,7 @@ class TrapCalibration(Image):
 
 class FluxcalFactor(Image):
     """
-    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
+    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electrons/s. 
 
     To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
@@ -1375,8 +1375,8 @@ class FluxcalFactor(Image):
                 orig_input_filename = input_dataset[0].filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
-            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 
@@ -1447,7 +1447,7 @@ class FpamFsamCal(Image):
             prihdr['OBSID'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
-            exthdr['CMDGAIN'] = 1.0
+            exthdr['EMGAIN_C'] = 1.0
             exthdr['EXCAMT'] = 40.0
 
             self.pri_hdr = prihdr
@@ -1754,13 +1754,27 @@ class CoreThroughputCalibration(Image):
         interpolator = LinearNDInterpolator(rad_az, core_throughput)
         # Now interpolate: 
         interpolated_values = interpolator(radius_cor, azimuth_cor)
-       
+
         # Raise ValueError if CT < 0, CT> 1
         if np.any(interpolated_values < 0) or np.any(interpolated_values > 1): 
             raise ValueError('Some interpolated core throughput values are '
                 f'out of bounds (0,1): ({interpolated_values.min():.2f}, '
                 f'{interpolated_values.max():.2f})')
 
+        # Edge case:
+        # If a target location happens to be part of the CT dataset (i.e., the
+        # interpolator) and its azimuth is equal to the maximum azimuth in the
+        # CT dataset, the interpolated CT may sometimes be assigned to NaN, while
+        # it should simply be the same inout CT value at the same location
+        idx_az_max = np.argwhere(np.isnan(interpolated_values))
+        for idx in idx_az_max:
+            idx_x_arr = np.argwhere(x_cor[idx] == x_grid)
+            idx_y_arr = np.argwhere(y_cor[idx] == y_grid)
+            for idx_x in idx_x_arr:
+                # If and only if the same index is in both, it's the same location
+                if idx_x in idx_y_arr:
+                    interpolated_values[idx_x] = core_throughput[idx_x]
+            
         # Raise ValueError if all CT are NaN
         if np.all(np.isnan(interpolated_values)):
             raise ValueError('There are no valid target positions within the ' +
