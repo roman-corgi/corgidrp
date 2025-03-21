@@ -121,16 +121,16 @@ def test_inject_psf():
     cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx=cenx,ceny=ceny,
-                  nx=nx,ny=ny)
+                  nx=nx,ny=ny,
+                  psfsize=5)
     
     inj_flux = 10.
-
 
     # Test 0 separation to make sure we can scale and center
     sep = 0.0
     pa = 0.0
     roll = 0.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx)
 
     ext_hdr = fits.Header()
@@ -138,7 +138,7 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
@@ -148,11 +148,11 @@ def test_inject_psf():
 
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
     
-    # Test separation of 1 pixel
+    # Test separation of exactly 1 pixel
     sep = 1.0
     pa = 0.0
     roll = 0.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny+1,cenx)
 
     ext_hdr = fits.Header()
@@ -160,7 +160,7 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
@@ -172,7 +172,7 @@ def test_inject_psf():
     sep = 1.0
     pa = 90.0
     roll = 0.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx-1)
 
     ext_hdr = fits.Header()
@@ -180,7 +180,7 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
@@ -192,7 +192,7 @@ def test_inject_psf():
     sep = 5.0
     pa = 0.0
     roll = 90.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx+5)
 
     ext_hdr = fits.Header()
@@ -200,7 +200,7 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
@@ -208,13 +208,185 @@ def test_inject_psf():
     
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
 
+    # Test injecting a psf over the left edge of the array
+    sep = 9.0
+    pa = 90.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (5,1)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+    # Test injecting a psf over the right edge of the array
+    sep = 9.0
+    pa = -90.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (5,19)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+    
+    # Test injecting a psf over the top edge of the array
+    sep = 4.0
+    pa = 0.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (9,10)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+
+    # Test injecting a psf over the bottom edge of the array
+    sep = 4.0
+    pa = 180.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (1,10)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+
+    # Test injecting a psf over the bottom left corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = 135.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (1,1)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+
+    # Test injecting a psf over the bottom right corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = -135.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (1,9)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+    # Test injecting a psf over the top left corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = 45.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (9,1)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+    
+    # Test injecting a psf over the top right corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = -45.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (9,9)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
     pass
 
 
 def test_measure_noise():
 
     cenx,ceny = (120.,130.)
-    frame_shape = (200,200)
+    frame_shape_yx = (200,200)
     seps = np.arange(50.,71.,5.)
     border_sep = 62.5
     
@@ -224,7 +396,7 @@ def test_measure_noise():
     ext_hdr['MASKLOCX'] = cenx
     ext_hdr['MASKLOCY'] = ceny
     
-    image = np.zeros((2,*frame_shape))
+    image = np.zeros((2,*frame_shape_yx))
 
     frame = Image(image,
                   pri_hdr=fits.Header(),
@@ -245,7 +417,7 @@ def test_measure_noise():
     std3 = 3.
     std4 = 4.
 
-    image = np.zeros((2,*frame_shape))
+    image = np.zeros((2,*frame_shape_yx))
     frame = Image(image,
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
@@ -255,8 +427,8 @@ def test_measure_noise():
     
 
     rng = np.random.default_rng(0)
-    frame.data[0,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std1,frame_shape),rng.normal(0.,std2,frame_shape))
-    frame.data[1,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std3,frame_shape),rng.normal(0.,std4,frame_shape))
+    frame.data[0,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std1,frame_shape_yx),rng.normal(0.,std2,frame_shape_yx))
+    frame.data[1,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std3,frame_shape_yx),rng.normal(0.,std4,frame_shape_yx))
 
     # No KL mode specified
     noise_profile = measure_noise(frame, seps, fwhm)
@@ -540,14 +712,14 @@ def test_psfsub_withklipandctmeas():
 if __name__ == '__main__':  
     # test_create_ct_cal()
     # test_get_closest_psf()
-    # test_inject_psf()
+    test_inject_psf()
     # test_measure_noise()
 
-    test_meas_klip_ADI()
-    test_meas_klip_RDI()
-    test_meas_klip_ADIRDI()
+    # test_meas_klip_ADI()
+    # test_meas_klip_RDI()
+    # test_meas_klip_ADIRDI()
 
-    test_compare_RDI_ADI()
+    # test_compare_RDI_ADI()
 
     # test_psfsub_withklipandctmeas()
 
