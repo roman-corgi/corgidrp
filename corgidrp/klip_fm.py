@@ -100,19 +100,18 @@ def inject_psf(frame_in, ct_calibration, amp,
     return frame, psf_model, psf_cenxy
 
 
-def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
+def measure_noise(frame, seps_pix, hw, klmode_index=None):
     """Calculates the noise (standard deviation of counts) of an 
         annulus at a given separation from the mask center.
-        TODO: Correct for small sample statistics?
     
     Args:
         frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" in header
         seps_pix (np.array of float): Separations (in pixels from mask center) at which to calculate 
             the noise level.
-        fwhm (float): halfwidth of the annulus to use for noise calculation, based on FWHM.
         klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
             the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
-            truncation choice.
+            truncation choice.  If None (by default), all indices are returned.
+        hw (float): halfwidth of the annulus to use for noise calculation.
 
     Returns: np.array 
     """
@@ -126,8 +125,8 @@ def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
 
     stds = []
     for sep_pix in seps_pix:
-        r_inner = sep_pix - fwhm
-        r_outer = sep_pix + fwhm
+        r_inner = sep_pix - hw
+        r_outer = sep_pix + hw
         masked_data = np.where(np.logical_and(sep_map3d<r_outer,sep_map3d>r_inner), frame.data,np.nan)
         
         # Calculate standard deviation
