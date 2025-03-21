@@ -181,11 +181,15 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
     
     Args:
-        Image (corgidrp.data.Image): The input image to search for sources (L4-level).
+        input_image (corgidrp.data.Image): The input image to search for sources (L4-level).
         psf (ndarray, optional): The PSF used for detection. If None, a Gaussian approximation is created.
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
         image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
+
+    Returns:
+        corgidrp.data.Image: A copy of the input image with the detected sources and their SNRs saved in the header.
+        
     """
 
     new_image = input_image.copy()

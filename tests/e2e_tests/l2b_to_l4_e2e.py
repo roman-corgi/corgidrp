@@ -24,19 +24,25 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
 
     An end-to-end test that takes the OS11 data and runs it through the L2B to L4 pipeline.
 
-    It checks that: 
-        - The two OS11 planets are detected within 1 pixel of their expected separations
-        - The calibration files are correctly associated with the output file
+        It checks that: 
+            - The two OS11 planets are detected within 1 pixel of their expected separations
+            - The calibration files are correctly associated with the output file
 
-    Data needed: 
-        - Coronagraphic dataset - taken from OS11 data
-        - Reference star dataset - taken from OS11 data
-        - Satellite spot dataset - created in the test
+        Data needed: 
+            - Coronagraphic dataset - taken from OS11 data
+            - Reference star dataset - taken from OS11 data
+            - Satellite spot dataset - created in the test
+        
+        Calibrations needed: 
+            - AstrometricCalibration
+            - CoreThroughputCalibration
+            - FluxCalibration
     
-    Calibrations needed: 
-        - AstrometricCalibration
-        - CoreThroughputCalibration
-        - FluxCalibration
+    Args:
+        os11_data_path (str): Path to the OS11 data
+        e2e_path (str): Path to the output directory
+
+
     '''
 
     e2e_data_path = os.path.join(e2e_path, "l2_files")
