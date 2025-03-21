@@ -285,9 +285,11 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
                 raise PhotonCountException('Threshold used for photon-counted master dark should match the threshold to be used for the illuminated frames.')
             if pc_master_dark.ext_hdr['NUM_FR'] < len(sub_dataset):
                 raise PhotonCountException('Number of frames that created the photon-counted master dark must be greater than or equal to the number of illuminated frames in order for the result to be reliable.')
-            pc_means.append(pc_master_dark.data[i])
-            dqs.append(pc_master_dark.dq[i])
-            errs.append(pc_master_dark.err[0][i])
+            # in case the number of subsets of darks < number of subsets of brights, which can happen since the number of darks within a subset can be bigger than the number in a bright subset
+            j = np.mod(i, pc_master_dark.data.shape[0])
+            pc_means.append(pc_master_dark.data[j])
+            dqs.append(pc_master_dark.dq[j])
+            errs.append(pc_master_dark.err[0][j])
             dark_sub = "yes"
             filename_end = ''
         else:

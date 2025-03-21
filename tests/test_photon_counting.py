@@ -181,8 +181,10 @@ def test_pc_subsets():
     assert pc_dataset.frames[0].ext_hdr['NUM_FR'] == 40
     assert pc_dataset.frames[-1].ext_hdr['NUM_FR'] == 40 # The 1 remainder frame ignored for consistent statistics among the PC-averaged output frames
     assert 'Number of subsets: 4' in pc_dataset.frames[0].ext_hdr['HISTORY'][-2]
-    with pytest.raises(PhotonCountException):
+    with pytest.raises(PhotonCountException): #since number of frames in a dark subset would be less than that of a subset in illuminated
         get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=51)
+    # but this is fine:
+    get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=38)
 
 
 if __name__ == '__main__':
