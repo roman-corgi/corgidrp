@@ -1415,7 +1415,7 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
         dq = dq)
     return image
 
-def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
+def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
                        distortion_coeffs_path=None, dither_pointings=0):
     """
     Create simulated data for astrometric calibration.
@@ -1425,6 +1425,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         filedir (str): (Optional) Full path to directory to save to. (default: None)
         image_shape (tuple of ints): The desired shape of the image (num y pixels, num x pixels), (default: (1024, 1024))
         target (tuple): The original pointing target in RA/DEC [deg] (default: (80.553428801, -69.514096821))
+        offset (tuple): The RA/DEC [deg] injected offset from the target pointing (default: (0,0))
         subfield_radius (float): The radius [deg] around the target coordinate for creating a subfield to produce the image from (default: 0.03 [deg])
         platescale (float): The plate scale of the created image data (default: 21.8 [mas/pixel])
         rotation (float): The north angle of the created image data (default: 45 [deg])
@@ -1475,8 +1476,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
     new_hdr['CDELT1'] = (platescale * 0.001) / 3600
     new_hdr['CDELT2'] = (platescale * 0.001) / 3600
 
-    new_hdr['CRVAL1'] = target[0]
-    new_hdr['CRVAL2'] = target[1]
+    new_hdr['CRVAL1'] = target[0] + offset[0]
+    new_hdr['CRVAL2'] = target[1] + offset[1]
 
     w = wcs.WCS(new_hdr)
 
@@ -1536,8 +1537,8 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         new_hdr['CDELT1'] = (platescale * 0.001) / 3600
         new_hdr['CDELT2'] = (platescale * 0.001) / 3600
         
-        new_hdr['CRVAL1'] = dither_target_ras[i]
-        new_hdr['CRVAL2'] = dither_target_decs[i]
+        new_hdr['CRVAL1'] = dither_target_ras[i] + offset[0]
+        new_hdr['CRVAL2'] = dither_target_decs[i] + offset[1]
         
         w = wcs.WCS(new_hdr)
         
