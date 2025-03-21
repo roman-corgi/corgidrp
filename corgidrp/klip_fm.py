@@ -1,9 +1,7 @@
 import os
 import warnings
 from astropy.io import fits
-from astropy.stats import sigma_clip
 import numpy as np
-import matplotlib.pyplot as plt
 from corgidrp.data import PyKLIPDataset, Image 
 from pyklip.parallelized import klip_dataset
 from pyklip.fakes import gaussfit2d
@@ -79,16 +77,49 @@ def inject_psf(frame_in, ct_calibration, amp,
     psf_model *= amp / peak_count
 
     # Assume PSF is centered in the data cutout for now
-    shape_arr = np.array(psf_model.shape)
-    psf_cenyx_ind = (np.array(shape_arr)/2 - 0.5).astype(int) 
+    model_shape = np.array(psf_model.shape)
+    psf_cenyx_ind = (np.array(model_shape)/2 - 0.5).astype(int) 
     psf_cenyx_inframe = np.array([frame.ext_hdr['STARLOCY'],frame.ext_hdr['STARLOCX']]) + np.array([dy,dx])
     injected_psf_cenyx_ind = np.round(psf_cenyx_inframe).astype(int)
-    starty, startx = injected_psf_cenyx_ind - psf_cenyx_ind
+    startyx = injected_psf_cenyx_ind - psf_cenyx_ind
+    endyx = startyx + model_shape
 
     # Insert into correct frame size array 
     psf_only_frame = np.zeros_like(frame.data)
-    psf_only_frame[starty:starty+shape_arr[0],startx:startx+shape_arr[1]] = psf_model
+    starty, startx = startyx
+    endy, endx = endyx
+
+    if starty < 0:
+        psfmodel_starty = -starty
+        starty = 0
+    else:
+        psfmodel_starty = 0
+
+    if startx < 0:
+        psfmodel_startx = -startx
+        startx = 0
+    else:
+        psfmodel_startx = 0
+
+    if endy >= psf_only_frame.shape[0]:
+        y_overhang = endy - psf_only_frame.shape[0]
+        psfmodel_endy = model_shape[0] - y_overhang
+    else: psfmodel_endy = model_shape[0]
+
+    if endx >= psf_only_frame.shape[1]:
+        x_overhang = endx - psf_only_frame.shape[1]
+        psfmodel_endx = model_shape[1] - x_overhang
+    else: psfmodel_endx = model_shape[1]
+
+
+    psf_only_frame[starty:endy,
+                   startx:endx] = psf_model[psfmodel_starty:psfmodel_endy,
+                                            psfmodel_startx:psfmodel_endx]
     
+    
+    
+
+
     # # TODO: Calculate subpixel shift:
     # psf_shift = (0.,0.) # Hardcode 0 shift for now
     # shifted_psf_only_frame = shift(psf_only_frame,psf_shift)
@@ -147,9 +178,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                      ct_calibration,
                      klip_params,
                      inject_snr = 5,
-                     sep_spacing = 5.,
-                     seps=None, # in pixels from mask center
-                     pas=np.array([0.,90.,180.,270.]),
+                     sep_spacing = 3.,
+                     n_pas = 5,
+                     seps = None, # in pixels from mask center
+                     pas = None,
                      cand_locs = [] # list of tuples (sep_pix,pa_deg) of known off-axis source locations
                     ):
     """Measures the throughput of the KLIP algorithm via injection-recovery of fake off-axis sources. 
@@ -165,7 +197,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             contain the keywords 'mode','annuli','subsections','movement','numbasis','outdir'.
             See corgidrp.l3_to_l4.do_psf_subtraction() for descriptions of each of these parameters.
         inject_snr (int, optional): SNR at which to inject fake PSFs. Defaults to 5.
-        sep_spacing (float, optional): multiples of the FWHM at which to space separation samples. Defaults to 5. Overridden by passing in
+        sep_spacing (float, optional): multiples of the FWHM at which to space separation samples. Defaults to 3. 
+            Overridden by passing in explicit separations to the seps keyword.
+        n_pas (int,optional): number of evenly spaced position angles at which to inject PSFs. Defaults to 5. 
+            Overridden by in explicit PAs to the pas keyword.
         seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
             PSFs. If not provided, a linear spacing of separations between the IWA & OWA will be chosen.
         pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
@@ -193,6 +228,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     
     if seps == None:
         seps = np.arange(iwa,owa,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
+    if pas == None:
+        pas = np.linspace(0.,360.,n_pas+1)[:-1] # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
     thrupts = []
     for k,klmode in enumerate(klip_params['numbasis']):
@@ -291,48 +328,52 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         pyklip_data = fits.getdata(pyklip_fpath)[0]
         pyklip_hdr = fits.getheader(pyklip_fpath)
 
-        # Measure and subtract background
-        # Sigma clip threshold 5
-        std = np.nanstd(pyklip_data)
-        med = np.nanmedian(pyklip_data)
-        clip_thresh = 3 * std
-        masked_data = np.where(np.abs(pyklip_data-med)>clip_thresh,np.nan,pyklip_data)
-        bg_level = np.nanmedian(masked_data)
+        # Measure background via sigma clip 
+        n_loops = 5
+        masked_data = pyklip_data.copy()
+        for n in range(n_loops):
+            std = np.nanstd(masked_data)
+            med = np.nanmedian(masked_data)
+            clip_thresh = 3 * std
+            masked_data = np.where(np.abs(pyklip_data-med)>clip_thresh,np.nan,pyklip_data)
+        
         # Subtract median
+        bg_level = np.nanmedian(masked_data)
         medsubtracted_data = pyklip_data - bg_level
         
-        # 
-        #     # Plot Psf subtraction with fakes
-            
-        #     if klip_params['mode'] == 'RDI':
-        #         analytical_result = rotate(sci_dataset[0].data - ref_dataset[0].data,-rolls[0],reshape=False,cval=np.nan)
-        #     elif klip_params['mode'] == 'ADI':
-        #         analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-        #                         [0.5,0.5],
-        #                         cval=np.nan)
-        #     elif klip_params['mode'] == 'ADI+RDI':
-        #         analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
-    
-        #     locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
-            
-        #     import matplotlib.pyplot as plt
+        # Plot Psf subtraction with fakes
+        
+        if klip_params['mode'] == 'RDI':
+            analytical_result = rotate(sci_dataset[0].data - ref_dataset[0].data,-rolls[0],reshape=False,cval=np.nan)
+        elif klip_params['mode'] == 'ADI':
+            analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+                            [0.5,0.5],
+                            cval=np.nan)
+        elif klip_params['mode'] == 'ADI+RDI':
+            analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
 
-        #     fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-        #     im0 = axes[0].imshow(medsubtracted_data,origin='lower')
-        #     plt.colorbar(im0,ax=axes[0],shrink=0.8)
-        #     axes[0].scatter(locsxy[0],locsxy[1],label='Injected PSFs',s=1,c='r',marker='x')
-        #     axes[0].set_title(f'PSF Sub Result ({klmode} KL Modes)')
-        #     axes[0].legend()
+        locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
+        
+        # import matplotlib.pyplot as plt
 
-        #     im1 = axes[1].imshow(analytical_result,origin='lower')
-        #     plt.colorbar(im1,ax=axes[1],shrink=0.8)
-        #     axes[1].set_title('Analytical result')
+        # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+        # im0 = axes[0].imshow(medsubtracted_data,origin='lower')
+        # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        # axes[0].scatter(locsxy[0],locsxy[1],label='Injected PSFs',s=1,c='r',marker='x')
+        # axes[0].set_title(f'Output data')
+        # axes[0].legend()
 
-        #     im2 = axes[2].imshow(medsubtracted_data - analytical_result,origin='lower')
-        #     plt.colorbar(im2,ax=axes[2],shrink=0.8)
-        #     axes[2].set_title('Difference')
+        # im1 = axes[1].imshow(analytical_result,origin='lower')
+        # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+        # axes[1].set_title('Analytical result')
 
-        #     plt.show()
+        # im2 = axes[2].imshow(medsubtracted_data - analytical_result,origin='lower')
+        # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+        # axes[2].set_title('Difference')
+
+        # plt.suptitle(f'PSF Subtraction {klip_params["mode"]} ({klmode} KL Modes)')
+
+        # plt.show()
         
         # After psf subtraction
         this_klmode_peakin = []
