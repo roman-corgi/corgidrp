@@ -11,10 +11,10 @@ def test_create_wcs():
 
     # create mock dataset (arbitrary northangle)
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
-    mock_dataset = mocks.create_astrom_data(field_path, platescale=21.8, rotation=20)
+    mock_dataset = mocks.create_astrom_data(field_path, platescale=21.8, rotation=20, dither_pointings=2)
 
     # run the boresight calibration to get an AstrometricCalibration file
-    astrom_cal = astrom.boresight_calibration(mock_dataset, field_path, find_threshold=100)
+    astrom_cal = astrom.boresight_calibration(mock_dataset, field_path, find_threshold=200, find_distortion=True, position_error=0.5)
 
     # create the wcs
     updated_dataset = create_wcs(mock_dataset, astrom_cal)
@@ -23,13 +23,14 @@ def test_create_wcs():
     # and that the values are as expected from the AstrometricCalibration file
     platescale = astrom_cal.platescale
     northangle = astrom_cal.northangle
-    boresight = astrom_cal.boresight
+    ra_offset, dec_offset = astrom_cal.avg_offset
 
     for mock_frame, updated_frame in zip(mock_dataset, updated_dataset):
         roll_ang = mock_frame.pri_hdr['ROLL']
         data = mock_frame.data
         image_shape = data.shape
         center_pixel = [image_shape[1] // 2, image_shape[0] // 2]
+        target_ra, target_dec = mock_frame.pri_hdr['RA'], mock_frame.pri_hdr['DEC']
 
         pc = np.array([[-np.cos(np.radians(northangle + roll_ang)), np.sin(np.radians(northangle + roll_ang))], [np.sin(np.radians(northangle + roll_ang)), np.cos(np.radians(northangle + roll_ang))]])
         matrix = pc * (platescale * 0.001) / 3600.
@@ -50,8 +51,8 @@ def test_create_wcs():
         expected['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
         expected['CDELT2'] = (platescale * 0.001) / 3600
 
-        expected['CRVAL1'] = boresight[0]
-        expected['CRVAL2'] = boresight[1]
+        expected['CRVAL1'] = target_ra - ra_offset      # the corrected target pointing based on astrom_cal
+        expected['CRVAL2'] = target_dec - dec_offset
 
         # gather the wcs values from the updated dataset
         wcs = {}
@@ -60,6 +61,5 @@ def test_create_wcs():
 
         # compare the expected dictionary to the updated dateset output
         assert wcs.items() == expected.items()
-
 if __name__ == "__main__":
     test_create_wcs()
