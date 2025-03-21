@@ -4,6 +4,7 @@ import numpy as np
 from astropy.io import fits
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers, create_synthetic_satellite_spot_image
+from corgidrp.l4_to_tda import find_source
 import corgidrp.mocks as mocks
 import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
@@ -11,6 +12,7 @@ import corgidrp.data as corgidata
 import corgidrp.walker as walker
 import pytest
 import glob
+import shutil
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -131,6 +133,9 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
 
         # new_image.filename ="CGI_020000199900100{}00{}_20250415T0305102_L2b.fits".format(ibatch,i)
         new_image.filename = "CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch)
+        #Save the last science filename for later. 
+        if star[ibatch] == 1:
+            last_sci_filename = new_image.filename
 
 
         image_list.append(new_image)
@@ -163,7 +168,7 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
 
     sat_spot_image = Image(big_array, mock_satspot_pri_header, mock_satspot_ext_header)
     sat_spot_image.filename ="CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch+1)
-    
+
     image_list.append(sat_spot_image)
 
     #########################################
@@ -182,8 +187,43 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
     l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_data_path, "*.fits")))
     walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path, template="l2b_to_l4.json")
 
+    expected_filename = os.path.join(e2eoutput_path, last_sci_filename.replace("_L2b.fits","_L4_.fits"))
+    
+    ########################################################################
+    #### Read in the psf_subtracted images and test for source detection ###
+    ########################################################################
+
+    psf_subtracted_image = Image(expected_filename)
+    psf_subtracted_image.data = psf_subtracted_image.data[-1,:,:] #Just pick one of the KL modes for now
+    
+    #Find the sources and get their distances from the center
+    psf_subtracted_image_with_source = find_source(psf_subtracted_image)
+    source_header = psf_subtracted_image_with_source.ext_hdr
+
+    snyx = np.array([list(map(float, source_header[key].split(','))) for key in source_header if key.startswith("SNYX")])
+    xcen = psf_subtracted_image_with_source.ext_hdr['CRPIX1']
+    ycen = psf_subtracted_image_with_source.ext_hdr['CRPIX2']
+    source_distances =np.sort(np.sqrt((snyx[:,1] - xcen)**2 + (snyx[:,2] - ycen)**2))
+
+    ### Get the expected distances
+    pixel_scale = 21 #mas/pixel
+    lambda_c = 575e-9 #center wavelength of band 1 in m
+    roman_D = 2.37 #roman primary diameter
+    expected_separations_lambda_over_D = np.array([3.5, 4.5]) #OS11 injected planets
+    expected_separations_arcsec = expected_separations_lambda_over_D *  lambda_c / roman_D * 206265
+    expected_separations_pixels = expected_separations_arcsec / pixel_scale * 1000 
+
+    #Check that the detected sources are within 1 pixel of the expected separations
+    #Assumes that only the correct sources were detected. 
+    for i,source_distance in enumerate(expected_separations_pixels):
+        assert np.isclose(source_distance, source_distances[i], atol=1)
+    print("Found all the sources!")
+
     #Clean up
     this_caldb.remove_entry(astrom_cal)
+    shutil.rmtree(e2e_data_path)
+    shutil.rmtree(e2eoutput_path)
+    shutil.rmtree(os.path.join(thisfile_dir,"KLIP_SUB"))
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
