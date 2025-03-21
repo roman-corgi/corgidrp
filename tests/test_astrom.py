@@ -47,10 +47,10 @@ def test_astrom():
 
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
-    # target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
-    ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
-    assert ra == pytest.approx(0, abs=8.333e-7)     # reported as ra offset
-    assert dec == pytest.approx(0, abs=8.333e-7)
+    target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
+    ra, dec = astrom_cal.boresight
+    assert ra == pytest.approx(target[0], abs=8.333e-7)     # reported as ra offset
+    assert dec == pytest.approx(target[1], abs=8.333e-7)
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal)

@@ -1057,7 +1057,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         corrected_positions_boresight.append([corr_ra, corr_dec])
 
         # return a single AstrometricCalibration data file
-        astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1], np.inf, np.inf])
+        astrom_data = np.array([ra, dec, cal_properties[0], cal_properties[1], 0, 0, np.inf, np.inf])
         astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=in_dataset)
         astroms.append(astrom_cal)
 
@@ -1081,7 +1081,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # assume that the undithered image with original pointing position is the first frame in dataset
     corr_pos_ra, corr_pos_dec = corrected_positions_boresight[0]
-    astromcal_data = np.concatenate((np.array([corr_pos_ra, corr_pos_dec, avg_dec, avg_platescale, avg_northangle, avg_ra, avg_dec]), np.array(distortion_coeffs), np.array([order])), axis=0)
+    astromcal_data = np.concatenate((np.array([corr_pos_ra, corr_pos_dec, avg_platescale, avg_northangle, avg_ra, avg_dec]), np.array(distortion_coeffs), np.array([order])), axis=0)
 
     astroms_dataset = corgidrp.data.Dataset(astroms)
     avg_cal = corgidrp.data.AstrometricCalibration(astromcal_data, pri_hdr=input_dataset[0].pri_hdr, ext_hdr=input_dataset[0].ext_hdr, input_dataset=astroms_dataset)
