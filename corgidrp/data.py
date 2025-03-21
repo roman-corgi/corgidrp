@@ -1375,8 +1375,8 @@ class FluxcalFactor(Image):
                 orig_input_filename = input_dataset[0].filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron/s'
-            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron/s'
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 

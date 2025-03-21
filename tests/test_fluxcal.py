@@ -142,7 +142,7 @@ def test_fluxcal_file():
     assert fluxcal_fac_file.filter == '3C'
     assert fluxcal_fac_file.fluxcal_fac == fluxcal_factor[0,0]
     assert fluxcal_fac_file.fluxcal_err == fluxcal_factor_error[0,0,0]
-    assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/electron/s'
+    assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
 
 def test_abs_fluxcal():
     """ 
@@ -303,11 +303,17 @@ def test_abs_fluxcal():
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_ap, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0
+    mag_err_ap = 2.5/np.log(10) * flux_err_ap/band_flux
+    
+    assert output_dataset[0].ext_hdr["MAGERR"] == pytest.approx(mag_err_ap, rel = 0.1)
     
     output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_gauss,  photo = "2dgauss", phot_kwargs = None)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_gauss, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0
+    mag_err_gauss = 2.5/np.log(10) * flux_err_gauss/band_flux
+    
+    assert output_dataset[0].ext_hdr["MAGERR"] == pytest.approx(mag_err_gauss, rel = 0.1)
     
     corgidrp.track_individual_errors = old_ind
     
