@@ -34,7 +34,8 @@ noise_amp = 1e-3
 pl_contrast = 0.0
 rolls = [0,10.,0,0]
 
-
+# Injection test settings
+inj_flux = 10.
 
 # KLIP throughput calculation settings
 inject_snr = 10.
@@ -112,19 +113,13 @@ def test_get_closest_psf():
 
 def test_inject_psf():
 
-    # Test injecting psf on edge of array
-    
-    # Set up frame of zeros
-    # Need .ext_hdr['ROLL'] and .ext_hdr['STARLOCX/Y']
-
+    # Mock CT cal object
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny,
                   psfsize=5)
-    
-    inj_flux = 10.
 
     # Test 0 separation to make sure we can scale and center
     sep = 0.0
@@ -379,8 +374,6 @@ def test_inject_psf():
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
 
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
-
-    pass
 
 
 def test_measure_noise():
@@ -647,16 +640,16 @@ def test_meas_klip_ADIRDI():
 
 def test_compare_RDI_ADI():
 
-    import matplotlib.pyplot as plt
-    fig,ax = plt.subplots()
-    ax.plot(kt_adi[0],kt_adi[1],label='ADI')
-    ax.plot(kt_rdi[0],kt_adirdi[1],label='ADI+RDI')
-    ax.plot(kt_rdi[0],kt_rdi[1],label='RDI')
-    plt.legend()
-    ax.set_ylim(-0.1,1.1)
-    plt.title('KLIP Throughput')
-    plt.xlabel('Separation (pixels)')
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # fig,ax = plt.subplots()
+    # ax.plot(kt_adi[0],kt_adi[1],label='ADI')
+    # ax.plot(kt_rdi[0],kt_adirdi[1],label='ADI+RDI')
+    # ax.plot(kt_rdi[0],kt_rdi[1],label='RDI')
+    # plt.legend()
+    # ax.set_ylim(-0.1,1.1)
+    # plt.title('KLIP Throughput')
+    # plt.xlabel('Separation (pixels)')
+    # plt.show()
 
     # Check that ADI thrupt < RDI thrupt
     mean_adi = np.mean(kt_adi[1:])
@@ -712,14 +705,14 @@ def test_psfsub_withklipandctmeas():
 if __name__ == '__main__':  
     # test_create_ct_cal()
     # test_get_closest_psf()
-    test_inject_psf()
+    # test_inject_psf()
     # test_measure_noise()
 
-    # test_meas_klip_ADI()
-    # test_meas_klip_RDI()
-    # test_meas_klip_ADIRDI()
+    test_meas_klip_ADI()
+    test_meas_klip_RDI()
+    test_meas_klip_ADIRDI()
 
-    # test_compare_RDI_ADI()
+    test_compare_RDI_ADI()
 
     # test_psfsub_withklipandctmeas()
 
