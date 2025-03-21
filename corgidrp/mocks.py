@@ -2965,7 +2965,8 @@ def create_ct_interp(
 
 def create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx = 50.5,ceny=50.5,
-                  nx=21,ny=21):
+                  nx=21,ny=21,
+                  psfsize=None):
     """
     Creates a mock CoreThroughputCalibration object with gaussian PSFs.
 
@@ -2978,6 +2979,7 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
             PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
         ny (int, optional): Number of y positions at which to simulate mock PSFs. Must be an odd number. 
             PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
+        psfsize (int,optional): Size of psf model array in pixels. Must be an odd number. Defaults to 6 * the FWHM.
     
     Returns:
         corgidrp.data.CoreThroughputCalibration: mock CoreThroughputCalibration object 
@@ -3009,7 +3011,12 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
     sig_pix = fwhm_pix / (2 * np.sqrt(2. * np.log(2.)))
 
     # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
-    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    if psfsize is None:
+        imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    else:
+        assert psfsize%2 == 1, 'psfsize must be an odd integer'
+        imshape = (psfsize,psfsize)
+        
     psf = gaussian_array(array_shape=imshape,sigma=sig_pix,amp=1.,xoffset=0.,yoffset=0.)
 
     psf_cube = np.ones((n_psfs,*imshape))
