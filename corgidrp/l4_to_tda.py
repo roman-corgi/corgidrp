@@ -209,10 +209,13 @@ def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwar
     filter_file = fluxcal.get_filter_name(flux_dataset[0])
     vega_mag = fluxcal.calculate_vega_mag(flux, filter_file)
     
+    #calculate the magnitude error from the flux error and put it in MAGERR header
+    vega_mag_err = 2.5/np.log(10) * flux_err/flux
+    
     history_msg = "star {0} flux calculated as {1} erg/(s * cm^2 * AA) corresponding to {2} vega magnitude".format(flux_dataset[0].pri_hdr["TARGET"],flux, vega_mag)
 
     # update the output dataset with this converted data and update the history
-    flux_dataset.update_after_processing_step(history_msg, header_entries = {"FLUXFAC": fluxcal_factor.fluxcal_fac, "LOCBACK": back, "FLUX": flux, "FLUXERR": flux_err, "APP_MAG": vega_mag})
+    flux_dataset.update_after_processing_step(history_msg, header_entries = {"FLUXFAC": fluxcal_factor.fluxcal_fac, "LOCBACK": back, "FLUX": flux, "FLUXERR": flux_err, "APP_MAG": vega_mag, "MAGERR": vega_mag_err})
     return flux_dataset
 
 
