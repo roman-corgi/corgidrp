@@ -21,7 +21,7 @@ def test_distortion_correction():
     distortion_dataset = mocks.create_astrom_data(field_path, distortion_coeffs_path=distortion_coeffs_path)
 
     # assume a ground truth AstrometricCalibration file for this dataset (zero offset from pointing, platescale=21.8, northangle=45)
-    astromcal_data = np.concatenate((np.array([0, 0, 21.8, 45]), distortion_coeffs), axis=0)
+    astromcal_data = np.concatenate((np.array([80.553428801, -69.514096821, 21.8, 45, 0, 0]), distortion_coeffs), axis=0)
     astrom_cal = data.AstrometricCalibration(astromcal_data, pri_hdr=distortion_dataset[0].pri_hdr, ext_hdr=distortion_dataset[0].ext_hdr, input_dataset=distortion_dataset)
 
     # use the distortion correction function to undistort
