@@ -21,7 +21,8 @@ def test_create_wcs():
 
     # check that all wcs keywords exist in the ext_hdrs of the mock dataset
     # and that the values are as expected from the AstrometricCalibration file
-    platescale = astrom_cal.platescale
+    platescale_x = astrom_cal.platescale[0]
+    platescale_y = astrom_cal.platescale[1]
     northangle = astrom_cal.northangle
     ra_offset, dec_offset = astrom_cal.avg_offset
 
@@ -33,7 +34,8 @@ def test_create_wcs():
         target_ra, target_dec = mock_frame.pri_hdr['RA'], mock_frame.pri_hdr['DEC']
 
         pc = np.array([[-np.cos(np.radians(northangle + roll_ang)), np.sin(np.radians(northangle + roll_ang))], [np.sin(np.radians(northangle + roll_ang)), np.cos(np.radians(northangle + roll_ang))]])
-        matrix = pc * (platescale * 0.001) / 3600.
+        # assuming platescale is the same along both axes
+        matrix = pc * (platescale_x * 0.001) / 3600.
         
         # gather expected values in a dictionary
         expected = {}
@@ -48,8 +50,8 @@ def test_create_wcs():
         expected['CTYPE1'] = 'RA---TAN'
         expected['CTYPE2'] = 'DEC--TAN'
 
-        expected['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
-        expected['CDELT2'] = (platescale * 0.001) / 3600
+        expected['CDELT1'] = (platescale_x * 0.001) / 3600  ## converting to degrees
+        expected['CDELT2'] = (platescale_y * 0.001) / 3600
 
         expected['CRVAL1'] = target_ra - ra_offset      # the corrected target pointing based on astrom_cal
         expected['CRVAL2'] = target_dec - dec_offset
