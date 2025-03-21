@@ -299,17 +299,16 @@ if __name__ == "__main__":
 
 
     outputdir = thisfile_dir
-    os11_dir = "/Users/maxmb/Data/corgi/corgidrp/os11_data/"
+    tvacdata_dir = "/Users/maxmb/Data/corgi/corgidrp/os11_data/"
+    #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
-    ap.add_argument("-os11", "--os11_dir", default=os11_dir,
-                    help="directory where you find your os11 data [%(default)s]")
-
+    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
-    
     args = ap.parse_args()
-    os11_dir = args.os11_dir
+    tvacdata_dir = args.tvacdata_dir
     outputdir = args.outputdir
 
-    test_l2b_to_l4(os11_dir, outputdir)
+    test_l2b_to_l4(tvacdata_dir, outputdir)
