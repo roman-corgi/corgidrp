@@ -643,7 +643,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
-def update_to_l4(input_dataset):
+def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
     Updates the data level to L4. Only works on L3 data.
 
@@ -651,6 +651,8 @@ def update_to_l4(input_dataset):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file
+        flux_cal (corgidrp.data.FluxCalibration): a FluxCalibration calibration file
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L4-level
@@ -667,6 +669,8 @@ def update_to_l4(input_dataset):
     for frame in updated_dataset:
         # update header
         frame.ext_hdr['DATALVL'] = "L4"
+        frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1] #Associate the ct calibration file
+        frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L3_", "_L4_", 1)

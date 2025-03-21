@@ -35,7 +35,11 @@
             "name": "do_psf_subtraction"
         },
         {
-            "name": "update_to_l4"
+            "name": "update_to_l4",
+            "calibs": {
+                "CoreThroughputCalibration": "AUTOMATIC",
+                "FluxcalFactor": "AUTOMATIC"
+            }
         },
         {
             "name": "save"

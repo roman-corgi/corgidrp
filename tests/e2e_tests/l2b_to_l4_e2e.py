@@ -3,13 +3,15 @@ import os
 import numpy as np
 from astropy.io import fits
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_L2b_headers, create_synthetic_satellite_spot_image
+from corgidrp.mocks import (create_default_L2b_headers, create_default_L3_headers, 
+                            create_synthetic_satellite_spot_image, create_ct_psfs)
 from corgidrp.l4_to_tda import find_source
 import corgidrp.mocks as mocks
 import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
 import corgidrp.walker as walker
+from corgidrp import corethroughput
 import pytest
 import glob
 import shutil
@@ -19,13 +21,22 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 @pytest.mark.e2e
 def test_l2b_to_l4(os11_data_path, e2e_path):
     '''
+
+    An end-to-end test that takes the OS11 data and runs it through the L2B to L4 pipeline.
+
+    It checks that: 
+        - The two OS11 planets are detected within 1 pixel of their expected separations
+        - The calibration files are correctly associated with the output file
+
     Data needed: 
-        - Coronagraphic dataset
-        - Reference star dataset
-        - Satellite spot dataset
+        - Coronagraphic dataset - taken from OS11 data
+        - Reference star dataset - taken from OS11 data
+        - Satellite spot dataset - created in the test
     
     Calibrations needed: 
         - AstrometricCalibration
+        - CoreThroughputCalibration
+        - FluxCalibration
     '''
 
     e2e_data_path = os.path.join(e2e_path, "l2_files")
@@ -62,6 +73,53 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
 
     # Read in the os11 data and format it into a dataset
     # Reading things in based on hlc_os11_example.py
+
+    ###########################
+    #### Make dummy CT cal ####
+    ###########################
+
+        # Dataset with some CT profile defined in create_ct_interp
+    # Pupil image
+    pupil_image = np.zeros([1024, 1024])
+    # Set it to some known value for a selected range of pixels
+    pupil_image[510:530, 510:530]=1
+    prhd, exthd_pupil = create_default_L3_headers()
+    # DRP
+    # cfam filter
+    exthd_pupil['CFAMNAME'] = '1F'
+    # Add specific values for pupil images:
+    # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+    exthd_pupil['DPAMNAME'] = 'PUPIL'
+    exthd_pupil['LSAMNAME'] = 'OPEN'
+    exthd_pupil['FSAMNAME'] = 'OPEN'
+    exthd_pupil['FPAMNAME'] = 'OPEN_12'
+
+    data_psf, psf_loc_in, half_psf = create_ct_psfs(50, cfam_name='1F',
+    n_psfs=100)
+    
+    err = np.ones([1024,1024]) 
+    data_ct_interp = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+    # Set of off-axis PSFs with a CT profile defined in create_ct_interp
+    # First, we need the CT FPM center to create the CT radial profile
+    # We can use a miminal dataset to get to know it
+    data_ct_interp += [data_psf[0]]
+    ct_cal_tmp = corethroughput.generate_ct_cal(corgidata.Dataset(data_ct_interp))
+    ct_cal_tmp.save(filedir=e2eoutput_path, filename="mock_ct.fits")
+    this_caldb.create_entry(ct_cal_tmp)
+
+    ##########################################
+    #### Generate a flux calibration file ####
+    ##########################################
+
+    #Create a mock flux calibration file
+    fluxcal_factor = np.array([[2e-12]])
+    fluxcal_factor_error = np.array([[[1e-14]]])
+    prhd, exthd = create_default_L3_headers()
+    fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+
+    fluxcal_fac.save(filedir=e2eoutput_path, filename="mock_fluxcal.fits")
+    this_caldb.create_entry(fluxcal_fac)
 
     ############################################
     #### Put the OS 11 data into L2B format ####
@@ -219,8 +277,15 @@ def test_l2b_to_l4(os11_data_path, e2e_path):
         assert np.isclose(source_distance, source_distances[i], atol=1)
     print("Found all the sources!")
 
+    #Check that the calibration filenames are appropriately associated
+    assert psf_subtracted_image.ext_hdr['CTCALFN'] == "mock_ct.fits"
+    assert psf_subtracted_image.ext_hdr['FLXCALFN'] == "mock_fluxcal.fits"
+    print("Filenames associated correctly!")
+
     #Clean up
     this_caldb.remove_entry(astrom_cal)
+    this_caldb.remove_entry(ct_cal_tmp)
+    this_caldb.remove_entry(fluxcal_fac)
     shutil.rmtree(e2e_data_path)
     shutil.rmtree(e2eoutput_path)
     shutil.rmtree(os.path.join(thisfile_dir,"KLIP_SUB"))
