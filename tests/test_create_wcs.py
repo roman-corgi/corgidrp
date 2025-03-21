@@ -21,7 +21,8 @@ def test_create_wcs():
 
     # check that all wcs keywords exist in the ext_hdrs of the mock dataset
     # and that the values are as expected from the AstrometricCalibration file
-    platescale = astrom_cal.platescale
+    platescale_x = astrom_cal.platescale[0]
+    platescale_y = astrom_cal.platescale[1]
     northangle = astrom_cal.northangle
     boresight = astrom_cal.boresight
 
@@ -32,7 +33,8 @@ def test_create_wcs():
         center_pixel = [image_shape[1] // 2, image_shape[0] // 2]
 
         pc = np.array([[-np.cos(np.radians(northangle + roll_ang)), np.sin(np.radians(northangle + roll_ang))], [np.sin(np.radians(northangle + roll_ang)), np.cos(np.radians(northangle + roll_ang))]])
-        matrix = pc * (platescale * 0.001) / 3600.
+        # assuming platescale is the same along both axes
+        matrix = pc * (platescale_x * 0.001) / 3600.
         
         # gather expected values in a dictionary
         expected = {}
@@ -47,8 +49,8 @@ def test_create_wcs():
         expected['CTYPE1'] = 'RA---TAN'
         expected['CTYPE2'] = 'DEC--TAN'
 
-        expected['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
-        expected['CDELT2'] = (platescale * 0.001) / 3600
+        expected['CDELT1'] = (platescale_x * 0.001) / 3600  ## converting to degrees
+        expected['CDELT2'] = (platescale_y * 0.001) / 3600
 
         expected['CRVAL1'] = boresight[0]
         expected['CRVAL2'] = boresight[1]

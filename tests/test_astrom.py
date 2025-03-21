@@ -42,7 +42,9 @@ def test_astrom():
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
-    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=0.5)
+
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
