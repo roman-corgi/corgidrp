@@ -20,7 +20,7 @@ def create_wcs(input_dataset, astrom_calibration):
 
     northangle = astrom_calibration.northangle
     platescale = astrom_calibration.platescale
-    ra_offset, dec_offset = astrom_calibration.boresight
+    ra_offset, dec_offset = astrom_calibration.avg_offset
 
     # create wcs for each image in the dataset
     for image in updated_dataset:
