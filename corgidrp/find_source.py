@@ -2,13 +2,14 @@ import numpy as np
 from pyklip.kpp.metrics.crossCorr import calculate_cc
 from pyklip.kpp.stat.statPerPix_utils import get_image_stat_map_perPixMasking
 
-def make_snmap(image, psf_binarymask, coronagraph=True):
+def make_snmap(image, psf_binarymask, image_without_planet=None, coronagraph=True):
     """
     Generates a signal-to-noise (S/N) map by convolving the image with the PSF.
     
     Args:
         image (ndarray): The input image.
         psf_binarymask (ndarray): A binary mask for PSF convolution.
+        image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
         coronagraph (bool, optional): If True, an IWA is applied to derive the snmap. Defaults to True.
     
     Returns:
@@ -16,6 +17,10 @@ def make_snmap(image, psf_binarymask, coronagraph=True):
     """
     
     image_convo = calculate_cc(image, psf_binarymask, nans2zero=True)
+
+    if image_without_planet is not None:
+        image_wop_convo = calculate_cc(image_without_planet, psf_binarymask, nans2zero=True)
+    else: image_wop_convo = None
     
     if coronagraph:
         # Compute distance map from PSF center and mask radius from the image.
@@ -27,7 +32,8 @@ def make_snmap(image, psf_binarymask, coronagraph=True):
         mask_radius = np.ceil( np.min(distance_map[idx]) )
     else: mask_radius = 0.
 
-    image_snmap = get_image_stat_map_perPixMasking(image_convo, mask_radius=mask_radius, Dr=3.)
+    image_snmap = get_image_stat_map_perPixMasking(image_convo, image_without_planet=image_wop_convo,
+                                                   mask_radius=mask_radius, Dr=3.)
 
     return image_snmap
 
@@ -45,7 +51,6 @@ def psf_scalesub(image, xy, psf, fwhm):
     Returns:
         ndarray: The image after PSF subtraction.
     """
-    
     # Compute distance map from PSF center
     x = np.arange(psf.shape[1]) ; y = np.arange(psf.shape[0])
     xx, yy = np.meshgrid(x, y)

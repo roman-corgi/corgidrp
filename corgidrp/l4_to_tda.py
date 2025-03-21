@@ -175,7 +175,8 @@ def update_to_tda(input_dataset):
     return updated_dataset
 
 
-def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0):
+def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
+                image_without_planet=None):
     """
     Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
     
@@ -184,6 +185,7 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0):
         psf (ndarray, optional): The PSF used for detection. If None, a Gaussian approximation is created.
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
+        image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
     """
     
     # Ensure an odd-sized box for PSF convolution
@@ -205,7 +207,7 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0):
 
     # Compute the SNR map using cross-correlation
     image_residual = np.zeros_like(Image.data) + Image.data
-    image_snmap = make_snmap(image_residual, psf_binarymask)
+    image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
     
     sn_source, xy_source = [], []
        
@@ -221,10 +223,28 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0):
 
             # Scale and subtract the detected PSF from the image
             image_residual = psf_scalesub(image_residual, xy, psf, fwhm)
-
+                
+            show = True ; show = False # will be removed
+            if show:
+                import matplotlib.pyplot as plt
+                fig = plt.figure(figsize=(8,8)) ; cmap = "bwr"
+                plt.subplot(2, 2, 3)
+                plt.imshow(np.flip(image_snmap, 0), clim=(-5,5), cmap=cmap)
+                
             # Update the SNR map after source removal
-            image_snmap = make_snmap(image_residual, psf)
-
+            image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
+            
+            if show: # will be removed
+                clim = [np.nanmedian(image_residual)-np.nanstd(image_residual)*nsigma_threshold,
+                        np.nanmedian(image_residual)+np.nanstd(image_residual)*nsigma_threshold]
+                plt.subplot(2, 2, 1)
+                plt.imshow(np.flip(Image.data, 0), clim=(clim[0],clim[1]), cmap=cmap)
+                plt.subplot(2, 2, 2)
+                plt.imshow(np.flip(image_residual, 0), clim=(clim[0],clim[1]), cmap=cmap)
+                plt.subplot(2, 2, 4)
+                plt.imshow(np.flip(image_snmap, 0), clim=(-5,5), cmap=cmap)
+                plt.show()
+        
     # Store detected sources in FITS header
     for i in range(len(sn_source)):
         Image.ext_hdr[f'snyx{i:03d}'] = f'{sn_source[i]:5.1f},{xy_source[i][0]:4d},{xy_source[i][1]:4d}'        
