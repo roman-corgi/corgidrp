@@ -184,22 +184,22 @@ def setup_module():
     # Needed for PSF interpolation
     # Dataset with two PSFs at equal radial distance from the CT FPM's center
     # Choose some H/V values for FPAM/FSAM  during corethroughput observations
-    # This test needs two PSFs at exactly the same rdial distance. Limitations
-    # due to pixelization, make it difficult unless the FPM's center are integer
-    # values. Arbitrary FPM locations are tested in test_ct_interp() and
+    # This test needs two PSFs at exactly the same radial distance. 
+    # Limitations due to pixelization, and the precision of FpamFsam introduce
+    # erorrs that are very small though not enough to pass an equality.
+    # On the other hand, Arbitrary FPM locations are tested in test_ct_interp() and
     # ct_map() in cases where we do not need identical radial distances. Obviously,
-    # in practice, we'll hradly have two PSFs with identical radial locations
-    # from the FPM's center, though we still test it. 
-    # Factors are derived from the inverting the FpamFsamCal coefficients. One
-    # of many choices:
-    exthd_pupil['FPAM_H'] = FPAM_H_CT - 1.1799975449759417 
-    exthd_pupil['FPAM_V'] = FPAM_V_CT + 4.43999924460695228
-    # Note: alternatively, one could choose to use the same FPM's center during
-    # CT and coronagraphic observations, though the final result is the same if
-    # the CT FPM's center can be set to be a (different) set of integer numbers
-    # Same would be:
-    # exthd_pupil['FPAM_H'] = FPAM_H_CT - 107
-    # exthd_pupil['FPAM_V'] = FPAM_V_CT + 37
+    # in practice, we'll hardly have two PSFs with identical radial locations
+    # from the FPM's center. We do test it below though.
+    # This is the best one can do within 1e-13 precision with a FPM's center
+    # for CT that is different than the coronagraphic one. Factors are derived
+    # from the inverting the FpamFsamCal coefficients. One of many choices:
+    #exthd_pupil['FPAM_H'] = FPAM_H_CT - 1.1799975449759417 
+    #exthd_pupil['FPAM_V'] = FPAM_V_CT + 4.43999924460695228
+    # In order to get == to work, one has to choose  the same FPM's center during
+    # CT and coronagraphic observations. Same would be:
+    exthd_pupil['FPAM_H'] = FPAM_H_CT - 107
+    exthd_pupil['FPAM_V'] = FPAM_V_CT + 37
     data_psf_interp = [Image(pupil_image,pri_hdr = prhd,
         ext_hdr = exthd_pupil, err = err)]
     # We need to estimate the location of the FPM's center to create the PSFs
@@ -214,20 +214,23 @@ def setup_module():
         ext_hdr = exthd_pupil, err = err)]
     # Band 1 FWHM: Enough approximation (and to a good extent, irrelevant)
     fwhm_mas = 50
-    imshape = (19, 19)
+    imshape = (219, 219)
     y, x = np.indices(imshape)
     # Following astropy documentation:
     # Generate 2 PSFs with the same radial distance to (0,0) and different A
     fpm_ct_frac = fpm_ct_2 % 1
+    # Choose the location of the PSFs
+    aa = 100
+    bb = 20
     model_params = [
         dict(amplitude=11,
-            x_mean=imshape[1]//2 + fpm_ct_frac[1]+3,
-            y_mean=imshape[0]//2 + fpm_ct_frac[0]+4,
+            x_mean=imshape[1]//2 + fpm_ct_frac[1]+aa,
+            y_mean=imshape[0]//2 + fpm_ct_frac[0]+bb,
             x_stddev=fwhm_mas/21.8/2.335,
             y_stddev=fwhm_mas/21.8/2.335),
         dict(amplitude=23,
-            x_mean=imshape[1]//2 + fpm_ct_frac[1]+4,
-            y_mean=imshape[0]//2 + fpm_ct_frac[0]+3,
+            x_mean=imshape[1]//2 + fpm_ct_frac[1]+bb,
+            y_mean=imshape[0]//2 + fpm_ct_frac[0]+aa,
             x_stddev=fwhm_mas/21.8/2.335,
             y_stddev=fwhm_mas/21.8/2.335)]
     model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
