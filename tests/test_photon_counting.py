@@ -74,14 +74,7 @@ def test_pc():
     # now process illuminated frames and subtract the PC dark
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)
 
-    # If first frame does not start with "CGI", skip the name test
-    first_frame = pc_dataset_err.frames[0].filename
-
-    if not first_frame.startswith("CGI"):
-        pytest.skip("Skipping test: first frame does not start with 'CGI'. Currently working under the assumption that we have correctly named the input dataset")
-
-    # Proceed to check if 'L2b' is present; assuming function was already tested
-    assert 'L2b' in first_frame, f"Expected 'L2b' in {first_frame}, but it was not found."
+    assert pc_dataset_err.frames[-1].filename.strip() == dataset_err[-1].filename.strip()
 
     history = ''
     for line in pc_dataset_err.frames[0].ext_hdr["HISTORY"]:
