@@ -556,8 +556,8 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0
     exthdr['CRVAL1'] = 0
     exthdr['CRVAL2'] = 0
-    exthdr['STARLOCX'] = 0
-    exthdr['STARLOCY'] = 0
+    exthdr['STARLOCX'] = 512
+    exthdr['STARLOCY'] = 512
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
@@ -2658,7 +2658,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     Args:
         star_flux (float): Flux of the point source in erg/(s*cm^2*AA)
         fwhm (float): Full width at half max (FWHM) of the centroid
-        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electrons/s
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electron/s
         filter (str): (Optional) The CFAM filter used.
         fpamname (str): (Optional) Position of the FPAM
         target_name (str): (Optional) Name of the calspec star
@@ -2736,9 +2736,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # Error map
     err = np.full(size, noise_scale)
 
-    # Create image object
-    prihdr, exthdr = create_default_L2b_headers()
-    
     # Get FPAM positions, not strictly necessary but
     if fpamname == 'HOLE':
         fpam_h = 40504.4
@@ -2751,6 +2748,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fpam_v = 6124.9
 
     # Create image object
+    prihdr, exthdr = create_default_L2b_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
@@ -2771,9 +2769,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CDELT2']   = (platescale * 0.001) / 3600
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
-
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
-
+   
     # Save file
     # TO DO: update with file name conventions
     if filedir is not None and file_save:
