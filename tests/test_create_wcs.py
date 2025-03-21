@@ -29,7 +29,7 @@ def test_create_wcs():
         roll_ang = mock_frame.pri_hdr['ROLL']
         data = mock_frame.data
         image_shape = data.shape
-        center_pixel = [image_shape[1] // 2, image_shape[0] // 2]
+        center_pixel = [(image_shape[1]-1) // 2, (image_shape[0]-1) // 2]
         target_ra, target_dec = mock_frame.pri_hdr['RA'], mock_frame.pri_hdr['DEC']
 
         pc = np.array([[-np.cos(np.radians(northangle + roll_ang)), np.sin(np.radians(northangle + roll_ang))], [np.sin(np.radians(northangle + roll_ang)), np.cos(np.radians(northangle + roll_ang))]])
