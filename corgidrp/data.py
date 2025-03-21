@@ -1227,8 +1227,8 @@ class AstrometricCalibration(Image):
             self.boresight = self.data[:2]
             self.platescale = self.data[2]
             self.northangle = self.data[3]
-            self.avg_offset = self.data[4]
-            self.distortion_coeffs = self.data[5:]
+            self.avg_offset = self.data[4:6]
+            self.distortion_coeffs = self.data[6:]
             
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
