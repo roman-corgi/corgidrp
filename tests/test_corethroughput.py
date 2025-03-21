@@ -4,6 +4,8 @@ import numpy as np
 import astropy.time as time
 from astropy.io import fits
 from scipy.signal import decimate
+from astropy.modeling import models
+from astropy.modeling.models import Gaussian2D
 
 import corgidrp
 import corgidrp.data as data
@@ -184,38 +186,33 @@ def setup_module():
     data_psf_interp = [Image(pupil_image,pri_hdr = prhd,
         ext_hdr = exthd_pupil, err = err)]
 
-    # Default headers
-    prhd, exthd = create_default_L3_headers()
-    # cfam filter
-    exthd['CFAMNAME'] = cfam_name
-    # Mock ERR
-    err = np.ones([1024,1024])
-    # Mock DQ
-    dq = np.zeros([1024,1024], dtype = np.uint16)
-
+    # Enough approximation (and to a good extent, irrelevant)
+    fwhm_mas = 50
     fwhm_pix = int(np.ceil(fwhm_mas/21.8))
-    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
     imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
     y, x = np.indices(imshape)
 
     # Following astropy documentation:
-    # Generate random source model list. Random amplitues and centers within a pixel
-    # PSF's final location on SCI frame is moved by more than one pixel below. This
-    # is the fractional part that only needs a smaller array of non-zero values
-    # Set seed for reproducibility of mock data
-    rng = np.random.default_rng(0)
+    # Generate 2 PSFs with the same radial distance to (0,0) and different A
     model_params = [
-        dict(amplitude=rng.uniform(1,10),
-        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-        x_stddev=fwhm_mas/21.8/2.335,
-        y_stddev=fwhm_mas/21.8/2.335)
-        for _ in range(n_psfs)]
-
+        dict(amplitude=11, x_mean=3-, y_mean=4, x_stddev=fwhm_mas/21.8/2.335,
+        y_stddev=fwhm_mas/21.8/2.335),
+        dict(amplitude=23, x_mean=4, y_mean=3, x_stddev=fwhm_mas/21.8/2.335,
+        y_stddev=fwhm_mas/21.8/2.335)]
     model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
-    
+    # Render models to image using full evaluation
+    for model in model_list:
+        psf = np.zeros(imshape)
+        model.bounding_box = None
+        model.render(psf)
+        image = np.zeros([1024, 1024])
+        # Insert PSF 
+        image[int(fpm_ct[0])-imshape[0]//2:int(fpm_ct[0])+imshape[0]//2+1,
+            int(fpm_ct[1])-imshape[1]//2:int(fpm_ct[1])+imshape[1]//2+1] = psf
+        # Build up the Dataset
+        data_psf_interp += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]    
 
-#    dataset_psf_interp
+    dataset_psf_interp = Dataset(data_psf_interp)
 
 def test_psf_interp():
     """
@@ -223,7 +220,26 @@ def test_psf_interp():
     coronagraphic observation given a CT calibration file and the PAM
     transformation from encoder values to EXCAM pixels.
     """
+    # Test 1/ Equal radial distance should retrieve the one with the nearest
+    # angular distance
     # Generate core throughput calibration file
+    ct_cal_eq = corethroughput.generate_ct_cal(dataset_psf_interp)
+
+    # We need to refer the PSF locations to the FPM's center
+    # Get PAM cal file
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    # Get CT FPM's center
+    fpam_ct_pix_eq = ct_cal_eq.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    # PSF locations with respect to the FPM's center. EXCAM pixels
+    x_ct_eq = ct_cal_eq.ct_excam[0,:] - fpam_ct_pix_eq[0]
+    y_ct_eq = ct_cal_eq.ct_excam[1,:] - fpam_ct_pix_eq[1]
+    r_ct_eq = np.sqrt(x_ct_eq**2 + y_ct_eq**2)
+
+
+    breakpoint()
+
+    # Generate core throughput calibration file with more PSFs for the next tests
     ct_cal = corethroughput.generate_ct_cal(dataset_ct_interp)
 
     # We need to refer the PSF locations to the FPM's center
@@ -241,9 +257,9 @@ def test_psf_interp():
     n_rand = 200
     rng = np.random.default_rng(0)
 
-    # Check that if the location is below or above the range of radial distances
+    # Test 2: Check that if the location is below or above the range of radial distances
     # in the input CT dataset used to generate the CT cal file, it fails
-    # Test 1/ Below minimum radial distance:
+    # Test 2.1/ Below minimum radial distance:
     x_below = rng.uniform(0, r_ct.min()-0.001, n_rand)
     y_below = r_ct.min() - x_below 
     # All must fail
@@ -251,19 +267,14 @@ def test_psf_interp():
         ct_cal.GetPSF(x_below, y_below, dataset_cor, fpam_fsam_cal)
     x_below, y_below = 0, r_ct.min()-0.1
 
-    # Test 2/ Beyond maximum radial distance 
+    # Test 2.2/ Beyond maximum radial distance 
     x_beyond = rng.uniform(r_ct.max()+0.001, 2*r_ct.max(), n_rand)
     y_beyond = x_beyond - r_ct.max()
     # All must fail
     with pytest.raises(ValueError):
         ct_cal.GetPSF(x_beyond, y_beyond, dataset_cor, fpam_fsam_cal)
 
-    # Test 3/ Equal radial distance should retrieve the one with the nearest
-    # angular distance
-
-    x_equal = r_
-
-    # Test 4/ Choose some arbitrary positions and check the returned PSF is the
+    # Test 3/ Choose some arbitrary positions and check the returned PSF is the
     # same as the nearest one in the CT cal file:
     
     # Array of random numbers, covering all quadrants with radial distances from
