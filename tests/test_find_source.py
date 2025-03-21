@@ -35,6 +35,80 @@ def generate_angles(n_random, lower=0, upper=360, min_diff=30):
     
     return np.array(angles)
 
+def plot_results(image, nsigma_threshold,
+                 detection, detection_lowsn,
+                 nondetection, nondetection_lowsn,
+                 misdetection):
+    
+    fig = plt.figure(figsize=(8,8)) ; cmap = "bwr"
+
+    # plot 1
+    plt.subplot(2, 2, 1)
+    clim = [np.nanmedian(image)-np.nanstd(image)*nsigma_threshold,
+            np.nanmedian(image)+np.nanstd(image)*nsigma_threshold]
+    plt.imshow(np.flip(image, 0), clim=(clim[0],clim[1]), cmap=cmap)
+    plt.title('An example with artificial sources')
+
+    # plot 2
+    plt.subplot(2, 2, 2)
+    for i in range( len(detection) ):
+        plt.plot([detection[i,1], detection[i,4]], [detection[i,2], detection[i,5]])
+        
+    for i in range( len(nondetection) ):
+        if i == 0: plt.plot(nondetection[i,1], nondetection[i,2], marker='d', markersize=12, label='Non-detect')
+        else: plt.plot(nondetection[i,1], nondetection[i,2], marker='d', markersize=12)
+    
+    for i in range( len(misdetection) ):
+        if i == 0: plt.plot(misdetection[i,1], misdetection[i,2], marker='x', markersize=12, label='Mis-detect')
+        else: plt.plot(misdetection[i,1], misdetection[i,2], marker='x', markersize=12)
+
+    x = np.arange(image.shape[1]) ; y = np.arange(image.shape[0])
+    xx, yy = np.meshgrid(x, y)
+    center = np.array(image.shape) // 2
+    distance_map = np.sqrt((xx - center[1])**2 + (yy - center[0])**2)
+    idx = np.where( (np.isnan(image) == False) )
+    iwa = np.nanmin(distance_map[idx]) ; owa = np.nanmax(distance_map[idx])
+
+    theta = np.linspace(0, 2 * np.pi, 100)
+    x = np.cos(theta) ; y = np.sin(theta)
+    plt.plot(iwa*x+center[1], iwa*y+center[0], label='IWA')
+    plt.plot(owa*x+center[1], owa*y+center[0], label='OWA')
+    
+    n_total = len(detection) + len(detection_lowsn) + len(nondetection) + len(nondetection_lowsn)
+    txt = 'Detection (low input-SNR): '+str(len(detection)).zfill(2)+'('+str(len(detection_lowsn)).zfill(2)+')/'+str(n_total).zfill(2)+'\n' 
+    txt = txt+'Non-detection (low input-SNR): '+str(len(nondetection)).zfill(2)+'('+str(len(nondetection_lowsn)).zfill(2)+')/'+str(n_total).zfill(2)+'\n'
+    txt = txt+'Mis-detection: '+str(len(misdetection)).zfill(2)
+    plt.title(txt)
+    plt.legend()
+            
+    # plot 3
+    dx = detection[:,4] - detection[:,1]
+    dy = detection[:,5] - detection[:,2]
+    h_x, hlocs = np.histogram(dx, bins=20, range=[-3, 3])
+    h_y, hlocs = np.histogram(dy, bins=20, range=[-3, 3])
+    plt.subplot(2, 2, 3)
+    plt.step(hlocs[1:], h_x, label='delta_x')
+    plt.step(hlocs[1:], h_y, label='delta_y')
+    plt.xlabel('Separation [pix]')
+    plt.legend()
+
+    # plot 4
+    plt.subplot(2, 2, 4)
+    plt.scatter(detection[:,0], detection[:,3], label='Detection')
+    plt.scatter(detection_lowsn[:,0], detection_lowsn[:,3], label='Detection (low input-SNR)')        
+    plt.plot(np.arange(0,100), np.arange(0,100))
+    plt.hlines(nsigma_threshold, 0., 10., linestyle='dashed')
+    plt.vlines(nsigma_threshold, 0., np.nanmax(detection[:,3])+1, linestyle='dashed')
+    plt.xlim(0, 10)
+    plt.ylim(0., np.nanmax(detection[:,3])+1)
+    plt.xlabel('SN_injected') ; plt.ylabel('SN_detected')
+    
+    plt.show()
+    plt.cla() ; plt.clf() ; plt.close()
+
+    return
+
+    
 def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
     """
     Tests the source detection algorithm by injecting artificial planets into an image,
@@ -82,11 +156,13 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
 
     
     # Generate contrast curve
-    pyklip_contrast = True ; pyklip_contrast = False
+    image_convo = calculate_cc(image, psf_binarymask, nans2zero=True)
+     
+    pyklip_contrast = True #; pyklip_contrast = False
     if pyklip_contrast:
         contrast_seps, contrast = klip.meas_contrast(
-            image, dataset_iwa, dataset_owa, fwhm, center=dataset_center, low_pass_filter=0.
-        )
+            image_convo, dataset_iwa, dataset_owa, 1., center=dataset_center, low_pass_filter=False)
+        contrast /= 5.
     else:
         image_convo = calculate_cc(image, psf_binarymask, nans2zero=True)
         contrast_seps = np.arange(dataset_iwa, dataset_owa, fwhm)
@@ -101,7 +177,8 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
     
     # Create input data with a simulated image and a sample header
     Image = data.Image
-    Image.data = image ; Image.ext_hdr = input_dataset[0].ext_hdr
+    Image.data = image
+    Image.ext_hdr = input_dataset[0].ext_hdr
 
     # Initialize arrays to store detection results
     detection, detection_lowsn = np.empty((0, 6)), np.empty((0, 6))
@@ -122,7 +199,6 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
         #pa_rand = np.random.uniform(0, 360, n_source)
         pa_rand = generate_angles(n_source)
         sn_rand = np.random.uniform(0, 10, n_source)
-        #while np.max(sn_rand) < 5.: sn_rand = np.random.uniform(0, 10, n_source)
         inputflux_rand = f(radius_rand) * sn_rand / np.nansum(psf[idx_psf])
         x_rand = radius_rand * np.cos(np.radians(pa_rand)) + dataset_center[1] ; x_rand = np.array(x_rand, dtype=int)
         y_rand = radius_rand * np.sin(np.radians(pa_rand)) + dataset_center[0] ; y_rand = np.array(y_rand, dtype=int)
@@ -138,7 +214,7 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
         ##### ##### #####
         # Run the source detection algorithm
         nsigma_threshold = 5.
-        find_source(Image, psf=psf, fwhm=fwhm, nsigma_threshold=nsigma_threshold)
+        find_source(Image, psf=psf, fwhm=fwhm, nsigma_threshold=nsigma_threshold, image_without_planet=image)
         ##### ##### #####
 
         
@@ -174,6 +250,7 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
             snyx_misdet = np.delete(snyx, idx2, axis=0)
             misdetection = np.vstack((misdetection, snyx_misdet))
 
+
     # Remove duplicate false positives (misdetections) associated with a particular pattern of the simulated image
     idx = []
     seen = []
@@ -183,16 +260,19 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
             idx.append(i)
     misdetection = misdetection[idx]
 
-    
-    dx = np.nanmean(detection[:,4] - detection[:,1])
-    dy = np.nanmean(detection[:,5] - detection[:,2])
-    dsn = np.nanmean(abs(detection[:,3] - detection[:,0]))
+    # Plot results
+    #plot_results(image, nsigma_threshold, detection, detection_lowsn, nondetection, nondetection_lowsn, misdetection)
+        
+    dx = np.nanmedian(detection[:,4] - detection[:,1])
+    dy = np.nanmedian(detection[:,5] - detection[:,2])
+    dsn = np.nanmedian(abs(detection[:,3] - detection[:,0]))
     detection_rate = float(len(detection)) / (len(detection)+len(nondetection))
-
-    assert dx < 1., 'x-coordinates of simulated sources could not be recovered'
-    assert dy < 1., 'y-coordinates of simulated sources could not be recovered'
-    assert dsn < 1.5, 'SNRs of simulated sources could not be recovered'
-    assert detection_rate > 0.80, 'Many sources were missed' 
+    
+    assert dx < 1., 'dx_mean = '+str(dx)+', x-coordinates of simulated sources could not be recovered'
+    assert dy < 1., 'dy_mean = '+str(dy)+', y-coordinates of simulated sources could not be recovered'
+    assert dsn < 1.5, 'dSNR_mean = '+str(dsn)+', SNRs of simulated sources could not be recovered'
+    assert detection_rate > 0.85, 'detection_rate = '+str(detection_rate)+', Many sources were missed'
+    print(dx, dy, dsn, detection_rate)
 
     return
 
