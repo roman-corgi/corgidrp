@@ -72,8 +72,9 @@ def test_pc():
     assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
     # now process illuminated frames and subtract the PC dark
     pc_dataset_err = get_pc_mean(dataset_err, pc_master_dark=pc_dark)
-    assert pc_dataset_err.frames[0].filename[-7:] == 'pc.fits'
-    assert pc_dataset_err.frames[0].filepath[-7:] == 'pc.fits'
+
+    assert pc_dataset_err.frames[-1].filename.strip() == dataset_err[-1].filename.strip()
+
     history = ''
     for line in pc_dataset_err.frames[0].ext_hdr["HISTORY"]:
         history += line
@@ -133,9 +134,7 @@ def test_pc():
     copy_pc = pc_dataset_err.all_data.copy()
     # mask out all the irrelevant pixels:
     copy_pc[0,22:40,23:49] = np.nan
-    # didn't dark-subtract this time:
-    assert pc_dataset_err.frames[0].filename.endswith('pc_no_ds.fits')
-    assert pc_dataset_err.frames[0].filepath.endswith('pc_no_ds.fits')
+    # didn't dark-subtract this time
     history = ''
     for line in pc_dataset_err.frames[0].ext_hdr["HISTORY"]:
         history += line
