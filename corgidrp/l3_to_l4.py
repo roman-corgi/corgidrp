@@ -536,7 +536,6 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     history_msg = f'PSF subtracted via pyKLIP {mode}.'
     
     dataset_out.update_after_processing_step(history_msg)
-    dataset_out[0].filename = sci_dataset[-1].filename
 
     return dataset_out
 
