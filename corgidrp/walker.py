@@ -50,7 +50,13 @@ all_steps = {
     "get_pc_mean" : corgidrp.photon_counting.get_pc_mean,
     "divide_by_exptime" : corgidrp.l2b_to_l3.divide_by_exptime,
     "northup" : corgidrp.l3_to_l4.northup,
-    "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper
+    "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper,
+    "update_to_l3": corgidrp.l2b_to_l3.update_to_l3,
+    "create_wcs": corgidrp.l2b_to_l3.create_wcs,
+    "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
+    "find_star": corgidrp.l3_to_l4.find_star,
+    "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
+    "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
