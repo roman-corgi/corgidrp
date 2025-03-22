@@ -646,12 +646,8 @@ class Dark(Image):
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
-                if self.ext_hdr['PC_STAT'] != 'photon-counted master dark':
-                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                    self.filename = "{0}_dark.fits".format(orig_input_filename)
-                else:
-                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                    self.filename = "{0}_pc_dark.fits".format(orig_input_filename)
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+                self.filename = "{0}_DRK_CAL.fits".format(orig_input_filename)
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'

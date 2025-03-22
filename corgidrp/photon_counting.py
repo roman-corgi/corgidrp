@@ -147,7 +147,6 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     list_new_image = []
     list_err = [] # only used for dark processing case
     list_dq = [] # only used for dark processing case
-    list_sub_dataset = [] # only used for dark processing case
     index_of_last_frame_used = num_bins*(len(input_dataset)//num_bins)
     # this for loop ignores the remainder from the division above
     for i in range(num_bins):
@@ -291,29 +290,27 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             dqs.append(pc_master_dark.dq[j])
             errs.append(pc_master_dark.err[0][j])
             dark_sub = "yes"
-            filename_end = ''
         else:
             pc_means.append(np.zeros_like(pc_means[0]))
             dqs.append(np.zeros_like(pc_means[0]).astype(int))
             errs.append(np.zeros_like(pc_means[0]))
             dark_sub = "no"
-            filename_end = '_no_ds'
 
         # now subtract the dark PC mean
         combined_pc_mean = pc_means[0] - pc_means[1]
         combined_pc_mean[combined_pc_mean<0] = 0
         combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
         combined_dq = np.bitwise_or(dqs[0], dqs[1])
-        pri_hdr = dataset[0].pri_hdr.copy()
-        ext_hdr = dataset[0].ext_hdr.copy()
-        err_hdr = dataset[0].err_hdr.copy()
-        dq_hdr = dataset[0].dq_hdr.copy()
-        hdulist = dataset[0].hdu_list.copy()
+        pri_hdr = dataset[-1].pri_hdr.copy()
+        ext_hdr = dataset[-1].ext_hdr.copy()
+        err_hdr = dataset[-1].err_hdr.copy()
+        dq_hdr = dataset[-1].dq_hdr.copy()
+        hdulist = dataset[-1].hdu_list.copy()
 
         if val[0] != "DARK":  
             new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 
                                 dq_hdr=dq_hdr, input_hdulist=hdulist) 
-            new_image.filename = dataset[0].filename.split('.')[0]+'_pc'+filename_end+'.fits'
+            new_image.filename = dataset[-1].filename.replace("L2a", "L2b")
             new_image.ext_hdr['PCTHRESH'] = thresh
             new_image.ext_hdr['NUM_FR'] = len(sub_dataset) 
             new_image._record_parent_filenames(sub_dataset) 

@@ -128,7 +128,9 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     master_dark_filename_list = []
     master_dark_filepath_list = []
     for f in os.listdir(output_dir):
-        if f.endswith('_pc_dark.fits'):
+        if not f.endswith('.fits'):
+            continue
+        if f.endswith('_DRK_CAL.fits'):
             master_dark_filename_list.append(f)
             master_dark_filepath_list.append(os.path.join(output_dir, f))
     
@@ -139,8 +141,17 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     # get photon-counted frame
     master_ill_filename_list = []
     master_ill_filepath_list = []
+    # helper function that doesn't rely on naming scheme
+    def get_last_modified_file(directory):
+        files = [os.path.join(directory, f) for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f))]
+        if not files:
+            return None
+        last_modified_file = max(files, key=os.path.getmtime)
+        return last_modified_file
+    pc_processed_filepath = get_last_modified_file(output_dir)
+    pc_processed_filename = os.path.split(pc_processed_filepath)[-1]
     for f in os.listdir(output_dir):
-        if f.endswith('_pc.fits'):
+        if f == pc_processed_filename: 
             master_ill_filename_list.append(f)
             master_ill_filepath_list.append(os.path.join(output_dir, f))
     for i in range(len(master_ill_filepath_list)):
