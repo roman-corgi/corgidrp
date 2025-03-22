@@ -34,7 +34,7 @@ def setup_module():
     global cfam_name
     cfam_name = '1F'
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_interp
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_eq_rad
     global dataset_cor
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
@@ -200,18 +200,17 @@ def setup_module():
     # CT and coronagraphic observations. Same would be:
     exthd_pupil['FPAM_H'] = FPAM_H_CT - 107
     exthd_pupil['FPAM_V'] = FPAM_V_CT + 37
-    data_psf_interp = [Image(pupil_image,pri_hdr = prhd,
+    data_psf_tmp = [Image(pupil_image,pri_hdr = prhd,
         ext_hdr = exthd_pupil, err = err)]
     # We need to estimate the location of the FPM's center to create the PSFs
     # at given predefined locatioins
-    data_ct_interp += [data_psf[0]]
-    ct_cal_tmp2 = corethroughput.generate_ct_cal(Dataset(data_ct_interp))
+    data_psf_tmp += [data_psf[0]]
+    ct_cal_tmp2 = corethroughput.generate_ct_cal(Dataset(data_psf_tmp))
     # FPM during the CT observations (different to the coronagraphic one since
     # FPAM/FSAM H/V values are different)
     fpm_ct_2 = ct_cal_tmp2.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # Generate the mock data for CT interpolation knowing the CT FPM
-    breakpoint()
-    data_ct_interp = [Image(pupil_image,pri_hdr = prhd,
+    data_psf_eq_rad = [Image(pupil_image,pri_hdr = prhd,
         ext_hdr = exthd_pupil, err = err)]
     # Band 1 FWHM: Enough approximation (and to a good extent, irrelevant)
     fwhm_mas = 50
@@ -223,7 +222,9 @@ def setup_module():
     # Choose the location of the PSFs
     aa = 100
     bb = 20
-    model_params = [
+    model_params = []
+    # Fill out the four quadrants to have more of a variety with PSFs at equal radii
+    model_params += [
         dict(amplitude=11,
             x_mean=imshape[1]//2 + fpm_ct_frac[1]+aa,
             y_mean=imshape[0]//2 + fpm_ct_frac[0]+bb,
@@ -245,9 +246,9 @@ def setup_module():
         image[int(fpm_ct_2[1])-imshape[1]//2:int(fpm_ct_2[1])+imshape[1]//2+1,
             int(fpm_ct_2[0])-imshape[0]//2:int(fpm_ct_2[0])+imshape[0]//2+1] = psf
         # Build up the Dataset
-        data_psf_interp += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]    
+        data_psf_eq_rad += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]    
 
-    dataset_psf_interp = Dataset(data_psf_interp)
+    dataset_psf_eq_rad = Dataset(data_psf_eq_rad)
 
 def test_psf_interp():
     """
@@ -258,7 +259,7 @@ def test_psf_interp():
     # Test 1/ Equal radial distance should retrieve the one with the nearest
     # angular distance
     # Generate core throughput calibration file
-    ct_cal_eq = corethroughput.generate_ct_cal(dataset_psf_interp)
+    ct_cal_eq = corethroughput.generate_ct_cal(dataset_psf_eq_rad)
 
     # We need to refer the PSF locations to the FPM's center
     # Get PAM cal file
@@ -274,12 +275,17 @@ def test_psf_interp():
         raise ValueError('The two PSFs must have the same radial distance.',
             f'The difference is {r_ct_eq[1] - r_ct_eq[0]:1e5}')
 
-    breakpoint()
     # Test with target location with the same radius as two PSFs in the input
     # dataset, but at a different angular location closer to one of them
-    x_mid = r_ct_eq[0]
-    y_mid = 0
-    #psf_interp = ct_cal_eq.GetPSF(x_mid, y_mid, dataset_cor, fpam_fsam_cal)
+    # Closer to the 1st one (arbitrary small shift, one of many possible choices)
+    x_mid = r_ct_eq[0]*np.cos(np.arctan(y_ct_eq[0]/x_ct_eq[0])-0.05)
+    y_mid = r_ct_eq[0]*np.sin(np.arctan(y_ct_eq[0]/x_ct_eq[0])-0.05)
+    psf_interp = ct_cal_eq.GetPSF(x_mid, y_mid, dataset_cor, fpam_fsam_cal)
+   
+    # Closer to the 1st one (arbitrary small shift, one of many possible choices)
+    x_mid = r_ct_eq[0]*np.cos(np.arctan(y_ct_eq[1]/x_ct_eq[1])+0.06)
+    y_mid = r_ct_eq[0]*np.sin(np.arctan(y_ct_eq[1]/x_ct_eq[1])+0.06)
+    psf_interp = ct_cal_eq.GetPSF(x_mid, y_mid, dataset_cor, fpam_fsam_cal)
     
     # Test with a location with the same radius and an equally (absolute) angular
     # distance from two PSFs in the input dataset
@@ -772,8 +778,8 @@ def teardown_module():
     global cfam_name
     del cfam_name
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_interp
-    del dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_interp
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_eq_rad
+    del dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_eq_rad
     global dataset_cor
     del dataset_cor
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
