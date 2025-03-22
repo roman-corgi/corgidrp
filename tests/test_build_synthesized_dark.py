@@ -106,7 +106,7 @@ def test_exact_case():
     assert(M.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
     assert(M.ext_hdr['NAXIS2'] == rows)
     assert(M.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
-    assert(M.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
+    assert(M.filename == 'Mock0_DetectorNoiseMaps_DRK_CAL.fits')
     assert('EM gain = '+str(g) in str(M.ext_hdr['HISTORY']))
     assert('exptime = '+str(t) in str(M.ext_hdr['HISTORY']))
 
