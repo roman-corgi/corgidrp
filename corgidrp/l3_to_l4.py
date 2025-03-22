@@ -14,6 +14,7 @@ import pyklip.rdi
 import os
 from astropy.io import fits
 import warnings
+import pathlib
 
 def distortion_correction(input_dataset, astrom_calibration):
     """
@@ -396,7 +397,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
 
 def do_psf_subtraction(input_dataset, reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
-                       numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
+                       numbasis=[1,4,8,16],outdir=None,fileprefix="",
                        do_crop=True,
                        crop_sizexy=None
                        ):
@@ -469,6 +470,9 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         numbasis = [numbasis]
 
     # Set up outdir
+    if outdir is None: 
+        outdir = os.path.join(pathlib.Path.home(), ".corgidrp",'KLIP_SUB')
+    
     outdir = os.path.join(outdir,mode)
     if not os.path.exists(outdir):
         os.makedirs(outdir)

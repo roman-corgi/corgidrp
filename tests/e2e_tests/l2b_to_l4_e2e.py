@@ -15,6 +15,7 @@ from corgidrp import corethroughput
 import pytest
 import glob
 import shutil
+import pathlib
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -365,7 +366,7 @@ def test_l3_to_l4(e2e_path):
     this_caldb.remove_entry(fluxcal_fac)
     shutil.rmtree(e2eoutput_path)
     shutil.rmtree(e2eintput_path)
-    shutil.rmtree(os.path.join(thisfile_dir,"KLIP_SUB"))
+    shutil.rmtree(os.path.join(pathlib.Path.home(), ".corgidrp",'KLIP_SUB'))
 
 
 
