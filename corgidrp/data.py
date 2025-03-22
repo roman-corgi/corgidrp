@@ -1897,6 +1897,13 @@ class CoreThroughputCalibration(Image):
                 # If there's more than one case, select that one with the
                 # smallest angular distance
                 if len(idx_near) > 1:
+                    print("More than one PSF found with the same radial distance from the FPM's center")
+                    ww0 = np.arctan(y_grid[0]/x_grid[0])
+                    ww1 = np.arctan(y_grid[1]/x_grid[1])
+                    ww_cor = np.arctan(y_cor[i_psf]/x_cor[i_psf])
+                    # (ww1-ww_cor) == (ww_cor-ww0): False
+                    # (ww1+ww0) == (2*ww_cor): True
+                    # ww_cor == (ww1+ww0)/2: True
                     breakpoint()
                 # Otherwise this is the interpolated PSF
                 elif len(idx_near) == 1:

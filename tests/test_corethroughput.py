@@ -269,6 +269,21 @@ def test_psf_interp():
     x_ct_eq = ct_cal_eq.ct_excam[0] - fpam_ct_pix_eq[0]
     y_ct_eq = ct_cal_eq.ct_excam[1] - fpam_ct_pix_eq[1]
     r_ct_eq = np.sqrt(x_ct_eq**2 + y_ct_eq**2)
+    if r_ct_eq[0] != r_ct_eq[1]:
+        raise ValueError('The two PSFs must have the same radial distance.',
+            f'The difference is {r_ct_eq[1] - r_ct_eq[0]:1e5}')
+
+    # Test with target location with the same radius as two PSFs in the input
+    # dataset, but at a different angular location closer to one of them
+    x_mid = r_ct_eq[0]
+    y_mid = 0
+    #psf_interp = ct_cal_eq.GetPSF(x_mid, y_mid, dataset_cor, fpam_fsam_cal)
+    
+    # Test with a location with the same radius and an equally (absolute) angular
+    # distance from two PSFs in the input dataset
+    x_mid = np.sqrt(100**2+20**2)/np.sqrt(2)
+    y_mid = x_mid
+    psf_interp = ct_cal_eq.GetPSF(x_mid, y_mid, dataset_cor, fpam_fsam_cal)
 
     breakpoint()
 
