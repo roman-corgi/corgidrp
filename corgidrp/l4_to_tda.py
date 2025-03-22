@@ -141,6 +141,84 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     flux_dataset.update_after_processing_step(history_msg, new_all_data=flux_cube, header_entries = {"BUNIT":"erg/(s*cm^2*AA)", "FLUXFAC":fluxcal_factor.fluxcal_fac})
     return flux_dataset
 
+
+def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None):
+    """
+    Calculates the total number of photoelectrons/s of a point source and convert them to the flux in erg/(s * cm^2 * AA).
+    Write the flux and corresponding error in the header. Convert the flux to Vega magnitude and write it in the header.
+    We assume that the source is the brightest point source in the field close to the center.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images with the source
+        fluxcal_factor (corgidrp.data.FluxcalFactor): flux calibration file
+        photo (String): do either aperture photometry ("aperture") or 2DGaussian fit of the point source ("2dgauss")
+        phot_kwargs (dict): parameters of the photometry method, for details see fluxcal.aper_phot and fluxcal.phot_by_gauss_2dfit
+
+    Returns:
+        corgidrp.data.Dataset: a version of the input dataset with the data in flux units
+    """
+   # you should make a copy the dataset to start
+    flux_dataset = input_dataset.copy()
+    if "COL_COR" in flux_dataset[0].ext_hdr:
+        color_cor_fac = flux_dataset[0].ext_hdr['COL_COR']
+    else: 
+        warnings.warn("There is no COL_COR keyword in the header, color correction was not done, it is set to 1")
+        color_cor_fac = 1
+    factor = fluxcal_factor.fluxcal_fac/color_cor_fac
+    factor_error = fluxcal_factor.fluxcal_err/color_cor_fac
+    if photo == "aperture":
+        if phot_kwargs == None:
+            #set default values
+            phot_kwargs = {
+              'encircled_radius': 5,
+              'frac_enc_energy': 1.0,
+              'method': 'subpixel',
+              'subpixels': 5,
+              'background_sub': False,
+              'r_in': 5,
+              'r_out': 10,
+              'centering_method': 'xy',
+              'centroid_roi_radius': 5
+            }
+        phot_values = [fluxcal.aper_phot(image, **phot_kwargs) for image in flux_dataset]
+    elif photo == "2dgauss":
+        if phot_kwargs == None:
+            #set default values
+            phot_kwargs = {
+              'fwhm': 3,
+              'fit_shape': None,
+              'background_sub': False,
+              'r_in': 5,
+              'r_out': 10,
+              'centering_method': 'xy',
+              'centroid_roi_radius': 5
+              }
+        phot_values = [fluxcal.phot_by_gauss2d_fit(image, **phot_kwargs) for image in flux_dataset]
+    else:
+        raise ValueError(photo + " is not a valid photo parameter, choose aperture or 2dgauss")
+    
+    if phot_kwargs.get('background_sub', False):
+        ap_sum, ap_sum_err, back = np.mean(np.array(phot_values),0)
+    else:
+        ap_sum, ap_sum_err = np.mean(np.array(phot_values),0)
+        back = 0
+    
+    flux = ap_sum * factor
+    flux_err = np.sqrt(ap_sum_err**2 * factor**2 + factor_error**2 *ap_sum**2)
+    #Also determine the apparent Vega magnitude
+    filter_file = fluxcal.get_filter_name(flux_dataset[0])
+    vega_mag = fluxcal.calculate_vega_mag(flux, filter_file)
+    
+    #calculate the magnitude error from the flux error and put it in MAGERR header
+    vega_mag_err = 2.5/np.log(10) * flux_err/flux
+    
+    history_msg = "star {0} flux calculated as {1} erg/(s * cm^2 * AA) corresponding to {2} vega magnitude".format(flux_dataset[0].pri_hdr["TARGET"],flux, vega_mag)
+
+    # update the output dataset with this converted data and update the history
+    flux_dataset.update_after_processing_step(history_msg, header_entries = {"FLUXFAC": fluxcal_factor.fluxcal_fac, "LOCBACK": back, "FLUX": flux, "FLUXERR": flux_err, "APP_MAG": vega_mag, "MAGERR": vega_mag_err})
+    return flux_dataset
+
+
 def update_to_tda(input_dataset):
     """
     Updates the data level to TDA (Technical Demo Analysis). Only works on L4 data.
