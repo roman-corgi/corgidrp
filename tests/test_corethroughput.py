@@ -193,9 +193,9 @@ def setup_module():
     # from the FPM's center. We do test it below though.
     # This is the best one can do within 1e-13 precision with a FPM's center
     # for CT that is different than the coronagraphic one. Factors are derived
-    # from the inverting the FpamFsamCal coefficients. One of many choices:
-    #exthd_pupil['FPAM_H'] = FPAM_H_CT - 1.1799975449759417 
-    #exthd_pupil['FPAM_V'] = FPAM_V_CT + 4.43999924460695228
+    # from the inverting the FpamFsamCal coefficients. One of many choices mod an integer:
+    #exthd_pupil['FPAM_H'] = FPAM_H_CT + (1-(fpm_ct[1] % 1))/fpam_fsam_cal.data[0][1][0]  
+    #exthd_pupil['FPAM_V'] = FPAM_V_CT + (1-(fpm_ct[0] % 1))/fpam_fsam_cal.data[0][0][1]
     # In order to get == to work, one has to choose  the same FPM's center during
     # CT and coronagraphic observations. Same would be:
     exthd_pupil['FPAM_H'] = FPAM_H_CT - 107
@@ -210,6 +210,7 @@ def setup_module():
     # FPAM/FSAM H/V values are different)
     fpm_ct_2 = ct_cal_tmp2.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # Generate the mock data for CT interpolation knowing the CT FPM
+    breakpoint()
     data_ct_interp = [Image(pupil_image,pri_hdr = prhd,
         ext_hdr = exthd_pupil, err = err)]
     # Band 1 FWHM: Enough approximation (and to a good extent, irrelevant)
@@ -273,6 +274,7 @@ def test_psf_interp():
         raise ValueError('The two PSFs must have the same radial distance.',
             f'The difference is {r_ct_eq[1] - r_ct_eq[0]:1e5}')
 
+    breakpoint()
     # Test with target location with the same radius as two PSFs in the input
     # dataset, but at a different angular location closer to one of them
     x_mid = r_ct_eq[0]
