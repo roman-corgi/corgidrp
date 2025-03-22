@@ -40,6 +40,7 @@ def fix_headers_for_tvac(
             exthdr['KGAINPAR'] = 8.7
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
+        exthdr['ISPC'] = False
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 

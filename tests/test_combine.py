@@ -42,11 +42,12 @@ def test_mean_combine_subexposures():
     assert combined_dataset[0].ext_hdr['DRPNFILE'] == 2
     assert combined_dataset[0].ext_hdr['FILE0'] in ["2.fits", "1.fits"]
     assert combined_dataset[0].ext_hdr['FILE1'] in ["2.fits", "1.fits"]
+    assert combined_dataset[0].ext_hdr['NUM_FR'] == 2
 
     assert combined_dataset[1].ext_hdr['DRPNFILE'] == 2
     assert combined_dataset[1].ext_hdr['FILE0'] in ["3.fits", "4.fits"]
     assert combined_dataset[1].ext_hdr['FILE1'] in ["3.fits", "4.fits"]
-
+    assert combined_dataset[1].ext_hdr['NUM_FR'] == 2
     # combine again
     combined_dataset_2 = combine.combine_subexposures(combined_dataset, 2)
      

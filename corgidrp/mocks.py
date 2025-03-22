@@ -272,7 +272,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
     exthdr['DATALVL']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
-
+    exthdr["ISPC"] = False                  # Flag from telemetry saying whether the frame was photon-counted or not
     return prihdr, exthdr
 
 
@@ -1733,10 +1733,11 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     # set these to have no effect, then use these with their input values at the end
     later_eperdn = eperdn
     if e2emode: 
+        arrtype = 'ENG'
         eperdn = 1
         cic = 0.02
-        num_pumps = 50000 #120000#90000#15000#5000
-        inj_charge = 27000 #31000#70000#45000#8000 #num_pumps/2 # more than num_pumps/4, so no mean_field input needed
+        num_pumps = 50000 #120000#90000#15000#5000    #640
+        inj_charge = 27000 #31000#70000#45000#8000   #1400   #num_pumps/2 # more than num_pumps/4, so no mean_field input needed
         multiple = 1
         g = 1
         rn = 0
@@ -2600,8 +2601,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
+        frame.ext_hdr['RN'] = 100
         frame.ext_hdr['KGAINPAR'] = kgain
         frame.pri_hdr['PHTCNT'] = True
+        frame.ext_hdr['ISPC'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
         frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
@@ -2615,8 +2618,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
+        frame_dark.ext_hdr['RN'] = 100
         frame_dark.ext_hdr['KGAINPAR'] = kgain
         frame_dark.pri_hdr['PHTCNT'] = True
+        frame_dark.ext_hdr['ISPC'] = True
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
         frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)

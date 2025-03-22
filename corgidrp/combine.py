@@ -90,6 +90,7 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         # grab the headers from the first frame in this sub sequence
         pri_hdr = input_dataset[num_frames_per_group*i].pri_hdr.copy()
         ext_hdr = input_dataset[num_frames_per_group*i].ext_hdr.copy()
+        ext_hdr["NUM_FR"] = num_frames_per_group
         err_hdr = input_dataset[num_frames_per_group*i].err_hdr.copy()
         dq_hdr = input_dataset[num_frames_per_group*i].dq_hdr.copy()
         hdulist = input_dataset[num_frames_per_group*i].hdu_list.copy()
