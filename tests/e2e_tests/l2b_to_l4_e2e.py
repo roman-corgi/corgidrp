@@ -233,6 +233,9 @@ def test_l3_to_l4(e2e_path):
             - AstrometricCalibration
             - CoreThroughputCalibration
             - FluxCalibration
+    
+    Args:
+        e2e_path (str): Path to the output directory
     '''
 
     e2eintput_path = os.path.join(e2e_path, "l2b_to_l3_output")
