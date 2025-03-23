@@ -1898,14 +1898,18 @@ class CoreThroughputCalibration(Image):
                 # smallest angular distance
                 if len(idx_near) > 1:
                     print("More than one PSF found with the same radial distance from the FPM's center")
-                    ww0 = np.arctan(y_grid[0]/x_grid[0])
-                    ww1 = np.arctan(y_grid[1]/x_grid[1])
-                    ww_cor = np.arctan(y_cor[i_psf]/x_cor[i_psf])
-                    # (ww1-ww_cor) == (ww_cor-ww0): False
-                    # (ww1+ww0) == (2*ww_cor): True
-                    # ww_cor == (ww1+ww0)/2: True
-                    breakpoint()
-                # Otherwise this is the interpolated PSF
+                    # Difference in angle b/w target and grid
+                    az_grid = np.arctan(y_grid[idx_near]/x_grid[idx_near])
+                    az_cor = np.arctan(y_cor[i_psf]/x_cor[i_psf])
+                    # Flatten into a 1-D array
+                    diff_az_abs = np.abs(az_cor - az_grid).transpose()[0]
+                    # Closest angular location to the target location within equal radius
+                    # For now: If more than one location (half angle), choose the closest one
+                    # In any interpolation beyind the nearest, there will be some
+                    # weighting factor that takes into account the distances 
+                    idx_near_az = diff_az_abs.argmin()
+                    psf_interp = np.squeeze(self.data[idx_near[idx_near_az]])
+                # Otherwise this is the interpolated PSF (nearest)
                 elif len(idx_near) == 1:
                     psf_interp = np.squeeze(self.data[idx_near[0]])
                 # This should not happen b/c there should always be a cloest radius
