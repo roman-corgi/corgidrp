@@ -49,8 +49,8 @@ def inject_psf(frame_in, ct_calibration, amp,
     frame = frame_in.copy()
 
     # Get closest psf model
-    frame_roll = frame.ext_hdr['ROLL']
-    rel_pa = frame_roll - pa_deg
+    frame_roll = frame.pri_hdr['ROLL']
+    rel_pa = pa_deg + frame_roll        #i'm changing this to match what klip psf sub does when it derotates
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
     psf_model = get_closest_psf(ct_calibration,
@@ -161,7 +161,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         sci_dataset = sci_dataset_in.copy()
         ref_dataset = ref_dataset_in.copy() if not ref_dataset_in is None else None
 
-        rolls = [frame.ext_hdr['ROLL'] for frame in sci_dataset]
+        rolls = [frame.pri_hdr['ROLL'] for frame in sci_dataset]
         
         # Inject planets:
         seppas_skipped = []

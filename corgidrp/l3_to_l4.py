@@ -388,7 +388,7 @@ def do_psf_subtraction(input_dataset,
         # Add history msg
         history_msg = f'1D CT throughput measured and saved to Image class HDU List extension "CT_THRU".'
         dataset_out.update_after_processing_step(history_msg)
-            
+      
     return dataset_out
 
 def northup(input_dataset,use_wcs=True,rot_center='im_center'):

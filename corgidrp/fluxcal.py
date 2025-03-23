@@ -589,11 +589,8 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     # Get the apparent magnitude from the updated dataset
     app_mag = mag_dataset[0].ext_hdr["APP_MAG"]
 
-    # Measure observed flux of the standard star in e-/s
-    observed_flux = np.sum(mag_dataset[0].data)  # Sum total flux in e-/s
-
     # Compute zero point
-    zp = app_mag + 2.5 * np.log10(observed_flux)
+    zp = app_mag + 2.5 * np.log10(gauss_sum)
     fluxcal_obj.ext_hdr['ZP'] = zp
     
     # If background subtraction was performed, set the LOCBACK keyword.

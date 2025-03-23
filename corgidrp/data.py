@@ -1843,6 +1843,7 @@ class PyKLIPDataset(pyKLIP_Data):
             try:
                 CWAVEL = self.wave_hlc[CFAMNAME]
             except:
+                print("in data", CFAMNAME)
                 raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
             
             # Rounding error introduced here?

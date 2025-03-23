@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import numpy as np
 import warnings
+import math
 import datetime
 import datetime
 import scipy.ndimage
@@ -2590,156 +2591,265 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     
     return gauss
 
-def create_flux_image(flux_erg_s_cm2, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
-                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
+def create_flux_image(
+    flux_erg_s_cm2,       # integrated flux over bandpass of filter, in erg/(s*cm^2)
+    fwhm, 
+    cal_factor,           # [ e- / erg ], conversion from erg/s -> e-/s
+    optical_throughput=1.0,   # dimensionless fraction (0-1) capturing optics throughput etc.
+    color_cor=1.0,        # dimensionless color correction factor
+    filter='3C', 
+    fpamname='HOLE',
+    target_name='Vega', 
+    fsm_x=0.0, 
+    fsm_y=0.0,
+    exptime=1.0,
+    filedir=None, 
+    platescale=21.8,      # mas/pixel
+    background=0,
+    add_gauss_noise=True,
+    noise_scale=1.0,
+    file_save=False,
+    shape=(1024, 1024)    # <-- new parameter for image size (ny, nx)
+):
     """
-    Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
-    and Gaussian noise. Frame is returned in units of photoelectrons.
+    Create simulated data for absolute flux calibration in photoelectrons.
+    This is a point source with a 2D-Gaussian PSF plus optional noise.
 
     Args:
-        flux_erg_s_cm2 (float): Flux of the point source in erg/(s*cm^2*AA)
-        fwhm (float): Full width at half max (FWHM) of the centroid
-        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electrons
-        filter (str): (Optional) The CFAM filter used.
-        fpamname (str): (Optional) Position of the FPAM
-        target_name (str): (Optional) Name of the calspec star
-        fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
-        fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
-        exptime (float): (Optional) Exposure time (s)
-        filedir (str): (Optional) Directory path to save the output file
-        color_cor (float): (Optional) Color correction factor
-        platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
-        background (float): optional additive background value
-        add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
-        noise_scale (float): Spread of the Gaussian noise
-        file_save (bool): Whether to save the image (default: False)
+        flux_erg_s_cm2 (float):
+            Star's flux integrated over the band, in erg/(s*cm^2).
+        fwhm (float):
+            FWHM of the PSF in pixels.
+        cal_factor (float):
+            Conversion from [erg] -> [electrons], i.e. e-/erg. This lumps
+            in the average photon energy, QE, passband integration, etc.
+        optical_throughput (float):
+            Dimensionless fraction of light transmitted (0 < throughput <= 1).
+        color_cor (float):
+            Another dimensionless factor if you need it. 
+        filter, fpamname, target_name: 
+            For metadata in the header.
+        fsm_x, fsm_y (float):
+            X,Y shift in mas from the image center.
+        exptime (float):
+            Exposure time (s).
+        platescale (float):
+            Plate scale in mas/pixel.
+        background (float):
+            Add an optional uniform background in e-.
+        add_gauss_noise (bool):
+            Whether to add Gaussian noise to the final data.
+        noise_scale (float):
+            RMS amplitude of the Gaussian noise.
+        filedir (str):
+            Optional folder to save the result if file_save=True.
+        file_save (bool):
+            If True, writes the FITS file to disk.
+        shape (tuple[int,int]):
+            Size of the output image (ny, nx). Defaults to (1024, 1024).
 
     Returns:
-        corgidrp.data.Image: The simulated image in units of photoelectrons.
+        corgidrp.data.Image: The 2D array in photoelectrons.
     """
 
     # Create directory if needed
-    if filedir is not None and not os.path.exists(filedir):
-        os.mkdir(filedir)
+    if filedir is not None and file_save:
+        os.makedirs(filedir, exist_ok=True)
 
-    # Compute telescope area in cm^2
-    telescope_diam = 2.4
-    obscuration_factor = 0          # central obscurtaion, for now just keeping 0
+    # 1) Telescope area in cm^2
+    telescope_diam = 2.4  # meters
+    obscuration_factor = 0.0 
     radius_m = telescope_diam / 2.0
-    area_m2 = np.pi * (radius_m**2)
+    area_m2 = math.pi * (radius_m**2)
     if obscuration_factor > 0:
-        area_m2 *= (1 - obscuration_factor)  # e.g. reduce area by 10%
-
+        area_m2 *= (1 - obscuration_factor)
     area_cm2 = area_m2 * 1e4
 
-    # Convert star_flux (erg/(s*cm^2)) to total e-/s
-    # star_flux_erg_s_cm2 = integrated band flux from CALSPEC
-    # multiply by telescope area => ergs/s
-    # multiply by cal_factor => e-/s (assuming that quantum efficiency is also incorporated here)
-    # multiply by exptime => total e-
-    flux_per_s = flux_erg_s_cm2 * area_cm2 * cal_factor
-    # also incorporate color_correction if desired
-    flux_per_s /= color_cor
-    star_electrons = flux_per_s * exptime  # total e- from star in the filter band
+    # 2) Convert flux (erg/(s*cm^2)) -> e-/s
+    flux_per_s = flux_erg_s_cm2 * area_cm2 * cal_factor * optical_throughput * color_cor
+    star_electrons = flux_per_s * exptime
 
-    # Image properties
-    size = (1024, 1024)
-    sim_data = np.zeros(size)
-    ny, nx = size
-    center = [nx // 2, ny // 2]  # Default image center
-    target_location = (80.553428801, -69.514096821)
+    # 3) Create the image array
+    ny, nx = shape
+    sim_data = np.zeros((ny, nx), dtype=np.float32)
+    center = [nx // 2, ny // 2]  # center in x,y sense => [xCenter, yCenter]
 
-    # Convert FSM shifts from mas to pixels
-    fsm_x_shift = fsm_x * 0.001 / (platescale * 0.001)  # Convert mas to degrees, then to pixels
-    fsm_y_shift = fsm_y * 0.001 / (platescale * 0.001)
-
-    # New star position
+    # 4) FSM offset in mas -> pixels
+    # platescale is [mas/pixel], so xshift = fsm_x / platescale
+    fsm_x_shift = fsm_x / platescale
+    fsm_y_shift = fsm_y / platescale
     xpos = center[0] + fsm_x_shift
     ypos = center[1] + fsm_y_shift
 
-    # Inject Gaussian PSF star
+    # 5) Build a 2D Gaussian of total star_electrons
+    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
     stampsize = int(np.ceil(3 * fwhm))
-    sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
 
-    # coordinate system
-    y, x = np.indices([stampsize, stampsize])
-    y -= stampsize // 2
-    x -= stampsize // 2
+    y_grid, x_grid = np.indices([stampsize, stampsize])
+    y_grid -= stampsize // 2
+    x_grid -= stampsize // 2
 
-    # Find nearest pixel
+    # integer offsets
     x_int = int(round(xpos))
     y_int = int(round(ypos))
-    x += x_int
-    y += y_int
-    
-    xmin = x[0][0]
-    xmax = x[-1][-1]
-    ymin = y[0][0]
-    ymax = y[-1][-1]
-        
-    psf = gaussian_array((stampsize,stampsize),sigma,star_electrons)
 
-    # Inject the star into the image
-    sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
+    x_grid += x_int
+    y_grid += y_int
 
-    # Add background
+    xmin, xmax = x_grid[0, 0], x_grid[-1, -1]
+    ymin, ymax = y_grid[0, 0], y_grid[-1, -1]
+
+    # "gaussian_array" that sums to 'star_electrons'
+    psf = gaussian_array((stampsize, stampsize), sigma, star_electrons)
+
+    # 6) Inject into full frame (check boundaries)
+    # If part of the stamp is outside the image, we clamp:
+    x1_clamp = max(xmin, 0)
+    x2_clamp = min(xmax, nx - 1)
+    y1_clamp = max(ymin, 0)
+    y2_clamp = min(ymax, ny - 1)
+
+    # only add the overlapping region
+    if (x2_clamp >= x1_clamp) and (y2_clamp >= y1_clamp):
+        stamp_x1 = x1_clamp - xmin
+        stamp_y1 = y1_clamp - ymin
+        stamp_x2 = x2_clamp - xmin
+        stamp_y2 = y2_clamp - ymin
+
+        sim_data[y1_clamp:y2_clamp + 1, x1_clamp:x2_clamp + 1] += psf[stamp_y1:stamp_y2 + 1, stamp_x1:stamp_x2 + 1]
+
+    # 7) Add background
     sim_data += background
 
-    # Add Gaussian noise
+    # 8) Optional noise
     if add_gauss_noise:
         noise_rng = np.random.default_rng(10)
-        noise = noise_rng.normal(scale=noise_scale, size=size)
-        sim_data += noise
+        noise = noise_rng.normal(scale=noise_scale, size=(ny, nx))
+        sim_data += noise.astype(np.float32)
 
-    # Error map
-    err = np.full(size, noise_scale)
+    # 9) Build error map (just uniform for demonstration)
+    err = np.full((ny, nx), noise_scale, dtype=np.float32)
 
-    # Get FPAM positions, not strictly necessary but
-    if fpamname == 'HOLE':
-        fpam_h = 40504.4
-        fpam_v = 9616.8
-    elif fpamname == 'ND225':
-        fpam_h = 61507.8
-        fpam_v = 25612.4
-    elif fpamname == 'ND475':
-        fpam_h = 2503.7
-        fpam_v = 6124.9
-
-    # Create image object
+    # 10) Build headers
     prihdr, exthdr = create_default_L3_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
-    prihdr['RA'] = target_location[0]
-    prihdr['DEC'] = target_location[1]
-    prihdr['TARGET'] = target_name
-
-    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
+    prihdr['TARGET']  = target_name
+    # Example RA/DEC just for demonstration
+    prihdr['RA'] = 80.553428801
+    prihdr['DEC'] = -69.514096821
+    
+    exthdr['CFAMNAME'] = filter
     exthdr['FPAMNAME'] = fpamname
-    exthdr['FPAM_H']   = 2503.7
-    exthdr['FPAM_V']   = 6124.9
-    exthdr['FSM_X']    = fsm_x              # Ensure fsm_x is defined
-    exthdr['FSM_Y']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined
-    exthdr['COL_COR']  = color_cor          # Ensure color_cor is defined
-    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
-    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
-    exthdr['CTYPE1']   = 'RA---TAN'
-    exthdr['CTYPE2']   = 'DEC--TAN'
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600
-    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
-    exthdr['CRVAL2']   = target_location[1]
+    exthdr['FSM_X']    = fsm_x
+    exthdr['FSM_Y']    = fsm_y
+    exthdr['EXPTIME']  = exptime
+    exthdr['CRPIX1']   = xpos
+    exthdr['CRPIX2']   = ypos
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600.
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
+    exthdr['SHAPEY']   = ny
+    exthdr['SHAPEX']   = nx
+    exthdr['TELESCOP'] = 'ROMAN'
 
-    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+    # 11) Create the corgidrp Image
+    out_frame = Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
 
-    # Save file
-    # TO DO: update with file name conventions
-    if filedir is not None and file_save:
+    # 12) Optionally save
+    if filedir and file_save:
         safe_target_name = target_name.replace(' ', '_')
-        filename = os.path.join(f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}_.fits")
-        frame.save(filedir=filedir, filename=filename)
+        fname = f"mock_flux_image_{safe_target_name}_X{fsm_x}_Y{fsm_y}.fits"
+        out_frame.save(filedir=filedir, filename=fname)
 
-    return frame
+    return out_frame
+
+
+def generate_reference_star_dataset_with_flux(
+    n_frames=3,
+    roll_angles=None,
+    # Following arguments match create_flux_image
+    flux_erg_s_cm2=1e-13,
+    fwhm=3.0,
+    cal_factor=1e10,            # [ e- / erg ]
+    optical_throughput=1.0,
+    color_cor=1.0,
+    filter='3C',
+    fpamname='HOLE',
+    target_name='Vega',
+    fsm_x=0.0,
+    fsm_y=0.0,
+    exptime=1.0,
+    platescale=21.8,     
+    background=0,
+    add_gauss_noise=True,
+    noise_scale=1.,
+    filedir=None,
+    file_save=False,
+    shape=(1024, 1024)  # <-- new shape argument
+):
+    """
+    Generates multiple frames of a reference star (no planet), 
+    each using create_flux_image() but storing different ROLL angles 
+    in the header so pyKLIP can do RDI or ADI+RDI.
+    """
+
+    if roll_angles is None:
+        roll_angles = [0.0]*n_frames
+    elif len(roll_angles) != n_frames:
+        raise ValueError("roll_angles must match n_frames or be None.")
+
+    from corgidrp.data import Dataset
+    frames = []
+    for i in range(n_frames):
+        # 1) Create a single flux image with the star alone
+        frame = create_flux_image(
+            flux_erg_s_cm2=flux_erg_s_cm2,
+            fwhm=fwhm,
+            cal_factor=cal_factor,
+            optical_throughput=optical_throughput,
+            color_cor=color_cor,
+            filter=filter,
+            fpamname=fpamname,
+            target_name=target_name,
+            fsm_x=fsm_x,
+            fsm_y=fsm_y,
+            exptime=exptime,
+            filedir=filedir,
+            platescale=platescale,
+            background=background,
+            add_gauss_noise=add_gauss_noise,
+            noise_scale=noise_scale,
+            file_save=False,
+            shape=shape            # <--- pass the shape argument here
+        )   
+
+        # 2) Mark primary header as "PSFREF=1" so do_psf_subtraction sees it as reference
+        frame.pri_hdr["PSFREF"] = 1
+
+        # 3) Set this frame's roll angle in pri_hdr
+        frame.pri_hdr["ROLL"] = roll_angles[i]
+
+        # 4) Set star center for reference
+        #    create_flux_image puts the star around (shape[1]//2, shape[0]//2).
+        #    If fsm_x=0, fsm_y=0. 
+        nx = shape[1]
+        ny = shape[0]
+        x_center = nx // 2 + (fsm_x * 0.001 / (platescale * 0.001))
+        y_center = ny // 2 + (fsm_y * 0.001 / (platescale * 0.001))
+
+        frame.ext_hdr['PLTSCALE'] = platescale
+        frame.ext_hdr["STARLOCX"] = x_center  
+        frame.ext_hdr["STARLOCY"] = y_center  
+        frame.pri_hdr["FILENAME"] = f"mock_refstar_flux_{i:03d}.fits"
+
+        # 5) Optionally save each file
+        if filedir is not None and file_save:
+            filename = f"mock_refstar_flux_{i:03d}.fits"
+            frame.save(filedir=filedir, filename=filename)
+
+        frames.append(frame)
+
+    return Dataset(frames)
+
 
 def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
     """
@@ -3036,6 +3146,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['INSTRUME'] = 'CGI'
         prihdr['XOFFSET'] = 0.0
         prihdr['YOFFSET'] = 0.0
+        prihdr['ROLL'] = roll_angles[i]
         prihdr['FILENAME'] = fname
         
         exthdr['BUNIT'] = 'MJy/sr'
@@ -3044,7 +3155,6 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
-        exthdr["ROLL"] = roll_angles[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
         # Add WCS header info, if provided
@@ -3088,114 +3198,172 @@ def generate_coron_dataset_with_companions(
     n_frames=1,
     shape=(200, 200),
     host_star_center=None,
-    companion_xy=None,
-    companion_counts=100.0,
     host_star_counts=1e5,
     roll_angles=None,
+    companion_xy=None,   # Now the companion is specified by (x, y)
+    companion_counts=100.0,
+    filter = '1F',
     platescale=0.0218,
     add_noise=False,
     noise_std=1.0e-2,
-    outdir=None
+    outdir=None,
+    darkhole_file=None,
+    apply_coron_mask=True,
+    coron_mask_radius=5
 ):
     """
-    Create a mock coronagraphic dataset with a star behind a coronagraph, plus one or more companions.
-
-    The dataset can be used as input to a PSF-subtraction algorithm
-    If the plan is to do forward modeling, pass this dataset to the
-    PSF-subtraction pipeline (pyKLIP) to see how the companion is subtracted.
-
+    Create a mock coronagraphic dataset with a star and optionally a companion.
+    
+    The companion is defined by its (x, y) pixel coordinate (e.g. in a frame with ROLL=0).
+    Its on-sky separation and position angle (PA) are computed relative to the host star.
+    Then for each frame (with its own roll angle), the companion is injected at the 
+    detector coordinate corresponding to that fixed on-sky location.
+    
     Args:
-        n_frames (int):  Number of frames (images) to create. If >1, can vary roll angles or
-            do ADI-like analysis.
-        shape (ny, nx): Size of each frame in pixels.
-        host_star_center ((x, y) or None): Pixel coordinates of the host star center. If None, 
-            defaults to the image center.
-        companion_xy (list of (x, y) or None): One or more companion coordinates. E.g. [(120, 80), (90, 130)].
-            If None, no companion is injected.
-        companion_counts (float or list of float): Counts for each companion. If multiple companions, 
-            pass a list with same length.
-        host_star_counts (float): Counts of the star in e-. Used to create a Gaussian approximation.
-        roll_angles (list of float or None): If n_frames>1, pass a list of roll angles. If None, 
-            defaults to all 0.
-        platescale (float): Plate scale in arcsec/pixel.
-        add_noise (bool): Whether to add random noise.
-        noise_std (float): Stddev of the noise if add_noise=True.
-        outdir (str or None): If not None, saves the resulting frames to disk in outdir. 
-            If None, does not save.
-
+      n_frames (int): Number of frames.
+      shape (tuple): (ny, nx) image shape.
+      host_star_center (tuple): (x, y) pixel coordinates of the host star. If None, uses image center.
+      host_star_counts (float): Total counts for the star.
+      roll_angles (list of float): One roll angle per frame (in degrees).
+      companion_xy (tuple): (x, y) pixel coordinate for the companion in the reference frame.
+      companion_counts (float): Total flux (counts) of the companion.
+      platescale (float): Plate scale in arcsec per pixel.
+      add_noise (bool): Whether to add random noise.
+      noise_std (float): Stddev of the noise.
+      outdir (str or None): If given, saves the frames to disk.
+      darkhole_file (corgidrp.data.Image): Darkhole reference frame. 
+            If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
+      apply_coron_mask (bool): Whether to apply the simulated coronagraph mask
+      coron_mask_radius (int): Coronagraph mask radius in pixels
+    
     Returns:
-        Dataset (corgidrp.data.Dataset): n_frames of coronagraphic images, each with a star 
-        and optional companions.
+      Dataset: A dataset of frames (each an Image) with the star and companion injected.
     """
     ny, nx = shape
     if host_star_center is None:
-        host_star_center = (nx / 2, ny / 2)  # (x, y)
-
-    # If companion_xy is a list of coordinates:
-    if companion_xy is None:
-        # No companion by default
-        companion_xy = []
-    # If companion_counts is a single float but multiple companions exist, unify
-    if isinstance(companion_counts, (int, float)):
-        companion_counts = [companion_counts] * len(companion_xy)
+        host_star_center = (nx / 2, ny / 2)  # (x,y)
 
     if roll_angles is None:
-        roll_angles = [0.0]*n_frames
+        roll_angles = [0.0] * n_frames
     elif len(roll_angles) != n_frames:
-        raise ValueError("roll_angles must be length n_frames or None.")
+        raise ValueError("roll_angles must have length n_frames or be None.")
+
+    # If a companion is provided, convert its (x,y) to on-sky separation & PA
+    if companion_xy is not None:
+        dx = companion_xy[0] - host_star_center[0]
+        dy = companion_xy[1] - host_star_center[1]
+        base_sep_pix = np.hypot(dx, dy)
+        pa_rad = np.arctan2(dx, -dy)
+        base_pa_deg = np.degrees(pa_rad) % 360
+    else:
+        base_sep_pix, base_pa_deg = None, None
 
     frames = []
+
+    # ---------------------------------------------------------
+    # (A) If a "dark hole" or realistic PSF file is provided, read it in once and store it for repeated use.
+    # ---------------------------------------------------------
+    if darkhole_file is not None:
+        dh_data = darkhole_file.data
+        dh_ny, dh_nx = dh_data.shape
+        # Find the total flux in that data to figure out scaling to host_star_counts:
+        dh_total = np.sum(dh_data[np.isfinite(dh_data)])
+        # Scale it so that sum(dh_data_scaled) = host_star_counts
+        # So multiply by factor = host_star_counts / dh_total.
+        # That can be done *per frame* if needed.
+    else:
+        dh_data = None
+
     for i in range(n_frames):
-        # Build a data array
+        angle_i = roll_angles[i]
+
+        # Build empty data array for this frame
         data_arr = np.zeros((ny, nx), dtype=np.float32)
 
-        # (A) Insert a star + coronagraph
-        # For simplicity, do a 2D Gaussian for the star, or a "hole" in the center, etc. 
-        xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
-        # standard deviation for star? e.g. FWHM=3 => sigma=3/(2sqrt(2ln2)) ~ 1.27
-        sigma = 1.2
-        r2 = (xgrid - host_star_center[0])**2 + (ygrid - host_star_center[1])**2
-        star_gaus = (host_star_counts / (2*np.pi*sigma**2)) * np.exp(-0.5*r2/sigma**2)
-        # reduce host_star_counts at the center:
-        hole_mask = r2 < 5**2
-        star_gaus[hole_mask] *= 0.01  # 99% blocked in the center
-        data_arr += star_gaus.astype(np.float32)
+        # ----------------------------------------------------------
+        # (B) Insert the star. Two scenarios:
+        #  1) We have a 'dark hole' image from a file (dh_data).
+        #  2) Otherwise, approximate with a simple 2D Gaussian + partial coronagraph mask.
+        # ----------------------------------------------------------
+        if dh_data is not None:
+            # (B1) If we have a dark-hole or real-PSF image:
+            #  (a) place it at host_star_center,
+            #  (b) scale so its total flux = host_star_counts,
+            #  (c) apply any coronagraph region.
 
-        # (B) Insert companion(s)
-        angle_i = roll_angles[i]
-        for j, (cx, cy) in enumerate(companion_xy):
-            flux_c = companion_counts[j]
+            # Scale the data so that total flux = host_star_counts
+            dh_total = np.sum(dh_data[np.isfinite(dh_data)])
+            scale_factor = host_star_counts / dh_total
+            dh_scaled = dh_data * scale_factor
 
-            theta = np.radians(angle_i)
-            dx = cx - host_star_center[0]
-            dy = cy - host_star_center[1]
+            # place it into data_arr, centered at host_star_center
+            # figure out top-left corner
+            dh_cx = dh_nx / 2.0
+            dh_cy = dh_ny / 2.0
+            # integer indices for placing
+            xstart = int(host_star_center[0] - dh_cx)
+            ystart = int(host_star_center[1] - dh_cy)
+            # handle boundaries in case it doesn't fit perfectly
+            data_arr[ystart:ystart+dh_ny, xstart:xstart+dh_nx] += dh_scaled
 
-            # Standard 2D rotation about origin: (x', y') = (x*cosθ - y*sinθ, x*sinθ + y*cosθ)
-            # Then shift back by star_x, star_y.
-            x_rot = dx * np.cos(theta) - dy * np.sin(theta) + host_star_center[0]
-            y_rot = dx * np.sin(theta) + dy * np.cos(theta) + host_star_center[1]
+            # Optionally apply a crude coronagraph “mask”:
+            if apply_coron_mask:
+                xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
+                r2 = ((xgrid - host_star_center[0])**2 + 
+                      (ygrid - host_star_center[1])**2)
+                data_arr[r2 < coron_mask_radius**2] *= 0.01
 
-            # simple Gaussian companion
+        else:
+            # (B2) No dark hole file, so just do a 2D Gaussian and multiply
+            xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
+            sigma_star = 1.2
+            r2 = (xgrid - host_star_center[0])**2 + (ygrid - host_star_center[1])**2
+            # Normalized 2D Gaussian so that sum ~ 1, then scale to host_star_counts
+            star_gaus = np.exp(-0.5 * r2 / sigma_star**2)
+            star_gaus /= np.sum(star_gaus)
+            star_gaus *= host_star_counts
+
+            data_arr += star_gaus
+
+            # Coronagraph region:
+            if apply_coron_mask:
+                data_arr[r2 < coron_mask_radius**2] *= 0.01
+
+        # ----------------------------------------------------------
+        # (C) Insert the companion (if base_sep_pix is not None)
+        #     as a smaller Gaussian or scaling of the same PSF
+        # ----------------------------------------------------------
+        if base_sep_pix is not None:
+            theta = np.radians(base_pa_deg - angle_i)
+            dx = base_sep_pix * np.sin(theta)
+            dy = -base_sep_pix * np.cos(theta)
+            xcomp = host_star_center[0] + dx
+            ycomp = host_star_center[1] + dy
+
+            # a small Gaussian
             sigma_c = 1.0
-            r2c = (xgrid - x_rot)**2 + (ygrid - y_rot)**2
-            comp_gaus = (flux_c / (2*np.pi*sigma_c**2)) * np.exp(-0.5*r2c/sigma_c**2)
-            data_arr += comp_gaus.astype(np.float32)
+            rc2 = (xgrid - xcomp)**2 + (ygrid - ycomp)**2
+            companion_gaus = np.exp(-0.5 * rc2 / sigma_c**2)
+            companion_gaus /= np.sum(companion_gaus)
+            companion_gaus *= companion_counts
+            data_arr += companion_gaus
 
-        # (C) Add noise if requested
+        # (D) Noise
         if add_noise:
             noise = np.random.normal(0., noise_std, data_arr.shape)
             data_arr += noise.astype(np.float32)
 
-        # (D) Build primary & extension headers
+        # Build headers
         prihdr, exthdr = create_default_L3_headers()
-        # Minimal keywords
         prihdr["FILENAME"] = f"mock_coron_{i:03d}.fits"
-        exthdr["ROLL"] = angle_i
+        prihdr["ROLL"] = angle_i
+        exthdr["CFAMNAME"] = filter
         exthdr["PLTSCALE"] = platescale
         exthdr["STARLOCX"] = host_star_center[0]
         exthdr["STARLOCY"] = host_star_center[1]
-        exthdr["CFAMNAME"] = "1F"  # example
-        exthdr["DATALVL"] = "L3"  
+        exthdr["DATALVL"]  = "L3"
+        exthdr["MASKLOCX"] = host_star_center[0]
+        exthdr["MASKLOCY"] = host_star_center[1]
 
         # optional WCS
         wcs_obj = generate_wcs(
@@ -3206,18 +3374,20 @@ def generate_coron_dataset_with_companions(
         wcs_header = wcs_obj.to_header()
         exthdr.update(wcs_header)
 
-        # Make a corgidrp Image
+        if companion_xy is not None:
+            exthdr[f"SNYX{i:03d}"] = f"5.0,{xcomp},{ycomp}"
+
         frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
 
     dataset = Dataset(frames)
 
-    # Optionally save
+    # (E) Optionally save
     if outdir is not None:
         os.makedirs(outdir, exist_ok=True)
         file_list = [f"mock_coron_{i:03d}.fits" for i in range(n_frames)]
         dataset.save(filedir=outdir, filenames=file_list)
-        print(f"Saved {n_frames} coronagraphic frames to {outdir}")
+        print(f"Saved {n_frames} frames to {outdir}")
 
     return dataset
 
@@ -3355,6 +3525,9 @@ def generate_psfsub_image_with_companions(
     prihdr, exthdr = create_default_L4_headers()
     exthdr["STARLOCX"] = host_star_center[0]
     exthdr["STARLOCY"] = host_star_center[1]
+    exthdr["MASKLOCX"] = host_star_center[0]
+    exthdr["MASKLOCY"] = host_star_center[1]
+    prihdr["FILENAME"] = f"mock_psfsub.fits"
     wcs_obj = generate_wcs(roll_angle, [host_star_center[0], host_star_center[1]], platescale=platescale)
     wcs_header = wcs_obj.to_header()
     exthdr.update(wcs_header)
@@ -3471,7 +3644,8 @@ def create_mock_ct_dataset_and_cal_file(
     # ----------------------------
     # A) Create the base headers
     # ----------------------------
-    prhd, exthd = create_default_L3_headers()
+    prihdr, exthd = create_default_L3_headers()
+    prihdr["FILENAME"] = f"CoreThroughputCalibration_{Time.now().isot}.fits"
     exthd['DRPCTIME'] = Time.now().isot
     exthd['DRPVERSN'] = corgidrp.__version__
     exthd['CFAMNAME'] = cfam_name
@@ -3503,8 +3677,8 @@ def create_mock_ct_dataset_and_cal_file(
     err = np.ones(shape)
 
     # Build Images
-    im_pupil1 = Image(pupil_image_1, pri_hdr=prhd, ext_hdr=exthd_pupil, err=err)
-    im_pupil2 = Image(pupil_image_2, pri_hdr=prhd, ext_hdr=exthd_pupil, err=err)
+    im_pupil1 = Image(pupil_image_1, pri_hdr=prihdr, ext_hdr=exthd_pupil, err=err)
+    im_pupil2 = Image(pupil_image_2, pri_hdr=prihdr, ext_hdr=exthd_pupil, err=err)
 
     # ----------------------------
     # C) Create a set of off-axis PSFs
@@ -3542,4 +3716,69 @@ def create_mock_ct_dataset_and_cal_file(
     dataset_ct = Dataset(psf_images)
 
     return dataset_ct, ct_cal_tmp
+
+def generate_reference_star_dataset(
+    n_frames=3,
+    shape=(200, 200),
+    star_center=(100,100),
+    host_star_counts=1e5,
+    roll_angles=None,
+    add_noise=False,
+    noise_std=1.0e-2,
+    outdir=None
+):
+    """
+    Create a mock dataset of a *reference star* behind the coronagraph, with no planet.
+    That can be used as an RDI library or combined with ADI+RDI.
+    """
+    from corgidrp.data import Dataset, Image
+    import numpy as np
+    import os
+
+    # We'll adapt the same logic but no companion injection
+    ny, nx = shape
+    if roll_angles is None:
+        roll_angles = [0.0]*n_frames
+
+    frames = []
+    for i in range(n_frames):
+        data_arr = np.zeros((ny, nx), dtype=np.float32)
+
+        # Insert a star behind coronagraph, e.g. as a 2D Gaussian with some hole
+        xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
+        sigma = 1.2
+        r2 = (xgrid - star_center[0])**2 + (ygrid - star_center[1])**2
+        star_gaus = (host_star_counts / (2*np.pi*sigma**2)) * np.exp(-0.5*r2/sigma**2)
+
+        # Fake 5-pixel mask radius at center
+        hole_mask = r2 < 5**2
+        star_gaus[hole_mask] *= 0.01
+
+        data_arr += star_gaus.astype(np.float32)
+
+        # Optional noise
+        if add_noise:
+            noise = np.random.normal(0., noise_std, data_arr.shape)
+            data_arr += noise.astype(np.float32)
+
+        # Build minimal headers
+        prihdr, exthdr = create_default_L3_headers()
+        prihdr["FILENAME"] = f"mock_refstar_{i:03d}.fits"
+        # Mark these frames as reference
+        prihdr["PSFREF"] = 1 
+        prihdr["ROLL"] = roll_angles[i]
+        exthdr["STARLOCX"] = star_center[0]
+        exthdr["STARLOCY"] = star_center[1]
+
+        # Make an Image
+        frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
+        frames.append(frame)
+
+    dataset = Dataset(frames)
+    if outdir is not None:
+        os.makedirs(outdir, exist_ok=True)
+        file_list = [f"mock_refstar_{i:03d}.fits" for i in range(n_frames)]
+        dataset.save(filedir=outdir, filenames=file_list)
+    return dataset
+
 
