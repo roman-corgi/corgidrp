@@ -41,7 +41,7 @@ def test_l2b_to_l3(os11_data_path, e2eoutput_path):
     
     Args:
         os11_data_path (str): Path to the OS11 data
-        e2e_path (str): Path to the output directory
+        e2eoutput_path (str): Path to the output directory
 
 
     '''
@@ -236,7 +236,7 @@ def test_l3_to_l4(e2eoutput_path):
             - FluxCalibration
     
     Args:
-        e2e_path (str): Path to the output directory
+        e2eoutput_path (str): Path to the output directory
     '''
 
     e2eintput_path = os.path.join(e2eoutput_path, "l2b_to_l3_output")
