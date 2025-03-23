@@ -217,7 +217,7 @@ def test_l2b_to_l3(os11_data_path, e2eoutput_path):
     # shutil.rmtree(e2eoutput_path)
     
 
-
+@pytest.mark.e2e
 def test_l3_to_l4(e2eoutput_path):
     '''
     An end-to-end test that takes the L3 data and runs it through the L3 to L4 pipeline.
