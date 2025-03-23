@@ -20,7 +20,7 @@ import pathlib
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_l2b_to_l3(os11_data_path, e2e_path):
+def test_l2b_to_l3(os11_data_path, e2eoutput_path):
     '''
 
     An end-to-end test that takes the OS11 data and runs it through the L2B to L4 pipeline.
@@ -46,11 +46,11 @@ def test_l2b_to_l3(os11_data_path, e2e_path):
 
     '''
 
-    e2e_data_path = os.path.join(e2e_path, "l2_files")
+    e2e_data_path = os.path.join(e2eoutput_path, "l2_files")
     if not os.path.exists(e2e_data_path):
         os.mkdir(e2e_data_path)
 
-    e2eoutput_path = os.path.join(e2e_path, "l2b_to_l3_output")
+    e2eoutput_path = os.path.join(e2eoutput_path, "l2b_to_l3_output")
     if not os.path.exists(e2eoutput_path):
         os.mkdir(e2eoutput_path)
 
@@ -218,7 +218,7 @@ def test_l2b_to_l3(os11_data_path, e2e_path):
     
 
 
-def test_l3_to_l4(e2e_path):
+def test_l3_to_l4(e2eoutput_path):
     '''
     An end-to-end test that takes the L3 data and runs it through the L3 to L4 pipeline.
 
@@ -239,11 +239,11 @@ def test_l3_to_l4(e2e_path):
         e2e_path (str): Path to the output directory
     '''
 
-    e2eintput_path = os.path.join(e2e_path, "l2b_to_l3_output")
+    e2eintput_path = os.path.join(e2eoutput_path, "l2b_to_l3_output")
 
-    e2eoutput_path = os.path.join(e2e_path, "l3_to_l4_output")
-    if not os.path.exists(e2eoutput_path):
-        os.mkdir(e2eoutput_path)
+    e2eoutput_path_l4 = os.path.join(e2eoutput_path, "l3_to_l4_output")
+    if not os.path.exists(e2eoutput_path_l4):
+        os.mkdir(e2eoutput_path_l4)
 
     ##################################################
     #### Generate an astrometric calibration file ####
@@ -255,15 +255,15 @@ def test_l3_to_l4(e2e_path):
     field_path = os.path.join(os.path.dirname(__file__),"..","test_data", "JWST_CALFIELD2020.csv")
 
     #Create the mock dataset
-    mocks.create_astrom_data(field_path=field_path, filedir=e2eoutput_path)
-    image_path = os.path.join(e2eoutput_path, 'simcal_astrom.fits')
+    mocks.create_astrom_data(field_path=field_path, filedir=e2eoutput_path_l4)
+    image_path = os.path.join(e2eoutput_path_l4, 'simcal_astrom.fits')
 
     # open the image
     dataset = corgidata.Dataset([image_path])
     # perform the astrometric calibration
     astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
 
-    astrom_cal.save(filedir=e2eoutput_path, filename="mock_astro.fits" )
+    astrom_cal.save(filedir=e2eoutput_path_l4, filename="mock_astro.fits" )
 
     # add calibration file to caldb
     this_caldb = caldb.CalDB()
@@ -300,7 +300,7 @@ def test_l3_to_l4(e2e_path):
     # We can use a miminal dataset to get to know it
     data_ct_interp += [data_psf[0]]
     ct_cal_tmp = corethroughput.generate_ct_cal(corgidata.Dataset(data_ct_interp))
-    ct_cal_tmp.save(filedir=e2eoutput_path, filename="mock_ct.fits")
+    ct_cal_tmp.save(filedir=e2eoutput_path_l4, filename="mock_ct.fits")
     this_caldb.create_entry(ct_cal_tmp)
 
     ##########################################
@@ -313,7 +313,7 @@ def test_l3_to_l4(e2e_path):
     prhd, exthd = create_default_L3_headers()
     fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
 
-    fluxcal_fac.save(filedir=e2eoutput_path, filename="mock_fluxcal.fits")
+    fluxcal_fac.save(filedir=e2eoutput_path_l4, filename="mock_fluxcal.fits")
     this_caldb.create_entry(fluxcal_fac)
 
     #####################################
@@ -322,13 +322,13 @@ def test_l3_to_l4(e2e_path):
 
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*L3_.fits")))
 
-    walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path, template="l3_to_l4.json")
+    walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4, template="l3_to_l4.json")
 
     ########################################################################
     #### Read in the psf_subtracted images and test for source detection ###
     ########################################################################
 
-    l4_filename = glob.glob(os.path.join(e2eoutput_path, "*L4_.fits"))[0]
+    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*L4_.fits"))[0]
     psf_subtracted_image = Image(l4_filename)
     psf_subtracted_image.data = psf_subtracted_image.data[-1,:,:] #Just pick one of the KL modes for now
     
@@ -364,7 +364,7 @@ def test_l3_to_l4(e2e_path):
     this_caldb.remove_entry(astrom_cal)
     this_caldb.remove_entry(ct_cal_tmp)
     this_caldb.remove_entry(fluxcal_fac)
-    shutil.rmtree(e2eoutput_path)
+    shutil.rmtree(e2eoutput_path_l4)
     shutil.rmtree(e2eintput_path)
     shutil.rmtree(os.path.join(pathlib.Path.home(), ".corgidrp",'KLIP_SUB'))
 
