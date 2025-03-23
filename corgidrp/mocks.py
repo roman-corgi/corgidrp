@@ -3110,10 +3110,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                 prihdr['PSFREF'] = 1
 
         # Add necessary header keys
+        prihdr['TELESCOP'] = 'ROMAN'
         prihdr['INSTRUME'] = 'CGI'
         prihdr['XOFFSET'] = 0.0
         prihdr['YOFFSET'] = 0.0
-        prihdr['FILENAME'] = fname
         prihdr["ROLL"] = roll_angles[i]
         
         exthdr['BUNIT'] = 'MJy/sr'
@@ -3135,6 +3135,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Make a corgiDRP Image frame
         frame = data.Image(img_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        frame.filename = fname
 
         # Add it to the correct dataset
         if i < n_sci:
