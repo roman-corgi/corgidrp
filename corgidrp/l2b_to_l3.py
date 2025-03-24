@@ -19,27 +19,31 @@ def create_wcs(input_dataset, astrom_calibration):
     updated_dataset = input_dataset.copy()
 
     northangle = astrom_calibration.northangle
-    platescale = astrom_calibration.platescale
-    center_coord = astrom_calibration.boresight
+    platescale_x, platescale_y = astrom_calibration.platescale
+    ra_offset, dec_offset = astrom_calibration.avg_offset
 
     # create wcs for each image in the dataset
     for image in updated_dataset:
 
         im_data = image.data
-        image_shape = im_data.shape
-        center_pixel = [image_shape[1] // 2, image_shape[0] // 2]
+        image_y, image_x = im_data.shape
+        center_pixel = [(image_x-1) // 2, (image_y-1) // 2]
+        target_ra, target_dec = image.pri_hdr['RA'], image.pri_hdr['DEC']
+        corrected_ra, corrected_dec = target_ra - ra_offset, target_dec - dec_offset
         roll_ang = image.pri_hdr['ROLL']
 
         vert_ang = np.radians(northangle + roll_ang)  ## might be -roll_ang
         pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
-        cdmatrix = pc * (platescale * 0.001) / 3600.
+        cdmatrix_x = pc * (platescale_x * 0.001) / 3600.
+        cdmatrix_y = pc * (platescale_y * 0.001) / 3600.
+
 
         # create dictionary with wcs information
         wcs_info = {}
-        wcs_info['CD1_1'] = cdmatrix[0,0]
-        wcs_info['CD1_2'] = cdmatrix[0,1]
-        wcs_info['CD2_1'] = cdmatrix[1,0]
-        wcs_info['CD2_2'] = cdmatrix[1,1]
+        wcs_info['CD1_1'] = cdmatrix_x[0,0]
+        wcs_info['CD1_2'] = cdmatrix_x[0,1]
+        wcs_info['CD2_1'] = cdmatrix_y[1,0]
+        wcs_info['CD2_2'] = cdmatrix_y[1,1]
 
         wcs_info['CRPIX1'] = center_pixel[0]
         wcs_info['CRPIX2'] = center_pixel[1]
@@ -47,13 +51,13 @@ def create_wcs(input_dataset, astrom_calibration):
         wcs_info['CTYPE1'] = 'RA---TAN'
         wcs_info['CTYPE2'] = 'DEC--TAN'
 
-        wcs_info['CDELT1'] = (platescale * 0.001) / 3600  ## converting to degrees
-        wcs_info['CDELT2'] = (platescale * 0.001) / 3600
+        wcs_info['CDELT1'] = (platescale_x * 0.001) / 3600  ## converting to degrees
+        wcs_info['CDELT2'] = (platescale_y * 0.001) / 3600
 
-        wcs_info['CRVAL1'] = center_coord[0]
-        wcs_info['CRVAL2'] = center_coord[1]
+        wcs_info['CRVAL1'] = corrected_ra
+        wcs_info['CRVAL2'] = corrected_dec
 
-        wcs_info['PLTSCALE'] = platescale  ## [mas] / pixel
+        wcs_info['PLTSCALE'] = np.mean([platescale_x, platescale_y])  ## [mas] / pixel
 
         # update the image header with wcs information
         for key, value in wcs_info.items():
