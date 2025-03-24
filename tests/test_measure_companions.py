@@ -34,7 +34,7 @@ OUT_DIR = os.path.join("tests/test_data", "L4_to_TDA_Inputs")
 os.makedirs(OUT_DIR, exist_ok=True)  # Ensure the folder exists
 
 # Flag to control whether to load mocks from disk (if available)
-LOAD_FROM_DISK = True  # Set to True to load files rather than re-generating them
+LOAD_FROM_DISK = False  # Set to True to load files rather than re-generating them
 
 # Reusable photometry parameters for flux calibration measurements.
 PHOT_KWARGS_COMMON = {

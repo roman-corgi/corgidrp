@@ -1973,7 +1973,7 @@ class PyKLIPDataset(pyKLIP_Data):
             phead = frame.pri_hdr
             shead = frame.ext_hdr
                 
-            #TELESCOP = phead['TELESCOP']   # not planning to have this at the moment
+            TELESCOP = phead['TELESCOP'] 
             INSTRUME = phead['INSTRUME']
             CFAMNAME = shead['CFAMNAME']
             data = frame.data

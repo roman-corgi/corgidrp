@@ -346,7 +346,8 @@ def forward_model_psf(
     """
     amp = np.nanmax(scaled_star_psf.data)
 
-    plot_dataset(coronagraphic_dataset, 'Coronagraph dataset', cmap='plasma')
+    # Debugging plotting:
+    #plot_dataset(coronagraphic_dataset, 'Coronagraph dataset', cmap='plasma')
 
     fm_dataset = coronagraphic_dataset.copy()
 
@@ -358,8 +359,7 @@ def forward_model_psf(
         fm_dataset[idx].data = injected_frame.data
     
     # Debugging plotting:
-    # Plot the injected PSF dataset (fm_dataset)
-    plot_dataset(fm_dataset, 'Injected PSF (fm_dataset)', cmap='plasma')
+    #plot_dataset(fm_dataset, 'Injected PSF (fm_dataset)', cmap='plasma')
 
     # Perform PSF subtraction using the l3_to_l4 pipeline.
     fm_psfsub = l3_to_l4.do_psf_subtraction(
@@ -393,8 +393,8 @@ def forward_model_psf(
     # Update companion location in the cropped image header.
     comp_keyword = next(key for key in fm_psfsub[0].ext_hdr if key.startswith("SNYX"))
 
-    # Plot the PSF-subtracted dataset (fm_psfsub)
-    plot_dataset(klip_image, 'PSF-Subtracted (fm_psfsub)', cmap='plasma')
+    # Debugging plotting: Plot the PSF-subtracted dataset (fm_psfsub)
+    #plot_dataset(klip_image, 'PSF-Subtracted (fm_psfsub)', cmap='plasma')
 
     #TO DO: don't hardcode this, ideally you can use masklocx and y
     klip_image = update_companion_location_in_cropped_image(klip_image, comp_keyword, (512, 512), (50, 50))

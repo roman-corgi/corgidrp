@@ -22,8 +22,8 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
                               Defaults to 1.
     
     Returns:
-        corgidrp.data.Dataset or corgidrp.data.Image: 
-            A version of the input with an updated header including the apparent magnitude.
+        mag_data (corgidrp.data.Dataset): A version of the input with an updated header including the apparent 
+            magnitude.
     """
     # If input is a dataset, process each image
     if isinstance(input_data, Dataset):
@@ -337,3 +337,46 @@ def find_source(Image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     # names of the header keywords are tentative
     
     return
+
+def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
+    """
+    Calculate the photometric zero point for a given star image.
+
+    Computes the zero point by comparing the measured photon flux from the image with the apparent magnitude 
+    determined for the star relative to Vega. If no photometry keyword arguments are provided, default values 
+    are used for the aperture photometry parameters.
+
+    Args:
+        image (corgidrp.data.Image): An image containing the star.
+        star_name (str): The name of the star, used to determine its apparent magnitude.
+        encircled_radius (float): The radius within which to sum the counts for aperture photometry.
+        phot_kwargs (dict, optional): A dictionary of keyword arguments for photometry, including parameters 
+            like 'frac_enc_energy', 'method', 'subpixels', 'background_sub', 'r_in', 'r_out', 
+            'centering_method', and 'centroid_roi_radius'. Defaults to a predefined set of parameters if None.
+
+    Returns:
+        zp (float): The computed zero point based on the apparent magnitude and the measured counts sum.
+    """
+    if phot_kwargs is None:
+        phot_kwargs = {
+            'frac_enc_energy': 1.0,
+            'method': 'subpixel',
+            'subpixels': 5,
+            'background_sub': False,
+            'r_in': 5,
+            'r_out': 10,
+            'centering_method': 'xy',
+            'centroid_roi_radius': 5
+        }
+
+    # Compute apparent magnitude of this star compared to Vega in this band
+    mag_dataset = determine_app_mag(image, star_name)
+    
+    # Get the apparent magnitude from the updated dataset
+    app_mag = mag_dataset[0].ext_hdr["APP_MAG"]
+
+    # Compute zero point using real measured photons
+    ap_sum = fluxcal.aper_phot(image, encircled_radius, **phot_kwargs, centering_initial_guess=None)
+    zp = app_mag + 2.5 * np.log10(ap_sum)
+
+    return zp

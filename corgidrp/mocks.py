@@ -3527,8 +3527,6 @@ def generate_coron_dataset_with_companions(
             xcomp = host_star_center[0] + dx
             ycomp = host_star_center[1] + dy
 
-            print("in mocks", xcomp, ycomp)
-
             # Inject the companion as a small Gaussian PSF.
             sigma_c = 1.0
             rc2 = (xgrid - xcomp)**2 + (ygrid - ycomp)**2
@@ -3547,6 +3545,7 @@ def generate_coron_dataset_with_companions(
         prihdr, exthdr = create_default_L3_headers()
         prihdr["FILENAME"] = f"mock_coron_{i:03d}.fits"
         prihdr["ROLL"] = angle_i
+        prihdr['TELESCOP'] = 'ROMAN'
         exthdr["CFAMNAME"] = filter
         exthdr["PLTSCALE"] = platescale
         exthdr["STARLOCX"] = host_star_center[0]

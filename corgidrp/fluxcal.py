@@ -7,7 +7,6 @@ from astropy import wcs
 from astropy.io import fits, ascii
 from astropy.coordinates import SkyCoord
 import corgidrp
-import corgidrp.l4_to_tda as l4_to_tda
 from photutils.aperture import CircularAperture
 from photutils.background import LocalBackground
 from photutils.psf import fit_2dgaussian
@@ -502,17 +501,6 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         input_dataset=dataset
     )
 
-    # Compute and add zero point to the header for use later
-    # Compute apparent magnitude of this star compared to Vega in this band
-    mag_dataset = l4_to_tda.determine_app_mag(dataset, star_name)
-    
-    # Get the apparent magnitude from the updated dataset
-    app_mag = mag_dataset[0].ext_hdr["APP_MAG"]
-
-    # Compute zero point using real measured photons
-    zp = app_mag + 2.5 * np.log10(ap_sum)
-    fluxcal_obj.ext_hdr['ZP'] = zp
-
     # If background subtraction was performed, set the LOCBACK keyword.
     if phot_kwargs.get('background_sub', False):
         # Here, "back" is the third value returned from phot_by_gauss2d_fit.
@@ -606,17 +594,6 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         ext_hdr=image.ext_hdr,
         input_dataset=dataset
     )
-
-    # Compute and add zero point to the header for use later
-    # Compute apparent magnitude using existing function
-    mag_dataset = l4_to_tda.determine_app_mag(image, star_name)
-    
-    # Get the apparent magnitude from the updated dataset
-    app_mag = mag_dataset[0].ext_hdr["APP_MAG"]
-
-    # Compute zero point
-    zp = app_mag + 2.5 * np.log10(gauss_sum)
-    fluxcal_obj.ext_hdr['ZP'] = zp
     
     # If background subtraction was performed, set the LOCBACK keyword.
     if phot_kwargs.get('background_sub', False):
