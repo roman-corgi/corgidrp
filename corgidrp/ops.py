@@ -1,4 +1,4 @@
-
+import corgidrp
 import corgidrp.caldb as caldb
 import corgidrp.walker as walker
 import argparse
@@ -6,11 +6,14 @@ import argparse
 
 def step_1_initialize():
     """
-    Initialize the caldb
+    Initialize corgidrp and it's caldb again
 
     Returns: 
         caldb.CalDB: an instance of an initialized caldb object
     """
+    corgidrp.create_config_dir()
+    corgidrp.update_pipeline_settings()
+    caldb.initialize()
     this_caldb = caldb.CalDB()
     return this_caldb
 
