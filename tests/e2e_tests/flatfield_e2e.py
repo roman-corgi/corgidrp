@@ -74,7 +74,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Neptune"
-        base_image.pri_hdr['FILTER'] = 4
+        base_image.pri_hdr['CFAMNAME'] = "4F"
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
@@ -174,7 +174,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[0].split(os.path.sep)[-1].replace("_L1_", "_L2a_")[:-5] + "_flatfield.fits"
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat # compute residual from true
@@ -184,7 +184,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 
 
     ####### Check the bad pixel map result
-    bp_map_filename = "mock_detnoisemaps_dark_bad_pixel_map.fits"
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
@@ -255,7 +255,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Uranus"
-        base_image.pri_hdr['FILTER'] = 1
+        base_image.pri_hdr['CFAMNAME'] = "1F"
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
@@ -349,7 +349,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
 
     ####### Test the result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[0].split(os.path.sep)[-1].replace("_L1_", "_L2a_")[:-5] + "_flatfield.fits"
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat
@@ -358,7 +358,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
     ####### Check the bad pixel map result
-    bp_map_filename = "mock_detnoisemaps_dark_bad_pixel_map.fits"
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
