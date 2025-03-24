@@ -223,6 +223,8 @@ def test_mean_num():
 
 
 if __name__ == '__main__':
+    setup_module()
+
     test_mean_num()
     test_expected_results_sub()
     test_sub_stack_len()
@@ -231,6 +233,8 @@ if __name__ == '__main__':
     test_t_arr_unique()
     test_t_gtr_0()
     test_k_gtr_0()
+
+    teardown_module()
 
 
 

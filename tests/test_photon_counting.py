@@ -33,7 +33,7 @@ def test_pc():
 
     Tests safemode, which makes the function issue warnings instead of crashing (useful for HOWFSC's iterative digging of dark holes).
 
-    Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='DARK' while also inputting a photon-counted master dark raises exception, exception raised when 'CMDGAIN' not the same for all frames.
+    Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='DARK' while also inputting a photon-counted master dark raises exception, exception raised when 'EMGAIN_C' not the same for all frames.
 
     Checks various metadata changes: the expected filename and history edit for the output is done (for case of dark subtraction and the case of no dark subtraction), the master dark is indicated as such via a header keyword 'PC_STAT'.
 
@@ -47,7 +47,6 @@ def test_pc():
 
     Tests that an exception occurs if the photon-counted master dark has a 'PCTHRESH' value than the one to be used on the illuminated dataset.
     '''
-    # exposure time too long to get reasonable photon-counted result (after photometric correction)
     np.random.seed(555)
     dataset_err, dark_dataset_err, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=160, cosmic_rate=0, full_frame=False, smear=False) 
     # instead of running through walker, just do the pre-processing steps simply
@@ -64,10 +63,10 @@ def test_pc():
     dataset_err.all_dq[:, 2, 2] = 1 #masked all the way through for (2,2)
     for f in dataset_err.frames: 
         f.ext_hdr['RN'] = 100
-        f.ext_hdr['KGAIN'] = 7
+        f.ext_hdr['KGAINPAR'] = 7
     for f in dark_dataset_err.frames: 
         f.ext_hdr['RN'] = 100
-        f.ext_hdr['KGAIN'] = 7
+        f.ext_hdr['KGAINPAR'] = 7
     # process the frames to make PC dark
     pc_dark = get_pc_mean(dark_dataset_err, inputmode='darks')
     assert pc_dark.ext_hdr['PC_STAT'] == 'photon-counted master dark'
@@ -99,11 +98,11 @@ def test_pc():
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, pc_master_dark=pc_dark, inputmode='darks')
     # must have same 'CMDGAIN' and other header values throughout input dataset
-    dark_dataset_err.frames[0].ext_hdr['CMDGAIN'] = 4999
+    dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 4999
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, inputmode='dark')
     # change back:
-    dark_dataset_err.frames[0].ext_hdr['CMDGAIN'] = 5000
+    dark_dataset_err.frames[0].ext_hdr['EMGAIN_C'] = 5000
 
     # test to make sure PC dark's threshold matches the one used for illuminated frames 
     with pytest.raises(PhotonCountException):
@@ -156,8 +155,40 @@ def test_pc():
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, inputmode='illuminated')
 
+def test_pc_subsets():
+    '''
+    Tests that the optional binning of frames works.
+    '''
+    np.random.seed(555)
+    dataset_bin, dark_dataset_bin, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=161, Ndarks=162, cosmic_rate=0, full_frame=False, smear=False) 
+    # instead of running through walker, just do the pre-processing steps simply
+    # using EM gain=5000 and kgain=7 and bias=20000 and read noise = 100 and QE=0.9 (quantum efficiency), from mocks.create_photon_countable_frames()
+    for f in dataset_bin.frames:
+        f.data = f.data.astype(float)*7 - 20000.
+    for f in dark_dataset_bin.frames:
+        f.data = f.data.astype(float)*7 - 20000.
+    dataset_bin.all_data = dataset_bin.all_data.astype(float)*7 - 20000.
+    dark_dataset_bin.all_data = dark_dataset_bin.all_data.astype(float)*7 - 20000.
+    # process darks and check NUM_FR
+    pc_dark = get_pc_mean(dark_dataset_bin, inputmode='darks', bin_size=40)
+    assert pc_dark.ext_hdr['NUM_FR'] == 40 # The 2 remainder frames ignored for consistent statistics among the PC-averaged output frames
+    assert 'Number of subsets: 4' in pc_dark.ext_hdr['HISTORY'][-4]
+    # now process illuminated frames and subtract the PC dark
+    pc_dataset = get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=40)
+    # bigger rtol below since we have fewer frames averaged over in each of the 161//40 = 162//40 = 4 frames in the output
+    assert np.isclose(pc_dataset.all_data.mean(), ill_mean - dark_mean, rtol=0.06) 
+    assert pc_dataset.frames[0].ext_hdr['NUM_FR'] == 40
+    assert pc_dataset.frames[-1].ext_hdr['NUM_FR'] == 40 # The 1 remainder frame ignored for consistent statistics among the PC-averaged output frames
+    assert 'Number of subsets: 4' in pc_dataset.frames[0].ext_hdr['HISTORY'][-2]
+    with pytest.raises(PhotonCountException): #since number of frames in a dark subset would be less than that of a subset in illuminated
+        get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=51)
+    # but this is fine:
+    get_pc_mean(dataset_bin, pc_master_dark=pc_dark, bin_size=38)
+
+
 if __name__ == '__main__':
     test_pc()
     test_negative()
+    test_pc_subsets()
     
     

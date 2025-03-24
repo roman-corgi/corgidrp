@@ -251,7 +251,7 @@ def guess_template(dataset):
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l1_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l1_to_l2a_noisemap.json"
@@ -260,21 +260,21 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l1_to_l2b_pc.json" 
             else:  
                 recipe_filename = "l1_to_l2b.json"    
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc.json"
             else:
                 recipe_filename = "l2a_to_l2b.json"

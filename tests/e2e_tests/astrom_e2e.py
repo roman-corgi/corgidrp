@@ -33,6 +33,7 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        exthdr['ISPC'] = False
     # exthdr['KGAINPAR'] = exthdr['KGAIN']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
