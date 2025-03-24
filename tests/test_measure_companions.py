@@ -154,7 +154,6 @@ def generate_test_data(out_dir):
 
     # 4) Generate coronagraphic frames.
     host_star_center = tuple(x // 2 for x in FULL_SIZE_IMAGE)
-    print("host star center", host_star_center)
     coron_data = mocks.generate_coron_dataset_with_companions(
         n_frames=NUM_IMAGES,
         shape=FULL_SIZE_IMAGE,
@@ -313,8 +312,8 @@ if __name__ == "__main__":
     test_measure_companions_non_forward_modeling()
     print("Non-forward modeling test passed.")
 
-    #print("Running test: forward modeling")
-    #test_measure_companions_forward_modeling()
-    #print("Forward modeling test passed.")
+    print("Running test: forward modeling")
+    test_measure_companions_forward_modeling()
+    print("Forward modeling test passed.")
     
     print("All tests passed successfully.")

@@ -3522,7 +3522,7 @@ def generate_coron_dataset_with_companions(
 
         # (C) Insert the companion if specified.
         if companion_sep_pix is not None and companion_pa_deg is not None:
-            rel_pa = companion_pa_deg + angle_i      
+            rel_pa = companion_pa_deg - angle_i      
             dx, dy = seppa2dxdy(companion_sep_pix, rel_pa)
             xcomp = host_star_center[0] + dx
             ycomp = host_star_center[1] + dy

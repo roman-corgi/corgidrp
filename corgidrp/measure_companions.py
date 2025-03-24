@@ -113,11 +113,13 @@ def measure_companions(
                 numbasis=numbasis, nwalkers=nwalkers, nburn=nburn, nsteps=nsteps,
                 numthreads=numthreads, outputdir=output_dir
             )
+            fm_counts_uncorrected, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
+            # correct for algorithmic efficiency
+            fm_counts = fm_counts_uncorrected / kl_value
         else:
             modeled_image, _ = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
+            fm_counts, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
         
-        # Measure counts in the modeled image.
-        fm_counts, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
         companion_host_ratio = psf_sub_counts / fm_counts
 
         # Calculate the apparent magnitude based on the host star magnitude or flux calibration.
@@ -347,7 +349,7 @@ def forward_model_psf(
     plot_dataset(coronagraphic_dataset, 'Coronagraph dataset', cmap='plasma')
 
     fm_dataset = coronagraphic_dataset.copy()
-    print("length coronagraph dataset", fm_dataset)
+
     # Inject the normalized PSF into each frame.
     for idx, frame in enumerate(fm_dataset):
         # TO DO: look into why this only works if I do negative guesspa
@@ -378,11 +380,15 @@ def forward_model_psf(
     )
     # Get the final frame from the subtraction.
     klip_data = fm_psfsub[0].data[-1]
-    # The following throughput values are placeholders.
-    kl_value = 1                    # Placeholder value for KLIP throughput.
+    klip_thru_hdu = fm_psfsub[0].hdu_list['KL_THRU']
+    klip_thru_data = klip_thru_hdu.data
+    # Find the index of the closest separation value
+    closest_idx = np.abs(klip_thru_data[0] - guesssep).argmin()
+
+    # Get the corresponding throughput from the last row
+    kl_throughput_value = klip_thru_data[-1, closest_idx]
+    # TO DO: figure out what to do about core throughput, if anything
     ct_value = 1                    # Placeholder value for core throughput.
-    # Set negative pixel values to zero.
-    klip_data[klip_data < 0] = 0
     klip_image = Image(klip_data, pri_hdr=fm_psfsub[0].pri_hdr, ext_hdr=fm_psfsub[0].ext_hdr)
     # Update companion location in the cropped image header.
     comp_keyword = next(key for key in fm_psfsub[0].ext_hdr if key.startswith("SNYX"))
@@ -392,7 +398,7 @@ def forward_model_psf(
 
     #TO DO: don't hardcode this, ideally you can use masklocx and y
     klip_image = update_companion_location_in_cropped_image(klip_image, comp_keyword, (512, 512), (50, 50))
-    return kl_value, ct_value, klip_image
+    return kl_throughput_value, ct_value, klip_image
 
 
 def measure_core_throughput_at_location(x_c, y_c, x_star, y_star, ct_cal, ct_dataset):
@@ -508,8 +514,6 @@ def plot_dataset(dataset, title_prefix, cmap='plasma'):
         # Use ZScaleInterval to compute the limits.
         zscale = ZScaleInterval()
         vmin, vmax = zscale.get_limits(data)
-        # Print the max value and the computed limits.
-        print(f"Frame {i} - Max Value: {data_max}, ZScale limits: vmin={vmin}, vmax={vmax}")
         
         im = axs[i].imshow(data, origin='lower', cmap=cmap, vmin=vmin, vmax=vmax)
         axs[i].set_title(f'{title_prefix} Frame {i} (max: {data_max:.2e})')

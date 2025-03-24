@@ -454,8 +454,6 @@ def do_psf_subtraction(input_dataset,
     # Use input reference dataset if provided
     if not reference_star_dataset is None:
         ref_dataset = reference_star_dataset.copy()
-        print("type", type(ref_dataset))
-        print("checking dataset sizes", sci_dataset[0].data.shape, ref_dataset[0].data.shape)
 
     # Try getting PSF references via the "PSFREF" header kw
     else:

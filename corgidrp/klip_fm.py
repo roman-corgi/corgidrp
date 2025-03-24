@@ -64,7 +64,7 @@ def inject_psf(frame_in, ct_calibration, amp,
 
     # Get closest psf model
     frame_roll = frame.pri_hdr['ROLL']
-    rel_pa = pa_deg + frame_roll        # TO DO: i can only get Ell's code to work if I change this convention
+    rel_pa = pa_deg - frame_roll        # TO DO: i can only get Ell's code to work if I change this convention
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
     # Debug: print offsets.
@@ -84,7 +84,6 @@ def inject_psf(frame_in, ct_calibration, amp,
     psf_cenyx_ind = (np.array(model_shape)/2 - 0.5).astype(int) 
     psf_cenyx_inframe = np.array([frame.ext_hdr['STARLOCY'],frame.ext_hdr['STARLOCX']]) + np.array([dy,dx])
     injected_psf_cenyx_ind = np.round(psf_cenyx_inframe).astype(int)
-    print("klip fm injecting psf at", injected_psf_cenyx_ind)
     startyx = injected_psf_cenyx_ind - psf_cenyx_ind
     endyx = startyx + model_shape
 
