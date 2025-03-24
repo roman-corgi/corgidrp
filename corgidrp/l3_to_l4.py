@@ -404,7 +404,10 @@ def do_psf_subtraction(input_dataset,
                        do_crop=True,
                        crop_sizexy=None,
                        measure_klip_thrupt=True,
-                       measure_1d_core_thrupt=True
+                       measure_1d_core_thrupt=True,
+                       cand_locs=[],
+                       kt_seps=None,
+                       kt_pas=None,
                        ):
     """
     
@@ -438,7 +441,14 @@ def do_psf_subtraction(input_dataset,
         measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
             Defaults to True.
-
+        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
+            PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        kt_seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
+            PSFs for KLIP throughput calibration. If not provided, a linear spacing of separations between the IWA & OWA 
+            will be chosen.
+        kt_pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
+            PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
+        
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
@@ -571,7 +581,9 @@ def do_psf_subtraction(input_dataset,
                             ct_calibration,
                             klip_params,
                             inject_snr,
-                            cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
+                            cand_locs = cand_locs, # list of (sep_pix,pa_deg) of known off axis source locations
+                            seps=kt_seps,
+                            pas=kt_pas
                             )
         thrupt_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is

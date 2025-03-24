@@ -2632,7 +2632,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     Args:
         array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
         sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
-        amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
+        amp (float,optional): Amplitude (peak) of gaussian curve. Defaults to 1.
         xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
         yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
         
@@ -2644,7 +2644,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
 
     # Calculate Gaussian 
-    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp / (2.0 * np.pi * sigma**2)
+    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp #/ (2.0 * np.pi * sigma**2)
     
     return gauss
 
@@ -3016,7 +3016,7 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
     else:
         assert psfsize%2 == 1, 'psfsize must be an odd integer'
         imshape = (psfsize,psfsize)
-        
+
     psf = gaussian_array(array_shape=imshape,sigma=sig_pix,amp=1.,xoffset=0.,yoffset=0.)
 
     psf_cube = np.ones((n_psfs,*imshape))
@@ -3078,7 +3078,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                           noise_amp = 1.,
                           fwhm_pix = 2.5,
                           ref_psf_spread=1. ,
-                          pl_contrast=1e-3
+                          pl_contrast=1e-3,
+                          pl_sep = 10.
                           ):
     """Generate a mock science and reference dataset ready for the PSF subtraction step.
     TODO: reference a central pixscale number, rather than hard code.
@@ -3107,6 +3108,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             reference PSFs. Defaults to 1.
         pl_contrast (float): Flux ratio between planet and starlight incident on the detector. 
             Defaults to 1e-3.
+        pl_sep (float): Planet-star separation in pixels. Defaults to 10.
 
         
     Returns:
@@ -3197,8 +3199,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             # Add fake planet to sci files
             if i<n_sci:
                 pa_deg = -roll_angles[i]
-                sep_pix = 10
-                xoff,yoff = sep_pix * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
+                xoff,yoff = pl_sep * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
                 planet_psf = gaussian_array(array_shape=data_shape,
                                             amp=pl_amp,
                                             sigma=sigma,

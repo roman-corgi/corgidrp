@@ -131,10 +131,13 @@ def inject_psf(frame_in, ct_calibration, amp,
     return frame, psf_model, psf_cenxy
 
 
-def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
+def measure_noise(frame, seps_pix, fwhm, 
+                  klmode_index=None,
+                  cand_locs = []):
     """Calculates the noise (standard deviation of counts) of an 
         annulus at a given separation from the mask center.
         TODO: Correct for small sample statistics?
+        TODO: Mask known off-axis sources.
     
     Args:
         frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" in header
@@ -144,6 +147,9 @@ def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
         klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
             the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
             truncation choice.
+        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we can mask them. 
+            This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        
 
     Returns: np.array 
     """
@@ -161,6 +167,25 @@ def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
         r_outer = sep_pix + fwhm
         masked_data = np.where(np.logical_and(sep_map3d<r_outer,sep_map3d>r_inner), frame.data,np.nan)
         
+        # import matplotlib.pyplot as plt
+        # plt.imshow(masked_data[0],origin='lower')
+        # plt.colorbar()
+        # plt.title('Candlocs not masked')
+        # plt.show()
+
+        if len(cand_locs) > 0:
+            for cand_loc in cand_locs:
+                cand_x, cand_y = seppa2xy(*cand_loc,cenx,ceny)
+                dists = np.sqrt((y-cand_y)**2 + (x-cand_x)**2)
+    
+                masked_data = np.where(dists > 5 * fwhm, masked_data.copy(),np.nan)
+        
+        # import matplotlib.pyplot as plt
+        # plt.imshow(masked_data[0],origin='lower')
+        # plt.colorbar()
+        # plt.title('Candlocs masked')
+        # plt.show()
+
         # Calculate standard deviation
         std = np.nanstd(masked_data,axis=(1,2))
         stds.append(std)
@@ -240,7 +265,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         rolls = [frame.ext_hdr['ROLL'] for frame in sci_dataset]
         
         # Measure noise at each separation in psf subtracted dataset (for this kl mode)
-        noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k)
+        noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k,cand_locs)
         
         # Inject planets:
         seppas_skipped = []
@@ -335,24 +360,24 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             std = np.nanstd(masked_data)
             med = np.nanmedian(masked_data)
             clip_thresh = 3 * std
-            masked_data = np.where(np.abs(pyklip_data-med)>clip_thresh,np.nan,pyklip_data)
+            masked_data = np.where(np.abs(masked_data-med)>clip_thresh,np.nan,masked_data)
         
         # Subtract median
         bg_level = np.nanmedian(masked_data)
         medsubtracted_data = pyklip_data - bg_level
         
-        # Plot Psf subtraction with fakes
+        # # Plot Psf subtraction with fakes
         
-        if klip_params['mode'] == 'RDI':
-            analytical_result = rotate(sci_dataset[0].data - ref_dataset[0].data,-rolls[0],reshape=False,cval=np.nan)
-        elif klip_params['mode'] == 'ADI':
-            analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-                            [0.5,0.5],
-                            cval=np.nan)
-        elif klip_params['mode'] == 'ADI+RDI':
-            analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+        # if klip_params['mode'] == 'RDI':
+        #     analytical_result = rotate(sci_dataset[0].data - ref_dataset[0].data,-rolls[0],reshape=False,cval=np.nan)
+        # elif klip_params['mode'] == 'ADI':
+        #     analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+        #                     [0.5,0.5],
+        #                     cval=np.nan)
+        # elif klip_params['mode'] == 'ADI+RDI':
+        #     analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
 
-        locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
+        # locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
         
         # import matplotlib.pyplot as plt
 
@@ -453,10 +478,6 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             # plt.colorbar(im1,ax=ax[1])
             # ax[1].set_title('Data Cutout')
             # plt.show()
-                
-            # if x1<0. or y1<0. or x2>=cutout_shape[1] or y2>=cutout_shape[0]:
-            #     print('!!!')
-            #     pass
             
             # Using pyklip.fakes.gaussfit2d
             preklip_peak, pre_fwhm, pre_xfit, pre_yfit = gaussfit2d(
@@ -480,20 +501,6 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             # Get total counts from 2D gaussian fit
             preklip_counts = np.pi * preklip_peak * pre_fwhm**2 / 4. / np.log(2.)
             postklip_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
-
-            # old version using pyhot_by_gauss2d_fit
-            # # Temporarily load into Image obj
-            # model_img = Image(psf_model,pri_hdr=fits.Header(),ext_hdr=fits.Header())
-            # data_img = Image(data_cutout,pri_hdr=fits.Header(),ext_hdr=fits.Header())
-
-            # # Try pyklip flux measurement functions: fakes.2dgaussianfit, retrieve planet flux
-            # preklip_amp, preklip_err, preklip_bg = phot_by_gauss2d_fit(model_img,fwhm_pix,background_sub=True,fit_shape=psf_model.shape)
-            # try:
-            #     postklip_amp, postklip_err, postklip_bg = phot_by_gauss2d_fit(data_img,fwhm_pix,background_sub=True,fit_shape=data_cutout.shape)
-            # except:
-            #     warnings.warn('Amplitude of fake after KLIP subtraction not recovered.')
-            #     postklip_amp = np.nan
-            
             
             thrupt = postklip_counts/preklip_counts
 
@@ -507,14 +514,21 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         seppas_arr = np.array(this_klmode_seppas[0])
         seps_arr = seppas_arr[:,0]
 
-        # if debug:
-        #     # Plot injected and recovered counts
-        #     fig,ax = plt.subplots()
-        #     plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
-        #     plt.scatter(seps_arr,this_klmode_outfluxs,label='Recovered counts')
-        #     plt.xlabel('separation (pixels)')
-        #     plt.legend()
-        #     plt.show()
+        # Plot injected and recovered peaks
+        fig,ax = plt.subplots()
+        plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
+        plt.scatter(seps_arr,this_klmode_outfluxs,label='Recovered counts')
+        plt.xlabel('separation (pixels)')
+        plt.legend()
+        plt.show()
+
+        # Plot injected and recovered peaks
+        fig,ax = plt.subplots()
+        plt.scatter(seps_arr,this_klmode_peakin,label='Injected peaks')
+        plt.scatter(seps_arr,this_klmode_peakout,label='Recovered peaks')
+        plt.xlabel('separation (pixels)')
+        plt.legend()
+        plt.show()
 
         mean_thrupts = []
         # TODO: If no measurements available for a given sep

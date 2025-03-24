@@ -1,10 +1,12 @@
-from corgidrp.mocks import create_psfsub_dataset,create_ct_cal
+from corgidrp.mocks import create_psfsub_dataset,create_ct_cal, gaussian_array
 from corgidrp.klip_fm import meas_klip_thrupt, get_closest_psf, inject_psf, measure_noise
 from corgidrp.l3_to_l4 import do_psf_subtraction
-from corgidrp.astrom import centroid
+from corgidrp.astrom import centroid, seppa2xy, create_circular_mask
 from corgidrp.data import Image
 from astropy.io import fits
 from scipy.ndimage import shift, rotate
+from pyklip.fakes import gaussfit2d
+
 
 import pytest
 import numpy as np
@@ -74,7 +76,7 @@ def test_create_ct_cal():
     # (scales with i for debugging purposes)
     for i in range(1,n_psfs+1):
         psf = ctcal.data[i-1]
-        assert np.sum(psf) == pytest.approx(i,rel=0.01)
+        assert np.max(psf) == pytest.approx(i,rel=0.01)
 
         # Check that psf is odd shape and is centered
         assert np.all(np.array(psf.shape) % 2 == 1)
@@ -658,23 +660,23 @@ def test_compare_RDI_ADI():
     assert mean_adi < mean_rdi
 
 
-def test_psfsub_withklipandctmeas():
+def test_psfsub_withklipandctmeas_adi():
 
-    # RDI
-    mode = 'RDI'
-    nsci, nref = (1,1)
+    nsci, nref = (2,0) # Mode ADI
  
     st_amp = 100.
     noise_amp = 1e-3
-    pl_contrast = 0. # No planet
-    numbasis = [1,2]
-    mock_sci_rdi,mock_ref_rdi = create_psfsub_dataset(nsci,nref,rolls,
+    pl_contrast = 3e-4 
+    pl_amp = st_amp * pl_contrast
+    pl_loc = (20.,0.)
+    est_pl_snr = pl_amp / noise_amp
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
                                             fwhm_pix=fwhm_pix,
                                             st_amp=st_amp,
                                             noise_amp=noise_amp,
-                                            pl_contrast=pl_contrast)
-
-    
+                                            pl_contrast=pl_contrast,
+                                            pl_sep=pl_loc[0],
+                                )
 
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
@@ -683,24 +685,361 @@ def test_psfsub_withklipandctmeas():
                   nx=nx,ny=ny)
     
     
-    psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi,ctcal,
-                                reference_star_dataset=mock_ref_rdi,
+    psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
+                                reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
                                 mode=None,
                                 do_crop=False,
                                 measure_klip_thrupt=True,
-                                measure_1d_core_thrupt=True)
+                                measure_1d_core_thrupt=True,
+                                cand_locs= [pl_loc],
+                                kt_seps=[pl_loc[0]])
     
+
+    # Plot Psf subtraction result
+    
+    if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
+        analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
+        analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+                        [0.5,0.5],
+                        cval=np.nan)
+    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+        analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+
+    import matplotlib.pyplot as plt
+
+    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
+    plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    axes[0].set_title(f'Output data')
+
+    im1 = axes[1].imshow(analytical_result,origin='lower')
+    plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    axes[1].set_title('Analytical result')
+
+    diff = psfsub_dataset[0].data[0] - analytical_result
+    im2 = axes[2].imshow(diff,origin='lower')
+    plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    axes[2].set_title('Difference')
+
+    plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
+
+    plt.show()    
+
     # Check that klip and ct separations are the same
-    kt = psfsub_dataset_rdi[0].hdu_list['KL_THRU'].data
+    kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
     kt_seps = kt[0]
 
-    ct = psfsub_dataset_rdi[0].hdu_list['CT_THRU'].data
+    import matplotlib.pyplot as plt
+    fig,ax = plt.subplots(figsize=(6,4))
+    plt.scatter(kt[0],kt[1],label=psfsub_dataset[0].pri_hdr["KLIP_ALG"])
+    plt.title('KLIP throughput')
+    plt.legend()
+    plt.xlabel('separation (pixels)')
+    plt.show()
+
+    ct = psfsub_dataset[0].hdu_list['CT_THRU'].data
     ct_seps = ct[0]
 
     assert np.all(kt_seps == ct_seps)
+
+    # Fit 2d gaussian to planet location:
+
+    # Crop data around location to be same as psf_model cutout
+    locxy = seppa2xy(*pl_loc,psfsub_dataset[0].ext_hdr['STARLOCX'],psfsub_dataset[0].ext_hdr['STARLOCY'])
+
+    # Measure background via sigma clip 
+    n_loops = 5
+    masked_data = psfsub_dataset[0].data.copy()[0]
+    for n in range(n_loops):
+        std = np.nanstd(masked_data)
+        med = np.nanmedian(masked_data)
+        clip_thresh = 3 * std
+        masked_data = np.where(np.abs(masked_data-med)>clip_thresh,np.nan,masked_data)
     
+    # Subtract median
+    bg_level = np.nanmedian(masked_data)
+    medsubtracted_data = psfsub_dataset[0].data[0] - bg_level
+
+    # Crop the data, pad with nans if we're cropping over the edge
+    cutout_shape = np.array([21,21])
+    cutout = np.zeros(cutout_shape)
+    cutoutcenyx = cutout_shape/2. - 0.5
+    cutout[:] = np.nan
+    cutout_starty, cutout_startx = (0,0)
+    cutout_endy, cutout_endx = cutout.shape
+
+    data_shape = medsubtracted_data.shape
+    data_center_indyx = np.array([locxy[1],locxy[0]]).astype(int)
+    data_start_indyx = (data_center_indyx - cutout_shape//2)
+    data_end_indyx = (data_start_indyx + cutout_shape)
+    data_starty,data_startx = data_start_indyx
+    data_endy,data_endx = data_end_indyx
+    
+    if data_starty < 0:
+        cutout_starty = -data_starty
+        data_starty = 0
+    
+    if data_startx < 0:
+        cutout_startx = -data_startx
+        data_startx = 0
+    
+    if data_endy >= data_shape[0]:
+        y_overhang = data_endy - medsubtracted_data.shape[0]
+        cutout_endy = cutout_shape[0] - y_overhang
+        data_endy = data_shape[0]
+
+    if data_endx >= data_shape[1]:
+        x_overhang = data_endx - medsubtracted_data.shape[1]
+        cutout_endx = cutout_shape[1] - x_overhang
+        data_endx = data_shape[1]
+
+    cutout[cutout_starty:cutout_endy,
+                cutout_startx:cutout_endx] = medsubtracted_data[data_starty:data_endy,
+                                                    data_startx:data_endx]
+    
+
+    postklip_peak, post_fwhm, post_xfit, post_yfit = gaussfit2d(
+                cutout, 
+                cutoutcenyx[1], 
+                cutoutcenyx[0], 
+                searchrad=5, 
+                guessfwhm=fwhm_pix, 
+                guesspeak=pl_amp, 
+                refinefit=True) 
+    post_sigma = post_fwhm / (2 * np.sqrt(2. * np.log(2.)))
+    final_model = gaussian_array(array_shape=cutout_shape,
+                                 sigma=post_sigma,
+                                 amp=postklip_peak,
+                                 xoffset=post_xfit-10.,
+                                 yoffset=post_yfit-10.)
+    
+
+    diff = cutout-final_model
+
+    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    im0 = axes[0].imshow(cutout,origin='lower')
+    plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    axes[0].set_title(f'Data')
+
+    im1 = axes[1].imshow(final_model,origin='lower')
+    plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    axes[1].set_title('Model')
+
+    im2 = axes[2].imshow(diff,origin='lower')
+    plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    axes[2].set_title('Residuals')
+
+    plt.suptitle(f'Final PSF Fit')
+
+    plt.show()    
+
+    
+    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0]))]
+    
+    pl_counts = np.pi * pl_amp * fwhm_pix**2 / 4. / np.log(2.)
+    recovered_pl_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
+    recovered_pl_counts_ktcorrected = recovered_pl_counts / pl_kt
+
+
+    assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.01) 
+
+
+def test_psfsub_withklipandctmeas_rdi():
+
+    nsci, nref = (1,1) # Mode RDI
+ 
+    st_amp = 100.
+    noise_amp = 1e-3
+    pl_contrast = 3e-3 
+    pl_amp = st_amp * pl_contrast
+    pl_loc = (20.,0.)
+    est_pl_snr = pl_amp / noise_amp
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast,
+                                            pl_sep=pl_loc[0],
+                                )
+
+    nx,ny = (21,21)
+    cenx, ceny = (25.,30.)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    
+    psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
+                                reference_star_dataset=mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=None,
+                                do_crop=False,
+                                measure_klip_thrupt=True,
+                                measure_1d_core_thrupt=True,
+                                cand_locs= [pl_loc],
+                                kt_seps=[pl_loc[0]])
+    
+
+    # Plot Psf subtraction result
+    
+    if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
+        analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
+        analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+                        [0.5,0.5],
+                        cval=np.nan)
+    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+        analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+
+    mask = create_circular_mask(*analytical_result.shape[-2:],
+                                r=3*fwhm_pix,
+                                center=(psfsub_dataset[0].ext_hdr['STARLOCX'],
+                                        psfsub_dataset[0].ext_hdr['STARLOCY']))
+    masked_analytical_result = np.where(mask,np.nan,analytical_result)
+
+
+    # Check that klip and ct separations are the same
+    kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
+    kt_seps = kt[0]
+
+    import matplotlib.pyplot as plt
+    fig,ax = plt.subplots(figsize=(6,4))
+    plt.scatter(kt[0],kt[1],label=psfsub_dataset[0].pri_hdr["KLIP_ALG"])
+    plt.title('KLIP throughput')
+    plt.legend()
+    plt.xlabel('separation (pixels)')
+    plt.show()
+
+    ct = psfsub_dataset[0].hdu_list['CT_THRU'].data
+    ct_seps = ct[0]
+
+    assert np.all(kt_seps == ct_seps)
+
+    # Fit 2d gaussian to planet location:
+
+    # Crop data around location to be same as psf_model cutout
+    locxy = seppa2xy(*pl_loc,psfsub_dataset[0].ext_hdr['STARLOCX'],psfsub_dataset[0].ext_hdr['STARLOCY'])
+
+    # Measure background via sigma clip 
+    n_loops = 5
+    masked_data = psfsub_dataset[0].data.copy()[0]
+    for n in range(n_loops):
+        std = np.nanstd(masked_data)
+        med = np.nanmedian(masked_data)
+        clip_thresh = 3 * std
+        masked_data = np.where(np.abs(masked_data-med)>clip_thresh,np.nan,masked_data)
+    
+    # Subtract median
+    bg_level = np.nanmedian(masked_data)
+    medsubtracted_data = psfsub_dataset[0].data[0] #- bg_level
+
+    import matplotlib.pyplot as plt
+
+    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    im0 = axes[0].imshow(medsubtracted_data,origin='lower')
+    plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    axes[0].set_title(f'BG-subtracted Output data')
+
+    im1 = axes[1].imshow(analytical_result,origin='lower')
+    plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    axes[1].set_title('Analytical result')
+
+    diff = medsubtracted_data - masked_analytical_result
+    im2 = axes[2].imshow(diff,origin='lower')
+    plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    axes[2].set_title('Difference')
+
+    plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
+
+    plt.show()    
+
+
+    # Crop the data, pad with nans if we're cropping over the edge
+    cutout_shape = np.array([21,21])
+    cutout = np.zeros(cutout_shape)
+    cutoutcenyx = cutout_shape/2. - 0.5
+    cutout[:] = np.nan
+    cutout_starty, cutout_startx = (0,0)
+    cutout_endy, cutout_endx = cutout.shape
+
+    data_shape = medsubtracted_data.shape
+    data_center_indyx = np.array([locxy[1],locxy[0]]).astype(int)
+    data_start_indyx = (data_center_indyx - cutout_shape//2)
+    data_end_indyx = (data_start_indyx + cutout_shape)
+    data_starty,data_startx = data_start_indyx
+    data_endy,data_endx = data_end_indyx
+    
+    if data_starty < 0:
+        cutout_starty = -data_starty
+        data_starty = 0
+    
+    if data_startx < 0:
+        cutout_startx = -data_startx
+        data_startx = 0
+    
+    if data_endy >= data_shape[0]:
+        y_overhang = data_endy - medsubtracted_data.shape[0]
+        cutout_endy = cutout_shape[0] - y_overhang
+        data_endy = data_shape[0]
+
+    if data_endx >= data_shape[1]:
+        x_overhang = data_endx - medsubtracted_data.shape[1]
+        cutout_endx = cutout_shape[1] - x_overhang
+        data_endx = data_shape[1]
+
+    cutout[cutout_starty:cutout_endy,
+                cutout_startx:cutout_endx] = medsubtracted_data[data_starty:data_endy,
+                                                    data_startx:data_endx]
+    
+
+    postklip_peak, post_fwhm, post_xfit, post_yfit = gaussfit2d(
+                cutout, 
+                cutoutcenyx[1], 
+                cutoutcenyx[0], 
+                searchrad=5, 
+                guessfwhm=fwhm_pix, 
+                guesspeak=pl_amp, 
+                refinefit=True) 
+    post_sigma = post_fwhm / (2 * np.sqrt(2. * np.log(2.)))
+    final_model = gaussian_array(array_shape=cutout_shape,
+                                 sigma=post_sigma,
+                                 amp=postklip_peak,
+                                 xoffset=post_xfit-10.,
+                                 yoffset=post_yfit-10.)
+    
+
+    diff = cutout-final_model
+
+    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    im0 = axes[0].imshow(cutout,origin='lower')
+    plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    axes[0].set_title(f'Data')
+
+    im1 = axes[1].imshow(final_model,origin='lower')
+    plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    axes[1].set_title('Model')
+
+    im2 = axes[2].imshow(diff,origin='lower')
+    plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    axes[2].set_title('Residuals')
+
+    plt.suptitle(f'Final PSF Fit')
+
+    plt.show()    
+
+    
+    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0]))]
+    
+    pl_counts = np.pi * pl_amp * fwhm_pix**2 / 4. / np.log(2.)
+    recovered_pl_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
+    recovered_pl_counts_ktcorrected = recovered_pl_counts / pl_kt
+
+    assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel = 0.05) 
+
 
 if __name__ == '__main__':  
     # test_create_ct_cal()
@@ -708,12 +1047,13 @@ if __name__ == '__main__':
     # test_inject_psf()
     # test_measure_noise()
 
-    test_meas_klip_ADI()
-    test_meas_klip_RDI()
-    test_meas_klip_ADIRDI()
+    # test_meas_klip_ADI()
+    # test_meas_klip_RDI()
+    # test_meas_klip_ADIRDI()
 
-    test_compare_RDI_ADI()
+    # test_compare_RDI_ADI()
 
-    # test_psfsub_withklipandctmeas()
+    # test_psfsub_withklipandctmeas_adi()
+    # test_psfsub_withklipandctmeas_rdi()
 
     pass
