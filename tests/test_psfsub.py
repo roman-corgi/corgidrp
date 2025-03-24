@@ -462,7 +462,7 @@ def test_psf_sub_RDI_nocrop():
     
     for i,frame in enumerate(result):
 
-        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -553,7 +553,7 @@ def test_psf_sub_ADIRDI_nocrop():
     for i,frame in enumerate(result):
 
         
-        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -664,8 +664,8 @@ if __name__ == '__main__':
 
     #test_psf_sub_split_dataset()
 
-    test_psf_sub_ADI_nocrop()
+    # test_psf_sub_ADI_nocrop()
     test_psf_sub_RDI_nocrop()
     test_psf_sub_ADIRDI_nocrop()
-    test_psf_sub_withcrop()
-    test_psf_sub_badmode()
+    # test_psf_sub_withcrop()
+    # test_psf_sub_badmode()
