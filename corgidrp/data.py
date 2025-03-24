@@ -1880,44 +1880,63 @@ class CoreThroughputCalibration(Image):
         y_cor = y_cor[r_good]
         r_cor = np.sqrt(x_cor**2 + y_cor**2)
 
-        # Loop over target locations (let conditional inside the loop to collect
-        # the result for any method after interpolating)
         psf_interp_list = []
         x_interp_list = []
         y_interp_list = []
-        for i_psf in range(len(x_cor)):
-            if method.lower() == 'nearest-polar':       
+        if method.lower() == 'nearest-polar':
+            # Agreeement for this nearest method is that distances are binned
+            # at 1/10th of a pixel. This will be unnecessary as soon as there's
+            # any other interpolation method than the 'nearest' one
+            x_grid = np.round(10*x_grid)/10
+            y_grid = np.round(10*y_grid)/10
+            radii = np.sqrt(x_grid**2 + y_grid**2)
+            # Azimuths
+            azimuths = np.arctan2(y_grid, x_grid)
+            x_cor = np.round(10*x_cor)/10
+            y_cor = np.round(10*y_cor)/10
+            radius_cor = np.sqrt(x_cor**2 + y_cor**2)
+            for i_psf in range(len(x_cor)):
                 # Find the nearest radial position in the CT file (argmin() returns the first occurence only)
                 diff_r_abs = np.abs(r_cor[i_psf] - radii)
+                # Agreement 
                 idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
                 # If there's more than one case, select that one with the
                 # smallest angular distance
                 if len(idx_near) > 1:
                     print("More than one PSF found with the same radial distance from the FPM's center")
                     # Difference in angle b/w target and grid
-                    az_grid = np.arctan(y_grid[idx_near]/x_grid[idx_near])
-                    az_cor = np.arctan(y_cor[i_psf]/x_cor[i_psf])
+                    # We want to distinguish PSFs at different quadrants
+                    az_grid = np.arctan2(y_grid[idx_near], x_grid[idx_near])
+                    az_cor = np.arctan2(y_cor[i_psf], x_cor[i_psf])
                     # Flatten into a 1-D array
                     diff_az_abs = np.abs(az_cor - az_grid).transpose()[0]
+                    # Consistent with the binning of a fraction of a pixel
+                    bin_az_fac = 1/10/r_cor[i_psf]
+                    diff_az_abs = bin_az_fac * np.round(diff_az_abs/bin_az_fac)
                     # Closest angular location to the target location within equal radius
-                    # For now: If more than one location (half angle), choose the closest one
-                    # In any interpolation beyind the nearest, there will be some
-                    # weighting factor that takes into account the distances 
-                    idx_near_az = diff_az_abs.argmin()
-                    psf_interp = np.squeeze(self.data[idx_near[idx_near_az]])
+                    idx_near_az = np.argwhere(diff_az_abs == diff_az_abs.min())
+                    # If there are two locations (half angle), choose the average (agreement)
+                    if len(idx_near_az) == 2: 
+                        psf_interp = np.squeeze(self.data[idx_near[idx_near_az]]).mean(axis=0)
+                    # Otherwise, this is the PSF
+                    elif len(idx_near_az) == 1:
+                        psf_interp = np.squeeze(self.data[idx_near[idx_near_az[0]]])
+                    else:
+                        raise ValueError(f'There are {len(idx_near_az):d} PSFs ',
+                            'equally near the target PSF. This should not happen.')
                 # Otherwise this is the interpolated PSF (nearest)
                 elif len(idx_near) == 1:
                     psf_interp = np.squeeze(self.data[idx_near[0]])
-                # This should not happen b/c there should always be a cloest radius
+                # This should not happen b/c there should always be a closest radius
                 else:
                     raise Exception('No closest radial distance found. This should not happen.')
-            else:
-                raise ValueError(f'Unidentified method for the interpolation: {method}')
 
-            # Add valid case
-            psf_interp_list += [psf_interp]
-            x_interp_list += [x_cor[i_psf]]
-            y_interp_list += [y_cor[i_psf]]
+                # Add valid case
+                psf_interp_list += [psf_interp]
+                x_interp_list += [x_cor[i_psf]]
+                y_interp_list += [y_cor[i_psf]]
+        else:
+            raise ValueError(f'Unidentified method for the interpolation: {method}')
 
         return np.array(psf_interp_list), np.array(x_interp_list), np.array(y_interp_list)
 
