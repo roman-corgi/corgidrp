@@ -413,6 +413,93 @@ def generate_ct_cal(
 
     return ct_cal
 
+def CreateCTMap(
+    corDataset,
+    fpamfsamcal,
+    ct_cal,
+    x_range=[-23,23],
+    y_range=[-23,23],
+    n_gridx=47,
+    n_gridy=47,
+    target_pix=None,
+    logr=False,
+    filepath=None,
+    save=False):
+    """
+      Create a core throughput map: Given a core throughput calibration file and
+      a coronagraphic dataset, derive 3-D list (x,y,ct) where (x,y) are some
+      target locations on EXCAM relative to the FPM's center and with valid
+      values of the throughput.
+
+        The core throughmap may be saved, optionally, as a CSV file.
+
+        The creation of the core throughput map relies on InterpolateCT(), a 
+      method of the CoreThroughputCalibration class in data.py. Valid core
+      throughput values are within the minimum and maxium radial distance from
+      the FPM's center in the core throughput dataset used to generate the
+      core throughput calibration file. Its options are inluded in the call of
+      this method too.
+
+      If an external list of locations is not provided, a default grid of points
+      is condidered.
+
+    Args:
+      corDataset (corgidrp.data.Dataset): a dataset containing some
+        coronagraphic observations.
+      fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+        FpamFsamCal class. That is, a FpamFsamCal calibration.
+      ct_cal (corgidrp.data.CoreThroughputCalibration): an instance of the
+        CoreThroughputCalibration class. That is, a core throughput calibration
+        file.
+      x_range (array): Two values [xmin, xmax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the center
+        of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
+      y_range (array): Two values [xmin, xmax] specifying the range of pixels to
+        be considered. Units are EXCAM pixels measured with respect the center
+        of the FPM. Notice that [-23,23] is approx. +/-10 l/D in band 1.
+      n_gridx (int) (optional): Number of x gridpoints.
+      n_gridy (int) (optional): Number of y gridpoints.
+      target_pix (array) (optional): a user-defined Mx2 array containing the pixel
+        positions for M target pixels where the core throughput will be derived
+        by interpolation. The target pixels are measured with respect the center
+        of the focal plane mask in (fractional) EXCAM pixels. Default is None.
+        In this case, a rectangular grid of pixel positions is used. Using
+        matplotlib.pyplot, target_pix[0] is the horizontal axis (x), and
+        target_pix[1] is the vertical axis (y).
+      logr (bool) (optional): If True, radii are mapped into their logarithmic
+        values before constructing the interpolant.
+      filepath (string) (optional): String with the path and filename of the 
+        file that will store the core throughput map as a CSV file.
+      save (bool) (optionla): Whether the core throughput map will be stored or not.
+
+    Returns:
+        A core throughput map with (x,y,ct) where x and y are locations
+        on EXCAM relative to the FPM's center with valid interpolated values of
+        the core throughput.
+    """
+    # If no target pixels are provided, create a grid:
+    if target_pix is None:
+        x_tmp = np.linspace(x_range[0], x_range[1], n_gridx)
+        y_tmp = np.linspace(y_range[0], y_range[1], n_gridy)
+        target_pix = np.array(np.meshgrid(x_tmp, y_tmp)).reshape(2, n_gridx*n_gridy)
+    # Get interpolated CT values at valid positions
+    ct_interp = ct_cal.InterpolateCT(
+            target_pix[0], target_pix[1], corDataset, fpamfsamcal, logr=logr)
+
+    # Re-order output to match the required order: (x,y,ct)
+    ct_map = ct_interp[[1,2,0]]
+    
+    # Optionally, store it
+    if save:
+        if filepath == None:
+            # Choose a default location and filename
+            filepath = os.path.join(corgidrp.default_cal_dir, 'ct_map.csv')
+            np.savetxt(filepath, ct_map, delimiter=',', header='x, y, ct')
+            print(f'CT map saved in {filepath:s}')
+    
+    return ct_map
+
+# keeping this here for now because other things rely on it
 def get_1d_ct(ct_cal,cenxy,seps,
               method='nearest'):
 
@@ -432,4 +519,3 @@ def get_1d_ct(ct_cal,cenxy,seps,
         return ct_arr_out
     else:
         raise NotImplementedError
-

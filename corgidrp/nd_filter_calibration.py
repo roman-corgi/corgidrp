@@ -30,7 +30,6 @@ def load_transformation_matrix_from_fits(file_path):
             data = hdul[1].data
         return np.array(data)
 
-
 def group_by_keyword(dataset, prihdr_keyword=None, exthdr_keyword=None):
     """
     Split the dataset by either a primary header (prihdr) or extension header (exthdr) keyword

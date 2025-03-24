@@ -8,6 +8,7 @@ import pandas as pd
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
 from pyklip.instruments.utils.wcsgen import generate_wcs
+from scipy.interpolate import LinearNDInterpolator
 from astropy import wcs
 import copy
 import corgidrp
@@ -1202,7 +1203,9 @@ class AstrometricCalibration(Image):
     Class for astrometric calibration file. 
     
     Args:
-        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 1D array of calibration measurements
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR a single array of calibration measurements of the following lengths (boresight: length 2 (RA, DEC), 
+        plate scale: length 1 (float), north angle: length 1 (float), distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
+        3rd order distortion fit the input array should be length 37.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
@@ -1210,19 +1213,21 @@ class AstrometricCalibration(Image):
         boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
         platescale (float): the platescale value in [mas/pixel]
         northangle (float): the north angle value in [deg]
+        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map (if distortion map is not computed this is an array of nans), where the last value of the array is the order of polynomial used
 
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
         # run the image class constructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # File format checks
-        if self.data.shape != (4,):
-            raise ValueError("The AstrometricCalibration data should be a 1D array of four values")
+        if type(self.data) != np.ndarray:
+            raise ValueError("The AstrometricCalibration data should be an array of calibration measurements")
         else:
             self.boresight = self.data[:2]
             self.platescale = self.data[2]
             self.northangle = self.data[3]
+            self.distortion_coeffs = self.data[4:]
             
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
@@ -1295,7 +1300,7 @@ class TrapCalibration(Image):
 
 class FluxcalFactor(Image):
     """
-    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
+    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electrons/s. 
 
     To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
@@ -1370,8 +1375,8 @@ class FluxcalFactor(Image):
                 orig_input_filename = input_dataset[0].filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
-            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 
@@ -1442,7 +1447,7 @@ class FpamFsamCal(Image):
             prihdr['OBSID'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
-            exthdr['CMDGAIN'] = 1.0
+            exthdr['EMGAIN_C'] = 1.0
             exthdr['EXCAMT'] = 40.0
 
             self.pri_hdr = prihdr
@@ -1627,6 +1632,159 @@ class CoreThroughputCalibration(Image):
         delta_fsam_excam = (fpamfsamcal.data[1] @ delta_fsam_um).transpose()[0]
         # Return the FPAM and FSAM centers during the core throughput observations
         return cor_fpm_center + delta_fpam_excam, cor_fpm_center + delta_fsam_excam
+
+    def InterpolateCT(self,
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal,
+        logr=False):
+        """ Interpolate CT value at a desired position of a coronagraphic
+            observation.
+
+        First implementation based on Max Millar-Blanchaer's suggestions
+        https://collaboration.ipac.caltech.edu/display/romancoronagraph/Max%27s+Interpolation+idea
+
+        Here we assume that the core throughput measurements with the star
+        located along a series of radial spikes at various azimuths. 
+
+        It throws an error if the radius of the new points is outside the range
+        of the input radii. If the azimuth is greater than the maximum azimuth
+        of the core throughput dataset, it will mod the azimuth to be within
+        the range of the input azimuths.
+
+        Assumes that the input core_thoughput is between 0 and 1.
+
+        # TODO: review accuracy of the method with simulated data that are more
+        # representative of future mission data, including error budget and 
+        # expected azimuthal dependence on the CT.
+
+        Args:
+          x_cor (numpy.ndarray): Values of the first dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          y_cor (numpy.ndarray): Values of the second dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+          logr (bool) (optional): If True, radii are mapped into their logarithmic
+              values before constructing the interpolant.
+
+        Returns:
+          Returns interpolated value of the CT, first, and positions for valid
+            locations as a numpy ndarray.
+        """
+        if isinstance(x_cor, np.ndarray) is False:
+            if isinstance(x_cor, int) or isinstance(x_cor, float):
+                x_cor = np.array([x_cor])
+            elif isinstance(x_cor, list):
+                x_cor = np.array(x_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+        if isinstance(y_cor, np.ndarray) is False:
+            if isinstance(y_cor, int) or isinstance(y_cor, float):
+                y_cor = np.array([y_cor])
+            elif isinstance(y_cor, list):
+                y_cor = np.array(y_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+
+        if len(x_cor) != len(y_cor):
+            raise ValueError('Target locations must have the same number of '
+                'elements')
+  
+        # Get FPM's center during CT observations
+        fpam_ct_pix_out = self.GetCTFPMPosition(
+                corDataset,
+                fpamfsamcal)[0]
+        # Get CT measurements relative to CT FPM's center
+        x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
+        y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
+        core_throughput = self.ct_excam[2,:]
+        # Algorithm
+        radii = np.sqrt(x_grid**2 + y_grid**2)
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero. 
+        azimuths = np.arctan2(y_grid, x_grid)
+        azimuth0 = azimuths.min()
+        azimuths = azimuths - azimuth0
+        # Now we can create a 2D array of the radii and azimuths
+        
+        # Calculate the new datapoint in the right radius and azimuth coordinates
+        radius_cor = np.sqrt(x_cor**2 + y_cor**2)
+       
+        # Remove interpolation locations that are outside the radius range
+        r_good = radius_cor >= radii.min()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are less than the minimum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_good = radius_cor <= radii.max()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are greater than the maximum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.max()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
+        azimuth_cor = np.arctan2(y_cor, x_cor) - azimuth0
+       
+        # MOD this azimuth so that we're in the right range: all angles will be
+        # within [0, azimuths.max()), including negative values
+        azimuth_cor = azimuth_cor % azimuths.max()
+       
+        if logr: 
+            radii = np.log10(radii)
+            radius_cor = np.log10(radius_cor)
+       
+        rad_az = np.c_[radii, azimuths]
+        # Make the interpolator
+        interpolator = LinearNDInterpolator(rad_az, core_throughput)
+        # Now interpolate: 
+        interpolated_values = interpolator(radius_cor, azimuth_cor)
+
+        # Raise ValueError if CT < 0, CT> 1
+        if np.any(interpolated_values < 0) or np.any(interpolated_values > 1): 
+            raise ValueError('Some interpolated core throughput values are '
+                f'out of bounds (0,1): ({interpolated_values.min():.2f}, '
+                f'{interpolated_values.max():.2f})')
+
+        # Edge case:
+        # If a target location happens to be part of the CT dataset (i.e., the
+        # interpolator) and its azimuth is equal to the maximum azimuth in the
+        # CT dataset, the interpolated CT may sometimes be assigned to NaN, while
+        # it should simply be the same inout CT value at the same location
+        idx_az_max = np.argwhere(np.isnan(interpolated_values))
+        for idx in idx_az_max:
+            idx_x_arr = np.argwhere(x_cor[idx] == x_grid)
+            idx_y_arr = np.argwhere(y_cor[idx] == y_grid)
+            for idx_x in idx_x_arr:
+                # If and only if the same index is in both, it's the same location
+                if idx_x in idx_y_arr:
+                    interpolated_values[idx_x] = core_throughput[idx_x]
+            
+        # Raise ValueError if all CT are NaN
+        if np.all(np.isnan(interpolated_values)):
+            raise ValueError('There are no valid target positions within the ' +
+                'range of input PSF locations')
+
+        # Extrapolation: Remove NaN values
+        is_valid = np.where(np.isnan(interpolated_values) == False)[0]
+        return np.array([interpolated_values[is_valid],
+            x_cor[is_valid],
+            y_cor[is_valid]])
 
 class PyKLIPDataset(pyKLIP_Data):
     """
@@ -2172,10 +2330,11 @@ def unpackbits_64uint(arr, axis):
         axis (int): axis to unpack
 
     Returns:
-        _type_: np.ndarray of bits
+        np.ndarray of bits
     """
-    n = np.array(arr).view("u1")
-    return np.unpackbits(n, axis=axis, bitorder='little')
+    arr = arr.astype('>u8')
+    n = arr.view('u1')
+    return np.unpackbits(n, axis=axis, bitorder='big')
 
 def packbits_64uint(arr, axis):
     """
@@ -2186,6 +2345,63 @@ def packbits_64uint(arr, axis):
         axis (int): axis to pack
 
     Returns:
-        _type_: np.ndarray of 64-bit unsigned integers
+        np.ndarray of 64-bit unsigned integers
     """
-    return np.packbits(arr, axis=axis, bitorder='little').view(np.uint64)
+    return np.packbits(arr, axis=axis, bitorder='big').view('>u8')
+
+def get_flag_to_bit_map():
+    """
+    Returns a dictionary mapping flag names to bit positions.
+    
+    Returns:
+        dict: A dictionary with flag names as keys and bit positions (int) as values.
+    """
+    return {
+        "bad_pixel_unspecified": 0,
+        "data_replaced_by_filled_value": 1,
+        "bad_pixel": 2,
+        "hot_pixel": 3,
+        "not_used": 4,
+        "full_well_saturated_pixel": 5,
+        "non_linear_pixel": 6,
+        "pixel_affected_by_cosmic_ray": 7,
+        "TBD": 8,
+    }
+
+def get_flag_to_value_map():
+    """
+    Returns a dictionary mapping flag names to their decimal flag values. Example usage is as follows:
+    
+    FLAG_TO_VALUE_MAP = get_flag_to_value_map()
+    flag_value = FLAG_TO_VALUE_MAP["TBD"]  # Gives the decimal value corresponding to "TBD"
+
+    Returns:
+        dict: A dictionary with flag names as keys and decimal values (int) as values.
+    """
+    return {name: (1 << bit) for name, bit in get_flag_to_bit_map().items()}
+
+def get_value_to_flag_map():
+    """
+    Returns a dictionary mapping flag decimal values to flag names. Example usage is as follows:
+    
+    FLAG_TO_BIT_MAP = get_flag_to_bit_map()
+    bit_position = FLAG_TO_BIT_MAP["TBD"]  # Gives which index it should be in with the key. 
+    
+    Expected position of bit_position of the unpacked array = 63 - bit_position
+    
+    Returns:
+        dict: A dictionary with decimal values (int) as keys and flag names as values.
+    """
+    return {value: name for name, value in get_flag_to_value_map().items()}
+
+def get_bit_to_flag_map():
+    """
+    Returns a dictionary mapping bit positions to flag names. Example usage is as follows:
+
+    BIT_TO_FLAG_MAP = get_bit_to_flag_map()
+    flag_name_from_bit = BIT_TO_FLAG_MAP[8]  # Expected: "TBD"
+    
+    Returns:
+        dict: A dictionary with bit positions (int) as keys and flag names as values.
+    """
+    return {bit: name for name, bit in get_flag_to_bit_map().items()}

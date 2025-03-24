@@ -20,10 +20,11 @@ FLUX_OR_IRR = 'irr'
 NUM_IMAGES = 10
 ROLL_ANGLES = np.linspace(0, 45 , NUM_IMAGES)
 PSF_SUB_SCALE = 0.7
-NUMBASIS = [1, 2]
+NUMBASIS = [1, 4, 8]
 OUT_DIR = os.path.join('corgidrp', 'data', 'L4TestInput')
 FULL_SIZE_IMAGE = (1024,1024)
 CROPPED_IMAGE_SIZE = (200,200)
+COMP_REL_COUNTS_SCALE = 1/3         # what to scale the host star's counts by for the companions
 
 PHOT_ARGS = {
     "aperture": {
@@ -80,13 +81,39 @@ def generate_test_data(out_dir):
 
     # 1) Generate core throughput calibration dataset
     dataset_ct, ct_cal, dataset_ct_nomask = mocks.create_mock_ct_dataset_and_cal_file(
-        fwhm=50, n_psfs=20, cfam_name=CFAM, save_cal_file=True, image_shape=FULL_SIZE_IMAGE
+        fwhm=50, n_psfs=20, cfam_name=CFAM, save_cal_file=True, image_shape=FULL_SIZE_IMAGE,
+        total_counts = 100
     )
 
-    scaling_factor, all_scaling_factors = measure_companions.compute_occ_to_unocc_scaling(dataset_ct, 
-                                                                    dataset_ct_nomask, 
-                                                                    ct_cal, PHOT_ARGS)
-    print("scaling factor", all_scaling_factors)
+    ct_cal_counts_ref, _, _ = fluxcal.aper_phot(
+        dataset_ct[3], encircled_radius=10, frac_enc_energy=1.0,
+        method='subpixel', subpixels=5, background_sub=True, r_in=12, r_out=20,
+        centering_method='xy', centroid_roi_radius=10
+    )
+
+    ct_cal_counts_ref_no_mask, _, _ = fluxcal.aper_phot(
+        dataset_ct_nomask[3], encircled_radius=10, frac_enc_energy=1.0,
+        method='subpixel', subpixels=5, background_sub=True, r_in=12, r_out=20,
+        centering_method='xy', centroid_roi_radius=10
+    )
+
+    print("Counts from PSFs in CT dataset. No mask: ", ct_cal_counts_ref_no_mask, "Mask: ", ct_cal_counts_ref)
+    mask_throughput_ratio =  ct_cal_counts_ref / ct_cal_counts_ref_no_mask
+
+    ct_cal_counts_ref_mask_far, _, _ = fluxcal.aper_phot(
+        dataset_ct[16], encircled_radius=10, frac_enc_energy=1.0,
+        method='subpixel', subpixels=5, background_sub=True, r_in=12, r_out=20,
+        centering_method='xy', centroid_roi_radius=10
+    )
+
+    ct_cal_counts_ref_mask_close, _, _ = fluxcal.aper_phot(
+        dataset_ct[8], encircled_radius=10, frac_enc_energy=1.0,
+        method='subpixel', subpixels=5, background_sub=True, r_in=12, r_out=20,
+        centering_method='xy', centroid_roi_radius=10
+    )
+    
+    location_throughput_ratio = ct_cal_counts_ref_mask_close/ct_cal_counts_ref_mask_far
+
     FpamFsamCal = mocks.create_mock_fpamfsam_cal(save_file=False)
 
     # 2) Generate reference star dataset (ND filter, etc.)
@@ -137,7 +164,7 @@ def generate_test_data(out_dir):
         host_star_counts=host_star_counts,
         roll_angles=ROLL_ANGLES,
         companion_xy=(host_star_center[0] + 20, host_star_center[1] - 20),  
-        companion_counts=host_star_counts / 2,
+        companion_counts=host_star_counts * COMP_REL_COUNTS_SCALE,
         filter='1F',
         platescale=0.0218,
         add_noise=True,
@@ -146,22 +173,32 @@ def generate_test_data(out_dir):
         darkhole_file=dataset_ct[0],
         apply_coron_mask=True,
         coron_mask_radius=20,
-        ct_cal=ct_cal,
-        use_ct_cal=True,
-        cor_dataset=dataset_ct,
-        FpamFsamCal=FpamFsamCal,
-        scaling_factors = all_scaling_factors
+        throughput_factor=location_throughput_ratio
     )
 
-    print("Companion 1 AP Mag:", (-2.5 * np.log10(host_star_counts / 2) + zero_point))
+    companion_star_counts, _, _ = fluxcal.aper_phot(
+        coron_data[0], encircled_radius=10, frac_enc_energy=1.0,
+        method='subpixel', subpixels=5, background_sub=True, r_in=12, r_out=20,
+        centering_method='xy', centroid_roi_radius=10, centering_initial_guess=(host_star_center[0] + 20, host_star_center[1] - 20)
+    )
+    print("Companion star counts with mask:", companion_star_counts)
+
+    print("Companion 1 AP Mag:", (-2.5 * np.log10(host_star_counts*COMP_REL_COUNTS_SCALE) + zero_point))
 
     # 5) Make a “PSF-subtracted” frame with that companion
     psf_sub_dataset = l3_to_l4.do_psf_subtraction(coron_data, ct_calibration=ct_cal,
                                                   numbasis=NUMBASIS,
                                                   do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE)
 
+    #print("PSF sub info", psf_sub_dataset[0].hdu_list['KL_THRU'].data)
+
     # Assuming psf_sub_dataset[0] is a multi-frame Image:
     psf_sub_image = measure_companions.extract_single_frame(psf_sub_dataset[0], frame_index=0)
+    # going to make the negative values zero here otherwise things fail
+    psf_sub_image.data[psf_sub_image.data < 0] = 0
+    psf_sub_image = Image(data_or_filepath=psf_sub_image.data,
+                      pri_hdr=psf_sub_image.pri_hdr,
+                      ext_hdr=psf_sub_image.ext_hdr)
 
     # update companion location in SNYX header due to frame cropping
     comp_keywords = [key for key in psf_sub_image.ext_hdr.keys() if key.startswith("SNYX")]
@@ -174,7 +211,7 @@ def generate_test_data(out_dir):
     print(f"Saved final PSF-subtracted image to: {os.path.join(OUT_DIR, output_filename)}")
 
     return ref_star_dataset, host_star_counts, fluxcal_factor, zero_point, \
-           dataset_ct, ct_cal, FpamFsamCal, final_psf_sub_image, coron_data, all_scaling_factors
+           dataset_ct, ct_cal, FpamFsamCal, final_psf_sub_image, coron_data
 
 
 def test_measure_companions_wcs(out_dir):
@@ -182,7 +219,7 @@ def test_measure_companions_wcs(out_dir):
     Run the full test: measure companion with classical + forward modeling.
     """
     (ref_star_dataset, host_star_counts, fluxcal_factor, zero_point,
-     dataset_ct, ct_cal, FpamFsamCal, psf_sub_frame, coron_data, all_scaling_factors) = generate_test_data(out_dir)
+     dataset_ct, ct_cal, FpamFsamCal, psf_sub_frame, coron_data) = generate_test_data(out_dir)
     
     # Identify a reference PSF at large separation where mask effects are negligible
     throughput_values = ct_cal.ct_excam[2]  # row 2 contains the core throughput values
@@ -190,11 +227,13 @@ def test_measure_companions_wcs(out_dir):
     reference_psf = ct_cal.data[max_index]
 
     # Debugging:
+    '''
     data = ct_cal.ct_excam.T  # Transpose so that each row is one PSF measurement
     import pandas as pd
     df = pd.DataFrame(data, columns=['x', 'y', 'core_throughput'])
     print("Core Throughput Table:")
-    print(df)
+    print(df)'
+    '''
 
     pri_hdr = ct_cal.pri_hdr
     ext_hdr = ct_cal.ext_hdr
@@ -217,22 +256,21 @@ def test_measure_companions_wcs(out_dir):
     ext_hdr['PC2_2'] = 1.0
 
     reference_psf = Image(data_or_filepath=reference_psf, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
-    checking_psf = Image(data_or_filepath=ct_cal.data[16], pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+    far_psf = Image(data_or_filepath=ct_cal.data[16], pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
     ref_psf_counts, _ = measure_companions.measure_counts(reference_psf, PHOT_METHOD, None, **PHOT_ARGS)
-    far_psf_counts, _ = measure_companions.measure_counts(checking_psf, PHOT_METHOD, None, **PHOT_ARGS)
+    far_psf_counts, _ = measure_companions.measure_counts(far_psf, PHOT_METHOD, None, **PHOT_ARGS)
     print("checking counts", ref_psf_counts, far_psf_counts)
 
     # -- Run companion measurement with forward_model = True
     result_table = measure_companions.measure_companions(
         coron_data, ref_star_dataset, psf_sub_frame,
-        ref_psf_min_mask_effect=reference_psf,
+        ref_psf_min_mask_effect=far_psf,
         ct_cal=ct_cal, FpamFsamCal=FpamFsamCal,
         phot_method='aperture',
         photometry_kwargs=PHOT_ARGS, 
         fluxcal_factor=fluxcal_factor,
         forward_model=False,
-        scaling_factors=all_scaling_factors,
         numbasis = NUMBASIS,
         output_dir=out_dir,
         verbose=True

@@ -88,7 +88,7 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
         flux_image = mocks.create_flux_image(
             dim_star_flux, FWHM, cal_factor, filter_used, "HOLE", star_name,
             fsm_x=0, fsm_y=0, exptime=dim_exptime, filedir=output_path,
-            color_cor=1.0, platescale=21.8,
+            platescale=21.8,
             background=background_val,
             add_gauss_noise=add_gauss_noise_val,
             noise_scale=1.0, file_save=True
@@ -131,7 +131,7 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                 flux_image = mocks.create_flux_image(
                     attenuated_flux, FWHM, cal_factor, filter_used, "ND225", star_name,
                     dx, dy, bright_exptime, output_path,
-                    color_cor=1.0, platescale=21.8,
+                    platescale=21.8,
                     background=background_val,
                     add_gauss_noise=add_gauss_noise_val,
                     noise_scale=1.0, file_save=True
