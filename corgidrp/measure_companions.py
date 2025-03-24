@@ -106,8 +106,9 @@ def measure_companions(
 
         # Use forward-modeling or a simplified subtraction approach to model the PSF and do PSF-subtraction.
         if forward_model:
+            #Forward model the off-axis image of the host star if it was at the planet location through the PSF subtraction process
             kl_value, ct_value, modeled_image = forward_model_psf(
-                coronagraphic_dataset, ref_star_dataset, ct_cal,
+                coronagraphic_dataset, ref_star_dataset, ct_cal, scaled_star_psf,
                 guesssep, guesspa, guessflux=1,
                 numbasis=numbasis, nwalkers=nwalkers, nburn=nburn, nsteps=nsteps,
                 numthreads=numthreads, outputdir=output_dir
@@ -278,6 +279,7 @@ def forward_model_psf(
     coronagraphic_dataset,
     reference_star_dataset,
     ct_calibration,
+    scaled_star_psf,
     guesssep,
     guesspa,
     guessflux,
@@ -340,18 +342,22 @@ def forward_model_psf(
         ct_value (float): Core throughput value extracted from the subtraction.
         klip_image (corgidrp.data.Image): Final PSF-subtracted image after forward modeling.
     """
+    amp = np.nanmax(scaled_star_psf.data)
+
+    plot_dataset(coronagraphic_dataset, 'Coronagraph dataset', cmap='plasma')
+
     fm_dataset = coronagraphic_dataset.copy()
+    print("length coronagraph dataset", fm_dataset)
     # Inject the normalized PSF into each frame.
     for idx, frame in enumerate(fm_dataset):
-        injected_frame, _, _ = klip_fm.inject_psf(
-            frame_in=frame,
-            ct_calibration=ct_calibration,
-            amp=guessflux,
-            sep_pix=guesssep,
-            pa_deg=guesspa,
-            norm=inject_norm
-        )
+        # TO DO: look into why this only works if I do negative guesspa
+        injected_frame, _, _ = klip_fm.inject_psf(frame, ct_calibration, amp, 
+                                                  guesssep, -guesspa)
         fm_dataset[idx].data = injected_frame.data
+    
+    # Debugging plotting:
+    # Plot the injected PSF dataset (fm_dataset)
+    plot_dataset(fm_dataset, 'Injected PSF (fm_dataset)', cmap='plasma')
 
     # Perform PSF subtraction using the l3_to_l4 pipeline.
     fm_psfsub = l3_to_l4.do_psf_subtraction(
@@ -380,6 +386,9 @@ def forward_model_psf(
     klip_image = Image(klip_data, pri_hdr=fm_psfsub[0].pri_hdr, ext_hdr=fm_psfsub[0].ext_hdr)
     # Update companion location in the cropped image header.
     comp_keyword = next(key for key in fm_psfsub[0].ext_hdr if key.startswith("SNYX"))
+
+    # Plot the PSF-subtracted dataset (fm_psfsub)
+    plot_dataset(klip_image, 'PSF-Subtracted (fm_psfsub)', cmap='plasma')
 
     #TO DO: don't hardcode this, ideally you can use masklocx and y
     klip_image = update_companion_location_in_cropped_image(klip_image, comp_keyword, (512, 512), (50, 50))
@@ -458,3 +467,58 @@ def extract_single_frame(image, frame_index=0):
     if hasattr(image, 'hdu_list'):
         new_image.hdu_list = {key: image.hdu_list[key] for key in image.hdu_list if key in ['KL_THRU', 'CT_THRU']}
     return new_image
+
+
+def plot_dataset(dataset, title_prefix, cmap='plasma'):
+    """
+    Plots frames from a dataset in a grid layout using ZScale normalization.
+    
+    For each frame, the ZScale algorithm determines suitable limits (vmin and vmax)
+    to enhance the contrast in the image, similar to ds9's zscale.
+    
+    This function accepts either:
+      - A Dataset object with a 'frames' attribute,
+      - A list or tuple of frame objects (each having a 'data' attribute), or
+      - A single frame object.
+    
+    Args:
+        dataset (Dataset, list, tuple, or object): The input dataset or frame(s).
+        title_prefix (str): Title prefix for each subplot.
+        cmap (str): Colormap to use for the image display.
+    """
+    # If dataset is a Dataset object (assumed to have a 'frames' attribute), extract the frames.
+    if hasattr(dataset, 'frames'):
+        frames = dataset.frames
+    # If dataset is not a list/tuple (i.e. a single frame), wrap it in a list.
+    elif not isinstance(dataset, (list, tuple)):
+        frames = [dataset]
+    else:
+        frames = dataset
+
+    num_frames = len(frames)
+    ncols = int(np.ceil(np.sqrt(num_frames)))
+    nrows = int(np.ceil(num_frames / ncols))
+    
+    fig, axs = plt.subplots(nrows, ncols, figsize=(4 * ncols, 4 * nrows))
+    axs = np.array(axs).flatten()
+    
+    for i, frame in enumerate(frames):
+        data = frame.data
+        data_max = data.max()
+        # Use ZScaleInterval to compute the limits.
+        zscale = ZScaleInterval()
+        vmin, vmax = zscale.get_limits(data)
+        # Print the max value and the computed limits.
+        print(f"Frame {i} - Max Value: {data_max}, ZScale limits: vmin={vmin}, vmax={vmax}")
+        
+        im = axs[i].imshow(data, origin='lower', cmap=cmap, vmin=vmin, vmax=vmax)
+        axs[i].set_title(f'{title_prefix} Frame {i} (max: {data_max:.2e})')
+        plt.colorbar(im, ax=axs[i])
+    
+    # Turn off any unused subplots.
+    for j in range(i + 1, len(axs)):
+        axs[j].axis('off')
+    
+    fig.suptitle(f'{title_prefix} Frames', fontsize=16)
+    plt.tight_layout()
+    plt.show()
