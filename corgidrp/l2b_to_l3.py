@@ -32,14 +32,16 @@ def create_wcs(input_dataset, astrom_calibration):
 
         vert_ang = np.radians(northangle + roll_ang)  ## might be -roll_ang
         pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
-        cdmatrix = pc * (platescale_x * 0.001) / 3600.  # assumes platescale is same along both axes
+        cdmatrix_x = pc * (platescale_x * 0.001) / 3600.
+        cdmatrix_y = pc * (platescale_y * 0.001) / 3600.
+
 
         # create dictionary with wcs information
         wcs_info = {}
-        wcs_info['CD1_1'] = cdmatrix[0,0]
-        wcs_info['CD1_2'] = cdmatrix[0,1]
-        wcs_info['CD2_1'] = cdmatrix[1,0]
-        wcs_info['CD2_2'] = cdmatrix[1,1]
+        wcs_info['CD1_1'] = cdmatrix_x[0,0]
+        wcs_info['CD1_2'] = cdmatrix_x[0,1]
+        wcs_info['CD2_1'] = cdmatrix_y[1,0]
+        wcs_info['CD2_2'] = cdmatrix_y[1,1]
 
         wcs_info['CRPIX1'] = center_pixel[0]
         wcs_info['CRPIX2'] = center_pixel[1]
