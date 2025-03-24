@@ -6,9 +6,8 @@ from astropy.io import fits
 from scipy.signal import decimate
 
 import corgidrp
-import corgidrp.data as data
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
-    create_ct_interp)
+    create_ct_interp, create_ct_cal)
 from corgidrp.data import Image, Dataset, FpamFsamCal, CoreThroughputCalibration
 from corgidrp import corethroughput
 
@@ -508,6 +507,71 @@ def test_ct_interp():
     
     assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
 
+
+def test_get_1d_ct():
+    d = 2.36 #m
+    lam = 573.8e-9 #m
+    pixscale_arcsec = 0.0218
+    fwhm_mas = 1.22 * lam / d * 206265 * 1000
+    
+    # Test where DETPIX0X/Y = (0,0)
+    nx,ny = (5,5)
+    cenx, ceny = (25.5,30.5)
+    ctcal = create_ct_cal(fwhm_mas,
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    pri_hdr = fits.Header()
+    ext_hdr = fits.Header()
+    ext_hdr["MASKLOCX"] = 25.
+    ext_hdr["MASKLOCY"] = 30.
+    frame = Image(np.zeros([80,80]),
+                  pri_hdr=pri_hdr,
+                  ext_hdr=ext_hdr)
+    
+    seps = [0.,1.,1.41,2.,3.,4.]
+
+    expected_args = [12,7,6,2,0,0]
+
+    ct_1d = corethroughput.get_1d_ct(ctcal,frame,
+                                     seps)
+    
+    assert ct_1d.shape == (2,len(seps))
+
+    for i,arg in enumerate(expected_args):
+        assert ct_1d[1,i] == ctcal.ct_excam[2,arg]
+
+    # Test where DETPIX0X/Y is nonzero:
+
+    nx,ny = (5,5)
+    cenx, ceny = (45.5,35.5)
+    ctcal = create_ct_cal(fwhm_mas,
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    pri_hdr = fits.Header()
+    ext_hdr = fits.Header()
+    ext_hdr["MASKLOCX"] = 25.
+    ext_hdr["MASKLOCY"] = 30.
+    ext_hdr["DETPIX0X"] = 20
+    ext_hdr["DETPIX0Y"] = 5
+    frame = Image(np.zeros([80,80]),
+                  pri_hdr=pri_hdr,
+                  ext_hdr=ext_hdr)
+    
+    seps = [0.,1.,1.41,2.,3.,4.]
+
+    expected_args = [12,7,6,2,0,0]
+
+    ct_1d = corethroughput.get_1d_ct(ctcal,frame,
+                                     seps)
+    
+    assert ct_1d.shape == (2,len(seps))
+
+    for i,arg in enumerate(expected_args):
+        assert ct_1d[1,i] == ctcal.ct_excam[2,arg]
+
+
 def test_ct_map():
     """ Tests the creation of a core throughput map. The method InterpolateCT()
       has its own unit test and can be considered as tested in the following. """
@@ -600,8 +664,10 @@ def teardown_module():
     del ct_in, ct_syn
 
 if __name__ == '__main__':
-    test_psf_pix_and_ct()
-    test_fpm_pos()
-    test_cal_file()
-    test_ct_interp()
-    test_ct_map()
+    # test_psf_pix_and_ct()
+    # test_fpm_pos()
+    # test_cal_file()
+    test_get_1d_ct()
+
+    # test_ct_interp()
+    # test_ct_map()
