@@ -298,6 +298,7 @@ def aper_phot(image, encircled_radius, frac_enc_energy=1., method='subpixel', su
     if background_sub:
         #This is essentially the median in a circular annulus 
         bkg = LocalBackground(r_in, r_out)
+        print("in fluxcal", pos[0], pos[1])
         back = bkg(dat, pos[0], pos[1], mask=image.dq.astype(bool))
         dat -= back
 

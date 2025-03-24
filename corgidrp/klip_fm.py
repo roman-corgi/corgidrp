@@ -53,6 +53,9 @@ def inject_psf(frame_in, ct_calibration, amp,
     rel_pa = pa_deg + frame_roll        #i'm changing this to match what klip psf sub does when it derotates
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
+    # Debug: print offsets.
+    #print("Computed dx, dy:", dx, dy)
+
     psf_model = get_closest_psf(ct_calibration,
                                 frame.ext_hdr['STARLOCX'],
                                 frame.ext_hdr['STARLOCY'],

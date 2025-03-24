@@ -10,10 +10,11 @@ import pyklip.fm as fm
 import pyklip.fmlib.fmpsf as fmpsf
 import pyklip.fitpsf as fitpsf
 import corgidrp.mocks as mocks
+import corgidrp.corethroughput as corethroughput
 import pyklip.rdi as rdi
 from corgidrp.data import PyKLIPDataset, Image, Dataset
-import corgidrp.l4_to_tda as l4_to_tda   
-import corgidrp.l3_to_l4 as l3_to_l4 
+import corgidrp.l4_to_tda as l4_to_tda
+import corgidrp.l3_to_l4 as l3_to_l4
 import astropy.io.fits as fits
 import matplotlib.pyplot as plt
 from pyklip.fitpsf import FMAstrometry
@@ -28,9 +29,12 @@ def measure_companions(
     ct_cal,
     FpamFsamCal,
     phot_method='aperture',
+    photometry_kwargs=None,
     fluxcal_factor=None,
     host_star_in_calspec=True,
     forward_model=False,
+    scaling_factors=None,
+    numbasis = [1, 2],
     nwalkers=10,
     nburn=5,
     nsteps=20,
@@ -46,56 +50,66 @@ def measure_companions(
       1) Measure host star counts in a direct (unocculted) image.
       2) Measure reference PSF counts (from an off-axis calibration).
       3) Compute a ratio for scaling that PSF to represent the star at companion's location.
-      4) (Optional) Forward-model that PSF with pyklip's FMAstrometry, or do a simpler 
-         "classical" approach.
+      4) Forward-model that PSF with pyklip's FMAstrometry, or do a simpler approach to determine
+            what the throughput is and account for losses incurred by PSF subtraction.
       5) Measure each companion's flux ratio & apparent magnitude, return in a table.
 
     Args:
-    coronagraphic_dataset (corgidrp.data.Dataset): A coronagraphic dataset (not PSF-subtracted)
-        with a star and a companion (in e-). 
-    ref_star_dataset (corgidrp.data.Dataset): Multiple frames of a reference star taken at different
-        roll angles, with no coronagraph in place and no companions (in e-).
-    psf_sub_image (corgidrp.data.Image): A PSF-subtracted frame of star behind the coronagraph, with 
-        companions
-    ref_psf_min_mask_effect (corgidrp.data.Image): An off-axis calibration PSF of a star at some known 
-        separation where mask effects are negligible (it is near 6 lam/D).
-    ct_dataset (corgidrp.data.Dataset): The Core Throughput calibration dataset.
-    ct_cal (corgidrp.data.CoreThroughputCalibration): A Core Throughput calibration file containing 
-        PSFs at different distances from the mask and their corresponding positions and throughputs.
-    phot_method ({'aperture', 'gauss2d'}, optional): Photometry method for measuring 
-        companion counts on the (already) PSF-subtracted image.
-    fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): Fluxcal factor with .ext_hdr['ZP'].
-    FpamFsamCal (corgidrp.data.FpamFsamCal, optional): FPAM to EXCAM transformation matrix.
-    host_star_in_calspec (bool, optional):
-    forward_model (bool, optional):
-    output_dir (str, optional): Output directory path.
-    verbose (bool, optional): If True, print progress messages.
+        coronagraphic_dataset (corgidrp.data.Dataset): A coronagraphic dataset (not PSF-subtracted)
+            with a star and a companion (in e-). 
+        ref_star_dataset (corgidrp.data.Dataset): Multiple frames of a reference star taken at different
+            roll angles, with no coronagraph in place and no companions (in e-).
+        psf_sub_image (corgidrp.data.Image): A PSF-subtracted frame of star behind the coronagraph, 
+            with companions.
+        ref_psf_min_mask_effect (corgidrp.data.Image): An off-axis calibration PSF of a star at some 
+            known separation where mask effects are negligible.
+        ct_cal (corgidrp.data.CoreThroughputCalibration): A Core Throughput calibration file containing 
+            PSFs at different distances from the mask and their positions/throughputs.
+        FpamFsamCal (corgidrp.data.FpamFsamCal): FPAM/FSAM to EXCAM transformation matrix.
+        phot_method ({'aperture', 'gauss2d'}, optional): Photometry method for measuring 
+            companion counts on the (already) PSF-subtracted image.
+        photometry_kwargs (dict, optional): A dictionary of keyword arguments to pass to the 
+            photometry routines. If None, defaults will be used.
+        fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): Fluxcal factor with .ext_hdr['ZP'].
+        host_star_in_calspec (bool, optional): If True, fetch the star's magnitude from calspec. 
+            Otherwise, use zero_point from fluxcal_factor.
+        forward_model (bool, optional): If True, run PyKLIP-based forward modeling to get flux. 
+            Otherwise do classical photometry.
+        scaling_factors (list, optional): Scaling factors to convert mask throughput/ core throughput
+            to counts.
+        numbasis (list, optional): Number of KLIP modes to retain.
+        nwalkers (int, optional): Number of MCMC walkers if forward_model=True.
+        nburn (int, optional): Number of MCMC burn steps if forward_model=True.
+        nsteps (int, optional): Number of MCMC steps if forward_model=True.
+        numthreads (int, optional): Threads for MCMC.
+        output_dir (str, optional): Output directory path.
+        verbose (bool, optional): If True, print progress messages.
 
     Returns:
-        result_table (astropy.table.Table):A table with the following columns (for checking now, replace later
-            with regular returns):
-                - id : companion label
-                - x, y : location in pixels
-                - counts_raw : companion counts in e- (post-subtraction)
-                - counts_err : estimated counts uncertainty
-                - counts_corr : counts after throughput correction
-                - counts_ratio : counts_corr / host_star_counts (if host_star_counts is given)
-                - mag : apparent magnitude (computed via host_star_apmag or zero point or fluxcal_factor)
+        result_table (astropy.table.Table): A table with columns:
+            - id: companion label
+            - x, y: location in pixels
+            - measured_flux: measured flux in e- (either final companion flux from FM or direct photometry)
+            - counts_ratio: companion flux / host star flux
+            - mag: apparent magnitude (computed from ratio or flux)
     """
-
-    # (A) Get default photometry parameters for aperture or gauss2d
-    phot_method_kwargs = get_photometry_kwargs(phot_method)
+    # Use provided photometry parameters or fallback to defaults.
+    if photometry_kwargs is None:
+        photometry_kwargs = get_photometry_kwargs(phot_method)
 
     # i. Measure host star counts from direct/unocculted ref_star_dataset
-    host_star_counts, _ = measure_counts(ref_star_dataset[0], phot_method, None, **phot_method_kwargs)
+    host_star_counts, _ = measure_counts(ref_star_dataset[0], phot_method, None, **photometry_kwargs)
 
     # ii. Measure reference PSF counts (off-axis calibration)
-    reference_psf_counts, _ = measure_counts(ref_psf_min_mask_effect, phot_method, None, **phot_method_kwargs)
+    reference_psf_counts, _ = measure_counts(ref_psf_min_mask_effect, phot_method, None, **photometry_kwargs)
+
+    print("checking input counts", host_star_counts, reference_psf_counts)
 
     # iii. The ratio of host star flux to off-axis reference PSF flux
-    host_psf_ratio = host_star_counts / reference_psf_counts
+    host_to_ref_psf_ratio = host_star_counts / reference_psf_counts
 
-    # Parse companion positions from the PSF-subtracted image header
+    # Parse companion positions from the PSF-subtracted image header, this image may be smaller than coronagraphic
+    #   dataset or reference images
     companions = []
     for key, val in psf_sub_image.ext_hdr.items():
         if key.startswith('SNYX'):
@@ -104,144 +118,129 @@ def measure_companions(
             y_val = float(parts[2])
             companions.append({"id": key, "x": x_val, "y": y_val})
 
+    x_star_in_psf_sub_frame = psf_sub_image.ext_hdr.get('STARLOCX', None)
+    y_star_in_psf_sub_frame = psf_sub_image.ext_hdr.get('STARLOCY', None)
+
     if verbose:
         print(f"Found {len(companions)} companion(s) in header.")
     
     # get ct_dataset from ct_cal
     ct_dataset = ct_dataset_from_cal(ct_cal)
-    
+
     results = []
 
     # Loop over each companion
     for comp in companions:
-        x_c, y_c = comp['x'], comp['y']
+        x_comp_in_psf_sub_frame, y_comp_in_psf_sub_frame = comp['x'], comp['y']
+
+        dx = x_comp_in_psf_sub_frame - x_star_in_psf_sub_frame
+        dy = y_comp_in_psf_sub_frame - y_star_in_psf_sub_frame
+        guesssep = np.hypot(dx, dy)
+        guesspa = np.degrees(np.arctan2(dx, dy)) % 360
 
         # (B) Get the off-axis PSF from calibration at that radial distance
-        throughput_factor, nearest_frame = measure_core_throughput_at_location(
-            x_c, y_c, ct_cal, ct_dataset, FpamFsamCal
+        throughput_factor, nearest_frame, scaling_factor = measure_core_throughput_at_location(
+            x_comp_in_psf_sub_frame, y_comp_in_psf_sub_frame, x_star_in_psf_sub_frame, 
+            y_star_in_psf_sub_frame, ct_cal, ct_dataset, scaling_factors
         )
-        # Scale the nearest_frame to the star's flux if the star were located at (x_c, y_c)
-        scaled_psf_data = nearest_frame.data * host_psf_ratio
-
-        scaled_psf_at_companion_loc = Image(
-            data_or_filepath=scaled_psf_data, 
+        # Scale that PSF to the star’s flux if it were at (x_c, y_c)
+        scaled_star_psf_data = nearest_frame.data * host_to_ref_psf_ratio
+        scaled_star_psf_at_companion_loc = Image(
+            data_or_filepath=scaled_star_psf_data, 
             pri_hdr=nearest_frame.pri_hdr, 
             ext_hdr=nearest_frame.ext_hdr, 
             err=nearest_frame.err if hasattr(nearest_frame, 'err') else None
         )
 
-        # Store two key fluxes:
-        #  - psf_sub_companion_counts (the measured companion flux)
-        #  - psf_sub_star_at_companion_loc_counts (the flux we'd measure for the star 
-        #    at that location). Then the ratio is companion/star_at_loc.
+        scaled_star_psf_at_companion_loc_counts, _ = measure_counts(
+            scaled_star_psf_at_companion_loc, phot_method, 
+            (x_comp_in_psf_sub_frame, y_comp_in_psf_sub_frame), **photometry_kwargs
+        )
 
+        # (C) Measure the companion flux in the final PSF-subtracted image 
+        psf_sub_companion_counts, _ = measure_counts(
+            psf_sub_image, phot_method, (x_comp_in_psf_sub_frame, y_comp_in_psf_sub_frame), 
+            **photometry_kwargs
+        )
+
+        # Forward model vs. simplified approach:
         if forward_model:
             # (C1) Forward-model approach with PyKLIP
-            x_star = coronagraphic_dataset[0].ext_hdr.get('STARLOCX', None)
-            y_star = coronagraphic_dataset[0].ext_hdr.get('STARLOCY', None)
-            dx = x_c - x_star
-            dy = y_c - y_star
-            guesssep = np.hypot(dx, dy)
-            guesspa = np.degrees(np.arctan2(dx, dy)) % 360
 
-            # The amplitude guess: measure flux of the scaled PSF
-            psf_guess_counts, _ = measure_counts(
-                scaled_psf_at_companion_loc, phot_method, None, **phot_method_kwargs
-            )
-            # Pass that as guessflux
-            fit = forward_model_psf(
+            kl_throughput, ct_throughput, psf_sub_star_at_companion_loc = forward_model_psf(
                 coronagraphic_dataset, ref_star_dataset, ct_cal,
-                guesssep, guesspa, guessflux=psf_guess_counts,
-                nwalkers=nwalkers, nburn=nburn, nsteps=nsteps, numthreads=numthreads,
-                outputdir=output_dir
+                guesssep, guesspa, guessflux=1,  # using a normalized injection
+                numbasis=numbasis, nwalkers=nwalkers, nburn=nburn, nsteps=nsteps,
+                numthreads=numthreads, outputdir=output_dir
             )
-
-            # 1) "raw_flux" is a ParamRange with .bestfit, .error, etc.
-            companion_flux_scale = fit.raw_flux.bestfit
-            companion_flux_scale_err = fit.raw_flux.error
-            print("Best-fit flux scale:", companion_flux_scale)
-            print("Flux scale uncertainty:", companion_flux_scale_err)
-
-            # 2) The final companion flux is scale * guessflux
-            companion_flux = companion_flux_scale * psf_guess_counts
-
-            # This is our "measured companion counts"
-            psf_sub_companion_counts = companion_flux
-
-            # The "star flux at that location" is the overall host_star_counts 
-            # (does this ignore any local throughput? if it does, to incorporate 
-            #  local mask throughput, could do star_flux_at_loc = host_star_counts * (some factor). 
-            psf_sub_star_at_companion_loc_counts = host_star_counts
-
-        else:
-            # (C2) Classical approach:
-            # Subtract star at that location
-            psf_sub_star_at_companion_loc, efficiency = classical_psf_sub(scaled_psf_at_companion_loc)
-
-            # Then measure flux in that subbed star image
+            comp_keywords = [key for key in psf_sub_star_at_companion_loc.ext_hdr.keys() if key.startswith("SNYX")]
+            comp_keyword = comp_keywords[0]
+            comp_locations_in_fm = psf_sub_star_at_companion_loc.ext_hdr[comp_keyword]
+            print("printing comp location", comp_locations_in_fm)
+            parts_in_fm = comp_locations_in_fm.split(',')
+            x_val_in_fm = float(parts_in_fm[1])
+            y_val_in_fm = float(parts_in_fm[2])
             psf_sub_star_at_companion_loc_counts, _ = measure_counts(
-                psf_sub_star_at_companion_loc, phot_method, None, **phot_method_kwargs
+                psf_sub_star_at_companion_loc, phot_method, (x_val_in_fm, y_val_in_fm), 
+                **photometry_kwargs
             )
 
-            # Also measure the companion flux in the final PSF-subtracted image
-            psf_sub_companion_counts, _ = measure_counts(
-                psf_sub_image, phot_method, (x_c, y_c), **phot_method_kwargs
-            )
+            plt.figure(figsize=(8, 8))
+            plt.imshow(psf_sub_star_at_companion_loc.data, origin='lower', cmap='inferno')
+            plt.scatter([x_val_in_fm], [y_val_in_fm],
+                        s=100, edgecolor='cyan', facecolor='none', linewidth=2,
+                        label='Companion Location')
+            plt.title('PSF Sub Star at Companion Location')
+            plt.legend()
+            plt.colorbar(label='Intensity (e-)')
+            plt.show()
 
-        # (D) If forward_model, already have `psf_sub_companion_counts` & 
-        #     `psf_sub_star_at_companion_loc_counts`.
-        #     Otherwise, define them from the lines above.
-        if not forward_model:
-            companion_host_ratio = (
-                psf_sub_companion_counts / psf_sub_star_at_companion_loc_counts
-            )
+            # Using the computed throughput from PyKLIP which forward models the off-axis image of the 
+            # host star through the PSF subtraction process, scale the counts
+            corrected_psf_sub_companion_counts = psf_sub_companion_counts
+            companion_host_ratio = psf_sub_companion_counts  / psf_sub_star_at_companion_loc_counts
         else:
-            companion_host_ratio = psf_sub_companion_counts / psf_sub_star_at_companion_loc_counts
+            # (C2) Simplified approach
+            psf_sub_star_at_companion_loc, efficiency = simplified_psf_sub(scaled_star_psf_at_companion_loc,
+                                                                           ct_cal, guesssep)
+            
+            psf_sub_star_at_companion_loc_counts, _ = measure_counts(
+                psf_sub_star_at_companion_loc, phot_method, None, **photometry_kwargs
+            )
+            print("check scaling", scaling_factor, psf_sub_companion_counts)
+            corrected_psf_sub_companion_counts = psf_sub_companion_counts*scaling_factor
+            companion_host_ratio = corrected_psf_sub_companion_counts / psf_sub_star_at_companion_loc_counts
 
-        # (E) Convert flux ratio to magnitude
+        # (D) Compute the companion magnitude
         if host_star_in_calspec:
-            # The star's apparent magnitude in this band
             apmag_data = l4_to_tda.determine_app_mag(ref_star_dataset[0], ref_star_dataset[0].pri_hdr['TARGET'])
             host_star_apmag = apmag_data[0].ext_hdr['APP_MAG']
             companion_mag = host_star_apmag - 2.5 * np.log10(companion_host_ratio)
         else:
-            # Use zero point from fluxcal_factor
             if fluxcal_factor is None:
-                raise ValueError("No fluxcal_factor provided, but host star is not in calspec. Provide fluxcal_factor.")
+                raise ValueError(
+                    "No fluxcal_factor provided, but host_star_in_calspec is False. "
+                    "Provide fluxcal_factor or set host_star_in_calspec=True."
+                )
             zero_point = fluxcal_factor.ext_hdr.get('ZP')
-            # The companion flux is "psf_sub_companion_counts"
-            counts_corr = psf_sub_companion_counts
-            companion_mag = -2.5 * np.log10(counts_corr) + zero_point
+            companion_mag = -2.5 * np.log10(psf_sub_companion_counts) + zero_point
 
-        # (F) Append to results
-        if forward_model:
-            results.append((
-                comp['id'],
-                x_c,
-                y_c,
-                psf_sub_companion_counts,          # final companion flux
-                psf_sub_star_at_companion_loc_counts,
-                companion_host_ratio,
-                companion_mag
-            ))
-        else:
-            results.append((
-                comp['id'],
-                x_c,
-                y_c,
-                psf_sub_companion_counts,
-                psf_sub_star_at_companion_loc_counts,
-                companion_host_ratio,
-                companion_mag
-            ))
+        results.append((
+            comp['id'],
+            x_comp_in_psf_sub_frame,
+            y_comp_in_psf_sub_frame,
+            corrected_psf_sub_companion_counts,
+            psf_sub_star_at_companion_loc_counts,
+            companion_host_ratio,
+            companion_mag
+        ))
 
-    # Build a table with consistent columns
     result_table = Table(
         rows=results,
         names=[
             'id', 'x', 'y',
-            'psf_sub_companion_counts',
-            'psf_sub_star_at_companion_loc_counts',
+            'measured companion counts',  # e- (either final companion flux from FM or direct photometry)
+            'simulated host star at companion location counts',
             'counts_ratio',
             'mag'
         ]
@@ -249,9 +248,12 @@ def measure_companions(
     return result_table
 
 
-# ---------------- Helper functions -------------------------------------- #
+# -------------------------------------------------------------------------
+# Helper functions
+# -------------------------------------------------------------------------
+
 def ct_dataset_from_cal(ct_cal):
-    psf_cube = ct_cal.data  # shape (N, 19, 19)
+    psf_cube = ct_cal.data  # shape (N, height, width)
     psf_images = []
     for i in range(psf_cube.shape[0]):
         psf_img = Image(psf_cube[i], pri_hdr=ct_cal.pri_hdr, ext_hdr=ct_cal.ext_hdr)
@@ -259,62 +261,108 @@ def ct_dataset_from_cal(ct_cal):
     dataset_ct = Dataset(psf_images)
     return dataset_ct
 
+
 def measure_counts(input_image_or_dataset, phot_method, initial_xy_guess, **kwargs):
-    """
-    Measure counts in an image using the specified phot_method 
-    ('aperture' or 'gauss2d'), returning (flux, flux_err).
-    """
     if phot_method == 'gauss2d':
-        return fluxcal.phot_by_gauss2d_fit(
+        flux, flux_err, *_ = fluxcal.phot_by_gauss2d_fit(
             input_image_or_dataset, centering_initial_guess=initial_xy_guess, **kwargs
-        )[:2]
+        )
+        return flux, flux_err
     elif phot_method == 'aperture':
-        return fluxcal.aper_phot(
+        flux, flux_err, *_ = fluxcal.aper_phot(
             input_image_or_dataset, centering_initial_guess=initial_xy_guess, **kwargs
-        )[:2]
+        )
+        return flux, flux_err
     else:
         raise ValueError(f"Invalid photometry method: {phot_method}")
 
 
 def get_photometry_kwargs(phot_method):
     """
-    Returns method-specific default keyword args for aperture or gauss2d photometry.
+    (Optional) Default photometry kwargs if none are provided.
     """
     common_kwargs = {'centering_method': 'xy', 'centroid_roi_radius': 5}
-
     photometry_options = {
         'gauss2d': {
-            'fwhm': 3, 'background_sub': True, 'r_in': 5, 'r_out': 10, **common_kwargs
+            'fwhm': 4,
+            'background_sub': True,
+            'r_in': 5,
+            'r_out': 10,
+            **common_kwargs
         },
         'aperture': {
-            'encircled_radius': 4, 'frac_enc_energy': 1, 'subpixels': 5, 
-            'background_sub': True, 'r_in': 6, 'r_out': 12, **common_kwargs
+            'encircled_radius': 7,
+            'frac_enc_energy': 1.0,
+            'subpixels': 10,
+            'background_sub': True,
+            'r_in': 5,
+            'r_out': 10,
+            **common_kwargs
         }
     }
-
     if phot_method not in photometry_options:
         raise ValueError(
-            f"Invalid photometry method '{phot_method}'. "
-            f"Choose from {list(photometry_options.keys())}."
+            f"Invalid photometry method '{phot_method}'. Choose from {list(photometry_options.keys())}."
         )
     return photometry_options[phot_method]
 
 
-def classical_psf_sub(psf_frame):
-    """
-    Placeholder function for classical PSF subtraction.
-    Returns a new image with the star's flux scaled by an efficiency factor,
-    plus the factor itself.
-    """
-    efficiency = 0.7
-    psf_sub_frame = psf_frame.data * efficiency
+def simplified_psf_sub(psf_frame, ct_cal, guesssep):
+    closest_sep, idx, ct_throughput = lookup_core_throughput(ct_cal, guesssep)
+    print("guesssep", guesssep, ct_throughput)
+    psf_sub_frame = psf_frame.data * ct_throughput
     psf_sub_image = Image(
-        data_or_filepath=psf_sub_frame, 
-        pri_hdr=psf_frame.pri_hdr, 
-        ext_hdr=psf_frame.ext_hdr, 
+        data_or_filepath=psf_sub_frame,
+        pri_hdr=psf_frame.pri_hdr,
+        ext_hdr=psf_frame.ext_hdr,
         err=psf_frame.err if hasattr(psf_frame, 'err') else None
     )
-    return psf_sub_image, efficiency
+    return psf_sub_image, ct_throughput
+
+
+def lookup_core_throughput(ct_cal, desired_sep):
+    """
+    Look up the core throughput value closest to a given pixel separation.
+    
+    Args:
+        ct_table (numpy.ndarray): A 2D array of shape (N, 3) where each row contains
+            [x, y, core_throughput] for a calibration PSF.
+        starloc (tuple): The (x, y) position of the star in the cropped image,
+            e.g., (STARLOCX, STARLOCY).
+        desired_sep (float): The desired pixel separation from the star center.
+    
+    Returns:
+        tuple: A tuple (closest_sep, throughput) where:
+            - closest_sep (float): The separation value (in pixels) from the ct_table
+              that is closest to desired_sep.
+            - throughput (float): The corresponding core throughput value.
+    """
+    # Existing lookup methods weren't working so i'm writing this one for now. 
+    x, y, ct = ct_cal.ct_excam
+    masklocx = ct_cal.ext_hdr['MASKLOCX']
+    masklocy = ct_cal.ext_hdr['MASKLOCY']
+    print("starloc", masklocx, masklocy, x, y, desired_sep)
+
+    # Compute separation for each PSF relative to the star location.
+    separations = np.sqrt((x - masklocx)**2 + (y - masklocy)**2)
+
+    # Build and print a debug table.
+    import pandas as pd
+    debug_df = pd.DataFrame({
+        'separation': separations,
+        'ct': ct
+    })
+    print("Debug table of separation and CT values:")
+    print(debug_df)
+    
+    # Find the index where the separation is closest to desired_sep.
+    idx = np.argmin(np.abs(separations - desired_sep))
+    
+    closest_sep = separations[idx]
+    throughput = ct[idx]
+    print("closest idx", idx)
+    
+    return closest_sep, idx, throughput
 
 
 def forward_model_psf(
@@ -346,19 +394,13 @@ def forward_model_psf(
     pa_uncertainty=0.1,
     plot_results=True
 ):
-    """
-    Example forward-model routine using klip_fm.inject_psf + PyKLIP's FMAstrometry.
-    Returns the fitted FMAstrometry object.
-    """
     fm_dataset = coronagraphic_dataset.copy()
     injected_images = []
-
-    # 1) Inject a fake planet into each science frame
     for idx, frame in enumerate(fm_dataset):
         injected_frame, psf_model, _ = klip_fm.inject_psf(
             frame_in=frame,
             ct_calibration=ct_calibration,
-            amp=guessflux,     # total flux (e-) to inject
+            amp=guessflux,
             sep_pix=guesssep,
             pa_deg=guesspa,
             norm=inject_norm
@@ -366,7 +408,6 @@ def forward_model_psf(
         fm_dataset[idx].data = injected_frame.data
         injected_images.append(injected_frame.data)
 
-    # Optional plotting
     if plot_results:
         n_frames = len(injected_images)
         cols = int(np.ceil(np.sqrt(n_frames)))
@@ -385,7 +426,6 @@ def forward_model_psf(
         plt.tight_layout()
         plt.show()
 
-    # 2) Run KLIP to subtract the stellar PSF
     fm_psfsub = l3_to_l4.do_psf_subtraction(
         input_dataset=fm_dataset,
         ct_calibration=ct_calibration,
@@ -397,24 +437,65 @@ def forward_model_psf(
         numbasis=numbasis,
         outdir=outputdir,
         fileprefix=fileprefix,
-        do_crop=False,
+        do_crop=True,
+        crop_sizexy=(100,100),
         measure_klip_thrupt=True,
         measure_1d_core_thrupt=True
     )
-    klip_data = fm_psfsub[0].data[-1]  # final KL mode
-
+    klip_data = fm_psfsub[0].data[-1]
     if plot_results:
         fig2, ax2 = plt.subplots(figsize=(6,6))
         norm2 = ImageNormalize(klip_data, interval=ZScaleInterval())
         im2 = ax2.imshow(klip_data, origin='lower', cmap='inferno', norm=norm2)
-        fig2.colorbar(im2, ax=ax2, label="Intensity")
+        fig2.colorbar(im2, ax=ax2, label="Intensity (e-)")
         ax2.set_title("Final PSF-sub image")
         plt.show()
 
-    # 3) FMAstrometry
-    fit = FMAstrometry(guesssep, -guesspa, stamp_size, method=method)
 
-    # Load forward-modelled frame from disk
+    # DEBUGGING
+    kl_throughput = fm_psfsub[0].hdu_list['KL_THRU'].data
+    ct_throughput = fm_psfsub[0].hdu_list['CT_THRU'].data
+
+    #print("KL Throughput:", kl_throughput)
+    #print("CT Throughput:", ct_throughput)
+
+    # For the throughput tables:
+    # The top row (index 0) is the separations.
+    # For KL throughput, use the last row (index -1) corresponding to the last KL mode.
+    kl_idx = np.argmin(np.abs(kl_throughput[0] - guesssep))
+    kl_value = kl_throughput[-1, kl_idx]
+    
+    # For CT throughput, there are two rows:
+    # the top row is separations, the second row (index 1) is the CT throughput.
+    ct_idx = np.argmin(np.abs(ct_throughput[0] - guesssep))
+    ct_value = ct_throughput[1, ct_idx]
+
+    '''
+    # DEBUGGING
+    print("Computed companion separation (pixels):", guesssep)
+    print("Closest separation in KL throughput table:", kl_throughput[0, kl_idx])
+    print("Selected KL throughput (last KL mode):", kl_value)
+    print("Closest separation in CT throughput table:", ct_throughput[0, ct_idx])
+    print("Selected CT throughput:", ct_value)
+    '''
+
+    # Return the klip_data frame to do aperture photometry, but set the negative numbers to 0
+    klip_data[klip_data < 0] = 0
+    klip_image = Image(data_or_filepath=klip_data,
+                      pri_hdr=fm_psfsub[0].pri_hdr,
+                      ext_hdr=fm_psfsub[0].ext_hdr)
+    
+    comp_keywords = [key for key in fm_psfsub[0].ext_hdr.keys() if key.startswith("SNYX")]
+    comp_keyword = comp_keywords[0]
+    # TO DO: don't hard code this
+    klip_image = update_companion_location_in_cropped_image(klip_image, comp_keyword, (512,512), 
+                                                            (50,50))
+    # Not sure how to use what the below code returns. It is in the KLIP documentation for 
+    # doing astrometry but the documentation isn't clear to me on what "raw_flux" scaling 
+    # factor is or how to use it. It doesn't look correct to me. I'll go with Ell's method 
+    # for now.
+    '''
+    fit = FMAstrometry(guesssep, -guesspa, stamp_size, method=method)
     filename = os.path.join(outputdir, "ADI", fileprefix + "-KLmodes-all.fits")
     fm_hdu = fits.open(filename)
     fm_frame = fm_hdu[0].data[1]
@@ -422,47 +503,205 @@ def forward_model_psf(
     fm_centy = fm_hdu[0].header['PSFCENTY']
     fm_hdu.close()
 
-    # Load data stamp frame from separate file
     data_filename = os.path.join(outputdir, "ADI", "FAKE_1KLMODES-KLmodes-all.fits")
-    data_hdu = fits.open(data_filename)
-    data_frame = data_hdu[0].data[0]
-    data_centx = data_hdu[0].header["PSFCENTX"]
-    data_centy = data_hdu[0].header["PSFCENTY"]
-    data_hdu.close()
+    if os.path.exists(data_filename):
+        data_hdu = fits.open(data_filename)
+        data_frame = data_hdu[0].data[0]
+        data_centx = data_hdu[0].header["PSFCENTX"]
+        data_centy = data_hdu[0].header["PSFCENTY"]
+        data_hdu.close()
+    else:
+        data_frame = fm_frame
+        data_centx = fm_centx
+        data_centy = fm_centy
 
     fit.generate_fm_stamp(fm_frame, [fm_centx, fm_centy], padding=5)
     fit.generate_data_stamp(data_frame, [data_centx, data_centy], dr=4, exclusion_radius=10)
-
-    # Possibly plot these stamps, etc.
     fit.set_kernel("matern32", [3.], [r"$l$"])
-    fit.set_bounds(1.5, 1.5, 1.,[1.]) # x_range, y_range, flux_range, hyperparams_range
-    fit.fit_astrometry(nwalkers=nwalkers, nburn=nburn, nsteps=nsteps, numthreads=numthreads)
+    fit.set_bounds(1.5, 1.5, 1., [1.])
+    fit.fit_astrometry(nwalkers=nwalkers, nburn=nburn, nsteps=nsteps, numthreads=numthreads)'
+    '''
+    return kl_value, ct_value, klip_image
 
-    return fit
 
-
-def measure_core_throughput_at_location(
-    x_c, y_c,
-    ct_cal,
-    ct_dataset,
-    FpamFsamCal
-):
-    """
-    Given a companion location x_c, y_c, 
-    find the nearest precomputed calibration PSF in ct_cal and return it.
-    """
-    star_center = ct_cal.GetCTFPMPosition(ct_dataset, FpamFsamCal)[0]
-    dx, dy = x_c - star_center[0], y_c - star_center[1]
-
-    # ct_cal.ct_excam => shape (3, N). The third row is throughput.
-    xyvals = ct_cal.ct_excam[:2]
-    throughvals = ct_cal.ct_excam[2]
-
-    # find nearest index
-    idx_best = int(np.argmin(np.hypot(xyvals[0] - dx, xyvals[1] - dy)))
-    throughput_factor = max(throughvals[idx_best], 1.0)
-
-    # assume ct_dataset is aligned with ct_cal.ct_excam
-    nearest_frame = ct_dataset[idx_best]
+def measure_core_throughput_at_location(x_c, y_c, x_star, y_star, ct_cal, ct_dataset, 
+                                        scaling_factors):
+    dx = x_c - x_star
+    dy = y_c - y_star
+    guesssep = np.hypot(dx, dy)
+    closest_sep, idx, throughput = lookup_core_throughput(ct_cal, guesssep)
     
-    return throughput_factor, nearest_frame
+    # Convert ct_dataset (a Dataset) to a list of frames and pick the one at index idx.
+    corresponding_frame = list(ct_dataset)[idx]
+    scaling_factor = scaling_factors[idx]
+    
+    return throughput, corresponding_frame, scaling_factor
+
+
+def update_companion_location_in_cropped_image(image, comp_keyword, old_host, new_host):
+    """
+    Update the companion location in the cropped image and return the updated image.
+
+    Args:
+        image (corgidrp.data.Image): The image object whose header will be updated.
+        comp_keyword (str): The header keyword for the companion location (e.g., "SNYX001").
+        old_host (tuple): The (x, y) position of the host star in the original image.
+        new_host (tuple): The (x, y) position of the host star in the cropped image.
+
+    Returns:
+        image (corgidrp.data.Image): The image object with the updated companion location in its header.
+
+    Raises:
+        KeyError: If comp_keyword is not found in the image header.
+        ValueError: If the companion location format is not as expected or cannot be parsed.
+    """
+    # Assume the companion information is stored in the extension header.
+    ext_hdr = image.ext_hdr
+
+    if comp_keyword not in ext_hdr:
+        raise KeyError(f"Keyword {comp_keyword} not found in image header.")
+
+    # Parse the companion value; expected format: "sn_value,x,y"
+    parts = ext_hdr[comp_keyword].split(',')
+    if len(parts) < 3:
+        raise ValueError(f"Unexpected format for companion location in {comp_keyword}: {ext_hdr[comp_keyword]}")
+    
+    try:
+        sn_val = float(parts[0])
+        old_comp_x = float(parts[1])
+        old_comp_y = float(parts[2])
+        print("updated location", old_comp_x, old_comp_y)
+    except Exception as e:
+        raise ValueError(f"Error parsing {comp_keyword} in image header: {e}")
+
+    # Compute new companion location in the cropped image.
+    new_comp_x = old_comp_x - old_host[0] + new_host[0]
+    new_comp_y = old_comp_y - old_host[1] + new_host[1]
+
+    # Convert to integer pixel coordinates.
+    new_comp_x = int(round(new_comp_x))
+    new_comp_y = int(round(new_comp_y))
+
+    # Update the companion location in the header.
+    ext_hdr[comp_keyword] = f"{sn_val:5.1f},{new_comp_x:4d},{new_comp_y:4d}"
+    print(f"Updated {comp_keyword}: {ext_hdr[comp_keyword]}")
+
+    return image
+
+
+def extract_single_frame(image, frame_index=0):
+    """
+    Extract a single frame from a multi-frame corgidrp.data.Image object along with its 
+    corresponding error and DQ arrays, and preserve the KL_THRU and CT_THRU HDUs.
+
+    Args:
+        image (corgidrp.data.Image): The multi-frame image object.
+        frame_index (int, optional): The index of the frame to extract (default is 0).
+
+    Returns:
+        corgidrp.data.Image: A new Image object consisting of the selected data frame,
+        its corresponding error and DQ arrays, and with the KL_THRU and CT_THRU HDUs assigned.
+    """
+    # Extract the data frame. Assume image.data is a NumPy array of shape (n_frames, height, width)
+    data_frame = image.data[frame_index, :, :]
+
+    # Extract the error array corresponding to this frame.
+    if image.err is not None:
+        # Adjust slicing according to the structure of image.err.
+        # If image.err has shape (n_err, n_frames, height, width), we pick index 0 for error type.
+        if image.err.ndim == 4:
+            err_frame = image.err[0, frame_index, :, :]
+        else:
+            err_frame = image.err[frame_index, :, :]
+    else:
+        err_frame = None
+
+    # Extract the DQ array corresponding to this frame.
+    dq_frame = image.dq[frame_index, :, :] if image.dq is not None else None
+
+    # Build a new Image object with the extracted components.
+    # Note: We do not pass hdu_list as a keyword argument.
+    new_image = Image(data_frame,
+                      pri_hdr=image.pri_hdr,
+                      ext_hdr=image.ext_hdr,
+                      err=err_frame,
+                      dq=dq_frame)
+    
+    # Now assign the HDU list attribute from the original image.
+    if hasattr(image, 'hdu_list'):
+        new_image.hdu_list = {key: image.hdu_list[key] for key in image.hdu_list if key in ['KL_THRU', 'CT_THRU']}
+    
+    return new_image
+
+
+def compute_occ_to_unocc_scaling(masked_psfs, unmasked_psfs, ct_cal, photometry_kwargs):
+    """
+    Empirically determine the scaling factor S needed to convert the total aperture flux 
+    measured on an occulted (masked) PSF into the total flux that would be measured 
+    in an unocculted image.
+
+    This function uses:
+      - A set of unmasked PSFs to compute R = (total integrated flux) / (core flux).
+      - For each masked PSF, it uses the core throughput CT from ct_cal (directly indexed)
+        that corresponds to that PSF.
+
+    For each masked PSF:
+         F_unocc_est = R * (masked core flux) / CT
+         S = F_unocc_est / (aperture flux measured on the masked PSF)
+
+    The function returns the average scaling factor S over all masked PSFs.
+
+    Args:
+        masked_psfs (list): List of Image objects for the masked PSFs.
+        unmasked_psfs (list): List of Image objects for the unmasked PSFs.
+        ct_cal (CoreThroughputCalibration): The CT calibration object with ct_excam,
+            a 3-row numpy array where row 0 is x positions, row 1 is y positions, and
+            row 2 contains the CT values.
+        photometry_kwargs (dict): Keyword arguments for the photometry routines.
+
+    Returns:
+        float: The average scaling factor S.
+    """
+    import numpy as np
+
+    # First, determine R from the unmasked PSFs.
+    # R = (total integrated flux) / (core flux) for an unocculted PSF.
+    R_values = []
+    for psf in unmasked_psfs:
+        total_flux, _ = measure_counts(psf, 'aperture', None, **photometry_kwargs)
+        core_flux = np.sum(psf.data[psf.data >= (psf.data.max() / 2)])
+        if core_flux > 0:
+            R_values.append(total_flux / core_flux)
+    if len(R_values) == 0:
+        raise ValueError("No valid unmasked PSF measurements to compute R.")
+    R = np.mean(R_values)
+    print(f"Empirical ratio R (total/core) from unmasked PSFs: {R:.3f}")
+
+    # Get the calibration values directly from ct_cal.ct_excam.
+    # ct_cal.ct_excam is assumed to be a 3-row array:
+    # row 0: x positions, row 1: y positions, row 2: CT values.
+    x_positions, y_positions, ct_values = ct_cal.ct_excam
+
+    scaling_factors = []
+    for i, psf in enumerate(masked_psfs):
+        # Measure aperture flux on the masked PSF.
+        F_masked, _ = measure_counts(psf, 'aperture', None, **photometry_kwargs)
+        # Compute the masked core flux (using the 50% threshold).
+        F_core_masked = np.sum(psf.data[psf.data >= (psf.data.max() / 2)])
+        # Get the CT value directly by index.
+        CT = ct_values[i]
+        if CT <= 0:
+            continue
+        # Estimate what the unocculted total flux would be for this PSF.
+        F_unocc_est = R * F_core_masked / CT
+        # Compute the scaling factor S.
+        S = F_unocc_est / F_masked
+        scaling_factors.append(S)
+        print(f"PSF {i} at (x,y)=({x_positions[i]:.1f}, {y_positions[i]:.1f}): "
+              f"F_masked = {F_masked:.2f}, F_core_masked = {F_core_masked:.2f}, CT = {CT:.3f}, S = {S:.3f}")
+
+    if len(scaling_factors) == 0:
+        raise ValueError("No valid scaling factors computed from masked PSFs.")
+    overall_scaling = np.mean(scaling_factors)
+    print(f"Average scaling factor S to convert masked aperture flux to unocculted flux: {overall_scaling:.3f}")
+    return overall_scaling, scaling_factors

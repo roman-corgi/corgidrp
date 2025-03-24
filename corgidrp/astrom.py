@@ -53,7 +53,7 @@ def centroid_with_roi(frame, roi_radius=5, centering_initial_guess=None):
     if centering_initial_guess is not None and None not in centering_initial_guess:
         peak_x, peak_y = int(round(centering_initial_guess[0])), int(round(centering_initial_guess[1]))
     else:
-        peak_y, peak_x = np.unravel_index(np.argmax(frame), frame.shape)
+        peak_y, peak_x = np.unravel_index(np.nanargmax(frame), frame.shape)
 
     # 2) Define the subarray (region of interest) around the peak
     y_min = max(0, peak_y - roi_radius)

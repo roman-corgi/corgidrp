@@ -2851,144 +2851,199 @@ def generate_reference_star_dataset_with_flux(
     return Dataset(frames)
 
 
-def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
+def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, image_shape=(1024,1024), apply_mask=True):
     """
     Create simulated data for core throughput calibration. This is a set of
-    individual, noiseless 2D Gaussians, one per image.  
-
+    individual, noiseless 2D Gaussians with a spatially varying throughput
+    that mimics a central occulting mask when apply_mask=True.
+    
     Args:
-        fwhm_mas (float): PSF's FWHM in mas
-        cfam_name (str) (optional): CFAM filter name.
-        n_psfs (int) (optional): Number of simulated PSFs.
-
+        fwhm_mas (float): PSF FWHM in mas.
+        cfam_name (str): CFAM filter name.
+        n_psfs (int): Number of PSFs to generate.
+        image_shape (tuple): Full image shape.
+        apply_mask (bool): If True, apply the mask transmission function. If False,
+            the transmission is set to 1 everywhere.
+    
     Returns:
-        corgidrp.data.Image: The simulated PSF Images
-        np.array: PSF locations
-        np.array: PSF CT values
+        data_psf (list): List of Image objects with the PSF stamp inserted.
+        psf_loc (np.array): Array of PSF locations.
+        half_psf (np.array): Array of “half” throughput values.
     """
-    # Default headers
+    # Set up headers, error, and dq arrays (assumed defined as before)
     prhd, exthd = create_default_L3_headers()
-    # cfam filter
     exthd['CFAMNAME'] = cfam_name
-    # Mock ERR
-    err = np.ones([1024,1024])
-    # Mock DQ
-    dq = np.zeros([1024,1024], dtype = np.uint16)
-
-    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
-    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
-    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
-    y, x = np.indices(imshape)
-
-    # Following astropy documentation:
-    # Generate random source model list. Random amplitues and centers within a pixel
-    # PSF's final location on SCI frame is moved by more than one pixel below. This
-    # is the fractional part that only needs a smaller array of non-zero values
-    # Set seed for reproducibility of mock data
+    err = np.ones(image_shape)
+    dq = np.zeros(image_shape, dtype=np.uint16)
+    
+    # Calculate the image center
+    center_x = image_shape[1] // 2
+    center_y = image_shape[0] // 2
+    image_center = (center_x, center_y)
+    exthd['MASKLOCX'] = center_x
+    exthd['MASKLOCY'] = center_y
+    
+    # Determine the stamp size for the PSF: +/- 3 FWHM in pixels
+    fwhm_pix = int(np.ceil(fwhm_mas / 21.8))
+    stamp_shape = (6 * fwhm_pix + 1, 6 * fwhm_pix + 1)
+    
+    # PSF parameters (constant for all PSFs)
+    amplitude = 5.0
+    x_mean = stamp_shape[1] // 2
+    y_mean = stamp_shape[0] // 2
+    x_stddev = fwhm_mas / 21.8 / 2.335
+    y_stddev = fwhm_mas / 21.8 / 2.335
+    
+    constant_model = models.Gaussian2D(amplitude=amplitude,
+                                       x_mean=x_mean,
+                                       y_mean=y_mean,
+                                       x_stddev=x_stddev,
+                                       y_stddev=y_stddev)
+    
+    # Use a random generator for PSF placement
     rng = np.random.default_rng(0)
-    model_params = [
-        dict(amplitude=rng.uniform(1,10),
-        x_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-        y_mean=rng.uniform(imshape[0]//2,imshape[0]//2+1),
-        x_stddev=fwhm_mas/21.8/2.335,
-        y_stddev=fwhm_mas/21.8/2.335)
-        for _ in range(n_psfs)]
-
-    model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
-    # Render models to image using full evaluation
     psf_loc = []
     half_psf = []
     data_psf = []
-    for model in model_list:
-        # Skip any PSFs with 0 amplitude (if any)
-        if model.amplitude == 0:
-            continue
-        psf = np.zeros(imshape)
-        model.bounding_box = None
-        model.render(psf)
-        image = np.zeros([1024, 1024])
-        # Insert PSF at random location within the SCI frame
-        y_image, x_image = rng.integers(100), rng.integers(100)
-        image[512+y_image-imshape[0]//2:512+y_image+imshape[0]//2+1,
-            512+x_image-imshape[1]//2:512+x_image+imshape[1]//2+1] = psf
-        # List of known positions and list of known PSF volume
-        psf_loc += [[512+x_image+model.x_mean.value-imshape[0]//2,
-            512+y_image+model.y_mean.value-imshape[0]//2]]
-        # Add half PSF volume for 2D Gaussian (numerator of core throughput)
-        half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
-        # Build up the Dataset
-        data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
+    
+    # Define mask transmission function; if apply_mask is False, return 1 always.
+    def mask_transmission(x_val, y_val, center=image_center, r0=30, sigma=10):
+        if not apply_mask:
+            return 1.0
+        r = ((x_val - center[0])**2 + (y_val - center[1])**2)**0.5
+        return 1 / (1 + np.exp(-(r - r0) / sigma))
+    
+    # Compute allowed offsets so that the stamp fits within the image.
+    x_offset_min = stamp_shape[1] // 2 - center_x
+    x_offset_max = image_shape[1] - stamp_shape[1] - center_x + stamp_shape[1] // 2
+    y_offset_min = stamp_shape[0] // 2 - center_y
+    y_offset_max = image_shape[0] - stamp_shape[0] - center_y + stamp_shape[0] // 2
 
+    # Restrict offsets to ±100 pixels.
+    desired_range = 100
+    x_offset_min = max(x_offset_min, -desired_range)
+    x_offset_max = min(x_offset_max, desired_range)
+    y_offset_min = max(y_offset_min, -desired_range)
+    y_offset_max = min(y_offset_max, desired_range)
+    
+    for i in range(n_psfs):
+        # Render the PSF stamp
+        psf_stamp = np.zeros(stamp_shape)
+        constant_model.bounding_box = None
+        constant_model.render(psf_stamp)
+        
+        # Create a full image and insert the stamp.
+        image = np.zeros(image_shape)
+        y_offset = rng.integers(y_offset_min, y_offset_max + 1)
+        x_offset = rng.integers(x_offset_min, x_offset_max + 1)
+        x_start = center_x + x_offset - stamp_shape[1] // 2
+        y_start = center_y + y_offset - stamp_shape[0] // 2
+        
+        final_x = x_start + x_mean
+        final_y = y_start + y_mean
+        psf_loc.append([final_x, final_y])
+        
+        base_throughput = np.pi * amplitude * x_stddev * y_stddev
+        transmission = mask_transmission(final_x, final_y)
+        half_psf.append(base_throughput * transmission)
+        
+        # Apply transmission if requested.
+        psf_stamp = psf_stamp * transmission
+        
+        image[y_start:y_start+stamp_shape[0], x_start:x_start+stamp_shape[1]] = psf_stamp
+        
+        data_psf.append(Image(image, pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq))
+    
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
+
 def create_ct_cal(fwhm_mas, cfam_name='1F',
-                  cenx = 50.5,ceny=50.5,
-                  nx=21,ny=21):
-    # Default headers
-    prhd, exthd = create_default_L3_headers()
-    # cfam filter
-    exthd['CFAMNAME'] = cfam_name
-    exthd.set('EXTNAME','PSFCUBE')
-
-    # Need nx, ny to be odd
-    assert nx%2 == 1, 'nx must be odd'
-    assert ny%2 == 1, 'ny must be odd'
-
-    x_arr = []
-    y_arr = []
-
-    for x in np.linspace(cenx-(nx-1)/2,cenx+(nx-1)/2,nx):
-        for y in np.linspace(ceny-(ny-1)/2,ceny+(ny-1)/2,ny):
-            x_arr.append(x)
-            y_arr.append(y)
-    x_arr = np.array(x_arr)
-    y_arr = np.array(y_arr)
-
-    n_psfs = len(x_arr)
+                  cenx=50.5, ceny=50.5,
+                  nx=21, ny=21):
+    """
+    Create a Core Throughput calibration file using create_ct_psfs.
     
-    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
-    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
-    imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
-    psf = gaussian_array(array_shape=imshape,sigma=fwhm_pix,amp=1.,xoffset=0.,yoffset=0.)
+    This function reuses create_ct_psfs by passing in (ny, nx) as the image size.
+    It sets the number of PSFs to nx*ny so that, by default, create_ct_psfs would
+    generate that many PSF images. Then, to ensure that the CT array is sampled on a 
+    regular grid (i.e. with PSF centers covering the entire frame), we override the 
+    returned positions with a grid spanning 0 to nx-1 (x) and 0 to ny-1 (y).
 
-    psf_cube = np.ones((n_psfs,*imshape))
-    psf_cube *= psf
-    amps = np.arange(1,len(psf_cube)+1)
-    psf_cube = np.array([psf_cube[i] * amps[i] for i in range(len(psf_cube))])
+    Args:
+        fwhm_mas (float): PSF's FWHM in mas.
+        cfam_name (str, optional): CFAM filter name.
+        cenx (float, optional): Not used here (can be used to shift the grid if needed).
+        ceny (float, optional): Not used here (can be used to shift the grid if needed).
+        nx (int, optional): Number of pixels in x for each PSF image and number of grid points.
+        ny (int, optional): Number of pixels in y for each PSF image and number of grid points.
 
-    err_cube = np.zeros_like(psf_cube)
-    err_hdr = fits.Header()
-    dq_cube = np.zeros_like(psf_cube)
-    dq_hdr = fits.Header()
+    Returns:
+        CoreThroughputCalibration: The generated calibration object.
+    """
+    from astropy.io import fits
+    from corgidrp.data import CoreThroughputCalibration, Dataset, Image
+    import numpy as np
 
-    cts = np.linspace(1.,0.01,len(x_arr))
-    ct_excam = np.array([x_arr,y_arr,cts])
+    # Set the full PSF image (stamp) size to (ny, nx).
+    image_shape = (ny, nx)
+    # Set number of PSFs equal to the number of grid points.
+    n_psfs = nx * ny
+
+    # Call create_ct_psfs with the desired image_shape.
+    data_psf, psf_loc, half_psf = create_ct_psfs(fwhm_mas, cfam_name=cfam_name,
+                                                  n_psfs=n_psfs, image_shape=image_shape)
+
+    # Optionally, override the returned psf_loc with a regular grid spanning the frame.
+    # For example, a grid spanning x = 0 ... nx-1 and y = 0 ... ny-1:
+    x_grid = np.linspace(0, nx - 1, nx)
+    y_grid = np.linspace(0, ny - 1, ny)
+    grid_positions = np.array([[x, y] for x in x_grid for y in y_grid])
+    # Replace psf_loc with the grid positions.
+    psf_loc = grid_positions
+
+    # Assemble the CT array: a 3 x n_psfs array with rows: x positions, y positions, throughput.
+    ct_excam = np.array([psf_loc[:, 0], psf_loc[:, 1], half_psf])
     ct_hdr = fits.Header()
+    ct_hdr['COMMENT'] = "Grid of PSF positions and measured core throughput values"
+    ct_hdr['UNITS'] = "x,y in pixels; throughput is a relative flux value"
+
+    # Build the HDU list for the calibration file.
     ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
-    
+    # Dummy FPAM and FSAM values.
     fpam_hv = [0., 0.]
     fpam_hdr = fits.Header()
     fpam_hdr['COMMENT'] = 'FPAM H and V values during the core throughput observations'
     fpam_hdr['UNITS'] = 'micrometer'
-    ct_hdu_list += [fits.ImageHDU(data=fpam_hv, header=fpam_hdr, name='CTFPAM')]
-
+    ct_hdu_list.append(fits.ImageHDU(data=fpam_hv, header=fpam_hdr, name='CTFPAM'))
     fsam_hv = [0., 0.]
     fsam_hdr = fits.Header()
     fsam_hdr['COMMENT'] = 'FSAM H and V values during the core throughput observations'
     fsam_hdr['UNITS'] = 'micrometer'
-    ct_hdu_list += [fits.ImageHDU(data=fsam_hv, header=fsam_hdr, name='CTFSAM')]
+    ct_hdu_list.append(fits.ImageHDU(data=fsam_hv, header=fsam_hdr, name='CTFSAM'))
 
-    ct_cal = data.CoreThroughputCalibration(psf_cube,
+    # Build the PSF cube by stacking the data from each PSF Image.
+    psf_cube = np.stack([im.data for im in data_psf])
+
+    # Create default primary and extension headers.
+    prhd, exthd = create_default_L3_headers()
+    exthd['EXTNAME'] = 'PSFCUBE'
+    exthd['CFAMNAME'] = cfam_name
+
+    # input_dataset.
+    input_dataset = Dataset(data_psf)
+
+    # Create and return the CoreThroughputCalibration object.
+    ct_cal = CoreThroughputCalibration(
+        psf_cube,
         pri_hdr=prhd,
         ext_hdr=exthd,
         input_hdulist=ct_hdu_list,
-        dq=dq_cube,
-        dq_hdr=dq_hdr,
-        input_dataset=data.Dataset([data.Image(np.array([0.]),
-                                 pri_hdr=fits.Header(),
-                                 ext_hdr=fits.Header())]))
-    
+        dq=np.zeros_like(psf_cube),
+        dq_hdr=fits.Header(),
+        input_dataset=input_dataset
+    )
     return ct_cal
+
 
 default_wcs_string = """WCSAXES =                    2 / Number of coordinate axes                      
 CRPIX1  =                  0.0 / Pixel coordinate of reference point            
@@ -3196,28 +3251,37 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
 def generate_coron_dataset_with_companions(
     n_frames=1,
-    shape=(200, 200),
+    shape=(1024, 1024),
     host_star_center=None,
     host_star_counts=1e5,
     roll_angles=None,
-    companion_xy=None,   # Now the companion is specified by (x, y)
+    companion_xy=None,   # Companion is specified in the reference frame as (x, y)
     companion_counts=100.0,
-    filter = '1F',
+    filter='1F',
     platescale=0.0218,
     add_noise=False,
     noise_std=1.0e-2,
     outdir=None,
     darkhole_file=None,
     apply_coron_mask=True,
-    coron_mask_radius=5
+    coron_mask_radius=5,
+    # Parameters for throughput calibration
+    ct_cal=None,
+    use_ct_cal=False,
+    cor_dataset=None,
+    FpamFsamCal=None,
+    scaling_factors=None
 ):
     """
-    Create a mock coronagraphic dataset with a star and optionally a companion.
+    Create a mock coronagraphic dataset with a star and (optionally) a companion.
     
-    The companion is defined by its (x, y) pixel coordinate (e.g. in a frame with ROLL=0).
-    Its on-sky separation and position angle (PA) are computed relative to the host star.
-    Then for each frame (with its own roll angle), the companion is injected at the 
-    detector coordinate corresponding to that fixed on-sky location.
+    The companion is defined by its (x, y) pixel coordinate (in a reference frame).  
+    Its on-sky separation and PA are computed relative to the host star, and then for each 
+    frame (with its own roll angle) the companion is injected at the corresponding detector coordinate.
+    
+    In addition, the companion flux is adjusted using a throughput factor computed from the 
+    provided CoreThroughputCalibration product. A coronagraphic mask (very opaque in the center) 
+    is also applied.
     
     Args:
       n_frames (int): Number of frames.
@@ -3227,32 +3291,38 @@ def generate_coron_dataset_with_companions(
       roll_angles (list of float): One roll angle per frame (in degrees).
       companion_xy (tuple): (x, y) pixel coordinate for the companion in the reference frame.
       companion_counts (float): Total flux (counts) of the companion.
+      filter (str): Filter name.
       platescale (float): Plate scale in arcsec per pixel.
       add_noise (bool): Whether to add random noise.
       noise_std (float): Stddev of the noise.
       outdir (str or None): If given, saves the frames to disk.
-      darkhole_file (corgidrp.data.Image): Darkhole reference frame. 
-            If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
-      apply_coron_mask (bool): Whether to apply the simulated coronagraph mask
-      coron_mask_radius (int): Coronagraph mask radius in pixels
+      darkhole_file (Image): Darkhole reference frame. If not provided, a Gaussian star is used.
+      apply_coron_mask (bool): Whether to apply the simulated coronagraph mask.
+      coron_mask_radius (int): Coronagraph mask radius in pixels.
+      ct_cal: CoreThroughputCalibration product.
+      use_ct_cal (bool): If True, use ct_cal to adjust the flux (throughput) of the companion.
+      cor_dataset: Dataset associated with the ct_cal product.
+      FpamFsamCal: FPAM/FSAM to EXCAM calibration product.
+      scaling_factors: Scaling factors to convert mask/ core throughput to counts.
     
     Returns:
       Dataset: A dataset of frames (each an Image) with the star and companion injected.
     """
     ny, nx = shape
     if host_star_center is None:
-        host_star_center = (nx / 2, ny / 2)  # (x,y)
+        host_star_center = (nx / 2, ny / 2)  # (x, y)
 
     if roll_angles is None:
         roll_angles = [0.0] * n_frames
     elif len(roll_angles) != n_frames:
         raise ValueError("roll_angles must have length n_frames or be None.")
 
-    # If a companion is provided, convert its (x,y) to on-sky separation & PA
+    # If a companion is provided, compute its on-sky separation & position angle (PA)
     if companion_xy is not None:
         dx = companion_xy[0] - host_star_center[0]
         dy = companion_xy[1] - host_star_center[1]
         base_sep_pix = np.hypot(dx, dy)
+        # PA computed with standard astronomical convention (north=0, east=90)
         pa_rad = np.arctan2(dx, -dy)
         base_pa_deg = np.degrees(pa_rad) % 360
     else:
@@ -3261,52 +3331,36 @@ def generate_coron_dataset_with_companions(
     frames = []
 
     # ---------------------------------------------------------
-    # (A) If a "dark hole" or realistic PSF file is provided, read it in once and store it for repeated use.
+    # (A) Load a dark-hole (or realistic PSF) image if provided.
     # ---------------------------------------------------------
     if darkhole_file is not None:
         dh_data = darkhole_file.data
         dh_ny, dh_nx = dh_data.shape
-        # Find the total flux in that data to figure out scaling to host_star_counts:
+        # Scale darkhole image so that its total flux equals host_star_counts.
         dh_total = np.sum(dh_data[np.isfinite(dh_data)])
-        # Scale it so that sum(dh_data_scaled) = host_star_counts
-        # So multiply by factor = host_star_counts / dh_total.
-        # That can be done *per frame* if needed.
+        scale_factor = host_star_counts / dh_total
+        dh_scaled = dh_data * scale_factor
     else:
         dh_data = None
 
     for i in range(n_frames):
         angle_i = roll_angles[i]
 
-        # Build empty data array for this frame
+        # Build an empty image frame
         data_arr = np.zeros((ny, nx), dtype=np.float32)
 
         # ----------------------------------------------------------
-        # (B) Insert the star. Two scenarios:
-        #  1) We have a 'dark hole' image from a file (dh_data).
-        #  2) Otherwise, approximate with a simple 2D Gaussian + partial coronagraph mask.
+        # (B) Insert the star.
         # ----------------------------------------------------------
         if dh_data is not None:
-            # (B1) If we have a dark-hole or real-PSF image:
-            #  (a) place it at host_star_center,
-            #  (b) scale so its total flux = host_star_counts,
-            #  (c) apply any coronagraph region.
-
-            # Scale the data so that total flux = host_star_counts
-            dh_total = np.sum(dh_data[np.isfinite(dh_data)])
-            scale_factor = host_star_counts / dh_total
-            dh_scaled = dh_data * scale_factor
-
-            # place it into data_arr, centered at host_star_center
-            # figure out top-left corner
+            # Place the dark-hole image into data_arr, centered at host_star_center
             dh_cx = dh_nx / 2.0
             dh_cy = dh_ny / 2.0
-            # integer indices for placing
             xstart = int(host_star_center[0] - dh_cx)
             ystart = int(host_star_center[1] - dh_cy)
-            # handle boundaries in case it doesn't fit perfectly
             data_arr[ystart:ystart+dh_ny, xstart:xstart+dh_nx] += dh_scaled
 
-            # Optionally apply a crude coronagraph “mask”:
+            # Apply the coronagraph mask if desired
             if apply_coron_mask:
                 xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
                 r2 = ((xgrid - host_star_center[0])**2 + 
@@ -3314,46 +3368,60 @@ def generate_coron_dataset_with_companions(
                 data_arr[r2 < coron_mask_radius**2] *= 0.01
 
         else:
-            # (B2) No dark hole file, so just do a 2D Gaussian and multiply
+            # Use a 2D Gaussian to represent the star
             xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
             sigma_star = 1.2
             r2 = (xgrid - host_star_center[0])**2 + (ygrid - host_star_center[1])**2
-            # Normalized 2D Gaussian so that sum ~ 1, then scale to host_star_counts
             star_gaus = np.exp(-0.5 * r2 / sigma_star**2)
             star_gaus /= np.sum(star_gaus)
             star_gaus *= host_star_counts
-
             data_arr += star_gaus
 
-            # Coronagraph region:
             if apply_coron_mask:
                 data_arr[r2 < coron_mask_radius**2] *= 0.01
 
         # ----------------------------------------------------------
-        # (C) Insert the companion (if base_sep_pix is not None)
-        #     as a smaller Gaussian or scaling of the same PSF
+        # (C) Insert the companion.
         # ----------------------------------------------------------
         if base_sep_pix is not None:
+            # Compute the rotated companion position in this frame.
             theta = np.radians(base_pa_deg - angle_i)
-            dx = base_sep_pix * np.sin(theta)
-            dy = -base_sep_pix * np.cos(theta)
-            xcomp = host_star_center[0] + dx
-            ycomp = host_star_center[1] + dy
+            dx_rot = base_sep_pix * np.sin(theta)
+            dy_rot = -base_sep_pix * np.cos(theta)
+            xcomp = host_star_center[0] + dx_rot
+            ycomp = host_star_center[1] + dy_rot
 
-            # a small Gaussian
+            # Compute a throughput factor for the companion using ct_cal, if enabled.
+            if use_ct_cal and ct_cal is not None and cor_dataset is not None:
+                throughput_factor, _, _ = measure_companions.measure_core_throughput_at_location(
+                    xcomp, ycomp, host_star_center[0], host_star_center[1], ct_cal, cor_dataset, scaling_factors
+                )
+                print("making mocks throughput factor", throughput_factor)
+            else:
+                throughput_factor = 1.0
+                print("didn't get there")
+
+            # Inject the companion as a small Gaussian PSF.
             sigma_c = 1.0
             rc2 = (xgrid - xcomp)**2 + (ygrid - ycomp)**2
             companion_gaus = np.exp(-0.5 * rc2 / sigma_c**2)
             companion_gaus /= np.sum(companion_gaus)
-            companion_gaus *= companion_counts
+            # Adjust the companion counts by the throughput factor.
+            companion_flux = companion_counts * throughput_factor
+            companion_gaus *= companion_flux
             data_arr += companion_gaus
 
-        # (D) Noise
+        # ----------------------------------------------------------
+        # (D) Add noise if requested.
+        # ----------------------------------------------------------
         if add_noise:
             noise = np.random.normal(0., noise_std, data_arr.shape)
             data_arr += noise.astype(np.float32)
 
-        # Build headers
+        # ----------------------------------------------------------
+        # (E) Build headers and create the Image.
+        # ----------------------------------------------------------
+        # (Assume create_default_L3_headers and generate_wcs are available functions)
         prihdr, exthdr = create_default_L3_headers()
         prihdr["FILENAME"] = f"mock_coron_{i:03d}.fits"
         prihdr["ROLL"] = angle_i
@@ -3364,26 +3432,25 @@ def generate_coron_dataset_with_companions(
         exthdr["DATALVL"]  = "L3"
         exthdr["MASKLOCX"] = host_star_center[0]
         exthdr["MASKLOCY"] = host_star_center[1]
-
-        # optional WCS
-        wcs_obj = generate_wcs(
-            roll_angles[i],
-            [host_star_center[0], host_star_center[1]],
-            platescale=platescale
-        )
+        # Optional WCS generation.
+        wcs_obj = generate_wcs(angle_i, [host_star_center[0], host_star_center[1]], platescale=platescale)
         wcs_header = wcs_obj.to_header()
         exthdr.update(wcs_header)
 
+        # Record the companion location in the header.
         if companion_xy is not None:
-            exthdr[f"SNYX{i:03d}"] = f"5.0,{xcomp},{ycomp}"
+            exthdr["SNYX001"] = f"5.0,{xcomp:.2f},{ycomp:.2f}"
 
+        # Create the Image (assuming the Image class accepts data, pri_hdr, and ext_hdr).
         frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
 
+    from corgidrp.data import Dataset
     dataset = Dataset(frames)
 
-    # (E) Optionally save
+    # (F) Optionally save the dataset.
     if outdir is not None:
+        import os
         os.makedirs(outdir, exist_ok=True)
         file_list = [f"mock_coron_{i:03d}.fits" for i in range(n_frames)]
         dataset.save(filedir=outdir, filenames=file_list)
@@ -3391,163 +3458,6 @@ def generate_coron_dataset_with_companions(
 
     return dataset
 
-
-def generate_psfsub_image_with_companions(
-    nx=200, ny=200,
-    host_star_center=None,
-    host_star_counts=1e5,          # Arbitrary star counts
-    psf_sub_scale=0.7,
-    companion_xy=None,
-    companion_counts=None,
-    companion_mags=None,
-    zero_point=0.0,
-    ct_cal=None,           
-    use_ct_cal=False,       
-    cor_dataset = None,    
-    FpamFsamCal = None,
-    blur_sigma=0.5,
-    noise_std=1e-7,
-    outdir=None,
-    roll_angle=0.0,
-    platescale=0.0218,
-    hole_radius=None,
-):
-    """
-    Create a single mock PSF-subtracted residual image with star mostly removed 
-    and faint companions. Simulates the star + companions prior to subtraction,
-    then applies a global factor star_sub_scale to mimic the star's partial removal
-    (and also removing some fraction of the companions).
-
-    Optionally:
-      - Apply a throughput factor from a CoreThroughputCalibration object.
-
-    Args:
-        nx (int): Image size x in pixels.
-        ny (int): Image size y in pixels.
-        host_star_center ((x, y) or None): If None, defaults to image center.
-        host_star_counts (float): Total counts (e-) of the star prior to PSF subtraction.
-        psf_sub_scale (float): Fraction of the star’s counts (and companion counts) that 
-            remains after subtraction. E.g., 0.7 => 70% remains.
-        companion_xy (list of (x, y) or None): Pixel coords of each companion.
-        companion_counts (float or list of float, optional): Total counts for each companion 
-            (pre-throughput).
-        companion_mags (float or list of float, optional): Apparent magnitudes for each companion, 
-            which will be converted to counts via zero_point. If present, companion_counts are ignored.
-        zero_point (float, optional): Photometric zero point used if companion_mags is specified. 
-        ct_cal (corgidrp.data.CoreThroughputCalibration or None): If provided and use_ct_cal=True, 
-            apply throughput factor at each companion location.
-        use_ct_cal (bool): If True, apply the throughput factor from ct_cal for each companion location.
-        cor_dataset (corgidrp.data.Dataset or None): dataset of images from CoreThroughputCalibration.
-        FpamFsamCal (corgidrp.data.FpamFsamCal): FPAM to EXCAM/ FSAM to EXCAM calibration product
-        blur_sigma (float): Gaussian blur at the end to mimic real instrumentation.
-        noise_std (float): Standard deviation of random noise to add.
-        outdir (str or None): If a directory is given, we save the final image there.
-        roll_angle (float): For WCS generation in degrees.
-        platescale (float): Arcsec per pixel.
-        hole_radius (float or None): If set, reduce flux in a circular region by some factor (e.g. 0.1).
-
-    Returns:
-        frame (corgidrp.data.Image): The final post- PSF sub image in a corgidrp Image object 
-            (with SCI/ERR/DQ).
-    """
-
-    # 1) Grid for the image
-    if host_star_center is None:
-        host_star_center = (nx / 2, ny / 2)
-    xgrid, ygrid = np.meshgrid(np.arange(nx), np.arange(ny))
-    r2 = (xgrid - host_star_center[0])**2 + (ygrid - host_star_center[1])**2
-
-    # 2) Create star PSF
-    sigma_star = 2.0
-    star_psf = host_star_counts / (2 * np.pi * sigma_star**2) * np.exp(-0.5 * r2 / sigma_star**2)
-
-    # 3) Initialize companion arrays
-    if companion_xy is None:
-        companion_xy = []
-    # Convert single float => list
-    if isinstance(companion_counts, (int, float)):
-        companion_counts = [companion_counts] * len(companion_xy)
-    if isinstance(companion_mags, (int, float)):
-        companion_mags = [companion_mags] * len(companion_xy)
-
-    # If magnitudes are provided, convert them to counts, ignoring companion_counts 
-    # if both are provided:
-    comp_counts_list = []
-    if companion_mags is not None:
-        # Convert each mag => counts via zero point
-        for mag in companion_mags:
-            counts_c = 10**(-0.4*(mag - zero_point))  # e-/s, for example
-            comp_counts_list.append(counts_c)
-    elif companion_counts is not None:
-        comp_counts_list = companion_counts[:]
-    else:
-        # No companions
-        comp_counts_list = []
-
-    # 4) If desired, apply a core throughput factor for each companion
-    #    That is, the pre-sub counts are scaled by the coronagraph's throughput at that offset
-
-    # 5) Add companions to the star image (pre-sub)
-    for (cx, cy), counts_c in zip(companion_xy, comp_counts_list):
-        # optional throughput factor
-        if not use_ct_cal or ct_cal is None:
-            throughput_factor = 1.0
-        else:
-            throughput_factor, nearest_frame = measure_companions.measure_core_throughput_at_location(
-                cx, cy,
-                ct_cal,
-                cor_dataset,
-                FpamFsamCal
-            )
-        counts_c_actual = counts_c * throughput_factor
-
-        # simple 2D Gaussian
-        sigma_c = 1.2
-        rr2c = (xgrid - cx)**2 + (ygrid - cy)**2
-        comp_gaus = counts_c_actual / (2 * np.pi * sigma_c ** 2) * np.exp(-0.5 * rr2c / sigma_c ** 2)
-        star_psf += comp_gaus  
-
-    # 6) "PSF subtraction": scale the star + companions by psf_sub_scale
-    residual_image = psf_sub_scale * star_psf
-
-    # 7) Optional hole in center
-    if hole_radius is not None and hole_radius > 0:
-        hole_mask = (r2 <= hole_radius**2)
-        residual_image[hole_mask] *= 0.1  # arbitrary fraction
-
-    # 8) Final blur + noise
-    from scipy.ndimage import gaussian_filter
-    residual_image = gaussian_filter(residual_image, sigma=blur_sigma).astype(np.float32)
-    residual_image += np.random.normal(0., noise_std, residual_image.shape).astype(np.float32)
-
-    # 9) Build corgidrp Image
-
-    prihdr, exthdr = create_default_L4_headers()
-    exthdr["STARLOCX"] = host_star_center[0]
-    exthdr["STARLOCY"] = host_star_center[1]
-    exthdr["MASKLOCX"] = host_star_center[0]
-    exthdr["MASKLOCY"] = host_star_center[1]
-    prihdr["FILENAME"] = f"mock_psfsub.fits"
-    wcs_obj = generate_wcs(roll_angle, [host_star_center[0], host_star_center[1]], platescale=platescale)
-    wcs_header = wcs_obj.to_header()
-    exthdr.update(wcs_header)
-
-    # Record companion location in the header
-    for i, (cx, cy) in enumerate(companion_xy, start=1):
-        exthdr[f"SNYX{i:03d}"] = f"5.0,{cx},{cy}"
-
-    err_data = np.full_like(residual_image, noise_std, dtype=np.float32)
-    dq_data  = np.zeros_like(residual_image, dtype=np.uint16)
-
-    frame = Image(residual_image, pri_hdr=prihdr, ext_hdr=exthdr, err=err_data, dq=dq_data)
-
-    # 10) Save if requested
-    if outdir is not None:
-        os.makedirs(outdir, exist_ok=True)
-        frame.save(filedir=outdir, filename=f"mock_psfsub_{i:03d}.fits")
-        print(f"Saved PSF-subtracted frame to", os.path.join(outdir, f"mock_psfsub_{i:03d}.fits"))
-
-    return frame
 
 
 def create_mock_fpamfsam_cal(
@@ -3613,30 +3523,18 @@ def create_mock_ct_dataset_and_cal_file(
     pupil_value_2=3,
     seed=None,
     save_cal_file=False,
-    cal_filename=None
+    cal_filename=None,
+    image_shape=(1024, 1024)
 ):
     """
     Create a mock dataset suitable for generating a Core Throughput calibration file,
-    then generate and return that calibration file in-memory.
-
-    Args:
-        fwhm (float, optional): The FWHM (in mas) for the mock off-axis PSFs (used by create_ct_psfs).
-        n_psfs (int, optional): Number of off-axis PSFs to generate.
-        cfam_name (str, optional): CFAM filter name to store in the header.
-        pupil_value_1 (float, optional): A value to fill in the first pupil image (used to simulate 
-            unocculted frames).
-        pupil_value_2 (float, optional): A value to fill in the second pupil image.
-        seed (int, optional): Random seed for reproducibility (used if create_ct_psfs has random 
-            offsets).
-        save_cal_file (bool, optional): Whether to save the generated calibration file to disk.
-        cal_filename (str, optional): Filename to use if saving the calibration file. If None, a 
-            default is generated.
-
+    then generate and return that calibration file in-memory. Additionally, returns a dataset
+    of PSF images without the mask-induced throughput reduction.
+    
     Returns: 
-        dataset_ct (corgidrp.data.Dataset): The constructed dataset containing pupil frames + 
-            off-axis PSFs.
-        ct_cal (corgidrp.data.CoreThroughputCalibration): The generated core throughput calibration 
-            object (in-memory).
+        dataset_ct (corgidrp.data.Dataset): The dataset of masked (throughput reduced) PSF images.
+        ct_cal (corgidrp.data.CoreThroughputCalibration): The generated core throughput calibration object.
+        dataset_ct_nomask (corgidrp.data.Dataset): The dataset of unmasked PSF images.
     """
     if seed is not None:
         np.random.seed(seed)
@@ -3650,14 +3548,11 @@ def create_mock_ct_dataset_and_cal_file(
     exthd['DRPVERSN'] = corgidrp.__version__
     exthd['CFAMNAME'] = cfam_name
 
-    # For example, choose some FPAM/FSAM positions during CT observations
-    # (just arbitrary or from real test data)
     exthd['FPAM_H'] = 6854
     exthd['FPAM_V'] = 22524
     exthd['FSAM_H'] = 29471
     exthd['FSAM_V'] = 12120
 
-    # Make a pupil header so we can mark these frames as unocculted
     exthd_pupil = exthd.copy()
     exthd_pupil['DPAMNAME'] = 'PUPIL'
     exthd_pupil['LSAMNAME'] = 'OPEN'
@@ -3667,55 +3562,64 @@ def create_mock_ct_dataset_and_cal_file(
     # ----------------------------
     # B) Create the unocculted/pupil frames
     # ----------------------------
-    # So 1024x1024 arrays with uniform “patches”
-    shape = (1024, 1024)
-    pupil_image_1 = np.zeros(shape)
-    pupil_image_2 = np.zeros(shape)
-    # fill some patch with pupil_value_1
-    pupil_image_1[510:530, 510:530] = pupil_value_1
-    pupil_image_2[510:530, 510:530] = pupil_value_2
-    err = np.ones(shape)
+    pupil_image_1 = np.zeros(image_shape)
+    pupil_image_2 = np.zeros(image_shape)
+    ny, nx = image_shape
+    y_center = ny // 2
+    x_center = nx // 2
+    patch_half_size = 10
+    pupil_image_1[y_center - patch_half_size:y_center + patch_half_size,
+                  x_center - patch_half_size:x_center + patch_half_size] = pupil_value_1
+    pupil_image_2[y_center - patch_half_size:y_center + patch_half_size,
+                  x_center - patch_half_size:x_center + patch_half_size] = pupil_value_2
 
-    # Build Images
+    err = np.ones(image_shape)
     im_pupil1 = Image(pupil_image_1, pri_hdr=prihdr, ext_hdr=exthd_pupil, err=err)
     im_pupil2 = Image(pupil_image_2, pri_hdr=prihdr, ext_hdr=exthd_pupil, err=err)
 
     # ----------------------------
-    # C) Create a set of off-axis PSFs
+    # C) Create a set of off-axis PSFs (masked and unmasked)
     # ----------------------------
-    data_psf, psf_locs, half_psf = create_ct_psfs(
-        fwhm_mas=fwhm,
-        cfam_name=cfam_name,
-        n_psfs=n_psfs
+    data_psf_masked, psf_locs, half_psf = create_ct_psfs(
+        fwhm, cfam_name=cfam_name, n_psfs=n_psfs, image_shape=image_shape, apply_mask=True
+    )
+    data_psf_nomask, _, _ = create_ct_psfs(
+        fwhm, cfam_name=cfam_name, n_psfs=n_psfs, image_shape=image_shape, apply_mask=False
     )
 
-    # Combine all frames into a single Dataset
-    data_ct = [im_pupil1, im_pupil2] + data_psf
+    # Combine frames for CT dataset (pupil frames + masked PSFs)
+    data_ct = [im_pupil1, im_pupil2] + data_psf_masked
     dataset_ct = Dataset(data_ct)
 
     # ----------------------------
     # D) Generate the CT cal file
     # ----------------------------
     ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct)
+    ct_cal_tmp.ext_hdr['MASKLOCX'] = x_center
+    ct_cal_tmp.ext_hdr['MASKLOCY'] = y_center
 
-    # Optionally save it to disk
     if save_cal_file:
         if not cal_filename:
-            # e.g. "CoreThroughputCalibration_<ISOTIME>.fits"
             cal_filename = f"CoreThroughputCalibration_{Time.now().isot}.fits"
         cal_filepath = os.path.join(corgidrp.default_cal_dir, cal_filename)
         ct_cal_tmp.save(filedir=corgidrp.default_cal_dir, filename=cal_filename)
         print(f"Saved CT cal file to: {cal_filepath}")
 
-    # Create a new Dataset from the PSF cube (which are (19,19) images)
-    psf_cube = ct_cal_tmp.data  # shape (N, 19, 19)
+    # Create a new Dataset from the PSF cube (masked)
+    psf_cube = ct_cal_tmp.data
     psf_images = []
     for i in range(psf_cube.shape[0]):
         psf_img = Image(psf_cube[i], pri_hdr=ct_cal_tmp.pri_hdr, ext_hdr=ct_cal_tmp.ext_hdr)
         psf_images.append(psf_img)
     dataset_ct = Dataset(psf_images)
 
-    return dataset_ct, ct_cal_tmp
+    # Also build a dataset for the unmasked PSFs
+    dataset_ct_nomask = Dataset(data_psf_nomask)
+
+    # Return both datasets and the calibration object.
+    return dataset_ct, ct_cal_tmp, dataset_ct_nomask
+
+
 
 def generate_reference_star_dataset(
     n_frames=3,
