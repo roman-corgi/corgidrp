@@ -533,14 +533,14 @@ def test_psfsub_withklipandctmeas():
     
 
 if __name__ == '__main__':  
-    # test_create_ct_cal()
-    # test_get_closest_psf()
-    # test_inject_psf()
-    # test_measure_noise()
+    test_create_ct_cal()
+    test_get_closest_psf()
+    test_inject_psf()
+    test_measure_noise()
 
-    # test_meas_klip_ADI()
-    # test_meas_klip_RDI()
-    # test_compare_RDI_ADI()
+    test_meas_klip_ADI()
+    test_meas_klip_RDI()
+    test_compare_RDI_ADI()
     test_meas_klip_ADIRDI()
 
     test_psfsub_withklipandctmeas()

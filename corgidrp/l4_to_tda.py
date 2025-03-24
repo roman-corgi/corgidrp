@@ -1,8 +1,9 @@
 # A file that holds the functions that transmogrify l4 data to TDA (Technical Demo Analysis) data 
 import corgidrp.fluxcal as fluxcal
-import check
-from klip_fm import measure_noise
+from corgidrp import check
+from corgidrp.klip_fm import measure_noise
 import numpy as np
+from astropy.io import fits
 import warnings
 
 def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
@@ -142,33 +143,29 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     return flux_dataset
 
 
-def compute_calibrated_contrast_curve(input_dataset, halfwidth, klmode_index=None):
+def compute_calibrated_contrast_curve(input_dataset, halfwidth=None):
     '''
     Uses the PSF-subtracted frame and its algorithm throughput vs separation to 
     produce a calibrated 1-sigma contrast curve, also accounting for the throughput of the coronagraph.
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images
-        halfwidth (float): halfwidth of the annulus to use for noise calculation.  If None, half 
-            of the minimum spacing between separation distances (if it isn't uniform spacing) is used.
-        klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
-            the given index to use for the annulus noise calculation. I.e. klmode_index=0 would return only the values for the first KL mode 
-            truncation choice.  If None (by default), all indices are returned. Defaults to None.
+        input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
+        halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.  If None, half 
+            of the minimum spacing between separation distances (if it isn't uniform spacing) is used.  Defaults to None.
     Returns:
-        corgidrp.data.Dataset: input dataset with an additional extension header 'CON_CRV' containing the 
-            calibrated contrast curve as function of radial separation.  The data in that extension is a 3xN array,
-            where the first row contains the separation radii in pixels, the second row contains the corresponding 
-            contrast curve values, and the third row contains the corresponding uncertainty of the values.
+        corgidrp.data.Dataset: input dataset with an additional extension header 'CON_CRV' for every frame, containing the 
+            calibrated contrast curve as a function of radial separation.  The data in that extension for a given frame is a (1+M)xN array,
+            where the first row contains the separation radii in pixels and the M rows contain the corresponding 
+            contrast curve values for each KL mode truncation (maintaining the KL index ordering).
+            TODO:  Add uncertainty to contrast curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
     '''
     output_dataset = input_dataset.copy()
     for frame in output_dataset.frames:
-        klip_tp = frame.hdu_list['KL_THRU'][1]
-        core_tp = frame.hdu_list['COR_THRU'].data[1]
+        klip_tp = frame.hdu_list['KL_THRU'].data[1:]
+        core_tp = frame.hdu_list['CT_THRU'].data[1]
         # the separations for KLIP and core throughput are assumed the same (for now)
         # separations, in pixels, give the middle radius of the annulus 
-        separations = frame.hdu_list['COR_THRU'][0]
-        if klip_tp.shape != core_tp.shape:
-            raise Exception('The KLIP and core throughput arrays must have the same shape.')
+        separations = frame.hdu_list['CT_THRU'].data[0]
         sep_spacings = separations - np.roll(separations, 1)
         # ignore the meaningless first entry (b/c of looping around with np.roll)
         min_spacing = np.min(sep_spacings[1:])
@@ -177,10 +174,14 @@ def compute_calibrated_contrast_curve(input_dataset, halfwidth, klmode_index=Non
         check.real_positive_scalar(halfwidth, 'halfwidth', ValueError)
         if halfwidth > min_spacing/2:
             warnings.warn('Halfwidth is wider than half the minimum spacing between separation values.')
-        annular_noise = measure_noise(frame, separations, halfwidth, klmode_index)
-        contrast_curve_vals = klip_tp*core_tp*annular_noise
-        contrast_curve = np.stack(separations, contrast_curve_vals)
-        frame.add_extension_hdu('CON_CRV', data = contrast_curve, header=None)
+        annular_noise = measure_noise(frame, separations, halfwidth)
+        contrast_curve_vals = klip_tp*core_tp*annular_noise.T
+        contrast_curve = np.vstack([separations, contrast_curve_vals])
+        hdr = fits.Header()
+        hdr['BUNIT'] = "erg/(s*cm^2*AA)"
+        frame.add_extension_hdu('CON_CRV', data = contrast_curve, header=hdr)
+        history_msg = 'Calibrated contrast curve added to extension header CON_CRV.'
+        output_dataset.update_after_processing_step(history_msg)
     return output_dataset
 
 
