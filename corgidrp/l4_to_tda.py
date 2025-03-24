@@ -154,6 +154,7 @@ def compute_calibrated_contrast_curve(input_dataset, halfwidth=None):
         input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
         halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.  If None, half 
             of the minimum spacing between separation distances (if it isn't uniform spacing) is used.  Defaults to None.
+            
     Returns:
         corgidrp.data.Dataset: input dataset with an additional extension header 'CON_CRV' for every frame, containing the 
             calibrated contrast curve as a function of radial separation.  The data in that extension for a given frame is a (1+M)xN array,
@@ -185,6 +186,7 @@ def compute_calibrated_contrast_curve(input_dataset, halfwidth=None):
         history_msg = 'Calibrated contrast curve added to extension header CON_CRV.'
         output_dataset.update_after_processing_step(history_msg)
     return output_dataset
+
 def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None):
     """
     Calculates the total number of photoelectrons/s of a point source and convert them to the flux in erg/(s * cm^2 * AA).
