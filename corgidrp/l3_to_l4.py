@@ -618,8 +618,7 @@ def do_psf_subtraction(input_dataset,
         else:
             seps = np.array([5.,10.,15.,20.,25.,30.,35.])
 
-        cenxy = (dataset_out[0].ext_hdr['STARLOCX'],dataset_out[0].ext_hdr['STARLOCY'])
-        ct_1d = get_1d_ct(ct_calibration,cenxy,seps)
+        ct_1d = get_1d_ct(ct_calibration,dataset_out[0],seps)
 
         ct_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
