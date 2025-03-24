@@ -2644,7 +2644,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
 
     # Calculate Gaussian 
-    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp #/ (2.0 * np.pi * sigma**2)
+    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp
     
     return gauss
 
@@ -2719,7 +2719,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     ymin = y[0][0]
     ymax = y[-1][-1]
         
-    psf = gaussian_array((stampsize,stampsize),sigma,flux)
+    psf = gaussian_array((stampsize,stampsize),sigma,flux) / (2.0 * np.pi * sigma**2)
 
     # Inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
