@@ -55,7 +55,7 @@ def create_wcs(input_dataset, astrom_calibration):
         wcs_info['CRVAL1'] = center_coord[0]
         wcs_info['CRVAL2'] = center_coord[1]
 
-        wcs_info['PLTSCALE'] = platescale_x  ## [mas] / pixel
+        wcs_info['PLTSCALE'] = np.mean([platescale_x, platescale_y])  ## [mas] / pixel
 
         # update the image header with wcs information
         for key, value in wcs_info.items():
