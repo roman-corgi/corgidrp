@@ -3,6 +3,7 @@
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
+import corgidrp
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
 from corgidrp import star_center
@@ -14,7 +15,6 @@ import pyklip.rdi
 import os
 from astropy.io import fits
 import warnings
-import pathlib
 
 def distortion_correction(input_dataset, astrom_calibration):
     """
@@ -471,7 +471,7 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
 
     # Set up outdir
     if outdir is None: 
-        outdir = os.path.join(pathlib.Path.home(), ".corgidrp",'KLIP_SUB')
+        outdir = os.path.join(corgidrp.config_folder, 'KLIP_SUB')
     
     outdir = os.path.join(outdir,mode)
     if not os.path.exists(outdir):

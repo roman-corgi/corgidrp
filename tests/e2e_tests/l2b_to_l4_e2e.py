@@ -20,7 +20,7 @@ import pathlib
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_l2b_to_l3(os11_data_path, e2eoutput_path):
+def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
     '''
 
     An end-to-end test that takes the OS11 data and runs it through the L2B to L4 pipeline.
@@ -40,7 +40,7 @@ def test_l2b_to_l3(os11_data_path, e2eoutput_path):
             - FluxCalibration
     
     Args:
-        os11_data_path (str): Path to the OS11 data
+        tvacdata_path (str): Path to the test data
         e2eoutput_path (str): Path to the output directory
 
 
@@ -84,14 +84,14 @@ def test_l2b_to_l3(os11_data_path, e2eoutput_path):
 
     #Read in the PSFs
     input_file = 'hlc_os11_frames_with_planets.fits'
-    input_hdul = fits.open(os.path.join(os11_data_path,"hcl_os11_v3",input_file))
+    input_hdul = fits.open(os.path.join(tvacdata_path,"hcl_os11_v3",input_file))
     input_images = input_hdul[0].data
     header = input_hdul[0].header
     psf_center_x = header['XCENTER']
     psf_center_y = header['YCENTER']
     
     #Get the auxilliary data
-    data = np.loadtxt(os.path.join(os11_data_path,"hcl_os11_v3",'hlc_os11_batch_info.txt'), skiprows=2)
+    data = np.loadtxt(os.path.join(tvacdata_path,"hcl_os11_v3",'hlc_os11_batch_info.txt'), skiprows=2)
     batch = data[:,0].astype(int)
     star = data[:,2].astype(int)
     roll = data[:,3]
@@ -209,7 +209,7 @@ def test_l2b_to_l3(os11_data_path, e2eoutput_path):
     assert l3_image.ext_hdr['CTYPE2'] == 'DEC--TAN'
 
     #Check if the Bunit is correct
-    assert l3_image.ext_hdr['BUNIT'] == 'electrons/s'
+    assert l3_image.ext_hdr['BUNIT'] == 'photoelectrons/s'
     
     #Clean up
     this_caldb.remove_entry(astrom_cal)
