@@ -19,24 +19,40 @@ lam = 573.8e-9 #m
 pixscale_arcsec = 0.0218
 fwhm_mas = 1.22 * lam / d * 206265 * 1000
 fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
+sig_pix = fwhm_pix / (2 * np.sqrt(2. * np.log(2.)))
 iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
 owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
 
-# Mock CT calibration
+# Mock CT calibration settings
 
+nx,ny = (21,21)
+cenx, ceny = (25.,30.)
+
+# Mock PSF subtraction data settings
+st_amp = 100.
+noise_amp = 1e-3
+pl_contrast = 0.0
+rolls = [0,10.,0,0]
+
+# Injection test settings
+inj_flux = 10.
+
+# KLIP throughput calculation settings
+inject_snr = 10.
 outdir = 'klipcal_output'
 fileprefix = 'FAKE'
 annuli = 1
 subsections = 1
 movement = 1
+numbasis = [1]
 calibrate_flux = False
-mode = 'ADI+RDI'
+
+# max_thrupt_tolerance = 1 + (noise_amp * (2*fwhm_pix)**2)
+max_thrupt_tolerance = 1.05
 
 if not os.path.exists(outdir):
     os.mkdir(outdir)
    
-
-
 ## pyKLIP data class tests
 
 def test_create_ct_cal():
@@ -97,25 +113,19 @@ def test_get_closest_psf():
 
 def test_inject_psf():
 
-    # Test injecting psf on edge of array
-    
-    # Set up frame of zeros
-    # Need .ext_hdr['ROLL'] and .ext_hdr['STARLOCX/Y']
-
+    # Mock CT cal object
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
     ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
                   cenx=cenx,ceny=ceny,
-                  nx=nx,ny=ny)
-    
-    inj_flux = 10.
-
+                  nx=nx,ny=ny,
+                  psfsize=5)
 
     # Test 0 separation to make sure we can scale and center
     sep = 0.0
     pa = 0.0
     roll = 0.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx)
 
     ext_hdr = fits.Header()
@@ -123,21 +133,21 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
     
-    assert np.sum(frame_out.data) == pytest.approx(inj_flux)
+    assert np.max(frame_out.data) == pytest.approx(inj_flux)
 
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
     
-    # Test separation of 1 pixel
+    # Test separation of exactly 1 pixel
     sep = 1.0
     pa = 0.0
     roll = 0.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny+1,cenx)
 
     ext_hdr = fits.Header()
@@ -145,7 +155,7 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
@@ -157,7 +167,7 @@ def test_inject_psf():
     sep = 1.0
     pa = 90.0
     roll = 0.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx-1)
 
     ext_hdr = fits.Header()
@@ -165,7 +175,7 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
@@ -177,7 +187,7 @@ def test_inject_psf():
     sep = 5.0
     pa = 0.0
     roll = 90.0
-    frame_shape = (50,60)
+    frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx+5)
 
     ext_hdr = fits.Header()
@@ -185,7 +195,7 @@ def test_inject_psf():
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
-    frame = Image(np.zeros(frame_shape),
+    frame = Image(np.zeros(frame_shape_yx),
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
 
@@ -193,13 +203,183 @@ def test_inject_psf():
     
     assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak
 
-    pass
+    # Test injecting a psf over the left edge of the array
+    sep = 9.0
+    pa = 90.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (5,1)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+    # Test injecting a psf over the right edge of the array
+    sep = 9.0
+    pa = -90.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (5,19)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+    
+    # Test injecting a psf over the top edge of the array
+    sep = 4.0
+    pa = 0.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (9,10)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+
+    # Test injecting a psf over the bottom edge of the array
+    sep = 4.0
+    pa = 180.0
+    roll = 0.0
+    frame_shape_yx = (11,21)
+    ceny,cenx = (5,10)
+    expected_peak_yx = (1,10)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+
+    # Test injecting a psf over the bottom left corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = 135.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (1,1)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+
+    # Test injecting a psf over the bottom right corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = -135.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (1,9)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+
+    # Test injecting a psf over the top left corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = 45.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (9,1)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
+    
+    # Test injecting a psf over the top right corner of the array
+    sep = 4.0 * np.sqrt(2)
+    pa = -45.0
+    roll = 0.0
+    frame_shape_yx = (11,11)
+    ceny,cenx = (5,5)
+    expected_peak_yx = (9,9)
+
+    ext_hdr = fits.Header()
+    ext_hdr['ROLL'] = roll
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
+    
+    frame = Image(np.zeros(frame_shape_yx),
+                  pri_hdr=fits.Header(),
+                  ext_hdr=ext_hdr)
+
+    frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
+
+    assert np.unravel_index(np.argmax(frame_out.data),frame_out.data.shape) == expected_peak_yx
 
 
 def test_measure_noise():
 
     cenx,ceny = (120.,130.)
-    frame_shape = (200,200)
+    frame_shape_yx = (200,200)
     seps = np.arange(50.,71.,5.)
     border_sep = 62.5
     
@@ -209,7 +389,7 @@ def test_measure_noise():
     ext_hdr['MASKLOCX'] = cenx
     ext_hdr['MASKLOCY'] = ceny
     
-    image = np.zeros((2,*frame_shape))
+    image = np.zeros((2,*frame_shape_yx))
 
     frame = Image(image,
                   pri_hdr=fits.Header(),
@@ -230,7 +410,7 @@ def test_measure_noise():
     std3 = 3.
     std4 = 4.
 
-    image = np.zeros((2,*frame_shape))
+    image = np.zeros((2,*frame_shape_yx))
     frame = Image(image,
                   pri_hdr=fits.Header(),
                   ext_hdr=ext_hdr)
@@ -240,8 +420,8 @@ def test_measure_noise():
     
 
     rng = np.random.default_rng(0)
-    frame.data[0,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std1,frame_shape),rng.normal(0.,std2,frame_shape))
-    frame.data[1,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std3,frame_shape),rng.normal(0.,std4,frame_shape))
+    frame.data[0,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std1,frame_shape_yx),rng.normal(0.,std2,frame_shape_yx))
+    frame.data[1,:,:] = np.where(sep_map>border_sep,rng.normal(0.,std3,frame_shape_yx),rng.normal(0.,std4,frame_shape_yx))
 
     # No KL mode specified
     noise_profile = measure_noise(frame, seps, fwhm)
@@ -275,170 +455,17 @@ def test_measure_noise():
 
 
 def test_meas_klip_ADI():
+    global kt_adi 
 
     mode = 'ADI'
-
-    nx,ny = (21,21)
-    cenx, ceny = (25.,30.)
-    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
-                  cenx=cenx,ceny=ceny,
-                  nx=nx,ny=ny)
-    
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 0.0
-    rolls = [0,15.,0,0]
-    numbasis = [1,2]
-    klip_params = {
-                'outdir':outdir,'fileprefix':fileprefix,
-                'annuli':annuli, 'subsections':subsections, 
-                'movement':movement, 'numbasis':numbasis,
-                'mode':mode,'calibrate_flux':calibrate_flux}
-    
-    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
-                                            fwhm_pix=fwhm_pix,
-                                            st_amp=st_amp,
-                                            noise_amp=noise_amp,
-                                            pl_contrast=pl_contrast)
-
-    psfsub_dataset = do_psf_subtraction(mock_sci,
-                                reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
-                                fileprefix='test_KL_THRU',
-                                mode=mode,
-                                do_crop=False,
-                                measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
-
-    inject_snr = 20
-
-    klip_params['mode'] = mode
-    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
-                     psfsub_dataset, # post-subtraction dataset
-                     ctcal,
-                     klip_params,
-                     inject_snr,
-                     seps=[15.,25.,35.], # in pixels from mask center
-                     pas=[0.,120.,240.], # Degrees
-                     cand_locs=[])
-
-    # See if it runs\-
-    pass
-
-
-def test_meas_klip_RDI():
-
-    mode = 'RDI'
-
-    nx,ny = (21,21)
-    cenx, ceny = (25.,30.)
-    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
-                  cenx=cenx,ceny=ceny,
-                  nx=nx,ny=ny)
-    
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 1e-2
-    rolls = [0,15.,0,0]
-    numbasis = [1,2]
-    klip_params = {
-                'outdir':outdir,'fileprefix':fileprefix,
-                'annuli':annuli, 'subsections':subsections, 
-                'movement':movement, 'numbasis':numbasis,
-                'mode':mode,'calibrate_flux':calibrate_flux}
-    
-    mock_sci,mock_ref = create_psfsub_dataset(1,1,rolls,
-                                            fwhm_pix=fwhm_pix,
-                                            st_amp=st_amp,
-                                            noise_amp=noise_amp,
-                                            pl_contrast=pl_contrast)
-
-    psfsub_dataset = do_psf_subtraction(mock_sci,
-                                reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
-                                fileprefix='test_KL_THRU',
-                                mode=mode,
-                                do_crop=False,
-                                measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
-
-    inject_snr = 20
-
-    klip_params['mode'] = mode
-    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
-                     psfsub_dataset, # post-subtraction dataset
-                     ctcal,
-                     klip_params,
-                     inject_snr,
-                     seps=[15.,25.,35.], # in pixels from mask center
-                     pas=[0.,60.,120.,180.,240.,300.], # Degrees
-                     cand_locs=[(15.,0.)])
-
-    # See if it runs\-
-    pass
-
-
-def test_meas_klip_ADIRDI():
-
-    mode = 'ADI+RDI'
-
-    nx,ny = (21,21)
-    cenx, ceny = (25.,30.)
-    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
-                  cenx=cenx,ceny=ceny,
-                  nx=nx,ny=ny)
-    
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 1e-2
-    rolls = [0,15.,0,0]
-    numbasis = [1,2]
-    klip_params = {
-                'outdir':outdir,'fileprefix':fileprefix,
-                'annuli':annuli, 'subsections':subsections, 
-                'movement':movement, 'numbasis':numbasis,
-                'mode':mode,'calibrate_flux':calibrate_flux}
-    
-    mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
-                                            fwhm_pix=fwhm_pix,
-                                            st_amp=st_amp,
-                                            noise_amp=noise_amp,
-                                            pl_contrast=pl_contrast)
-
-    psfsub_dataset = do_psf_subtraction(mock_sci,
-                                reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
-                                fileprefix='test_KL_THRU',
-                                mode=mode,
-                                do_crop=False,
-                                measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
-
-    inject_snr = 20
-
-    klip_params['mode'] = mode
-    out_arr = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
-                     psfsub_dataset, # post-subtraction dataset
-                     ctcal,
-                     klip_params,
-                     inject_snr,
-                     seps=[15.,25.,35.], # in pixels from mask center
-                     pas=[0.,60.,120.,180.,240.,300.], # Degrees
-                     cand_locs=[(15.,0.)])
-
-    # See if it runs\-
-    pass
-
-
-def test_psfsub_withklipandctmeas():
-
     nsci, nref = (2,0)
- 
-    st_amp = 100.
-    noise_amp = 1e-3
-    pl_contrast = 0. # No planet
-    rolls = [0,15.,0,0]
-    numbasis = [1,2]
+
+    nx,ny = (21,21)
+    cenx, ceny = (25.,30.)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+
     klip_params = {
                 'outdir':outdir,'fileprefix':fileprefix,
                 'annuli':annuli, 'subsections':subsections, 
@@ -451,18 +478,203 @@ def test_psfsub_withklipandctmeas():
                                             noise_amp=noise_amp,
                                             pl_contrast=pl_contrast)
 
-    # Plot input dataset
-    import matplotlib.pyplot as plt
-    dataset_frames = mock_sci if mock_ref is None else (*mock_sci,*mock_ref)
-    fig,axes = plt.subplots(1,len(dataset_frames),sharey=True,layout='constrained',figsize=(3*len(dataset_frames),3))
-    for f,frame in enumerate(dataset_frames):
-        im0 = axes[f].imshow(frame.data,origin='lower')
-        plt.colorbar(im0,ax=axes[f],shrink=0.8)
-        axes[f].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'],s=1)
-        name = 'Sci' if f < len(mock_sci) else 'Ref'
-        n_frame = f if f < len(mock_sci) else f-len(mock_sci)
-        axes[f].set_title(f'{name} Input Frame {n_frame}')
-    plt.show()
+    # # Plot input dataset
+    # import matplotlib.pyplot as plt
+    # dataset_frames = mock_sci if mock_ref is None else (*mock_sci,*mock_ref)
+    # fig,axes = plt.subplots(1,len(dataset_frames),sharey=True,layout='constrained',figsize=(3*len(dataset_frames),3))
+    # for f,frame in enumerate(dataset_frames):
+    #     im0 = axes[f].imshow(frame.data,origin='lower')
+    #     plt.colorbar(im0,ax=axes[f],shrink=0.8)
+    #     axes[f].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'],s=1)
+    #     name = 'Sci' if f < len(mock_sci) else 'Ref'
+    #     n_frame = f if f < len(mock_sci) else f-len(mock_sci)
+    #     axes[f].set_title(f'{name} Input Frame {n_frame}')
+    # plt.show()
+
+    psfsub_dataset = do_psf_subtraction(mock_sci,
+                                reference_star_dataset=mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=mode,
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
+
+    klip_params['mode'] = mode
+    kt_adi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+                     psfsub_dataset, # post-subtraction dataset
+                     ctcal,
+                     klip_params,
+                     inject_snr,
+                     seps = None, # in pixels from mask center
+                     cand_locs=[])
+
+    # # See if it runs\
+    # import matplotlib.pyplot as plt
+    # fig,ax = plt.subplots(figsize=(6,4))
+    # plt.plot(kt_adi[0],kt_adi[1],label='ADI')
+    # plt.title('KLIP throughput')
+    # plt.legend()
+    # plt.xlabel('separation (pixels)')
+    # plt.show()
+
+    # Check KL thrupt is <= 1 within noise tolerance
+    assert np.all(kt_adi[1:] < max_thrupt_tolerance)
+
+    # Check KL thrupt is > 0
+    assert np.all(kt_adi[1:] > 0.)
+
+    # Check KL thrupt increases with separation
+    for i in range(1,len(kt_adi[0])):
+        assert np.all(kt_adi[1:,i] > kt_adi[1:,i-1])
+
+
+def test_meas_klip_RDI():
+    global kt_rdi
+    mode = 'RDI'
+    nsci, nref = (1,1)
+
+    nx,ny = (21,21)
+    cenx, ceny = (25.,30.)
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+
+    klip_params = {
+                'outdir':outdir,'fileprefix':fileprefix,
+                'annuli':annuli, 'subsections':subsections, 
+                'movement':movement, 'numbasis':numbasis,
+                'mode':mode,'calibrate_flux':calibrate_flux}
+    
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast)
+
+    # # Plot input dataset
+    # import matplotlib.pyplot as plt
+    # dataset_frames = mock_sci if mock_ref is None else (*mock_sci,*mock_ref)
+    # fig,axes = plt.subplots(1,len(dataset_frames),sharey=True,layout='constrained',figsize=(3*len(dataset_frames),3))
+    # for f,frame in enumerate(dataset_frames):
+    #     im0 = axes[f].imshow(frame.data,origin='lower')
+    #     plt.colorbar(im0,ax=axes[f],shrink=0.8)
+    #     axes[f].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'],s=1)
+    #     name = 'Sci' if f < len(mock_sci) else 'Ref'
+    #     n_frame = f if f < len(mock_sci) else f-len(mock_sci)
+    #     axes[f].set_title(f'{name} Input Frame {n_frame}')
+    # plt.show()
+
+    psfsub_dataset = do_psf_subtraction(mock_sci,
+                                reference_star_dataset=mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=mode,
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
+
+    klip_params['mode'] = mode
+    kt_rdi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+                     psfsub_dataset, # post-subtraction dataset
+                     ctcal,
+                     klip_params,
+                     inject_snr)
+
+    # # See if it runs
+    # import matplotlib.pyplot as plt
+    # fig,ax = plt.subplots(figsize=(6,4))
+    # plt.plot(kt_rdi[0],kt_rdi[1],label='RDI')
+    # plt.title('KLIP throughput')
+    # plt.legend()
+    # plt.xlabel('separation (pixels)')
+    # plt.show()
+
+    # Check KL thrupt is <= 1 within noise tolerance
+    assert np.all(kt_rdi[1:] < max_thrupt_tolerance)
+
+    # Check KL thrupt > 0.8
+    assert np.all(kt_rdi[1:] > 0.8)
+
+
+def test_meas_klip_ADIRDI():
+    global kt_adirdi
+    
+    mode = 'ADI+RDI'
+    nsci, nref = (2,1)
+
+    ctcal = create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx=cenx,ceny=ceny,
+                  nx=nx,ny=ny)
+    
+    klip_params = {
+                'outdir':outdir,'fileprefix':fileprefix,
+                'annuli':annuli, 'subsections':subsections, 
+                'movement':movement, 'numbasis':numbasis,
+                'mode':mode,'calibrate_flux':calibrate_flux}
+    
+    mock_sci,mock_ref = create_psfsub_dataset(nsci,nref,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast)
+
+    psfsub_dataset = do_psf_subtraction(mock_sci,
+                                reference_star_dataset=mock_ref,
+                                numbasis=numbasis,
+                                fileprefix='test_KL_THRU',
+                                mode=mode,
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
+
+    kt_adirdi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
+                     psfsub_dataset, # post-subtraction dataset
+                     ctcal,
+                     klip_params,
+                     inject_snr)
+
+    # Just make sure it runs
+    pass
+
+
+def test_compare_RDI_ADI():
+
+    # import matplotlib.pyplot as plt
+    # fig,ax = plt.subplots()
+    # ax.plot(kt_adi[0],kt_adi[1],label='ADI')
+    # ax.plot(kt_rdi[0],kt_adirdi[1],label='ADI+RDI')
+    # ax.plot(kt_rdi[0],kt_rdi[1],label='RDI')
+    # plt.legend()
+    # ax.set_ylim(-0.1,1.1)
+    # plt.title('KLIP Throughput')
+    # plt.xlabel('Separation (pixels)')
+    # plt.show()
+
+    # Check that ADI thrupt < RDI thrupt
+    mean_adi = np.mean(kt_adi[1:])
+    mean_rdi = np.mean(kt_rdi[1:])
+
+    assert mean_adi < mean_rdi
+
+
+def test_psfsub_withklipandctmeas():
+
+    # RDI
+    mode = 'RDI'
+    nsci, nref = (1,1)
+ 
+    st_amp = 100.
+    noise_amp = 1e-3
+    pl_contrast = 0. # No planet
+    numbasis = [1,2]
+    mock_sci_rdi,mock_ref_rdi = create_psfsub_dataset(nsci,nref,rolls,
+                                            fwhm_pix=fwhm_pix,
+                                            st_amp=st_amp,
+                                            noise_amp=noise_amp,
+                                            pl_contrast=pl_contrast)
+
+    
 
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
@@ -471,8 +683,8 @@ def test_psfsub_withklipandctmeas():
                   nx=nx,ny=ny)
     
     
-    psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
-                                reference_star_dataset=mock_ref,
+    psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi,ctcal,
+                                reference_star_dataset=mock_ref_rdi,
                                 numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
                                 mode=None,
@@ -480,59 +692,15 @@ def test_psfsub_withklipandctmeas():
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True)
     
-    if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-        analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
-    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-        analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-                              [0.5,0.5],
-                              cval=np.nan)
-
-    for i,frame in enumerate(psfsub_dataset):
-
-        for k, img in enumerate(frame.data):
-            import matplotlib.pyplot as plt
-
-            fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-            im0 = axes[0].imshow(img,origin='lower')
-            plt.colorbar(im0,ax=axes[0],shrink=0.8)
-            axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-            axes[0].set_title(f'PSF Sub Result ({numbasis[k]} KL Modes)')
-
-            im1 = axes[1].imshow(analytical_result,origin='lower')
-            plt.colorbar(im1,ax=axes[1],shrink=0.8)
-            axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-            axes[1].set_title('Analytical result')
-
-            im2 = axes[2].imshow(img - analytical_result,origin='lower')
-            plt.colorbar(im2,ax=axes[2],shrink=0.8)
-            axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-            axes[2].set_title('Difference')
-
-            fig.suptitle(f"{frame.pri_hdr['KLIP_ALG']}, No Injections")
-
-            plt.show()
-            # plt.close()
-        
-    
     # Check that klip and ct separations are the same
+    kt = psfsub_dataset_rdi[0].hdu_list['KL_THRU'].data
+    kt_seps = kt[0]
 
+    ct = psfsub_dataset_rdi[0].hdu_list['CT_THRU'].data
+    ct_seps = ct[0]
 
-    # Check that array shapes are correct
-
-    # Plot KL throughput
-    kt_arr = psfsub_dataset[0].hdu_list['KL_THRU'].data
-    seps = kt_arr[0]
-
-    fig,ax = plt.subplots(figsize=(6,4))
-    for arr in kt_arr[1:]:
-        plt.plot(seps,arr)
-
-    plt.title('KLIP throughput')
-    plt.xlabel('separation (pixels)')
-
-    plt.show()
-
-    pass
+    assert np.all(kt_seps == ct_seps)
+    
 
 if __name__ == '__main__':  
     # test_create_ct_cal()
@@ -540,10 +708,12 @@ if __name__ == '__main__':
     # test_inject_psf()
     # test_measure_noise()
 
-    # test_meas_klip_RDI()
-    # test_meas_klip_ADI()
-    # test_meas_klip_ADIRDI()
+    test_meas_klip_ADI()
+    test_meas_klip_RDI()
+    test_meas_klip_ADIRDI()
 
-    test_psfsub_withklipandctmeas()
+    test_compare_RDI_ADI()
+
+    # test_psfsub_withklipandctmeas()
 
     pass

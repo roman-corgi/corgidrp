@@ -176,6 +176,38 @@ def test_distortion():
     assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
 
 
+def test_seppa2dxdy():
+
+    seps = np.array([10.0,15.0,20,10,10,10,10])
+    pas = np.array([0.,90.,-90,45,-45,135,-135])
+
+    expect_dx = np.array([0.,-15.0,20.,-10./np.sqrt(2.),10./np.sqrt(2.),-10./np.sqrt(2.),10./np.sqrt(2.)])
+    expect_dy = np.array([10.,0,0,10./np.sqrt(2.),10./np.sqrt(2.),-10./np.sqrt(2.),-10./np.sqrt(2.)])
+
+    expect_dxdy = np.array([expect_dx,expect_dy])
+
+    dxdy = astrom.seppa2dxdy(seps,pas)
+
+    assert dxdy == pytest.approx(expect_dxdy)
+
+def test_seppa2xy():
+
+    seps = np.array([10.0,15.0,20.,10,10,10,10])
+    pas = np.array([0.,90.,-90.,45,-45,135,-135])
+    cenx = 25.
+    ceny = 35.
+
+    expect_x = np.array([25.,10.0,45.,cenx-10./np.sqrt(2.),cenx+10./np.sqrt(2.),cenx-10./np.sqrt(2.),cenx+10./np.sqrt(2.)])
+    expect_y = np.array([45.,35.,35.,ceny+10./np.sqrt(2.),ceny+10./np.sqrt(2.),ceny-10./np.sqrt(2.),ceny-10./np.sqrt(2.)])
+
+    expect_xy = np.array([expect_x,expect_y])
+
+    dxdy = astrom.seppa2xy(seps,pas,cenx,ceny)
+
+    assert dxdy == pytest.approx(expect_xy)
+
 if __name__ == "__main__":
-    test_astrom()
-    test_distortion()
+    # test_astrom()
+    # test_distortion()
+    test_seppa2dxdy()
+    test_seppa2xy()
