@@ -514,21 +514,22 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         seppas_arr = np.array(this_klmode_seppas[0])
         seps_arr = seppas_arr[:,0]
 
-        # Plot injected and recovered peaks
-        fig,ax = plt.subplots()
-        plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
-        plt.scatter(seps_arr,this_klmode_outfluxs,label='Recovered counts')
-        plt.xlabel('separation (pixels)')
-        plt.legend()
-        plt.show()
+        # # Plot injected and recovered peaks
+        # import matplotlib.pyplot as plt
+        # fig,ax = plt.subplots()
+        # plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
+        # plt.scatter(seps_arr,this_klmode_outfluxs,label='Recovered counts')
+        # plt.xlabel('separation (pixels)')
+        # plt.legend()
+        # plt.show()
 
-        # Plot injected and recovered peaks
-        fig,ax = plt.subplots()
-        plt.scatter(seps_arr,this_klmode_peakin,label='Injected peaks')
-        plt.scatter(seps_arr,this_klmode_peakout,label='Recovered peaks')
-        plt.xlabel('separation (pixels)')
-        plt.legend()
-        plt.show()
+        # # Plot injected and recovered peaks
+        # fig,ax = plt.subplots()
+        # plt.scatter(seps_arr,this_klmode_peakin,label='Injected peaks')
+        # plt.scatter(seps_arr,this_klmode_peakout,label='Recovered peaks')
+        # plt.xlabel('separation (pixels)')
+        # plt.legend()
+        # plt.show()
 
         mean_thrupts = []
         # TODO: If no measurements available for a given sep
