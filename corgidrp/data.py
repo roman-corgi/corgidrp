@@ -951,7 +951,14 @@ class BadPixelMap(Image):
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
             # give it a default filename using the last input file as the base
-            self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+            # filename could be from an data level or filename oculd be from a flat field
+            base_filename = input_dataset[-1].filename
+            if "_FLT_CAL" in base_filename:
+                self.filename = base_filename.replace("_FLT_CAL", "_BPM_CAL")
+            else:
+                # not created from a flat
+                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+
 
 
         # double check that this is actually a bad pixel map that got read in
