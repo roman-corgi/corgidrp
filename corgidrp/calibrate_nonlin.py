@@ -161,7 +161,7 @@ def calibrate_nonlin(dataset_nl,
         13.846, 14.615, 15.385, and 1.538 (again).
         Set with non-unity gain frames:: a set of subsets of frames. All frames
         in each subset have a unique, non-unity EM gain. For instance, in TVAC,
-        11 subsets were considered with EM values (CMDGAIN): 1.65, 5.24, 8.60,
+        11 subsets were considered with EM values (EMGAIN_C): 1.65, 5.24, 8.60,
         16.70, 27.50, 45.26, 87.50, 144.10, 237.26, 458.70 and 584.40. These
         correspond to a range of actual EM gains from about 2 to 7000. Each subset
         collects the same number of frames, which is at least 20 frames. In TVAC,
