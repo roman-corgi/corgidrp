@@ -109,9 +109,8 @@ def measure_companions(
             #Forward model the off-axis image of the host star if it was at the planet location through the PSF subtraction process
             kl_value, ct_value, modeled_image = forward_model_psf(
                 coronagraphic_dataset, ref_star_dataset, ct_cal, scaled_star_psf,
-                guesssep, guesspa, guessflux=1,
-                numbasis=numbasis, nwalkers=nwalkers, nburn=nburn, nsteps=nsteps,
-                numthreads=numthreads, outputdir=output_dir
+                guesssep, guesspa, numbasis=numbasis, nwalkers=nwalkers, nburn=nburn,
+                nsteps=nsteps, numthreads=numthreads, outputdir=output_dir
             )
             fm_counts_uncorrected, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
             # correct for algorithmic efficiency
@@ -201,6 +200,7 @@ def measure_counts(image, phot_method, initial_xy, **kwargs):
         image (corgidrp.data.Image): Input image for photometry.
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
         initial_xy (tuple or None): Initial (x, y) guess for centroiding.
+        kwargs(dict): keyword arguments for photometry method.
     
     Returns:
         flux (float): Measured flux in the image.
@@ -284,7 +284,6 @@ def forward_model_psf(
     scaled_star_psf,
     guesssep,
     guesspa,
-    guessflux,
     outputdir=".",
     fileprefix="companion_fm",
     numbasis=[1, 2],
@@ -314,9 +313,10 @@ def forward_model_psf(
         coronagraphic_dataset (corgidrp.data.Dataset): Dataset containing coronagraphic images.
         reference_star_dataset (corgidrp.data.Dataset): Dataset containing reference star images.
         ct_calibration (corgidrp.data.CoreThroughputCalibration): Core throughput calibration data.
+        scaled_star_psf (corgidrp.data.Image): PSF subtracted image at the location of the companion,
+            scaled to the host star's brightness. 
         guesssep (float): Estimated separation of the companion.
         guesspa (float): Estimated position angle (in degrees) of the companion.
-        guessflux (float): Initial guess for the companion flux.
         outputdir (str): Directory path to save output files.
         fileprefix (str): File prefix for output files.
         numbasis (list): List of KLIP modes to retain.

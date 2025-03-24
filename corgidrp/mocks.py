@@ -2683,8 +2683,11 @@ def create_flux_image(
         optical_throughput (float): Dimensionless fraction of light transmitted (0 < 
             throughput <= 1).
         color_cor (float): Another dimensionless factor if you need it. 
-        filter, fpamname, target_name: For metadata in the header.
-        fsm_x, fsm_y (float): X,Y shift in mas from the image center.
+        filter (string): CFAM filter name used.
+        fpamname (string) FPAM name used.
+        target_name (string): Star target observed.
+        fsm_x (float): X shift in mas from the image center.
+        fsm_y (float): Y shift in mas from the image center.
         exptime (float): Exposure time (s).
         platescale (float): Plate scale in mas/pixel.
         background (float): Add an optional uniform background in e-.
@@ -3282,6 +3285,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             saved. Defaults to None.
         st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 100.
         noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1.
+        fwhm_pix (float): Full width half maximum in pixels.
         ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
             reference PSFs. Defaults to 1.
         pl_contrast (float): Flux ratio between planet and starlight incident on the detector. 
