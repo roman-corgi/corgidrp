@@ -94,16 +94,24 @@ def get_fluxcal_factor(image, method, phot_args, flux_or_irr):
 
 
 def generate_test_data(out_dir):
-    """
-    Generate mock data: direct star images, coronagraphic frames, and a PSF-subtracted frame.
-    
+    '''
+    Generate mock data including direct star images, coronagraphic frames, and a PSF-subtracted frame.
+
     Args:
-        out_dir (str): Output directory for saving data.
-    
+        out_dir (str): Directory path where the generated mock data files will be saved.
+
     Returns:
-        ref_star_dataset, host_star_counts, fluxcal_factor, zero_point, 
-        dataset_ct, ct_cal, FpamFsamCal, final_psf_sub_image, coron_data
-    """
+        tuple: A tuple containing the following items:
+            ref_star_dataset (list of Image): Generated reference star dataset images.
+            host_star_counts (float): Measured flux counts for the host star from the reference star dataset.
+            fluxcal_factor (float): Flux calibration factor derived from photometry.
+            zero_point (float or None): Photometric zero point from the calibration.
+            dataset_ct (list of Image): Dataset for core throughput calibration.
+            ct_cal (Image): Core throughput calibration frame.
+            FpamFsamCal (dict): Mock calibration data for FPAM-FSAM.
+            final_psf_sub_image (Image): Final PSF-subtracted image after post-processing and cropping.
+            coron_data (list of Image): Generated mock coronagraphic images with synthetic companion signals.
+    '''  
     os.makedirs(out_dir, exist_ok=True)
 
     # 1) Generate core throughput calibration dataset.
@@ -201,10 +209,31 @@ def generate_test_data(out_dir):
 
 def generate_or_load_test_data(out_dir, load_from_disk=False):
     """
-    Generate or load mock data.
-    
-    If load_from_disk is True and the expected saved files exist in out_dir,
-    then load the mocks from disk. Otherwise, generate the mocks and save them.
+    Generate or load mock datasets for testing.
+
+    If `load_from_disk` is True and the required data files are available in `out_dir`, 
+    the data is loaded directly from disk to save computation time. Otherwise, the mock data
+    is generated from scratch and saved for future use.
+
+    Parameters:
+        out_dir (str):
+            Directory path where data files are stored or will be saved.
+        load_from_disk (bool, optional):
+            If True, load existing data from disk if available; otherwise, generate new data.
+            Defaults to False.
+
+    Returns:
+        tuple:
+            A tuple containing:
+                - ref_star_dataset (list): Dataset of reference star images.
+                - host_star_counts (float): Photometrically measured counts of the host star.
+                - fluxcal_factor (float): Flux calibration factor for photometry.
+                - zero_point (float): Photometric zero point magnitude.
+                - dataset_ct (list): Core throughput calibration dataset.
+                - ct_cal (object): Core throughput calibration object.
+                - FpamFsamCal (object): Calibration object for FPAM and FSAM.
+                - final_psf_sub_image (Image): Final PSF-subtracted image.
+                - coron_data (list): Coronagraphic image dataset.
     """
     # Check for one of the key files that indicates mocks have been saved.
     final_psf_file = os.path.join(out_dir, "final_psf_sub_image.fits")
@@ -245,8 +274,14 @@ def generate_or_load_test_data(out_dir, load_from_disk=False):
 
 def _common_measure_companions_test(forward_model_flag):
     """
-    Helper function to run measure_companions with the given forward_model flag,
-    and check that exactly one companion is detected with expected coordinates and magnitude.
+    Helper function to test the `measure_companions` function with specified forward modeling.
+
+    Generates or loads test data, runs the companion measurement, and validates that exactly
+    one companion is detected. It then verifies the measured companion's coordinates and magnitude
+    against expected values.
+
+    Args:
+        forward_model_flag (bool): Flag indicating whether forward modeling should be enabled.
     """
 
     (ref_star_dataset, host_star_counts, fluxcal_factor, zero_point,
