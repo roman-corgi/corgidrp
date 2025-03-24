@@ -11,6 +11,8 @@ import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.l2b_to_l3
+import corgidrp.l3_to_l4
 import corgidrp.photon_counting
 import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
@@ -18,6 +20,7 @@ import corgidrp.detector
 import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
+import corgidrp.fluxcal
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -44,7 +47,10 @@ all_steps = {
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
-    "get_pc_mean" : corgidrp.photon_counting.get_pc_mean
+    "get_pc_mean" : corgidrp.photon_counting.get_pc_mean,
+    "divide_by_exptime" : corgidrp.l2b_to_l3.divide_by_exptime,
+    "northup" : corgidrp.l3_to_l4.northup,
+    "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -239,7 +245,7 @@ def guess_template(dataset):
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l1_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l1_to_l2a_noisemap.json"
@@ -248,24 +254,27 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l1_to_l2b_pc.json" 
             else:  
                 recipe_filename = "l1_to_l2b.json"    
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
-            _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
-            if image.pri_hdr['PHTCNT']:
+            _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc.json"
             else:
                 recipe_filename = "l2a_to_l2b.json"
+    elif image.ext_hdr['DATALVL'] == "L2b":
+        if image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
+            recipe_filename = "l2b_to_fluxcal_factor.json"
     else:
         raise NotImplementedError()
 

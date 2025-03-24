@@ -11,6 +11,7 @@ def create_config_dir():
     """
     Checks if the default .corgidrp directory exists, and if not, it sets it up
     """
+    global config_folder
     homedir = pathlib.Path.home()
     config_folder = os.path.join(homedir, ".corgidrp")
     # replace legacy file with folder if needed
@@ -50,19 +51,32 @@ def create_config_dir():
             config.write(f)
 
         print("corgidrp: Configuration file written to {0}. Please edit if you want things stored in different locations.".format(config_filepath))
+
+
+def update_pipeline_settings():
+    """
+    Loads configuration file to update pipeline settings
+    """
+    global config_filepath
+    global caldb_filepath, default_cal_dir, track_individual_errors, skip_missing_cal_steps, jit_calib_id
+    # borrowed from the kpicdrp caldb
+    # load in default caldbs based on configuration file
+    config_filepath = os.path.join(pathlib.Path.home(), ".corgidrp", "corgidrp.cfg")
+    config = configparser.ConfigParser()
+    config.read(config_filepath)
+
+    _bool_map = {"true" : True, "false" : False}
+
+    ## pipeline settings
+    caldb_filepath = config.get("PATH", "caldb", fallback=None) # path to calibration db
+    default_cal_dir = config.get("PATH", "default_calibs", fallback=None) # path to default calibrations directory
+    track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors", fallback='false').lower()] # save each individual error component separately?
+    skip_missing_cal_steps = _bool_map[config.get("WALKER", "skip_missing_cal_steps", fallback='false').lower()] # skip steps, instead of crashing, when suitable calibration file cannot be found 
+    jit_calib_id = _bool_map[config.get("WALKER", "jit_calib_id", fallback='false').lower()] # AUTOMATIC calibration files identified right before the execution of a step, rather than when recipe is first generated
+
+
 create_config_dir()
-    
-_bool_map = {"true" : True, "false" : False}
+update_pipeline_settings()
 
-# borrowed from the kpicdrp caldb
-# load in default caldbs based on configuration file
-config_filepath = os.path.join(pathlib.Path.home(), ".corgidrp", "corgidrp.cfg")
-config = configparser.ConfigParser()
-config.read(config_filepath)
 
-## pipeline settings
-caldb_filepath = config.get("PATH", "caldb", fallback=None) # path to calibration db
-default_cal_dir = config.get("PATH", "default_calibs", fallback=None) # path to default calibrations directory
-track_individual_errors = _bool_map[config.get("DATA", "track_individual_errors", fallback='false').lower()] # save each individual error component separately?
-skip_missing_cal_steps = _bool_map[config.get("WALKER", "skip_missing_cal_steps", fallback='false').lower()] # skip steps, instead of crashing, when suitable calibration file cannot be found 
-jit_calib_id = _bool_map[config.get("WALKER", "jit_calib_id", fallback='false').lower()] # AUTOMATIC calibration files identified right before the execution of a step, rather than when recipe is first generated
+

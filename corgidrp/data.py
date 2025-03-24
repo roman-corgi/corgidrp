@@ -646,12 +646,8 @@ class Dark(Image):
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
-                if self.ext_hdr['PC_STAT'] != 'photon-counted master dark':
-                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                    self.filename = "{0}_dark.fits".format(orig_input_filename)
-                else:
-                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                    self.filename = "{0}_pc_dark.fits".format(orig_input_filename)
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+                self.filename = "{0}_DRK_CAL.fits".format(orig_input_filename)
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'
@@ -1300,7 +1296,7 @@ class TrapCalibration(Image):
 
 class FluxcalFactor(Image):
     """
-    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electron. 
+    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electrons/s. 
 
     To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
@@ -1375,8 +1371,8 @@ class FluxcalFactor(Image):
                 orig_input_filename = input_dataset[0].filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
-            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/electron'
+            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 
@@ -1447,7 +1443,7 @@ class FpamFsamCal(Image):
             prihdr['OBSID'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
-            exthdr['CMDGAIN'] = 1.0
+            exthdr['EMGAIN_C'] = 1.0
             exthdr['EXCAMT'] = 40.0
 
             self.pri_hdr = prihdr
