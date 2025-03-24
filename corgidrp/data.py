@@ -1991,7 +1991,7 @@ class PyKLIPDataset(pyKLIP_Data):
             input_all += [data]
             centers_all += [centers]
             filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [shead['ROLL']] * NINTS
+            PAs_all += [phead['ROLL']] * NINTS      # ROLL is in primary header
 
             if TELESCOP != "ROMAN" or INSTRUME != "CGI":
                 raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')

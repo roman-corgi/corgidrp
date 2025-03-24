@@ -1,3 +1,5 @@
+# A file that holds the functions that transmogrify l3 data to l4 data 
+
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
@@ -385,12 +387,6 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
             updated_hdrs.append('CRPIX1/2')
-        if not ("DETPIX0X" in exthdr.keys()):
-            exthdr.set('DETPIX0X',0)
-            exthdr.set('DETPIX0Y',0)
-        exthdr.set('DETPIX0X',exthdr["DETPIX0X"]+x1)
-        exthdr.set('DETPIX0Y',exthdr["DETPIX0Y"]+y1)
-
         new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
         frames_out.append(new_frame)
 
@@ -404,18 +400,12 @@ def crop(input_dataset, sizexy=None, centerxy=None):
 def do_psf_subtraction(input_dataset, 
                        ct_calibration=None,
                        reference_star_dataset=None,
-def do_psf_subtraction(input_dataset, 
-                       ct_calibration=None,
-                       reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
                        numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
                        do_crop=True,
                        crop_sizexy=None,
                        measure_klip_thrupt=True,
-                       measure_1d_core_thrupt=True,
-                       cand_locs=[],
-                       kt_seps=None,
-                       kt_pas=None,
+                       measure_1d_core_thrupt=True
                        ):
     """
     
@@ -441,7 +431,6 @@ def do_psf_subtraction(input_dataset,
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
         do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
-        do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
         crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
             None, which results in the step choosing a crop size based on the imaging mode. 
         measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
@@ -450,14 +439,7 @@ def do_psf_subtraction(input_dataset,
         measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
             Defaults to True.
-        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
-            PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
-        kt_seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
-            PSFs for KLIP throughput calibration. If not provided, a linear spacing of separations between the IWA & OWA 
-            will be chosen.
-        kt_pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
-            PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
-        
+
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
@@ -588,15 +570,14 @@ def do_psf_subtraction(input_dataset,
             'movement':movement, 'numbasis':numbasis,
             'mode':mode}
         
-        klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
+        klip_thpt = klip_fm.meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,
                             ct_calibration,
                             klip_params,
                             inject_snr,
-                            cand_locs = cand_locs, # list of (sep_pix,pa_deg) of known off axis source locations
-                            seps=kt_seps,
-                            pas=kt_pas
+                            cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
                             )
+
         thrupt_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
         # wrt FPM's center 
@@ -621,7 +602,8 @@ def do_psf_subtraction(input_dataset,
         else:
             seps = np.array([5.,10.,15.,20.,25.,30.,35.])
 
-        ct_1d = get_1d_ct(ct_calibration,dataset_out[0],seps)
+        cenxy = (dataset_out[0].ext_hdr['STARLOCX'],dataset_out[0].ext_hdr['STARLOCY'])
+        ct_1d = corethroughput.get_1d_ct(ct_calibration,cenxy,seps)
 
         ct_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
@@ -637,7 +619,7 @@ def do_psf_subtraction(input_dataset,
         # Add history msg
         history_msg = f'1D CT throughput measured and saved to Image class HDU List extension "CT_THRU".'
         dataset_out.update_after_processing_step(history_msg)
-            
+      
     return dataset_out
 
 def northup(input_dataset,use_wcs=True,rot_center='im_center'):

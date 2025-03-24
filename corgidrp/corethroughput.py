@@ -413,7 +413,7 @@ def generate_ct_cal(
 
     return ct_cal
 
-def get_1d_ct(ct_cal,frame,seps,
+def get_1d_ct(ct_cal,cenxy,seps,
               method='nearest'):
     """Fetches core throughput values at specific separations from the mask center.
     Currently only the 'nearest' method is configured. 
@@ -421,8 +421,9 @@ def get_1d_ct(ct_cal,frame,seps,
     Args:
         ct_cal (corgidrp.data.CoreThroughputCalibration): the core throughput calibration 
             object.
-        frame (corgidrp.data.Image): data frame containing mask location and detector 0,0 coordinate 
-            in the header
+        cenxy (tuple of float): mask center location in CT calibration object, measured from 
+            the bottom left corner of the bottom left pixel of the full science area (1024x1024 
+            pixels) 
         seps (np.array of float): separations (pixels from the mask center) at which to sample 
             the CT curve.
         method (str, optional): Method of calculating CT at a given separation. Defaults to 'nearest'.
@@ -434,10 +435,7 @@ def get_1d_ct(ct_cal,frame,seps,
             sampled, and the second row is the ct value for each separation.
     """
     x, y, ct = ct_cal.ct_excam
-
-    # Get location of mask center in CT coordinates
-    xcen = frame.ext_hdr['MASKLOCX'] + frame.ext_hdr.get("DETPIX0X",0.) + 0.5
-    ycen = frame.ext_hdr['MASKLOCY'] + frame.ext_hdr.get("DETPIX0Y",0.) + 0.5
+    xcen, ycen = cenxy
 
     ct_seps = np.sqrt((x-xcen)**2 + (y-ycen)**2)
 
@@ -539,3 +537,24 @@ def CreateCTMap(
             print(f'CT map saved in {filepath:s}')
     
     return ct_map
+
+# keeping this here for now because other things rely on it
+def get_1d_ct(ct_cal,cenxy,seps,
+              method='nearest'):
+
+    x, y, ct = ct_cal.ct_excam
+    xcen, ycen = cenxy
+
+    ct_seps = np.sqrt((x-xcen)**2 + (y-ycen)**2)
+
+    if method == 'nearest':
+        cts_out = []
+        for sep in seps:
+            argmin = np.argmin(np.abs(sep-ct_seps))
+            ct_out = ct[argmin]
+            cts_out.append(ct_out)
+        
+        ct_arr_out = np.array([seps,cts_out])
+        return ct_arr_out
+    else:
+        raise NotImplementedError
