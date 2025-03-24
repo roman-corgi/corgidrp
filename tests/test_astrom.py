@@ -206,8 +206,49 @@ def test_seppa2xy():
 
     assert dxdy == pytest.approx(expect_xy)
 
+def test_create_circular_mask():
+    img = np.zeros((10,10))
+    r = 2
+
+    mask1 = astrom.create_circular_mask(img.shape, center=None, r=r)
+    mask2 = astrom.create_circular_mask(img.shape, center=(4.5,4.5), r=r)
+
+    # Make sure automatic centering works
+    assert mask1 == pytest.approx(mask2)
+
+    # Make sure some pixels have been masked
+    assert mask1.size - np.count_nonzero(mask1) > 0
+
+
+def test_get_polar_dist():
+
+    # Test vertical line
+    seppa1 = (10,0)
+    seppa2 = (10,180)
+    dist = 20.
+
+    assert astrom.get_polar_dist(seppa1,seppa2) == dist
+
+    # Test horizontal line
+    seppa1 = (10,90)
+    seppa2 = (10,270)
+    dist = 20.
+
+    assert astrom.get_polar_dist(seppa1,seppa2) == dist
+
+    # Test 45 degree line
+    seppa1 = (10,0)
+    seppa2 = (10,90)
+    dist = 10. * np.sqrt(2.)
+
+    assert astrom.get_polar_dist(seppa1,seppa2) == dist
+
+    pass
+
 if __name__ == "__main__":
     # test_astrom()
     # test_distortion()
-    test_seppa2dxdy()
-    test_seppa2xy()
+    # test_seppa2dxdy()
+    # test_seppa2xy()
+    test_create_circular_mask()
+    test_get_polar_dist()

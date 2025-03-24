@@ -231,6 +231,7 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
+
 def get_polar_dist(seppa1,seppa2):
     """Computes the linear distance between two points in polar coordinates.
 
@@ -245,6 +246,7 @@ def get_polar_dist(seppa1,seppa2):
     sep2, pa2 = seppa2
 
     return np.sqrt(sep1**2 + sep2**2 - (2 * sep1 * sep2 * np.cos((pa1-pa2)*np.pi/180.)))
+
 
 def seppa2dxdy(sep_pix,pa_deg):
     """Converts position in separation (pixels from some reference center) and position angle 
@@ -261,6 +263,7 @@ def seppa2dxdy(sep_pix,pa_deg):
     dy = sep_pix * np.cos(pa_deg * np.pi/180.)
 
     return np.array([dx, dy])
+
 
 def seppa2xy(sep_pix,pa_deg,cenx,ceny):
     """Converts position in separation (pixels from some reference center) and position angle 
@@ -281,6 +284,7 @@ def seppa2xy(sep_pix,pa_deg,cenx,ceny):
     y = dy + ceny
 
     return np.array([x, y])
+
 
 def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     ''' 
@@ -1153,7 +1157,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     return avg_cal
 
-def create_circular_mask(h, w, center=None, r=None):
+
+def create_circular_mask(shape, center=None, r=None):
     """Creates a circular mask
 
     Args:
@@ -1167,13 +1172,13 @@ def create_circular_mask(h, w, center=None, r=None):
     Returns:
         np.array: boolean array with True inside the circle, False outside.
     """
-
+    shape = np.array(shape)
     if center is None: # use the middle of the image
-        center = (w/2, h/2)
+        center = (shape-1) / 2
     if r is None: # use the smallest distance between the center and image walls
-        r = min(center[0], center[1], w-center[0], h-center[1])
+        r = min(center[0], center[1], shape[0]-center[0], shape[1]-center[1])
 
-    Y, X = np.ogrid[:h, :w]
+    Y, X = np.ogrid[:shape[0], :shape[1]]
     dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
 
     mask = dist_from_center <= r
