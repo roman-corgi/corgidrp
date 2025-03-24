@@ -646,8 +646,12 @@ class Dark(Image):
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
-                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-                self.filename = "{0}_DRK_CAL.fits".format(orig_input_filename)
+                if self.ext_hdr['PC_STAT'] != 'photon-counted master dark':
+                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                    self.filename = "{0}_dark.fits".format(orig_input_filename)
+                else:
+                    orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                    self.filename = "{0}_pc_dark.fits".format(orig_input_filename)
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'
@@ -1200,18 +1204,16 @@ class AstrometricCalibration(Image):
     
     Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR a single array of calibration measurements of the following lengths (boresight: length 2 (RA, DEC), 
-        plate scale: length 2 (floats), north angle: length 1 (float), average offset: length 2 (floats) of average boresight offset in RA/DEC [deg],
-        distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
+        plate scale: length 1 (float), north angle: length 1 (float), distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
         3rd order distortion fit the input array should be length 37.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
     Attrs:
-        boresight (np.array): the corrected RA/DEC [deg] position of the detector center
-        platescale (float): the platescale value in [mas/pixel] along each axis
+        boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
+        platescale (float): the platescale value in [mas/pixel]
         northangle (float): the north angle value in [deg]
-        avg_offset (np.array): the average offset [deg] from the detector center
-        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map, where the last value of the array is the order of polynomial used
+        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map (if distortion map is not computed this is an array of nans), where the last value of the array is the order of polynomial used
 
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
@@ -1223,10 +1225,9 @@ class AstrometricCalibration(Image):
             raise ValueError("The AstrometricCalibration data should be an array of calibration measurements")
         else:
             self.boresight = self.data[:2]
-            self.platescale = self.data[2:4]
-            self.northangle = self.data[4]
-            self.avg_offset = self.data[5:7]
-            self.distortion_coeffs = self.data[7:]
+            self.platescale = self.data[2]
+            self.northangle = self.data[3]
+            self.distortion_coeffs = self.data[4:]
             
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
@@ -1972,7 +1973,7 @@ class PyKLIPDataset(pyKLIP_Data):
             phead = frame.pri_hdr
             shead = frame.ext_hdr
                 
-            TELESCOP = phead['TELESCOP']
+            TELESCOP = phead['TELESCOP'] 
             INSTRUME = phead['INSTRUME']
             CFAMNAME = shead['CFAMNAME']
             data = frame.data
@@ -1991,15 +1992,16 @@ class PyKLIPDataset(pyKLIP_Data):
             input_all += [data]
             centers_all += [centers]
             filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [phead['ROLL']] * NINTS      # ROLL is in primary header
+            PAs_all += [phead['ROLL']] * NINTS
 
-            if TELESCOP != "ROMAN" or INSTRUME != "CGI":
-                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
+            #if TELESCOP != "ROMAN" or INSTRUME != "CGI":
+            #    raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
             
             # Get center wavelengths
             try:
                 CWAVEL = self.wave_hlc[CFAMNAME]
             except:
+                print("in data", CFAMNAME)
                 raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
             
             # Rounding error introduced here?
