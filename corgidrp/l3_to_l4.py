@@ -386,6 +386,12 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
             updated_hdrs.append('CRPIX1/2')
+        if not ("DETPIX0X" in exthdr.keys()):
+            exthdr.set('DETPIX0X',0)
+            exthdr.set('DETPIX0Y',0)
+        exthdr.set('DETPIX0X',exthdr["DETPIX0X"]+x1)
+        exthdr.set('DETPIX0Y',exthdr["DETPIX0Y"]+y1)
+
         new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
         frames_out.append(new_frame)
 
