@@ -116,7 +116,7 @@ def measure_companions(
             # correct for algorithmic efficiency
             fm_counts = fm_counts_uncorrected / kl_value
         else:
-            modeled_image, _ = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
+            modeled_image = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
             fm_counts, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
         
         companion_host_ratio = psf_sub_counts / fm_counts
@@ -200,7 +200,7 @@ def measure_counts(image, phot_method, initial_xy, **kwargs):
         image (corgidrp.data.Image): Input image for photometry.
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
         initial_xy (tuple or None): Initial (x, y) guess for centroiding.
-        kwargs(dict): keyword arguments for photometry method.
+        **kwargs(dict): keyword arguments for photometry method.
     
     Returns:
         flux (float): Measured flux in the image.
@@ -223,7 +223,7 @@ def get_photometry_kwargs(phot_method):
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
     
     Returns:
-        kwargs (dict): Dictionary of default photometry keyword arguments.
+        options[phot_method] (dict): Dictionary of default photometry keyword arguments.
     """
     common = {'centering_method': 'xy', 'centroid_roi_radius': 5}
     options = {
@@ -238,6 +238,7 @@ def get_photometry_kwargs(phot_method):
 
 def simplified_psf_sub(psf_frame, ct_cal, guesssep, efficiency):
     """
+    TO DO: add in core throughput efficiencies?
     Perform a simplified PSF subtraction by scaling the PSF frame using a provided efficiency.
     
     Args:
@@ -247,11 +248,11 @@ def simplified_psf_sub(psf_frame, ct_cal, guesssep, efficiency):
         efficiency (float): PSF subtraction efficiency factor.
     
     Returns:
-        subtracted_image (corgidrp.data.Image): Scaled PSF-subtracted image.
+        (corgidrp.data.Image): Scaled PSF-subtracted image.
         None (NoneType): Placeholder value.
     """
     sub_frame = psf_frame.data * efficiency
-    return Image(sub_frame, pri_hdr=psf_frame.pri_hdr, ext_hdr=psf_frame.ext_hdr, err=getattr(psf_frame, 'err', None)), None
+    return Image(sub_frame, pri_hdr=psf_frame.pri_hdr, ext_hdr=psf_frame.ext_hdr, err=getattr(psf_frame, 'err', None))
 
 
 def lookup_core_throughput(ct_cal, desired_sep):
