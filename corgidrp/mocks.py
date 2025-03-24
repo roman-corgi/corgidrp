@@ -272,7 +272,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
     exthdr['DATALVL']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['MISSING']     = 0               # Flag indicating if header keywords are missing: 0=no, 1=yes
-
+    exthdr["ISPC"] = False                  # Flag from telemetry saying whether the frame was photon-counted or not
     return prihdr, exthdr
 
 
@@ -556,8 +556,8 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0
     exthdr['CRVAL1'] = 0
     exthdr['CRVAL2'] = 0
-    exthdr['STARLOCX'] = 0
-    exthdr['STARLOCY'] = 0
+    exthdr['STARLOCX'] = 512
+    exthdr['STARLOCY'] = 512
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
@@ -1733,10 +1733,11 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
     # set these to have no effect, then use these with their input values at the end
     later_eperdn = eperdn
     if e2emode: 
+        arrtype = 'ENG'
         eperdn = 1
         cic = 0.02
-        num_pumps = 50000 #120000#90000#15000#5000
-        inj_charge = 27000 #31000#70000#45000#8000 #num_pumps/2 # more than num_pumps/4, so no mean_field input needed
+        num_pumps = 50000 #120000#90000#15000#5000    #640
+        inj_charge = 27000 #31000#70000#45000#8000   #1400   #num_pumps/2 # more than num_pumps/4, so no mean_field input needed
         multiple = 1
         g = 1
         rn = 0
@@ -2600,8 +2601,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame = data.Image(frame_dn, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.ext_hdr['EMGAIN_C'] = EMgain
         frame.ext_hdr['EXPTIME'] = exptime
+        frame.ext_hdr['RN'] = 100
         frame.ext_hdr['KGAINPAR'] = kgain
         frame.pri_hdr['PHTCNT'] = True
+        frame.ext_hdr['ISPC'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
         frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
@@ -2615,8 +2618,10 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark = data.Image(frame_dn_dark, pri_hdr=prihdr.copy(), ext_hdr=exthdr.copy())
         frame_dark.ext_hdr['EMGAIN_C'] = EMgain
         frame_dark.ext_hdr['EXPTIME'] = exptime
+        frame_dark.ext_hdr['RN'] = 100
         frame_dark.ext_hdr['KGAINPAR'] = kgain
         frame_dark.pri_hdr['PHTCNT'] = True
+        frame_dark.ext_hdr['ISPC'] = True
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
         frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)
@@ -2649,7 +2654,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     return gauss
 
 def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=1.0, filedir=None, color_cor=1., platescale=21.8, 
+                      fsm_y=0.0, exptime=1.0, filedir=None, platescale=21.8, 
                       background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
     Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
@@ -2658,7 +2663,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     Args:
         star_flux (float): Flux of the point source in erg/(s*cm^2*AA)
         fwhm (float): Full width at half max (FWHM) of the centroid
-        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electrons
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electron/s
         filter (str): (Optional) The CFAM filter used.
         fpamname (str): (Optional) Position of the FPAM
         target_name (str): (Optional) Name of the calspec star
@@ -2666,7 +2671,6 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
         exptime (float): (Optional) Exposure time (s)
         filedir (str): (Optional) Directory path to save the output file
-        color_cor (float): (Optional) Color correction factor
         platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
         background (float): optional additive background value
         add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
@@ -2697,7 +2701,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     ypos = center[1] + fsm_y_shift
 
     # Convert flux from calspec units to photo-electrons
-    flux = (star_flux * exptime / color_cor) / cal_factor
+    flux = (star_flux * exptime) / cal_factor
 
     # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
@@ -2749,7 +2753,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fpam_v = 6124.9
 
     # Create image object
-    prihdr, exthdr = create_default_L3_headers()
+    prihdr, exthdr = create_default_L2b_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
@@ -2759,10 +2763,9 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['FPAMNAME'] = fpamname
     exthdr['FPAM_H']   = 2503.7
     exthdr['FPAM_V']   = 6124.9
-    exthdr['FSM_X']    = fsm_x              # Ensure fsm_x is defined
-    exthdr['FSM_Y']    = fsm_y              # Ensure fsm_y is defined
-    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined
-    exthdr['COL_COR']  = color_cor          # Ensure color_cor is defined
+    exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
     exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
     exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
@@ -2771,9 +2774,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CDELT2']   = (platescale * 0.001) / 3600
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
-
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
-
+   
     # Save file
     # TO DO: update with file name conventions
     if filedir is not None and file_save:
@@ -3255,7 +3257,6 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             ref_dataset.save(filedir=outdir, filenames=['mock_psfsub_L2b_ref_input_dataset.fits'])
 
     return sci_dataset,ref_dataset
-
 
 def create_synthetic_satellite_spot_image(
     image_shape,
