@@ -7,6 +7,7 @@ from astropy.wcs import WCS
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
 from corgidrp import star_center
+import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
