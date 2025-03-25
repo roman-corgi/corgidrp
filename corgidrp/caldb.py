@@ -29,13 +29,18 @@ column_names = list(column_dtypes.keys())
 
 labels = {data.Dark: "Dark",
           data.NonLinearityCalibration: "NonLinearityCalibration",
-          data.BadPixelMap: "BadPixelMap",
           data.KGain : "KGain",
+          data.BadPixelMap: "BadPixelMap",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
-          data.DetectorParams : "DetectorParams",
           data.FlatField : "FlatField",
+          data.DetectorParams : "DetectorParams",
+          data.AstrometricCalibration : "AstrometricCalibration",
           data.TrapCalibration : "TrapCalibration",
-          data.FluxcalFactor : "FluxcalFactor"}
+          data.FluxcalFactor : "FluxcalFactor",
+          data.FpamFsamCal : "FpamFsamCal",
+          data.CoreThroughputCalibration: "CoreThroughputCalibration",
+          data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
+          }
 
 class CalDB:
     """
@@ -155,8 +160,18 @@ class CalDB:
         hash_val = entry.get_hash()
 
         # this only works for 2D images. may need to adapt for non-2D calibration frames
-        naxis1 = entry.data.shape[-1]
-        naxis2 = entry.data.shape[-2]
+        # import IPython; IPython.embed()
+
+        entry_shape = entry.data.shape
+        if len(entry_shape) < 2:
+            naxis1 = entry.data.shape[-1]
+            naxis2 = 0
+        else:
+            naxis1 = entry.data.shape[-1]
+            naxis2 = entry.data.shape[-2]
+
+        # naxis1 = entry.data.shape[-1]
+        # naxis2 = entry.data.shape[-2]
 
         row = [
             filepath,

@@ -1444,7 +1444,7 @@ class FpamFsamCal(Image):
             exthdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
-            prihdr['OBSID'] = 0
+            prihdr['OBSNUM'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
             exthdr['EMGAIN_C'] = 1.0
@@ -2131,8 +2131,14 @@ class PyKLIPDataset(pyKLIP_Data):
             phead = frame.pri_hdr
             shead = frame.ext_hdr
                 
-            TELESCOP = phead['TELESCOP']
+            if 'TELESCOP' in phead:
+                TELESCOP = phead['TELESCOP']
+                if TELESCOP != "ROMAN":
+                    raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. TELESCOP = {0}'.format(TELESCOP))
             INSTRUME = phead['INSTRUME']
+            if INSTRUME != "CGI":
+                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. INSTRUME = {0}'.format(INSTRUME))
+            
             CFAMNAME = shead['CFAMNAME']
             data = frame.data
             if data.ndim == 2:
@@ -2149,12 +2155,9 @@ class PyKLIPDataset(pyKLIP_Data):
             # Get metadata.
             input_all += [data]
             centers_all += [centers]
-            filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [shead['ROLL']] * NINTS
+            filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            PAs_all += [phead['ROLL']] * NINTS
 
-            if TELESCOP != "ROMAN" or INSTRUME != "CGI":
-                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
-            
             # Get center wavelengths
             try:
                 CWAVEL = self.wave_hlc[CFAMNAME]
@@ -2165,7 +2168,7 @@ class PyKLIPDataset(pyKLIP_Data):
             wvs_all += [CWAVEL] * NINTS
 
             # pyklip will look for wcs.cd, so make sure that attribute exists
-            wcs_obj = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
+            wcs_obj = wcs.WCS(header=shead)
 
             if not hasattr(wcs_obj.wcs,'cd'):
                 wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
@@ -2233,7 +2236,7 @@ class PyKLIPDataset(pyKLIP_Data):
 
                 psflib_data_all += [data]
                 psflib_centers_all += [centers]
-                psflib_filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+                psflib_filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             
             psflib_data_all = np.concatenate(psflib_data_all)
             if psflib_data_all.ndim != 3:

@@ -3199,7 +3199,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['INSTRUME'] = 'CGI'
         prihdr['XOFFSET'] = 0.0
         prihdr['YOFFSET'] = 0.0
-        prihdr['FILENAME'] = fname
+        prihdr["ROLL"] = roll_angles[i]
         
         exthdr['BUNIT'] = 'MJy/sr'
         exthdr['MASKLOCX'] = psfcentx
@@ -3207,7 +3207,6 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
-        exthdr["ROLL"] = roll_angles[i]
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
         # Add WCS header info, if provided
@@ -3221,6 +3220,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Make a corgiDRP Image frame
         frame = data.Image(img_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        frame.filename = fname
 
         # Add it to the correct dataset
         if i < n_sci:
