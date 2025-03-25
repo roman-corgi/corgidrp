@@ -603,9 +603,10 @@ def do_psf_subtraction(input_dataset,
         thrupt_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
         # wrt FPM's center 
-        thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM (pix) as a function of separation for each KLMode '
-                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2])')
-        thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1.'
+        thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2]). The last axis contains the'
+                                'KL throughput in the 0th index and the FWHM in the 1st index')
+        thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
         thrupt_hdu_list = [fits.ImageHDU(data=klip_thpt, header=thrupt_hdr, name='KL_THRU')]
         
         dataset_out[0].hdu_list.extend(thrupt_hdu_list)
