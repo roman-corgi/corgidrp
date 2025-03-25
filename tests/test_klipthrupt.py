@@ -63,6 +63,10 @@ if not os.path.exists(outdir):
 ## pyKLIP data class tests
 
 def test_create_ct_cal():
+    """Test that mocks.create_ct_cal() generates the correct number of PSFs, 
+    each with the correct shape, and that each PSF is a predictable amplitude 
+    for debugging purposes.
+    """
 
     nx,ny = (3,5)
     
@@ -89,7 +93,9 @@ def test_create_ct_cal():
 
 
 def test_get_closest_psf():
-    
+    """Test that the correct PSF is grabbed from the CT Calibration 
+    object for each position.
+    """
     # Should get the first PSF
     nx,ny = (3,5)
     ct_cenx,ct_ceny = (10.5,20.5)
@@ -119,7 +125,8 @@ def test_get_closest_psf():
 
 
 def test_inject_psf():
-
+    """Test that PSFs are injected with the correct amplitude and peak pixel location
+    """
     # Mock CT cal object
     nx,ny = (21,21)
     cenx, ceny = (25.,30.)
@@ -135,13 +142,14 @@ def test_inject_psf():
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -157,13 +165,14 @@ def test_inject_psf():
     frame_shape_yx = (50,60)
     expected_peak = (ceny+1,cenx)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -177,13 +186,14 @@ def test_inject_psf():
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx-1)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -197,13 +207,14 @@ def test_inject_psf():
     frame_shape_yx = (50,60)
     expected_peak = (ceny,cenx+5)
 
+    pri_hdr = fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -218,13 +229,14 @@ def test_inject_psf():
     ceny,cenx = (5,10)
     expected_peak_yx = (5,1)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -239,13 +251,14 @@ def test_inject_psf():
     ceny,cenx = (5,10)
     expected_peak_yx = (5,19)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -261,13 +274,14 @@ def test_inject_psf():
     ceny,cenx = (5,10)
     expected_peak_yx = (9,10)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -283,13 +297,14 @@ def test_inject_psf():
     ceny,cenx = (5,10)
     expected_peak_yx = (1,10)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -305,13 +320,14 @@ def test_inject_psf():
     ceny,cenx = (5,5)
     expected_peak_yx = (1,1)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -327,13 +343,14 @@ def test_inject_psf():
     ceny,cenx = (5,5)
     expected_peak_yx = (1,9)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -348,13 +365,14 @@ def test_inject_psf():
     ceny,cenx = (5,5)
     expected_peak_yx = (9,1)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
@@ -369,13 +387,14 @@ def test_inject_psf():
     ceny,cenx = (5,5)
     expected_peak_yx = (9,9)
 
+    pri_hdr=fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr['ROLL'] = roll
+    pri_hdr['ROLL'] = roll
     ext_hdr['STARLOCX'] = cenx
     ext_hdr['STARLOCY'] = ceny
     
     frame = Image(np.zeros(frame_shape_yx),
-                  pri_hdr=fits.Header(),
+                  pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
 
     frame_out, psf_model, psf_cenxy = inject_psf(frame, ctcal,inj_flux, sep,pa)
