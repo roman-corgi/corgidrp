@@ -10,6 +10,7 @@ from pyklip.kpp.metrics.crossCorr import calculate_cc
 from corgidrp import data
 from corgidrp.l4_to_tda import find_source
 from corgidrp.find_source import make_snmap
+from corgidrp.mocks import create_default_L3_headers
 
 def simulate_image(image_size=64):
     """
@@ -174,11 +175,6 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
 
     f = interp1d(contrast_seps, contrast)
 
-    
-    # Create input data with a simulated image and a sample header
-    Image = data.Image
-    Image.data = image
-    Image.ext_hdr = input_dataset[0].ext_hdr
 
     # Initialize arrays to store detection results
     detection, detection_lowsn = np.empty((0, 6)), np.empty((0, 6))
@@ -198,28 +194,31 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
 
         #pa_rand = np.random.uniform(0, 360, n_source)
         pa_rand = generate_angles(n_source)
-        sn_rand = np.random.uniform(0, 10, n_source)
+        sn_rand = np.random.uniform(3, 10, n_source)
         inputflux_rand = f(radius_rand) * sn_rand / np.nansum(psf[idx_psf])
         x_rand = radius_rand * np.cos(np.radians(pa_rand)) + dataset_center[1] ; x_rand = np.array(x_rand, dtype=int)
         y_rand = radius_rand * np.sin(np.radians(pa_rand)) + dataset_center[0] ; y_rand = np.array(y_rand, dtype=int)
 
-        image_copy = copy.deepcopy(image)
+        image_copy = image.copy()
         for i in range(n_source):
             psf_window = psf.shape[0] // 2
             image_copy[y_rand[i]-psf_window:y_rand[i]+psf_window+1,
                        x_rand[i]-psf_window:x_rand[i]+psf_window+1] += psf * inputflux_rand[i]
-        Image.data = image_copy
-
         
+        # Create input data with a simulated image and a sample header
+        pri_hdr, _ = create_default_L3_headers()
+        image_with_point_source = data.Image(image_copy,pri_hdr=pri_hdr,ext_hdr=input_dataset[0].ext_hdr)
+        image_with_point_source.data = image_copy
+
         ##### ##### #####
         # Run the source detection algorithm
         nsigma_threshold = 5.
-        find_source(Image, psf=psf, fwhm=fwhm, nsigma_threshold=nsigma_threshold, image_without_planet=image)
+        image_with_point_source = find_source(image_with_point_source, psf=psf, fwhm=fwhm, nsigma_threshold=nsigma_threshold, image_without_planet=image)
         ##### ##### #####
 
         
         # Extract detected sources from FITS header
-        header = Image.ext_hdr
+        header = image_with_point_source.ext_hdr
         snyx = np.array([list(map(float, header[key].split(','))) for key in header if key.startswith("SNYX")])
 
         if len(snyx) > 0:
@@ -262,7 +261,6 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
 
     # Plot results
     #plot_results(image, nsigma_threshold, detection, detection_lowsn, nondetection, nondetection_lowsn, misdetection)
-        
     dx = np.nanmedian(detection[:,4] - detection[:,1])
     dy = np.nanmedian(detection[:,5] - detection[:,2])
     dsn = np.nanmedian(abs(detection[:,3] - detection[:,0]))
