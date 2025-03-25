@@ -181,6 +181,8 @@ def test_distortion():
 
 
 def test_seppa2dxdy():
+    """Test that conversion from separation/position angle to delta x/y 
+    produces the expected result for varying input separations and angles."""
 
     seps = np.array([10.0,15.0,20,10,10,10,10])
     pas = np.array([0.,90.,-90,45,-45,135,-135])
@@ -194,7 +196,10 @@ def test_seppa2dxdy():
 
     assert dxdy == pytest.approx(expect_dxdy)
 
+
 def test_seppa2xy():
+    """Test that conversion from separation/position angle to detector x/y coordinates
+    produces the expected result for varying input separations and angles."""
 
     seps = np.array([10.0,15.0,20.,10,10,10,10])
     pas = np.array([0.,90.,-90.,45,-45,135,-135])
@@ -211,6 +216,9 @@ def test_seppa2xy():
     assert dxdy == pytest.approx(expect_xy)
 
 def test_create_circular_mask():
+    """Test that astrom.create_circular_mask() calculates the center 
+    of an image correctly and produces a mask."""
+
     img = np.zeros((10,10))
     r = 2
 
@@ -225,7 +233,9 @@ def test_create_circular_mask():
 
 
 def test_get_polar_dist():
-
+    """Test that astrom.get_polar_dist() calculates distances correctly 
+    in varying directions."""
+    
     # Test vertical line
     seppa1 = (10,0)
     seppa2 = (10,180)
