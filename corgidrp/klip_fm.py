@@ -271,7 +271,6 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     for k,klmode in enumerate(klip_params['numbasis']):
         
         sci_dataset = sci_dataset_in.copy()
-        ref_dataset = ref_dataset_in.copy() if not ref_dataset_in is None else None
 
         rolls = [frame.pri_hdr['ROLL'] for frame in sci_dataset]
         
@@ -346,7 +345,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         psfmodel_peaks = np.max(psfmodels_arr,axis=(2,3))
 
         # Init pyklip dataset
-        pyklip_dataset = PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
+        pyklip_dataset = PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset_in)
         
         # Run pyklip
         klip_dataset(pyklip_dataset, outputdir=klip_params['outdir'],
