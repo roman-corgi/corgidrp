@@ -2937,7 +2937,10 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
         half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
         # Build up the Dataset
         data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
-
+        # Add some filename following the file convention:
+        # CGI_<VisitID: PPPPPCCAAASSSOOOVVV>_<TimeUTC>_L2b.fits
+        data_psf[-1].filename = 'CGI_0200001001001001001_20250415T0305102_L2b.fits'
+        
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
 def create_ct_interp(

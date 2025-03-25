@@ -16,7 +16,7 @@ from corgidrp import corethroughput
 
 # If a run has crashed before being able to remove the test CT cal file,
 # remove it before importing caldb, which scans for new entries in the cal folder
-ct_cal_test_file = 'CoreThroughputCalibration_2025-02-15T00:00:00.fits'
+ct_cal_test_file = 'CGI_0200001001001001001_20250415T0305102_CTP_CAL.fits'
 if os.path.exists(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file)):
     os.remove(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file))
 from corgidrp import caldb
@@ -344,8 +344,20 @@ def test_cal_file():
 
     # Write core throughput calibration file
     ct_cal_file_in = corethroughput.generate_ct_cal(dataset_ct)
-    # It's fine to use a hardcoded filename for UTs
-    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir, filename=ct_cal_test_file)
+    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir)
+
+    # Check that the filename is what we expect
+    ct_cal_filename = dataset_ct[-1].filename.replace("_L2b", "_CTP_CAL")
+    ct_cal_filepath = os.path.join(corgidrp.default_cal_dir,ct_cal_filename)
+    if os.exists()
+    # Load the calibration file to check it has the same contents
+    ct_cal_file_load = data.CoreThroughputCalibration(ct_cal_filepath)
+    np.all(ct_cal_file_in.data == ww.data)
+    np.all(ct_cal_file_in.ct_excam == ww.ct_excam)
+    np.all(ct_cal_file_in.ct_fpam == ww.ct_fpam)
+    np.all(ct_cal_file_in.ct_fsam == ww.ct_fsam)
+    # Headers
+    
 
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
