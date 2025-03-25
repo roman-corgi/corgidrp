@@ -3,10 +3,13 @@
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
-import corgidrp
+
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
 from corgidrp import star_center
+import corgidrp
+from corgidrp.klip_fm import meas_klip_thrupt
+from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
@@ -384,6 +387,12 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
             updated_hdrs.append('CRPIX1/2')
+        if not ("DETPIX0X" in exthdr.keys()):
+            exthdr.set('DETPIX0X',0)
+            exthdr.set('DETPIX0Y',0)
+        exthdr.set('DETPIX0X',exthdr["DETPIX0X"]+x1)
+        exthdr.set('DETPIX0Y',exthdr["DETPIX0Y"]+y1)
+
         new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
         new_frame.filename = frame.filename
         frames_out.append(new_frame)
@@ -395,24 +404,35 @@ def crop(input_dataset, sizexy=None, centerxy=None):
     
     return output_dataset
 
-def do_psf_subtraction(input_dataset, reference_star_dataset=None,
+def do_psf_subtraction(input_dataset, 
+                       ct_calibration=None,
+                       reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
                        numbasis=[1,4,8,16],outdir=None,fileprefix="",
                        do_crop=True,
-                       crop_sizexy=None
+                       crop_sizexy=None,
+                       measure_klip_thrupt=True,
+                       measure_1d_core_thrupt=True,
+                       cand_locs=[],
+                       kt_seps=None,
+                       kt_pas=None,
+                       kt_snr=20.
                        ):
     """
     
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
-        Handle nans & propagate DQ array
+        Handle propagate DQ array
+        Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
         
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        ct_calibration (corgidrp.data.CoreThroughputCalibration, optional): core throughput calibration object. Required 
+            if measuring KLIP throughput or 1D core throughput. Defaults to None.
         reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
-            star [optional]
+            star. If not provided, references will be searched for in the input dataset.
         mode (str, optional): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously 
             if not specified.
         annuli (int, optional): number of concentric annuli to run separate subtractions on. Defaults to 1.
@@ -421,10 +441,24 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
         numbasis (int or list of int, optional): number of KLIP modes to retain. Defaults to [1,4,8,16].
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
-        do_crop (bool): whether to crop data before PSF subtraction. Defaults to True.
+        do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
         crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
             None, which results in the step choosing a crop size based on the imaging mode. 
-
+        measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
+            and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU']. 
+            Defaults to True.
+        measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
+            Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
+            Defaults to True.
+        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
+            PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        kt_seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
+            PSFs for KLIP throughput calibration. If not provided, a linear spacing of separations between the IWA & OWA 
+            will be chosen.
+        kt_pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
+            PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
+        kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
+        
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
@@ -432,6 +466,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
 
     sci_dataset = input_dataset.copy()
     
+    # Need CT calibration object to measure KLIP throughput and 1D core throughput
+    if measure_klip_thrupt or measure_1d_core_thrupt:
+        assert ct_calibration != None
+
     # Use input reference dataset if provided
     if not reference_star_dataset is None:
         ref_dataset = reference_star_dataset.copy()
@@ -486,8 +524,10 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     sci_dataset_masked = nan_flags(sci_dataset)
     ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
 
-    # Run pyklip
+    # Initialize pyklip dataset class
     pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
+    
+    # Run pyklip
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
                               calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
@@ -538,9 +578,70 @@ def do_psf_subtraction(input_dataset, reference_star_dataset=None,
     dataset_out = nan_flags(dataset_out,threshold=1)
     
     history_msg = f'PSF subtracted via pyKLIP {mode}.'
-    
     dataset_out.update_after_processing_step(history_msg)
+    
+    if measure_klip_thrupt:
+        
+        # Determine flux of objects to inject (units?)
 
+        # Use same KLIP parameters
+        klip_params = {
+            'outdir':outdir,'fileprefix':fileprefix,
+            'annuli':annuli, 'subsections':subsections, 
+            'movement':movement, 'numbasis':numbasis,
+            'mode':mode}
+        
+        klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
+                            dataset_out,
+                            ct_calibration,
+                            klip_params,
+                            kt_snr,
+                            cand_locs = cand_locs, # list of (sep_pix,pa_deg) of known off axis source locations
+                            seps=kt_seps,
+                            pas=kt_pas
+                            )
+        thrupt_hdr = fits.Header()
+        # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+        # wrt FPM's center 
+        thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2]). The last axis contains the'
+                                'KL throughput in the 0th index and the FWHM in the 1st index')
+        thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
+        thrupt_hdu_list = [fits.ImageHDU(data=klip_thpt, header=thrupt_hdr, name='KL_THRU')]
+        
+        dataset_out[0].hdu_list.extend(thrupt_hdu_list)
+    
+        # Save throughput as an extension on the psf-subtracted Image
+
+        # Add history msg
+        history_msg = f'KLIP throughput measured and saved to Image class HDU List extension "KL_THRU".'
+        dataset_out.update_after_processing_step(history_msg)
+
+    if measure_1d_core_thrupt:
+        
+        # Use the same separations as for KLIP throughput
+        if measure_klip_thrupt:
+            seps = dataset_out[0].hdu_list['KL_THRU'].data[0,:,0]
+        else:
+            seps = np.array([5.,10.,15.,20.,25.,30.,35.])
+
+        ct_1d = get_1d_ct(ct_calibration,dataset_out[0],seps)
+
+        ct_hdr = fits.Header()
+        # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
+        # wrt FPM's center 
+        ct_hdr['COMMENT'] = ('KLIP Throughput as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2])')
+        ct_hdr['UNITS'] = 'Separation: EXCAM pixels. CT throughput: values between 0 and 1.'
+        ct_hdu_list = [fits.ImageHDU(data=ct_1d, header=ct_hdr, name='CT_THRU')]
+        
+        dataset_out[0].hdu_list.extend(ct_hdu_list)
+        # Save throughput as an extension on the psf-subtracted Image
+
+        # Add history msg
+        history_msg = f'1D CT throughput measured and saved to Image class HDU List extension "CT_THRU".'
+        dataset_out.update_after_processing_step(history_msg)
+            
     return dataset_out
 
 def northup(input_dataset,use_wcs=True,rot_center='im_center'):

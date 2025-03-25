@@ -2722,7 +2722,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     Args:
         array_shape (int, optional): Shape of desired array in pixels. Defaults to [50,50].
         sigma (float, optional): Standard deviation of the gaussian curve, in pixels. Defaults to 5.
-        amp (float,optional): Amplitude of gaussian curve. Defaults to 1.
+        amp (float,optional): Amplitude (peak) of gaussian curve. Defaults to 1.
         xoffset (float,optional): x offset of gaussian from array center. Defaults to 0.
         yoffset (float,optional): y offset of gaussian from array center. Defaults to 0.
         
@@ -2734,7 +2734,7 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     dst = np.sqrt((x-xoffset)**2+(y-yoffset)**2)
 
     # Calculate Gaussian 
-    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp / (2.0 * np.pi * sigma**2)
+    gauss = np.exp(-((dst)**2 / (2.0 * sigma**2))) * amp
     
     return gauss
 
@@ -2808,7 +2808,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     ymin = y[0][0]
     ymax = y[-1][-1]
         
-    psf = gaussian_array((stampsize,stampsize),sigma,flux)
+    psf = gaussian_array((stampsize,stampsize),sigma,flux) / (2.0 * np.pi * sigma**2)
 
     # Inject the star into the image
     sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
@@ -3050,6 +3050,101 @@ def create_ct_interp(
 
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
+def create_ct_cal(fwhm_mas, cfam_name='1F',
+                  cenx = 50.5,ceny=50.5,
+                  nx=21,ny=21,
+                  psfsize=None):
+    """
+    Creates a mock CoreThroughputCalibration object with gaussian PSFs.
+
+    Args:
+        fwhm_mas (float): FWHM in milliarcseconds
+        cfam_name (str, optional): CFAM name, defaults to '1F'.
+        cenx (float, optional): EXCAM mask center X location (measured from bottom left corner of bottom left pixel)
+        ceny (float, optional): EXCAM mask center Y location (measured from bottom left corner of bottom left pixel)
+        nx (int, optional): Number of x positions at which to simulate mock PSFs. Must be an odd number. 
+            PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
+        ny (int, optional): Number of y positions at which to simulate mock PSFs. Must be an odd number. 
+            PSFs will be generated in the center of each pixel within nx/2 pixels of the mask center. Defaults to 21.
+        psfsize (int,optional): Size of psf model array in pixels. Must be an odd number. Defaults to 6 * the FWHM.
+    
+    Returns:
+        corgidrp.data.CoreThroughputCalibration: mock CoreThroughputCalibration object 
+
+    """
+    # Default headers
+    prhd, exthd = create_default_L3_headers()
+    # cfam filter
+    exthd['CFAMNAME'] = cfam_name
+    exthd.set('EXTNAME','PSFCUBE')
+
+    # Need nx, ny to be odd
+    assert nx%2 == 1, 'nx must be an odd integer'
+    assert ny%2 == 1, 'ny must be an odd integer'
+
+    x_arr = []
+    y_arr = []
+
+    for x in np.linspace(cenx-(nx-1)/2,cenx+(nx-1)/2,nx):
+        for y in np.linspace(ceny-(ny-1)/2,ceny+(ny-1)/2,ny):
+            x_arr.append(x)
+            y_arr.append(y)
+    x_arr = np.array(x_arr)
+    y_arr = np.array(y_arr)
+
+    n_psfs = len(x_arr)
+    
+    fwhm_pix = int(np.ceil(fwhm_mas/21.8))
+    sig_pix = fwhm_pix / (2 * np.sqrt(2. * np.log(2.)))
+
+    # PSF/PSF_peak > 1e-10 for +/- 3FWHM around the PSFs center
+    if psfsize is None:
+        imshape = (6*fwhm_pix+1, 6*fwhm_pix+1)
+    else:
+        assert psfsize%2 == 1, 'psfsize must be an odd integer'
+        imshape = (psfsize,psfsize)
+
+    psf = gaussian_array(array_shape=imshape,sigma=sig_pix,amp=1.,xoffset=0.,yoffset=0.)
+
+    psf_cube = np.ones((n_psfs,*imshape))
+    psf_cube *= psf
+    amps = np.arange(1,len(psf_cube)+1)
+    psf_cube = np.array([psf_cube[i] * amps[i] for i in range(len(psf_cube))])
+
+    err_cube = np.zeros_like(psf_cube)
+    err_hdr = fits.Header()
+    dq_cube = np.zeros_like(psf_cube)
+    dq_hdr = fits.Header()
+
+    cts = np.linspace(1.,0.01,len(x_arr))
+    ct_excam = np.array([x_arr,y_arr,cts])
+    ct_hdr = fits.Header()
+    ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
+    
+    fpam_hv = [0., 0.]
+    fpam_hdr = fits.Header()
+    fpam_hdr['COMMENT'] = 'FPAM H and V values during the core throughput observations'
+    fpam_hdr['UNITS'] = 'micrometer'
+    ct_hdu_list += [fits.ImageHDU(data=fpam_hv, header=fpam_hdr, name='CTFPAM')]
+
+    fsam_hv = [0., 0.]
+    fsam_hdr = fits.Header()
+    fsam_hdr['COMMENT'] = 'FSAM H and V values during the core throughput observations'
+    fsam_hdr['UNITS'] = 'micrometer'
+    ct_hdu_list += [fits.ImageHDU(data=fsam_hv, header=fsam_hdr, name='CTFSAM')]
+
+    ct_cal = data.CoreThroughputCalibration(psf_cube,
+        pri_hdr=prhd,
+        ext_hdr=exthd,
+        input_hdulist=ct_hdu_list,
+        dq=dq_cube,
+        dq_hdr=dq_hdr,
+        input_dataset=data.Dataset([data.Image(np.array([0.]),
+                                 pri_hdr=fits.Header(),
+                                 ext_hdr=fits.Header())]))
+    
+    return ct_cal
+
 default_wcs_string = """WCSAXES =                    2 / Number of coordinate axes                      
 CRPIX1  =                  0.0 / Pixel coordinate of reference point            
 CRPIX2  =                  0.0 / Pixel coordinate of reference point            
@@ -3068,8 +3163,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
                           outdir = None,
                           st_amp = 100.,
                           noise_amp = 1.,
+                          fwhm_pix = 2.5,
                           ref_psf_spread=1. ,
-                          pl_contrast=1e-3
+                          pl_contrast=1e-3,
+                          pl_sep = 10.
                           ):
     """Generate a mock science and reference dataset ready for the PSF subtraction step.
     TODO: reference a central pixscale number, rather than hard code.
@@ -3092,11 +3189,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         outdir (str, optional): Desired output directory. If not provided, data will not be 
             saved. Defaults to None.
         st_amp (float): Amplitude of stellar psf added to fake data. Defaults to 100.
+        fwhm_pix (float): FWHM of the stellar (and optional planet) PSF. Defaults to 2.5.
         noise_amp (float): Amplitude of gaussian noise added to fake data. Defaults to 1.
         ref_psf_spread (float): Fractional increase in gaussian PSF width between science and 
             reference PSFs. Defaults to 1.
         pl_contrast (float): Flux ratio between planet and starlight incident on the detector. 
             Defaults to 1e-3.
+        pl_sep (float): Planet-star separation in pixels. Defaults to 10.
 
         
     Returns:
@@ -3110,7 +3209,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
     # mask_center = np.array(data_shape)/2
     # star_pos = mask_center
-    pixscale = 0.0218 # arcsec
+    pixscale = 21.8 # milli-arcsec
 
     # Build each science/reference frame
     sci_frames = []
@@ -3158,12 +3257,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Otherwise generate a 2D gaussian for a fake PSF
         else:
-            sci_sigma = 2.5
-            ref_sigma = sci_sigma * ref_psf_spread
+            sci_fwhm = fwhm_pix
+            ref_fwhm = sci_fwhm * ref_psf_spread
             pl_amp = st_amp * pl_contrast
 
             label = 'ref' if i>= n_sci else 'sci'
-            sigma = ref_sigma if i>= n_sci else sci_sigma
+            fwhm = ref_fwhm if i>= n_sci else sci_fwhm
+            sigma = fwhm / (2 * np.sqrt(2. * np.log(2.)))
             fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
             arr_center = np.array(data_shape) / 2 - 0.5
             if centerxy is None:
@@ -3186,10 +3286,10 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             # Add fake planet to sci files
             if i<n_sci:
                 pa_deg = -roll_angles[i]
-                sep_pix = 10
-                xoff,yoff = sep_pix * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
+                xoff,yoff = pl_sep * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
                 planet_psf = gaussian_array(array_shape=data_shape,
                                             amp=pl_amp,
+                                            sigma=sigma,
                                             xoffset=xoff+psf_off_xy[0],
                                             yoffset=yoff+psf_off_xy[1])
                 img_data += planet_psf
