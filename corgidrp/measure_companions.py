@@ -170,7 +170,7 @@ def parse_companions(ext_hdr):
             parts = val.split(',')
             # Ensure there are at least three parts: id, x, and y.
             if len(parts) >= 3:
-                companions.append({"id": key, "x": float(parts[1]), "y": float(parts[2])})
+                companions.append({"id": key, "y": float(parts[2]), "x": float(parts[1])})
     return companions
 
 
@@ -448,11 +448,16 @@ def update_companion_location_in_cropped_image(image, comp_keyword, old_host, ne
     parts = ext_hdr[comp_keyword].split(',')
     if len(parts) < 3:
         raise ValueError(f"Unexpected format for companion location in {comp_keyword}: {ext_hdr[comp_keyword]}")
-    sn_val, old_comp_x, old_comp_y = float(parts[0]), float(parts[1]), float(parts[2])
-    new_comp_x = int(round(old_comp_x - old_host[0] + new_host[0]))
+    # Since header format is "SNR,y,x", parse accordingly.
+    sn_val = float(parts[0])
+    old_comp_y = float(parts[1])
+    old_comp_x = float(parts[2])
+    # Update: host coordinates are (x,y) so use old_host[0] for x and old_host[1] for y.
     new_comp_y = int(round(old_comp_y - old_host[1] + new_host[1]))
-    ext_hdr[comp_keyword] = f"{sn_val:5.1f},{new_comp_x:4d},{new_comp_y:4d}"
+    new_comp_x = int(round(old_comp_x - old_host[0] + new_host[0]))
+    ext_hdr[comp_keyword] = f"{sn_val:5.1f},{new_comp_y:4d},{new_comp_x:4d}"
     return image
+
 
 
 def extract_single_frame(image, frame_index=0):

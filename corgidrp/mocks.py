@@ -3559,7 +3559,7 @@ def generate_coron_dataset_with_companions(
                 # Record the companion location in the header.
                 # Create keys like SNYX001, SNYX002, etc.
                 key = f"SNYX{idx+1:03d}"
-                companion_keywords[key] = f"5.0,{xcomp:.2f},{ycomp:.2f}"
+                companion_keywords[key] = f"5.0,{ycomp:.2f},{xcomp:.2f}"
 
         # (D) Add noise if requested.
         if add_noise:
