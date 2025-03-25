@@ -416,6 +416,7 @@ def do_psf_subtraction(input_dataset,
                        cand_locs=[],
                        kt_seps=None,
                        kt_pas=None,
+                       kt_snr=20.
                        ):
     """
     
@@ -456,6 +457,7 @@ def do_psf_subtraction(input_dataset,
             will be chosen.
         kt_pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
+        kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
         
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
@@ -581,7 +583,6 @@ def do_psf_subtraction(input_dataset,
     if measure_klip_thrupt:
         
         # Determine flux of objects to inject (units?)
-        inject_snr = 20.0
 
         # Use same KLIP parameters
         klip_params = {
@@ -594,7 +595,7 @@ def do_psf_subtraction(input_dataset,
                             dataset_out,
                             ct_calibration,
                             klip_params,
-                            inject_snr,
+                            kt_snr,
                             cand_locs = cand_locs, # list of (sep_pix,pa_deg) of known off axis source locations
                             seps=kt_seps,
                             pas=kt_pas
