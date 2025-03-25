@@ -3204,7 +3204,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
     # mask_center = np.array(data_shape)/2
     # star_pos = mask_center
-    pixscale = 0.0218 # arcsec
+    pixscale = 21.8 # milli-arcsec
 
     # Build each science/reference frame
     sci_frames = []
