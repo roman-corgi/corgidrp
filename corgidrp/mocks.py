@@ -556,8 +556,6 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0
     exthdr['CRVAL1'] = 0
     exthdr['CRVAL2'] = 0
-    exthdr['STARLOCX'] = 512
-    exthdr['STARLOCY'] = 512
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
@@ -579,7 +577,9 @@ def create_default_L4_headers(arrtype="SCI"):
     """
     # TO DO: Update this once L4 headers have been finalized
     prihdr, exthdr = create_default_L3_headers(arrtype)
-
+    
+    exthdr['STARLOCX'] = 512
+    exthdr['STARLOCY'] = 512
     exthdr['DATALVL']    = 'L4'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
