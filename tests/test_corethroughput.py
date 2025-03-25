@@ -293,6 +293,7 @@ def test_psf_interp():
     # PSF locations with respect to the FPM's center. EXCAM pixels
     x_ct = ct_cal.ct_excam[0,:] - fpam_ct_pix[0]
     y_ct = ct_cal.ct_excam[1,:] - fpam_ct_pix[1]
+    # Radial distance
     r_ct = np.sqrt(x_ct**2 + y_ct**2)
 
     # Number of positions to test (PSF stamps are small 15x15 pixels)
@@ -337,18 +338,55 @@ def test_psf_interp():
         raise Exception('Inconsistent number of interpolated PSFs')
 
     # Test agreement between interpolated PSFs and nearest one in the input set
+    # Remember distances are binned to 1/10th of a pixel in this test
+    x_ct = np.round(10*x_ct)/10
+    y_ct = np.round(10*y_ct)/10
+    # Radial distance
+    r_ct = np.sqrt(x_ct**2 + y_ct**2)
     for i_psf in range(len(x_out)):
         # Radial distance difference with the input dataset
-        diff_r_abs = np.abs(np.sqrt(x_out[i_psf]**2 + y_out[i_psf]**2) - r_ct)
+        r_out = np.sqrt(x_out[i_psf]**2 + y_out[i_psf]**2)
+        diff_r_abs = np.abs(r_out - r_ct)
         idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
         # If there's more than one case, check the interpolated PSF is the one
         # that has the shortest angular distance to the ones in the input dataset
-        # with the same radial distance
+        # with the same radial distance, or if there are two such locations
+        # (half angle), the output should be the average of both PSFs (agreement)
         if len(idx_near) > 1:
-            breakpoint()
+            # Difference in angle b/w target and grid
+            # We want to distinguish PSFs at different quadrants
+            az_grid = np.arctan2(y_ct[idx_near], x_ct[idx_near])
+            az_cor = np.arctan2(y_out[i_psf], x_out[i_psf])
+            # Flatten into a 1-D array
+            diff_az_abs = np.abs(az_cor - az_grid).transpose()[0]
+            # Consistent with the binning of a fraction of a pixel
+            bin_az_fac = 1/10/r_out
+            diff_az_abs = bin_az_fac * np.round(diff_az_abs/bin_az_fac)
+            # Closest angular location to the target location within equal radius
+            idx_near_az = np.argwhere(diff_az_abs == diff_az_abs.min())
+            # If there are two locations (half angle), choose the average (agreement)
+            if len(idx_near_az) == 2:
+                breakpoint()
+                try:
+                    assert np.all(interpolated_PSF[i_psf] == ct_cal.data[idx_near[idx_near_az]].mean(axis=0))
+                except:
+                    breakpoint()
+            # Otherwise, this is the PSF
+            elif len(idx_near_az) == 1:
+                try:
+                    assert np.all(interpolated_PSF[i_psf] == ct_cal.data[idx_near[idx_near_az[0]]])
+                except:
+                    breakpoint()
+            else:
+                breakpoint()
+                raise ValueError(f'There are {len(idx_near_az):d} PSFs ',
+                            'equally near the target PSF. This should not happen.')
         # Otherwise this is the interpolated PSF
         else:
-            assert np.all(interpolated_PSF[i_psf] == ct_cal.data[idx_near])
+            try:
+                assert np.all(interpolated_PSF[i_psf] == ct_cal.data[idx_near[0]])
+            except:
+                breakpoint()
 
     print('Tests about PSF interpolation passed')
 

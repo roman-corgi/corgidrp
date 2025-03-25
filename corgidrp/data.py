@@ -1,4 +1,5 @@
 import os
+import re
 import warnings
 import numpy as np
 import numpy.ma as ma
@@ -1577,7 +1578,7 @@ class CoreThroughputCalibration(Image):
             # Default convention: replace _L3_.fits from the filename of the
             # input dataset by _CTP_CAL.fits
             self.filedir = '.'
-            self.filename = input_dataset[0].filename[:-8] + 'CTP_CAL.fits'
+            self.filename = re.sub('_L[0-9].', '_CTP_CAL', input_dataset[-1].filename)
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
