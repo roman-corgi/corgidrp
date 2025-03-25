@@ -393,6 +393,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         exthdr.set('DETPIX0Y',exthdr["DETPIX0Y"]+y1)
 
         new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
+        new_frame.filename = frame.filename
         frames_out.append(new_frame)
 
     output_dataset = data.Dataset(frames_out)
@@ -406,7 +407,7 @@ def do_psf_subtraction(input_dataset,
                        ct_calibration=None,
                        reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
-                       numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
+                       numbasis=[1,4,8,16],outdir=None,fileprefix="",
                        do_crop=True,
                        crop_sizexy=None,
                        measure_klip_thrupt=True,
@@ -504,6 +505,9 @@ def do_psf_subtraction(input_dataset,
         numbasis = [numbasis]
 
     # Set up outdir
+    if outdir is None: 
+        outdir = os.path.join(corgidrp.config_folder, 'KLIP_SUB')
+    
     outdir = os.path.join(outdir,mode)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -743,7 +747,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
-def update_to_l4(input_dataset):
+def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
     Updates the data level to L4. Only works on L3 data.
 
@@ -751,6 +755,8 @@ def update_to_l4(input_dataset):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file
+        flux_cal (corgidrp.data.FluxCalibration): a FluxCalibration calibration file
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L4-level
@@ -767,6 +773,8 @@ def update_to_l4(input_dataset):
     for frame in updated_dataset:
         # update header
         frame.ext_hdr['DATALVL'] = "L4"
+        frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1] #Associate the ct calibration file
+        frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L3_", "_L4_", 1)

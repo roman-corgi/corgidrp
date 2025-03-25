@@ -20,33 +20,38 @@ def test_astrom():
         os.mkdir(datadir)
 
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
+    
+    # create a dataset with dithers
+    # dataset = mocks.create_astrom_data(field_path=field_path, filedir=datadir, rotation=20, dither_pointings=4)
+    dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4)
 
-    mocks.create_astrom_data(field_path=field_path, filedir=datadir)
-
-    image_path = os.path.join(datadir, 'simcal_astrom.fits')
-
+    # image_path = os.path.join(datadir, 'simcal_astrom.fits')
     # open the image
-    dataset = data.Dataset([image_path])
-    assert len(dataset) == 1
+    # dataset = data.Dataset([image_path])
+
+    # check the dataset format
+    assert len(dataset) == 5  # one pointing + 4 dithers
     assert type(dataset[0]) == data.Image
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=5)
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=200)
 
     # the data was generated to have the following image properties
     expected_platescale = 21.8
-    expected_northangle = 45
+    expected_northangle = 20
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
-    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=0.5)
+
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
-    # the simulated image should have no shift from the target
+    # the simulated image should have zero offset
     target = dataset[0].pri_hdr['RA'], dataset[0].pri_hdr['DEC']
-    ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
-    assert ra == pytest.approx(target[0], abs=8.333e-7)
+    ra, dec = astrom_cal.boresight
+    assert ra == pytest.approx(target[0], abs=8.333e-7)     # reported as ra offset
     assert dec == pytest.approx(target[1], abs=8.333e-7)
 
     # check they can be pickled (for CTC operations)
@@ -78,18 +83,19 @@ def test_distortion():
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "test_data", "distortion_expected_coeffs.csv")
     expected_coeffs = np.genfromtxt(distortion_coeffs_path)
 
-    mocks.create_astrom_data(field_path=field_path, filedir=datadir, rotation=20, distortion_coeffs_path=distortion_coeffs_path)
+    # create dithered dataset 
+    # mocks.create_astrom_data(field_path=field_path, filedir=datadir, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
+    dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
 
-    image_path = os.path.join(datadir, 'simcal_astrom.fits')
-    source_match_path = os.path.join(datadir, 'guesses.csv')
-    matches = ascii.read(source_match_path)
+    # image_path = os.path.join(datadir, 'simcal_astrom.fits')
+    # source_match_path = os.path.join(datadir, 'guesses.csv')
+    # matches = ascii.read(source_match_path)
 
     # open the image
-    dataset = data.Dataset([image_path])
+    # dataset = data.Dataset([image_path])
 
     # perform the astrometric calibration
-    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, field_matches=[matches], find_threshold=400, comparison_threshold=75, find_distortion=True, fitorder=3, position_error=0.5)
-    #, initial_dist_guess=expected_coeffs[:-1]
+    astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=400, find_distortion=True, fitorder=3, position_error=0.5)
 
     ## check that the distortion map does not create offsets greater than 4[mas]
         # compute the distortion maps created from the best fit coeffs
@@ -146,15 +152,13 @@ def test_distortion():
     true_y_corr = true_y_corr.reshape(yorig.shape)
     true_y_diff = true_y_corr - yorig
 
-    # check the distortion maps are less than the maximum injected distortion (~3 pixels)
-    # assert np.all(np.abs(x_diff) < np.max(np.abs(true_x_diff)))
-    # assert np.all(np.abs(y_diff) < np.max(np.abs(true_y_diff)))
-
     # check that the distortion error in the central 1" x 1" region (center ~45 x 45 pixels) 
     # has distortion error < 4 [mas] (~0.1835 [pixel])
     lower_lim, upper_lim = int((1024//2) - ((1000/21.8)//2)), int((1024//2) + ((1000/21.8)//2))
+
     central_1arcsec_x = x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
     central_1arcsec_y = y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
+    
     true_1arcsec_x = true_x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
     true_1arcsec_y = true_y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
 
