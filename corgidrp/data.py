@@ -1,5 +1,6 @@
 import os
 import warnings
+import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
@@ -501,6 +502,10 @@ class Image():
             new_img = copy.deepcopy(self)
         else:
             new_img = copy.copy(self)
+            # copy the hdu_list and hdu_names list, but not their pointers
+            new_img.hdu_list = self.hdu_list.copy()
+            new_img.hdu_names = copy.copy(self.hdu_names)
+
         # update DRP version tracking
         new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
@@ -694,9 +699,8 @@ class FlatField(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_flatfield.fits".format(orig_input_filename)
+            # give it a default filename using the last input file as the base
+            self.filename = re.sub('_L[0-9].', '_FLT_CAL', input_dataset[-1].filename)
 
 
         # double check that this is actually a masterflat file that got read in
@@ -954,10 +958,15 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_bad_pixel_map.fits".format(orig_input_filename)
+            # give it a default filename using the last input file as the base
+            # filename could be from an data level or filename oculd be from a flat field
+            base_filename = input_dataset[-1].filename
+            if "_FLT_CAL" in base_filename:
+                self.filename = base_filename.replace("_FLT_CAL", "_BPM_CAL")
+            else:
+                # not created from a flat
+                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+
 
 
         # double check that this is actually a bad pixel map that got read in
@@ -1444,7 +1453,7 @@ class FpamFsamCal(Image):
             exthdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
-            prihdr['OBSID'] = 0
+            prihdr['OBSNUM'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
             exthdr['EMGAIN_C'] = 1.0
@@ -1973,8 +1982,14 @@ class PyKLIPDataset(pyKLIP_Data):
             phead = frame.pri_hdr
             shead = frame.ext_hdr
                 
-            TELESCOP = phead['TELESCOP'] 
+            if 'TELESCOP' in phead:
+                TELESCOP = phead['TELESCOP']
+                if TELESCOP != "ROMAN":
+                    raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. TELESCOP = {0}'.format(TELESCOP))
             INSTRUME = phead['INSTRUME']
+            if INSTRUME != "CGI":
+                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. INSTRUME = {0}'.format(INSTRUME))
+            
             CFAMNAME = shead['CFAMNAME']
             data = frame.data
             if data.ndim == 2:
@@ -1991,12 +2006,9 @@ class PyKLIPDataset(pyKLIP_Data):
             # Get metadata.
             input_all += [data]
             centers_all += [centers]
-            filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             PAs_all += [phead['ROLL']] * NINTS
 
-            #if TELESCOP != "ROMAN" or INSTRUME != "CGI":
-            #    raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
-            
             # Get center wavelengths
             try:
                 CWAVEL = self.wave_hlc[CFAMNAME]
@@ -2008,7 +2020,7 @@ class PyKLIPDataset(pyKLIP_Data):
             wvs_all += [CWAVEL] * NINTS
 
             # pyklip will look for wcs.cd, so make sure that attribute exists
-            wcs_obj = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
+            wcs_obj = wcs.WCS(header=shead)
 
             if not hasattr(wcs_obj.wcs,'cd'):
                 wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
@@ -2076,7 +2088,7 @@ class PyKLIPDataset(pyKLIP_Data):
 
                 psflib_data_all += [data]
                 psflib_centers_all += [centers]
-                psflib_filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+                psflib_filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             
             psflib_data_all = np.concatenate(psflib_data_all)
             if psflib_data_all.ndim != 3:

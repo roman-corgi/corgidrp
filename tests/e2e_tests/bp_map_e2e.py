@@ -105,7 +105,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    noise_maps.save(filedir=bp_map_outputdir, filename="mock_detnoisemaps.fits")
+    noise_maps.save(filedir=bp_map_outputdir, filename="mock_detnoisemaps_DNM_CAL.fits")
     this_caldb.create_entry(noise_maps)
 
     ## Load and save flat field calibration data
@@ -113,7 +113,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                           input_dataset=mock_input_dataset)
-    flat.save(filedir=bp_map_outputdir, filename="mock_flat.fits")
+    flat.save(filedir=bp_map_outputdir, filename="mock_flat_FLT_CAL.fits")
     this_caldb.create_entry(flat)
 
     # Load and save bad pixel map data
@@ -121,12 +121,12 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                               input_dataset=mock_input_dataset)
-    bp_map.save(filedir=bp_map_outputdir, filename="mock_bpmap.fits")
+    bp_map.save(filedir=bp_map_outputdir, filename="mock_bpmap_BPM_CAL.fits")
     this_caldb.create_entry(bp_map)
 
     # Build and save a synthesized master dark frame
     master_dark = darks.build_synthesized_dark(mock_input_dataset, noise_maps)
-    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
+    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock_DRK_CAL.fits")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
@@ -139,7 +139,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(master_dark)
     this_caldb.remove_entry(bp_map)
 
-    generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
+    generated_bp_map_file = os.path.join(bp_map_outputdir, "mock_flat_BPM_CAL.fits")
 
     # Load the generated bad pixel map image and master dark reference data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
@@ -257,7 +257,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                           input_dataset=mock_input_dataset)
-    flat.save(filedir=bp_map_outputdir, filename="mock_flat.fits")
+    flat.save(filedir=bp_map_outputdir, filename="mock_flat_FLT_CAL.fits")
     this_caldb.create_entry(flat)
 
     # Create a simulated dark frame with random hot pixels for testing
@@ -286,7 +286,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     master_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                             input_dataset=mock_input_dataset)
 
-    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
+    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock_DRK_CAL.fits")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
@@ -297,7 +297,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(master_dark)
 
-    generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
+    generated_bp_map_file = os.path.join(bp_map_outputdir, "mock_flat_BPM_CAL.fits")
 
     # Load the generated bad pixel map image and reference dark data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
@@ -345,8 +345,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    # tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
+    tvacdata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
     outputdir = thisfile_dir
 
     # Argument parser setup

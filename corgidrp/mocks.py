@@ -940,7 +940,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
             planet_rot_images.append(planet_repoint_current[0][j])
             pred_cents.append(planet_repoint_current[1][j])
 
-    filepattern= planet+'_'+band+"_"+"raster_scan_{0:01d}.fits"
+    filepattern = "CGI_PPPPPCCAAASSSOOOVVV_YYYYMMDDT{0:02d}{1:02d}00_L2a.fits"
     frames=[]
     for i in range(numfiles*raster_subexps):
         prihdr, exthdr = create_default_L1_headers()
@@ -949,9 +949,14 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
         pl=planet
         band=band
         frame.pri_hdr.set('TARGET', pl)
-        frame.pri_hdr.append(('FILTER', band), end=True)
+        frame.ext_hdr.append(('CFAMNAME', "{0}F".format(band)), end=True)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
+        else:
+            # fake filenumber as hours and minutes
+            hours = i // 60
+            minutes = i % 60
+            frame.filename = filepattern.format(hours, minutes)
         frames.append(frame)
     raster_dataset = data.Dataset(frames)
     return raster_dataset
@@ -3421,6 +3426,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
         # Make a corgiDRP Image frame
         frame = data.Image(img_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        frame.filename = fname
 
         # Add it to the correct dataset
         if i < n_sci:

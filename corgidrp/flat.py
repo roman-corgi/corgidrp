@@ -129,9 +129,9 @@ def combine_flatfield_rasters(residual_images,cent=None,planet=None,band=None,im
              planet_rad = 65
     
     if rad_mask is None:
-         if band == 1:
+         if band[0] == "1":
             rad_mask = 1.25
-         elif band == 4:
+         elif band[0] == "4":
             rad_mask = 1.75
     
     aperture = CircularAperture((np.ceil(rad_mask), np.ceil(rad_mask)), r=rad_mask)
@@ -213,7 +213,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     if planet is None:
          planet=dataset[0].pri_hdr['TARGET']
     if band is None:
-         band=dataset[0].pri_hdr['FILTER']
+         band=dataset[0].ext_hdr['CFAMNAME']
     
     if planet_rad is None:
         if planet.lower() =='neptune':
@@ -222,9 +222,9 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
              planet_rad = 65
     
     if rad_mask is None:
-         if band == 1:
+         if band[0] == "1":
             rad_mask = 1.25
-         elif band == 4:
+         elif band[0] == "4":
             rad_mask = 1.75
 
     smooth_images=[]; raster_images_cent=[]; cent=[]; act_cents=[]; frames=[];
