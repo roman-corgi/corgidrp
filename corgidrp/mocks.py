@@ -2669,7 +2669,7 @@ def create_flux_image(
     fsm_y=0.0,
     exptime=1.0,
     filedir=None, 
-    platescale=21.8,      # mas/pixel
+    pltscale_mas=21.8,      # mas/pixel
     background=0,
     add_gauss_noise=True,
     noise_scale=1.0,
@@ -2695,7 +2695,7 @@ def create_flux_image(
         fsm_y (float): Y shift in mas from the image center.
         exptime (float): Exposure time (s).
         filedir (string): File directory for saving.
-        platescale (float): Plate scale in mas/pixel.
+        pltscale_mas (float): Plate scale in mas/pixel.
         background (float): Add an optional uniform background in e-.
         add_gauss_noise (bool): Whether to add Gaussian noise to the final data.
         noise_scale (float): RMS amplitude of the Gaussian noise.
@@ -2732,8 +2732,8 @@ def create_flux_image(
 
     # 4) FSM offset in mas -> pixels
     # platescale is [mas/pixel], so xshift = fsm_x / platescale
-    fsm_x_shift = fsm_x / platescale
-    fsm_y_shift = fsm_y / platescale
+    fsm_x_shift = fsm_x / pltscale_mas
+    fsm_y_shift = fsm_y / pltscale_mas
     xpos = center[0] + fsm_x_shift
     ypos = center[1] + fsm_y_shift
 
@@ -2802,8 +2802,8 @@ def create_flux_image(
     exthdr['EXPTIME']  = exptime
     exthdr['CRPIX1']   = xpos
     exthdr['CRPIX2']   = ypos
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600.
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
+    exthdr['CDELT1']   = (pltscale_mas * 0.001) / 3600.
+    exthdr['CDELT2']   = (pltscale_mas * 0.001) / 3600.
     exthdr['SHAPEY']   = ny
     exthdr['SHAPEX']   = nx
     exthdr['TELESCOP'] = 'ROMAN'
@@ -2835,7 +2835,7 @@ def generate_reference_star_dataset_with_flux(
     fsm_x=0.0,
     fsm_y=0.0,
     exptime=1.0,
-    platescale=21.8,     
+    pltscale_mas=21.8,     
     background=0,
     add_gauss_noise=True,
     noise_scale=1.,
@@ -2863,7 +2863,7 @@ def generate_reference_star_dataset_with_flux(
         fsm_x (float): Field Stabilization Mirror (FSM) x-offset.
         fsm_y (float): Field Stabilization Mirror (FSM) y-offset.
         exptime (float): Exposure time in seconds.
-        platescale (float): Plate scale (e.g., mas/pixel or arcsec/pixel) of the image.
+        pltscale_mas (float): Plate scale (e.g., mas/pixel or arcsec/pixel) of the image.
         background (int): Background level counts.
         add_gauss_noise (bool): If True, add Gaussian noise to the image.
         noise_scale (float): Scaling factor for the Gaussian noise.
@@ -2897,7 +2897,7 @@ def generate_reference_star_dataset_with_flux(
             fsm_y=fsm_y,
             exptime=exptime,
             filedir=filedir,
-            platescale=platescale,
+            pltscale_mas=pltscale_mas,
             background=background,
             add_gauss_noise=add_gauss_noise,
             noise_scale=noise_scale,
@@ -2916,10 +2916,10 @@ def generate_reference_star_dataset_with_flux(
         #    If fsm_x=0, fsm_y=0. 
         nx = shape[1]
         ny = shape[0]
-        x_center = nx // 2 + (fsm_x * 0.001 / (platescale * 0.001))
-        y_center = ny // 2 + (fsm_y * 0.001 / (platescale * 0.001))
+        x_center = nx // 2 + (fsm_x * 0.001 / (pltscale_mas * 0.001))
+        y_center = ny // 2 + (fsm_y * 0.001 / (pltscale_mas * 0.001))
 
-        frame.ext_hdr['PLTSCALE'] = platescale
+        frame.ext_hdr['PLTSCALE'] = pltscale_mas
         frame.ext_hdr["STARLOCX"] = x_center  
         frame.ext_hdr["STARLOCY"] = y_center  
         frame.pri_hdr["FILENAME"] = f"mock_refstar_flux_{i:03d}.fits"
@@ -3309,7 +3309,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
 
     # mask_center = np.array(data_shape)/2
     # star_pos = mask_center
-    pixscale = 0.0218 # arcsec
+    pltscale_as = 0.0218 # arcsec
 
     # Build each science/reference frame
     sci_frames = []
@@ -3412,14 +3412,14 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr['MASKLOCY'] = psfcenty
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
-        exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
+        exthdr['PLTSCALE'] = pltscale_as*1000 # This is in milliarcseconds!
         exthdr["HIERARCH DATA_LEVEL"] = 'L3'
         
         # Add WCS header info, if provided
         if wcs_header is None:
             wcs_header = generate_wcs(roll_angles[i], 
                                       [psfcentx,psfcenty],
-                                      platescale=0.0218).to_header()
+                                      platescale=pltscale_as).to_header()
             
             # wcs_header._cards = wcs_header._cards[-1]
         exthdr.extend(wcs_header)
@@ -3463,7 +3463,7 @@ def generate_coron_dataset_with_companions(
     companion_pa_deg=None,    # Companion position angle in degrees (counterclockwise from north) or list
     companion_counts=100.0,   # Total flux (counts) for the companion or list
     filter='1F',
-    platescale=0.0218,
+    pltscale_as=21.8,
     add_noise=False,
     noise_std=1.0e-2,
     outdir=None,
@@ -3489,7 +3489,7 @@ def generate_coron_dataset_with_companions(
       companion_pa_deg (float or list): On-sky position angle(s) of the companion(s) (counterclockwise from north).
       companion_counts (float or list): Total flux (counts) of the companion(s).
       filter (str): Filter name.
-      platescale (float): Plate scale in arcsec per pixel.
+      pltscale_as (float): Plate scale in arcsec per pixel.
       add_noise (bool): Whether to add random noise.
       noise_std (float): Stddev of the noise.
       outdir (str or None): If given, saves the frames to disk.
@@ -3579,14 +3579,16 @@ def generate_coron_dataset_with_companions(
         prihdr["ROLL"] = angle_i
         prihdr['TELESCOP'] = 'ROMAN'
         exthdr["CFAMNAME"] = filter
-        exthdr["PLTSCALE"] = platescale
+        exthdr["PLTSCALE"] = pltscale_as*1000 #in milliarcsec
         exthdr["STARLOCX"] = host_star_center[0]
         exthdr["STARLOCY"] = host_star_center[1]
         exthdr["DATALVL"]  = "L3"
         exthdr["MASKLOCX"] = host_star_center[0]
         exthdr["MASKLOCY"] = host_star_center[1]
+        exthdr['LSAMNAME'] = 'NFOV'
+        exthdr['FPAMNAME'] = 'HLC12_C2R1'
         # Optional WCS generation.
-        wcs_obj = generate_wcs(angle_i, [host_star_center[0], host_star_center[1]], platescale=platescale)
+        wcs_obj = generate_wcs(angle_i, [host_star_center[0], host_star_center[1]], platescale=pltscale_as)
         wcs_header = wcs_obj.to_header()
         exthdr.update(wcs_header)
 

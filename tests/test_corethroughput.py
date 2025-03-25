@@ -509,6 +509,9 @@ def test_ct_interp():
 
 
 def test_get_1d_ct():
+    """Test that corethroughput.get_1d_ct() produces an array of the correct 
+    shape and returns the expected PSF for each position."""
+
     d = 2.36 #m
     lam = 573.8e-9 #m
     pixscale_arcsec = 0.0218

@@ -87,7 +87,7 @@ def measure_companions(
         # Compute separation and position angle relative to the star.
         dx, dy = x_psf - x_star, y_psf - y_star
         guesssep = np.hypot(dx, dy)
-        guesspa = np.degrees(np.arctan2(dx, dy)) % 360
+        guesspa = -np.degrees(np.arctan2(dx, dy)) % 360
 
         # Get the calibration frame based on the companion's position.
         _, nearest_frame = measure_core_throughput_at_location(x_psf, y_psf, x_star, y_star, ct_cal, ct_dataset)
@@ -112,7 +112,7 @@ def measure_companions(
             kl_value, ct_value, modeled_image = forward_model_psf(
                 coronagraphic_dataset, ref_star_dataset, ct_cal, scaled_star_psf,
                 guesssep, guesspa, numbasis=numbasis, nwalkers=nwalkers, nburn=nburn,
-                nsteps=nsteps, numthreads=numthreads, outputdir=output_dir
+                nsteps=nsteps, numthreads=numthreads, outputdir=output_dir, plot_results=plot_results
             )
             fm_counts_uncorrected, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
             # correct for algorithmic efficiency
@@ -170,7 +170,7 @@ def parse_companions(ext_hdr):
             parts = val.split(',')
             # Ensure there are at least three parts: id, x, and y.
             if len(parts) >= 3:
-                companions.append({"id": key, "y": float(parts[2]), "x": float(parts[1])})
+                companions.append({"id": key, "y": float(parts[1]), "x": float(parts[2])})
     return companions
 
 
@@ -359,7 +359,7 @@ def forward_model_psf(
     for idx, frame in enumerate(fm_dataset):
         # TO DO: look into why this only works if I do negative guesspa
         injected_frame, _, _ = klip_fm.inject_psf(frame, ct_calibration, amp, 
-                                                  guesssep, -guesspa)
+                                                  guesssep, guesspa)
         fm_dataset[idx].data = injected_frame.data
     
     if plot_results == True:
@@ -386,6 +386,7 @@ def forward_model_psf(
     klip_data = fm_psfsub[0].data[-1]
     klip_thru_hdu = fm_psfsub[0].hdu_list['KL_THRU']
     klip_thru_data = klip_thru_hdu.data
+    print("KL throughput", klip_thru_data)
     # Find the index of the closest separation value
     closest_idx = np.abs(klip_thru_data[0] - guesssep).argmin()
 

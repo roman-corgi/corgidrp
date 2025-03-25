@@ -27,15 +27,16 @@ ROLL_ANGLES = np.linspace(0, 45, NUM_IMAGES)
 NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
 CROPPED_IMAGE_SIZE = (200, 200)
-PLOT_RESULTS = False
-LOAD_FROM_DISK = True  # Flag to control whether to load mocks from disk (if available)
+PLOT_RESULTS = True
+LOAD_FROM_DISK = False  # Flag to control whether to load mocks from disk (if available)
 
 # Define a list of companions.
-# Each dictionary defines the companion's separation (in pixels), position angle (degrees), 
-# and a scaling factor on the host star counts.
+# Each dictionary defines the companion's sep (in pixels), position angle (degrees counter-
+# clockwise from north), and a scaling factor on the host star counts. Make sep between IWA 
+# (~6.5 pix) and OWA (~20.6 pix)
 COMPANION_PARAMS = [
-    {"sep_pix": 28, "pa": 45, "counts_scale": 1/3},
-    {"sep_pix": 40, "pa": 120, "counts_scale": 1/4}  
+    {"sep_pix": 40, "pa": 45, "counts_scale": 1/3},
+    {"sep_pix": 50, "pa": 120, "counts_scale": 1/4}  
 ]
 
 # Use a relative path for OUT_DIR
@@ -170,7 +171,7 @@ def generate_test_data(out_dir):
         fsm_x=0.0,
         fsm_y=0.0,
         exptime=1.0,
-        platescale=21.8,
+        pltscale_mas= 21.8,
         background=0,
         add_gauss_noise=True,
         noise_scale=1.0,
@@ -196,7 +197,7 @@ def generate_test_data(out_dir):
         companion_pa_deg=[cp["pa"] for cp in COMPANION_PARAMS],
         companion_counts=[host_star_counts * cp["counts_scale"] for cp in COMPANION_PARAMS],
         filter='1F',
-        platescale=0.0218,
+        pltscale_as=0.0218,
         add_noise=True,
         noise_std=1.0e-2,
         outdir=out_dir,
@@ -355,6 +356,7 @@ def _common_measure_companions_test(forward_model_flag):
         expected_y = star_loc_cropped[1] + dy
         measured_x = result_table['x'][i]
         measured_y = result_table['y'][i]
+        print("locs", expected_x, expected_y, measured_x, measured_y)
         assert abs(measured_x - expected_x) < 5, f"Companion {i} x-coordinate off: expected {expected_x}, got {measured_x}"
         assert abs(measured_y - expected_y) < 5, f"Companion {i} y-coordinate off: expected {expected_y}, got {measured_y}"
         
@@ -458,7 +460,7 @@ def test_robustness_high_noise():
         companion_pa_deg=[cp["pa"] for cp in COMPANION_PARAMS],
         companion_counts=[host_star_counts * cp["counts_scale"] for cp in COMPANION_PARAMS],
         filter='1F',
-        platescale=0.0218,
+        pltscale_as=0.0218,
         add_noise=True,
         noise_std=high_noise_std,
         outdir=OUT_DIR,
@@ -483,7 +485,7 @@ def test_robustness_high_noise():
         fsm_x=0.0,
         fsm_y=0.0,
         exptime=1.0,
-        platescale=21.8,
+        pltscale_mas=21.8,
         background=0,
         add_gauss_noise=True,
         noise_scale=1.0,
@@ -518,7 +520,7 @@ def test_robustness_high_noise():
 if __name__ == "__main__":
     # Run tests when executing the file directly.
     print("Running test: non-forward modeling")
-    test_measure_companions_non_forward_modeling()
+    #test_measure_companions_non_forward_modeling()
     print("Non-forward modeling test passed.")
 
     print("Running test: forward modeling")

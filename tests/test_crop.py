@@ -57,7 +57,8 @@ def test_2d_square_center_crop():
         raise Exception("Unexpected result for 2D square crop test.")
 
 def test_manual_center_crop():
-    """ Test overriding crop location using centerxy argument.
+    """ Test overriding crop location using centerxy argument and make sure 
+    DETPIX0X/Y header keyword is updated correctly.
     """
 
     test_dataset = make_test_dataset(shape=[12,12],centxy=[5.5,5.5])
@@ -255,7 +256,6 @@ def test_detpix0_nonzero():
             cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy:
         raise Exception("Extension header DETPIX0X/Y not updated correctly.")
     
-    pass
 
 if __name__ == "__main__":
     # test_2d_square_center_crop()

@@ -64,11 +64,8 @@ def inject_psf(frame_in, ct_calibration, amp,
 
     # Get closest psf model
     frame_roll = frame.pri_hdr['ROLL']
-    rel_pa = pa_deg - frame_roll        # TO DO: i can only get Ell's code to work if I change this convention
+    rel_pa = pa_deg - frame_roll
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
-
-    # Debug: print offsets.
-    #print("Computed dx, dy:", dx, dy)
 
     psf_model = get_closest_psf(ct_calibration,
                                 frame.ext_hdr['STARLOCX'],
@@ -134,10 +131,13 @@ def inject_psf(frame_in, ct_calibration, amp,
     return frame, psf_model, psf_cenxy
 
 
-def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
+def measure_noise(frame, seps_pix, fwhm, 
+                  klmode_index=None,
+                  cand_locs = []):
     """Calculates the noise (standard deviation of counts) of an 
         annulus at a given separation from the mask center.
         TODO: Correct for small sample statistics?
+        TODO: Mask known off-axis sources.
     
     Args:
         frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" in header
@@ -147,6 +147,9 @@ def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
         klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
             the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
             truncation choice.
+        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we can mask them. 
+            This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        
 
     Returns: np.array 
     """
@@ -164,6 +167,25 @@ def measure_noise(frame, seps_pix, fwhm, klmode_index=None):
         r_outer = sep_pix + fwhm
         masked_data = np.where(np.logical_and(sep_map3d<r_outer,sep_map3d>r_inner), frame.data,np.nan)
         
+        # import matplotlib.pyplot as plt
+        # plt.imshow(masked_data[0],origin='lower')
+        # plt.colorbar()
+        # plt.title('Candlocs not masked')
+        # plt.show()
+
+        if len(cand_locs) > 0:
+            for cand_loc in cand_locs:
+                cand_x, cand_y = seppa2xy(*cand_loc,cenx,ceny)
+                dists = np.sqrt((y-cand_y)**2 + (x-cand_x)**2)
+    
+                masked_data = np.where(dists > 5 * fwhm, masked_data.copy(),np.nan)
+        
+        # import matplotlib.pyplot as plt
+        # plt.imshow(masked_data[0],origin='lower')
+        # plt.colorbar()
+        # plt.title('Candlocs masked')
+        # plt.show()
+
         # Calculate standard deviation
         std = np.nanstd(masked_data,axis=(1,2))
         stds.append(std)
@@ -212,38 +234,50 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
         
     Returns: 
-        np.array: array of shape (N,n_seps), where N is 1 + the number of KL mode truncation choices and n_seps 
+        np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
         is the number of separations sampled. Index 0 contains the separations sampled, and each following index
-        contains the KLIP throughput measured at each separation for each KL mode truncation choice.
+        contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode 
+        truncation choice.
     """
     
-    # TODO: read these in instead of hard code.
-    iwa = 10. # pix, update real number
-    owa = 50. # pix, update with real number
-    d = 2.36 #m
-    lam = 573.8e-9 #m
-    pixscale_arcsec = 0.0218
-    fwhm_mas = 1.22 * lam / d * 206265 * 1000
-    fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
+    if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
+        lam = 573.8e-9 #m
+    else:
+        raise NotImplementedError("Only band 1 observations using CFAMNAME 1F are currently configured.")
+
+    d = 2.36 #m  
+    pixscale_mas = sci_dataset_in[0].ext_hdr['PLTSCALE']
+    fwhm_mas = 1.22 * lam / d * 206265. * 1000.
+    fwhm_pix = fwhm_mas / pixscale_mas  
+    res_elem = sep_spacing * fwhm_pix # pix
     
-    
-    res_elem = sep_spacing * fwhm_pix # pix, update this with value for NFOV, Band 1 mode
-    
-    if seps == None:
-        seps = np.arange(iwa,owa,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
-    if pas == None:
+    if seps is None:
+        if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'NFOV':
+            owa_mas = 450. 
+            owa_pix = owa_mas / pixscale_mas   
+        else:
+            raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
+        
+        if sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'HLC12_C2R1':
+            iwa_mas = 140. 
+            iwa_pix = iwa_mas / pixscale_mas 
+        else:
+            raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
+        
+        seps = np.arange(iwa_pix,owa_pix,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
+    if pas is None:
         pas = np.linspace(0.,360.,n_pas+1)[:-1] # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
     thrupts = []
+    outfwhms = []
     for k,klmode in enumerate(klip_params['numbasis']):
         
         sci_dataset = sci_dataset_in.copy()
-        ref_dataset = ref_dataset_in.copy() if not ref_dataset_in is None else None
 
         rolls = [frame.pri_hdr['ROLL'] for frame in sci_dataset]
         
         # Measure noise at each separation in psf subtracted dataset (for this kl mode)
-        noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k)
+        noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k,cand_locs)
         
         # Inject planets:
         seppas_skipped = []
@@ -313,7 +347,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         psfmodel_peaks = np.max(psfmodels_arr,axis=(2,3))
 
         # Init pyklip dataset
-        pyklip_dataset = PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset)
+        pyklip_dataset = PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset_in)
         
         # Run pyklip
         klip_dataset(pyklip_dataset, outputdir=klip_params['outdir'],
@@ -338,52 +372,47 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             std = np.nanstd(masked_data)
             med = np.nanmedian(masked_data)
             clip_thresh = 3 * std
-            masked_data = np.where(np.abs(pyklip_data-med)>clip_thresh,np.nan,pyklip_data)
+            masked_data = np.where(np.abs(masked_data-med)>clip_thresh,np.nan,masked_data)
         
         # Subtract median
         bg_level = np.nanmedian(masked_data)
         medsubtracted_data = pyklip_data - bg_level
         
-        # Plot Psf subtraction with fakes
-        
-        if klip_params['mode'] == 'RDI':
-            analytical_result = rotate(sci_dataset[0].data - ref_dataset[0].data,-rolls[0],reshape=False,cval=np.nan)
-        elif klip_params['mode'] == 'ADI':
-            analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-                            [0.5,0.5],
-                            cval=np.nan)
-        elif klip_params['mode'] == 'ADI+RDI':
-            analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+        # # Plot Psf subtraction with fakes
+        # if klip_params['mode'] == 'RDI':
+        #     analytical_result = rotate(sci_dataset[0].data - ref_dataset_in[0].data,-rolls[0],reshape=False,cval=np.nan)
+        # elif klip_params['mode'] == 'ADI':
+        #     analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+        #                     [0.5,0.5],
+        #                     cval=np.nan)
+        # elif klip_params['mode'] == 'ADI+RDI':
+        #     analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset_in[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset_in[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
 
-        locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
-        
         # import matplotlib.pyplot as plt
-
         # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
         # im0 = axes[0].imshow(medsubtracted_data,origin='lower')
         # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        # locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
         # axes[0].scatter(locsxy[0],locsxy[1],label='Injected PSFs',s=1,c='r',marker='x')
         # axes[0].set_title(f'Output data')
         # axes[0].legend()
-
         # im1 = axes[1].imshow(analytical_result,origin='lower')
         # plt.colorbar(im1,ax=axes[1],shrink=0.8)
         # axes[1].set_title('Analytical result')
-
         # im2 = axes[2].imshow(medsubtracted_data - analytical_result,origin='lower')
         # plt.colorbar(im2,ax=axes[2],shrink=0.8)
         # axes[2].set_title('Difference')
-
         # plt.suptitle(f'PSF Subtraction {klip_params["mode"]} ({klmode} KL Modes)')
-
         # plt.show()
         
         # After psf subtraction
-        this_klmode_peakin = []
-        this_klmode_peakout = []
-        this_klmode_sumin = []
-        this_klmode_influxs = []
-        this_klmode_outfluxs = []
+        # this_klmode_peakin = []
+        # this_klmode_peakout = []
+        # this_klmode_sumin = []
+        # this_klmode_influxs = []
+        # this_klmode_outfluxs = []
+        this_klmode_infwhms = []
+        this_klmode_outfwhms = []
         this_klmode_thrupts = []
         for ll,loc in enumerate(this_klmode_seppas[0]):
             
@@ -446,9 +475,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             # fig,ax = plt.subplots(1,2,
             #                       sharey=True,
             #                       layout='constrained',
-            #                       figsize=(8,4)
-            #                     )
-            
+            #                       figsize=(8,4))
             # im0 = ax[0].imshow(psf_model_padded,origin='lower')
             # plt.colorbar(im0,ax=ax[0])
             # ax[0].set_title('PSF Model')
@@ -456,10 +483,6 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             # plt.colorbar(im1,ax=ax[1])
             # ax[1].set_title('Data Cutout')
             # plt.show()
-                
-            # if x1<0. or y1<0. or x2>=cutout_shape[1] or y2>=cutout_shape[0]:
-            #     print('!!!')
-            #     pass
             
             # Using pyklip.fakes.gaussfit2d
             preklip_peak, pre_fwhm, pre_xfit, pre_yfit = gaussfit2d(
@@ -483,43 +506,40 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             # Get total counts from 2D gaussian fit
             preklip_counts = np.pi * preklip_peak * pre_fwhm**2 / 4. / np.log(2.)
             postklip_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
-
-            # old version using pyhot_by_gauss2d_fit
-            # # Temporarily load into Image obj
-            # model_img = Image(psf_model,pri_hdr=fits.Header(),ext_hdr=fits.Header())
-            # data_img = Image(data_cutout,pri_hdr=fits.Header(),ext_hdr=fits.Header())
-
-            # # Try pyklip flux measurement functions: fakes.2dgaussianfit, retrieve planet flux
-            # preklip_amp, preklip_err, preklip_bg = phot_by_gauss2d_fit(model_img,fwhm_pix,background_sub=True,fit_shape=psf_model.shape)
-            # try:
-            #     postklip_amp, postklip_err, postklip_bg = phot_by_gauss2d_fit(data_img,fwhm_pix,background_sub=True,fit_shape=data_cutout.shape)
-            # except:
-            #     warnings.warn('Amplitude of fake after KLIP subtraction not recovered.')
-            #     postklip_amp = np.nan
-            
             
             thrupt = postklip_counts/preklip_counts
 
-            this_klmode_peakin.append(preklip_peak)
-            this_klmode_peakout.append(postklip_peak)
-            this_klmode_sumin.append(np.sum(psf_model))
-            this_klmode_influxs.append(preklip_counts)
-            this_klmode_outfluxs.append(postklip_counts)
+            # this_klmode_peakin.append(preklip_peak)
+            # this_klmode_peakout.append(postklip_peak)
+            # this_klmode_sumin.append(np.sum(psf_model))
+            # this_klmode_influxs.append(preklip_counts)
+            # this_klmode_outfluxs.append(postklip_counts)
+            this_klmode_infwhms.append(pre_fwhm)
+            this_klmode_outfwhms.append(post_fwhm)
             this_klmode_thrupts.append(thrupt)
 
         seppas_arr = np.array(this_klmode_seppas[0])
         seps_arr = seppas_arr[:,0]
 
-        # if debug:
-        #     # Plot injected and recovered counts
-        #     fig,ax = plt.subplots()
-        #     plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
-        #     plt.scatter(seps_arr,this_klmode_outfluxs,label='Recovered counts')
-        #     plt.xlabel('separation (pixels)')
-        #     plt.legend()
-        #     plt.show()
+        # # Plot injected and recovered peaks
+        # import matplotlib.pyplot as plt
+        # fig,ax = plt.subplots()
+        # plt.scatter(seps_arr,this_klmode_influxs,label='Injected counts')
+        # plt.scatter(seps_arr,this_klmode_outfluxs,label='Recovered counts')
+        # plt.xlabel('separation (pixels)')
+        # plt.legend()
+        # plt.show()
+
+        # # Plot injected and recovered peaks
+        # fig,ax = plt.subplots()
+        # plt.scatter(seps_arr,this_klmode_peakin,label='Injected peaks')
+        # plt.scatter(seps_arr,this_klmode_peakout,label='Recovered peaks')
+        # plt.xlabel('separation (pixels)')
+        # plt.legend()
+        # plt.show()
 
         mean_thrupts = []
+        mean_outfwhms = []
         # TODO: If no measurements available for a given sep
         # show warning and add np.nan 
         for sep in np.unique(seps_arr):
@@ -527,8 +547,13 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             mean_thrupt = np.nanmean(this_sep_thrupts)
             mean_thrupts.append(mean_thrupt)
 
-        thrupts.append(mean_thrupts)
+            this_sep_outfwhms = np.where(seps_arr==sep,this_klmode_outfwhms,np.nan)
+            mean_outfwhm = np.nanmean(this_sep_outfwhms)
+            mean_outfwhms.append(mean_outfwhm)
 
-    thrupt_arr = np.array([seps,*thrupts])
+        thrupts.append(mean_thrupts)
+        outfwhms.append(mean_outfwhms)
+
+    thrupt_arr = np.array([[(sep,sep) for sep in seps],*[[(thrupts[kk][ss],outfwhms[kk][ss]) for ss in range(len(seps))] for kk in range(len(klip_params['numbasis']))]])
 
     return thrupt_arr
