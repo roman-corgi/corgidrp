@@ -946,7 +946,7 @@ def create_onsky_rasterscans(dataset,filedir=None,planet=None,band=None, im_size
         pl=planet
         band=band
         frame.pri_hdr.set('TARGET', pl)
-        frame.pri_hdr.append(('CFAMNAME', "{0}F".format(band)), end=True)
+        frame.ext_hdr.append(('CFAMNAME', "{0}F".format(band)), end=True)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
         else:

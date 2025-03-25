@@ -213,7 +213,7 @@ def create_onsky_flatfield(dataset, planet=None,band=None,up_radius=55,im_size=N
     if planet is None:
          planet=dataset[0].pri_hdr['TARGET']
     if band is None:
-         band=dataset[0].pri_hdr['CFAMNAME']
+         band=dataset[0].ext_hdr['CFAMNAME']
     
     if planet_rad is None:
         if planet.lower() =='neptune':
