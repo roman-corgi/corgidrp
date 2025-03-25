@@ -1,5 +1,6 @@
 import os
 import warnings
+import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
@@ -501,6 +502,10 @@ class Image():
             new_img = copy.deepcopy(self)
         else:
             new_img = copy.copy(self)
+            # copy the hdu_list and hdu_names list, but not their pointers
+            new_img.hdu_list = self.hdu_list.copy()
+            new_img.hdu_names = copy.copy(self.hdu_names)
+
         # update DRP version tracking
         new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
@@ -690,9 +695,8 @@ class FlatField(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_flatfield.fits".format(orig_input_filename)
+            # give it a default filename using the last input file as the base
+            self.filename = re.sub('_L[0-9].', '_FLT_CAL', input_dataset[-1].filename)
 
 
         # double check that this is actually a masterflat file that got read in
@@ -950,10 +954,15 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_bad_pixel_map.fits".format(orig_input_filename)
+            # give it a default filename using the last input file as the base
+            # filename could be from an data level or filename oculd be from a flat field
+            base_filename = input_dataset[-1].filename
+            if "_FLT_CAL" in base_filename:
+                self.filename = base_filename.replace("_FLT_CAL", "_BPM_CAL")
+            else:
+                # not created from a flat
+                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+
 
 
         # double check that this is actually a bad pixel map that got read in
