@@ -82,7 +82,16 @@ PHOT_ARGS = {
 
 def get_fluxcal_factor(image, method, phot_args, flux_or_irr):
     """
-    Compute flux calibration factor.
+    Compute flux calibration factor based on the specified calibration method.
+    
+    Args:
+        image (object): Input image data to be calibrated.
+        method (str): Calibration method to apply. Use "aperture" for aperture photometry or any other value for 2D Gaussian calibration.
+        phot_args (dict): Additional keyword arguments for the photometry functions.
+        flux_or_irr (str): Indicates whether to calibrate flux or irradiance.
+    
+    Returns:
+        float: The computed flux calibration factor.
     """
     if method == "aperture":
         return fluxcal.calibrate_fluxcal_aper(image, flux_or_irr=flux_or_irr, phot_kwargs=phot_args)
@@ -91,10 +100,35 @@ def get_fluxcal_factor(image, method, phot_args, flux_or_irr):
 
 
 def generate_test_data(out_dir):
-    '''
+    """
     Generate mock data including direct star images, coronagraphic frames with multiple injected companions,
     and a PSF-subtracted frame.
-    '''
+    
+    This function does the following:
+      1) Creates a core throughput calibration dataset and associated calibration file.
+      2) Generates a reference star dataset with flux calibration.
+      3) Measures host star counts and computes the flux calibration factor and apparent magnitude.
+      4) Creates coronagraphic frames with multiple companions using the host star counts and 
+         companion parameters (separation, position angle, and count scaling).
+      5) Performs PSF subtraction on the coronagraphic dataset to create a final PSF-subtracted image,
+         and updates companion locations after cropping.
+    
+    Args:
+        out_dir (str): Directory path where the generated test data files will be saved. 
+                       The directory will be created if it does not already exist.
+    
+    Returns:
+        tuple: A tuple containing the following:
+            ref_star_dataset (list): A list of reference star images with associated flux calibration.
+            host_star_counts (float): Measured host star counts from the reference star dataset.
+            fluxcal_factor (float): Computed flux calibration factor for the reference star image.
+            host_star_mag (float): Determined apparent magnitude of the host star.
+            dataset_ct (object): Core throughput calibration dataset (raw calibration images).
+            ct_cal (object): Core throughput calibration data including throughput values and header info.
+            FpamFsamCal (object): Calibration data for FPAM-FSAM.
+            psf_sub_image (Image): Final PSF-subtracted image after processing and companion location updates.
+            coron_data (object): Generated coronagraphic dataset containing frames with multiple injected companions.
+    """
     os.makedirs(out_dir, exist_ok=True)
 
     host_star_center = tuple(x // 2 for x in FULL_SIZE_IMAGE)
@@ -205,7 +239,32 @@ def generate_test_data(out_dir):
 def generate_or_load_test_data(out_dir, load_from_disk=False):
     """
     Generate or load mock datasets for testing.
+    
+    This function checks whether previously generated mock datasets exist on disk 
+    in the specified output directory. If load_from_disk is True and the final PSF-subtracted 
+    image file is found, it loads all necessary datasets (including core throughput calibration data, 
+    flux calibration data, reference star dataset, FPAM-FSAM calibration data, and coronagraphic data) 
+    from disk. Otherwise, it generates new mock datasets using generate_test_data, saves them to disk, 
+    and returns the generated data.
+    
+    Args:
+        out_dir (str): Directory path where the test data files are stored or will be generated.
+        load_from_disk (bool): Flag indicating whether to load existing mock data from disk 
+                               (if True) or generate new mock data (if False).
+    
+    Returns:
+        tuple: A tuple containing the following elements:
+            ref_star_dataset (list): A list of reference star images with associated flux calibration.
+            host_star_counts (float): Measured host star counts from the reference star dataset.
+            fluxcal_factor (float): Computed flux calibration factor for the reference star image.
+            zero_point (float): Determined zero point for the host star photometry.
+            dataset_ct (object): Core throughput calibration dataset (raw calibration images).
+            ct_cal (object): Core throughput calibration data including throughput values and header info.
+            FpamFsamCal (object): Calibration data for FPAM-FSAM.
+            final_psf_sub_image (Image): Final PSF-subtracted image generated or loaded from disk.
+            coron_data (object): Generated coronagraphic dataset containing frames with injected companions.
     """
+
     final_psf_file = os.path.join(out_dir, "final_psf_sub_image.fits")
     if load_from_disk and os.path.exists(final_psf_file):
         print("Loading mocks from disk...")
@@ -240,7 +299,24 @@ def generate_or_load_test_data(out_dir, load_from_disk=False):
 
 def _common_measure_companions_test(forward_model_flag):
     """
-    Helper function to test the `measure_companions` function with the specified forward modeling.
+    Helper function to test the `measure_companions` function using the specified forward modeling flag.
+    
+    This function performs the following steps:
+      1. Loads or generates mock test datasets, including reference star images, flux calibration data,
+         core throughput calibration data, a PSF-subtracted image, and coronagraphic frames.
+      2. Prints the host star magnitude for diagnostic purposes.
+      3. Calls the `measure_companions` function to detect companions in the coronagraphic data.
+      4. Verifies that the number of detected companions matches the number of injected companions.
+      5. For each detected companion, calculates the expected position in the cropped image based on 
+         the known companion separation and position angle, and asserts that the measured position 
+         is within an acceptable tolerance.
+      6. Computes the expected companion magnitude from the host star magnitude and companion flux scaling, 
+         and asserts that the measured magnitude is within a defined tolerance.
+      7. Prints the resulting table of measured companion properties.
+    
+    Args:
+        forward_model_flag (bool): Flag indicating whether to use forward modeling in the companion measurement.
+        
     """
     (ref_star_dataset, host_star_counts, fluxcal_factor, host_star_mag, dataset_ct, ct_cal, FpamFsamCal, 
      psf_sub_image, coron_data) = generate_or_load_test_data(OUT_DIR, load_from_disk=LOAD_FROM_DISK)

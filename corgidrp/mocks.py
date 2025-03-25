@@ -3496,7 +3496,7 @@ def generate_coron_dataset_with_companions(
       darkhole_file (Image): Ignored in this version.
       apply_coron_mask (bool): Whether to apply the simulated coronagraph mask.
       coron_mask_radius (int): Coronagraph mask radius in pixels.
-      throughput_factor (float): Optical throughput of companion due to the presence of a coronagraph mask.
+      throughput_factors (float): Optical throughput of companion due to the presence of a coronagraph mask.
     
     Returns:
       Dataset: A dataset of frames (each an Image) with the star and companion(s) injected.
