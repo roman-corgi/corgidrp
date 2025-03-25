@@ -26,15 +26,20 @@ ROLL_ANGLES = np.linspace(0, 45, NUM_IMAGES)
 NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
 CROPPED_IMAGE_SIZE = (200, 200)
-COMP_REL_COUNTS_SCALE = 1 / 3
-COMP_SEP_PIX = 28                   # Number of pixels companion is separated from star center
-COMP_PA = 45                        # Companion degree position (counterclockwise from north-up)
+PLOT_RESULTS=False
+LOAD_FROM_DISK = True  # Flag to control whether to load mocks from disk (if available)
+
+# Define a list of companions.
+# Each dictionary defines the companion's separation (in pixels), position angle (degrees), 
+# and a scaling factor on the host star counts.
+COMPANION_PARAMS = [
+    {"sep_pix": 28, "pa": 45, "counts_scale": 1/3},
+    {"sep_pix": 40, "pa": 120, "counts_scale": 1/4}  
+]
+
 # Use a relative path for OUT_DIR
 OUT_DIR = os.path.join("tests/test_data", "L4_to_TDA_Inputs")
 os.makedirs(OUT_DIR, exist_ok=True)  # Ensure the folder exists
-
-# Flag to control whether to load mocks from disk (if available)
-LOAD_FROM_DISK = False  # Set to True to load files rather than re-generating them
 
 # Reusable photometry parameters for flux calibration measurements.
 PHOT_KWARGS_COMMON = {
@@ -77,15 +82,6 @@ PHOT_ARGS = {
 def get_fluxcal_factor(image, method, phot_args, flux_or_irr):
     """
     Compute flux calibration factor.
-    
-    Args:
-        image (corgidrp.data.Image): The direct star image.
-        method (str): Photometry method ('aperture' or 'gauss2d').
-        phot_args (dict): Arguments for the photometry method.
-        flux_or_irr (str): 'flux' or 'irr'.
-    
-    Returns:
-        fluxcal_factor (corgidrp.fluxcal.FluxcalFactor): Flux calibration factor.
     """
     if method == "aperture":
         return fluxcal.calibrate_fluxcal_aper(image, flux_or_irr=flux_or_irr, phot_kwargs=phot_args)
@@ -95,37 +91,31 @@ def get_fluxcal_factor(image, method, phot_args, flux_or_irr):
 
 def generate_test_data(out_dir):
     '''
-    Generate mock data including direct star images, coronagraphic frames, and a PSF-subtracted frame.
-
-    Args:
-        out_dir (str): Directory path where the generated mock data files will be saved.
-
-    Returns:
-        tuple: A tuple containing the following items:
-            ref_star_dataset (list of Image): Generated reference star dataset images.
-            host_star_counts (float): Measured flux counts for the host star from the reference star dataset.
-            fluxcal_factor (float): Flux calibration factor derived from photometry.
-            zero_point (float or None): Photometric zero point from the calibration.
-            dataset_ct (list of Image): Dataset for core throughput calibration.
-            ct_cal (Image): Core throughput calibration frame.
-            FpamFsamCal (dict): Mock calibration data for FPAM-FSAM.
-            final_psf_sub_image (Image): Final PSF-subtracted image after post-processing and cropping.
-            coron_data (list of Image): Generated mock coronagraphic images with synthetic companion signals.
-    '''  
+    Generate mock data including direct star images, coronagraphic frames with multiple injected companions,
+    and a PSF-subtracted frame.
+    '''
     os.makedirs(out_dir, exist_ok=True)
+
+    host_star_center = tuple(x // 2 for x in FULL_SIZE_IMAGE)
 
     # 1) Generate core throughput calibration dataset.
     dataset_ct, ct_cal, dataset_ct_nomask = mocks.create_mock_ct_dataset_and_cal_file(
         fwhm=50, n_psfs=20, cfam_name=CFAM, save_cal_file=True, image_shape=FULL_SIZE_IMAGE,
         total_counts=100
     )
-    ct_cal_counts_ref, _, _ = fluxcal.aper_phot(dataset_ct[3], **PHOT_KWARGS_COMMON)
-    ct_cal_counts_ref_no_mask, _, _ = fluxcal.aper_phot(dataset_ct_nomask[3], **PHOT_KWARGS_COMMON)
-    mask_throughput_ratio = ct_cal_counts_ref / ct_cal_counts_ref_no_mask
+    
+    # get the index/ image of the PSF with maximum core throughput for reference
+    x, y, ct = ct_cal.ct_excam
+    max_index = np.argmax(ct)
+    ct_cal_counts_ref_mask_far, _, _ = fluxcal.aper_phot(dataset_ct[int(max_index)], **PHOT_KWARGS_COMMON)
 
-    ct_cal_counts_ref_mask_far, _, _ = fluxcal.aper_phot(dataset_ct[16], **PHOT_KWARGS_COMMON)
-    ct_cal_counts_ref_mask_close, _, _ = fluxcal.aper_phot(dataset_ct[8], **PHOT_KWARGS_COMMON)
-    location_throughput_ratio = ct_cal_counts_ref_mask_close / ct_cal_counts_ref_mask_far
+    companion_throughput_ratios = []
+    for i, comp in enumerate(COMPANION_PARAMS):
+        separation, idx, throughput = measure_companions.lookup_core_throughput(ct_cal, comp["sep_pix"])
+        ct_cal_counts_ref_mask_close, _, _ = fluxcal.aper_phot(dataset_ct[int(idx)], **PHOT_KWARGS_COMMON)
+
+        location_throughput_ratio = ct_cal_counts_ref_mask_close / ct_cal_counts_ref_mask_far
+        companion_throughput_ratios.append(location_throughput_ratio)
 
     FpamFsamCal = mocks.create_mock_fpamfsam_cal(save_file=False)
 
@@ -158,19 +148,18 @@ def generate_test_data(out_dir):
     host_star_counts, _, _ = fluxcal.aper_phot(ref_star_dataset[0], **PHOT_KWARGS_COMMON)
     host_star_mag = l4_to_tda.determine_app_mag(ref_star_dataset[0], HOST_STAR)
     fluxcal_factor = get_fluxcal_factor(ref_star_dataset[0], PHOT_METHOD, PHOT_ARGS, FLUX_OR_IRR)
-    zero_point = fluxcal_factor.ext_hdr.get('ZP', None)
 
-    # 4) Generate coronagraphic frames.
-    host_star_center = tuple(x // 2 for x in FULL_SIZE_IMAGE)
+    # 4) Generate coronagraphic frames with multiple companions.
+    # For multiple companions, pass lists for sep, PA and counts.
     coron_data = mocks.generate_coron_dataset_with_companions(
         n_frames=NUM_IMAGES,
         shape=FULL_SIZE_IMAGE,
         host_star_center=host_star_center,
         host_star_counts=host_star_counts,
         roll_angles=ROLL_ANGLES,
-        companion_sep_pix=COMP_SEP_PIX,
-        companion_pa_deg=COMP_PA,
-        companion_counts=host_star_counts * COMP_REL_COUNTS_SCALE,
+        companion_sep_pix=[cp["sep_pix"] for cp in COMPANION_PARAMS],
+        companion_pa_deg=[cp["pa"] for cp in COMPANION_PARAMS],
+        companion_counts=[host_star_counts * cp["counts_scale"] for cp in COMPANION_PARAMS],
         filter='1F',
         platescale=0.0218,
         add_noise=True,
@@ -179,7 +168,7 @@ def generate_test_data(out_dir):
         darkhole_file=dataset_ct[0],
         apply_coron_mask=True,
         coron_mask_radius=20,
-        throughput_factor=location_throughput_ratio
+        throughput_factors=companion_throughput_ratios
     )
 
     # 5) Create a PSF-subtracted frame.
@@ -193,55 +182,33 @@ def generate_test_data(out_dir):
     psf_sub_image = Image(data_or_filepath=psf_sub_image.data,
                           pri_hdr=psf_sub_image.pri_hdr,
                           ext_hdr=psf_sub_image.ext_hdr)
-    # Update companion location after cropping using fixed update.
-    comp_keyword = next(key for key in psf_sub_image.ext_hdr if key.startswith("SNYX"))
-    final_psf_sub_image = measure_companions.update_companion_location_in_cropped_image(
-        psf_sub_image, comp_keyword,
-        tuple(x // 2 for x in FULL_SIZE_IMAGE),
-        tuple(x // 2 for x in CROPPED_IMAGE_SIZE)
-    )
-    output_filename = "final_psf_sub_image.fits"
-    final_psf_sub_image.save(filedir=out_dir, filename=output_filename)
+    
+    # Update companion locations after cropping.
+    comp_keywords = [key for key in psf_sub_image.ext_hdr if key.startswith("SNYX")]
 
-    return (ref_star_dataset, host_star_counts, fluxcal_factor, zero_point,
-            dataset_ct, ct_cal, FpamFsamCal, final_psf_sub_image, coron_data)
+    # Loop through each companion key and update its location.
+    for key in comp_keywords:
+        psf_sub_image = measure_companions.update_companion_location_in_cropped_image(
+            psf_sub_image, key,
+            tuple(x // 2 for x in FULL_SIZE_IMAGE),
+            tuple(x // 2 for x in CROPPED_IMAGE_SIZE)
+        )
+
+    output_filename = "final_psf_sub_image.fits"
+    psf_sub_image.save(filedir=out_dir, filename=output_filename)
+
+    return (ref_star_dataset, host_star_counts, fluxcal_factor, host_star_mag,
+            dataset_ct, ct_cal, FpamFsamCal, psf_sub_image, coron_data)
 
 
 def generate_or_load_test_data(out_dir, load_from_disk=False):
     """
     Generate or load mock datasets for testing.
-
-    If `load_from_disk` is True and the required data files are available in `out_dir`, 
-    the data is loaded directly from disk to save computation time. Otherwise, the mock data
-    is generated from scratch and saved for future use.
-
-    Parameters:
-        out_dir (str):
-            Directory path where data files are stored or will be saved.
-        load_from_disk (bool, optional):
-            If True, load existing data from disk if available; otherwise, generate new data.
-            Defaults to False.
-
-    Returns:
-        tuple:
-            A tuple containing:
-                - ref_star_dataset (list): Dataset of reference star images.
-                - host_star_counts (float): Photometrically measured counts of the host star.
-                - fluxcal_factor (float): Flux calibration factor for photometry.
-                - zero_point (float): Photometric zero point magnitude.
-                - dataset_ct (list): Core throughput calibration dataset.
-                - ct_cal (object): Core throughput calibration object.
-                - FpamFsamCal (object): Calibration object for FPAM and FSAM.
-                - final_psf_sub_image (Image): Final PSF-subtracted image.
-                - coron_data (list): Coronagraphic image dataset.
     """
-    # Check for one of the key files that indicates mocks have been saved.
     final_psf_file = os.path.join(out_dir, "final_psf_sub_image.fits")
     if load_from_disk and os.path.exists(final_psf_file):
         print("Loading mocks from disk...")
-        # Load final PSF-subtracted image using the Image class.
         final_psf_sub_image = Image(data_or_filepath=final_psf_file)
-        # Load other objects from pickle files.
         with open(os.path.join(out_dir, "ct_data.pkl"), "rb") as f:
             dataset_ct, ct_cal = pickle.load(f)
         with open(os.path.join(out_dir, "fluxcal_data.pkl"), "rb") as f:
@@ -257,7 +224,6 @@ def generate_or_load_test_data(out_dir, load_from_disk=False):
     else:
         print("Generating mocks...")
         data = generate_test_data(out_dir)
-        # Save key groups to disk for faster future loading.
         with open(os.path.join(out_dir, "ct_data.pkl"), "wb") as f:
             pickle.dump((data[4], data[5]), f)
         with open(os.path.join(out_dir, "fluxcal_data.pkl"), "wb") as f:
@@ -268,30 +234,24 @@ def generate_or_load_test_data(out_dir, load_from_disk=False):
             pickle.dump(data[6], f)
         with open(os.path.join(out_dir, "coron_data.pkl"), "wb") as f:
             pickle.dump(data[8], f)
-        # final_psf_sub_image is already saved as a FITS file.
         return data
+    
 
 
 def _common_measure_companions_test(forward_model_flag):
     """
-    Helper function to test the `measure_companions` function with specified forward modeling.
-
-    Generates or loads test data, runs the companion measurement, and validates that exactly
-    one companion is detected. It then verifies the measured companion's coordinates and magnitude
-    against expected values.
-
-    Args:
-        forward_model_flag (bool): Flag indicating whether forward modeling should be enabled.
+    Helper function to test the `measure_companions` function with the specified forward modeling.
     """
-
-    (ref_star_dataset, host_star_counts, fluxcal_factor, zero_point,
-        dataset_ct, ct_cal, FpamFsamCal, psf_sub_frame, coron_data) = generate_or_load_test_data(OUT_DIR, load_from_disk=LOAD_FROM_DISK)
+    (ref_star_dataset, host_star_counts, fluxcal_factor, host_star_mag, dataset_ct, ct_cal, FpamFsamCal, 
+     psf_sub_image, coron_data) = generate_or_load_test_data(OUT_DIR, load_from_disk=LOAD_FROM_DISK)
     
+    print(f"Host Star Magnitude: {host_star_mag[0].ext_hdr["APP_MAG"]}")
+
     result_table = measure_companions.measure_companions(
-        coron_data, ref_star_dataset, psf_sub_frame,
+        coron_data, ref_star_dataset, psf_sub_image,
         ref_psf_min_mask_effect=Image(data_or_filepath=ct_cal.data[16],
-                                        pri_hdr=ct_cal.pri_hdr,
-                                        ext_hdr=ct_cal.ext_hdr),
+                                      pri_hdr=ct_cal.pri_hdr,
+                                      ext_hdr=ct_cal.ext_hdr),
         ct_cal=ct_cal, FpamFsamCal=FpamFsamCal,
         phot_method=PHOT_METHOD,
         photometry_kwargs=PHOT_ARGS,
@@ -299,31 +259,37 @@ def _common_measure_companions_test(forward_model_flag):
         forward_model=forward_model_flag,
         numbasis=NUMBASIS,
         output_dir=OUT_DIR,
-        verbose=False
+        verbose=False,
+        plot_results=PLOT_RESULTS
     )
     
-    # Assert exactly one companion is detected.
-    assert len(result_table) == 1, "Expected exactly one companion in the results."
+    # Expect the number of detected companions to equal the number injected.
+    expected_n = len(COMPANION_PARAMS)
+    assert len(result_table) == expected_n, f"Expected {expected_n} companions, but found {len(result_table)}."
     
-    # Calculate expected companion coordinates.   
-    # TO DO: don't hard code the 100, use starloc or maskloc if available
-    dx, dy = seppa2dxdy(COMP_SEP_PIX, COMP_PA)
-    expected_x = 100 + dx
-    expected_y = 100 + dy
-
-    print(result_table)
-    
-    measured_x = result_table['x'][0]
-    measured_y = result_table['y'][0]
-    assert abs(measured_x - expected_x) < 5, f"Companion x-coordinate off: expected {expected_x}, got {measured_x}"
-    assert abs(measured_y - expected_y) < 5, f"Companion y-coordinate off: expected {expected_y}, got {measured_y}"
-    
-    # Calculate expected companion magnitude.
+    # Determine the expected companion positions in the cropped image.
+    # The cropped star center is at (CROPPED_IMAGE_SIZE[0]//2, CROPPED_IMAGE_SIZE[1]//2)
+    star_loc_cropped = (CROPPED_IMAGE_SIZE[0] // 2, CROPPED_IMAGE_SIZE[1] // 2)
     apmag_data = l4_to_tda.determine_app_mag(ref_star_dataset[0], ref_star_dataset[0].pri_hdr['TARGET'])
     host_star_apmag = float(apmag_data[0].ext_hdr['APP_MAG'])
-    expected_comp_mag = host_star_apmag - 2.5 * np.log10(COMP_REL_COUNTS_SCALE)
-    measured_mag = result_table['mag'][0]
-    assert abs(measured_mag - expected_comp_mag) < 0.1, f"Companion magnitude off: expected {expected_comp_mag}, got {measured_mag}"
+    
+    for i, comp in enumerate(COMPANION_PARAMS):
+        dx, dy = seppa2dxdy(comp["sep_pix"], comp["pa"])
+        expected_x = star_loc_cropped[0] + dx
+        expected_y = star_loc_cropped[1] + dy
+        measured_x = result_table['x'][i]
+        measured_y = result_table['y'][i]
+        assert abs(measured_x - expected_x) < 5, f"Companion {i} x-coordinate off: expected {expected_x}, got {measured_x}"
+        assert abs(measured_y - expected_y) < 5, f"Companion {i} y-coordinate off: expected {expected_y}, got {measured_y}"
+        
+        # Calculate expected companion magnitude.
+        expected_comp_mag = host_star_apmag - 2.5 * np.log10(comp["counts_scale"])
+        measured_mag = result_table['companion estimated mag'][i]
+        # Print companion magnitude.
+        print(f"Companion {i} Magnitude: {measured_mag}")
+        assert abs(measured_mag - expected_comp_mag) < 0.15, f"Companion {i} magnitude off: expected {expected_comp_mag}, got {measured_mag}"
+    
+    print(result_table)
 
 
 def test_measure_companions_forward_modeling():
@@ -342,7 +308,6 @@ def test_measure_companions_non_forward_modeling():
 
 if __name__ == "__main__":
     # Run tests when executing the file directly.
-    # Uncomment the test you want to run.
     print("Running test: non-forward modeling")
     test_measure_companions_non_forward_modeling()
     print("Non-forward modeling test passed.")

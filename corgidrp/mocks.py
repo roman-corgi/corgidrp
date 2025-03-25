@@ -2684,7 +2684,7 @@ def create_flux_image(
             throughput <= 1).
         color_cor (float): Another dimensionless factor if you need it. 
         filter (string): CFAM filter name used.
-        fpamname (string) FPAM name used.
+        fpamname (string): FPAM name used.
         target_name (string): Star target observed.
         fsm_x (float): X shift in mas from the image center.
         fsm_y (float): Y shift in mas from the image center.
@@ -3453,9 +3453,9 @@ def generate_coron_dataset_with_companions(
     host_star_center=None,
     host_star_counts=1e5,
     roll_angles=None,
-    companion_sep_pix=None,   # Companion separation in pixels (explicit)
-    companion_pa_deg=None,    # Companion position angle in degrees (counterclockwise from north)
-    companion_counts=100.0,
+    companion_sep_pix=None,   # Companion separation in pixels (explicit) or list of separations
+    companion_pa_deg=None,    # Companion position angle in degrees (counterclockwise from north) or list
+    companion_counts=100.0,   # Total flux (counts) for the companion or list
     filter='1F',
     platescale=0.0218,
     add_noise=False,
@@ -3464,10 +3464,10 @@ def generate_coron_dataset_with_companions(
     darkhole_file=None,   # darkhole_file is ignored in this version
     apply_coron_mask=True,
     coron_mask_radius=5,
-    throughput_factor=1,
+    throughput_factors=1,
 ):
     """
-    Create a mock coronagraphic dataset with a star and (optionally) a companion.
+    Create a mock coronagraphic dataset with a star and (optionally) one or more companions.
     
     In this version, a Gaussian star is always injected at host_star_center.
     When the coronagraph mask is applied, the flux within the inner mask region
@@ -3479,9 +3479,9 @@ def generate_coron_dataset_with_companions(
       host_star_center (tuple): (x, y) pixel coordinates of the host star. If None, uses image center.
       host_star_counts (float): Total counts for the star.
       roll_angles (list of float): One roll angle per frame (in degrees).
-      companion_sep_pix (float): On-sky separation of the companion in pixels.
-      companion_pa_deg (float): On-sky position angle of the companion (counterclockwise from north).
-      companion_counts (float): Total flux (counts) of the companion.
+      companion_sep_pix (float or list): On-sky separation(s) of the companion(s) in pixels.
+      companion_pa_deg (float or list): On-sky position angle(s) of the companion(s) (counterclockwise from north).
+      companion_counts (float or list): Total flux (counts) of the companion(s).
       filter (str): Filter name.
       platescale (float): Plate scale in arcsec per pixel.
       add_noise (bool): Whether to add random noise.
@@ -3493,8 +3493,9 @@ def generate_coron_dataset_with_companions(
       throughput_factor (float): Optical throughput of companion due to the presence of a coronagraph mask.
     
     Returns:
-      Dataset: A dataset of frames (each an Image) with the star and companion injected.
+      Dataset: A dataset of frames (each an Image) with the star and companion(s) injected.
     """
+    import numpy as np
     ny, nx = shape
     if host_star_center is None:
         host_star_center = (nx / 2, ny / 2)  # (x, y)
@@ -3503,6 +3504,15 @@ def generate_coron_dataset_with_companions(
         roll_angles = [0.0] * n_frames
     elif len(roll_angles) != n_frames:
         raise ValueError("roll_angles must have length n_frames or be None.")
+
+    # If only one companion is provided, wrap parameters into lists.
+    if companion_sep_pix is not None and companion_pa_deg is not None:
+        if not isinstance(companion_sep_pix, list):
+            companion_sep_pix = [companion_sep_pix]
+        if not isinstance(companion_pa_deg, list):
+            companion_pa_deg = [companion_pa_deg]
+        if not isinstance(companion_counts, list):
+            companion_counts = [companion_counts] * len(companion_sep_pix)
 
     frames = []
 
@@ -3525,21 +3535,31 @@ def generate_coron_dataset_with_companions(
         if apply_coron_mask:
             data_arr[r2 < coron_mask_radius**2] *= 1e-3
 
-        # (C) Insert the companion if specified.
+        # (C) Insert the companion(s) if specified.
+        companion_keywords = {}
         if companion_sep_pix is not None and companion_pa_deg is not None:
-            rel_pa = companion_pa_deg - angle_i      
-            dx, dy = seppa2dxdy(companion_sep_pix, rel_pa)
-            xcomp = host_star_center[0] + dx
-            ycomp = host_star_center[1] + dy
+            for idx, (sep, pa, counts, throughput_factor) in enumerate(zip(companion_sep_pix, companion_pa_deg, 
+                                                                           companion_counts, throughput_factors)):
+                # Adjust the companion position based on the roll angle.
+                rel_pa = pa - angle_i      
+                # Use the helper function to convert separation and position angle to dx, dy.
+                dx, dy = seppa2dxdy(sep, rel_pa)
+                xcomp = host_star_center[0] + dx
+                ycomp = host_star_center[1] + dy
 
-            # Inject the companion as a small Gaussian PSF.
-            sigma_c = 1.0
-            rc2 = (xgrid - xcomp)**2 + (ygrid - ycomp)**2
-            companion_gaus = np.exp(-0.5 * rc2 / sigma_c**2)
-            companion_gaus /= np.sum(companion_gaus)
-            companion_flux = companion_counts * throughput_factor
-            companion_gaus *= companion_flux
-            data_arr += companion_gaus
+                # Inject the companion as a small Gaussian PSF.
+                sigma_c = 1.0
+                rc2 = (xgrid - xcomp)**2 + (ygrid - ycomp)**2
+                companion_gaus = np.exp(-0.5 * rc2 / sigma_c**2)
+                companion_gaus /= np.sum(companion_gaus)
+                companion_flux = counts * throughput_factor
+                companion_gaus *= companion_flux
+                data_arr += companion_gaus
+
+                # Record the companion location in the header.
+                # Create keys like SNYX001, SNYX002, etc.
+                key = f"SNYX{idx+1:03d}"
+                companion_keywords[key] = f"5.0,{xcomp:.2f},{ycomp:.2f}"
 
         # (D) Add noise if requested.
         if add_noise:
@@ -3547,6 +3567,7 @@ def generate_coron_dataset_with_companions(
             data_arr += noise.astype(np.float32)
 
         # (E) Build headers and create the Image.
+        # Assume create_default_L3_headers() and generate_wcs() are defined elsewhere.
         prihdr, exthdr = create_default_L3_headers()
         prihdr["FILENAME"] = f"mock_coron_{i:03d}.fits"
         prihdr["ROLL"] = angle_i
@@ -3563,10 +3584,12 @@ def generate_coron_dataset_with_companions(
         wcs_header = wcs_obj.to_header()
         exthdr.update(wcs_header)
 
-        # Record the companion location in the header if applicable.
-        if companion_sep_pix is not None and companion_pa_deg is not None:
-            exthdr["SNYX001"] = f"5.0,{xcomp:.2f},{ycomp:.2f}"
+        # Add companion header entries if any.
+        if companion_keywords:
+            for key, value in companion_keywords.items():
+                exthdr[key] = value
 
+        from corgidrp.data import Image
         frame = Image(data_arr, pri_hdr=prihdr, ext_hdr=exthdr)
         frames.append(frame)
 
@@ -3582,7 +3605,6 @@ def generate_coron_dataset_with_companions(
         print(f"Saved {n_frames} frames to {outdir}")
 
     return dataset
-
 
 
 def create_mock_fpamfsam_cal(

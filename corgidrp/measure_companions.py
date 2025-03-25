@@ -28,7 +28,8 @@ def measure_companions(
     nsteps=20,
     numthreads=1,
     output_dir=".",
-    verbose=True
+    verbose=True,
+    plot_results=False
 ):
     """
     Measure companion properties in a coronagraphic image and return a table with companion position, flux ratio, and apparent magnitude.
@@ -52,6 +53,7 @@ def measure_companions(
         numthreads (int): Number of threads for MCMC computation.
         output_dir (str): Output directory path for forward-modeling results.
         verbose (bool): Flag to enable verbose output.
+        plot_results (bool): Whether to enable plotting.
     
     Returns:
         result_table (astropy.table.Table): Table containing companion measurements.
@@ -146,7 +148,7 @@ def measure_companions(
             'measured companion counts',
             'simulated host star counts',
             'counts_ratio',
-            'mag'
+            'companion estimated mag'
         ]
     )
 
@@ -200,7 +202,7 @@ def measure_counts(image, phot_method, initial_xy, **kwargs):
         image (corgidrp.data.Image): Input image for photometry.
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
         initial_xy (tuple or None): Initial (x, y) guess for centroiding.
-        kwargs(dict): Arbitrary keyword arguments passed directly to the photometry method
+        kwargs (dict): Arbitrary keyword arguments passed directly to the photometry method
             (e.g., fluxcal.phot_by_gauss2d_fit or fluxcal.aper_phot).
     
     Returns:
@@ -266,9 +268,9 @@ def lookup_core_throughput(ct_cal, desired_sep):
         desired_sep (float): Desired separation in pixels.
     
     Returns:
-        closest_sep (float): Separation value closest to desired_sep.
+        separations[idx] (float): Separation value closest to desired_sep.
         idx (int): Index of the closest separation value.
-        throughput (float): Core throughput value corresponding to the closest separation.
+        ct[idx] (float): Core throughput value corresponding to the closest separation.
     """
     x, y, ct = ct_cal.ct_excam
     mask_x = ct_cal.ext_hdr['MASKLOCX']
@@ -348,8 +350,8 @@ def forward_model_psf(
     """
     amp = np.nanmax(scaled_star_psf.data)
 
-    # Debugging plotting:
-    #plot_dataset(coronagraphic_dataset, 'Coronagraph dataset', cmap='plasma')
+    if plot_results == True:
+        plot_dataset(coronagraphic_dataset, 'Coronagraph dataset', cmap='plasma')
 
     fm_dataset = coronagraphic_dataset.copy()
 
@@ -360,8 +362,8 @@ def forward_model_psf(
                                                   guesssep, -guesspa)
         fm_dataset[idx].data = injected_frame.data
     
-    # Debugging plotting:
-    #plot_dataset(fm_dataset, 'Injected PSF (fm_dataset)', cmap='plasma')
+    if plot_results == True:
+        plot_dataset(fm_dataset, 'Injected PSF (fm_dataset)', cmap='plasma')
 
     # Perform PSF subtraction using the l3_to_l4 pipeline.
     fm_psfsub = l3_to_l4.do_psf_subtraction(
@@ -392,14 +394,15 @@ def forward_model_psf(
     # TO DO: figure out what to do about core throughput, if anything
     ct_value = 1                    # Placeholder value for core throughput.
     klip_image = Image(klip_data, pri_hdr=fm_psfsub[0].pri_hdr, ext_hdr=fm_psfsub[0].ext_hdr)
-    # Update companion location in the cropped image header.
-    comp_keyword = next(key for key in fm_psfsub[0].ext_hdr if key.startswith("SNYX"))
 
-    # Debugging plotting: Plot the PSF-subtracted dataset (fm_psfsub)
-    #plot_dataset(klip_image, 'PSF-Subtracted (fm_psfsub)', cmap='plasma')
+    if plot_results == True:
+        plot_dataset(klip_image, 'PSF-Subtracted (fm_psfsub)', cmap='plasma')
 
     #TO DO: don't hardcode this, ideally you can use masklocx and y
-    klip_image = update_companion_location_in_cropped_image(klip_image, comp_keyword, (512, 512), (50, 50))
+    comp_keywords = [key for key in fm_psfsub[0].ext_hdr if key.startswith("SNYX")]
+    for key in comp_keywords:
+        klip_image = update_companion_location_in_cropped_image(klip_image, key, (512, 512), (50, 50))
+
     return kl_throughput_value, ct_value, klip_image
 
 
