@@ -28,7 +28,7 @@ NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
 CROPPED_IMAGE_SIZE = (200, 200)
 PLOT_RESULTS = True
-LOAD_FROM_DISK = False  # Flag to control whether to load mocks from disk (if available)
+LOAD_FROM_DISK = True  # Flag to control whether to load mocks from disk (if available)
 
 # Define a list of companions.
 # Each dictionary defines the companion's sep (in pixels), position angle (degrees counter-
