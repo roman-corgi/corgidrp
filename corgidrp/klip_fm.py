@@ -63,7 +63,7 @@ def inject_psf(frame_in, ct_calibration, amp,
     frame = frame_in.copy()
 
     # Get closest psf model
-    frame_roll = frame.ext_hdr['ROLL']
+    frame_roll = frame.pri_hdr['ROLL']
     rel_pa = pa_deg - frame_roll
     dx,dy = seppa2dxdy(sep_pix,rel_pa)
 
@@ -239,21 +239,32 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         contains the KLIP throughput measured at each separation for each KL mode truncation choice.
     """
     
-    # TODO: read these in instead of hard code.
-    iwa = 10. # pix, update real number
-    owa = 50. # pix, update with real number
-    d = 2.36 #m
-    lam = 573.8e-9 #m
-    pixscale_arcsec = 0.0218
-    fwhm_mas = 1.22 * lam / d * 206265 * 1000
-    fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
+    if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
+        lam = 573.8e-9 #m
+    else:
+        raise NotImplementedError("Only band 1 observations using CFAMNAME 1F are currently configured.")
+
+    d = 2.36 #m  
+    pixscale_mas = 0.0218 * 1000 # mas
+    fwhm_mas = 1.22 * lam / d * 206265. * 1000.
+    fwhm_pix = fwhm_mas / pixscale_mas  
+    res_elem = sep_spacing * fwhm_pix # pix
     
-    
-    res_elem = sep_spacing * fwhm_pix # pix, update this with value for NFOV, Band 1 mode
-    
-    if seps == None:
-        seps = np.arange(iwa,owa,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
-    if pas == None:
+    if seps is None:
+        if sci_dataset_in[0].ext_hdr['LSAMNAME'] == 'NFOV':
+            owa_mas = 450. 
+            owa_pix = owa_mas / pixscale_mas   
+        else:
+            raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
+        
+        if sci_dataset_in[0].ext_hdr['FPAMNAME'] == 'HLC12_C2R1':
+            iwa_mas = 140. 
+            iwa_pix = iwa_mas / pixscale_mas 
+        else:
+            raise NotImplementedError("Automatic separation choices only configured for NFOV observations.")
+        
+        seps = np.arange(iwa_pix,owa_pix,res_elem) # Some linear spacing between the IWA & OWA, around 5x the fwhm
+    if pas is None:
         pas = np.linspace(0.,360.,n_pas+1)[:-1] # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
     thrupts = []
@@ -262,7 +273,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         sci_dataset = sci_dataset_in.copy()
         ref_dataset = ref_dataset_in.copy() if not ref_dataset_in is None else None
 
-        rolls = [frame.ext_hdr['ROLL'] for frame in sci_dataset]
+        rolls = [frame.pri_hdr['ROLL'] for frame in sci_dataset]
         
         # Measure noise at each separation in psf subtracted dataset (for this kl mode)
         noise_vals = measure_noise(psfsub_dataset[0],seps,fwhm_pix,k,cand_locs)
@@ -367,7 +378,6 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         medsubtracted_data = pyklip_data - bg_level
         
         # # Plot Psf subtraction with fakes
-        
         # if klip_params['mode'] == 'RDI':
         #     analytical_result = rotate(sci_dataset[0].data - ref_dataset[0].data,-rolls[0],reshape=False,cval=np.nan)
         # elif klip_params['mode'] == 'ADI':
@@ -377,27 +387,21 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # elif klip_params['mode'] == 'ADI+RDI':
         #     analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
 
-        # locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
-        
         # import matplotlib.pyplot as plt
-
         # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
         # im0 = axes[0].imshow(medsubtracted_data,origin='lower')
         # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+        # locsxy = seppa2xy(seppas_arr[0,:,0],seppas_arr[0,:,1],pyklip_hdr['PSFCENTX'],pyklip_hdr['PSFCENTY'])
         # axes[0].scatter(locsxy[0],locsxy[1],label='Injected PSFs',s=1,c='r',marker='x')
         # axes[0].set_title(f'Output data')
         # axes[0].legend()
-
         # im1 = axes[1].imshow(analytical_result,origin='lower')
         # plt.colorbar(im1,ax=axes[1],shrink=0.8)
         # axes[1].set_title('Analytical result')
-
         # im2 = axes[2].imshow(medsubtracted_data - analytical_result,origin='lower')
         # plt.colorbar(im2,ax=axes[2],shrink=0.8)
         # axes[2].set_title('Difference')
-
         # plt.suptitle(f'PSF Subtraction {klip_params["mode"]} ({klmode} KL Modes)')
-
         # plt.show()
         
         # After psf subtraction
@@ -468,9 +472,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             # fig,ax = plt.subplots(1,2,
             #                       sharey=True,
             #                       layout='constrained',
-            #                       figsize=(8,4)
-            #                     )
-            
+            #                       figsize=(8,4))
             # im0 = ax[0].imshow(psf_model_padded,origin='lower')
             # plt.colorbar(im0,ax=ax[0])
             # ax[0].set_title('PSF Model')

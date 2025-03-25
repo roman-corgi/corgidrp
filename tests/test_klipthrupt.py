@@ -14,16 +14,21 @@ import os
 
 ## Helper functions/quantities
 
-iwa_lod = 3.
-owa_lod = 9.7
-d = 2.36 #m
 lam = 573.8e-9 #m
-pixscale_arcsec = 0.0218
-fwhm_mas = 1.22 * lam / d * 206265 * 1000
-fwhm_pix = fwhm_mas * 0.001 / pixscale_arcsec
-sig_pix = fwhm_pix / (2 * np.sqrt(2. * np.log(2.)))
-iwa_pix = iwa_lod * lam / d * 206265 / pixscale_arcsec
-owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
+d = 2.36 #m  
+pixscale_mas = 0.0218 * 1000 # mas
+fwhm_mas = 1.22 * lam / d * 206265. * 1000.
+fwhm_pix = fwhm_mas / pixscale_mas  
+res_elem = 3 * fwhm_pix # pix
+
+owa_mas = 450. 
+owa_pix = owa_mas / pixscale_mas   
+
+iwa_mas = 140. 
+iwa_pix = iwa_mas / pixscale_mas  
+
+# Overriding separations for testing purposes
+seps = np.array([10.,15.,20.,25.,30.])
 
 # Mock CT calibration settings
 
@@ -508,10 +513,9 @@ def test_meas_klip_ADI():
                      ctcal,
                      klip_params,
                      inject_snr,
-                     seps = None, # in pixels from mask center
+                     seps = seps, # in pixels from mask center
                      cand_locs=[])
 
-    # # See if it runs\
     # import matplotlib.pyplot as plt
     # fig,ax = plt.subplots(figsize=(6,4))
     # plt.plot(kt_adi[0],kt_adi[1],label='ADI')
@@ -581,9 +585,9 @@ def test_meas_klip_RDI():
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
-                     inject_snr)
+                     inject_snr,
+                     seps=seps)
 
-    # # See if it runs
     # import matplotlib.pyplot as plt
     # fig,ax = plt.subplots(figsize=(6,4))
     # plt.plot(kt_rdi[0],kt_rdi[1],label='RDI')
@@ -634,7 +638,8 @@ def test_meas_klip_ADIRDI():
                      psfsub_dataset, # post-subtraction dataset
                      ctcal,
                      klip_params,
-                     inject_snr)
+                     inject_snr,
+                     seps=seps)
 
     # Just make sure it runs
     pass
@@ -819,17 +824,13 @@ def test_psfsub_withklipandctmeas_adi():
     # im0 = axes[0].imshow(cutout,origin='lower')
     # plt.colorbar(im0,ax=axes[0],shrink=0.8)
     # axes[0].set_title(f'Data')
-
     # im1 = axes[1].imshow(final_model,origin='lower')
     # plt.colorbar(im1,ax=axes[1],shrink=0.8)
     # axes[1].set_title('Model')
-
     # im2 = axes[2].imshow(diff,origin='lower')
     # plt.colorbar(im2,ax=axes[2],shrink=0.8)
     # axes[2].set_title('Residuals')
-
     # plt.suptitle(f'Final PSF Fit')
-
     # plt.show()    
 
     
@@ -1063,52 +1064,43 @@ def test_psfsub_withKTandCTandCrop_adi():
                                 measure_1d_core_thrupt=True,
                                 cand_locs= [pl_loc],
                                 kt_seps=[pl_loc[0]])
+
+    # # Plot Psf subtraction result
+    # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
+    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
+    #     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+    #                     [0.5,0.5],
+    #                     cval=np.nan)
+    # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+    # prihdr = fits.Header()
+    # exthdr = fits.Header()
+    # exthdr["STARLOCX"] = mock_sci[0].ext_hdr["STARLOCX"]
+    # exthdr["STARLOCY"] = mock_sci[0].ext_hdr["STARLOCY"]
+    # exthdr["MASKLOCX"] = mock_sci[0].ext_hdr["MASKLOCX"]
+    # exthdr["MASKLOCY"] = mock_sci[0].ext_hdr["MASKLOCY"]
+    # exthdr.set("LSAMNAME",'NFOV')
+    # ar_image = Image(analytical_result,
+    #                  prihdr,
+    #                  exthdr) 
+    # ar_dataset_cropped = crop(Dataset([ar_image]))
     
 
-    # Plot Psf subtraction result
-    
-    if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
-        analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
-    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
-        analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
-                        [0.5,0.5],
-                        cval=np.nan)
-    elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-        analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
-
-    prihdr = fits.Header()
-    exthdr = fits.Header()
-    exthdr["STARLOCX"] = mock_sci[0].ext_hdr["STARLOCX"]
-    exthdr["STARLOCY"] = mock_sci[0].ext_hdr["STARLOCY"]
-    exthdr["MASKLOCX"] = mock_sci[0].ext_hdr["MASKLOCX"]
-    exthdr["MASKLOCY"] = mock_sci[0].ext_hdr["MASKLOCY"]
-    exthdr.set("LSAMNAME",'NFOV')
-
-    ar_image = Image(analytical_result,
-                     prihdr,
-                     exthdr) 
-    ar_dataset_cropped = crop(Dataset([ar_image]))
-    
-
-    import matplotlib.pyplot as plt
-
-    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-    im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
-    plt.colorbar(im0,ax=axes[0],shrink=0.8)
-    axes[0].set_title(f'Output data')
-
-    im1 = axes[1].imshow(ar_dataset_cropped[0].data,origin='lower')
-    plt.colorbar(im1,ax=axes[1],shrink=0.8)
-    axes[1].set_title('Analytical result')
-
-    diff = psfsub_dataset[0].data[0] - ar_dataset_cropped[0].data
-    im2 = axes[2].imshow(diff,origin='lower')
-    plt.colorbar(im2,ax=axes[2],shrink=0.8)
-    axes[2].set_title('Difference')
-
-    plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
-
-    plt.show()    
+    # import matplotlib.pyplot as plt
+    # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    # im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
+    # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    # axes[0].set_title(f'Output data')
+    # im1 = axes[1].imshow(ar_dataset_cropped[0].data,origin='lower')
+    # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    # axes[1].set_title('Analytical result')
+    # diff = psfsub_dataset[0].data[0] - ar_dataset_cropped[0].data
+    # im2 = axes[2].imshow(diff,origin='lower')
+    # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    # axes[2].set_title('Difference')
+    # plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
+    # plt.show()    
 
     # Check that klip and ct separations are the same
     kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
@@ -1201,22 +1193,22 @@ def test_psfsub_withKTandCTandCrop_adi():
 
     diff = cutout-final_model
 
-    fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-    im0 = axes[0].imshow(cutout,origin='lower')
-    plt.colorbar(im0,ax=axes[0],shrink=0.8)
-    axes[0].set_title(f'Data')
+    # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    # im0 = axes[0].imshow(cutout,origin='lower')
+    # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    # axes[0].set_title(f'Data')
 
-    im1 = axes[1].imshow(final_model,origin='lower')
-    plt.colorbar(im1,ax=axes[1],shrink=0.8)
-    axes[1].set_title('Model')
+    # im1 = axes[1].imshow(final_model,origin='lower')
+    # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    # axes[1].set_title('Model')
 
-    im2 = axes[2].imshow(diff,origin='lower')
-    plt.colorbar(im2,ax=axes[2],shrink=0.8)
-    axes[2].set_title('Residuals')
+    # im2 = axes[2].imshow(diff,origin='lower')
+    # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    # axes[2].set_title('Residuals')
 
-    plt.suptitle(f'Final PSF Fit')
+    # plt.suptitle(f'Final PSF Fit')
 
-    plt.show()    
+    # plt.show()    
 
     
     pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0]))]
@@ -1228,22 +1220,19 @@ def test_psfsub_withKTandCTandCrop_adi():
     assert pl_counts == pytest.approx(recovered_pl_counts_ktcorrected,rel=0.01)
 
 
-
-
 if __name__ == '__main__':  
     # test_create_ct_cal()
     # test_get_closest_psf()
     # test_inject_psf()
     # test_measure_noise()
 
-    # test_meas_klip_ADI()
-    # test_meas_klip_RDI()
-    # test_meas_klip_ADIRDI()
-
+    test_meas_klip_ADI()
+    test_meas_klip_RDI()
+    test_meas_klip_ADIRDI()
     # test_compare_RDI_ADI()
 
-    test_psfsub_withklipandctmeas_adi()
-    test_psfsub_withklipandctmeas_rdi()
+    # test_psfsub_withklipandctmeas_adi()
+    # test_psfsub_withklipandctmeas_rdi()
     # test_psfsub_withKTandCTandCrop_adi()
 
     pass
