@@ -584,6 +584,10 @@ def test_meas_klip_ADI():
     for i in range(1,len(kt_adi[0])):
         assert np.all(kt_adi[1:,i,0] > kt_adi[1:,i-1,0])
 
+    # Check recovered FWHM increases with separation
+    for i in range(1,len(kt_adi[0])):
+        assert np.all(kt_adi[1:,i,1] > kt_adi[1:,i-1,1])
+
 
 def test_meas_klip_RDI():
     """Checks that KLIP throughput measurement for RDI is always between 0.8 and 1 
@@ -1281,16 +1285,16 @@ def test_psfsub_withKTandCTandCrop_adi():
 
 
 if __name__ == '__main__':  
-    test_create_ct_cal()
-    test_get_closest_psf()
-    test_inject_psf()
-    test_measure_noise()
+    # test_create_ct_cal()
+    # test_get_closest_psf()
+    # test_inject_psf()
+    # test_measure_noise()
 
     test_meas_klip_ADI()
-    test_meas_klip_RDI()
-    test_meas_klip_ADIRDI()
-    test_compare_RDI_ADI()
+    # test_meas_klip_RDI()
+    # test_meas_klip_ADIRDI()
+    # test_compare_RDI_ADI()
 
-    test_psfsub_withklipandctmeas_adi()
-    test_psfsub_withklipandctmeas_rdi()
-    test_psfsub_withKTandCTandCrop_adi()
+    # test_psfsub_withklipandctmeas_adi()
+    # test_psfsub_withklipandctmeas_rdi()
+    # test_psfsub_withKTandCTandCrop_adi()
