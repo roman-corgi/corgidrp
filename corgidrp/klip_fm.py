@@ -235,10 +235,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         
     Returns: 
         np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
-        np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
         is the number of separations sampled. Index 0 contains the separations sampled, and each following index
-        contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode 
-        truncation choice.
         contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode 
         truncation choice.
     """
@@ -560,3 +557,4 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     thrupt_arr = np.array([[(sep,sep) for sep in seps],*[[(thrupts[kk][ss],outfwhms[kk][ss]) for ss in range(len(seps))] for kk in range(len(klip_params['numbasis']))]])
 
     return thrupt_arr
+
