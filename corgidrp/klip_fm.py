@@ -234,9 +234,10 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
         
     Returns: 
-        np.array: array of shape (N,n_seps), where N is 1 + the number of KL mode truncation choices and n_seps 
+        np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
         is the number of separations sampled. Index 0 contains the separations sampled, and each following index
-        contains the KLIP throughput measured at each separation for each KL mode truncation choice.
+        contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode 
+        truncation choice.
     """
     
     if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
@@ -268,6 +269,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         pas = np.linspace(0.,360.,n_pas+1)[:-1] # Some linear spacing between the IWA & OWA, around 5x the fwhm
 
     thrupts = []
+    outfwhms = []
     for k,klmode in enumerate(klip_params['numbasis']):
         
         sci_dataset = sci_dataset_in.copy()
@@ -378,13 +380,13 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         
         # # Plot Psf subtraction with fakes
         # if klip_params['mode'] == 'RDI':
-        #     analytical_result = rotate(sci_dataset[0].data - ref_dataset[0].data,-rolls[0],reshape=False,cval=np.nan)
+        #     analytical_result = rotate(sci_dataset[0].data - ref_dataset_in[0].data,-rolls[0],reshape=False,cval=np.nan)
         # elif klip_params['mode'] == 'ADI':
         #     analytical_result = shift((rotate(sci_dataset[0].data - sci_dataset[1].data,-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - sci_dataset[0].data,-rolls[1],reshape=False,cval=0)) / 2,
         #                     [0.5,0.5],
         #                     cval=np.nan)
         # elif klip_params['mode'] == 'ADI+RDI':
-        #     analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+        #     analytical_result = (rotate(sci_dataset[0].data - (sci_dataset[1].data/2+ref_dataset_in[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(sci_dataset[1].data - (sci_dataset[0].data/2+ref_dataset_in[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
 
         # import matplotlib.pyplot as plt
         # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
@@ -409,6 +411,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # this_klmode_sumin = []
         # this_klmode_influxs = []
         # this_klmode_outfluxs = []
+        this_klmode_infwhms = []
+        this_klmode_outfwhms = []
         this_klmode_thrupts = []
         for ll,loc in enumerate(this_klmode_seppas[0]):
             
@@ -510,6 +514,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             # this_klmode_sumin.append(np.sum(psf_model))
             # this_klmode_influxs.append(preklip_counts)
             # this_klmode_outfluxs.append(postklip_counts)
+            this_klmode_infwhms.append(pre_fwhm)
+            this_klmode_outfwhms.append(post_fwhm)
             this_klmode_thrupts.append(thrupt)
 
         seppas_arr = np.array(this_klmode_seppas[0])
@@ -533,6 +539,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # plt.show()
 
         mean_thrupts = []
+        mean_outfwhms = []
         # TODO: If no measurements available for a given sep
         # show warning and add np.nan 
         for sep in np.unique(seps_arr):
@@ -540,9 +547,14 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             mean_thrupt = np.nanmean(this_sep_thrupts)
             mean_thrupts.append(mean_thrupt)
 
-        thrupts.append(mean_thrupts)
+            this_sep_outfwhms = np.where(seps_arr==sep,this_klmode_outfwhms,np.nan)
+            mean_outfwhm = np.nanmean(this_sep_outfwhms)
+            mean_outfwhms.append(mean_outfwhm)
 
-    thrupt_arr = np.array([seps,*thrupts])
+        thrupts.append(mean_thrupts)
+        outfwhms.append(mean_outfwhms)
+
+    thrupt_arr = np.array([[(sep,sep) for sep in seps],*[[(thrupts[kk][ss],outfwhms[kk][ss]) for ss in range(len(seps))] for kk in range(len(klip_params['numbasis']))]])
 
     return thrupt_arr
 

@@ -532,6 +532,30 @@ def test_meas_klip_ADI():
                                 do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
+    
+    # # Plot Psf subtraction result
+    # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
+    #     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
+    # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI':
+    #     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
+    #                     [0.5,0.5],
+    #                     cval=np.nan)
+    # elif psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'ADI+RDI':
+    #     analytical_result = (rotate(mock_sci[0].data - (mock_sci[1].data/2+mock_ref[0].data/2),-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - (mock_sci[0].data/2+mock_ref[0].data/2),-rolls[1],reshape=False,cval=0)) / 2
+    # import matplotlib.pyplot as plt
+    # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
+    # im0 = axes[0].imshow(psfsub_dataset[0].data[0],origin='lower')
+    # plt.colorbar(im0,ax=axes[0],shrink=0.8)
+    # axes[0].set_title(f'Output data')
+    # im1 = axes[1].imshow(analytical_result,origin='lower')
+    # plt.colorbar(im1,ax=axes[1],shrink=0.8)
+    # axes[1].set_title('Analytical result')
+    # diff = psfsub_dataset[0].data[0] - analytical_result
+    # im2 = axes[2].imshow(diff,origin='lower')
+    # plt.colorbar(im2,ax=axes[2],shrink=0.8)
+    # axes[2].set_title('Difference')
+    # plt.suptitle(f'PSF Subtraction {psfsub_dataset[0].pri_hdr["KLIP_ALG"]} ({psfsub_dataset[0].ext_hdr["KLMODE0"]} KL Modes)')
+    # plt.show()   
 
     klip_params['mode'] = mode
     kt_adi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
@@ -551,14 +575,14 @@ def test_meas_klip_ADI():
     # plt.show()
 
     # Check KL thrupt is <= 1 within noise tolerance
-    assert np.all(kt_adi[1:] < max_thrupt_tolerance)
+    assert np.all(kt_adi[1:,:,0] < max_thrupt_tolerance)
 
     # Check KL thrupt is > 0
-    assert np.all(kt_adi[1:] > 0.)
+    assert np.all(kt_adi[1:,:,0] > 0.)
 
     # Check KL thrupt increases with separation
     for i in range(1,len(kt_adi[0])):
-        assert np.all(kt_adi[1:,i] > kt_adi[1:,i-1])
+        assert np.all(kt_adi[1:,i,0] > kt_adi[1:,i-1,0])
 
 
 def test_meas_klip_RDI():
@@ -626,10 +650,10 @@ def test_meas_klip_RDI():
     # plt.show()
 
     # Check KL thrupt is <= 1 within noise tolerance
-    assert np.all(kt_rdi[1:] < max_thrupt_tolerance)
+    assert np.all(kt_rdi[1:,:,0] < max_thrupt_tolerance)
 
     # Check KL thrupt > 0.8
-    assert np.all(kt_rdi[1:] > 0.8)
+    assert np.all(kt_rdi[1:,:,0] > 0.8)
 
 
 def test_meas_klip_ADIRDI():
@@ -673,10 +697,10 @@ def test_meas_klip_ADIRDI():
                      seps=seps)
 
     # Check KL thrupt is <= 1 within noise tolerance
-    assert np.all(kt_adirdi[1:] < max_thrupt_tolerance)
+    assert np.all(kt_adirdi[1:,:,0] < max_thrupt_tolerance)
 
     # Check KL thrupt is > 0
-    assert np.all(kt_adirdi[1:] > 0.)
+    assert np.all(kt_adirdi[1:,:,0] > 0.)
 
 
 def test_compare_RDI_ADI():
@@ -695,8 +719,8 @@ def test_compare_RDI_ADI():
     # plt.show()
 
     # Check that ADI thrupt < RDI thrupt
-    mean_adi = np.mean(kt_adi[1:])
-    mean_rdi = np.mean(kt_rdi[1:])
+    mean_adi = np.mean(kt_adi[1:,:,0])
+    mean_rdi = np.mean(kt_rdi[1:,:,0])
 
     assert mean_adi < mean_rdi
 
@@ -769,7 +793,7 @@ def test_psfsub_withklipandctmeas_adi():
 
     # Check that klip and ct separations are the same
     kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
-    kt_seps = kt[0]
+    kt_seps = kt[0,:,0]
 
     # import matplotlib.pyplot as plt
     # fig,ax = plt.subplots(figsize=(6,4))
@@ -870,7 +894,7 @@ def test_psfsub_withklipandctmeas_adi():
     # plt.show()    
 
     
-    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0]))]
+    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0])),0]
     
     pl_counts = np.pi * pl_amp * fwhm_pix**2 / 4. / np.log(2.)
     recovered_pl_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
@@ -942,7 +966,7 @@ def test_psfsub_withklipandctmeas_rdi():
 
     # Check that klip and ct separations are the same
     kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
-    kt_seps = kt[0]
+    kt_seps = kt[0,:,0]
 
     # import matplotlib.pyplot as plt
     # fig,ax = plt.subplots(figsize=(6,4))
@@ -1061,7 +1085,7 @@ def test_psfsub_withklipandctmeas_rdi():
     # plt.suptitle(f'Final PSF Fit')
     # plt.show()    
     
-    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0]))]
+    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0])),0]
     
     pl_counts = np.pi * pl_amp * fwhm_pix**2 / 4. / np.log(2.)
     recovered_pl_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
@@ -1147,7 +1171,7 @@ def test_psfsub_withKTandCTandCrop_adi():
 
     # Check that klip and ct separations are the same
     kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
-    kt_seps = kt[0]
+    kt_seps = kt[0,:,0]
 
     # import matplotlib.pyplot as plt
     # fig,ax = plt.subplots(figsize=(6,4))
@@ -1247,7 +1271,7 @@ def test_psfsub_withKTandCTandCrop_adi():
     # plt.suptitle(f'Final PSF Fit')
     # plt.show()    
 
-    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0]))]
+    pl_kt = kt[1,np.argmin(np.abs(kt_seps-pl_loc[0])),0]
     
     pl_counts = np.pi * pl_amp * fwhm_pix**2 / 4. / np.log(2.)
     recovered_pl_counts = np.pi * postklip_peak * post_fwhm**2 / 4. / np.log(2.)
@@ -1257,16 +1281,16 @@ def test_psfsub_withKTandCTandCrop_adi():
 
 
 if __name__ == '__main__':  
-    # test_create_ct_cal()
-    # test_get_closest_psf()
-    # test_inject_psf()
-    # test_measure_noise()
+    test_create_ct_cal()
+    test_get_closest_psf()
+    test_inject_psf()
+    test_measure_noise()
 
     test_meas_klip_ADI()
     test_meas_klip_RDI()
     test_meas_klip_ADIRDI()
-    # test_compare_RDI_ADI()
+    test_compare_RDI_ADI()
 
-    # test_psfsub_withklipandctmeas_adi()
-    # test_psfsub_withklipandctmeas_rdi()
-    # test_psfsub_withKTandCTandCrop_adi()
+    test_psfsub_withklipandctmeas_adi()
+    test_psfsub_withklipandctmeas_rdi()
+    test_psfsub_withKTandCTandCrop_adi()

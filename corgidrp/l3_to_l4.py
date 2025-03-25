@@ -620,7 +620,7 @@ def do_psf_subtraction(input_dataset,
         
         # Use the same separations as for KLIP throughput
         if measure_klip_thrupt:
-            seps = dataset_out[0].hdu_list['KL_THRU'].data[0]
+            seps = dataset_out[0].hdu_list['KL_THRU'].data[0,:,0]
         else:
             seps = np.array([5.,10.,15.,20.,25.,30.,35.])
 
