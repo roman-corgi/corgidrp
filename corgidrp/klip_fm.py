@@ -245,7 +245,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         raise NotImplementedError("Only band 1 observations using CFAMNAME 1F are currently configured.")
 
     d = 2.36 #m  
-    pixscale_mas = 0.0218 * 1000 # mas
+    pixscale_mas = sci_dataset_in[0].ext_hdr['PLTSCALE']
     fwhm_mas = 1.22 * lam / d * 206265. * 1000.
     fwhm_pix = fwhm_mas / pixscale_mas  
     res_elem = sep_spacing * fwhm_pix # pix
@@ -405,11 +405,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # plt.show()
         
         # After psf subtraction
-        this_klmode_peakin = []
-        this_klmode_peakout = []
-        this_klmode_sumin = []
-        this_klmode_influxs = []
-        this_klmode_outfluxs = []
+        # this_klmode_peakin = []
+        # this_klmode_peakout = []
+        # this_klmode_sumin = []
+        # this_klmode_influxs = []
+        # this_klmode_outfluxs = []
         this_klmode_thrupts = []
         for ll,loc in enumerate(this_klmode_seppas[0]):
             
@@ -506,11 +506,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             
             thrupt = postklip_counts/preklip_counts
 
-            this_klmode_peakin.append(preklip_peak)
-            this_klmode_peakout.append(postklip_peak)
-            this_klmode_sumin.append(np.sum(psf_model))
-            this_klmode_influxs.append(preklip_counts)
-            this_klmode_outfluxs.append(postklip_counts)
+            # this_klmode_peakin.append(preklip_peak)
+            # this_klmode_peakout.append(postklip_peak)
+            # this_klmode_sumin.append(np.sum(psf_model))
+            # this_klmode_influxs.append(preklip_counts)
+            # this_klmode_outfluxs.append(postklip_counts)
             this_klmode_thrupts.append(thrupt)
 
         seppas_arr = np.array(this_klmode_seppas[0])
