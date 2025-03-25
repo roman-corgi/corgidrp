@@ -1897,21 +1897,13 @@ class CoreThroughputCalibration(Image):
         x_interp_list = []
         y_interp_list = []
         if method.lower() == 'nearest-polar':
-            # Agreeement for this nearest method is that distances are binned
-            # at 1/10th of a pixel. This will be unnecessary as soon as there's
-            # any other interpolation method than the 'nearest' one
-            x_grid = np.round(10*x_grid)/10
-            y_grid = np.round(10*y_grid)/10
-            radii = np.sqrt(x_grid**2 + y_grid**2)
-            # Azimuths
-            azimuths = np.arctan2(y_grid, x_grid)
-            x_cor = np.round(10*x_cor)/10
-            y_cor = np.round(10*y_cor)/10
-            radius_cor = np.sqrt(x_cor**2 + y_cor**2)
             for i_psf in range(len(x_cor)):
-                # Find the nearest radial position in the CT file (argmin() returns the first occurence only)
-                diff_r_abs = np.abs(r_cor[i_psf] - radii)
-                # Agreement 
+                # Agreeement for this nearest method is that radial distances are
+                # binned at 1/10th of a pixel. This will be unnecessary as soon as
+                # there's any other interpolation method than the 'nearest' one.
+                # Find the nearest radial position in the CT file (argmin()
+                # returns the first occurence only)
+                diff_r_abs = np.round(10*np.abs(r_cor[i_psf] - radii)/10)
                 idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
                 # If there's more than one case, select that one with the
                 # smallest angular distance
@@ -1923,7 +1915,7 @@ class CoreThroughputCalibration(Image):
                     az_cor = np.arctan2(y_cor[i_psf], x_cor[i_psf])
                     # Flatten into a 1-D array
                     diff_az_abs = np.abs(az_cor - az_grid).transpose()[0]
-                    # Consistent with the binning of a fraction of a pixel
+                    # Azimuth binning consistent with the binning of the radial distance
                     bin_az_fac = 1/10/r_cor[i_psf]
                     diff_az_abs = bin_az_fac * np.round(diff_az_abs/bin_az_fac)
                     # Closest angular location to the target location within equal radius
