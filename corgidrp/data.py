@@ -502,6 +502,10 @@ class Image():
             new_img = copy.deepcopy(self)
         else:
             new_img = copy.copy(self)
+            # copy the hdu_list and hdu_names list, but not their pointers
+            new_img.hdu_list = self.hdu_list.copy()
+            new_img.hdu_names = copy.copy(self.hdu_names)
+
         # update DRP version tracking
         new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
