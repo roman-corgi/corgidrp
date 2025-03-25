@@ -130,7 +130,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     del out_frames_data, out_frames_err, out_frames_dq, out_frames_bias
 
     # Make a copy of the input dataset to operate on
-    output_dataset = input_dataset.copy()
+    output_dataset = input_dataset.copy(copy_data=False)
 
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
