@@ -2684,7 +2684,7 @@ def create_flux_image(
             throughput <= 1).
         color_cor (float): Another dimensionless factor if you need it. 
         filter (string): CFAM filter name used.
-        fpamname (string) FPAM name used.
+        fpamname (string): FPAM name used.
         target_name (string): Star target observed.
         fsm_x (float): X shift in mas from the image center.
         fsm_y (float): Y shift in mas from the image center.

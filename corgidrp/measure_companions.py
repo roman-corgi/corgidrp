@@ -200,7 +200,7 @@ def measure_counts(image, phot_method, initial_xy, **kwargs):
         image (corgidrp.data.Image): Input image for photometry.
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
         initial_xy (tuple or None): Initial (x, y) guess for centroiding.
-        kwargs(dict): Arbitrary keyword arguments passed directly to the photometry method
+        kwargs (dict): Arbitrary keyword arguments passed directly to the photometry method
             (e.g., fluxcal.phot_by_gauss2d_fit or fluxcal.aper_phot).
     
     Returns:
