@@ -27,7 +27,7 @@ ROLL_ANGLES = np.linspace(0, 45, NUM_IMAGES)
 NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
 CROPPED_IMAGE_SIZE = (200, 200)
-PLOT_RESULTS = True
+PLOT_RESULTS = False
 LOAD_FROM_DISK = False  # Flag to control whether to load mocks from disk (if available)
 KL_MODE = -1            # Use the last KL_MODE
 VERBOSE = True
@@ -533,7 +533,7 @@ def test_robustness_high_noise():
 if __name__ == "__main__":
     # Run tests when executing the file directly.
     print("Running test: non-forward modeling")
-    #test_measure_companions_non_forward_modeling()
+    test_measure_companions_non_forward_modeling()
     print("Non-forward modeling test passed.")
 
     print("Running test: forward modeling")
