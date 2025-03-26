@@ -28,15 +28,17 @@ NUMBASIS = [1, 4, 8]
 FULL_SIZE_IMAGE = (1024, 1024)
 CROPPED_IMAGE_SIZE = (200, 200)
 PLOT_RESULTS = True
-LOAD_FROM_DISK = True  # Flag to control whether to load mocks from disk (if available)
+LOAD_FROM_DISK = False  # Flag to control whether to load mocks from disk (if available)
+KL_MODE = -1            # Use the last KL_MODE
+VERBOSE = True
 
 # Define a list of companions.
 # Each dictionary defines the companion's sep (in pixels), position angle (degrees counter-
 # clockwise from north), and a scaling factor on the host star counts. Make sep between IWA 
 # (~6.5 pix) and OWA (~20.6 pix)
 COMPANION_PARAMS = [
-    {"sep_pix": 40, "pa": 45, "counts_scale": 1/3},
-    {"sep_pix": 50, "pa": 120, "counts_scale": 1/4}  
+    {"sep_pix": 13, "pa": 45, "counts_scale": 1/3},
+    {"sep_pix": 18, "pa": 120, "counts_scale": 1/4}  
 ]
 
 # Use a relative path for OUT_DIR
@@ -144,11 +146,15 @@ def generate_test_data(out_dir):
     x, y, ct = ct_cal.ct_excam
     max_index = np.argmax(ct)
     ct_cal_counts_ref_mask_far, _, _ = fluxcal.aper_phot(dataset_ct[int(max_index)], **PHOT_KWARGS_COMMON)
+    if VERBOSE == True:
+        print("Reference PSF with maximum core throughput counts: ", ct_cal_counts_ref_mask_far)
 
     companion_throughput_ratios = []
     for i, comp in enumerate(COMPANION_PARAMS):
         separation, idx, throughput = measure_companions.lookup_core_throughput(ct_cal, comp["sep_pix"])
         ct_cal_counts_ref_mask_close, _, _ = fluxcal.aper_phot(dataset_ct[int(idx)], **PHOT_KWARGS_COMMON)
+        if VERBOSE == True:
+            print("Reference PSF nearest companion ", i, " location counts: ", ct_cal_counts_ref_mask_close)
 
         location_throughput_ratio = ct_cal_counts_ref_mask_close / ct_cal_counts_ref_mask_far
         companion_throughput_ratios.append(location_throughput_ratio)
@@ -184,6 +190,12 @@ def generate_test_data(out_dir):
     host_star_counts, _, _ = fluxcal.aper_phot(ref_star_dataset[0], **PHOT_KWARGS_COMMON)
     host_star_mag = l4_to_tda.determine_app_mag(ref_star_dataset[0], HOST_STAR)
     fluxcal_factor = get_fluxcal_factor(ref_star_dataset[0], PHOT_METHOD, PHOT_ARGS, FLUX_OR_IRR)
+    if VERBOSE == True:
+        print("Host star unocculted counts: ", host_star_counts)
+        i = 0
+        for companion in COMPANION_PARAMS:
+            print("Companion ", i, " unocculted counts: ", host_star_counts * companion["counts_scale"])
+            i+=1
 
     # 4) Generate coronagraphic frames with multiple companions.
     # For multiple companions, pass lists for sep, PA and counts.
@@ -213,8 +225,9 @@ def generate_test_data(out_dir):
         numbasis=NUMBASIS,
         do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE
     )
-    psf_sub_image = measure_companions.extract_single_frame(psf_sub_dataset[0], frame_index=0)
-    psf_sub_image.data[psf_sub_image.data < 0] = 0
+    psf_sub_image = measure_companions.extract_single_frame(psf_sub_dataset[0], 
+                                                            frame_index=KL_MODE)
+
     psf_sub_image = Image(data_or_filepath=psf_sub_image.data,
                           pri_hdr=psf_sub_image.pri_hdr,
                           ext_hdr=psf_sub_image.ext_hdr)
@@ -336,8 +349,9 @@ def _common_measure_companions_test(forward_model_flag):
         forward_model=forward_model_flag,
         numbasis=NUMBASIS,
         output_dir=OUT_DIR,
-        verbose=False,
-        plot_results=PLOT_RESULTS
+        verbose=VERBOSE,
+        plot_results=PLOT_RESULTS,
+        kl_mode_idx = KL_MODE
     )
     
     # Expect the number of detected companions to equal the number injected.
@@ -356,7 +370,6 @@ def _common_measure_companions_test(forward_model_flag):
         expected_y = star_loc_cropped[1] + dy
         measured_x = result_table['x'][i]
         measured_y = result_table['y'][i]
-        print("locs", expected_x, expected_y, measured_x, measured_y)
         assert abs(measured_x - expected_x) < 5, f"Companion {i} x-coordinate off: expected {expected_x}, got {measured_x}"
         assert abs(measured_y - expected_y) < 5, f"Companion {i} y-coordinate off: expected {expected_y}, got {measured_y}"
         

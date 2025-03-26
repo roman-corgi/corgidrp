@@ -557,4 +557,3 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     thrupt_arr = np.array([[(sep,sep) for sep in seps],*[[(thrupts[kk][ss],outfwhms[kk][ss]) for ss in range(len(seps))] for kk in range(len(klip_params['numbasis']))]])
 
     return thrupt_arr
-

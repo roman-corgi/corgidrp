@@ -29,7 +29,8 @@ def measure_companions(
     numthreads=1,
     output_dir=".",
     verbose=True,
-    plot_results=False
+    plot_results=False,
+    kl_mode_idx=-1
 ):
     """
     Measure companion properties in a coronagraphic image and return a table with companion position, flux ratio, and apparent magnitude.
@@ -54,6 +55,8 @@ def measure_companions(
         output_dir (str): Output directory path for forward-modeling results.
         verbose (bool): Flag to enable verbose output.
         plot_results (bool): Whether to enable plotting.
+        kl_mode_idx (int): Index of the KL mode to use (must match the one used for PSF subtraction).
+            Defaults to the last KL mode.
     
     Returns:
         result_table (astropy.table.Table): Table containing companion measurements.
@@ -80,6 +83,7 @@ def measure_companions(
     results = []
 
     # Process each companion by comparing positions in the PSF-subtracted and coronagraphic images.
+    i = 0
     for comp_sub, comp_coron in zip(companions, companions_coron):
         x_psf, y_psf = comp_sub['x'], comp_sub['y']
         x_coron, y_coron = comp_coron['x'], comp_coron['y']
@@ -100,11 +104,15 @@ def measure_companions(
             err=getattr(nearest_frame, 'err', None)
         )
 
-        # Measure counts in the PSF-subtracted image at the companion location.
-        psf_sub_counts, _ = measure_counts(psf_sub_image, phot_method, (x_psf, y_psf), **photometry_kwargs)
         # Measure counts in the original coronagraphic image at the companion location.
         companion_pre_sub_counts, _ = measure_counts(coronagraphic_dataset[0], phot_method, (x_coron, y_coron), **photometry_kwargs)
+        # Measure counts in the PSF-subtracted image at the companion location.
+        psf_sub_counts, _ = measure_counts(psf_sub_image, phot_method, (x_psf, y_psf), **photometry_kwargs)
         psf_sub_efficiency = psf_sub_counts / companion_pre_sub_counts
+        if verbose == True:
+            print("Companion ", i, " coronagraphic, non-PSF-subtracted counts: ", companion_pre_sub_counts)
+            print("Companion ", i, " coronagraphic, PSF-subtracted counts: ", psf_sub_counts)
+            print("Input companion ", i, "PSF sub efficiency: ", psf_sub_efficiency)
 
         # Use forward-modeling or a simplified subtraction approach to model the PSF and do PSF-subtraction.
         if forward_model:
@@ -112,16 +120,23 @@ def measure_companions(
             kl_value, ct_value, modeled_image = forward_model_psf(
                 coronagraphic_dataset, ref_star_dataset, ct_cal, scaled_star_psf,
                 guesssep, guesspa, numbasis=numbasis, nwalkers=nwalkers, nburn=nburn,
-                nsteps=nsteps, numthreads=numthreads, outputdir=output_dir, plot_results=plot_results
+                nsteps=nsteps, numthreads=numthreads, outputdir=output_dir, plot_results=plot_results,
+                kl_mode_idx=kl_mode_idx
             )
             fm_counts_uncorrected, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
             # correct for algorithmic efficiency
-            fm_counts = fm_counts_uncorrected / kl_value
+            model_counts = fm_counts_uncorrected / kl_value
+            if verbose == True:
+                print("Host star if it was at companion ", i, " location forward modeled counts uncorrected: ", fm_counts_uncorrected)
+                print("Host star if it was at companion ", i, " location forward modeled counts corrected: ", model_counts)
+                print("Recovered companion ", i, " PSF sub efficiency: ", kl_value)
         else:
             modeled_image = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
-            fm_counts, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
+            model_counts, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
+            if verbose == True:
+                print("Companion ", i, " simplified model counts corrected: ", model_counts)
         
-        companion_host_ratio = psf_sub_counts / fm_counts
+        companion_host_ratio = psf_sub_counts / model_counts
 
         # Calculate the apparent magnitude based on the host star magnitude or flux calibration.
         if host_star_in_calspec:
@@ -137,8 +152,9 @@ def measure_companions(
         # Append the results for this companion.
         results.append((
             comp_sub['id'], x_psf, y_psf,
-            psf_sub_counts, fm_counts, companion_host_ratio, companion_mag
+            psf_sub_counts, model_counts, companion_host_ratio, companion_mag
         ))
+        i+=1
 
     # Return the results as an Astropy Table.
     return Table(
@@ -308,7 +324,8 @@ def forward_model_psf(
     platescale_err=0.02,
     pa_offset=0.0,
     pa_uncertainty=0.1,
-    plot_results=False
+    plot_results=False,
+    kl_mode_idx=-1  # default to the last KL mode
 ):
     """
     Forward model the PSF for a companion by injecting a normalized PSF into each frame and performing KLIP subtraction.
@@ -342,6 +359,7 @@ def forward_model_psf(
         pa_offset (float): Position angle offset.
         pa_uncertainty (float): Uncertainty in the position angle.
         plot_results (bool): Flag to enable plotting of forward modeling results.
+        kl_mode_idx (int): Index of the KL mode to use (must match the one used for PSF subtraction).
     
     Returns:
         kl_value (float): KLIP throughput value extracted from the subtraction.
@@ -383,17 +401,29 @@ def forward_model_psf(
         measure_1d_core_thrupt=True
     )
     # Get the final frame from the subtraction.
-    klip_data = fm_psfsub[0].data[-1]
+    klip_data = fm_psfsub[0].data[kl_mode_idx]
     klip_thru_hdu = fm_psfsub[0].hdu_list['KL_THRU']
     klip_thru_data = klip_thru_hdu.data
     print("KL throughput", klip_thru_data)
     # Find the index of the closest separation value
     closest_idx = np.abs(klip_thru_data[0] - guesssep).argmin()
 
-    # Get the corresponding throughput from the last row
-    kl_throughput_value = klip_thru_data[-1, closest_idx]
+    # Get the corresponding algorithm throughput, returned data is
+    # (N, n_seps, 2) where:
+    # N is 1 plus the number of KL mode truncation choices (the extra “1” is for the reference separations).
+    # n_seps is the number of separations sampled.
+    # The last dimension (of size 2) holds the pair: (throughput, output FWHM) for each separation.
+    separations = klip_thru_data[0, :, 0]  # extract separation values from the header row
+    # Find the index of the separation closest to desired_sep:
+    closest_idx = np.argmin(np.abs(separations - guesssep))
+    kl_throughput_value = klip_thru_data[kl_mode_idx, closest_idx, 0]
+
     # TO DO: figure out what to do about core throughput, if anything
     ct_value = 1                    # Placeholder value for core throughput.
+    ct_data = fm_psfsub[0].data[kl_mode_idx]
+    ct_hdu = fm_psfsub[0].hdu_list['CT_THRU']
+    ct_data = ct_hdu.data
+    print("CT throughput", ct_data)
     klip_image = Image(klip_data, pri_hdr=fm_psfsub[0].pri_hdr, ext_hdr=fm_psfsub[0].ext_hdr)
 
     if plot_results == True:
@@ -490,10 +520,7 @@ def plot_dataset(dataset, title_prefix, cmap='plasma'):
     """
     Plots frames from a dataset in a grid layout using ZScale normalization.
     
-    For each frame, the ZScale algorithm determines suitable limits (vmin and vmax)
-    to enhance the contrast in the image, similar to ds9's zscale.
-    
-    This function accepts either:
+    Function accepts either:
       - A Dataset object with a 'frames' attribute,
       - A list or tuple of frame objects (each having a 'data' attribute), or
       - A single frame object.
