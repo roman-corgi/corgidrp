@@ -490,7 +490,7 @@ def test_background_effect(tmp_path):
     # The overall OD should be similar, within a small tolerance.
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
-
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -574,6 +574,7 @@ def main():
     #run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
 
     print("All tests PASSED")
+'''
 
 if __name__ == "__main__":
     main()
