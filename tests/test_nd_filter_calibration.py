@@ -551,7 +551,7 @@ def test_calculate_od_at_new_location(output_dir):
         f"interpolated OD={interpolated_od}"
     )
 
-
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -641,4 +641,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+'''
