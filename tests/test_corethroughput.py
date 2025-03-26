@@ -577,6 +577,7 @@ def test_ct_interp():
     
     assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
 
+    print('Tests about CT interpolation passed')
 
 def test_get_1d_ct():
     """Test that corethroughput.get_1d_ct() produces an array of the correct 
@@ -885,5 +886,6 @@ if __name__ == '__main__':
     test_fpm_pos()
     test_cal_file()
     test_ct_interp()
+    test_get_1d_ct()
     test_ct_map()
     test_psf_interp()
