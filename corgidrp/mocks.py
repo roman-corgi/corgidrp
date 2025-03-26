@@ -3239,11 +3239,13 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
 
     x_arr = []
     y_arr = []
+    r_arr = []
 
     for x in np.linspace(cenx-(nx-1)/2,cenx+(nx-1)/2,nx):
         for y in np.linspace(ceny-(ny-1)/2,ceny+(ny-1)/2,ny):
             x_arr.append(x)
             y_arr.append(y)
+            r_arr.append(np.sqrt((x - cenx)**2 + (y - ceny)**2))
     x_arr = np.array(x_arr)
     y_arr = np.array(y_arr)
 
@@ -3260,10 +3262,11 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
         imshape = (psfsize,psfsize)
 
     psf = gaussian_array(array_shape=imshape,sigma=sig_pix,amp=1.,xoffset=0.,yoffset=0.)
+    scale_factors = np.interp(r_arr, [0, np.max(r_arr)], [1, 0.01]) # throughput falls off linearly radially
 
     psf_cube = np.ones((n_psfs,*imshape))
     psf_cube *= psf
-    amps = np.arange(1,len(psf_cube)+1)
+    amps = scale_factors
     psf_cube = np.array([psf_cube[i] * amps[i] for i in range(len(psf_cube))])
 
     err_cube = np.zeros_like(psf_cube)
@@ -3271,7 +3274,7 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
     dq_cube = np.zeros_like(psf_cube)
     dq_hdr = fits.Header()
 
-    cts = np.linspace(1.,0.01,len(x_arr))
+    cts = scale_factors
     ct_excam = np.array([x_arr,y_arr,cts])
     ct_hdr = fits.Header()
     ct_hdu_list = [fits.ImageHDU(data=ct_excam, header=ct_hdr, name='CTEXCAM')]
@@ -3884,10 +3887,10 @@ def create_mock_ct_dataset_and_cal_file(
     exthd['DRPVERSN'] = corgidrp.__version__
     exthd['CFAMNAME'] = cfam_name
 
-    exthd['FPAM_H'] = 6854
-    exthd['FPAM_V'] = 22524
-    exthd['FSAM_H'] = 29471
-    exthd['FSAM_V'] = 12120
+    exthd['FPAM_H'] = 1
+    exthd['FPAM_V'] = 1
+    exthd['FSAM_H'] = 1
+    exthd['FSAM_V'] = 1
 
     exthd_pupil = exthd.copy()
     exthd_pupil['DPAMNAME'] = 'PUPIL'

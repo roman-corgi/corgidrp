@@ -8,20 +8,21 @@ import corgidrp.l4_to_tda as l4_to_tda
 import corgidrp.l3_to_l4 as l3_to_l4
 import matplotlib.pyplot as plt
 from astropy.visualization import ZScaleInterval, ImageNormalize
+import pyklip.fakes
 
 
 def measure_companions(
-    coronagraphic_dataset,
-    ref_star_dataset,
+    host_star_image,
     psf_sub_image,
-    ref_psf_min_mask_effect,
     ct_cal,
-    FpamFsamCal,
+    fpam_fsam_cal,
     phot_method='aperture',
     photometry_kwargs=None,
     fluxcal_factor=None,
     host_star_in_calspec=True,
     forward_model=False,
+    coronagraphic_dataset=None,
+    refstar_dataset=None,
     numbasis=[1, 2],
     nwalkers=10,
     nburn=5,
@@ -30,16 +31,16 @@ def measure_companions(
     output_dir=".",
     verbose=True,
     plot_results=False,
-    kl_mode_idx=-1
+    kl_mode_idx=-1,
+    cand_locs=None
 ):
     """
     Measure companion properties in a coronagraphic image and return a table with companion position, flux ratio, and apparent magnitude.
     
     Args:
-        coronagraphic_dataset (corgidrp.data.Dataset): Dataset containing coronagraphic images.
-        ref_star_dataset (corgidrp.data.Dataset): Dataset containing reference star images.
+
+        host_star_image (corgidrp.data.Image): Unocculted 2-D image of the host star (corrected for ND transmission)
         psf_sub_image (corgidrp.data.Image): PSF-subtracted image with companions.
-        ref_psf_min_mask_effect (corgidrp.data.Image): Reference PSF image with minimal mask effect.
         ct_cal (corgidrp.data.CoreThroughputCalibration): Core throughput calibration data.
         FpamFsamCal (corgidrp.Data.FpamFsamCal): Transformation calibration data.
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
@@ -47,6 +48,8 @@ def measure_companions(
         fluxcal_factor (corgidrp.Data.FluxcalFactor): Flux calibration factor object.
         host_star_in_calspec (bool): Flag indicating whether to use host star magnitude from calspec.
         forward_model (bool): Flag to enable forward-modeling for flux estimation.
+        coronagraphic_dataset (corgidrp.data.Dataset): Dataset containing coronagraphic images.
+        refstar_dataset (corgidrp.data.Dataset): RDI reference star dataset for PSF subtraction
         numbasis (list): List of KLIP modes to retain.
         nwalkers (int): Number of MCMC walkers for forward-modeling.
         nburn (int): Number of burn-in steps for MCMC.
@@ -57,6 +60,9 @@ def measure_companions(
         plot_results (bool): Whether to enable plotting.
         kl_mode_idx (int): Index of the KL mode to use (must match the one used for PSF subtraction).
             Defaults to the last KL mode.
+        cand_locs (list of tuples, optional): Locations of known off-axis sources to measure flux. 
+            Each tuple should be of the format (sep_pix, pa_degrees). If not, the function
+            will look in the header for detectios from l4_to_tda.find_source 
     
     Returns:
         result_table (astropy.table.Table): Table containing companion measurements.
@@ -66,81 +72,117 @@ def measure_companions(
 
     # Measure counts of the host star and reference PSF from the provided images.
     # TO DO: correct for ND filter here
-    host_star_counts, _ = measure_counts(ref_star_dataset[0], phot_method, None, **photometry_kwargs)
-    reference_psf_counts, _ = measure_counts(ref_psf_min_mask_effect, phot_method, None, **photometry_kwargs)
-    host_to_ref_psf_ratio = host_star_counts / reference_psf_counts
-
-    # Extract companion positions from the PSF-subtracted image and coronagraphic image headers.
-    companions = parse_companions(psf_sub_image.ext_hdr)
-    companions_coron = parse_companions(coronagraphic_dataset[0].ext_hdr)
+    guess_index = np.unravel_index(np.nanargmax(host_star_image.data), host_star_image.data.shape)
+    host_star_peakflux, host_star_fwhm, _, _ = pyklip.fakes.gaussfit2d(host_star_image.data, guess_index[1], guess_index[0], searchrad=7, guessfwhm=3, 
+                                                        guesspeak=np.nanmax(host_star_image.data), refinefit=True)
+    # host_star_counts, _ = measure_counts(ref_star_dataset[0], phot_method, None, **photometry_kwargs)
+    _, _, ct = ct_cal.ct_excam
+    max_index = np.argmax(ct)
+    ct_max_frame = ct_cal.data[int(max_index)]
+    guess_index = np.unravel_index(np.nanargmax(ct_max_frame), ct_max_frame.shape)
+    ct_psf_peakflux, ct_psf_fwhm, _, _ = pyklip.fakes.gaussfit2d(ct_max_frame, guess_index[1], guess_index[0], searchrad=7, guessfwhm=3, 
+                                                        guesspeak=np.nanmax(ct_max_frame), refinefit=True)
+    # reference_psf_counts, _ = measure_counts(ref_psf_min_mask_effect, phot_method, None, **photometry_kwargs)
     
+    # flux ratio - compare ratio of integrated flux, not just peak flux
+    host_to_ct_psf_ratio = (host_star_peakflux * host_star_fwhm**2) / (ct_psf_peakflux * ct_psf_fwhm**2)
+
     # Get the star location from the PSF-subtracted image header.
     x_star = psf_sub_image.ext_hdr.get('STARLOCX')
     y_star = psf_sub_image.ext_hdr.get('STARLOCY')
+    x_mask = psf_sub_image.ext_hdr['MASKLOCX']
+    y_mask = psf_sub_image.ext_hdr['MASKLOCY']
+
+    if cand_locs is None:
+        # Extract companion positions from the PSF-subtracted image and coronagraphic image headers.
+        companions = parse_companions(psf_sub_image.ext_hdr)
+    else:
+        companions = []
+        for i, cand in enumerate(cand_locs):
+            x_comp = x_star + cand[0] * np.cos(np.radians(cand[1] + 90))
+            y_comp = y_star + cand[0] * np.sin(np.radians(cand[1] + 90)) 
+            companions.append({"id": i, "y": y_comp, "x": x_comp})
+
     
-    # Create a dataset of calibration images from the core throughput calibration.
-    ct_dataset = ct_dataset_from_cal(ct_cal)
-    results = []
+    # Create a for the single psf subtraction for API purposes
+    psf_sub_dataset = Dataset([psf_sub_image])
 
     # Process each companion by comparing positions in the PSF-subtracted and coronagraphic images.
+    results = []
     i = 0
-    for comp_sub, comp_coron in zip(companions, companions_coron):
+    for comp_sub in companions:
         x_psf, y_psf = comp_sub['x'], comp_sub['y']
-        x_coron, y_coron = comp_coron['x'], comp_coron['y']
-        
+        x_psf_int = int(np.round(x_psf))
+        y_psf_int = int(np.round(y_psf))
+
         # Compute separation and position angle relative to the star.
         dx, dy = x_psf - x_star, y_psf - y_star
         guesssep = np.hypot(dx, dy)
         guesspa = -np.degrees(np.arctan2(dx, dy)) % 360
 
         # Get the calibration frame based on the companion's position.
-        _, nearest_frame = measure_core_throughput_at_location(x_psf, y_psf, x_star, y_star, ct_cal, ct_dataset)
-        
-        # Scale the calibration PSF to the host star flux level.
-        scaled_star_psf = Image(
-            data_or_filepath=nearest_frame.data * host_to_ref_psf_ratio,
-            pri_hdr=nearest_frame.pri_hdr,
-            ext_hdr=nearest_frame.ext_hdr,
-            err=getattr(nearest_frame, 'err', None)
-        )
-
-        # Measure counts in the original coronagraphic image at the companion location.
-        companion_pre_sub_counts, _ = measure_counts(coronagraphic_dataset[0], phot_method, (x_coron, y_coron), **photometry_kwargs)
-        # Measure counts in the PSF-subtracted image at the companion location.
-        psf_sub_counts, _ = measure_counts(psf_sub_image, phot_method, (x_psf, y_psf), **photometry_kwargs)
-        psf_sub_efficiency = psf_sub_counts / companion_pre_sub_counts
-        if verbose == True:
-            print("Companion ", i, " coronagraphic, non-PSF-subtracted counts: ", companion_pre_sub_counts)
-            print("Companion ", i, " coronagraphic, PSF-subtracted counts: ", psf_sub_counts)
-            print("Input companion ", i, "PSF sub efficiency: ", psf_sub_efficiency)
+        interp_psfs, _, _ = ct_cal.GetPSF(x_psf - x_mask, y_psf - y_mask, psf_sub_dataset, fpam_fsam_cal)
+        nearest_psf = interp_psfs[0]
+        scaled_host_psf_at_planet_location = nearest_psf * host_to_ct_psf_ratio
+        # measure flux of star at psf
+        guess_index = np.unravel_index(np.nanargmax(scaled_host_psf_at_planet_location), scaled_host_psf_at_planet_location.shape)
+        host_planet_loc_peakflux, host_planet_loc_fwhm, _, _ = pyklip.fakes.gaussfit2d(scaled_host_psf_at_planet_location, 
+                                                        guess_index[1], guess_index[0], searchrad=7, guessfwhm=ct_psf_fwhm, 
+                                                        guesspeak=np.nanmax(scaled_host_psf_at_planet_location), refinefit=True)
 
         # Use forward-modeling or a simplified subtraction approach to model the PSF and do PSF-subtraction.
         if forward_model:
-            #Forward model the off-axis image of the host star if it was at the planet location through the PSF subtraction process
-            kl_value, ct_value, modeled_image = forward_model_psf(
-                coronagraphic_dataset, ref_star_dataset, ct_cal, scaled_star_psf,
-                guesssep, guesspa, numbasis=numbasis, nwalkers=nwalkers, nburn=nburn,
-                nsteps=nsteps, numthreads=numthreads, outputdir=output_dir, plot_results=plot_results,
-                kl_mode_idx=kl_mode_idx
-            )
-            fm_counts_uncorrected, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
-            # correct for algorithmic efficiency
-            model_counts = fm_counts_uncorrected / kl_value
-            if verbose == True:
-                print("Host star if it was at companion ", i, " location forward modeled counts uncorrected: ", fm_counts_uncorrected)
-                print("Host star if it was at companion ", i, " location forward modeled counts corrected: ", model_counts)
-                print("Recovered companion ", i, " PSF sub efficiency: ", kl_value)
+            psf_sub_frame = psf_sub_image.data[kl_mode_idx]
+            comp_peakflux, comp_fwhm, x_comp, y_comp = pyklip.fakes.gaussfit2d(psf_sub_frame, x_psf, y_psf, searchrad=7, 
+                                                                               guessfwhm=host_planet_loc_fwhm, 
+                                                                               guesspeak=psf_sub_frame[y_psf_int, x_psf_int], 
+                                                                               refinefit=True)
+            meas_sep_pix = np.sqrt((x_comp - x_star)**2 + (y_comp - y_star)**2)
+            model_counts = np.pi * comp_peakflux * comp_fwhm**2 / 4. / np.log(2.)
+
+
+            algo_thrp_data = psf_sub_image.hdu_list['KL_THRU'].data
+            algo_thrp_seps = algo_thrp_data[0,:,0]
+            algo_thrp = algo_thrp_data[1:][kl_mode_idx, :, 0]
+            thrp_fwhms = algo_thrp_data[1:][kl_mode_idx, :, 1]
+
+            this_thrp = np.interp(meas_sep_pix, algo_thrp_seps, algo_thrp)
+            this_fwhm = np.interp(meas_sep_pix, algo_thrp_seps, thrp_fwhms)
+
+            companion_host_ratio = (comp_peakflux / this_thrp) / host_planet_loc_peakflux 
+
+            # #Forward model the off-axis image of the host star if it was at the planet location through the PSF subtraction process
+            # kl_value, ct_value, modeled_image = forward_model_psf(
+            #     coronagraphic_dataset, ref_star_dataset, ct_cal, scaled_star_psf,
+            #     guesssep, guesspa, numbasis=numbasis, nwalkers=nwalkers, nburn=nburn,
+            #     nsteps=nsteps, numthreads=numthreads, outputdir=output_dir, plot_results=plot_results,
+            #     kl_mode_idx=kl_mode_idx
+            # )
+            # fm_counts_uncorrected, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
+            # # correct for algorithmic efficiency
+            # model_counts = fm_counts_uncorrected / kl_value
+            # if verbose == True:
+            #     print("Host star if it was at companion ", i, " location forward modeled counts uncorrected: ", fm_counts_uncorrected)
+            #     print("Host star if it was at companion ", i, " location forward modeled counts corrected: ", model_counts)
+            #     print("Recovered companion ", i, " PSF sub efficiency: ", kl_value)
         else:
+
+            # Measure counts in the PSF-subtracted image at the companion location.
+            psf_sub_counts, _ = measure_counts(psf_sub_image, phot_method, (x_psf, y_psf), **photometry_kwargs)
+            if verbose == True:
+                print("Companion ", i, " coronagraphic, PSF-subtracted counts: ", psf_sub_counts)
+
+
             modeled_image = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
             model_counts, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
             if verbose == True:
                 print("Companion ", i, " simplified model counts corrected: ", model_counts)
         
-        companion_host_ratio = psf_sub_counts / model_counts
+            companion_host_ratio = psf_sub_counts / model_counts
 
         # Calculate the apparent magnitude based on the host star magnitude or flux calibration.
         if host_star_in_calspec:
-            apmag_data = l4_to_tda.determine_app_mag(ref_star_dataset[0], ref_star_dataset[0].pri_hdr['TARGET'])
+            apmag_data = l4_to_tda.determine_app_mag(host_star_image, host_star_image.pri_hdr['TARGET'])
             host_star_apmag = apmag_data[0].ext_hdr['APP_MAG']
             companion_mag = host_star_apmag - 2.5 * np.log10(companion_host_ratio)
         else:
@@ -151,8 +193,7 @@ def measure_companions(
 
         # Append the results for this companion.
         results.append((
-            comp_sub['id'], x_psf, y_psf,
-            psf_sub_counts, model_counts, companion_host_ratio, companion_mag
+            comp_sub['id'], x_psf, y_psf, model_counts, companion_host_ratio, companion_mag
         ))
         i+=1
 
@@ -162,7 +203,6 @@ def measure_companions(
         names=[
             'id', 'x', 'y',
             'measured companion counts',
-            'simulated host star counts',
             'counts_ratio',
             'companion estimated mag'
         ]
