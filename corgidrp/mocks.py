@@ -559,8 +559,6 @@ def create_default_L3_headers(arrtype="SCI"):
     exthdr['CDELT2'] = 0
     exthdr['CRVAL1'] = 0
     exthdr['CRVAL2'] = 0
-    exthdr['STARLOCX'] = 512
-    exthdr['STARLOCY'] = 512
     exthdr['DATALVL']    = 'L3'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
@@ -582,7 +580,9 @@ def create_default_L4_headers(arrtype="SCI"):
     """
     # TO DO: Update this once L4 headers have been finalized
     prihdr, exthdr = create_default_L3_headers(arrtype)
-
+    
+    exthdr['STARLOCX'] = 512
+    exthdr['STARLOCY'] = 512
     exthdr['DATALVL']    = 'L4'           # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     return prihdr, exthdr
@@ -3084,7 +3084,10 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
         half_psf += [np.pi*model.amplitude.value*model.x_stddev.value*model.y_stddev.value]
         # Build up the Dataset
         data_psf += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err, dq=dq)]
-
+        # Add some filename following the file convention:
+        # CGI_<VisitID: PPPPPCCAAASSSOOOVVV>_<TimeUTC>_L2b.fits
+        data_psf[-1].filename = 'CGI_0200001001001001001_20250415T0305102_L2b.fits'
+        
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
 

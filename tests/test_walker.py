@@ -191,7 +191,7 @@ def test_auto_template_identification():
     ### Finally, test the recipe identification
     recipe = walker.autogen_recipe(filelist, outputdir)
 
-    assert recipe['name'] == 'l1_to_l2b'
+    assert recipe['name'] == 'l1_to_l2a_basic'
     assert recipe['template'] == False
 
     # now cleanup
@@ -315,7 +315,10 @@ def test_skip_missing_calib():
 
 
     ### Test that we are skipping the steps without calibrations
-    recipe = walker.autogen_recipe(filelist, outputdir)
+    # use l1 to l2b recipe
+    template_filepath = os.path.join(os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2b.json")
+    template_recipe = json.load(open(template_filepath, "r"))
+    recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
     assert recipe['name'] == 'l1_to_l2b'
     assert recipe['template'] == False

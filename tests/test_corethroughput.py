@@ -4,6 +4,8 @@ import numpy as np
 import astropy.time as time
 from astropy.io import fits
 from scipy.signal import decimate
+from astropy.modeling import models
+from astropy.modeling.models import Gaussian2D
 
 import corgidrp
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
@@ -13,7 +15,7 @@ from corgidrp import corethroughput
 
 # If a run has crashed before being able to remove the test CT cal file,
 # remove it before importing caldb, which scans for new entries in the cal folder
-ct_cal_test_file = 'CoreThroughputCalibration_2025-02-15T00:00:00.fits'
+ct_cal_test_file = 'CGI_0200001001001001001_20250415T0305102_CTP_CAL.fits'
 if os.path.exists(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file)):
     os.remove(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file))
 from corgidrp import caldb
@@ -31,7 +33,7 @@ def setup_module():
     global cfam_name
     cfam_name = '1F'
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_ct_interp
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_eq_rad
     global dataset_cor
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
     global psf_loc_in, psf_loc_syn
@@ -178,6 +180,61 @@ def setup_module():
         norm=pupil_image_1.sum())[0]
     dataset_ct_interp = Dataset(data_ct_interp)
 
+    # Needed for PSF interpolation
+    # Dataset with two PSFs at equal radial distance from the CT FPM's center
+    data_psf_tmp = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+    # We need to estimate the location of the FPM's center to create the PSFs
+    # at given predefined locatioins
+    data_psf_tmp += [data_psf[0]]
+    ct_cal_tmp2 = corethroughput.generate_ct_cal(Dataset(data_psf_tmp))
+    # FPM during the CT observations (different to the coronagraphic one since
+    # FPAM/FSAM H/V values are different)
+    fpm_ct_2 = ct_cal_tmp2.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    # Generate the mock data for CT interpolation knowing the CT FPM
+    data_psf_eq_rad = [Image(pupil_image,pri_hdr = prhd,
+        ext_hdr = exthd_pupil, err = err)]
+    # Band 1 FWHM: Enough approximation (and to a good extent, irrelevant)
+    fwhm_mas = 50
+    imshape = (219, 219)
+    y, x = np.indices(imshape)
+    # Following astropy documentation:
+    # Generate 2 PSFs with the same radial distance to (0,0) and different A
+    fpm_ct_frac_2 = fpm_ct_2 % 1
+    # Choose the location of the PSFs
+    aa = 100
+    bb = 20
+    model_params = []
+    # Fill out the four quadrants to have more of a variety with PSFs at equal radii
+    for idx in range(4):
+        aa_w_sgn = (-1)**idx * aa
+        bb_w_sgn = (-1)**(idx//2) * bb
+        model_params += [
+            dict(amplitude=11,
+                x_mean=imshape[0]//2 + fpm_ct_frac_2[0]+aa_w_sgn,
+                y_mean=imshape[1]//2 + fpm_ct_frac_2[1]+bb_w_sgn,
+                x_stddev=fwhm_mas/21.8/2.335,
+                y_stddev=fwhm_mas/21.8/2.335),
+            dict(amplitude=23,
+                x_mean=imshape[0]//2 + fpm_ct_frac_2[0]+bb_w_sgn,
+                y_mean=imshape[1]//2 + fpm_ct_frac_2[1]+aa_w_sgn,
+                x_stddev=fwhm_mas/21.8/2.335,
+                y_stddev=fwhm_mas/21.8/2.335)]
+    model_list = [models.Gaussian2D(**kwargs) for kwargs in model_params]
+    # Render models to image using full evaluation
+    for model in model_list:
+        psf = np.zeros(imshape)
+        model.bounding_box = None
+        model.render(psf)
+        image = np.zeros([1024, 1024])
+        # Insert PSF 
+        image[int(fpm_ct_2[1])-imshape[1]//2:int(fpm_ct_2[1])+imshape[1]//2+1,
+            int(fpm_ct_2[0])-imshape[0]//2:int(fpm_ct_2[0])+imshape[0]//2+1] = psf
+        # Build up the Dataset
+        data_psf_eq_rad += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]    
+
+    dataset_psf_eq_rad = Dataset(data_psf_eq_rad)
+
 def test_psf_pix_and_ct():
     """
     Test 1090881 - Given a core throughput dataset consisting of M clean frames
@@ -286,9 +343,22 @@ def test_cal_file():
 
     # Write core throughput calibration file
     ct_cal_file_in = corethroughput.generate_ct_cal(dataset_ct)
-    # It's fine to use a hardcoded filename for UTs
-    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir, filename=ct_cal_test_file)
+    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir)
 
+    # Check that the filename is what we expect
+    ct_cal_filename = dataset_ct[-1].filename.replace("_L2b", "_CTP_CAL")
+    ct_cal_filepath = os.path.join(corgidrp.default_cal_dir,ct_cal_filename)
+    if os.path.exists(ct_cal_filepath) is False:
+        raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
+    # Load the calibration file to check it has the same data contents
+    ct_cal_file_load = CoreThroughputCalibration(ct_cal_filepath)
+    assert np.all(ct_cal_file_load.data == ct_cal_file_in.data)
+    assert np.all(ct_cal_file_load.err == ct_cal_file_in.err)
+    assert np.all(ct_cal_file_load.dq == ct_cal_file_in.dq)
+    assert np.all(ct_cal_file_load.ct_excam == ct_cal_file_in.ct_excam)
+    assert np.all(ct_cal_file_load.ct_fpam == ct_cal_file_in.ct_fpam)
+    assert np.all(ct_cal_file_load.ct_fsam == ct_cal_file_in.ct_fsam)
+    
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
     # vs. centroid/pixelized data is part of the tests on test_psf_pix_and_ct before)
@@ -507,6 +577,7 @@ def test_ct_interp():
     
     assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
 
+    print('Tests about CT interpolation passed')
 
 def test_get_1d_ct():
     """Test that corethroughput.get_1d_ct() produces an array of the correct 
@@ -644,6 +715,150 @@ def test_ct_map():
 
     print('Tests about CT map passed')
 
+def test_psf_interp():
+    """
+    Test the ability to recover a PSF at a given (x,y) location on HLC in a
+    coronagraphic observation given a CT calibration file and the PAM
+    transformation from encoder values to EXCAM pixels.
+    """
+    # Test 1/ Equal radial distance should retrieve the one with the nearest
+    # angular distance
+    # Generate core throughput calibration file
+    ct_cal_eq = corethroughput.generate_ct_cal(dataset_psf_eq_rad)
+
+    # We need to refer the PSF locations to the FPM's center
+    # Get PAM cal file
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    # Get CT FPM's center
+    fpam_ct_pix_eq = ct_cal_eq.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    # PSF locations with respect to the FPM's center. EXCAM pixels
+    x_ct_eq = ct_cal_eq.ct_excam[0] - fpam_ct_pix_eq[0]
+    y_ct_eq = ct_cal_eq.ct_excam[1] - fpam_ct_pix_eq[1]
+    r_ct_eq = np.sqrt(x_ct_eq**2 + y_ct_eq**2)
+
+    # Test with a location with the same radius and an equally (absolute) angular
+    # distance from two PSFs in the input dataset: It should be the average value
+    # In any interpolation beyind the nearest, there will be some
+    # weighting factor that takes into account the distances
+    x_mid = np.sqrt(100**2+20**2)/np.sqrt(2)
+    y_mid = x_mid
+    psf_interp = ct_cal_eq.GetPSF(x_mid, y_mid, dataset_cor, fpam_fsam_cal)[0]
+    assert np.all(psf_interp == 0.5*(ct_cal_eq.data[0]+ct_cal_eq.data[1]))
+
+    # Test with target location with the same radius as two PSFs in the input
+    # dataset, but at a different angular location closer to one of them
+    # Closer to the 1st one (arbitrary small shift, one of many possible choices)
+    x_targ = r_ct_eq[0]*np.cos(np.arctan(y_ct_eq[0]/x_ct_eq[0])-0.05)
+    y_targ = r_ct_eq[0]*np.sin(np.arctan(y_ct_eq[0]/x_ct_eq[0])-0.05)
+    psf_interp = ct_cal_eq.GetPSF(x_targ, y_targ, dataset_cor, fpam_fsam_cal)[0]
+    assert np.all(psf_interp == ct_cal_eq.data[0])
+   
+    # Closer to the 2nd one (arbitrary small shift, one of many possible choices)
+    x_targ = r_ct_eq[1]*np.cos(np.arctan(y_ct_eq[1]/x_ct_eq[1])+0.06)
+    y_targ = r_ct_eq[1]*np.sin(np.arctan(y_ct_eq[1]/x_ct_eq[1])+0.06)
+    psf_interp = ct_cal_eq.GetPSF(x_targ, y_targ, dataset_cor, fpam_fsam_cal)[0]
+    assert np.all(psf_interp == ct_cal_eq.data[1])
+    
+    # Next tests: Generate core throughput calibration file with more PSFs
+    ct_cal = corethroughput.generate_ct_cal(dataset_ct_interp)
+
+    # We need to refer the PSF locations to the FPM's center
+    # Get PAM cal file
+    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    # Get CT FPM's center
+    fpam_ct_pix = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+    # PSF locations with respect to the FPM's center. EXCAM pixels
+    x_ct = ct_cal.ct_excam[0,:] - fpam_ct_pix[0]
+    y_ct = ct_cal.ct_excam[1,:] - fpam_ct_pix[1]
+    # Radial distance
+    r_ct = np.sqrt(x_ct**2 + y_ct**2)
+
+    # Number of positions to test (PSF stamps are small 15x15 pixels)
+    n_rand = 200
+    rng = np.random.default_rng(0)
+
+    # Test 2: Check that if the location is below or above the range of radial distances
+    # in the input CT dataset used to generate the CT cal file, it fails
+    # Test 2.1/ Below minimum radial distance:
+    x_below = rng.uniform(0, r_ct.min()-0.2, n_rand)
+    y_below = r_ct.min() - x_below 
+    # All must fail
+    with pytest.raises(ValueError):
+        ct_cal.GetPSF(x_below, y_below, dataset_cor, fpam_fsam_cal)
+    # Test 2.2/ Beyond maximum radial distance 
+    x_beyond = rng.uniform(r_ct.max()+0.2, 2*r_ct.max(), n_rand)
+    y_beyond = x_beyond - r_ct.max()
+    # All must fail
+    with pytest.raises(ValueError):
+        ct_cal.GetPSF(x_beyond, y_beyond, dataset_cor, fpam_fsam_cal)
+
+    # Test 3/ Choose some arbitrary positions and check the returned PSF is the
+    # same as the nearest one in the CT cal file:
+    
+    # Array of random numbers, covering all quadrants with radial distances from
+    # the FPM within the range of the CT cal file including some locations that
+    # are invalid
+    r_test = rng.uniform(r_ct.min()-1, r_ct.max()+1, n_rand)
+    az_test = rng.uniform(0, 2*np.pi, n_rand)
+    x_test = r_test * np.cos(az_test)
+    y_test = r_test * np.sin(az_test)
+    # Number of locations outside the range of valid radial distances
+    n_invalid = ((r_test<r_ct.min()) + (r_test>r_ct.max())).sum()
+    if n_invalid == 0:
+        print('Target dataset should have some locations outside the radial range of the input dataset')
+
+    # Interpolated PSFs
+    interpolated_PSF, x_out, y_out = ct_cal.GetPSF(x_test, y_test, dataset_cor, fpam_fsam_cal)
+    # Test that the number of interpolated PSFs is the same as the number of
+    # valid positions
+    if n_invalid + len(interpolated_PSF) != n_rand:
+        raise Exception('Inconsistent number of interpolated PSFs')
+
+    # Radial distance
+    r_ct = np.sqrt(x_ct**2 + y_ct**2)
+    for i_psf in range(len(x_out)):
+        # Radial distance difference with the input dataset
+        r_out = np.sqrt(x_out[i_psf]**2 + y_out[i_psf]**2)
+        # Test agreement between interpolated PSFs and nearest one in the input set
+        # Remember agreement to bin radial distances to 1/10th of a pixel in the
+        # nearest-polar method
+        diff_r_abs = np.round(10*np.abs(r_out - r_ct)/10)
+        idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
+        # If there's more than one case, check the interpolated PSF is the one
+        # that has the shortest angular distance to the ones in the input dataset
+        # with the same radial distance, or if there are two such locations
+        # (half angle), the output should be the average of both PSFs (agreement)
+        if len(idx_near) > 1:
+            # Difference in angle b/w target and grid
+            # We want to distinguish PSFs at different quadrants
+            az_grid = np.arctan2(y_ct[idx_near], x_ct[idx_near])
+            az_cor = np.arctan2(y_out[i_psf], x_out[i_psf])
+            # Flatten into a 1-D array
+            diff_az_abs = np.abs(az_cor - az_grid).transpose()[0]
+            # Azimuth binning consistent with the binning of the radial distance
+            bin_az_fac = 1/10/r_out
+            diff_az_abs = bin_az_fac * np.round(diff_az_abs/bin_az_fac)
+            # Closest angular location to the target location within equal radius
+            idx_near_az = np.argwhere(diff_az_abs == diff_az_abs.min())
+            # If there are two locations (half angle), choose the average (agreement)
+            if len(idx_near_az) == 2:
+                assert np.all(interpolated_PSF[i_psf] ==
+                    ct_cal.data[idx_near[idx_near_az]].mean(axis=0))
+            # Otherwise, this is the PSF
+            elif len(idx_near_az) == 1:
+                assert np.all(interpolated_PSF[i_psf] ==
+                    ct_cal.data[idx_near[idx_near_az[0]]])
+            else:
+                raise ValueError(f'There are {len(idx_near_az):d} PSFs ',
+                            'equally near the target PSF. This should not happen.')
+        # Otherwise this is the interpolated PSF
+        else:
+            assert np.all(interpolated_PSF[i_psf] == ct_cal.data[idx_near[0]])
+
+    print('Tests about PSF interpolation passed')
+
 def teardown_module():
     """
     Deletes variables
@@ -655,8 +870,8 @@ def teardown_module():
     global cfam_name
     del cfam_name
     # CT and coronagraphic datasets
-    global dataset_ct, dataset_ct_syn, dataset_ct_interp
-    del dataset_ct, dataset_ct_syn, dataset_ct_interp
+    global dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_eq_rad
+    del dataset_ct, dataset_ct_syn, dataset_ct_interp, dataset_psf_eq_rad
     global dataset_cor
     del dataset_cor
     # Arbitrary set of PSF locations to be tested in EXCAM pixels referred to (0,0)
@@ -671,7 +886,7 @@ if __name__ == '__main__':
     test_psf_pix_and_ct()
     test_fpm_pos()
     test_cal_file()
-    test_get_1d_ct()
-
     test_ct_interp()
+    test_get_1d_ct()
     test_ct_map()
+    test_psf_interp()

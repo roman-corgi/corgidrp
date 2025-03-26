@@ -237,6 +237,8 @@ def guess_template(dataset):
         str or list: the best template filename or a list of multiple template filenames
     """
     image = dataset[0] # first image for convenience
+
+    # L1 -> L2a data processing
     if image.ext_hdr['DATALVL'] == "L1":
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
@@ -260,10 +262,8 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
-            if image.ext_hdr['ISPC']:
-                recipe_filename = "l1_to_l2b_pc.json" 
-            else:  
-                recipe_filename = "l1_to_l2b.json"    
+            recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
+    # L2a -> L2b data processing
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
@@ -277,12 +277,18 @@ def guess_template(dataset):
             if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc.json"
             else:
-                recipe_filename = "l2a_to_l2b.json"
+                recipe_filename = "l2a_to_l2b.json"  # science data and all else
+    # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
             recipe_filename = "l2b_to_fluxcal_factor.json"
+        else:
+            recipe_filename = "l2b_to_l3.json"
+    # L3 -> L4 data processing
+    elif image.ext_hdr['DATALVL'] == "L3":
+        recipe_filename = "l3_to_l4.json"
     else:
-        raise NotImplementedError()
+        raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
 
     return recipe_filename
 
