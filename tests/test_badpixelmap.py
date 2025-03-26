@@ -109,17 +109,17 @@ def test_badpixelmap():
     hot_pixel_bit_position = 63 - FLAG_TO_BIT_MAP["hot_pixel"]
     hot_pixel_locations = np.where(badpixelmap_bits[:,:,hot_pixel_bit_position])
     for ii in hot_pixel_locations[0]:
-        assert ii in col_hot, f"Hot pixel at column {i} not expected."
+        assert ii in col_hot, f"Hot pixel at column {ii} not expected."
     for jj in hot_pixel_locations[1]:
-        assert jj in row_hot, f"Hot pixel at row {j} not expected."
+        assert jj in row_hot, f"Hot pixel at row {jj} not expected."
 
     # Checking that CR are at the expected locations - bit #2
     dead_pixel_bit_position = 63 - FLAG_TO_BIT_MAP["bad_pixel"]
     dead_pixel_locations = np.where(badpixelmap_bits[:,:,dead_pixel_bit_position])
     for ii in dead_pixel_locations[0]:
-        assert ii in col_dead, f"Dead pixel at column {i} not expected." 
+        assert ii in col_dead, f"Dead pixel at column {ii} not expected." 
     for jj in dead_pixel_locations[1]:
-       assert jj in row_dead, f"Dead pixel at row {j} not expected."
+       assert jj in row_dead, f"Dead pixel at row {jj} not expected."
 
 
 def test_packing_unpacking_uint64():
