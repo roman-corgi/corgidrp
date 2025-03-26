@@ -20,17 +20,11 @@ def measure_companions(
     photometry_kwargs=None,
     fluxcal_factor=None,
     host_star_in_calspec=True,
-    forward_model=False,
+    thrp_corr="L4",
     coronagraphic_dataset=None,
     refstar_dataset=None,
-    numbasis=[1, 2],
-    nwalkers=10,
-    nburn=5,
-    nsteps=20,
-    numthreads=1,
-    output_dir=".",
+    klip_fm_kwargs=None,
     verbose=True,
-    plot_results=False,
     kl_mode_idx=-1,
     cand_locs=None
 ):
@@ -46,17 +40,15 @@ def measure_companions(
         photometry_kwargs (dict): Dictionary of keyword arguments for photometry.
         fluxcal_factor (corgidrp.Data.FluxcalFactor): Flux calibration factor object.
         host_star_in_calspec (bool): Flag indicating whether to use host star magnitude from calspec.
-        forward_model (bool): Flag to enable forward-modeling for flux estimation.
+        thrp_corr (str): How to do the algorithm throughput estimation to measure the flux. Options are:
+                         1) "L4", which uses the algorithm throughput calculated from L3 -> L4 processing
+                         2) "None", which ignorees algorithm throughput
+                         3) "KLIP-FM", which forward models the PSF through KLIP (requires passing in 
+                         coronagraphic_dataset and refstar_dataset, if RDI). [not implemented]
         coronagraphic_dataset (corgidrp.data.Dataset): Dataset containing coronagraphic images.
         refstar_dataset (corgidrp.data.Dataset): RDI reference star dataset for PSF subtraction
-        numbasis (list): List of KLIP modes to retain.
-        nwalkers (int): Number of MCMC walkers for forward-modeling.
-        nburn (int): Number of burn-in steps for MCMC.
-        nsteps (int): Number of MCMC steps.
-        numthreads (int): Number of threads for MCMC computation.
-        output_dir (str): Output directory path for forward-modeling results.
+        klip_fm_kwargs (dict): keyword arguments to pass into forward_model_psf()
         verbose (bool): Flag to enable verbose output.
-        plot_results (bool): Whether to enable plotting.
         kl_mode_idx (int): Index of the KL mode to use (must match the one used for PSF subtraction).
             Defaults to the last KL mode.
         cand_locs (list of tuples, optional): Locations of known off-axis sources to measure flux. 
@@ -66,9 +58,6 @@ def measure_companions(
     Returns:
         result_table (astropy.table.Table): Table containing companion measurements.
     """
-    # Set default photometry keyword arguments if none are provided.
-    photometry_kwargs = photometry_kwargs or get_photometry_kwargs(phot_method)
-
     # Measure counts of the host star and reference PSF from the provided images.
     # TO DO: correct for ND filter here
     guess_index = np.unravel_index(np.nanargmax(host_star_image.data), host_star_image.data.shape)
@@ -130,7 +119,7 @@ def measure_companions(
                                                         guesspeak=np.nanmax(scaled_host_psf_at_planet_location), refinefit=True)
 
         # Use forward-modeling or a simplified subtraction approach to model the PSF and do PSF-subtraction.
-        if forward_model:
+        if thrp_corr == "L4":
             psf_sub_frame = psf_sub_image.data[kl_mode_idx]
             comp_peakflux, comp_fwhm, x_comp, y_comp = pyklip.fakes.gaussfit2d(psf_sub_frame, x_psf, y_psf, searchrad=7, 
                                                                                guessfwhm=host_planet_loc_fwhm, 
@@ -149,7 +138,8 @@ def measure_companions(
             this_fwhm = np.interp(meas_sep_pix, algo_thrp_seps, thrp_fwhms)
 
             companion_host_ratio = (comp_peakflux / this_thrp) / host_planet_loc_peakflux 
-
+        elif thrp_corr == "KLIP-FM":
+            raise NotImplementedError("KLIP-FM not yet implemented")
             # #Forward model the off-axis image of the host star if it was at the planet location through the PSF subtraction process
             # kl_value, ct_value, modeled_image = forward_model_psf(
             #     coronagraphic_dataset, ref_star_dataset, ct_cal, scaled_star_psf,
@@ -164,19 +154,33 @@ def measure_companions(
             #     print("Host star if it was at companion ", i, " location forward modeled counts uncorrected: ", fm_counts_uncorrected)
             #     print("Host star if it was at companion ", i, " location forward modeled counts corrected: ", model_counts)
             #     print("Recovered companion ", i, " PSF sub efficiency: ", kl_value)
-        else:
+        elif thrp_corr == "None":
+            # Set default photometry keyword arguments if none are provided.
+            photometry_kwargs = photometry_kwargs or get_photometry_kwargs(phot_method)
 
             # Measure counts in the PSF-subtracted image at the companion location.
-            psf_sub_counts, _ = measure_counts(psf_sub_image, phot_method, (x_psf, y_psf), **photometry_kwargs)
+            # select the frame from the KL cube
+            psf_sub_frame = psf_sub_image.copy()
+            psf_sub_frame.data = psf_sub_image.data[kl_mode_idx]
+            psf_sub_frame.dq = psf_sub_image.dq[kl_mode_idx]
+            psf_sub_frame.err = psf_sub_image.err[:,kl_mode_idx]
+            psf_sub_counts, _ = measure_counts(psf_sub_frame, phot_method, (x_psf, y_psf), **photometry_kwargs)
             if verbose == True:
                 print("Companion ", i, " coronagraphic, PSF-subtracted counts: ", psf_sub_counts)
 
             # modeled_image = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
-            model_counts, _ = measure_counts(scaled_host_psf_at_planet_location, phot_method, None, **photometry_kwargs)
+            # measure the host star brightness. need to stick into an image class
+            scaled_host_star_img = host_star_image.copy()
+            scaled_host_star_img.data = scaled_host_psf_at_planet_location
+            scaled_host_star_img.dq = np.zeros(scaled_host_psf_at_planet_location.shape)
+            scaled_host_star_img.err = np.zeros((1,) + scaled_host_psf_at_planet_location.shape)
+            model_counts, _ = measure_counts(scaled_host_star_img, phot_method, None, **photometry_kwargs)
             if verbose == True:
-                print("Companion ", i, " simplified model counts corrected: ", model_counts)
+                print("Host star ", i, " simplified model counts corrected: ", model_counts)
         
             companion_host_ratio = psf_sub_counts / model_counts
+        else:
+            raise ValueError("{0} is not a valid option for thrp_corr".format(thrp_corr))
 
         # Calculate the apparent magnitude based on the host star magnitude or flux calibration.
         if host_star_in_calspec:

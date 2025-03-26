@@ -139,12 +139,11 @@ def generate_test_data(out_dir):
     host_star_center = tuple(x // 2 for x in FULL_SIZE_IMAGE)
     # 1) Generate reference star dataset.
     host_star_flux = nd_filter_calibration.compute_expected_band_irradiance(HOST_STAR, CFAM)
-    host_star_image = mocks.create_flux_image( host_star_flux, FWHM, 1e10,  
+    host_star_image = mocks.create_flux_image( host_star_flux, FWHM, 1e-16,  
         # dimensionless color correction factor
         filter='1F', 
         fpamname='HOLE',
-        target_name=HOST_STAR, 
-        shape=(1024, 1024)    # <-- new parameter for image size (ny, nx)
+        target_name=HOST_STAR
     )
 
     # 2) Measure host star counts and determine zero point.
@@ -331,7 +330,7 @@ def _common_measure_companions_test(forward_model_flag):
       7. Prints the resulting table of measured companion properties.
     
     Args:
-        forward_model_flag (bool): Flag indicating whether to use forward modeling in the companion measurement.
+        forward_model_flag (str): flag indicating which forward modeling technique to use
         
     """
     (host_star_image, host_star_counts, fluxcal_factor, host_star_mag, ct_cal, FpamFsamCal, 
@@ -349,11 +348,8 @@ def _common_measure_companions_test(forward_model_flag):
         phot_method=PHOT_METHOD,
         photometry_kwargs=PHOT_ARGS,
         fluxcal_factor=fluxcal_factor,
-        forward_model=forward_model_flag,
-        numbasis=NUMBASIS,
-        output_dir=OUT_DIR,
+        thrp_corr=forward_model_flag,
         verbose=VERBOSE,
-        plot_results=PLOT_RESULTS,
         kl_mode_idx = KL_MODE,
         cand_locs = cand_locs
     )
@@ -390,14 +386,14 @@ def test_measure_companions_forward_modeling():
     """
     Test measure_companions using forward modeling.
     """
-    _common_measure_companions_test(forward_model_flag=True)
+    _common_measure_companions_test(forward_model_flag="L4")
 
 
-# def test_measure_companions_non_forward_modeling():
-#     """
-#     Test measure_companions using the simplified (non-forward modeling) approach.
-#     """
-#     _common_measure_companions_test(forward_model_flag=False)
+def test_measure_companions_non_forward_modeling():
+    """
+    Test measure_companions using the simplified (non-forward modeling) approach.
+    """
+    _common_measure_companions_test(forward_model_flag="None")
 
 
 def test_update_companion_location():
@@ -535,10 +531,10 @@ def test_update_companion_location():
 
 
 if __name__ == "__main__":
-    # # Run tests when executing the file directly.
-    # print("Running test: non-forward modeling")
-    # test_measure_companions_non_forward_modeling()
-    # print("Non-forward modeling test passed.")
+    # Run tests when executing the file directly.
+    print("Running test: non-forward modeling")
+    test_measure_companions_non_forward_modeling()
+    print("Non-forward modeling test passed.")
 
     print("Running test: forward modeling")
     test_measure_companions_forward_modeling()

@@ -2740,169 +2740,137 @@ def gaussian_array(array_shape=[50,50],sigma=2.5,amp=100.,xoffset=0.,yoffset=0.)
     
     return gauss
 
-def create_flux_image(
-    flux_erg_s_cm2,       # integrated flux over bandpass of filter, in erg/(s*cm^2)
-    fwhm, 
-    cal_factor,           # [ e- / erg ], conversion from erg/s -> e-/s
-    optical_throughput=1.0,   # dimensionless fraction (0-1) capturing optics throughput etc.
-    color_cor=1.0,        # dimensionless color correction factor
-    filter='3C', 
-    fpamname='HOLE',
-    target_name='Vega', 
-    fsm_x=0.0, 
-    fsm_y=0.0,
-    exptime=1.0,
-    filedir=None, 
-    platescale=21.8,      # mas/pixel
-    background=0,
-    add_gauss_noise=True,
-    noise_scale=1.0,
-    file_save=False,
-    shape=(1024, 1024)    # <-- new parameter for image size (ny, nx)
-):
+def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE', target_name='Vega', fsm_x=0.0, 
+                      fsm_y=0.0, exptime=1.0, filedir=None, platescale=21.8, 
+                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
     """
-    Create simulated data for absolute flux calibration in photoelectrons.
-    This is a point source with a 2D-Gaussian PSF plus optional noise.
+    Create simulated data for absolute flux calibration. This is a point source with a 2D-Gaussian PSF
+    and Gaussian noise.
 
     Args:
-        flux_erg_s_cm2 (float): Star's flux integrated over the band, in erg/(s*cm^2).
-        fwhm (float): FWHM of the PSF in pixels.
-        cal_factor (float): Conversion from [erg] -> [electrons], i.e. e-/erg. This lumps
-            in the average photon energy, QE, passband integration, etc.
-        optical_throughput (float): Dimensionless fraction of light transmitted (0 < 
-            throughput <= 1).
-        color_cor (float): Another dimensionless factor if you need it. 
-        filter (string): CFAM filter name used.
-        fpamname (string): FPAM name used.
-        target_name (string): Star target observed.
-        fsm_x (float): X shift in mas from the image center.
-        fsm_y (float): Y shift in mas from the image center.
-        exptime (float): Exposure time (s).
-        filedir (string): File directory for saving.
-        platescale (float): Plate scale in mas/pixel.
-        background (float): Add an optional uniform background in e-.
-        add_gauss_noise (bool): Whether to add Gaussian noise to the final data.
-        noise_scale (float): RMS amplitude of the Gaussian noise.
-        filedir (str): Optional folder to save the result if file_save=True.
-        file_save (bool): If True, writes the FITS file to disk.
-        shape (tuple[int,int]): Size of the output image (ny, nx). Defaults to 
-            (1024, 1024).
+        star_flux (float): Flux of the point source in erg/(s*cm^2*AA)
+        fwhm (float): Full width at half max (FWHM) of the centroid
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electron/s
+        filter (str): (Optional) The CFAM filter used.
+        fpamname (str): (Optional) Position of the FPAM
+        target_name (str): (Optional) Name of the calspec star
+        fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
+        fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
+        exptime (float): (Optional) Exposure time (s)
+        filedir (str): (Optional) Directory path to save the output file
+        platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
+        background (float): optional additive background value
+        add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
+        noise_scale (float): Spread of the Gaussian noise
+        file_save (bool): Whether to save the image (default: False)
 
     Returns:
-        outframe (corgidrp.data.Image): The 2D array in photoelectrons.
+        corgidrp.data.Image: The simulated image
     """
 
     # Create directory if needed
-    if filedir is not None and file_save:
-        os.makedirs(filedir, exist_ok=True)
+    if filedir is not None and not os.path.exists(filedir):
+        os.mkdir(filedir)
 
-    # 1) Telescope area in cm^2
-    telescope_diam = 2.4  # meters
-    obscuration_factor = 0.0 
-    radius_m = telescope_diam / 2.0
-    area_m2 = math.pi * (radius_m**2)
-    if obscuration_factor > 0:
-        area_m2 *= (1 - obscuration_factor)
-    area_cm2 = area_m2 * 1e4
+    # Image properties
+    size = (1024, 1024)
+    sim_data = np.zeros(size)
+    ny, nx = size
+    center = [nx // 2, ny // 2]  # Default image center
+    target_location = (80.553428801, -69.514096821)
 
-    # 2) Convert flux (erg/(s*cm^2)) -> e-/s
-    flux_per_s = flux_erg_s_cm2 * area_cm2 * cal_factor * optical_throughput * color_cor
-    star_electrons = flux_per_s * exptime
+    # Convert FSM shifts from mas to pixels
+    fsm_x_shift = fsm_x * 0.001 / (platescale * 0.001)  # Convert mas to degrees, then to pixels
+    fsm_y_shift = fsm_y * 0.001 / (platescale * 0.001)
 
-    # 3) Create the image array
-    ny, nx = shape
-    sim_data = np.zeros((ny, nx), dtype=np.float32)
-    center = [nx // 2, ny // 2]  # center in x,y sense => [xCenter, yCenter]
-
-    # 4) FSM offset in mas -> pixels
-    # platescale is [mas/pixel], so xshift = fsm_x / platescale
-    fsm_x_shift = fsm_x / platescale
-    fsm_y_shift = fsm_y / platescale
+    # New star position
     xpos = center[0] + fsm_x_shift
     ypos = center[1] + fsm_y_shift
 
-    # 5) Build a 2D Gaussian of total star_electrons
-    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
+    # Convert flux from calspec units to photo-electrons
+    flux = (star_flux * exptime) / cal_factor
+
+    # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
+    sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
 
-    y_grid, x_grid = np.indices([stampsize, stampsize])
-    y_grid -= stampsize // 2
-    x_grid -= stampsize // 2
+    # coordinate system
+    y, x = np.indices([stampsize, stampsize])
+    y -= stampsize // 2
+    x -= stampsize // 2
 
-    # integer offsets
+    # Find nearest pixel
     x_int = int(round(xpos))
     y_int = int(round(ypos))
+    x += x_int
+    y += y_int
+    
+    xmin = x[0][0]
+    xmax = x[-1][-1]
+    ymin = y[0][0]
+    ymax = y[-1][-1]
+        
+    psf = gaussian_array((stampsize,stampsize),sigma,flux) / (2.0 * np.pi * sigma**2)
 
-    x_grid += x_int
-    y_grid += y_int
+    # Inject the star into the image
+    sim_data[ymin:ymax + 1, xmin:xmax + 1] += psf
 
-    xmin, xmax = x_grid[0, 0], x_grid[-1, -1]
-    ymin, ymax = y_grid[0, 0], y_grid[-1, -1]
-
-    # "gaussian_array" that sums to 'star_electrons'
-    psf = gaussian_array((stampsize, stampsize), sigma, star_electrons)
-
-    # 6) Inject into full frame (check boundaries)
-    # If part of the stamp is outside the image, we clamp:
-    x1_clamp = max(xmin, 0)
-    x2_clamp = min(xmax, nx - 1)
-    y1_clamp = max(ymin, 0)
-    y2_clamp = min(ymax, ny - 1)
-
-    # only add the overlapping region
-    if (x2_clamp >= x1_clamp) and (y2_clamp >= y1_clamp):
-        stamp_x1 = x1_clamp - xmin
-        stamp_y1 = y1_clamp - ymin
-        stamp_x2 = x2_clamp - xmin
-        stamp_y2 = y2_clamp - ymin
-
-        sim_data[y1_clamp:y2_clamp + 1, x1_clamp:x2_clamp + 1] += psf[stamp_y1:stamp_y2 + 1, stamp_x1:stamp_x2 + 1]
-
-    # 7) Add background
+    # Add background
     sim_data += background
 
-    # 8) Optional noise
+    # Add Gaussian noise
     if add_gauss_noise:
         # add Gaussian random noise
         noise_rng = np.random.default_rng(10)
-        noise = noise_rng.normal(scale=noise_scale, size=(ny, nx))
-        sim_data += noise.astype(np.float32)
+        noise = noise_rng.normal(scale=noise_scale, size=size)
+        sim_data += noise
 
-    # 9) Build error map (just uniform for demonstration)
-    err = np.full((ny, nx), noise_scale, dtype=np.float32)
+    # Error map
+    err = np.full(size, noise_scale)
 
-    # 10) Build headers
-    prihdr, exthdr = create_default_L3_headers()
+    # Get FPAM positions, not strictly necessary but
+    if fpamname == 'HOLE':
+        fpam_h = 40504.4
+        fpam_v = 9616.8
+    elif fpamname == 'ND225':
+        fpam_h = 61507.8
+        fpam_v = 25612.4
+    elif fpamname == 'ND475':
+        fpam_h = 2503.7
+        fpam_v = 6124.9
+
+    # Create image object
+    prihdr, exthdr = create_default_L2b_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
-    prihdr['TARGET']  = target_name
-    # Example RA/DEC just for demonstration
-    prihdr['RA'] = 80.553428801
-    prihdr['DEC'] = -69.514096821
-    
-    exthdr['CFAMNAME'] = filter
+    prihdr['RA'] = target_location[0]
+    prihdr['DEC'] = target_location[1]
+    prihdr['TARGET'] = target_name
+
+    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
     exthdr['FPAMNAME'] = fpamname
-    exthdr['FSM_X']    = fsm_x
-    exthdr['FSM_Y']    = fsm_y
-    exthdr['EXPTIME']  = exptime
-    exthdr['CRPIX1']   = xpos
-    exthdr['CRPIX2']   = ypos
-    exthdr['CDELT1']   = (platescale * 0.001) / 3600.
-    exthdr['CDELT2']   = (platescale * 0.001) / 3600.
-    exthdr['SHAPEY']   = ny
-    exthdr['SHAPEX']   = nx
-    exthdr['TELESCOP'] = 'ROMAN'
-
-    # 11) Create the corgidrp Image
-    out_frame = Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
-
-    # 12) Optionally save
-    if filedir and file_save:
+    exthdr['FPAM_H']   = 2503.7
+    exthdr['FPAM_V']   = 6124.9
+    exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
+    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
+    exthdr['CTYPE1']   = 'RA---TAN'
+    exthdr['CTYPE2']   = 'DEC--TAN'
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
+    exthdr['CRVAL2']   = target_location[1]
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+   
+    # Save file
+    # TO DO: update with file name conventions
+    if filedir is not None and file_save:
         safe_target_name = target_name.replace(' ', '_')
-        fname = f"mock_flux_image_{safe_target_name}_X{fsm_x}_Y{fsm_y}.fits"
-        out_frame.save(filedir=filedir, filename=fname)
+        filename = os.path.join(f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}_.fits")
+        frame.save(filedir=filedir, filename=filename)
 
-    return out_frame
-
+    return frame
 
 def generate_reference_star_dataset_with_flux(
     n_frames=3,
