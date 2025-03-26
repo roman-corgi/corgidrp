@@ -7,6 +7,7 @@ from astropy.wcs import WCS
 from corgidrp import data
 from corgidrp.detector import flag_nans,nan_flags
 from corgidrp import star_center
+import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
@@ -386,7 +387,14 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
             updated_hdrs.append('CRPIX1/2')
+        if not ("DETPIX0X" in exthdr.keys()):
+            exthdr.set('DETPIX0X',0)
+            exthdr.set('DETPIX0Y',0)
+        exthdr.set('DETPIX0X',exthdr["DETPIX0X"]+x1)
+        exthdr.set('DETPIX0Y',exthdr["DETPIX0Y"]+y1)
+
         new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
+        new_frame.filename = frame.filename
         frames_out.append(new_frame)
 
     output_dataset = data.Dataset(frames_out)
@@ -400,11 +408,15 @@ def do_psf_subtraction(input_dataset,
                        ct_calibration=None,
                        reference_star_dataset=None,
                        mode=None, annuli=1,subsections=1,movement=1,
-                       numbasis=[1,4,8,16],outdir='KLIP_SUB',fileprefix="",
+                       numbasis=[1,4,8,16],outdir=None,fileprefix="",
                        do_crop=True,
                        crop_sizexy=None,
                        measure_klip_thrupt=True,
-                       measure_1d_core_thrupt=True
+                       measure_1d_core_thrupt=True,
+                       cand_locs=[],
+                       kt_seps=None,
+                       kt_pas=None,
+                       kt_snr=20.
                        ):
     """
     
@@ -438,7 +450,15 @@ def do_psf_subtraction(input_dataset,
         measure_1d_core_thrupt (bool, optional): Whether to measure the core throughput as a function of separation. 
             Separations and throughput levels for each separation are saved in Dataset[0].hdu_list['CT_THRU'].
             Defaults to True.
-
+        cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
+            PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        kt_seps (np.array, optional): Separations (in pixels from the star center) at which to inject fake 
+            PSFs for KLIP throughput calibration. If not provided, a linear spacing of separations between the IWA & OWA 
+            will be chosen.
+        kt_pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
+            PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
+        kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
+        
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
@@ -488,6 +508,9 @@ def do_psf_subtraction(input_dataset,
         numbasis = [numbasis]
 
     # Set up outdir
+    if outdir is None: 
+        outdir = os.path.join(corgidrp.config_folder, 'KLIP_SUB')
+    
     outdir = os.path.join(outdir,mode)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -560,7 +583,6 @@ def do_psf_subtraction(input_dataset,
     if measure_klip_thrupt:
         
         # Determine flux of objects to inject (units?)
-        inject_snr = 20.0
 
         # Use same KLIP parameters
         klip_params = {
@@ -573,15 +595,18 @@ def do_psf_subtraction(input_dataset,
                             dataset_out,
                             ct_calibration,
                             klip_params,
-                            inject_snr,
-                            cand_locs = [] # list of (sep_pix,pa_deg) of known off axis source locations
+                            kt_snr,
+                            cand_locs = cand_locs, # list of (sep_pix,pa_deg) of known off axis source locations
+                            seps=kt_seps,
+                            pas=kt_pas
                             )
         thrupt_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
         # wrt FPM's center 
-        thrupt_hdr['COMMENT'] = ('KLIP Throughput as a function of separation for each KLMode '
-                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2])')
-        thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1.'
+        thrupt_hdr['COMMENT'] = ('KLIP Throughput and retrieved FWHM as a function of separation for each KLMode '
+                                '(r, KL1, KL2, ...) = (data[0], data[1], data[2]). The last axis contains the'
+                                'KL throughput in the 0th index and the FWHM in the 1st index')
+        thrupt_hdr['UNITS'] = 'Separation: EXCAM pixels. KLIP throughput: values between 0 and 1. FWHM: EXCAM pixels'
         thrupt_hdu_list = [fits.ImageHDU(data=klip_thpt, header=thrupt_hdr, name='KL_THRU')]
         
         dataset_out[0].hdu_list.extend(thrupt_hdu_list)
@@ -596,12 +621,11 @@ def do_psf_subtraction(input_dataset,
         
         # Use the same separations as for KLIP throughput
         if measure_klip_thrupt:
-            seps = dataset_out[0].hdu_list['KL_THRU'].data[0]
+            seps = dataset_out[0].hdu_list['KL_THRU'].data[0,:,0]
         else:
             seps = np.array([5.,10.,15.,20.,25.,30.,35.])
 
-        cenxy = (dataset_out[0].ext_hdr['STARLOCX'],dataset_out[0].ext_hdr['STARLOCY'])
-        ct_1d = get_1d_ct(ct_calibration,cenxy,seps)
+        ct_1d = get_1d_ct(ct_calibration,dataset_out[0],seps)
 
         ct_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is
@@ -726,7 +750,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
-def update_to_l4(input_dataset):
+def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
     Updates the data level to L4. Only works on L3 data.
 
@@ -734,6 +758,8 @@ def update_to_l4(input_dataset):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
+        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file
+        flux_cal (corgidrp.data.FluxCalibration): a FluxCalibration calibration file
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L4-level
@@ -750,6 +776,8 @@ def update_to_l4(input_dataset):
     for frame in updated_dataset:
         # update header
         frame.ext_hdr['DATALVL'] = "L4"
+        frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1] #Associate the ct calibration file
+        frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
         frame.filename = frame.filename.replace("_L3_", "_L4_", 1)

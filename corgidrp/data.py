@@ -1,5 +1,7 @@
 import os
+import re
 import warnings
+import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
@@ -501,6 +503,10 @@ class Image():
             new_img = copy.deepcopy(self)
         else:
             new_img = copy.copy(self)
+            # copy the hdu_list and hdu_names list, but not their pointers
+            new_img.hdu_list = self.hdu_list.copy()
+            new_img.hdu_names = copy.copy(self.hdu_names)
+
         # update DRP version tracking
         new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
         new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
@@ -683,6 +689,7 @@ class FlatField(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
             self.ext_hdr['DATATYPE'] = 'FlatField' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = "None" # flat field is dimentionless
 
             # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)
@@ -690,9 +697,8 @@ class FlatField(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_flatfield.fits".format(orig_input_filename)
+            # give it a default filename using the last input file as the base
+            self.filename = re.sub('_L[0-9].', '_FLT_CAL', input_dataset[-1].filename)
 
 
         # double check that this is actually a masterflat file that got read in
@@ -950,10 +956,15 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_bad_pixel_map.fits".format(orig_input_filename)
+            # give it a default filename using the last input file as the base
+            # filename could be from an data level or filename oculd be from a flat field
+            base_filename = input_dataset[-1].filename
+            if "_FLT_CAL" in base_filename:
+                self.filename = base_filename.replace("_FLT_CAL", "_BPM_CAL")
+            else:
+                # not created from a flat
+                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+
 
 
         # double check that this is actually a bad pixel map that got read in
@@ -1200,16 +1211,18 @@ class AstrometricCalibration(Image):
     
     Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR a single array of calibration measurements of the following lengths (boresight: length 2 (RA, DEC), 
-        plate scale: length 1 (float), north angle: length 1 (float), distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
+        plate scale: length 2 (floats), north angle: length 1 (float), average offset: length 2 (floats) of average boresight offset in RA/DEC [deg],
+        distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
         3rd order distortion fit the input array should be length 37.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
     Attrs:
-        boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
-        platescale (float): the platescale value in [mas/pixel]
+        boresight (np.array): the corrected RA/DEC [deg] position of the detector center
+        platescale (float): the platescale value in [mas/pixel] along each axis
         northangle (float): the north angle value in [deg]
-        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map (if distortion map is not computed this is an array of nans), where the last value of the array is the order of polynomial used
+        avg_offset (np.array): the average offset [deg] from the detector center
+        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map, where the last value of the array is the order of polynomial used
 
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
@@ -1221,9 +1234,10 @@ class AstrometricCalibration(Image):
             raise ValueError("The AstrometricCalibration data should be an array of calibration measurements")
         else:
             self.boresight = self.data[:2]
-            self.platescale = self.data[2]
-            self.northangle = self.data[3]
-            self.distortion_coeffs = self.data[4:]
+            self.platescale = self.data[2:4]
+            self.northangle = self.data[4]
+            self.avg_offset = self.data[5:7]
+            self.distortion_coeffs = self.data[7:]
             
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
@@ -1440,7 +1454,7 @@ class FpamFsamCal(Image):
             exthdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
-            prihdr['OBSID'] = 0
+            prihdr['OBSNUM'] = 0
             exthdr["EXPTIME"] = 0
             exthdr['OPMODE'] = ""
             exthdr['EMGAIN_C'] = 1.0
@@ -1574,7 +1588,7 @@ class CoreThroughputCalibration(Image):
             # Default convention: replace _L3_.fits from the filename of the
             # input dataset by _CTP_CAL.fits
             self.filedir = '.'
-            self.filename = input_dataset[0].filename[:-8] + 'CTP_CAL.fits'
+            self.filename = re.sub('_L[0-9].', '_CTP_CAL', input_dataset[-1].filename)
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1782,6 +1796,160 @@ class CoreThroughputCalibration(Image):
             x_cor[is_valid],
             y_cor[is_valid]])
 
+    def GetPSF(self,
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal,
+        method='nearest-polar'):
+        """ Get a PSF at a given (x,y) location on HLC in a coronagraphic
+        observation given a CT calibration file and the PAM transformation from
+        encoder values to EXCAM pixels.
+
+        First implementation: nearest PSF in a polar sense. See below.
+
+        # TODO: Implement an interpolation method that takes into account other
+        # PSF than the nearest one. Comply with any required precision from the
+        # functions that will use the interpolated PSF. 
+
+        Args:
+          x_cor (numpy.ndarray): Values of the first dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          y_cor (numpy.ndarray): Values of the second dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+          method (str): Interpolation method that will be used:
+              'polar-nearest': Given an (x,y) position wrt FPM's center, the
+               associated PSF is the one in the CT calibration dataset whose
+               radial distance to the FPM's center is the closest to
+               sqrt(x**2+y**2). If there is more than one CT PSF at the same
+               radial distance, choose the one whose angular distance to the
+               (x,y) location is the smallest.
+              
+        Returns:
+          psf_interp_list (array): Array of interpolated PSFs for the valid
+              target locations.
+          x_interp_list (array): First dimension of the list of valid target positions. 
+          y_interp_list (array): Second dimension of the list of valid target positions.
+        """
+        if isinstance(x_cor, np.ndarray) is False:
+            if isinstance(x_cor, int) or isinstance(x_cor, float):
+                x_cor = np.array([x_cor])
+            elif isinstance(x_cor, list):
+                x_cor = np.array(x_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+        if isinstance(y_cor, np.ndarray) is False:
+            if isinstance(y_cor, int) or isinstance(y_cor, float):
+                y_cor = np.array([y_cor])
+            elif isinstance(y_cor, list):
+                y_cor = np.array(y_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+
+        if len(x_cor) != len(y_cor):
+            raise ValueError('Target locations must have the same number of '
+                'elements')
+
+        # We need to translate the PSF locations in the CT cal file to be with
+        # respect to the FPM's center during CT observations:
+        # Get FPM's center during CT observations
+        fpam_ct_pix_out = self.GetCTFPMPosition(
+                corDataset,
+                fpamfsamcal)[0]
+        # Get CT measurements relative to CT FPM's center
+        x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
+        y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
+        # Algorithm:
+        # Radial distances wrt FPM's center
+        radii = np.sqrt(x_grid**2 + y_grid**2)
+        # Azimuths
+        azimuths = np.arctan2(y_grid, x_grid)
+
+        # Radial distances of the target locations
+        radius_cor = np.sqrt(x_cor**2 + y_cor**2)
+
+        # Remove interpolation locations that are outside the radius range
+        r_good = radius_cor >= radii.min()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are less than the minimum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_good = radius_cor <= radii.max()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are either less than the minimum'
+                ' radius or greater than the maximum radius in the core throughout'
+                ' data: {:.2f} EXCAM pixels'.format(radii.max()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_cor = np.sqrt(x_cor**2 + y_cor**2)
+
+        psf_interp_list = []
+        x_interp_list = []
+        y_interp_list = []
+        if method.lower() == 'nearest-polar':
+            for i_psf in range(len(x_cor)):
+                # Agreeement for this nearest method is that radial distances are
+                # binned at 1/10th of a pixel. This will be unnecessary as soon as
+                # there's any other interpolation method than the 'nearest' one.
+                # Find the nearest radial position in the CT file (argmin()
+                # returns the first occurence only)
+                diff_r_abs = np.round(10*np.abs(r_cor[i_psf] - radii)/10)
+                idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
+                # If there's more than one case, select that one with the
+                # smallest angular distance
+                if len(idx_near) > 1:
+                    print("More than one PSF found with the same radial distance from the FPM's center")
+                    # Difference in angle b/w target and grid
+                    # We want to distinguish PSFs at different quadrants
+                    az_grid = np.arctan2(y_grid[idx_near], x_grid[idx_near])
+                    az_cor = np.arctan2(y_cor[i_psf], x_cor[i_psf])
+                    # Flatten into a 1-D array
+                    diff_az_abs = np.abs(az_cor - az_grid).transpose()[0]
+                    # Azimuth binning consistent with the binning of the radial distance
+                    bin_az_fac = 1/10/r_cor[i_psf]
+                    diff_az_abs = bin_az_fac * np.round(diff_az_abs/bin_az_fac)
+                    # Closest angular location to the target location within equal radius
+                    idx_near_az = np.argwhere(diff_az_abs == diff_az_abs.min())
+                    # If there are two locations (half angle), choose the average (agreement)
+                    if len(idx_near_az) == 2: 
+                        psf_interp = np.squeeze(self.data[idx_near[idx_near_az]]).mean(axis=0)
+                    # Otherwise, this is the PSF
+                    elif len(idx_near_az) == 1:
+                        psf_interp = np.squeeze(self.data[idx_near[idx_near_az[0]]])
+                    else:
+                        raise ValueError(f'There are {len(idx_near_az):d} PSFs ',
+                            'equally near the target PSF. This should not happen.')
+                # Otherwise this is the interpolated PSF (nearest)
+                elif len(idx_near) == 1:
+                    psf_interp = np.squeeze(self.data[idx_near[0]])
+                # This should not happen b/c there should always be a closest radius
+                else:
+                    raise Exception('No closest radial distance found. This should not happen.')
+
+                # Add valid case
+                psf_interp_list += [psf_interp]
+                x_interp_list += [x_cor[i_psf]]
+                y_interp_list += [y_cor[i_psf]]
+        else:
+            raise ValueError(f'Unidentified method for the interpolation: {method}')
+
+        return np.array(psf_interp_list), np.array(x_interp_list), np.array(y_interp_list)
+
 class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
@@ -1969,8 +2137,14 @@ class PyKLIPDataset(pyKLIP_Data):
             phead = frame.pri_hdr
             shead = frame.ext_hdr
                 
-            TELESCOP = phead['TELESCOP']
+            if 'TELESCOP' in phead:
+                TELESCOP = phead['TELESCOP']
+                if TELESCOP != "ROMAN":
+                    raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. TELESCOP = {0}'.format(TELESCOP))
             INSTRUME = phead['INSTRUME']
+            if INSTRUME != "CGI":
+                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. INSTRUME = {0}'.format(INSTRUME))
+            
             CFAMNAME = shead['CFAMNAME']
             data = frame.data
             if data.ndim == 2:
@@ -1987,12 +2161,9 @@ class PyKLIPDataset(pyKLIP_Data):
             # Get metadata.
             input_all += [data]
             centers_all += [centers]
-            filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
-            PAs_all += [shead['ROLL']] * NINTS
+            filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            PAs_all += [phead['ROLL']] * NINTS
 
-            if TELESCOP != "ROMAN" or INSTRUME != "CGI":
-                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument.')
-            
             # Get center wavelengths
             try:
                 CWAVEL = self.wave_hlc[CFAMNAME]
@@ -2003,7 +2174,7 @@ class PyKLIPDataset(pyKLIP_Data):
             wvs_all += [CWAVEL] * NINTS
 
             # pyklip will look for wcs.cd, so make sure that attribute exists
-            wcs_obj = wcs.WCS(header=shead, naxis=shead['WCSAXES'])
+            wcs_obj = wcs.WCS(header=shead)
 
             if not hasattr(wcs_obj.wcs,'cd'):
                 wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
@@ -2071,7 +2242,7 @@ class PyKLIPDataset(pyKLIP_Data):
 
                 psflib_data_all += [data]
                 psflib_centers_all += [centers]
-                psflib_filenames_all += [os.path.split(phead['FILENAME'])[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+                psflib_filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
             
             psflib_data_all = np.concatenate(psflib_data_all)
             if psflib_data_all.ndim != 3:

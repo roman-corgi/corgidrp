@@ -2,37 +2,12 @@ from corgidrp.mocks import create_psfsub_dataset,create_default_headers
 from corgidrp.l3_to_l4 import do_psf_subtraction
 from corgidrp.data import PyKLIPDataset, Image, Dataset
 from corgidrp.detector import nan_flags, flag_nans
+from corgidrp.astrom import create_circular_mask
 from scipy.ndimage import shift, rotate
 import pytest
 import numpy as np
 
 ## Helper functions/quantities
-
-def create_circular_mask(h, w, center=None, r=None):
-    """Creates a circular mask
-
-    Args:
-        h (int): array height
-        w (int): array width
-        center (list of float, optional): Center of mask. Defaults to the 
-            center of the array.
-        r (float, optional): radius of mask. Defaults to the minimum distance 
-            from the center to the edge of the array.
-
-    Returns:
-        np.array: boolean array with True inside the circle, False outside.
-    """
-
-    if center is None: # use the middle of the image
-        center = (w/2, h/2)
-    if r is None: # use the smallest distance between the center and image walls
-        r = min(center[0], center[1], w-center[0], h-center[1])
-
-    Y, X = np.ogrid[:h, :w]
-    dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-
-    mask = dist_from_center <= r
-    return mask
 
 iwa_lod = 3.
 owa_lod = 9.7
@@ -487,7 +462,7 @@ def test_psf_sub_RDI_nocrop():
     
     for i,frame in enumerate(result):
 
-        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -578,7 +553,7 @@ def test_psf_sub_ADIRDI_nocrop():
     for i,frame in enumerate(result):
 
         
-        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -689,8 +664,8 @@ if __name__ == '__main__':
 
     #test_psf_sub_split_dataset()
 
-    test_psf_sub_ADI_nocrop()
+    # test_psf_sub_ADI_nocrop()
     test_psf_sub_RDI_nocrop()
     test_psf_sub_ADIRDI_nocrop()
-    test_psf_sub_withcrop()
-    test_psf_sub_badmode()
+    # test_psf_sub_withcrop()
+    # test_psf_sub_badmode()
