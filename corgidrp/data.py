@@ -13,6 +13,7 @@ from scipy.interpolate import LinearNDInterpolator
 from astropy import wcs
 import copy
 import corgidrp
+from datetime import datetime, timedelta, timezone
 
 class Dataset():
     """
@@ -1384,8 +1385,9 @@ class FluxcalFactor(Image):
                 orig_input_filename = input_dataset[0].filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
-            self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            # JM: moved the below to fluxcal.py since it varies depending on the method
+            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 
@@ -2271,16 +2273,59 @@ class NDFilterSweetSpotDataset(Image):
             self.ext_hdr['HISTORY'] = (
                 f"NDFilterSweetSpotDataset created from {self.ext_hdr.get('DRPNFILE','?')} frames"
             )
-            # Optionally, define a default filename.
-            if input_dataset is not None and len(input_dataset) > 0:
-                base_name = input_dataset[0].filename.split(".fits")[0]
-                self.filename = f"{base_name}_ndfsweet.fits"
-            else:
-                self.filename = "NDFilterSweetSpotDataset.fits"
+
+            formatted_time = format_ftimeutc(self.ext_hdr['FTIMEUTC'])
+
+            self.filename = f"CGI_{self.pri_hdr['VISITID']}_{formatted_time}_NDF_CAL.fits"
 
         # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
             raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
+
+
+def format_ftimeutc(ftime_str: str) -> str:
+    """
+    Round the input FTIMEUTC time to the nearest 0.1 sec and reformat as:
+    yyyymmddThhmmsss, where the last three digits represent the two-digit seconds 
+    and one digit for the tenths of a second.
+    
+    For example, an input of "2025-04-15T03:05:10.21" would return "20250415T0305102".
+
+    Args:
+        ftime_str (str): Time string in ISO format, e.g. "2025-04-15T03:05:10.21".
+
+    Returns:
+        formatted_time (str): Reformatted time string that complies with documentation
+            guidelines.
+    """
+    # Parse the input using fromisoformat, which can handle timezone offsets.
+    try:
+        ftime = datetime.fromisoformat(ftime_str)
+    except ValueError as e:
+        raise ValueError(f"Could not parse FTIMEUTC: {ftime_str}") from e
+
+    # If the datetime is timezone aware, convert to UTC and remove tzinfo.
+    if ftime.tzinfo is not None:
+        ftime = ftime.astimezone(timezone.utc).replace(tzinfo=None)
+    
+    # Define rounding interval: 0.1 sec = 100,000 microseconds.
+    rounding_interval = 100000
+    # Round the microseconds to the nearest 0.1 sec.
+    rounded_microsec = int((ftime.microsecond + rounding_interval / 2) // rounding_interval * rounding_interval)
+    
+    # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds, increment the second.
+    if rounded_microsec >= 1000000:
+        ftime = ftime.replace(microsecond=0) + timedelta(seconds=1)
+    else:
+        ftime = ftime.replace(microsecond=rounded_microsec)
+    
+    # Extract seconds (two digits) and the tenths-of-second.
+    sec_int = ftime.second
+    tenth = int(ftime.microsecond / 100000)  # gives one digit (0-9)
+    
+    # Format as YYYYMMDDTHHMM then append seconds and tenth-of-second.
+    formatted_time = ftime.strftime("%Y%m%dT%H%M") + f"{sec_int:02d}{tenth:d}"
+    return formatted_time
 
 
 datatypes = { "Image" : Image,

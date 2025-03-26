@@ -5,6 +5,7 @@ import numpy as np
 from astropy.io import fits
 import pytest
 
+from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
@@ -213,18 +214,17 @@ def output_dir(tmp_path):
 # ---------------------------------------------------------------------------
 # Test functions using pytest
 # ---------------------------------------------------------------------------
-def test_nd_filter_calibration_object(stars_dataset_cached, output_dir):
+def test_nd_filter_calibration_object(stars_dataset_cached):
     print("**Testing ND filter calibration object generation and expected headers**")
     results = nd_filter_calibration.create_nd_filter_cal(
         stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     
-    # TO DO: update this when file name conventions are finalized
-    results.save(output_dir, "CGI_NDF_CAL.fits")
+    results.save(filedir=default_cal_dir)
 
-    nd_files = [fn for fn in os.listdir(output_dir) if fn.endswith('_NDF_CAL.fits')]
+    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_NDF_CAL.fits')]
     assert nd_files, "No NDFilterOD files were generated."
-    with fits.open(os.path.join(output_dir, nd_files[0])) as hdul:
+    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
         ext_hdr = hdul[1].header
         assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
@@ -234,16 +234,15 @@ def test_nd_filter_calibration_object(stars_dataset_cached, output_dir):
         assert ext_hdr.get('CFAMNAME') is not None, "Missing CFAMNAME keyword."
 
 
-def test_output_filename_convention(stars_dataset_cached, output_dir):
+def test_output_filename_convention(stars_dataset_cached):
     print("**Testing output filename naming conventions**")
     results = nd_filter_calibration.create_nd_filter_cal(
         stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
-    # TO DO: update this when file name conventions are decided
-    # TO DO: update this when file name conventions are finalized
-    results.save(output_dir, "CGI_NDF_CAL.fits")
-    nd_files = [fn for fn in os.listdir(output_dir) if fn.endswith('_NDF_CAL.fits')]
-    assert nd_files, "No files found matching naming convention."
+    results.save(filedir=default_cal_dir)
+    pattern = r"^CGI_[A-Z0-9]{19}_\d{8}T\d{7}_NDF_CAL\.fits$"
+    matched_files = [fn for fn in os.listdir(default_cal_dir) if re.match(pattern, fn)]
+    assert matched_files, "No files found matching naming convention."
 
 
 def test_average_od_within_tolerance(stars_dataset_cached):
@@ -491,7 +490,6 @@ def test_background_effect(tmp_path):
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
 
-'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -555,27 +553,27 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
-    run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
-    run_test(test_average_od_within_tolerance, stars_dataset_cached)
+    run_test(test_nd_filter_calibration_object, stars_dataset_cached)
+    run_test(test_output_filename_convention, stars_dataset_cached)
+    #run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
-    for method in ["Aperture", "Gaussian"]:
-        run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
+    #for method in ["Aperture", "Gaussian"]:
+    #    run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
 
-    for test_od in [1.0, 3.0]:
-        run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
+    #for test_od in [1.0, 3.0]:
+    #    run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
 
-    for aper_radius in [5, 10]:
-        run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
+    #for aper_radius in [5, 10]:
+    #    run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
-    run_test(test_od_stability, stars_dataset_cached)
+    #run_test(test_od_stability, stars_dataset_cached)
 
-    run_test(test_background_effect, background_tmp_dir)
+    #run_test(test_background_effect, background_tmp_dir)
 
-    run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
+    #run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
 
     print("All tests PASSED")
 
 if __name__ == "__main__":
     main()
-'''
+
