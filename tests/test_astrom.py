@@ -260,9 +260,9 @@ def test_get_polar_dist():
     pass
 
 if __name__ == "__main__":
-    # test_astrom()
-    # test_distortion()
-    # test_seppa2dxdy()
-    # test_seppa2xy()
+    test_astrom()
+    test_distortion()
+    test_seppa2dxdy()
+    test_seppa2xy()
     test_create_circular_mask()
     test_get_polar_dist()

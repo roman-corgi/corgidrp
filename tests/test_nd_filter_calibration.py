@@ -30,7 +30,7 @@ OD_RASTER_THRESHOLD = 0.1
 OD_TEST_TOLERANCE = 0.2
 FILESAVE = True
 ADD_GAUSS = False
-BACKGROUND = 3
+BACKGROUND = 0
 PHOT_METHOD = "Aperture"
 FLUX_OR_IRR = 'irr'
 
@@ -61,7 +61,7 @@ elif PHOT_METHOD == "Gaussian":
 # Functions to generate mocks
 # ---------------------------------------------------------------------------
 def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, output_path=None, 
-                           background_val=0, add_gauss_noise_val=False):
+                           add_background=False, add_gauss_noise_val=False):
     """
     Generate and save mock dim dataset files for specified exposure time and filter.
 
@@ -85,20 +85,24 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
     dim_star_images = []
     for star_name in DIM_STARS:
         dim_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
+        if add_background == True:
+            background_val= dim_star_flux*0.1
+        else:
+            background_val = BACKGROUND 
         flux_image = mocks.create_flux_image(
-            dim_star_flux, FWHM, cal_factor, filter_used, "HOLE", star_name,
+            dim_star_flux, FWHM, cal_factor, filter=filter_used, fpamname="HOLE", target_name=star_name,
             fsm_x=0, fsm_y=0, exptime=dim_exptime, filedir=output_path,
             platescale=21.8,
             background=background_val,
             add_gauss_noise=add_gauss_noise_val,
-            noise_scale=1.0, file_save=True
+            file_save=True
         )
         dim_star_images.append(flux_image)
     return dim_star_images
 
 
 def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_mocks, output_path=None, 
-                              background_val=0, add_gauss_noise_val=False):
+                              add_background=False, add_gauss_noise_val=False):
     """
     Generate and save mock bright dataset files for specified exposure time and filter.
 
@@ -115,6 +119,7 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
     Returns:
         list: A list of generated flux images for the dim stars.
     """
+    
     if save_mocks:
         output_path = output_path or os.getcwd()
     else:
@@ -128,13 +133,18 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                 bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, 
                                                                                           filter_used)
                 attenuated_flux = bright_star_flux * ND_transmission
+                if add_background == True:
+                    background_val = attenuated_flux*0.1
+                else:
+                    background_val = BACKGROUND
                 flux_image = mocks.create_flux_image(
-                    attenuated_flux, FWHM, cal_factor, filter_used, "ND225", star_name,
-                    dx, dy, bright_exptime, output_path,
+                    attenuated_flux, FWHM, cal_factor, filter=filter_used, fpamname="ND225", 
+                    target_name=star_name,
+                    fsm_x=dx, fsm_y=dy, exptime=bright_exptime, filedir=output_path,
                     platescale=21.8,
                     background=background_val,
                     add_gauss_noise=add_gauss_noise_val,
-                    noise_scale=1.0, file_save=True
+                    file_save=True
                 )
                 bright_star_images.append(flux_image)
     return bright_star_images
@@ -448,9 +458,9 @@ def test_background_effect(tmp_path):
     dim_dir_no.mkdir(exist_ok=True)
     dim_dir_bg.mkdir(exist_ok=True)
     dim_files_no = mock_dim_dataset_files(DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False,
-                                      output_path=str(dim_dir_no), background_val=0, add_gauss_noise_val=False)
+                                      output_path=str(dim_dir_no), add_background=False, add_gauss_noise_val=False)
     dim_files_bg = mock_dim_dataset_files(DIM_EXPTIME, FILTER_USED, CAL_FACTOR, save_mocks=False,
-                                      output_path=str(dim_dir_bg), background_val=BACKGROUND, add_gauss_noise_val=ADD_GAUSS)
+                                      output_path=str(dim_dir_bg), add_background=True, add_gauss_noise_val=ADD_GAUSS)
 
     # Create bright star mocks for two modes.
     bright_dir_no = tmp_path / "bright_no"
@@ -458,9 +468,9 @@ def test_background_effect(tmp_path):
     bright_dir_no.mkdir(exist_ok=True)
     bright_dir_bg.mkdir(exist_ok=True)
     bright_files_no = mock_bright_dataset_files(BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False,
-                                                output_path=str(bright_dir_no), background_val=0, add_gauss_noise_val=False)
+                                                output_path=str(bright_dir_no), add_background=False, add_gauss_noise_val=False)
     bright_files_bg = mock_bright_dataset_files(BRIGHT_EXPTIME, FILTER_USED, INPUT_OD, CAL_FACTOR, save_mocks=False,
-                                                output_path=str(bright_dir_bg), background_val=BACKGROUND, add_gauss_noise_val=ADD_GAUSS)
+                                                output_path=str(bright_dir_bg), add_background=True, add_gauss_noise_val=ADD_GAUSS)
     
     combined_no = dim_files_no + bright_files_no
     combined_bg = dim_files_bg + bright_files_bg
@@ -491,7 +501,7 @@ def test_background_effect(tmp_path):
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
 
-'''
+
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -555,20 +565,20 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
-    run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
-    run_test(test_average_od_within_tolerance, stars_dataset_cached)
+    #run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
+    #run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
+    #run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
-    for method in ["Aperture", "Gaussian"]:
-        run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
+    #for method in ["Aperture", "Gaussian"]:
+    #    run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
 
-    for test_od in [1.0, 3.0]:
-        run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
+    #for test_od in [1.0, 3.0]:
+    #    run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
 
-    for aper_radius in [5, 10]:
-        run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
+    #for aper_radius in [5, 10]:
+    #    run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
-    run_test(test_od_stability, stars_dataset_cached)
+    #run_test(test_od_stability, stars_dataset_cached)
 
     run_test(test_background_effect, background_tmp_dir)
 
@@ -578,4 +588,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
+
