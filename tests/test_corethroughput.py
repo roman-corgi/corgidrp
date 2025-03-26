@@ -351,7 +351,7 @@ def test_cal_file():
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
     # Load the calibration file to check it has the same data contents
-    ct_cal_file_load = data.CoreThroughputCalibration(ct_cal_filepath)
+    ct_cal_file_load = CoreThroughputCalibration(ct_cal_filepath)
     assert np.all(ct_cal_file_load.data == ct_cal_file_in.data)
     assert np.all(ct_cal_file_load.err == ct_cal_file_in.err)
     assert np.all(ct_cal_file_load.dq == ct_cal_file_in.dq)
