@@ -13,6 +13,7 @@ import corgidrp.l2b_to_l3 as l2b_tol3
 from corgidrp.data import Dataset
 from corgidrp.data import Image
 import corgidrp.mocks as mocks
+from corgidrp.data import Image, NDFilterSweetSpotDataset
 
 # ---------------------------------------------------------------------------
 # Global variables and constants
@@ -491,6 +492,66 @@ def test_background_effect(tmp_path):
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
 
+def test_calculate_od_at_new_location(output_dir):
+    """
+    Test calculate_od_at_new_location with:
+      1) A real NDFilterSweetSpotDataset containing Nx3 data = [OD, x, y]
+      2) A mock clean_frame_entry with a star centroid at a known location
+      3) Known FPAM offsets in headers
+      4) An identity transformation matrix file
+    We expect the interpolation to return a specific OD value.
+    """
+
+    # Create a small Nx3 "sweet spot" array:
+    # Each row is [OD, x, y].
+    # Here, the four corners form a 10x10 square, which we will interpolate at the center (5,5).
+    # The OD values at corners are 2.0, 3.0, 4.0, 5.0 => a bilinear interpolation at (5,5) => 3.5.
+    sweetspot_data = np.array([
+        [2.0,  0.0,  0.0],   # OD=2.0 at (x=0,y=0)
+        [3.0,  0.0, 10.0],   # OD=3.0 at (x=0,y=10)
+        [4.0, 10.0,  0.0],   # OD=4.0 at (x=10,y=0)
+        [5.0, 10.0, 10.0]    # OD=5.0 at (x=10,y=10)
+    ], dtype=float)
+
+    # Build the NDFilterSweetSpotDataset with a header that includes FPAM offsets
+    ndcal_prihdr, ndcal_exthdr = mocks.create_default_calibration_product_headers()
+    ndcal_exthdr["FPAM_H"] = 0.0
+    ndcal_exthdr["FPAM_V"] = 0.0
+    nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr)
+ 
+    # Create an identity transformation matrix FITS file in output_dir
+    transformation_matrix_file = mock_transformation_matrix(output_dir)
+    # The identity matrix => final EXCAM offset = FPAM offset
+
+    # Make a 5x5 mock 'clean_frame_entry' with a star at (2,2) => centroid (2,2)
+    # We'll shift it by (3,3) => final location (5,5).
+    clean_image_data = np.zeros((5, 5), dtype=float)
+    clean_image_data[2, 2] = 100.0  # star pixel
+    cframe_prihdr, cframe_exthdr = mocks.create_default_L2b_headers()
+    cframe_exthdr["FPAM_H"] = 3.0
+    cframe_exthdr["FPAM_V"] = 3.0
+    clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
+                              ext_hdr=cframe_exthdr)
+
+    # Call the function under test
+    interpolated_od = nd_filter_calibration.calculate_od_at_new_location(
+        clean_frame_entry=clean_frame_entry,
+        transformation_matrix_file=transformation_matrix_file,
+        ndsweetspot_dataset=nd_sweetspot_dataset
+    )
+
+    # Expect the final location = (2+3, 2+3) = (5,5).
+    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
+    expected_value = 3.5
+    assert abs(interpolated_od - expected_value) < 1e-6, (
+        f"Expected OD={expected_value}, got {interpolated_od}"
+    )
+    print(
+        f"test_calculate_od_at_new_location_nd_sweetspot_real_class PASSED: "
+        f"interpolated OD={interpolated_od}"
+    )
+
+
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -556,7 +617,7 @@ def main():
 
     #run_test(test_nd_filter_calibration_object, stars_dataset_cached)
     #run_test(test_output_filename_convention, stars_dataset_cached)
-    run_test(test_average_od_within_tolerance, stars_dataset_cached)
+    #run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
     #for method in ["Aperture", "Gaussian"]:
     #    run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
@@ -572,6 +633,8 @@ def main():
     #run_test(test_background_effect, background_tmp_dir)
 
     #run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
+
+    test_calculate_od_at_new_location(output_dir)
 
     print("All tests PASSED")
 
