@@ -349,16 +349,17 @@ def test_cal_file():
     # Check that the filename is what we expect
     ct_cal_filename = dataset_ct[-1].filename.replace("_L2b", "_CTP_CAL")
     ct_cal_filepath = os.path.join(corgidrp.default_cal_dir,ct_cal_filename)
-    if os.exists()
-    # Load the calibration file to check it has the same contents
+    if os.path.exists(ct_cal_filepath) is False:
+        raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
+    # Load the calibration file to check it has the same data contents
     ct_cal_file_load = data.CoreThroughputCalibration(ct_cal_filepath)
-    np.all(ct_cal_file_in.data == ww.data)
-    np.all(ct_cal_file_in.ct_excam == ww.ct_excam)
-    np.all(ct_cal_file_in.ct_fpam == ww.ct_fpam)
-    np.all(ct_cal_file_in.ct_fsam == ww.ct_fsam)
-    # Headers
+    assert np.all(ct_cal_file_load.data == ct_cal_file_in.data)
+    assert np.all(ct_cal_file_load.err == ct_cal_file_in.err)
+    assert np.all(ct_cal_file_load.dq == ct_cal_file_in.dq)
+    assert np.all(ct_cal_file_load.ct_excam == ct_cal_file_in.ct_excam)
+    assert np.all(ct_cal_file_load.ct_fpam == ct_cal_file_in.ct_fpam)
+    assert np.all(ct_cal_file_load.ct_fsam == ct_cal_file_in.ct_fsam)
     
-
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
     # vs. centroid/pixelized data is part of the tests on test_psf_pix_and_ct before)
