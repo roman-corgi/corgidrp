@@ -1832,7 +1832,10 @@ class CoreThroughputCalibration(Image):
                (x,y) location is the smallest.
               
         Returns:
-          Returns interpolated PSF
+          psf_interp_list (array): Array of interpolated PSFs for the valid
+              target locations.
+          x_interp_list (array): First dimension of the list of valid target positions. 
+          y_interp_list (array): Second dimension of the list of valid target positions.
         """
         if isinstance(x_cor, np.ndarray) is False:
             if isinstance(x_cor, int) or isinstance(x_cor, float):
@@ -1886,8 +1889,9 @@ class CoreThroughputCalibration(Image):
         y_cor = y_cor[r_good]
         r_good = radius_cor <= radii.max()
         if len(x_cor[r_good]) == 0:
-            raise ValueError('All target radius are greater than the maximum '
-                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.max()))
+            raise ValueError('All target radius are either less than the minimum'
+                ' radius or greater than the maximum radius in the core throughout'
+                ' data: {:.2f} EXCAM pixels'.format(radii.max()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor
         x_cor = x_cor[r_good]
