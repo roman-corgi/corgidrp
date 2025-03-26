@@ -71,7 +71,7 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
         cal_factor (float): Calibration factor applied to the images.
         save_mocks (bool): Whether to save the generated mock images.
         output_path (str, optional): Directory path to save the images. Defaults to the current working directory.
-        background_val (int, optional): Background value to be added to the images. Defaults to 0.
+        add_background (bool, optional): Whether to add background to the images.
         add_gauss_noise_val (bool, optional): Whether to add Gaussian noise to the images. Defaults to False.
 
     Returns:
@@ -113,7 +113,7 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
         cal_factor (float): Calibration factor applied to the images.
         save_mocks (bool): Whether to save the generated mock images.
         output_path (str, optional): Directory path to save the images. Defaults to the current working directory.
-        background_val (int, optional): Background value to be added to the images. Defaults to 0.
+        add_background (bool, optional): Whether to add background to the images.
         add_gauss_noise_val (bool, optional): Whether to add Gaussian noise to the images. Defaults to False.
 
     Returns:
