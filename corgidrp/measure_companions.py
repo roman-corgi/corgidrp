@@ -38,11 +38,10 @@ def measure_companions(
     Measure companion properties in a coronagraphic image and return a table with companion position, flux ratio, and apparent magnitude.
     
     Args:
-
         host_star_image (corgidrp.data.Image): Unocculted 2-D image of the host star (corrected for ND transmission)
         psf_sub_image (corgidrp.data.Image): PSF-subtracted image with companions.
         ct_cal (corgidrp.data.CoreThroughputCalibration): Core throughput calibration data.
-        FpamFsamCal (corgidrp.Data.FpamFsamCal): Transformation calibration data.
+        fpam_fsam_cal (corgidrp.Data.FpamFsamCal): Transformation calibration data.
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
         photometry_kwargs (dict): Dictionary of keyword arguments for photometry.
         fluxcal_factor (corgidrp.Data.FluxcalFactor): Flux calibration factor object.
@@ -172,9 +171,8 @@ def measure_companions(
             if verbose == True:
                 print("Companion ", i, " coronagraphic, PSF-subtracted counts: ", psf_sub_counts)
 
-
-            modeled_image = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
-            model_counts, _ = measure_counts(modeled_image, phot_method, None, **photometry_kwargs)
+            # modeled_image = simplified_psf_sub(scaled_star_psf, ct_cal, guesssep, psf_sub_efficiency)
+            model_counts, _ = measure_counts(scaled_host_psf_at_planet_location, phot_method, None, **photometry_kwargs)
             if verbose == True:
                 print("Companion ", i, " simplified model counts corrected: ", model_counts)
         
