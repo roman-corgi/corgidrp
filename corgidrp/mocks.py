@@ -3055,6 +3055,7 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
                   psfsize=None):
     """
     Creates a mock CoreThroughputCalibration object with gaussian PSFs.
+
     Args:
         fwhm_mas (float): FWHM in milliarcseconds
         cfam_name (str, optional): CFAM name, defaults to '1F'.
@@ -3067,7 +3068,7 @@ def create_ct_cal(fwhm_mas, cfam_name='1F',
         psfsize (int,optional): Size of psf model array in pixels. Must be an odd number. Defaults to 6 * the FWHM.
     
     Returns:
-        corgidrp.data.CoreThroughputCalibration: mock CoreThroughputCalibration object 
+        ct_cal (corgidrp.data.CoreThroughputCalibration): mock CoreThroughputCalibration object 
     """
     # Default headers
     prhd, exthd = create_default_L3_headers()
