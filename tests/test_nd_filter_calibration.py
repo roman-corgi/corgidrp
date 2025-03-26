@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 from astropy.io import fits
 import pytest
+import re
 
 from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
