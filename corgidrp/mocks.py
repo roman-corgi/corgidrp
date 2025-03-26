@@ -2779,7 +2779,7 @@ def create_flux_image(
         fsm_y (float): Y shift in mas from the image center.
         exptime (float): Exposure time (s).
         filedir (string): File directory for saving.
-        pltscale_mas (float): Plate scale in mas/pixel.
+        pltscale (float): Plate scale in mas/pixel.
         background (float): Add an optional uniform background in e-.
         add_gauss_noise (bool): Whether to add Gaussian noise to the final data.
         noise_scale (float): RMS amplitude of the Gaussian noise.
