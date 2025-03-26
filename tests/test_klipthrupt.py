@@ -799,8 +799,6 @@ def test_psfsub_withklipandctmeas_adi():
     kt = psfsub_dataset[0].hdu_list['KL_THRU'].data
     kt_seps = kt[0,:,0]
 
-    print("here", kt)
-
     # import matplotlib.pyplot as plt
     # fig,ax = plt.subplots(figsize=(6,4))
     # plt.scatter(kt[0],kt[1],label=psfsub_dataset[0].pri_hdr["KLIP_ALG"])
@@ -1292,11 +1290,12 @@ if __name__ == '__main__':
     # test_inject_psf()
     # test_measure_noise()
 
-    # test_meas_klip_ADI()
+    test_meas_klip_ADI()
     # test_meas_klip_RDI()
     # test_meas_klip_ADIRDI()
     # test_compare_RDI_ADI()
 
-    test_psfsub_withklipandctmeas_adi()
+    # test_psfsub_withklipandctmeas_adi()
     # test_psfsub_withklipandctmeas_rdi()
     # test_psfsub_withKTandCTandCrop_adi()
+    
