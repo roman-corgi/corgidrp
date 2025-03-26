@@ -1022,7 +1022,7 @@ class DetectorNoiseMaps(Image):
 
             # give it a default filename
             orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
-            self.filename = "{0}_DetectorNoiseMaps.fits".format(orig_input_filename)
+            self.filename = "{0}_DNM_CAL.fits".format(orig_input_filename)
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'Detected Electrons'

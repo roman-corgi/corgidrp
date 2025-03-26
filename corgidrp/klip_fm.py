@@ -100,23 +100,29 @@ def inject_psf(frame_in, ct_calibration, amp,
     return frame, psf_model, psf_cenxy
 
 
-def measure_noise(frame, seps_pix, hw, klmode_index=None):
+def measure_noise(frame, seps_pix, hw, klmode_index=None, center='mask'):
     """Calculates the noise (standard deviation of counts) of an 
         annulus at a given separation from the mask center.
     
     Args:
-        frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" in header
-        seps_pix (np.array of float): Separations (in pixels from mask center) at which to calculate 
+        frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" and "STARLOCX/Y" in header
+        seps_pix (np.array of float): Separations (in pixels from specified center) at which to calculate 
             the noise level.
         klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
             the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
             truncation choice.  If None (by default), all indices are returned.
         hw (float): halfwidth of the annulus to use for noise calculation.
+        center (str, optional): 'mask' or 'star'. Defaults to 'mask', which assumes the center at MASKLOCX and MASKLOCY, 
+            whereas 'star' assumes the center at STARLOCX and STARLOCY.
 
     Returns: np.array 
     """
-
-    cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
+    if center == 'mask':
+        cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
+    elif center == 'star':
+        cenx, ceny = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+    else:
+        raise ValueError(f"center must be 'mask' or 'star', got {center}")  
 
     # Mask data outside the specified annulus
     y, x = np.indices(frame.data.shape[1:])

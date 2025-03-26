@@ -4,6 +4,7 @@ from corgidrp import check
 from corgidrp.klip_fm import measure_noise
 import numpy as np
 from astropy.io import fits
+from scipy.interpolate import interp1d
 import warnings
 
 from corgidrp.find_source import make_snmap, psf_scalesub
@@ -145,45 +146,72 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     return flux_dataset
 
 
-def compute_calibrated_contrast_curve(input_dataset, halfwidth=None):
+def compute_flux_ratio_noise(input_dataset, unocculted_star_dataset, unocculted_star_locx=None, unocculted_star_locy=None, requested_separations=None, halfwidth=None):
     '''
     Uses the PSF-subtracted frame and its algorithm throughput vs separation to 
-    produce a calibrated 1-sigma contrast curve, also accounting for the throughput of the coronagraph.
+    produce a calibrated 1-sigma flux ratio "contrast" curve (or "noise curve" since contrast curve is typically 5-sigma), also accounting for the throughput of the coronagraph.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
+        unocculted_star_dataset (corgidrp.data.Dataset): a dataset of unocculted star Images corresponding to the Images in input_dataset
+        unocculted_star_locx (float array, optional): x-coordinates of the unocculted stars according to the order given in the unocculted_star_dataset.  If None, the peak pixel x is used.  Defaults to None. 
+        unocculted_star_locy (float array, optional): y-coordinates of the unocculted stars according to the order given in the unocculted_star_dataset.  If None, the peak pixel y is used.  Defaults to None.
+        requested_separations (float array, optional): separations at which to compute the flux ratio noise curve.  If None, the separations used for 
+            the core throughput are used (e.g., no interpolation needed).  Defaults to None.
         halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.  If None, half 
             of the minimum spacing between separation distances (if it isn't uniform spacing) is used.  Defaults to None.
-            
+
     Returns:
-        corgidrp.data.Dataset: input dataset with an additional extension header 'CON_CRV' for every frame, containing the 
-            calibrated contrast curve as a function of radial separation.  The data in that extension for a given frame is a (1+M)xN array,
+        corgidrp.data.Dataset: input dataset with an additional extension header 'FRN_CRV' for every frame, containing the 
+            calibrated flux ratio noise curve as a function of radial separation.  The data in that extension for a given frame is a (1+M)xN array,
             where the first row contains the separation radii in pixels and the M rows contain the corresponding 
-            contrast curve values for each KL mode truncation (maintaining the KL index ordering).
-            TODO:  Add uncertainty to contrast curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
+            flux ratio noise curve values for each KL mode truncation (maintaining the KL index ordering).
+            TODO:  Add uncertainty to flux ratio noise curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
     '''
     output_dataset = input_dataset.copy()
     for frame in output_dataset.frames:
         klip_tp = frame.hdu_list['KL_THRU'].data[1:]
         core_tp = frame.hdu_list['CT_THRU'].data[1]
-        # the separations for KLIP and core throughput are assumed the same (for now)
-        # separations, in pixels, give the middle radius of the annulus 
-        separations = frame.hdu_list['CT_THRU'].data[0]
-        sep_spacings = separations - np.roll(separations, 1)
+        klip_seps = frame.hdu_list['KL_THRU'].data[0]
+        ct_seps = frame.hdu_list['CT_THRU'].data[0]
+        min_sep = np.max([np.min(klip_seps), np.min(ct_seps)])
+        max_sep = np.min([np.max(klip_seps), np.max(ct_seps)])
+        if requested_separations is None:
+            requested_separations = frame.hdu_list['KL_THRU'].data[0]
+        if np.any(requested_separations < min_sep) or np.any(requested_separations > max_sep):
+            warnings.warn('Not all requested_separations are within the range of the separations used for the KLIP and core throughputs.  Extrapolation will be used.')
+        ct_spacings = ct_seps - np.roll(ct_seps, 1)
         # ignore the meaningless first entry (b/c of looping around with np.roll)
-        min_spacing = np.min(sep_spacings[1:])
+        min_ct_spacing = np.min(ct_spacings[1:])
+        klip_spacings = klip_seps - np.roll(klip_seps, 1)
+        # ignore the meaningless first entry (b/c of looping around with np.roll)
+        min_klip_spacing = np.min(klip_spacings[1:])
+        min_spacing = np.min([min_ct_spacing, min_klip_spacing])
         if halfwidth is None:
             halfwidth = min_spacing/2
         check.real_positive_scalar(halfwidth, 'halfwidth', ValueError)
         if halfwidth > min_spacing/2:
             warnings.warn('Halfwidth is wider than half the minimum spacing between separation values.')
-        annular_noise = measure_noise(frame, separations, halfwidth)
-        contrast_curve_vals = klip_tp*core_tp*annular_noise.T
-        contrast_curve = np.vstack([separations, contrast_curve_vals])
+        annular_noise = measure_noise(frame, requested_separations, halfwidth, center='star') # in photoelectrons/s
+        # now need to get Fp/Fs
+        # For star flux, Fs:  integrated flux of star modeled as analytic formula for volume under 2-D Gaussian defined 
+        # by amplitude and FWHM used for KLIP throughput calculation.  Amplitude found by doing Gaussian fit.
+        # For planet flux, Fp:  treat the annular noise value as the amplitude of a 2-D Gaussian and use the 
+        # same FWHM used for KLIP throughput calculation.  The analytic formula for volume under the Gaussian is the integrated flux.
+        noise_amp = annular_noise
+        fwhm = 
+        # Interpolate/extrapolate the algorithm and core throughputs at the desired separations
+        klip_interp_func = interp1d(klip_seps, klip_tp, kind='linear', fill_value='extrapolate')
+        klip_tp = klip_interp_func(requested_separations)
+        ct_interp_func = interp1d(ct_seps, core_tp, kind='linear', fill_value='extrapolate')
+        core_tp = ct_interp_func(requested_separations)
+        contrast_curve_vals = annular_noise.T/(klip_tp*core_tp)
+        # XXX include row for separations in mas; does Ell's code do this already?
+        contrast_curve = np.vstack([requested_separations, contrast_curve_vals])
         hdr = fits.Header()
-        hdr['BUNIT'] = "erg/(s*cm^2*AA)"
-        frame.add_extension_hdu('CON_CRV', data = contrast_curve, header=hdr)
-        history_msg = 'Calibrated contrast curve added to extension header CON_CRV.'
+        hdr['BUNIT'] = "Fp/Fs"
+        frame.add_extension_hdu('FRN_CRV', data = contrast_curve, header=hdr)
+        history_msg = 'Calibrated flux ratio curve added to extension header FRN_CRV.'
         output_dataset.update_after_processing_step(history_msg)
     return output_dataset
 

@@ -1,7 +1,7 @@
 from corgidrp.mocks import create_psfsub_dataset,create_ct_cal
 from corgidrp.klip_fm import measure_noise
 from corgidrp.l3_to_l4 import do_psf_subtraction
-from corgidrp.l4_to_tda import compute_calibrated_contrast_curve
+from corgidrp.l4_to_tda import compute_flux_ratio_noise
 
 import pytest
 import numpy as np
@@ -84,10 +84,10 @@ def test_expected_contrast():
     klip_tp = klip[1:]
     core_tp = frame0.hdu_list['CT_THRU'].data[1]
     annular_noise = measure_noise(frame0, separations, hw=3)
-    contrast_curve_expected = klip_tp*core_tp*annular_noise.T
+    contrast_curve_expected = annular_noise.T/(klip_tp*core_tp)
 
     # now see what the step function gives:
-    contrast_dataset = compute_calibrated_contrast_curve(psfsub_dataset_rdi, halfwidth=3)
+    contrast_dataset = compute_flux_ratio_noise(psfsub_dataset_rdi, halfwidth=3)
     contrast = contrast_dataset[0].hdu_list['CON_CRV'].data
     contrast_seps = contrast[0]
 
@@ -98,9 +98,9 @@ def test_expected_contrast():
     
     #test inputs
     with pytest.raises(ValueError):
-        compute_calibrated_contrast_curve(psfsub_dataset_rdi, halfwidth=0)
+        compute_flux_ratio_noise(psfsub_dataset_rdi, halfwidth=0)
     with pytest.warns(UserWarning):
-        compute_calibrated_contrast_curve(psfsub_dataset_rdi, halfwidth=100)
+        compute_flux_ratio_noise(psfsub_dataset_rdi, halfwidth=100)
 
 if __name__ == '__main__':  
     test_expected_contrast()
