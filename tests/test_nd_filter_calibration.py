@@ -574,8 +574,8 @@ def main():
     #run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
 
     print("All tests PASSED")
-'''
+
 
 if __name__ == "__main__":
     main()
-
+'''

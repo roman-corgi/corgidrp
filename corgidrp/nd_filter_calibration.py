@@ -323,6 +323,7 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
     # keeping the common metadata because if you do provide dim stars as part of the dataset
     # and grab the last header you might get the FPAM info of a frame with no ND filter in.
     ext_hdr['BUNIT']    = 'None (dimensionless)'
+    ext_hdr['DATALVL']  = 'CAL'
     ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
     ext_hdr['FPAM_H']   = common_metadata.get('FPAM_H')
     ext_hdr['FPAM_V']   = common_metadata.get('FPAM_V')
