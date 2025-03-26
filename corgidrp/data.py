@@ -689,6 +689,7 @@ class FlatField(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
             self.ext_hdr['DATATYPE'] = 'FlatField' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = "None" # flat field is dimentionless
 
             # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)

@@ -198,7 +198,7 @@ def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
     #####################################
 
     l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_data_path, "*.fits")))
-    walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path, template="l2b_to_l3.json")
+    walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path)
 
     #Read in an L3 file
     l3_filename = glob.glob(os.path.join(e2eoutput_path, "*L3_.fits"))[0]
@@ -322,7 +322,7 @@ def test_l3_to_l4(e2eoutput_path):
 
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*L3_.fits")))
 
-    walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4, template="l3_to_l4.json")
+    walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4)
 
     ########################################################################
     #### Read in the psf_subtracted images and test for source detection ###

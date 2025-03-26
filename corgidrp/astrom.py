@@ -231,6 +231,61 @@ def angle_between(pos1, pos2):
             
     return angle * 180/np.pi
 
+
+def get_polar_dist(seppa1,seppa2):
+    """Computes the linear distance between two points in polar coordinates.
+
+    Args:
+        seppa1 (tuple): Separation (in any units) and position angle (in degrees) of the first point.
+        seppa2 (tuple): Separation (in same units as above) and position angle (in degrees) of the second point.
+
+    Returns:
+        float: Distance between the two points in the input separation units.
+    """
+    sep1, pa1 = seppa1
+    sep2, pa2 = seppa2
+
+    return np.sqrt(sep1**2 + sep2**2 - (2 * sep1 * sep2 * np.cos((pa1-pa2)*np.pi/180.)))
+
+
+def seppa2dxdy(sep_pix,pa_deg):
+    """Converts position in separation (pixels from some reference center) and position angle 
+    (counterclockwise from north) to separation in x and y pixels from the center.
+
+    Args:
+        sep_pix (float or np.array): Separation in pixels
+        pa_deg (float or np.array): Position angle in degrees (counterclockwise from North)
+
+    Returns:
+        np.array: array of shape (2,) containing delta x and delta y in pixels from the center 
+    """
+    dx = -sep_pix * np.sin(pa_deg * np.pi/180.)
+    dy = sep_pix * np.cos(pa_deg * np.pi/180.)
+
+    return np.array([dx, dy])
+
+
+def seppa2xy(sep_pix,pa_deg,cenx,ceny):
+    """Converts position in separation (pixels from some reference center) and position angle 
+    (counterclockwise from north) to separation in x and y pixels from the center.
+
+    Args:
+        sep_pix (float or np.array): Separation in pixels
+        pa_deg (float or np.array): Position angle in degrees (counterclockwise from North)
+        cenx (float): X location of center reference pixel. (0,0) is center of bottom left pixel
+        ceny (float): Y location of center reference pixel. (0,0) is center of bottom left pixel
+
+    Returns:
+        np.array: x and y pixel location. (0,0) is center of bottom left pixel.
+    """
+    dx, dy = seppa2dxdy(sep_pix,pa_deg)
+
+    x = dx + cenx
+    y = dy + ceny
+
+    return np.array([x, y])
+
+
 def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     ''' 
     Used to find to [pixel, pixel] locations of the sources in an image
@@ -1100,3 +1155,29 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     input_dataset.update_after_processing_step(history_msg)
 
     return avg_cal
+
+
+def create_circular_mask(shape_yx, center=None, r=None):
+    """Creates a circular mask
+
+    Args:
+        shape_yx (list-like of int): 
+        center (list of float, optional): Center of mask. Defaults to the 
+            center of the array.
+        r (float, optional): radius of mask. Defaults to the minimum distance 
+            from the center to the edge of the array.
+
+    Returns:
+        np.array: boolean array with True inside the circle, False outside.
+    """
+    shape_yx = np.array(shape_yx)
+    if center is None: # use the middle of the image
+        center = (shape_yx-1) / 2
+    if r is None: # use the smallest distance between the center and image walls
+        r = min(center[0], center[1], shape_yx[0]-center[0], shape_yx[1]-center[1])
+
+    Y, X = np.ogrid[:shape_yx[0], :shape_yx[1]]
+    dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
+
+    mask = dist_from_center <= r
+    return mask
