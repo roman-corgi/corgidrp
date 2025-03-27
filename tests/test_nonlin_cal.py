@@ -149,7 +149,6 @@ def setup_module():
     min_write = 800
     max_write = 10000
 
-
 def teardown_module():
     """
     Runs at the end. Deletes variables
@@ -201,6 +200,13 @@ def test_expected_results_nom_sub():
     assert np.equal(nonlin_out.data[norm_ind+1,-1], 1)
     # check that norm_val is correct
     assert np.equal(nonlin_out.data[norm_ind+1,0], norm_val)
+
+    # Test filename follows convention (as of R3.0.2)
+    nln_cal_filename = dataset_nl[-1].filename.replace("_L2b", "_NLN_CAL")
+    nln_cal_filepath = os.path.join(corgidrp.default_cal_dir,ct_cal_filename)
+    breakpoint()
+    if os.path.exists(nln_cal_filepath) is False:
+        raise IOError(f'NonLinearity calibration file {nln_cal_filepath} does not exist.')
 
 def test_expected_results_time_sub():
     """Outputs are as expected for the provided frames with datetime values for
