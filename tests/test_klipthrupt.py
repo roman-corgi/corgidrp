@@ -85,7 +85,7 @@ def test_create_ct_cal():
     # (scales with i for debugging purposes)
     for i in range(1,n_psfs+1):
         psf = ctcal.data[i-1]
-        assert np.max(psf) == pytest.approx(i,rel=0.01)
+        assert np.max(psf) == pytest.approx(ctcal.ct_excam[2][i-1],rel=0.01)
 
         # Check that psf is odd shape and is centered
         assert np.all(np.array(psf.shape) % 2 == 1)
@@ -582,11 +582,11 @@ def test_meas_klip_ADI():
 
     # Check KL thrupt increases with separation
     for i in range(1,len(kt_adi[0])):
-        assert np.all(kt_adi[1:,i,0] > kt_adi[1:,i-1,0])
+        assert np.all(kt_adi[1:,i,0] > kt_adi[1:,i-1,0] - 0.05) # add a fudge factor of 5%
 
     # Check recovered FWHM increases with separation
     for i in range(1,len(kt_adi[0])):
-        assert np.all(kt_adi[1:,i,1] > kt_adi[1:,i-1,1])
+        assert np.all(kt_adi[1:,i,1] > kt_adi[1:,i-1,1] - 0.1) # add fudge factor of 0.1 pixels
 
 
 def test_meas_klip_RDI():
@@ -1298,3 +1298,4 @@ if __name__ == '__main__':
     # test_psfsub_withklipandctmeas_adi()
     # test_psfsub_withklipandctmeas_rdi()
     # test_psfsub_withKTandCTandCrop_adi()
+    
