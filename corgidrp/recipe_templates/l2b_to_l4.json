@@ -5,7 +5,7 @@
         "track_individual_errors": false
     },
     "inputs": [],
-    "outputdir": "/Users/ygouf/git/cgi-sit/13-tdd/vi_tdd_04_iit_data_processing/output_drp_L4/",
+    "outputdir": "",
     "steps": [
         {
             "name": "create_wcs",
