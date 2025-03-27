@@ -2,17 +2,19 @@
 import corgidrp.fluxcal as fluxcal
 import numpy as np
 import warnings
+from corgidrp.data import Dataset, Image
 
 from corgidrp.find_source import make_snmap, psf_scalesub
 
-def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
+def determine_app_mag(input_data, source_star, scale_factor = 1.):
     """
     determine the apparent Vega magnitude of the observed source
     in the used filter band and put it into the header.
     We assume that each frame in the dataset was observed with the same color filter.
     
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
+        input_data (corgidrp.data.Dataset or corgidrp.data.Image): 
+            A dataset of Images (L2b-level) or a single Image. Must be all of the same source with same filter.
         source_star (str): either the fits file path of the flux model of the observed source in 
                            CALSPEC units (erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
         scale_factor (float): factor applied to the flux of the calspec standard source, so that you can apply it 
@@ -20,12 +22,34 @@ def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
                               Defaults to 1.
     
     Returns:
-        corgidrp.data.Dataset: a version of the input dataset with updated header including 
-                               the apparent magnitude
+        mag_data (corgidrp.data.Dataset): A version of the input with an updated header including the apparent 
+            magnitude.
     """
-    mag_dataset = input_dataset.copy()
-    # get the filter name from the header keyword 'CFAMNAME'
-    filter_name = fluxcal.get_filter_name(mag_dataset[0])
+    # If input is a dataset, process each image
+    if isinstance(input_data, Dataset):
+        mag_data = input_data.copy()
+
+        # Make sure all frames in dataset have the same filter and target
+        filter_name = fluxcal.get_filter_name(mag_data[0])
+        target_name = mag_data[0].pri_hdr["TARGET"]
+        
+        for img in mag_data:
+            img_filter = fluxcal.get_filter_name(img)
+            img_target = img.pri_hdr["TARGET"]
+
+            if img_filter != filter_name:
+                raise ValueError(f"All images in dataset must be taken with the same CFAMNAME for calculating"
+                                 f"apparent magnitude. Found {img_filter}, expected {filter_name}."
+                                 )
+            if img_target != target_name:
+                raise ValueError(f"All images in dataset must be taken of the same TARGET for calculating"
+                                 f"apparent magnitude. Found {img_target}, expected {target_name}."
+                                 )
+
+    elif isinstance(input_data, Image):
+        mag_data = Dataset([input_data.copy()])
+        filter_name = fluxcal.get_filter_name(mag_data[0]) 
+
     # read the transmission curve from the color filter file
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
 
@@ -42,14 +66,16 @@ def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     #Calculate the irradiance of vega and the source star in the filter band
     vega_irr = fluxcal.calculate_band_irradiance(filter_trans, vega_sed, wave)
     source_irr = fluxcal.calculate_band_irradiance(filter_trans, source_sed, wave)
+
     #calculate apparent magnitude
     app_mag = -2.5 * np.log10(source_irr/vega_irr)
+
     # write the reference wavelength and the color correction factor to the header (keyword names tbd)
     history_msg = "the apparent Vega magnitude is calculated and added to the header {0}".format(str(app_mag))
     # update the header of the output dataset and update the history
-    mag_dataset.update_after_processing_step(history_msg, header_entries = {"APP_MAG": app_mag})
+    mag_data.update_after_processing_step(history_msg, header_entries = {"APP_MAG": app_mag})
     
-    return mag_dataset
+    return mag_data
 
 
 def determine_color_cor(input_dataset, ref_star, source_star):
@@ -317,3 +343,46 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     # names of the header keywords are tentative
     
     return new_image
+
+def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
+    """
+    Calculate the photometric zero point for a given star image.
+
+    Computes the zero point by comparing the measured photon flux from the image with the apparent magnitude 
+    determined for the star relative to Vega. If no photometry keyword arguments are provided, default values 
+    are used for the aperture photometry parameters.
+
+    Args:
+        image (corgidrp.data.Image): An image containing the star.
+        star_name (str): The name of the star, used to determine its apparent magnitude.
+        encircled_radius (float): The radius within which to sum the counts for aperture photometry.
+        phot_kwargs (dict, optional): A dictionary of keyword arguments for photometry, including parameters 
+            like 'frac_enc_energy', 'method', 'subpixels', 'background_sub', 'r_in', 'r_out', 
+            'centering_method', and 'centroid_roi_radius'. Defaults to a predefined set of parameters if None.
+
+    Returns:
+        zp (float): The computed zero point based on the apparent magnitude and the measured counts sum.
+    """
+    if phot_kwargs is None:
+        phot_kwargs = {
+            'frac_enc_energy': 1.0,
+            'method': 'subpixel',
+            'subpixels': 5,
+            'background_sub': False,
+            'r_in': 5,
+            'r_out': 10,
+            'centering_method': 'xy',
+            'centroid_roi_radius': 5
+        }
+
+    # Compute apparent magnitude of this star compared to Vega in this band
+    mag_dataset = determine_app_mag(image, star_name)
+    
+    # Get the apparent magnitude from the updated dataset
+    app_mag = mag_dataset[0].ext_hdr["APP_MAG"]
+
+    # Compute zero point using real measured photons
+    ap_sum = fluxcal.aper_phot(image, encircled_radius, **phot_kwargs, centering_initial_guess=None)
+    zp = app_mag + 2.5 * np.log10(ap_sum)
+
+    return zp
