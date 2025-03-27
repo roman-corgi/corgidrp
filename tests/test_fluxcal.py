@@ -142,7 +142,9 @@ def test_fluxcal_file():
     assert fluxcal_fac_file.filter == '3C'
     assert fluxcal_fac_file.fluxcal_fac == fluxcal_factor[0,0]
     assert fluxcal_fac_file.fluxcal_err == fluxcal_factor_error[0,0,0]
-    assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
+    # JM: I moved this out of the fluxcal class and into fluxcal.py because, depending on the method you use to 
+    # make the fluxcal factor, the BUNIT will vary. Doing a mock without running fluxcal methods won't update BUNIT
+    #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
 
 def test_abs_fluxcal():
     """ 

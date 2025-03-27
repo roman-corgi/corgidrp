@@ -19,9 +19,9 @@ from corgidrp.data import Image, NDFilterSweetSpotDataset
 # ---------------------------------------------------------------------------
 # Global variables and constants
 # ---------------------------------------------------------------------------
-BRIGHT_STARS = ['109 Vir', 'Vega']
+BRIGHT_STARS = ['Vega']
 DIM_STARS = ['TYC 4424-1286-1',
-             'GSC 02581-02323', 'TYC 4207-219-1']
+             'GSC 02581-02323']
 
 # takes a long time to run with all stars
 #BRIGHT_STARS = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep']
@@ -435,21 +435,6 @@ def test_aperture_radius_sensitivity(stars_dataset_cached, aper_radius):
     )
 
 
-def test_od_stability(stars_dataset_cached):
-    # TO DO: move this out of the test code and into the calibration product generation 
-    print("**Testing OD stability across multiple dithers**")
-    ds_copy = copy.deepcopy(stars_dataset_cached)
-    results = nd_filter_calibration.create_nd_filter_cal(
-        ds_copy, OD_RASTER_THRESHOLD, "Aperture", "irr", PHOT_ARGS, 
-        fluxcal_factor = None)
-    ods = results.data
-    std_od = np.std(ods[:, 0])
-    allowed_scatter = 0.05
-    assert std_od < allowed_scatter, (
-        f"OD dithers for target have std={np.std(ods)}, expected < {allowed_scatter}"
-    )
-
-
 def test_background_effect(tmp_path):
     """
     Generate two sets of mocks (one without background, one with background)
@@ -564,7 +549,7 @@ def test_calculate_od_at_new_location(output_dir):
         f"interpolated OD={interpolated_od}"
     )
 
-
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -641,8 +626,6 @@ def main():
     for aper_radius in [5, 10]:
         run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
-    run_test(test_od_stability, stars_dataset_cached)
-
     run_test(test_background_effect, background_tmp_dir)
 
     run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
@@ -654,4 +637,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+'''

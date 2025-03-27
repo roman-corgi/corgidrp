@@ -8,6 +8,7 @@ import corgidrp.astrom as astrom
 from corgidrp.data import Dataset, FluxcalFactor, NDFilterSweetSpotDataset
 from corgidrp.astrom import centroid_with_roi
 from scipy.interpolate import griddata
+import warnings
 
 # =============================================================================
 # Helper Functions
@@ -278,7 +279,19 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
         y_values.append(y_center)
 
     od_array = np.array(od_values)
-    star_flag = (np.std(od_array) >= od_raster_threshold) if od_array.size > 0 else False
+
+    # Check for wide variation in OD values
+    # Check for wide variation in OD values
+    if od_array.size > 0:
+        od_std = np.std(od_array)
+        if od_std >= od_raster_threshold:
+            warnings.warn(
+                f"OD variation is high for target '{target}': "
+                f"Standard deviation ({od_std:.3f}) exceeds threshold ({od_raster_threshold:.3f})."
+            )
+    else:
+        od_std = np.nan
+
     average_od = np.mean(od_array) if od_array.size > 0 else np.nan
 
     return {
@@ -288,7 +301,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
         'FPAM_H': common_fpam_h,
         'FPAM_V': common_fpam_v,
         'CFAMNAME': ref_cfam_name,
-        'flag': star_flag,
+        'flag': (od_std >= od_raster_threshold if not np.isnan(od_std) else False),
         'x_values': x_values,
         'y_values': y_values
     }
