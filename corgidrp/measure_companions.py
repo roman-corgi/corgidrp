@@ -16,6 +16,7 @@ def measure_companions(
     psf_sub_image,
     ct_cal,
     fpam_fsam_cal,
+    nd_cal=None,
     phot_method='aperture',
     photometry_kwargs=None,
     fluxcal_factor=None,
@@ -32,10 +33,12 @@ def measure_companions(
     Measure companion properties in a coronagraphic image and return a table with companion position, flux ratio, and apparent magnitude.
     
     Args:
-        host_star_image (corgidrp.data.Image): Unocculted 2-D image of the host star (corrected for ND transmission)
+        host_star_image (corgidrp.data.Image): Unocculted 2-D image of the host star (potentially corrected for ND transmission)
         psf_sub_image (corgidrp.data.Image): PSF-subtracted image with companions.
         ct_cal (corgidrp.data.CoreThroughputCalibration): Core throughput calibration data.
-        fpam_fsam_cal (corgidrp.Data.FpamFsamCal): Transformation calibration data.
+        fpam_fsam_cal (corgidrp.data.FpamFsamCal): Transformation calibration data.
+        nd_cal (corgidrp.data.NDFilterSweetSpotDataset): ND calibration if host_star_image has not been corrected for ND. If None,
+            no correction will be done.
         phot_method (str): Photometry method to use ('aperture' or 'gauss2d').
         photometry_kwargs (dict): Dictionary of keyword arguments for photometry.
         fluxcal_factor (corgidrp.Data.FluxcalFactor): Flux calibration factor object.
@@ -59,11 +62,15 @@ def measure_companions(
         result_table (astropy.table.Table): Table containing companion measurements.
     """
     # Measure counts of the host star and reference PSF from the provided images.
-    # TO DO: correct for ND filter here
     guess_index = np.unravel_index(np.nanargmax(host_star_image.data), host_star_image.data.shape)
-    host_star_peakflux, host_star_fwhm, _, _ = pyklip.fakes.gaussfit2d(host_star_image.data, guess_index[1], guess_index[0], searchrad=7, guessfwhm=3, 
+    host_star_peakflux, host_star_fwhm, x_host, y_host = pyklip.fakes.gaussfit2d(host_star_image.data, guess_index[1], guess_index[0], searchrad=7, guessfwhm=3, 
                                                         guesspeak=np.nanmax(host_star_image.data), refinefit=True)
     # host_star_counts, _ = measure_counts(ref_star_dataset[0], phot_method, None, **photometry_kwargs)
+    # correct for ND if ND cal is provided
+    if nd_cal is not None:
+        od_val = nd_cal.interpolate_od(x_host, y_host)
+        host_star_peakflux /= od_val
+    
     _, _, ct = ct_cal.ct_excam
     max_index = np.argmax(ct)
     ct_max_frame = ct_cal.data[int(max_index)]

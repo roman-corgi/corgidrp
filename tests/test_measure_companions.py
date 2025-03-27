@@ -1,9 +1,10 @@
 import os
 import numpy as np
+import scipy.interpolate
 from astropy.table import Table
 import corgidrp.fluxcal as fluxcal
 import corgidrp.klip_fm as klip_fm
-from corgidrp.data import Image, Dataset
+from corgidrp.data import Image, Dataset, NDFilterSweetSpotDataset
 import corgidrp.mocks as mocks
 import corgidrp.l4_to_tda as l4_to_tda
 import corgidrp.l3_to_l4 as l3_to_l4
@@ -159,6 +160,15 @@ def generate_test_data(out_dir):
             print("Companion ", i, " unocculted counts: ", host_star_counts * companion["counts_scale"])
             i+=1
 
+    # 2.5) Attenuate host star frame by ND
+    nd_x, nd_y = np.meshgrid(np.linspace(300, 700, 5), np.linspace(300, 700, 5))
+    nd_x = nd_x.ravel()
+    nd_y = nd_y.ravel()
+    nd_od = np.ones(nd_y.shape) * 1e-2
+    pri_hdr, ext_hdr = mocks.create_default_L2b_headers()
+    nd_cal = NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
+                                      ext_hdr=ext_hdr)
+    host_star_image.data *= nd_cal.interpolate_od(512, 512)
 
     # 3) Generate coronagraphic frames with multiple companions.
     coron_data, ref_data = mocks.create_psfsub_dataset(NUM_IMAGES, NUM_IMAGES, np.append(ROLL_ANGLES, ROLL_ANGLES), 
@@ -244,7 +254,7 @@ def generate_test_data(out_dir):
     output_filename = "final_psf_sub_image.fits"
     psf_sub_dataset[0].save(filedir=out_dir, filename=output_filename)
 
-    return (host_star_image, host_star_counts, fluxcal_factor, host_star_mag, ct_cal, FpamFsamCal, psf_sub_dataset[0], coron_data, ref_data)
+    return (host_star_image, host_star_counts, fluxcal_factor, host_star_mag, ct_cal, FpamFsamCal, nd_cal, psf_sub_dataset[0], coron_data, ref_data)
 
 
 def generate_or_load_test_data(out_dir, load_from_disk=False):
@@ -288,12 +298,14 @@ def generate_or_load_test_data(out_dir, load_from_disk=False):
             host_star_dataset = pickle.load(f)
         with open(os.path.join(out_dir, "FpamFsamCal.pkl"), "rb") as f:
             FpamFsamCal = pickle.load(f)
+        with open(os.path.join(out_dir, "nd_cal.pkl"), "rb") as f:
+            nd_cal = pickle.load(f)
         with open(os.path.join(out_dir, "coron_data.pkl"), "rb") as f:
             coron_data = pickle.load(f)
         with open(os.path.join(out_dir, "ref_data.pkl"), "rb") as f:
             ref_data = pickle.load(f)
         return (host_star_dataset, host_star_counts, fluxcal_factor, zero_point,
-                ct_cal, FpamFsamCal, final_psf_sub_image, coron_data, ref_data)
+                ct_cal, FpamFsamCal, nd_cal, final_psf_sub_image, coron_data, ref_data)
     else:
         print("Generating mocks...")
         data = generate_test_data(out_dir)
@@ -305,10 +317,12 @@ def generate_or_load_test_data(out_dir, load_from_disk=False):
             pickle.dump(data[0], f)
         with open(os.path.join(out_dir, "FpamFsamCal.pkl"), "wb") as f:
             pickle.dump(data[5], f)
+        with open(os.path.join(out_dir, "nd_cal.pkl"), "wb") as f:
+            pickle.dump(data[6], f)
         with open(os.path.join(out_dir, "coron_data.pkl"), "wb") as f:
-            pickle.dump(data[7], f)
-        with open(os.path.join(out_dir, "ref_data.pkl"), "wb") as f:
             pickle.dump(data[8], f)
+        with open(os.path.join(out_dir, "ref_data.pkl"), "wb") as f:
+            pickle.dump(data[9], f)
         return data
     
 
@@ -333,7 +347,7 @@ def _common_measure_companions_test(forward_model_flag):
         forward_model_flag (str): flag indicating which forward modeling technique to use
         
     """
-    (host_star_image, host_star_counts, fluxcal_factor, host_star_mag, ct_cal, FpamFsamCal, 
+    (host_star_image, host_star_counts, fluxcal_factor, host_star_mag, ct_cal, FpamFsamCal, nd_cal,
      psf_sub_image, coron_data, ref_data) = generate_or_load_test_data(OUT_DIR, load_from_disk=LOAD_FROM_DISK)
     
     print(f"Host Star Magnitude: {host_star_mag[0].ext_hdr['APP_MAG']}")
@@ -345,6 +359,7 @@ def _common_measure_companions_test(forward_model_flag):
     result_table = measure_companions.measure_companions(
         host_star_image, psf_sub_image,
         ct_cal=ct_cal, fpam_fsam_cal=FpamFsamCal,
+        nd_cal=nd_cal,
         phot_method=PHOT_METHOD,
         photometry_kwargs=PHOT_ARGS,
         fluxcal_factor=fluxcal_factor,
