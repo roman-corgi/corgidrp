@@ -1,13 +1,15 @@
 # A file that holds the functions that transmogrify l4 data to TDA (Technical Demo Analysis) data 
-import corgidrp.fluxcal as fluxcal
-from corgidrp import check
-from corgidrp.klip_fm import measure_noise
 import numpy as np
 from astropy.io import fits
 from scipy.interpolate import interp1d
 import warnings
+from photutils.psf import fit_2dgaussian
 
+import corgidrp.fluxcal as fluxcal
+from corgidrp import check
+from corgidrp.klip_fm import measure_noise
 from corgidrp.find_source import make_snmap, psf_scalesub
+from scipy.stats import gaussian_kde
 
 def determine_app_mag(input_dataset, source_star, scale_factor = 1.):
     """
@@ -146,16 +148,18 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     return flux_dataset
 
 
-def compute_flux_ratio_noise(input_dataset, unocculted_star_dataset, unocculted_star_locx=None, unocculted_star_locy=None, requested_separations=None, halfwidth=None):
+def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_dataset, unocculted_star_loc=None, requested_separations=None, halfwidth=None):
     '''
     Uses the PSF-subtracted frame and its algorithm throughput vs separation to 
     produce a calibrated 1-sigma flux ratio "contrast" curve (or "noise curve" since contrast curve is typically 5-sigma), also accounting for the throughput of the coronagraph.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
+        NDcalibration (corgidrp.data.NDFilterSweetSpotDataset): ND filter calibration
         unocculted_star_dataset (corgidrp.data.Dataset): a dataset of unocculted star Images corresponding to the Images in input_dataset
-        unocculted_star_locx (float array, optional): x-coordinates of the unocculted stars according to the order given in the unocculted_star_dataset.  If None, the peak pixel x is used.  Defaults to None. 
-        unocculted_star_locy (float array, optional): y-coordinates of the unocculted stars according to the order given in the unocculted_star_dataset.  If None, the peak pixel y is used.  Defaults to None.
+        unocculted_star_loc (2-D float array, optional): array of coordinates of the unocculted stars according to the order given in the unocculted_star_dataset. 
+            The first row of the array is for row position, and the second row is for column position. 
+            If None, the peak pixel location is used for each frame.  Defaults to None. 
         requested_separations (float array, optional): separations at which to compute the flux ratio noise curve.  If None, the separations used for 
             the core throughput are used (e.g., no interpolation needed).  Defaults to None.
         halfwidth (float, optional): halfwidth of the annulus to use for noise calculation.  If None, half 
@@ -163,21 +167,26 @@ def compute_flux_ratio_noise(input_dataset, unocculted_star_dataset, unocculted_
 
     Returns:
         corgidrp.data.Dataset: input dataset with an additional extension header 'FRN_CRV' for every frame, containing the 
-            calibrated flux ratio noise curve as a function of radial separation.  The data in that extension for a given frame is a (1+M)xN array,
-            where the first row contains the separation radii in pixels and the M rows contain the corresponding 
-            flux ratio noise curve values for each KL mode truncation (maintaining the KL index ordering).
+            calibrated flux ratio noise curve as a function of radial separation.  The data in that extension for a given frame is a (2+M)xN array,
+            where:
+            --the first row contains the separation radii in pixels 
+            --the second row containts the separation radii in milli-arcseconds (mas) 
+            --and the M rows contain the corresponding flux ratio noise curve values for the M KL mode truncations (maintaining the KL index ordering).
             TODO:  Add uncertainty to flux ratio noise curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
     '''
     output_dataset = input_dataset.copy()
-    for frame in output_dataset.frames:
-        klip_tp = frame.hdu_list['KL_THRU'].data[1:]
+    for i, frame in enumerate(output_dataset.frames):
+        pixscale_mas = frame.ext_hdr['PLTSCALE']
+        conversion_to_mas = 206265. * 1000. / pixscale_mas  
+        klip_tp = frame.hdu_list['KL_THRU'].data[1:,:,0]
         core_tp = frame.hdu_list['CT_THRU'].data[1]
-        klip_seps = frame.hdu_list['KL_THRU'].data[0]
+        klip_seps = frame.hdu_list['KL_THRU'].data[0,:,0]
         ct_seps = frame.hdu_list['CT_THRU'].data[0]
+        klip_fwhms = frame.hdu_list['KL_THRU'].data[1:,:,1]
         min_sep = np.max([np.min(klip_seps), np.min(ct_seps)])
         max_sep = np.min([np.max(klip_seps), np.max(ct_seps)])
         if requested_separations is None:
-            requested_separations = frame.hdu_list['KL_THRU'].data[0]
+            requested_separations = klip_seps
         if np.any(requested_separations < min_sep) or np.any(requested_separations > max_sep):
             warnings.warn('Not all requested_separations are within the range of the separations used for the KLIP and core throughputs.  Extrapolation will be used.')
         ct_spacings = ct_seps - np.roll(ct_seps, 1)
@@ -196,23 +205,88 @@ def compute_flux_ratio_noise(input_dataset, unocculted_star_dataset, unocculted_
         # now need to get Fp/Fs
         # For star flux, Fs:  integrated flux of star modeled as analytic formula for volume under 2-D Gaussian defined 
         # by amplitude and FWHM used for KLIP throughput calculation.  Amplitude found by doing Gaussian fit.
+        star_fr = unocculted_star_dataset.frames[i]
+        if unocculted_star_loc is None:
+            peak_row, peak_col = np.where(star_fr.data == star_fr.data.max())
+            pos = (peak_row[0], peak_col[0])
+        else:
+            pos = (unocculted_star_loc[0][i], unocculted_star_loc[1][i])
+        if pos[0] > star_fr.data.shape[0] or pos[1] > star_fr.data.shape[1]:
+            raise ValueError('The guess centroid pixel location for the unocculted star is outside the image bounds.')
+        # fit_shape inupt below must have odd numbers:
+        if np.mod(star_fr.data.shape[0], 2) == 0:
+            row_shape  = star_fr.data.shape[0] - 1
+        else:
+            row_shape = star_fr.data.shape[0]
+        if np.mod(star_fr.data.shape[1], 2) == 0:
+            col_shape  = star_fr.data.shape[1] - 1
+        else:
+            col_shape = star_fr.data.shape[1]
+        fit_shape = (row_shape, col_shape)
+        data = star_fr.data[:row_shape, :col_shape]
+        mask = star_fr.dq.astype(bool)[:row_shape, :col_shape]
+        guess_row, guess_col = pos
+        # Get the value at the max_row and max_col position
+        half_value = data[guess_row, guess_col] / 2
+        # Calculate the absolute difference from half_value for all pixels
+        abs_diff = np.abs(data - half_value)
+        # Get the indices of the 20 smallest differences
+        closest_indices = np.unravel_index(np.argsort(abs_diff.ravel())[:20], data.shape)
+        # to estimate a guess FWHM over a large frame (to ensure a decent fit),
+        # Find the highest-density location among the 20 pixels closest to half the guess star amplitude
+        positions = np.vstack([closest_indices[0], closest_indices[1]])
+        # Perform kernel density estimation
+        kde = gaussian_kde(positions)
+        density = kde(positions)
+        # Find the index of the highest density
+        highest_density_index = np.argmax(density)
+        # Get the row and column of the highest-density location
+        median_row = closest_indices[0][highest_density_index]
+        median_col = closest_indices[1][highest_density_index]
+        fwhm_guess = 2*np.sqrt((median_row-guess_row)**2 + (median_col-guess_col)**2)
+
+        # halfmax_rows, halfmax_cols = np.where(data >= data.max()/2)
+        # ind = np.argmax((halfmax_rows-guess_row)**2 + (halfmax_cols-guess_col)**2)
+        # fwhm_guess = 2*np.sqrt((halfmax_rows[ind]-guess_row)**2 + (halfmax_cols[ind]-guess_col)**2)
+        psf_phot = fit_2dgaussian(data, xypos=pos, fit_shape=fit_shape, fwhm=fwhm_guess, fix_fwhm=False,
+                                mask=mask, error=None)
+        star_xs = psf_phot.results['x_fit']
+        star_ys = psf_phot.results['y_fit']
+        # in case more than 1 PSF found:
+        star_ind = np.argmin(np.sqrt((star_xs-guess_col)**2+(star_ys-guess_row)**2))
+        star_x = star_xs[star_ind]
+        star_y = star_ys[star_ind]
+        #TODO perhaps incorporate into ERR in future, and incorporate error in psf_phot argument above (must be non-zero, though)
+        star_err = psf_phot.results['flux_err'][star_ind] 
+        # transmission through ND filter:
+        ND_transmission = NDcalibration.interpolate_od(star_x, star_y)
+        # integral under the fitted 2-D Gaussian for the unocculted star:
+        Fs = ND_transmission * psf_phot.results['flux_fit'][star_ind] 
         # For planet flux, Fp:  treat the annular noise value as the amplitude of a 2-D Gaussian and use the 
         # same FWHM used for KLIP throughput calculation.  The analytic formula for volume under the Gaussian is the integrated flux.
-        noise_amp = annular_noise
-        fwhm = 
+        noise_amp = annular_noise.T
+        # interpolate FWHMs to use based on requested_separations
+        interp_fwhms = np.zeros((len(klip_fwhms), len(requested_separations)))
+        for j in range(len(klip_fwhms)):
+            fwhms_func = interp1d(klip_seps, klip_fwhms[j], kind='linear', fill_value='extrapolate')
+            interp_fwhms[j] = fwhms_func(requested_separations)
+
+        Fp = np.pi*noise_amp*interp_fwhms**2/(4*np.log(2)) #integral of 2-D Gaussian
         # Interpolate/extrapolate the algorithm and core throughputs at the desired separations
         klip_interp_func = interp1d(klip_seps, klip_tp, kind='linear', fill_value='extrapolate')
         klip_tp = klip_interp_func(requested_separations)
         ct_interp_func = interp1d(ct_seps, core_tp, kind='linear', fill_value='extrapolate')
         core_tp = ct_interp_func(requested_separations)
-        contrast_curve_vals = annular_noise.T/(klip_tp*core_tp)
-        # XXX include row for separations in mas; does Ell's code do this already?
-        contrast_curve = np.vstack([requested_separations, contrast_curve_vals])
+        frn_vals = (Fp/Fs)/(klip_tp*core_tp)
+        # include row for separations in milli-arcseconds (mas)
+        requested_mas = requested_separations * conversion_to_mas
+        flux_ratio_noise_curve = np.vstack([requested_separations, requested_mas, frn_vals])
         hdr = fits.Header()
         hdr['BUNIT'] = "Fp/Fs"
-        frame.add_extension_hdu('FRN_CRV', data = contrast_curve, header=hdr)
-        history_msg = 'Calibrated flux ratio curve added to extension header FRN_CRV.'
-        output_dataset.update_after_processing_step(history_msg)
+        hdr['COMMENT'] = "Flux ratio noise curve as a function of radial separation.  First row:  separation radii in pixels.  Second row:  separation radii in mas.  Remaining rows:  flux ratio noise curve values for KL mode truncations."
+        frame.add_extension_hdu('FRN_CRV', data = flux_ratio_noise_curve, header=hdr)
+        history_msg = 'Calibrated flux ratio noise curve added to extension header FRN_CRV.'
+    output_dataset.update_after_processing_step(history_msg)
     return output_dataset
 
 def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None):

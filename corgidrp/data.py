@@ -1032,7 +1032,7 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['HISTORY'] = "DetectorNoiseMaps calibration file created"
 
             # give it a default filename
-            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
+            orig_input_filename = input_dataset.frames[-1].filename.split(".fits")[0]
             self.filename = "{0}_DNM_CAL.fits".format(orig_input_filename)
 
         if err_hdr is not None:
@@ -2437,6 +2437,21 @@ class NDFilterSweetSpotDataset(Image):
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
             raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
 
+    def interpolate_od(self, x, y, method="nearest"):
+        """
+        Interpolates the data to get the OD at the requested x/y location
+
+        Args:
+            x (float): x detector pixel location
+            y (float): y detector pixel location
+            method (str): only "nearest" supported currently
+        
+        Returns:
+            float: the OD at the requested point
+        """
+        interpolator = LinearNDInterpolator(np.array([self.x_values, self.y_values]).T, self.od_values)
+
+        return interpolator(x, y)
 
 datatypes = { "Image" : Image,
               "Dark" : Dark,
