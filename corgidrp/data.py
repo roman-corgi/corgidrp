@@ -654,6 +654,9 @@ class Dark(Image):
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
                 self.filename = "{0}_DRK_CAL.fits".format(orig_input_filename)
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'
@@ -700,6 +703,8 @@ class FlatField(Image):
             # give it a default filename using the last input file as the base
             self.filename = re.sub('_L[0-9].', '_FLT_CAL', input_dataset[-1].filename)
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a masterflat file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -794,6 +799,9 @@ class NonLinearityCalibration(Image):
             orig_input_filename = input_dataset[0].filename.split(".fits")[0]
             self.filename = "{0}_NonLinearityCalibration.fits".format(orig_input_filename)
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -881,6 +889,9 @@ class KGain(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
         # double check that this is actually a KGain file that got read in
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr:
@@ -964,8 +975,9 @@ class BadPixelMap(Image):
             else:
                 # not created from a flat
                 self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
-
-
+            
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a bad pixel map that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1034,6 +1046,9 @@ class DetectorNoiseMaps(Image):
             # give it a default filename
             orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
             self.filename = "{0}_DetectorNoiseMaps.fits".format(orig_input_filename)
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         if err_hdr is not None:
             self.err_hdr['BUNIT'] = 'Detected Electrons'
@@ -1137,6 +1152,9 @@ class DetectorParams(Image):
             ext_hdr['OPMODE'] = ""
             ext_hdr['EMGAIN_C'] = 1.0
             ext_hdr['EXCAMT'] = 40.0
+
+            # Enforce data level = CAL?
+            ext_hdr['DATALVL']    = 'CAL'
 
             # write default values to headers
             for key, value in self.default_values.items():
@@ -1255,6 +1273,9 @@ class AstrometricCalibration(Image):
             # give a default filename
             self.filename = "AstrometricCalibration.fits"
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
             raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
@@ -1301,6 +1322,8 @@ class TrapCalibration(Image):
             orig_input_filename = input_dataset[0].filename.split(".fits")[0]
             self.filename = "{0}_trapcal.fits".format(orig_input_filename)
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1389,6 +1412,9 @@ class FluxcalFactor(Image):
             self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
             # use the start date for the filename by default
             self.filedir = "."
@@ -1484,6 +1510,9 @@ class FpamFsamCal(Image):
             # use the start date for the filename by default
             self.filedir = '.'
             self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
 class CoreThroughputCalibration(Image):
     """
@@ -1589,6 +1618,9 @@ class CoreThroughputCalibration(Image):
             # input dataset by _CTP_CAL.fits
             self.filedir = '.'
             self.filename = re.sub('_L[0-9].', '_CTP_CAL', input_dataset[-1].filename)
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -2432,6 +2464,9 @@ class NDFilterSweetSpotDataset(Image):
                 self.filename = f"{base_name}_ndfsweet.fits"
             else:
                 self.filename = "NDFilterSweetSpotDataset.fits"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':

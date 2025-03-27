@@ -271,6 +271,8 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
     exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
     exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
+    exthdr['EACQ_ROW']    = 0               # Desired row for EXCAM star acquisition method
+    exthdr['EQCQ_COL']    = 0               # Desired column for EXCAM star acquisition method
     exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
     exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
     exthdr['DATALVL']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
@@ -450,6 +452,8 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
     exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
     exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
+    exthdr['EACQ_ROW']    = 0               # Desired row for EXCAM star acquisition method
+    exthdr['EQCQ_COL']    = 0               # Desired column for EXCAM star acquisition method
     exthdr['TPINJCYC']    = 0               # Number of cycles for TPUMP injection
     exthdr['TPOSCCYC']    = 0               # Number of cycles for charge oscillation (TPUMP)
     exthdr['TPTAU']       = 0               # Length of one step in a trap pumping scheme (microseconds)
@@ -601,7 +605,7 @@ def create_default_calibration_product_headers():
     '''
     # TO DO: update when this has been more defined
     prihdr, exthdr = create_default_L1_headers()
-    exthdr['DATALVL']    = 'Calibration Product'
+    exthdr['DATALVL']    = 'CAL'
     exthdr['DATATYPE']    = 'Image'              # What type of calibration product, just do image for now, mock codes will update
 
     return prihdr, exthdr
