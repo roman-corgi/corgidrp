@@ -16,6 +16,14 @@ def test_no_selection():
 
     assert len(pruned_dataset) == len(default_dataset)
     assert len(pruned_dataset) == 5
+    
+    # assert headers are filled out
+    assert pruned_dataset[0].ext_hdr['FRMSEL01'] == 1
+    assert pruned_dataset[0].ext_hdr['FRMSEL02'] == False
+    assert pruned_dataset[0].ext_hdr['FRMSEL03'] is None
+    assert pruned_dataset[0].ext_hdr['FRMSEL04'] is None
+    assert pruned_dataset[0].ext_hdr['FRMSEL05'] is None
+    assert pruned_dataset[0].ext_hdr['FRMSEL06'] is None
 
 def test_bpfrac_cutoff():
     """
@@ -37,6 +45,7 @@ def test_bpfrac_cutoff():
     assert len(pruned_dataset) != len(default_dataset)
     assert len(pruned_dataset) == 4
     assert default_dataset[0].filename in pruned_dataset[0].ext_hdr['HISTORY'][-1] # test history
+    assert pruned_dataset[0].ext_hdr['FRMSEL01'] == 0.5
 
     # allowing DQ = 1 should make no frames get dropped
     pruned_dataset = frame_select(default_dataset, bpix_frac=0.5, allowed_bpix=1)
@@ -68,6 +77,7 @@ def test_overexp():
     pruned_dataset = frame_select(default_dataset, overexp=True)
     assert len(pruned_dataset) != len(default_dataset)
     assert len(pruned_dataset) == 4
+    assert pruned_dataset[0].ext_hdr['FRMSEL02'] == True
 
 def test_tt_rms():
     """
@@ -90,6 +100,8 @@ def test_tt_rms():
     pruned_dataset = frame_select(default_dataset, tt_rms_thres=2.5)
     assert len(pruned_dataset) != len(default_dataset)
     assert len(pruned_dataset) == 3
+    assert pruned_dataset[0].ext_hdr['FRMSEL03'] == 2.5
+    assert pruned_dataset[0].ext_hdr['FRMSEL04'] == 2.5
 
 def test_tt_bias():
     """
@@ -112,6 +124,8 @@ def test_tt_bias():
     pruned_dataset = frame_select(default_dataset, tt_bias_thres=2.5)
     assert len(pruned_dataset) != len(default_dataset)
     assert len(pruned_dataset) == 3
+    assert pruned_dataset[0].ext_hdr['FRMSEL05'] == 2.5
+    assert pruned_dataset[0].ext_hdr['FRMSEL06'] == 2.5
 
 def test_remove_all():
     """
