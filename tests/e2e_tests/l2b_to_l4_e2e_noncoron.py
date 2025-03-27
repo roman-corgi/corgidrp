@@ -11,7 +11,7 @@ import corgidrp.caldb as caldb
 import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
 import corgidrp.walker as walker
-from corgidrp import corethroughput
+import pyklip.fakes
 import pytest
 import glob
 import shutil
@@ -254,13 +254,15 @@ def test_l3_to_l4(e2eoutput_path):
     
     #Find the sources and get their (x,y) coordinate
     y_source, x_source = np.unravel_index(np.nanargmax(combined_image.data), combined_image.data.shape)
+    peakflux, fwhm, x_source, y_source = pyklip.fakes.gaussfit2d(combined_image.data, x_source, y_source, guesspeak=np.nanmax(combined_image.data))
     xcen = combined_image.ext_hdr['CRPIX1']
     ycen = combined_image.ext_hdr['CRPIX2']
     assert np.isclose(x_source, xcen, atol=1)
     assert np.isclose(y_source, ycen, atol=1)
+    assert peakflux == pytest.approx(1000, rel=1e-2)
 
     #Check that the calibration filenames are appropriately associated
-    assert combined_image.ext_hdr['CTCALFN'] is '' # no calibration frame associated for L4 non-coron
+    assert combined_image.ext_hdr['CTCALFN'] == '' # no calibration frame associated for L4 non-coron
     assert combined_image.ext_hdr['FLXCALFN'] == "mock_fluxcal.fits"
 
     #Clean up
@@ -268,7 +270,6 @@ def test_l3_to_l4(e2eoutput_path):
     this_caldb.remove_entry(fluxcal_fac)
     shutil.rmtree(e2eoutput_path_l4)
     shutil.rmtree(e2eintput_path)
-    shutil.rmtree(os.path.join(pathlib.Path.home(), ".corgidrp",'KLIP_SUB'))
 
 
 
