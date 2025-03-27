@@ -155,7 +155,7 @@ def generate_test_data(out_dir):
             print("Companion ", i, " unocculted counts: ", host_star_counts * companion["counts_scale"])
             i+=1
 
-    # 2.5) Attenuate host star frame by ND
+    # 3) Attenuate host star frame by ND
     nd_x, nd_y = np.meshgrid(np.linspace(300, 700, 5), np.linspace(300, 700, 5))
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
@@ -165,7 +165,7 @@ def generate_test_data(out_dir):
                                       ext_hdr=ext_hdr)
     host_star_image.data *= nd_cal.interpolate_od(512, 512)
 
-    # 3) Generate coronagraphic frames with multiple companions.
+    # 4) Generate coronagraphic frames (just star, no companions) and RDI reference star dataset
     coron_data, ref_data = mocks.create_psfsub_dataset(NUM_IMAGES, NUM_IMAGES, np.append(ROLL_ANGLES, ROLL_ANGLES), 
                                                         data_shape = FULL_SIZE_IMAGE,
                                                         centerxy = host_star_center,
@@ -176,7 +176,7 @@ def generate_test_data(out_dir):
                                                         pl_contrast=0,
                                                         )
 
-    # 4) Generate core throughput calibration dataset.
+    # 5) Generate core throughput calibration dataset.
     # assume 50 mas PSF
     ct_cal = mocks.create_ct_cal(50, cfam_name='1F', cenx=CROPPED_IMAGE_SIZE[0]//2, ceny=CROPPED_IMAGE_SIZE[1]//2, nx=41, ny=41)
     ct_cal_full_frame = mocks.create_ct_cal(50, cfam_name='1F', cenx=FULL_SIZE_IMAGE[0]//2, ceny=FULL_SIZE_IMAGE[1]//2, nx=41, ny=41)
@@ -191,6 +191,7 @@ def generate_test_data(out_dir):
     if VERBOSE == True:
         print("Reference PSF with maximum core throughput counts: ", ct_cal_counts_ref_mask_far)
 
+    # 6) Use CT to generate off-axis PSFs of the planets for injection
     companion_throughput_ratios = []
     companion_unscaled_psfs = []
     for i, comp in enumerate(COMPANION_PARAMS):
@@ -210,7 +211,7 @@ def generate_test_data(out_dir):
 
         companion_unscaled_psfs.append(nearest_psf)
 
-    # 3.5) Create off-axis PSFs for each planet
+    # 7) Scale planet PSFs to the appropriate flux and inject into the data
     companion_psfs = []
     for i, comp in enumerate(COMPANION_PARAMS):
         unscaled_psf = companion_unscaled_psfs[i]
@@ -227,11 +228,12 @@ def generate_test_data(out_dir):
                       [None for _ in coron_data], comp['sep_pix'], 0, thetas=90 + comp['pa'] - rolls)
 
 
-    # 5) Create a PSF-subtracted frame.
+    # 8) Create the PSF-subtracted frame using the dataset with planets and the RDI reference star dtaset
     cand_locs = []
     for i, comp in enumerate(COMPANION_PARAMS):
         cand_locs.append((comp['sep_pix'], comp['pa']))
     
+    # RDI
     psf_sub_dataset = l3_to_l4.do_psf_subtraction(
         coron_data, reference_star_dataset=ref_data,
         ct_calibration=ct_cal,
@@ -391,7 +393,7 @@ def _common_measure_companions_test(forward_model_flag):
     print(result_table)
 
 
-def test_measure_companions_forward_modeling():
+def test_measure_companions_using_L4_klipthroughput():
     """
     Test measure_companions using forward modeling.
     """
@@ -454,9 +456,9 @@ if __name__ == "__main__":
     test_measure_companions_non_forward_modeling()
     print("Non-forward modeling test passed.")
 
-    print("Running test: forward modeling")
-    test_measure_companions_forward_modeling()
-    print("Forward modeling test passed.")
+    print("Running test: using saved L4 KLIP throughput")
+    test_measure_companions_using_L4_klipthroughput()
+    print("L4 KLIP throughput test passed.")
     
     print("Running companion location test.")
     test_update_companion_location()

@@ -61,16 +61,19 @@ def measure_companions(
     Returns:
         result_table (astropy.table.Table): Table containing companion measurements.
     """
-    # Measure counts of the host star and reference PSF from the provided images.
+    # Measure counts of the host star image
     guess_index = np.unravel_index(np.nanargmax(host_star_image.data), host_star_image.data.shape)
     host_star_peakflux, host_star_fwhm, x_host, y_host = pyklip.fakes.gaussfit2d(host_star_image.data, guess_index[1], guess_index[0], searchrad=7, guessfwhm=3, 
                                                         guesspeak=np.nanmax(host_star_image.data), refinefit=True)
     # host_star_counts, _ = measure_counts(ref_star_dataset[0], phot_method, None, **photometry_kwargs)
-    # correct for ND if ND cal is provided
+    
+    # correct host star counts for  for ND if ND cal is provided
     if nd_cal is not None:
         od_val = nd_cal.interpolate_od(x_host, y_host)
         host_star_peakflux /= od_val
     
+
+    # measure peak flux in CT dataset and use as CT=1
     _, _, ct = ct_cal.ct_excam
     max_index = np.argmax(ct)
     ct_max_frame = ct_cal.data[int(max_index)]
@@ -79,15 +82,16 @@ def measure_companions(
                                                         guesspeak=np.nanmax(ct_max_frame), refinefit=True)
     # reference_psf_counts, _ = measure_counts(ref_psf_min_mask_effect, phot_method, None, **photometry_kwargs)
     
-    # flux ratio - compare ratio of integrated flux, not just peak flux
+    # flux ratio between host star and CT star to scale CT PSFs
     host_to_ct_psf_ratio = (host_star_peakflux * host_star_fwhm**2) / (ct_psf_peakflux * ct_psf_fwhm**2)
 
-    # Get the star location from the PSF-subtracted image header.
+    # Get the star and mask location from the PSF-subtracted image header.
     x_star = psf_sub_image.ext_hdr.get('STARLOCX')
     y_star = psf_sub_image.ext_hdr.get('STARLOCY')
     x_mask = psf_sub_image.ext_hdr['MASKLOCX']
     y_mask = psf_sub_image.ext_hdr['MASKLOCY']
 
+    # determine x/y location of candidates
     if cand_locs is None:
         # Extract companion positions from the PSF-subtracted image and coronagraphic image headers.
         companions = parse_companions(psf_sub_image.ext_hdr)
@@ -102,7 +106,7 @@ def measure_companions(
     # Create a for the single psf subtraction for API purposes
     psf_sub_dataset = Dataset([psf_sub_image])
 
-    # Process each companion by comparing positions in the PSF-subtracted and coronagraphic images.
+    # Measure the flux of each companion
     results = []
     i = 0
     for comp_sub in companions:
@@ -115,27 +119,32 @@ def measure_companions(
         guesssep = np.hypot(dx, dy)
         guesspa = -np.degrees(np.arctan2(dx, dy)) % 360
 
-        # Get the calibration frame based on the companion's position.
+        # Get the off-axis PSF at the planet location using the CT calibration file.
         interp_psfs, _, _ = ct_cal.GetPSF(x_psf - x_mask, y_psf - y_mask, psf_sub_dataset, fpam_fsam_cal)
         nearest_psf = interp_psfs[0]
         scaled_host_psf_at_planet_location = nearest_psf * host_to_ct_psf_ratio
-        # measure flux of star at psf
+        # measure flux of the star if it was at planet separation from mask (used in measuring flux ratio)
         guess_index = np.unravel_index(np.nanargmax(scaled_host_psf_at_planet_location), scaled_host_psf_at_planet_location.shape)
         host_planet_loc_peakflux, host_planet_loc_fwhm, _, _ = pyklip.fakes.gaussfit2d(scaled_host_psf_at_planet_location, 
                                                         guess_index[1], guess_index[0], searchrad=7, guessfwhm=ct_psf_fwhm, 
                                                         guesspeak=np.nanmax(scaled_host_psf_at_planet_location), refinefit=True)
 
-        # Use forward-modeling or a simplified subtraction approach to model the PSF and do PSF-subtraction.
+        # Which approach to use for KLIP throughput correction.
         if thrp_corr == "L4":
+            # use the klip throughput stored from PSF subtraction
+            # pro: already calculated
+            # con: maybe for planets of a different brightness, also must use same photonetry routine as was done for L4 KLIP throughput
+
+            # measure flux at plaent position
             psf_sub_frame = psf_sub_image.data[kl_mode_idx]
             comp_peakflux, comp_fwhm, x_comp, y_comp = pyklip.fakes.gaussfit2d(psf_sub_frame, x_psf, y_psf, searchrad=7, 
                                                                                guessfwhm=host_planet_loc_fwhm, 
                                                                                guesspeak=psf_sub_frame[y_psf_int, x_psf_int], 
                                                                                refinefit=True)
             meas_sep_pix = np.sqrt((x_comp - x_star)**2 + (y_comp - y_star)**2)
-            model_counts = np.pi * comp_peakflux * comp_fwhm**2 / 4. / np.log(2.)
+            psf_sub_counts = np.pi * comp_peakflux * comp_fwhm**2 / 4. / np.log(2.) # total integrated flux for saving
 
-
+            # interpolate algorithm throhgput from L4 data product 
             algo_thrp_data = psf_sub_image.hdu_list['KL_THRU'].data
             algo_thrp_seps = algo_thrp_data[0,:,0]
             algo_thrp = algo_thrp_data[1:][kl_mode_idx, :, 0]
@@ -144,8 +153,12 @@ def measure_companions(
             this_thrp = np.interp(meas_sep_pix, algo_thrp_seps, algo_thrp)
             this_fwhm = np.interp(meas_sep_pix, algo_thrp_seps, thrp_fwhms)
 
+            # correct for KLIP throughput and calculate flux ratio
             companion_host_ratio = (comp_peakflux / this_thrp) / host_planet_loc_peakflux 
         elif thrp_corr == "KLIP-FM":
+            # KLIP-FM PSF forward moeling
+            # Pro: PSF fit exactly for planet, exact for RDI
+            # Con: linear approximation for ADI, not the best for bright planets ad ADI
             raise NotImplementedError("KLIP-FM not yet implemented")
             # #Forward model the off-axis image of the host star if it was at the planet location through the PSF subtraction process
             # kl_value, ct_value, modeled_image = forward_model_psf(
@@ -162,6 +175,10 @@ def measure_companions(
             #     print("Host star if it was at companion ", i, " location forward modeled counts corrected: ", model_counts)
             #     print("Recovered companion ", i, " PSF sub efficiency: ", kl_value)
         elif thrp_corr == "None":
+            # Don't do FM
+            # Pro: simple, also can use photometry routine of choice
+            # Con: doesn't account for KLIP throughput
+
             # Set default photometry keyword arguments if none are provided.
             photometry_kwargs = photometry_kwargs or get_photometry_kwargs(phot_method)
 
@@ -181,11 +198,11 @@ def measure_companions(
             scaled_host_star_img.data = scaled_host_psf_at_planet_location
             scaled_host_star_img.dq = np.zeros(scaled_host_psf_at_planet_location.shape)
             scaled_host_star_img.err = np.zeros((1,) + scaled_host_psf_at_planet_location.shape)
-            model_counts, _ = measure_counts(scaled_host_star_img, phot_method, None, **photometry_kwargs)
+            host_star_counts, _ = measure_counts(scaled_host_star_img, phot_method, None, **photometry_kwargs)
             if verbose == True:
-                print("Host star ", i, " simplified model counts corrected: ", model_counts)
+                print("Host star ", i, " simplified model counts corrected: ", host_star_counts)
         
-            companion_host_ratio = psf_sub_counts / model_counts
+            companion_host_ratio = psf_sub_counts / host_star_counts
         else:
             raise ValueError("{0} is not a valid option for thrp_corr".format(thrp_corr))
 
@@ -202,7 +219,7 @@ def measure_companions(
 
         # Append the results for this companion.
         results.append((
-            comp_sub['id'], x_psf, y_psf, model_counts, companion_host_ratio, companion_mag
+            comp_sub['id'], x_psf, y_psf, psf_sub_counts, companion_host_ratio, companion_mag
         ))
         i+=1
 
