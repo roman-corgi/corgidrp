@@ -11,6 +11,7 @@ from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
+import corgidrp.data as data 
 from corgidrp.data import Dataset
 from corgidrp.data import Image
 import corgidrp.mocks as mocks
@@ -246,14 +247,35 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
 
 def test_output_filename_convention(stars_dataset_cached):
     print("**Testing output filename naming conventions**")
+    
+    # Make a copy of the dataset and retrieve expected values.
     ds_copy = copy.deepcopy(stars_dataset_cached)
+
+    expected_visitid = stars_dataset_cached[-1].pri_hdr['VISITID']
+    expected_ftimeutc_long = stars_dataset_cached[-1].ext_hdr['FTIMEUTC']
+    expected_ftimeutc = data.format_ftimeutc(expected_ftimeutc_long)
+    
+    # Construct the expected filename from last file header values.
+    expected_filename = f"CGI_{expected_visitid}_{expected_ftimeutc}_NDF_CAL.fits"
+    full_expected_path = os.path.join(default_cal_dir, expected_filename)
+    
+    # Create the calibration product
     results = nd_filter_calibration.create_nd_filter_cal(
-        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor = None)
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
+        fluxcal_factor=None
+    )
     results.save(filedir=default_cal_dir)
+    
+    # Check that the naming convention pattern is followed
     pattern = r"^CGI_[A-Z0-9]{19}_\d{8}T\d{7}_NDF_CAL\.fits$"
     matched_files = [fn for fn in os.listdir(default_cal_dir) if re.match(pattern, fn)]
     assert matched_files, "No files found matching naming convention."
+    
+    # Check that the filename uses VISITID and FTIMEUTC from the last file.
+    assert os.path.exists(full_expected_path), (
+        f"Expected file {expected_filename} not found in {default_cal_dir}."
+    )
+    print("The nd_filter_calibration product file meets the expected naming convention.")
 
 
 def test_average_od_within_tolerance(stars_dataset_cached):
@@ -549,7 +571,7 @@ def test_calculate_od_at_new_location(output_dir):
         f"interpolated OD={interpolated_od}"
     )
 
-'''
+
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -637,4 +659,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
