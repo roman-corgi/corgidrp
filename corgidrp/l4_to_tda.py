@@ -270,9 +270,6 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         median_col = closest_indices[1][highest_density_index]
         fwhm_guess = 2*np.sqrt((median_row-guess_row)**2 + (median_col-guess_col)**2)
 
-        # halfmax_rows, halfmax_cols = np.where(data >= data.max()/2)
-        # ind = np.argmax((halfmax_rows-guess_row)**2 + (halfmax_cols-guess_col)**2)
-        # fwhm_guess = 2*np.sqrt((halfmax_rows[ind]-guess_row)**2 + (halfmax_cols[ind]-guess_col)**2)
         psf_phot = fit_2dgaussian(data, xypos=pos, fit_shape=fit_shape, fwhm=fwhm_guess, fix_fwhm=False,
                                 mask=mask, error=None)
         star_xs = psf_phot.results['x_fit']
