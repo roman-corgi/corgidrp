@@ -5,6 +5,7 @@ import numpy as np
 from astropy.io import fits
 import pytest
 import re
+import copy
 
 from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
@@ -18,10 +19,15 @@ from corgidrp.data import Image, NDFilterSweetSpotDataset
 # ---------------------------------------------------------------------------
 # Global variables and constants
 # ---------------------------------------------------------------------------
-BRIGHT_STARS = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep']
-DIM_STARS = ['TYC 4433-1800-1', 'TYC 4205-1677-1', 'TYC 4212-455-1', 'TYC 4209-1396-1',
-             'TYC 4413-304-1', 'UCAC3 313-62260', 'BPS BS 17447-0067', 'TYC 4424-1286-1',
+BRIGHT_STARS = ['109 Vir', 'Vega']
+DIM_STARS = ['TYC 4424-1286-1',
              'GSC 02581-02323', 'TYC 4207-219-1']
+
+# takes a long time to run with all stars
+#BRIGHT_STARS = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep']
+#DIM_STARS = ['TYC 4433-1800-1', 'TYC 4205-1677-1', 'TYC 4212-455-1', 'TYC 4209-1396-1',
+#            'TYC 4413-304-1', 'UCAC3 313-62260', 'BPS BS 17447-0067', 'TYC 4424-1286-1',
+#             'GSC 02581-02323', 'TYC 4207-219-1']
 
 DIM_EXPTIME = 10.0
 BRIGHT_EXPTIME = 5.0
@@ -89,7 +95,7 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
     for star_name in DIM_STARS:
         dim_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
         flux_image = mocks.create_flux_image(
-            dim_star_flux, FWHM, cal_factor, filter_used, "HOLE", star_name,
+            dim_star_flux, FWHM, cal_factor, filter=filter_used, fpamname="HOLE", target_name=star_name,
             fsm_x=0, fsm_y=0, exptime=dim_exptime, filedir=output_path,
             platescale=21.8,
             background=background_val,
@@ -132,8 +138,8 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                                                                                           filter_used)
                 attenuated_flux = bright_star_flux * ND_transmission
                 flux_image = mocks.create_flux_image(
-                    attenuated_flux, FWHM, cal_factor, filter_used, "ND225", star_name,
-                    dx, dy, bright_exptime, output_path,
+                    attenuated_flux, FWHM, cal_factor, filter=filter_used, fpamname="ND225", target_name=star_name,
+                    fsm_x=dx, fsm_y=dy, exptime=bright_exptime, filedir=output_path,
                     platescale=21.8,
                     background=background_val,
                     add_gauss_noise=add_gauss_noise_val,
@@ -218,8 +224,10 @@ def output_dir(tmp_path):
 # ---------------------------------------------------------------------------
 def test_nd_filter_calibration_object(stars_dataset_cached):
     print("**Testing ND filter calibration object generation and expected headers**")
+    # don't want the datasets to get overwritten for subsequent tests
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     
     results.save(filedir=default_cal_dir)
@@ -238,8 +246,9 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
 
 def test_output_filename_convention(stars_dataset_cached):
     print("**Testing output filename naming conventions**")
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     results.save(filedir=default_cal_dir)
     pattern = r"^CGI_[A-Z0-9]{19}_\d{8}T\d{7}_NDF_CAL\.fits$"
@@ -249,8 +258,9 @@ def test_output_filename_convention(stars_dataset_cached):
 
 def test_average_od_within_tolerance(stars_dataset_cached):
     print("**Testing computed OD within tolerance**")
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
@@ -293,8 +303,9 @@ def test_nd_filter_calibration_phot_methods(stars_dataset_cached, phot_method):
             "centroid_roi_radius": 5
         }
     print(f"**Testing ND calibration with photometry method: {phot_method}**")
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, phot_method, FLUX_OR_IRR, phot_args, 
+        ds_copy, OD_RASTER_THRESHOLD, phot_method, FLUX_OR_IRR, phot_args, 
         fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
@@ -413,8 +424,9 @@ def test_aperture_radius_sensitivity(stars_dataset_cached, aper_radius):
         "centering_method": "xy",
         "centroid_roi_radius": 5
     }
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, "Aperture", "irr", phot_args, 
+        ds_copy, OD_RASTER_THRESHOLD, "Aperture", "irr", phot_args, 
         fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
@@ -426,8 +438,9 @@ def test_aperture_radius_sensitivity(stars_dataset_cached, aper_radius):
 def test_od_stability(stars_dataset_cached):
     # TO DO: move this out of the test code and into the calibration product generation 
     print("**Testing OD stability across multiple dithers**")
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, "Aperture", "irr", PHOT_ARGS, 
+        ds_copy, OD_RASTER_THRESHOLD, "Aperture", "irr", PHOT_ARGS, 
         fluxcal_factor = None)
     ods = results.data
     std_od = np.std(ods[:, 0])
@@ -551,7 +564,7 @@ def test_calculate_od_at_new_location(output_dir):
         f"interpolated OD={interpolated_od}"
     )
 
-'''
+
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -615,24 +628,24 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    #run_test(test_nd_filter_calibration_object, stars_dataset_cached)
-    #run_test(test_output_filename_convention, stars_dataset_cached)
-    #run_test(test_average_od_within_tolerance, stars_dataset_cached)
+    run_test(test_nd_filter_calibration_object, stars_dataset_cached)
+    run_test(test_output_filename_convention, stars_dataset_cached)
+    run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
-    #for method in ["Aperture", "Gaussian"]:
-    #    run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
+    for method in ["Aperture", "Gaussian"]:
+        run_test(test_nd_filter_calibration_phot_methods, stars_dataset_cached, method)
 
-    #for test_od in [1.0, 3.0]:
-    #    run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
+    for test_od in [1.0, 3.0]:
+        run_test(test_multiple_nd_levels, DIM_CACHE_DIR, output_dir, test_od)
 
-    #for aper_radius in [5, 10]:
-    #    run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
+    for aper_radius in [5, 10]:
+        run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
-    #run_test(test_od_stability, stars_dataset_cached)
+    run_test(test_od_stability, stars_dataset_cached)
 
-    #run_test(test_background_effect, background_tmp_dir)
+    run_test(test_background_effect, background_tmp_dir)
 
-    #run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
+    run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
 
     test_calculate_od_at_new_location(output_dir)
 
@@ -641,4 +654,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-'''
+

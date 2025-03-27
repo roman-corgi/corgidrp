@@ -5,8 +5,7 @@ import numpy as np
 from astropy.io import fits
 import corgidrp.fluxcal as fluxcal
 import corgidrp.astrom as astrom
-from corgidrp.data import FluxcalFactor
-from corgidrp.data import NDFilterSweetSpotDataset
+from corgidrp.data import Dataset, FluxcalFactor, NDFilterSweetSpotDataset
 from corgidrp.astrom import centroid_with_roi
 from scipy.interpolate import griddata
 
@@ -432,12 +431,16 @@ def create_nd_filter_cal(stars_dataset,
     dim_stars_dataset = []
     bright_stars_dataset = []
 
-    # Iterate over each group key, splitting based on "ND" prefix.
     for keyword, records in grouped_nd_files.items():
         if keyword.startswith('ND'):
-            bright_stars_dataset = records
+            # don't overwrite
+            bright_stars_dataset.extend(records)
         else:
-            dim_stars_dataset = records
+            dim_stars_dataset.extend(records)
+
+    bright_stars_dataset = Dataset(bright_stars_dataset)
+    dim_stars_dataset = Dataset(dim_stars_dataset)
+
 
     # 2. If a fluxcal factor was provided, use that for the dim stars
     if fluxcal_factor is not None:
