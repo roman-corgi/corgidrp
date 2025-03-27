@@ -185,7 +185,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
         if f.endswith('_DRK_CAL.fits'):
             trad_dark_filename = f
             break
-    generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, generated_trad_dark_file) 
+    generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, trad_dark_filename) 
     
     ###################### run II&T code on data
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
