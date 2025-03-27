@@ -761,8 +761,8 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file
-        flux_cal (corgidrp.data.FluxCalibration): a FluxCalibration calibration file
+        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file. Can be None
+        flux_cal (corgidrp.data.FluxCalibration): a FluxCalibration calibration file. Cannot be None
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L4-level
@@ -779,7 +779,10 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     for frame in updated_dataset:
         # update header
         frame.ext_hdr['DATALVL'] = "L4"
-        frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1] #Associate the ct calibration file
+        if corethroughput_cal is not None:
+            frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1] #Associate the ct calibration file
+        else:
+            frame.ext_hdr['CTCALFN'] = ''
         frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
