@@ -4,7 +4,7 @@ from astropy.io import fits
 import numpy as np
 from corgidrp.data import PyKLIPDataset, Image 
 from pyklip.parallelized import klip_dataset
-from pyklip.fakes import gaussfit2d
+from pyklip.fakes import gaussfit2d, inject_planet
 from scipy.ndimage import shift, rotate
 from corgidrp.astrom import get_polar_dist, seppa2dxdy, seppa2xy
 from corgidrp.fluxcal import phot_by_gauss2d_fit
@@ -84,48 +84,7 @@ def inject_psf(frame_in, ct_calibration, amp,
     startyx = injected_psf_cenyx_ind - psf_cenyx_ind
     endyx = startyx + model_shape
 
-    # Insert into correct frame size array 
-    psf_only_frame = np.zeros_like(frame.data)
-    starty, startx = startyx
-    endy, endx = endyx
-
-    if starty < 0:
-        psfmodel_starty = -starty
-        starty = 0
-    else:
-        psfmodel_starty = 0
-
-    if startx < 0:
-        psfmodel_startx = -startx
-        startx = 0
-    else:
-        psfmodel_startx = 0
-
-    if endy >= psf_only_frame.shape[0]:
-        y_overhang = endy - psf_only_frame.shape[0]
-        psfmodel_endy = model_shape[0] - y_overhang
-    else: psfmodel_endy = model_shape[0]
-
-    if endx >= psf_only_frame.shape[1]:
-        x_overhang = endx - psf_only_frame.shape[1]
-        psfmodel_endx = model_shape[1] - x_overhang
-    else: psfmodel_endx = model_shape[1]
-
-
-    psf_only_frame[starty:endy,
-                   startx:endx] = psf_model[psfmodel_starty:psfmodel_endy,
-                                            psfmodel_startx:psfmodel_endx]
-    
-    
-    
-
-
-    # # TODO: Calculate subpixel shift:
-    # psf_shift = (0.,0.) # Hardcode 0 shift for now
-    # shifted_psf_only_frame = shift(psf_only_frame,psf_shift)
-
-    # Add to input frame
-    frame.data += psf_only_frame
+    inject_planet([frame.data], [[frame.ext_hdr['STARLOCX'], frame.ext_hdr['STARLOCY']]], [psf_model], [None], sep_pix, 0, thetas=[rel_pa + 90])
 
     psf_cenxy = [psf_cenyx_inframe[1],psf_cenyx_inframe[0]]
     return frame, psf_model, psf_cenxy
@@ -212,7 +171,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                      n_pas = 5,
                      seps = None, # in pixels from mask center
                      pas = None,
-                     cand_locs = [] # list of tuples (sep_pix,pa_deg) of known off-axis source locations
+                     cand_locs = [], # list of tuples (sep_pix,pa_deg) of known off-axis source locations,
+                     num_processes = None
                     ):
     """Measures the throughput of the KLIP algorithm via injection-recovery of fake off-axis sources. 
 
@@ -237,6 +197,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
             PSFs at each separation. Defaults to [0.,90.,180.,270.].
         cand_locs (list of tuples, optional): Locations of known off-axis sources, so we don't inject a fake 
             PSF too close to them. This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        num_processes (int): number of processes for parallelizing the PSF subtraction
         
     Returns: 
         np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
@@ -320,7 +281,7 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                         for cand_sep, cand_pa in cand_locs:
                             # Account for telescope roll angles, skip if any are too close
                             for roll in rolls:
-                                cand_pa_adj = cand_pa - roll
+                                cand_pa_adj = cand_pa
                                 dist = get_polar_dist((cand_sep,cand_pa_adj),inject_loc)
                                 if dist < res_elem:
                                     too_close=True
@@ -361,7 +322,8 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
                                 numbasis=[klmode],
                                 calibrate_flux=False, mode=klip_params['mode'],
                                 psf_library=pyklip_dataset._psflib,
-                                fileprefix=f"FAKE_{klmode}KLMODES")
+                                fileprefix=f"FAKE_{klmode}KLMODES",
+                                numthreads=num_processes)
         
         # Get photometry of each injected source
 
@@ -549,11 +511,11 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         # show warning and add np.nan 
         for sep in np.unique(seps_arr):
             this_sep_thrupts = np.where(seps_arr==sep,this_klmode_thrupts,np.nan)
-            mean_thrupt = np.nanmean(this_sep_thrupts)
+            mean_thrupt = np.nanmedian(this_sep_thrupts)
             mean_thrupts.append(mean_thrupt)
 
             this_sep_outfwhms = np.where(seps_arr==sep,this_klmode_outfwhms,np.nan)
-            mean_outfwhm = np.nanmean(this_sep_outfwhms)
+            mean_outfwhm = np.nanmedian(this_sep_outfwhms)
             mean_outfwhms.append(mean_outfwhm)
 
         thrupts.append(mean_thrupts)
@@ -562,4 +524,3 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
     thrupt_arr = np.array([[(sep,sep) for sep in seps],*[[(thrupts[kk][ss],outfwhms[kk][ss]) for ss in range(len(seps))] for kk in range(len(klip_params['numbasis']))]])
 
     return thrupt_arr
-

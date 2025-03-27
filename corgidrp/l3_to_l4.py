@@ -415,7 +415,8 @@ def do_psf_subtraction(input_dataset,
                        cand_locs=[],
                        kt_seps=None,
                        kt_pas=None,
-                       kt_snr=20.
+                       kt_snr=20.,
+                       num_processes=None
                        ):
     """
     
@@ -457,6 +458,7 @@ def do_psf_subtraction(input_dataset,
         kt_pas (np.array, optional): Position angles (in degrees counterclockwise from north/up) at which to inject fake 
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
         kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
+        num_processes (int): number of processes for parallelizing the PSF subtraction
         
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
@@ -530,7 +532,7 @@ def do_psf_subtraction(input_dataset,
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
                               annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
                               calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
-                              fileprefix=fileprefix)
+                              fileprefix=fileprefix, numthreads=num_processes)
     
     # Construct corgiDRP dataset from pyKLIP result
     result_fpath = os.path.join(outdir,f'{fileprefix}-KLmodes-all.fits')   
@@ -597,7 +599,8 @@ def do_psf_subtraction(input_dataset,
                             kt_snr,
                             cand_locs = cand_locs, # list of (sep_pix,pa_deg) of known off axis source locations
                             seps=kt_seps,
-                            pas=kt_pas
+                            pas=kt_pas,
+                            num_processes=num_processes
                             )
         thrupt_hdr = fits.Header()
         # Core throughput values on EXCAM wrt pixel (0,0) (not a "CT map", which is

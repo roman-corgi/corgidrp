@@ -64,6 +64,7 @@ tests/walker_output/*
 tests/testcalib/*
 tests/e2e_tests/*/*.json
 tests/ops_output/*.json
+tests/test_data/L4_to_TDA_Inputs/*
 
 # editor files
 .vscode/*

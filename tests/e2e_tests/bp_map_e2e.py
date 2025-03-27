@@ -363,3 +363,4 @@ if __name__ == "__main__":
     # Run the main functions with parsed arguments
     test_bp_map_master_dark_e2e(tvacdata_dir, outputdir)
     test_bp_map_simulated_dark_e2e(tvacdata_dir, outputdir)
+    
