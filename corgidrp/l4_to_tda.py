@@ -176,8 +176,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
     '''
     output_dataset = input_dataset.copy()
     for i, frame in enumerate(output_dataset.frames):
-        pixscale_mas = frame.ext_hdr['PLTSCALE']
-        conversion_to_mas = 206265. * 1000. / pixscale_mas  
+        pixscale_mas = frame.ext_hdr['PLTSCALE']  
         klip_tp = frame.hdu_list['KL_THRU'].data[1:,:,0]
         core_tp = frame.hdu_list['CT_THRU'].data[1]
         klip_seps = frame.hdu_list['KL_THRU'].data[0,:,0]
@@ -279,7 +278,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         core_tp = ct_interp_func(requested_separations)
         frn_vals = (Fp/Fs)/(klip_tp*core_tp)
         # include row for separations in milli-arcseconds (mas)
-        requested_mas = requested_separations * conversion_to_mas
+        requested_mas = requested_separations * pixscale_mas
         flux_ratio_noise_curve = np.vstack([requested_separations, requested_mas, frn_vals])
         hdr = fits.Header()
         hdr['BUNIT'] = "Fp/Fs"
