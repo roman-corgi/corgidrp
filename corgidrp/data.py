@@ -1154,7 +1154,7 @@ class DetectorParams(Image):
             ext_hdr['EXCAMT'] = 40.0
 
             # Enforce data level = CAL?
-            self.ext_hdr['DATALVL']    = 'CAL'
+            ext_hdr['DATALVL']    = 'CAL'
 
             # write default values to headers
             for key, value in self.default_values.items():
