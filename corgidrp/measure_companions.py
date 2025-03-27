@@ -239,25 +239,6 @@ def parse_companions(ext_hdr):
     return companions
 
 
-def ct_dataset_from_cal(ct_cal):
-    """
-    Create a dataset from a core throughput calibration object.
-    
-    Args:
-        ct_cal (corgidrp.data.CoreThroughputCalibration): Core throughput calibration data 
-            containing a PSF cube.
-    
-    Returns:
-        dataset (corgidrp.data.Dataset): Dataset consisting of individual calibration PSF images.
-    """
-    psf_cube = ct_cal.data
-    # Create an Image object for each slice of the PSF cube.
-    psf_images = [
-        Image(psf_cube[i], pri_hdr=ct_cal.pri_hdr, ext_hdr=ct_cal.ext_hdr)
-        for i in range(psf_cube.shape[0])
-    ]
-    return Dataset(psf_images)
-
 
 def measure_counts(image, phot_method, initial_xy, **kwargs):
     """
@@ -323,28 +304,6 @@ def simplified_psf_sub(psf_frame, ct_cal, guesssep, efficiency):
     return Image(sub_frame, pri_hdr=psf_frame.pri_hdr, ext_hdr=psf_frame.ext_hdr, err=getattr(psf_frame, 'err', None))
 
 
-def lookup_core_throughput(ct_cal, desired_sep):
-    """
-    Lookup the core throughput value closest to the desired separation.
-    
-    Args:
-        ct_cal (corgidrp.data.CoreThroughputCalibration): Core throughput calibration data 
-            containing ct_excam and header info.
-        desired_sep (float): Desired separation in pixels.
-    
-    Returns:
-        separations[idx] (float): Separation value closest to desired_sep.
-        idx (int): Index of the closest separation value.
-        ct[idx] (float): Core throughput value corresponding to the closest separation.
-    """
-    x, y, ct = ct_cal.ct_excam
-    mask_x = ct_cal.ext_hdr['MASKLOCX']
-    mask_y = ct_cal.ext_hdr['MASKLOCY']
-    # Compute separations from the mask center.
-    separations = np.sqrt((x - mask_x)**2 + (y - mask_y)**2)
-    idx = np.argmin(np.abs(separations - desired_sep))
-    return separations[idx], idx, ct[idx]
-
 
 def forward_model_psf(
     coronagraphic_dataset,
@@ -379,6 +338,8 @@ def forward_model_psf(
     """
     Forward model the PSF for a companion by injecting a normalized PSF into each frame and performing KLIP subtraction.
     
+    TODO: this is not fully implemented yet.
+
     Args:
         coronagraphic_dataset (corgidrp.data.Dataset): Dataset containing coronagraphic images.
         reference_star_dataset (corgidrp.data.Dataset): Dataset containing reference star images.
@@ -485,28 +446,6 @@ def forward_model_psf(
 
     return kl_throughput_value, ct_value, klip_image
 
-
-def measure_core_throughput_at_location(x_c, y_c, x_star, y_star, ct_cal, ct_dataset):
-    """
-    Measure the core throughput at the location of the companion relative to the star.
-    
-    Args:
-        x_c (float): x-coordinate of the companion.
-        y_c (float): y-coordinate of the companion.
-        x_star (float): x-coordinate of the star.
-        y_star (float): y-coordinate of the star.
-        ct_cal (corgidrp.data.CoreThroughputCalibration): Core throughput calibration data.
-        ct_dataset (corgidrp.data.Dataset): Dataset of calibration PSF images.
-    
-    Returns:
-        throughput (float): Core throughput value at the companion location.
-        corresponding_frame (corgidrp.data.Image): Calibration frame corresponding to the throughput.
-    """
-    dx, dy = x_c - x_star, y_c - y_star
-    guesssep = np.hypot(dx, dy)
-    _, idx, throughput = lookup_core_throughput(ct_cal, guesssep)
-    corresponding_frame = list(ct_dataset)[idx]
-    return throughput, corresponding_frame
 
 
 def update_companion_location_in_cropped_image(image, comp_keyword, old_host, new_host):
