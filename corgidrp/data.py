@@ -1032,7 +1032,12 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['HISTORY'] = "DetectorNoiseMaps calibration file created"
 
             # give it a default filename
-            orig_input_filename = input_dataset.frames[-1].filename.split(".fits")[0]
+            if input_dataset is not None:
+                orig_input_filename = input_dataset.frames[-1].filename.split(".fits")[0]
+            else:
+                #running the calibration code gets the name right (based on last filename in input dataset); this is a standby
+                orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0] 
+            
             self.filename = "{0}_DNM_CAL.fits".format(orig_input_filename)
 
         if err_hdr is not None:
@@ -1298,8 +1303,8 @@ class TrapCalibration(Image):
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_trapcal.fits".format(orig_input_filename)
+            orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+            self.filename = "{0}_TPU_CAL.fits".format(orig_input_filename)
 
 
         # double check that this is actually a dark file that got read in
