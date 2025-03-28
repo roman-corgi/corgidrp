@@ -254,6 +254,7 @@ def test_l3_to_l4(e2eoutput_path):
     
     #Find the sources and get their (x,y) coordinate
     y_source, x_source = np.unravel_index(np.nanargmax(combined_image.data), combined_image.data.shape)
+    assert combined_image.dq[y_source, x_source] == 0 # check DQ
     peakflux, fwhm, x_source, y_source = pyklip.fakes.gaussfit2d(combined_image.data, x_source, y_source, guesspeak=np.nanmax(combined_image.data))
     xcen = combined_image.ext_hdr['CRPIX1']
     ycen = combined_image.ext_hdr['CRPIX2']
@@ -261,9 +262,19 @@ def test_l3_to_l4(e2eoutput_path):
     assert np.isclose(y_source, ycen, atol=1)
     assert peakflux == pytest.approx(1000, rel=1e-2)
 
+
     #Check that the calibration filenames are appropriately associated
     assert combined_image.ext_hdr['CTCALFN'] == '' # no calibration frame associated for L4 non-coron
     assert combined_image.ext_hdr['FLXCALFN'] == "mock_fluxcal.fits"
+
+    input_filenames = [filepath.split(os.path.sep)[-1] for filepath in l3_data_filelist]
+
+    assert combined_image.ext_hdr['FILE0'] in input_filenames
+    assert combined_image.ext_hdr['FILE1'] in input_filenames
+    assert combined_image.ext_hdr['FILE2'] in input_filenames
+    assert combined_image.ext_hdr['FILE3'] in input_filenames
+    assert combined_image.ext_hdr['FILE4'] in input_filenames
+
 
     #Clean up
     this_caldb.remove_entry(astrom_cal)
