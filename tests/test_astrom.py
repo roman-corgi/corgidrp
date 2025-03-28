@@ -59,6 +59,9 @@ def test_astrom():
     pickled_astrom = pickle.loads(pickled)
     assert np.all((astrom_cal.data == pickled_astrom.data))
 
+    # check that the default filename matches the expected convention ('..._AST_CAL.fits')
+    assert astrom_cal.filename[-13:] == '_AST_CAL.fits'
+
     # save and check it can be pickled after save
     astrom_cal.save(filedir=datadir, filename="astrom_cal_output.fits")
     astrom_cal_2 = data.AstrometricCalibration(os.path.join(datadir, "astrom_cal_output.fits"))
