@@ -132,7 +132,7 @@ def create_default_L1_headers(arrtype="SCI"):
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
     prihdr['EXTEND']    = True         # Denotes FIT extensions
-    prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
+    prihdr['VISITID']   = '0000000000000000000' # Full visit ID (placeholder positive integer)
     prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
     prihdr['INSTRUME']  = 'CGI'        # Instrument designation
     prihdr['ORIGIN']    = 'SSC'        # Who is responsible for the data
@@ -313,7 +313,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
     prihdr['EXTEND']    = True         # Denotes FIT extensions
-    prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
+    prihdr['VISITID']   = '0000000000000000000'          # Full visit ID (placeholder positive integer)
     prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
     prihdr['INSTRUME']  = 'CGI'        # Instrument designation
     prihdr['ORIGIN']    = 'SSC'        # Who is responsible for the data
@@ -2879,10 +2879,9 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
    
     # Save file
-    # TO DO: update with file name conventions
     if filedir is not None and file_save:
-        safe_target_name = target_name.replace(' ', '_')
-        filename = os.path.join(f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}_.fits")
+        ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
+        filename = f'CGI_{prihdr['VISITID']}_{ftimeutc}_L2b.fits'
         frame.save(filedir=filedir, filename=filename)
 
     return frame

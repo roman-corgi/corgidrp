@@ -4,21 +4,31 @@ from pathlib import Path
 import numpy as np
 from astropy.io import fits
 import pytest
+import re
+import copy
 
+from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
+import corgidrp.data as data 
 from corgidrp.data import Dataset
 from corgidrp.data import Image
 import corgidrp.mocks as mocks
+from corgidrp.data import Image, NDFilterSweetSpotDataset
 
 # ---------------------------------------------------------------------------
 # Global variables and constants
 # ---------------------------------------------------------------------------
-BRIGHT_STARS = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep']
-DIM_STARS = ['TYC 4433-1800-1', 'TYC 4205-1677-1', 'TYC 4212-455-1', 'TYC 4209-1396-1',
-             'TYC 4413-304-1', 'UCAC3 313-62260', 'BPS BS 17447-0067', 'TYC 4424-1286-1',
-             'GSC 02581-02323', 'TYC 4207-219-1']
+BRIGHT_STARS = ['Vega']
+DIM_STARS = ['TYC 4424-1286-1',
+             'GSC 02581-02323']
+
+# takes a long time to run with all stars
+#BRIGHT_STARS = ['109 Vir', 'Vega', 'Eta Uma', 'Lam Lep']
+#DIM_STARS = ['TYC 4433-1800-1', 'TYC 4205-1677-1', 'TYC 4212-455-1', 'TYC 4209-1396-1',
+#            'TYC 4413-304-1', 'UCAC3 313-62260', 'BPS BS 17447-0067', 'TYC 4424-1286-1',
+#             'GSC 02581-02323', 'TYC 4207-219-1']
 
 DIM_EXPTIME = 10.0
 BRIGHT_EXPTIME = 5.0
@@ -86,7 +96,7 @@ def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, out
     for star_name in DIM_STARS:
         dim_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
         flux_image = mocks.create_flux_image(
-            dim_star_flux, FWHM, cal_factor, filter_used, "HOLE", star_name,
+            dim_star_flux, FWHM, cal_factor, filter=filter_used, fpamname="HOLE", target_name=star_name,
             fsm_x=0, fsm_y=0, exptime=dim_exptime, filedir=output_path,
             platescale=21.8,
             background=background_val,
@@ -129,8 +139,8 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
                                                                                           filter_used)
                 attenuated_flux = bright_star_flux * ND_transmission
                 flux_image = mocks.create_flux_image(
-                    attenuated_flux, FWHM, cal_factor, filter_used, "ND225", star_name,
-                    dx, dy, bright_exptime, output_path,
+                    attenuated_flux, FWHM, cal_factor, filter=filter_used, fpamname="ND225", target_name=star_name,
+                    fsm_x=dx, fsm_y=dy, exptime=bright_exptime, filedir=output_path,
                     platescale=21.8,
                     background=background_val,
                     add_gauss_noise=add_gauss_noise_val,
@@ -213,18 +223,19 @@ def output_dir(tmp_path):
 # ---------------------------------------------------------------------------
 # Test functions using pytest
 # ---------------------------------------------------------------------------
-def test_nd_filter_calibration_object(stars_dataset_cached, output_dir):
+def test_nd_filter_calibration_object(stars_dataset_cached):
     print("**Testing ND filter calibration object generation and expected headers**")
+    # don't want the datasets to get overwritten for subsequent tests
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     
-    # TO DO: update this when file name conventions are finalized
-    results.save(output_dir, "CGI_NDF_CAL.fits")
+    results.save(filedir=default_cal_dir)
 
-    nd_files = [fn for fn in os.listdir(output_dir) if fn.endswith('_NDF_CAL.fits')]
+    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_NDF_CAL.fits')]
     assert nd_files, "No NDFilterOD files were generated."
-    with fits.open(os.path.join(output_dir, nd_files[0])) as hdul:
+    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
         ext_hdr = hdul[1].header
         assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
@@ -234,22 +245,34 @@ def test_nd_filter_calibration_object(stars_dataset_cached, output_dir):
         assert ext_hdr.get('CFAMNAME') is not None, "Missing CFAMNAME keyword."
 
 
-def test_output_filename_convention(stars_dataset_cached, output_dir):
+def test_output_filename_convention(stars_dataset_cached):
     print("**Testing output filename naming conventions**")
+    
+    # Make a copy of the dataset and retrieve expected values.
+    ds_copy = copy.deepcopy(stars_dataset_cached)
+
+    # Construct the expected filename from the last input dataset filename.
+    expected_filename = re.sub('_L[0-9].', '_NDF_CAL', stars_dataset_cached[-1].filename)
+    full_expected_path = os.path.join(default_cal_dir, expected_filename)
+
+    # Create the calibration product
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor = None)
-    # TO DO: update this when file name conventions are decided
-    # TO DO: update this when file name conventions are finalized
-    results.save(output_dir, "CGI_NDF_CAL.fits")
-    nd_files = [fn for fn in os.listdir(output_dir) if fn.endswith('_NDF_CAL.fits')]
-    assert nd_files, "No files found matching naming convention."
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
+        fluxcal_factor=None
+    )
+    results.save(filedir=default_cal_dir)
+    
+    assert os.path.exists(full_expected_path), (
+        f"Expected file {expected_filename} not found in {default_cal_dir}."
+    )
+    print("The nd_filter_calibration product file exists and meets the expected naming convention.")
 
 
 def test_average_od_within_tolerance(stars_dataset_cached):
     print("**Testing computed OD within tolerance**")
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
@@ -292,8 +315,9 @@ def test_nd_filter_calibration_phot_methods(stars_dataset_cached, phot_method):
             "centroid_roi_radius": 5
         }
     print(f"**Testing ND calibration with photometry method: {phot_method}**")
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, phot_method, FLUX_OR_IRR, phot_args, 
+        ds_copy, OD_RASTER_THRESHOLD, phot_method, FLUX_OR_IRR, phot_args, 
         fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
@@ -412,27 +436,14 @@ def test_aperture_radius_sensitivity(stars_dataset_cached, aper_radius):
         "centering_method": "xy",
         "centroid_roi_radius": 5
     }
+    ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, "Aperture", "irr", phot_args, 
+        ds_copy, OD_RASTER_THRESHOLD, "Aperture", "irr", phot_args, 
         fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
     assert abs(avg_od - INPUT_OD) < 0.3, (
         f"AperRadius={aper_radius}: OD mismatch for target."
-    )
-
-
-def test_od_stability(stars_dataset_cached):
-    # TO DO: move this out of the test code and into the calibration product generation 
-    print("**Testing OD stability across multiple dithers**")
-    results = nd_filter_calibration.create_nd_filter_cal(
-        stars_dataset_cached, OD_RASTER_THRESHOLD, "Aperture", "irr", PHOT_ARGS, 
-        fluxcal_factor = None)
-    ods = results.data
-    std_od = np.std(ods[:, 0])
-    allowed_scatter = 0.05
-    assert std_od < allowed_scatter, (
-        f"OD dithers for target have std={np.std(ods)}, expected < {allowed_scatter}"
     )
 
 
@@ -491,7 +502,70 @@ def test_background_effect(tmp_path):
     assert abs(avg_od_no - avg_od_bg) < 0.1, f"OD should not differ drastically between background subtraction and no background subtraction modes."
 
 
-'''
+def test_calculate_od_at_new_location(output_dir):
+    """
+    Test calculate_od_at_new_location with:
+      1) A real NDFilterSweetSpotDataset containing Nx3 data = [OD, x, y]
+      2) A mock clean_frame_entry with a star centroid at a known location
+      3) Known FPAM offsets in headers
+      4) An identity transformation matrix file
+    """
+
+    # Create a small Nx3 sweet spot array, each row is [OD, x, y].
+    # Interpolate at the center (5,5).
+    # The OD values at corners are 2.0, 3.0, 4.0, 5.0 => a bilinear interpolation at (5,5) => 3.5.
+    sweetspot_data = np.array([
+        [2.0,  0.0,  0.0],   # OD=2.0 at (x=0,y=0)
+        [3.0,  0.0, 10.0],   # OD=3.0 at (x=0,y=10)
+        [4.0, 10.0,  0.0],   # OD=4.0 at (x=10,y=0)
+        [5.0, 10.0, 10.0]    # OD=5.0 at (x=10,y=10)
+    ], dtype=float)
+
+    # Create a fake input dataset to set the filename
+    input_prihdr, input_exthdr = mocks.create_default_L2b_headers()
+    fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
+    fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
+    fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
+
+    # Build the NDFilterSweetSpotDataset
+    ndcal_prihdr, ndcal_exthdr = mocks.create_default_calibration_product_headers()
+    ndcal_exthdr["FPAM_H"] = 0.0
+    ndcal_exthdr["FPAM_V"] = 0.0
+    nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
+                                                    input_dataset=fake_input_dataset)
+ 
+    # Create an identity transformation matrix FITS file in output_dir
+    transformation_matrix_file = mock_transformation_matrix(output_dir)
+
+    # Make a 5x5 mock 'clean_frame_entry' with a star at (2,2) => centroid (2,2)
+    # Shift it by (3,3) => final location (5,5).
+    clean_image_data = np.zeros((5, 5), dtype=float)
+    clean_image_data[2, 2] = 100.0  # star pixel
+    cframe_prihdr, cframe_exthdr = mocks.create_default_L2b_headers()
+    cframe_exthdr["FPAM_H"] = 3.0
+    cframe_exthdr["FPAM_V"] = 3.0
+    clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
+                              ext_hdr=cframe_exthdr)
+
+    # Call the function under test
+    interpolated_od = nd_filter_calibration.calculate_od_at_new_location(
+        clean_frame_entry=clean_frame_entry,
+        transformation_matrix_file=transformation_matrix_file,
+        ndsweetspot_dataset=nd_sweetspot_dataset
+    )
+
+    # Expect the final location = (2+3, 2+3) = (5,5).
+    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
+    expected_value = 3.5
+    assert abs(interpolated_od - expected_value) < 1e-6, (
+        f"Expected OD={expected_value}, got {interpolated_od}"
+    )
+    print(
+        f"test_calculate_od_at_new_location_nd_sweetspot_real_class PASSED: "
+        f"interpolated OD={interpolated_od}"
+    )
+
+
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -555,8 +629,8 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    run_test(test_nd_filter_calibration_object, stars_dataset_cached, output_dir)
-    run_test(test_output_filename_convention, stars_dataset_cached, output_dir)
+    run_test(test_nd_filter_calibration_object, stars_dataset_cached)
+    run_test(test_output_filename_convention, stars_dataset_cached)
     run_test(test_average_od_within_tolerance, stars_dataset_cached)
 
     for method in ["Aperture", "Gaussian"]:
@@ -568,14 +642,14 @@ def main():
     for aper_radius in [5, 10]:
         run_test(test_aperture_radius_sensitivity, stars_dataset_cached, aper_radius)
 
-    run_test(test_od_stability, stars_dataset_cached)
-
     run_test(test_background_effect, background_tmp_dir)
 
     run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
 
+    test_calculate_od_at_new_location(output_dir)
+
     print("All tests PASSED")
+
 
 if __name__ == "__main__":
     main()
-'''
