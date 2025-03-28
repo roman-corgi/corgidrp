@@ -1270,8 +1270,10 @@ class AstrometricCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
             
-            # give a default filename
-            self.filename = "AstrometricCalibration.fits"
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+            self.filename = "{0}_AST_CAL.fits".format(orig_input_filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
