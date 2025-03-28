@@ -794,14 +794,9 @@ class NonLinearityCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Non Linearity Calibration file created"
 
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_NonLinearityCalibration.fits".format(orig_input_filename)
-
-            # Enforce data level = CAL
-            self.ext_hdr['DATALVL']    = 'CAL'
-
+            # Follow filename convention as of R3.0.2
+            self.filedir = '.'
+            self.filename = re.sub('_L[0-9].', '_NLN_CAL', input_dataset[-1].filename)
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in

@@ -1431,6 +1431,8 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     dq = np.zeros([1200,2200], dtype = np.uint16)
     image = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
+    # Use a an expected filename
+    image.filename = 'CGI_0200001001001001001_20250415T0305102_L2b.fits'
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
