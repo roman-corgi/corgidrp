@@ -797,6 +797,9 @@ class NonLinearityCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Non Linearity Calibration file created"
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL'] = 'CAL'
+
             # Follow filename convention as of R3.0.2
             self.filedir = '.'
             self.filename = re.sub('_L[0-9].', '_NLN_CAL', input_dataset[-1].filename)

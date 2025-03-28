@@ -172,6 +172,9 @@ def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
     nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
         max_write)
+
+    # Test its DATALVL is CAL
+    assert nonlin_out.ext_hdr['DATALVL'] == 'CAL'
         
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
