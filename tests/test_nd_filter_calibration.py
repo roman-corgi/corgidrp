@@ -522,12 +522,10 @@ def test_calculate_od_at_new_location(output_dir):
     ], dtype=float)
 
     # Create a fake input dataset to set the filename
-    input_prihdr, input_exthdr = mocks.create_default_calibration_product_headers()
+    input_prihdr, input_exthdr = mocks.create_default_L2b_headers()
     fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
+    fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
-    formatted_time = data.format_ftimeutc(input_exthdr['FTIMEUTC'])
-    fake_input_filename = f"CGI_{input_prihdr['VISITID']}_{formatted_time}_NDF_CAL.fits"
-    fake_input_dataset.filename = fake_input_filename
 
     # Build the NDFilterSweetSpotDataset
     ndcal_prihdr, ndcal_exthdr = mocks.create_default_calibration_product_headers()
@@ -538,10 +536,9 @@ def test_calculate_od_at_new_location(output_dir):
  
     # Create an identity transformation matrix FITS file in output_dir
     transformation_matrix_file = mock_transformation_matrix(output_dir)
-    # The identity matrix => final EXCAM offset = FPAM offset
 
     # Make a 5x5 mock 'clean_frame_entry' with a star at (2,2) => centroid (2,2)
-    # We'll shift it by (3,3) => final location (5,5).
+    # Shift it by (3,3) => final location (5,5).
     clean_image_data = np.zeros((5, 5), dtype=float)
     clean_image_data[2, 2] = 100.0  # star pixel
     cframe_prihdr, cframe_exthdr = mocks.create_default_L2b_headers()
@@ -632,7 +629,6 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
-    '''
     run_test(test_nd_filter_calibration_object, stars_dataset_cached)
     run_test(test_output_filename_convention, stars_dataset_cached)
     run_test(test_average_od_within_tolerance, stars_dataset_cached)
@@ -649,7 +645,6 @@ def main():
     run_test(test_background_effect, background_tmp_dir)
 
     run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
-    '''
 
     test_calculate_od_at_new_location(output_dir)
 

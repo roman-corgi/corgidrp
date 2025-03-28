@@ -957,10 +957,9 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            # Save it with filename that matches documentation conventions
-            formatted_time = format_ftimeutc(self.ext_hdr['FTIMEUTC'])
-
-            self.filename = f"CGI_{self.pri_hdr['VISITID']}_{formatted_time}_BPM_CAL.fits"
+            self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+            # if no input_dataset is given, do we want to set the filename manually using 
+            # header values?
 
         # double check that this is actually a bad pixel map that got read in
         # since if only a filepath was passed in, any file could have been read in

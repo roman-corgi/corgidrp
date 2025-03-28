@@ -150,30 +150,35 @@ def test_packing_unpacking_uint64():
 
 def test_output_filename_convention():
     print("**Testing output filename naming conventions**")
-    badpixelmap, dark_frame, flat_frame = generate_badpixel_map()
 
-    # Bad pixel map is made using the headers from the dark frame currently
-    expected_visitid = dark_frame.pri_hdr['VISITID']
-    expected_ftimeutc_long = dark_frame.ext_hdr['FTIMEUTC']
-    expected_ftimeutc = data.format_ftimeutc(expected_ftimeutc_long)
+    bp_fake_data = np.array([
+        [0,  1,  0],   
+        [1,  0, 0],  
+        [0, 0, 0]
+    ], dtype=float)
+
+    # Create a fake input dataset to set the filename
+    input_prihdr, input_exthdr = mocks.create_default_L2b_headers()
+    fake_input_image = data.Image(bp_fake_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
+    fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
+    fake_input_dataset = data.Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
+
+    bpcal_prihdr, bpcal_exthdr = mocks.create_default_calibration_product_headers()
     
+    badpixelmap = data.BadPixelMap(bp_fake_data, pri_hdr=bpcal_prihdr, ext_hdr=bpcal_exthdr, input_dataset=fake_input_dataset)
     badpixelmap.save(filedir=default_cal_dir)
-    pattern = r"^CGI_[A-Z0-9]{19}_\d{8}T\d{7}_BPM_CAL\.fits$"
-    matched_files = [fn for fn in os.listdir(default_cal_dir) if re.match(pattern, fn)]
-    assert matched_files, "No files found matching naming convention."
 
-    # Construct the expected filename
-    expected_filename = f"CGI_{expected_visitid}_{expected_ftimeutc}_BPM_CAL.fits"
+     # Construct the expected filename from the last input dataset filename.
+    expected_filename = re.sub('_L[0-9].', '_BPM_CAL', fake_input_dataset[-1].filename)
     full_expected_path = os.path.join(default_cal_dir, expected_filename)
-
-    # Check that the filename uses VISITID and FTIMEUTC from dark file
+    
     assert os.path.exists(full_expected_path), (
         f"Expected file {expected_filename} not found in {default_cal_dir}."
     )
-    print("The nd_filter_calibration product file meets the expected naming convention.")
+    print("The bad pixel map calibration product file exists and meets the expected naming convention.")
 
 
 if __name__ == "__main__":
-    #test_badpixelmap()
-    #test_packing_unpacking_uint64()
+    test_badpixelmap()
+    test_packing_unpacking_uint64()
     test_output_filename_convention()
