@@ -1710,6 +1710,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         ## save as an Image object
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
         filename = "simcal_astrom.fits"
+        frame.filename = filename
         
         if filedir is not None:
             # save source SkyCoord locations and pixel location estimates
