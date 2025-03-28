@@ -90,30 +90,35 @@ def inject_psf(frame_in, ct_calibration, amp,
     return frame, psf_model, psf_cenxy
 
 
-def measure_noise(frame, seps_pix, fwhm, 
-                  klmode_index=None,
-                  cand_locs = []):
+def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = [], center='mask'):
     """Calculates the noise (standard deviation of counts) of an 
-        annulus at a given separation from the mask center.
+        annulus at a given separation from the mask or star center.
         TODO: Correct for small sample statistics?
         TODO: Mask known off-axis sources.
     
     Args:
-        frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" in header
-        seps_pix (np.array of float): Separations (in pixels from mask center) at which to calculate 
+        frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" and "STARLOCX/Y" in header
+        seps_pix (np.array of float): Separations (in pixels from specified center) at which to calculate 
             the noise level.
-        fwhm (float): halfwidth of the annulus to use for noise calculation, based on FWHM.
+        hw (float): halfwidth of the annulus to use for noise calculation.
         klmode_index (int, optional): If provided, returns only the noise values for the KL mode with 
             the given index. I.e. klmode_index=0 would return only the values for the first KL mode 
-            truncation choice.
+            truncation choice.  If None (by default), all indices are returned.
         cand_locs (list of tuples, optional): Locations of known off-axis sources, so we can mask them. 
             This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
+        center (str, optional): 'mask' or 'star'. Defaults to 'mask', which assumes the center at MASKLOCX and MASKLOCY, 
+            whereas 'star' assumes the center at STARLOCX and STARLOCY.
+            truncation choice.
         
-
-    Returns: np.array 
+    Returns: np.array: array of shape (number of separtions, number of KL modes) containing the annular noise.  If klmode_index 
+        specified, the number of KL modes in the output array is 1.
     """
-
-    cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
+    if center == 'mask':
+        cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
+    elif center == 'star':
+        cenx, ceny = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+    else:
+        raise ValueError(f"center must be 'mask' or 'star', got {center}")  
 
     # Mask data outside the specified annulus
     y, x = np.indices(frame.data.shape[1:])
@@ -122,8 +127,8 @@ def measure_noise(frame, seps_pix, fwhm,
 
     stds = []
     for sep_pix in seps_pix:
-        r_inner = sep_pix - fwhm
-        r_outer = sep_pix + fwhm
+        r_inner = sep_pix - hw
+        r_outer = sep_pix + hw
         masked_data = np.where(np.logical_and(sep_map3d<r_outer,sep_map3d>r_inner), frame.data,np.nan)
         
         # import matplotlib.pyplot as plt
@@ -137,7 +142,7 @@ def measure_noise(frame, seps_pix, fwhm,
                 cand_x, cand_y = seppa2xy(*cand_loc,cenx,ceny)
                 dists = np.sqrt((y-cand_y)**2 + (x-cand_x)**2)
     
-                masked_data = np.where(dists > 5 * fwhm, masked_data.copy(),np.nan)
+                masked_data = np.where(dists > 5 * hw, masked_data.copy(),np.nan)
         
         # import matplotlib.pyplot as plt
         # plt.imshow(masked_data[0],origin='lower')

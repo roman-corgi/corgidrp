@@ -83,7 +83,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     """
 
     # figure out paths for both II&T and DRP runs, assuming everything is located in the same relative location as in the TVAC Box drive
-    l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
+    l1_datadir = os.path.join(tvacdata_path, 'untitled folder', "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
 
     # define the raw science data to process
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
@@ -207,6 +207,10 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(nonlinear_cal)
 
     ##### Check against II&T ("TVAC") data
+    for f in os.listdir(noisemap_outputdir):
+        if f.endswith('_DNM_CAL.fits'):
+            output_filename = f
+            break
     corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,output_filename)
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
@@ -268,7 +272,7 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     """
 
     # figure out paths for both II&T and DRP runs, assuming everything is located in the same relative location as in the TVAC Box drive
-    l1_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
+    l1_datadir = os.path.join(tvacdata_path, 'untitled folder', "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
 
     # define the raw science data to process
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
@@ -391,8 +395,10 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
 
     # getting output filename
-    l2a_data_filename = os.path.split(l2a_filepaths[0])[1]
-    output_filename = l2a_data_filename[:-5] + '_DetectorNoiseMaps.fits'
+    for f in os.listdir(noisemap_outputdir):
+        if f.endswith('_DNM_CAL.fits'):
+            output_filename = f
+            break
 
     # clean up by removing entry
     this_caldb.remove_entry(kgain)

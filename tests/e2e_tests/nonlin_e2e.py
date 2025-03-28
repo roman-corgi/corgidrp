@@ -116,7 +116,7 @@ def test_nonlin_cal_e2e(
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
-    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NonLinearityCalibration.fits'))
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL.fits'))
     nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
     nonlin_drp_filename = nonlin_drp_filepath.split(os.path.sep)[-1]
 

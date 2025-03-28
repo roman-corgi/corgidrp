@@ -1074,11 +1074,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
             count += frames_to_combine
             if count >= num_frames:
                 sub_array = data_array[count - frames_to_combine:]
+                file_name = input_dataset[-1].filename
             else:
                 sub_array = data_array[count - frames_to_combine: count]
+                file_name = input_dataset[count].filename
 
             comb = np.mean(sub_array, axis=0)
             im = corgidrp.data.Image(comb, pri_hdr=input_dataset[count - frames_to_combine].pri_hdr, ext_hdr=input_dataset[0].ext_hdr)
+            im.filename = file_name
             image_objects.append(im)
         
         dataset = corgidrp.data.Dataset(image_objects)
@@ -1118,6 +1121,8 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         # return a single AstrometricCalibration data file
         astrom_data = np.array([corr_ra, corr_dec, cal_properties[0], cal_properties[0], cal_properties[1], ra, dec, np.inf, np.inf])
         astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=in_dataset)
+        # change the filename here since the astrom_cals will be averaged later and arent individually saved ('_AST_CAL' will be added to filename twice otherwise)
+        astrom_cal.filename = astrom_cal.filename.split("_AST_CAL")[0] + '.fits'
         astroms.append(astrom_cal)
 
     # average the calibration properties over all frames

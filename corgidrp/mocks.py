@@ -271,6 +271,8 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
     exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
     exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
+    exthdr['EACQ_ROW']    = 0               # Desired row for EXCAM star acquisition method
+    exthdr['EQCQ_COL']    = 0               # Desired column for EXCAM star acquisition method
     exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)
     exthdr['FTIMEUTC']    = dt_str           # Frame time in UTC
     exthdr['DATALVL']    = 'L1'            # Data level (e.g., 'L1', 'L2a', 'L2b')
@@ -450,6 +452,8 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
     exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
     exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
+    exthdr['EACQ_ROW']    = 0               # Desired row for EXCAM star acquisition method
+    exthdr['EQCQ_COL']    = 0               # Desired column for EXCAM star acquisition method
     exthdr['TPINJCYC']    = 0               # Number of cycles for TPUMP injection
     exthdr['TPOSCCYC']    = 0               # Number of cycles for charge oscillation (TPUMP)
     exthdr['TPTAU']       = 0               # Length of one step in a trap pumping scheme (microseconds)
@@ -609,7 +613,7 @@ def create_default_calibration_product_headers():
     '''
     # TO DO: update when this has been more defined
     prihdr, exthdr = create_default_L1_headers()
-    exthdr['DATALVL']    = 'Calibration Product'
+    exthdr['DATALVL']    = 'CAL'
     exthdr['DATATYPE']    = 'Image'              # What type of calibration product, just do image for now, mock codes will update
 
     return prihdr, exthdr
@@ -1435,6 +1439,8 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     dq = np.zeros([1200,2200], dtype = np.uint16)
     image = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
+    # Use a an expected filename
+    image.filename = 'CGI_0200001001001001001_20250415T0305102_L2b.fits'
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
@@ -1712,6 +1718,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         ## save as an Image object
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
         filename = "simcal_astrom.fits"
+        frame.filename = filename
         
         if filedir is not None:
             # save source SkyCoord locations and pixel location estimates
