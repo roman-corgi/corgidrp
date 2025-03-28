@@ -197,6 +197,10 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
 
     astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_AST_CAL.fits'))[0])
 
+    # check that the astrometric calibration filename is based on the last file in the input file list
+    expected_last_filename = sim_data_filelist[-1].split('L1_')[-1].split('.fits')[0]
+    assert astrom_cal.filename.split('L2b')[-1] == expected_last_filename + '_AST_CAL.fits'
+
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
     assert astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=0.5)
