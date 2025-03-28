@@ -94,7 +94,10 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
                     hdulist[0].header[key] = image_sources[0].pri_hdr[key]
 
             for ext_key in image_sources[0].ext_hdr:
-                if ext_key not in hdulist[1].header:
+                if ext_key == "HISTORY":
+                    for item in image_sources[0].ext_hdr[ext_key]:
+                        hdulist[1].header.add_history(item)
+                elif ext_key not in hdulist[1].header:
                     hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
 
             # save to the data dir in the output directory
@@ -213,6 +216,8 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
+
+    this_caldb.remove_entry(astrom_cal)
 
 if __name__ == "__main__":
     tvacdata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"

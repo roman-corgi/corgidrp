@@ -1,5 +1,5 @@
 {
-    "name": "l2b_to_l4",
+    "name": "l3_to_l4_noncoron",
     "template": true, 
     "drpconfig": {
         "track_individual_errors": false
@@ -8,36 +8,24 @@
     "outputdir": "",
     "steps": [
         {
-            "name": "create_wcs",
-            "calibs": {
-                "AstrometricCalibration": "AUTOMATIC"
-            }
-        },
-        {
-            "name": "divide_by_exptime"
-        },
-        {
-            "name": "update_to_l3"
-        }, 
-        {
-            "name": "save"
-        },
-        {
             "name": "distortion_correction", 
             "calibs": {
                 "AstrometricCalibration": "AUTOMATIC"
             }
         },
         {
-            "name": "find_star"
+            "name": "northup"
         },
         {
-            "name": "do_psf_subtraction"
+            "name": "combine_subexposures",
+            "keywords" :{
+                "num_frames_scaling": false
+            }
         },
         {
             "name": "update_to_l4",
             "calibs": {
-                "CoreThroughputCalibration": "AUTOMATIC",
+                "CoreThroughputCalibration": "AUTOMATIC,OPTIONAL",
                 "FluxcalFactor": "AUTOMATIC"
             }
         },

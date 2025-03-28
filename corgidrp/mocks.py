@@ -527,6 +527,14 @@ def create_default_L2b_headers(arrtype="SCI"):
     exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['DATALVL']      = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['PCTHRESH']     = 0.0            # Photon-counting threshold (electrons)
+    # frame selection headers
+    exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
+    exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
+    exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
+    exthdr['FRMSEL04'] = (None, "tilt rms (Z3VAR) threshold") # record selection criteria
+    exthdr['FRMSEL05'] = (None, "tip bias (Z2RES) threshold") # record selection criteria
+    exthdr['FRMSEL06'] = (None, "tilt bias (Z3RES) threshold") # record selection criteria
+    exthdr.add_history("Marked 0 frames as bad: ") # history message travking bad frames
 
     return prihdr, exthdr
 

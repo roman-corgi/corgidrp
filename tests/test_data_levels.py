@@ -21,6 +21,7 @@ def test_l1_to_l4():
     fname_template = "CGI_0000011222333OOO111_20250101T12{0:02d}00_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
+        assert image.pri_hdr['ORIGIN'] == 'DRP' # should already be DRP origin
 
     l2a_dataset = l1_to_l2a.update_to_l2a(l1_dataset)
 

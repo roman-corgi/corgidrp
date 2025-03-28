@@ -25,6 +25,7 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
+    output_l2a_dir = os.path.join(output_dir, 'l2a')
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     # empty out directory of any previous files
@@ -36,6 +37,8 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
         os.mkdir(output_ill_dir)
     if not os.path.exists(output_dark_dir):
         os.mkdir(output_dark_dir)
+    if not os.path.exists(output_l2a_dir):
+        os.mkdir(output_l2a_dir)
     # empty out directory of any previous files
     for f in os.listdir(output_ill_dir):
         os.remove(os.path.join(output_ill_dir,f))
@@ -136,12 +139,20 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     
 
     # make PC illuminated, subtracting the PC dark
-    # If I leave out the template specification, the walker recipe guesser uses l1_to_l2a_basic.json, 
-    # so if you run the walker again with the output file list from the first walker call as input to the second,
-    # it uses l2a_to_l2b_pc.json
-        
-    # or you could just run it once with line below:
-    walker.walk_corgidrp(l1_data_ill_filelist, '', output_dir, template="l1_to_l2b_pc.json")
+    # below I leave out the template specification to check that the walker recipe guesser works as expected
+    # L1 to L2a
+    walker.walk_corgidrp(l1_data_ill_filelist, '', output_l2a_dir)#, template="l1_to_l2b_pc.json")
+    
+    # grab L2a files to go to L2b
+    l2a_files = []
+    for filepath in l1_data_ill_filelist:
+        # emulate naming change behaviors
+        new_filename = filepath.split(os.path.sep)[-1].replace("_L1_", "_L2a") 
+        # loook in new dir
+        new_filepath = os.path.join(output_l2a_dir, new_filename)
+        l2a_files.append(new_filepath)
+    walker.walk_corgidrp(l2a_files, '', output_dir)
+
     # get photon-counted frame
     master_ill_filename_list = []
     master_ill_filepath_list = []
@@ -199,4 +210,5 @@ if __name__ == "__main__":
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
+    tvacdata_dir = args.tvacdata_dir
     test_expected_results_e2e(tvacdata_dir, outputdir)

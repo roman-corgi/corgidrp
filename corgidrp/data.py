@@ -422,7 +422,8 @@ class Image():
         if not 'IS_BAD' in self.ext_hdr:
             self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
 
-
+        # the DRP has touched this file so it's origin is now this DRP
+        self.pri_hdr['ORIGIN'] = 'DRP'
 
 
     # create this field dynamically
