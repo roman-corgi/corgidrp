@@ -17,7 +17,10 @@
             "name": "find_star"
         },
         {
-            "name": "do_psf_subtraction"
+            "name": "do_psf_subtraction",
+            "calibs": {
+                "CoreThroughputCalibration": "AUTOMATIC"
+            }
         },
         {
             "name": "update_to_l4",
