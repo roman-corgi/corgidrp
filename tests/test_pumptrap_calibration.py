@@ -107,7 +107,8 @@ def test_tpump_analysis():
                         cs_fit_thresh = cs_fit_thresh, 
                         input_T=input_T,
                         bins_E=bins_E, bins_cs=bins_cs)
-
+    # filename check
+    assert tpump_calibration.filename.endswith('TPU_CAL.fits')
     #Extract the extra info. 
     unused_fit_data = tpump_calibration.ext_hdr['unfitdat']
     unused_temp_fit_data = tpump_calibration.ext_hdr['untempfd']

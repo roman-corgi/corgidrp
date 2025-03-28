@@ -7,7 +7,6 @@ import corgidrp.mocks as mocks
 
 import pytest
 import numpy as np
-import os
 
 ## Helper functions/quantities
 
