@@ -1,3 +1,4 @@
+import re
 import os
 import glob
 import pickle
@@ -108,7 +109,10 @@ def test_tpump_analysis():
                         input_T=input_T,
                         bins_E=bins_E, bins_cs=bins_cs)
     # filename check
-    assert tpump_calibration.filename.endswith('TPU_CAL.fits')
+    test_filename = emgain_divided_dataset.frames[-1].filename.split('.fits')[0] + '_TPU_CAL.fits'
+    test_filename = re.sub('_L[0-9].', '', test_filename)
+    assert tpump_calibration.filename == test_filename
+
     #Extract the extra info. 
     unused_fit_data = tpump_calibration.ext_hdr['unfitdat']
     unused_temp_fit_data = tpump_calibration.ext_hdr['untempfd']

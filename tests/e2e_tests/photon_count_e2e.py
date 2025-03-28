@@ -136,8 +136,12 @@ def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
     
 
     # make PC illuminated, subtracting the PC dark
-    # below I leave out the template specification to check that the walker recipe guesser works as expected
-    walker.walk_corgidrp(l1_data_ill_filelist, '', output_dir)#, template="l1_to_l2b_pc.json")
+    # If I leave out the template specification, the walker recipe guesser uses l1_to_l2a_basic.json, 
+    # so if you run the walker again with the output file list from the first walker call as input to the second,
+    # it uses l2a_to_l2b_pc.json
+        
+    # or you could just run it once with line below:
+    walker.walk_corgidrp(l1_data_ill_filelist, '', output_dir, template="l1_to_l2b_pc.json")
     # get photon-counted frame
     master_ill_filename_list = []
     master_ill_filepath_list = []

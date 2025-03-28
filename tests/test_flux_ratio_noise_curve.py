@@ -160,6 +160,10 @@ def test_expected_flux_ratio_noise():
     assert np.array_equal(frn_hw, frn_true_hw)
     
     #test inputs
+    # number of frames in input_dataset and unocculted_star_dataset should be equal
+    bad_star_dataset = data.Dataset([star_image for i in range(len(psfsub_dataset_rdi)+2)])
+    with pytest.raises(ValueError):
+        compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, bad_star_dataset)
     # requested_separations includes at least 1 value outside the range covered by the KLIP extension header, so extrapolation is used
     with pytest.warns(UserWarning):
         compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, requested_separations=np.array([4, 13, 17]))

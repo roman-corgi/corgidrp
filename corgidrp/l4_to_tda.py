@@ -186,7 +186,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
         NDcalibration (corgidrp.data.NDFilterSweetSpotDataset): ND filter calibration
-        unocculted_star_dataset (corgidrp.data.Dataset): a dataset of unocculted star Images corresponding to the Images in input_dataset
+        unocculted_star_dataset (corgidrp.data.Dataset): a dataset of unocculted star Images corresponding to the Images in input_dataset.   Should have the same number of frames as input_dataset (1-to-1 correspondence).
         unocculted_star_loc (2-D float array, optional): array of coordinates of the unocculted stars according to the order given in the unocculted_star_dataset. 
             The first row of the array is for row position, and the second row is for column position. 
             If None, the peak pixel location is used for each frame.  Defaults to None. 
@@ -205,6 +205,8 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
             TODO:  Add uncertainty to flux ratio noise curve based on uncertainties in core throughput and algorithm throughput if those are implemented in the future.
     '''
     output_dataset = input_dataset.copy()
+    if len(input_dataset) != len(unocculted_star_dataset):
+        raise ValueError('The number of frames in input_dataset and unocculted_star_dataset must be the same.')
     for i, frame in enumerate(output_dataset.frames):
         pixscale_mas = frame.ext_hdr['PLTSCALE']  
         klip_tp = frame.hdu_list['KL_THRU'].data[1:,:,0]
