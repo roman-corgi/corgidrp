@@ -654,6 +654,8 @@ class Dark(Image):
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
                 self.filename = "{0}_DRK_CAL.fits".format(orig_input_filename)
+                # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
+                self.filename = self.filename.replace("_DNM_CAL", "")
         
         if 'PC_STAT' not in self.ext_hdr:
             self.ext_hdr['PC_STAT'] = 'analog master dark'

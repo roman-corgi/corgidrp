@@ -178,6 +178,10 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
     '''
     Uses the PSF-subtracted frame and its algorithm throughput vs separation to 
     produce a calibrated 1-sigma flux ratio "contrast" curve (or "noise curve" since contrast curve is typically 5-sigma), also accounting for the throughput of the coronagraph.
+    It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
+    It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames 
+    in the input_dataset), and the an estimate of planet flux per frame of inupt_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
+    the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of PSF-subtracted Images
