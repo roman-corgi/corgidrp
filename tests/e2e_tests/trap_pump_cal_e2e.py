@@ -243,7 +243,10 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True, sim_data_on_the_
     this_caldb.remove_entry(nonlinear_cal)
     this_caldb.remove_entry(noise_maps)
     # find cal file (naming convention for data.TrapCalibration class)
-    generated_trapcal_file = trap_cal_filename[:-5]+'_trapcal.fits'
+    for f in os.listdir(trap_pump_outputdir):
+        if f.endswith('_TPU_CAL.fits'):
+            generated_trapcal_file = f
+            break
     generated_trapcal_file = os.path.join(trap_pump_outputdir, generated_trapcal_file) 
     # Load
     tpump_calibration = data.Image(generated_trapcal_file)

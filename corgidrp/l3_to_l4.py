@@ -17,7 +17,6 @@ import numpy as np
 import pyklip.rdi
 import os
 from astropy.io import fits
-import warnings
 
 def distortion_correction(input_dataset, astrom_calibration):
     """
