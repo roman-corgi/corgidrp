@@ -221,6 +221,11 @@ def test_err_array_sizes():
     dark_frame = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
 
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    # clean out directory of old cals .fits files
+    for filename in os.listdir(calibdir):
+        if filename.endswith(".fits"):
+            os.remove(os.path.join(calibdir, filename))
+            
     dark_filename = "sim_dark_calib.fits"
     if not os.path.exists(calibdir):
             os.mkdir(calibdir)
