@@ -174,6 +174,6 @@ def test_output_filename_convention():
 
 
 if __name__ == "__main__":
-    test_badpixelmap()
-    test_packing_unpacking_uint64()
+    #test_badpixelmap()
+    #test_packing_unpacking_uint64()
     test_output_filename_convention()

@@ -251,14 +251,10 @@ def test_output_filename_convention(stars_dataset_cached):
     # Make a copy of the dataset and retrieve expected values.
     ds_copy = copy.deepcopy(stars_dataset_cached)
 
-    expected_visitid = stars_dataset_cached[-1].pri_hdr['VISITID']
-    expected_ftimeutc_long = stars_dataset_cached[-1].ext_hdr['FTIMEUTC']
-    expected_ftimeutc = data.format_ftimeutc(expected_ftimeutc_long)
-    
-    # Construct the expected filename from last file header values.
-    expected_filename = f"CGI_{expected_visitid}_{expected_ftimeutc}_NDF_CAL.fits"
+    # Construct the expected filename from the last input dataset filename.
+    expected_filename = re.sub('_L[0-9].', '_NDF_CAL', stars_dataset_cached[-1].filename)
     full_expected_path = os.path.join(default_cal_dir, expected_filename)
-    
+
     # Create the calibration product
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
@@ -266,16 +262,10 @@ def test_output_filename_convention(stars_dataset_cached):
     )
     results.save(filedir=default_cal_dir)
     
-    # Check that the naming convention pattern is followed
-    pattern = r"^CGI_[A-Z0-9]{19}_\d{8}T\d{7}_NDF_CAL\.fits$"
-    matched_files = [fn for fn in os.listdir(default_cal_dir) if re.match(pattern, fn)]
-    assert matched_files, "No files found matching naming convention."
-    
-    # Check that the filename uses VISITID and FTIMEUTC from the last file.
     assert os.path.exists(full_expected_path), (
         f"Expected file {expected_filename} not found in {default_cal_dir}."
     )
-    print("The nd_filter_calibration product file meets the expected naming convention.")
+    print("The nd_filter_calibration product file exists and meets the expected naming convention.")
 
 
 def test_average_od_within_tolerance(stars_dataset_cached):
@@ -519,12 +509,10 @@ def test_calculate_od_at_new_location(output_dir):
       2) A mock clean_frame_entry with a star centroid at a known location
       3) Known FPAM offsets in headers
       4) An identity transformation matrix file
-    We expect the interpolation to return a specific OD value.
     """
 
-    # Create a small Nx3 "sweet spot" array:
-    # Each row is [OD, x, y].
-    # Here, the four corners form a 10x10 square, which we will interpolate at the center (5,5).
+    # Create a small Nx3 sweet spot array, each row is [OD, x, y].
+    # Interpolate at the center (5,5).
     # The OD values at corners are 2.0, 3.0, 4.0, 5.0 => a bilinear interpolation at (5,5) => 3.5.
     sweetspot_data = np.array([
         [2.0,  0.0,  0.0],   # OD=2.0 at (x=0,y=0)
@@ -533,11 +521,20 @@ def test_calculate_od_at_new_location(output_dir):
         [5.0, 10.0, 10.0]    # OD=5.0 at (x=10,y=10)
     ], dtype=float)
 
-    # Build the NDFilterSweetSpotDataset with a header that includes FPAM offsets
+    # Create a fake input dataset to set the filename
+    input_prihdr, input_exthdr = mocks.create_default_calibration_product_headers()
+    fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
+    fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
+    formatted_time = data.format_ftimeutc(input_exthdr['FTIMEUTC'])
+    fake_input_filename = f"CGI_{input_prihdr['VISITID']}_{formatted_time}_NDF_CAL.fits"
+    fake_input_dataset.filename = fake_input_filename
+
+    # Build the NDFilterSweetSpotDataset
     ndcal_prihdr, ndcal_exthdr = mocks.create_default_calibration_product_headers()
     ndcal_exthdr["FPAM_H"] = 0.0
     ndcal_exthdr["FPAM_V"] = 0.0
-    nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr)
+    nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
+                                                    input_dataset=fake_input_dataset)
  
     # Create an identity transformation matrix FITS file in output_dir
     transformation_matrix_file = mock_transformation_matrix(output_dir)
@@ -635,6 +632,7 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
+    '''
     run_test(test_nd_filter_calibration_object, stars_dataset_cached)
     run_test(test_output_filename_convention, stars_dataset_cached)
     run_test(test_average_od_within_tolerance, stars_dataset_cached)
@@ -651,6 +649,7 @@ def main():
     run_test(test_background_effect, background_tmp_dir)
 
     run_test(test_nd_filter_calibration_with_fluxcal, DIM_CACHE_DIR, stars_dataset_cached, "Gaussian")
+    '''
 
     test_calculate_od_at_new_location(output_dir)
 

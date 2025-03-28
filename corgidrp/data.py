@@ -2418,14 +2418,14 @@ class NDFilterSweetSpotDataset(Image):
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
+                self.filename = re.sub('_L[0-9].', '_NDF_CAL', input_dataset[-1].filename)
+            # if no input_dataset is given, do we want to set the filename manually using 
+            # header values?
+
             self.ext_hdr['DATATYPE'] = 'NDFilterSweetSpotDataset'
             self.ext_hdr['HISTORY'] = (
                 f"NDFilterSweetSpotDataset created from {self.ext_hdr.get('DRPNFILE','?')} frames"
             )
-
-            formatted_time = format_ftimeutc(self.ext_hdr['FTIMEUTC'])
-
-            self.filename = f"CGI_{self.pri_hdr['VISITID']}_{formatted_time}_NDF_CAL.fits"
 
         # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
