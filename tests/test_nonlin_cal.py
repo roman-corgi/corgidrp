@@ -203,9 +203,12 @@ def test_expected_results_nom_sub():
     assert np.equal(nonlin_out.data[norm_ind+1,0], norm_val)
 
     # Test filename follows convention (as of R3.0.2)
-    nonlin_out.save(filedir=corgidrp.default_cal_dir)
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    nonlin_out.save(filedir=datadir)
     nln_cal_filename = dataset_nl[-1].filename.replace("_L2b", "_NLN_CAL")
-    nln_cal_filepath = os.path.join(corgidrp.default_cal_dir, nln_cal_filename)
+    nln_cal_filepath = os.path.join(datadir, nln_cal_filename)
     if os.path.exists(nln_cal_filepath) is False:
         raise IOError(f'NonLinearity calibration file {nln_cal_filepath} does not exist.')
     # Load the calibration file to check it has the same data contents
