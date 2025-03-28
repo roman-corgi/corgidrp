@@ -1285,15 +1285,15 @@ def test_psfsub_withKTandCTandCrop_adi():
 
 
 if __name__ == '__main__':  
-    # test_create_ct_cal()
-    # test_get_closest_psf()
-    # test_inject_psf()
-    # test_measure_noise()
+    test_create_ct_cal()
+    test_get_closest_psf()
+    test_inject_psf()
+    test_measure_noise()
 
     test_meas_klip_ADI()
-    # test_meas_klip_RDI()
-    # test_meas_klip_ADIRDI()
-    # test_compare_RDI_ADI()
+    test_meas_klip_RDI()
+    test_meas_klip_ADIRDI()
+    test_compare_RDI_ADI()
 
     # test_psfsub_withklipandctmeas_adi()
     # test_psfsub_withklipandctmeas_rdi()

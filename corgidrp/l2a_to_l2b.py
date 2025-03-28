@@ -190,28 +190,37 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                 reject_flags[i] += 1
                 reject_reasons[i].append("bad pix frac {0:.5f} > {1:.5f}"
                                          .format(frame_badpix_frac, bpix_frac))
+        frame.ext_hdr['FRMSEL01'] = (bpix_frac, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to {0}".format(allowed_bpix)) # record selection criteria
+
         if overexp:
             if frame.ext_hdr['OVEREXP']:
                 reject_flags[i] += 2 # use distinct bits in case it's useful
                 reject_reasons[i].append("OVEREXP = T")
+        frame.ext_hdr['FRMSEL02'] = (overexp, "Are we selecting on the OVEREXP flag?") # record selection criteria
+
         if tt_rms_thres is not None:
             if frame.ext_hdr['Z2VAR'] > tt_rms_thres:
                 reject_flags[i] += 4 # use distinct bits in case it's useful
-                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
+                reject_reasons[i].append("tip rms (Z2VAR) {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['Z2VAR'], tt_rms_thres))
             if frame.ext_hdr['Z3VAR'] > tt_rms_thres:
                 reject_flags[i] += 8 # use distinct bits in case it's useful
-                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
+                reject_reasons[i].append("tilt rms (Z3VAR) {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['Z3VAR'], tt_rms_thres))
+        frame.ext_hdr['FRMSEL03'] = (tt_rms_thres, "tip rms (Z2VAR) threshold") # record selection criteria
+        frame.ext_hdr['FRMSEL04'] = (tt_rms_thres, "tilt rms (Z3VAR) threshold") # record selection criteria
+        
         if tt_bias_thres is not None:
             if frame.ext_hdr['Z2RES'] > tt_bias_thres:
                 reject_flags[i] += 16 # use distinct bits in case it's useful
-                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
+                reject_reasons[i].append("tip bias (Z2RES) {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['Z2RES'], tt_bias_thres))
             if frame.ext_hdr['Z3RES'] > tt_bias_thres:
                 reject_flags[i] += 32 # use distinct bits in case it's useful
-                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
+                reject_reasons[i].append("tilt bias (Z3RES) {0:.1f} > {1:.1f}"
                                          .format(frame.ext_hdr['Z3RES'], tt_bias_thres))
+        frame.ext_hdr['FRMSEL05'] = (tt_bias_thres, "tip bias (Z2RES) threshold") # record selection criteria
+        frame.ext_hdr['FRMSEL06'] = (tt_bias_thres, "tilt bias (Z3RES) threshold") # record selection criteria
                 
         # if rejected, mark as bad in the header
         if reject_flags[i] > 0:
