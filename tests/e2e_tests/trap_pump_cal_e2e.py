@@ -80,7 +80,7 @@ def test_trap_pump_cal(tvacdata_path, e2eoutput_path, e2e=True, sim_data_on_the_
         trap_pump_datadir = trap_pump_outputdir
         if True:
             np.random.seed(39)
-            mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e)
+            mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
             for i in os.listdir(trap_pump_outputdir):
                 if 'Scheme_' not in i:
                     continue

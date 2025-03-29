@@ -250,10 +250,11 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['NAXIS1'] = data.shape[1]
     exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
-    prihdr['OBSNUM'] = 000
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
-
+    master_dark.ext_hdr['BUNIT'] = 'Detected EM Electrons'
+    master_dark.err_hdr['BUNIT'] = 'Detected EM Electrons'
+    master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps); not EM gain-divided, so not intended for dark subtraction in pipeline to L2b since that happens after EM gain division'
     return master_dark
 
 
