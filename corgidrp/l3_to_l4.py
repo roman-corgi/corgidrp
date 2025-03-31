@@ -378,10 +378,6 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             exthdr["STARLOCX"] -= x1
             exthdr["STARLOCY"] -= y1
             updated_hdrs.append('STARLOCX/Y')
-        if ("MASKLOCX" in exthdr.keys()):
-            exthdr["MASKLOCX"] -= x1
-            exthdr["MASKLOCY"] -= y1
-            updated_hdrs.append('MASKLOCX/Y')
         if ("CRPIX1" in prihdr.keys()):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
