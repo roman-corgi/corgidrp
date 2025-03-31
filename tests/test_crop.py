@@ -142,8 +142,8 @@ def test_header_updates_2d():
     """
     
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
-    test_dataset[0].ext_hdr["MASKLOCX"] = 49.5
-    test_dataset[0].ext_hdr["MASKLOCY"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCX"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCY"] = 49.5
     test_dataset[0].pri_hdr["CRPIX1"] = 50.5
     test_dataset[0].pri_hdr["CRPIX2"] = 50.5
     
@@ -153,10 +153,6 @@ def test_header_updates_2d():
         raise Exception("Frame header kw STARLOCX not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["STARLOCY"] == 4.5:
         raise Exception("Frame header kw STARLOCY not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCX"] == 4.5:
-        raise Exception("Frame header kw MASKLOCX not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCY"] == 4.5:
-        raise Exception("Frame header kw MASKLOCY not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 5.5:
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
@@ -180,8 +176,8 @@ def test_header_updates_3d():
     """
     
     test_dataset = make_test_dataset(shape=[3,100,100],centxy=[49.5,49.5])
-    test_dataset[0].ext_hdr["MASKLOCX"] = 49.5
-    test_dataset[0].ext_hdr["MASKLOCY"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCX"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCY"] = 49.5
     test_dataset[0].pri_hdr["CRPIX1"] = 50.5
     test_dataset[0].pri_hdr["CRPIX2"] = 50.5
     
@@ -191,10 +187,6 @@ def test_header_updates_3d():
         raise Exception("Frame header kw STARLOCX not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["STARLOCY"] == 4.5:
         raise Exception("Frame header kw STARLOCY not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCX"] == 4.5:
-        raise Exception("Frame header kw MASKLOCX not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCY"] == 4.5:
-        raise Exception("Frame header kw MASKLOCY not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 5.5:
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
