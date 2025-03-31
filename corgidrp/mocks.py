@@ -3104,8 +3104,8 @@ def create_ct_psfs_with_mask(fwhm_mas, cfam_name='1F', n_psfs=10, image_shape=(1
     center_x = image_shape[1] // 2
     center_y = image_shape[0] // 2
     image_center = (center_x, center_y)
-    exthd['MASKLOCX'] = center_x
-    exthd['MASKLOCY'] = center_y
+    exthd['STARLOCX'] = center_x
+    exthd['STARLOCY'] = center_y
     
     # Determine the stamp size for the PSF: +/- 3 FWHM in pixels.
     fwhm_pix = int(np.ceil(fwhm_mas / 21.8))
@@ -3559,8 +3559,6 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr["ROLL"] = roll_angles[i]
         
         exthdr['BUNIT'] = 'MJy/sr'
-        exthdr['MASKLOCX'] = psfcentx
-        exthdr['MASKLOCY'] = psfcenty
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
@@ -3734,8 +3732,6 @@ def generate_coron_dataset_with_companions(
         exthdr["STARLOCX"] = host_star_center[0]
         exthdr["STARLOCY"] = host_star_center[1]
         exthdr["DATALVL"]  = "L3"
-        exthdr["MASKLOCX"] = host_star_center[0]
-        exthdr["MASKLOCY"] = host_star_center[1]
         exthdr['LSAMNAME'] = 'NFOV'
         exthdr['FPAMNAME'] = 'HLC12_C2R1'
         # Optional WCS generation.
@@ -3918,8 +3914,8 @@ def create_mock_ct_dataset_and_cal_file(
     # D) Generate the CT cal file
     # ----------------------------
     ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct_masked_temp)
-    ct_cal_tmp.ext_hdr['MASKLOCX'] = x_center
-    ct_cal_tmp.ext_hdr['MASKLOCY'] = y_center
+    ct_cal_tmp.ext_hdr['STARLOCX'] = x_center
+    ct_cal_tmp.ext_hdr['STARLOCY'] = y_center
 
     if save_cal_file:
         if not cal_filename:

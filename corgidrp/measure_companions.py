@@ -88,8 +88,7 @@ def measure_companions(
     # Get the star and mask location from the PSF-subtracted image header.
     x_star = psf_sub_image.ext_hdr.get('STARLOCX')
     y_star = psf_sub_image.ext_hdr.get('STARLOCY')
-    x_mask = psf_sub_image.ext_hdr['MASKLOCX']
-    y_mask = psf_sub_image.ext_hdr['MASKLOCY']
+
 
     # determine x/y location of candidates
     if cand_locs is None:
@@ -120,7 +119,7 @@ def measure_companions(
         guesspa = -np.degrees(np.arctan2(dx, dy)) % 360
 
         # Get the off-axis PSF at the planet location using the CT calibration file.
-        interp_psfs, _, _ = ct_cal.GetPSF(x_psf - x_mask, y_psf - y_mask, psf_sub_dataset, fpam_fsam_cal)
+        interp_psfs, _, _ = ct_cal.GetPSF(x_psf - x_star, y_psf - y_star, psf_sub_dataset, fpam_fsam_cal)
         nearest_psf = interp_psfs[0]
         scaled_host_psf_at_planet_location = nearest_psf * host_to_ct_psf_ratio
         # measure flux of the star if it was at planet separation from mask (used in measuring flux ratio)
