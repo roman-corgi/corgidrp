@@ -74,16 +74,16 @@ def fix_headers_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
-def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
+def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     """End-to-End test for generating NoiseMap calibration files, starting with L1 data.
 
     Args:
-        tvacdata_path (str or path): Path to the directory holding all TVAC data.
+        e2edata_path (str or path): Path to the directory holding all TVAC data.
         e2eoutput_path (str or path): Path for test output files.
     """
 
     # figure out paths for both II&T and DRP runs, assuming everything is located in the same relative location as in the TVAC Box drive
-    l1_datadir = os.path.join(tvacdata_path, 'untitled folder', "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
+    l1_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
 
     # define the raw science data to process
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
@@ -97,7 +97,7 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
     corgidrp_folder = os.path.split(corgidrp.__file__)[0]
     corgidrp_f = os.path.split(corgidrp_folder)[0]
     meta_path = os.path.join(corgidrp_f, 'tests', 'test_data', 'metadata.yaml')
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     det_params = data.DetectorParams({})
     fwc_pp_e = int(det_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
@@ -263,16 +263,16 @@ def test_noisemap_calibration_from_l1(tvacdata_path, e2eoutput_path):
         # assert np.all(np.abs(diff) < 1e-5)
 
 @pytest.mark.e2e
-def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
+def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     """End-to-End test for generating NoiseMap calibration files, starting with L2a data.
 
     Args:
-        tvacdata_path (str or path): Path to the directory holding all TVAC data.
+        e2edata_path (str or path): Path to the directory holding all TVAC data.
         e2eoutput_path (str or path): Path for test output files.
     """
 
     # figure out paths for both II&T and DRP runs, assuming everything is located in the same relative location as in the TVAC Box drive
-    l1_datadir = os.path.join(tvacdata_path, 'untitled folder', "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
+    l1_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
 
     # define the raw science data to process
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
@@ -283,7 +283,7 @@ def test_noisemap_calibration_from_l2a(tvacdata_path, e2eoutput_path):
     corgidrp_folder = os.path.split(corgidrp.__file__)[0]
     corgidrp_f = os.path.split(corgidrp_folder)[0]
     meta_path = os.path.join(corgidrp_f, 'tests', 'test_data', 'metadata.yaml')
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
     eperdn = 8.7 # what is used in DRP
@@ -467,19 +467,19 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    args_here = ['--tvacdata_dir', tvacdata_dir, '--outputdir', outputdir]#, '--e2e_flag',False]
+    args_here = ['--e2edata_dir', e2edata_dir, '--outputdir', outputdir]#, '--e2e_flag',False]
     #args = ap.parse_args()
     args = ap.parse_args(args_here)
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_noisemap_calibration_from_l1(tvacdata_dir, outputdir)
-    test_noisemap_calibration_from_l2a(tvacdata_dir, outputdir)
+    test_noisemap_calibration_from_l1(e2edata_dir, outputdir)
+    test_noisemap_calibration_from_l2a(e2edata_dir, outputdir)

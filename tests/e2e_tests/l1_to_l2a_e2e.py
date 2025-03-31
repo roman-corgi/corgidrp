@@ -41,14 +41,14 @@ def fix_headers_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
-def test_l1_to_l2a(tvacdata_path, e2eoutput_path):
+def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    l2a_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L2a")
-    nonlin_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
-    dark_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "dark_current_20240322.fits")
-    fpn_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "fpn_20240322.fits")
-    cic_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals", "cic_20240322.fits")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    l2a_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2a")
+    nonlin_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")
+    dark_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals", "dark_current_20240322.fits")
+    fpn_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals", "fpn_20240322.fits")
+    cic_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals", "cic_20240322.fits")
 
     # make output directory if needed
     l2a_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_output")
@@ -166,15 +166,15 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_l1_to_l2a(tvacdata_dir, outputdir)
+    test_l1_to_l2a(e2edata_dir, outputdir)

@@ -20,7 +20,7 @@ import pathlib
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
+def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     '''
 
     An end-to-end test that takes the OS11 data and runs it through the L2B to L4 pipeline.
@@ -40,7 +40,7 @@ def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
             - FluxCalibration
     
     Args:
-        tvacdata_path (str): Path to the test data
+        e2edata_path (str): Path to the test data
         e2eoutput_path (str): Path to the output directory
 
 
@@ -84,14 +84,14 @@ def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
 
     #Read in the PSFs
     input_file = 'hlc_os11_frames_with_planets.fits'
-    input_hdul = fits.open(os.path.join(tvacdata_path,"hcl_os11_v3",input_file))
+    input_hdul = fits.open(os.path.join(e2edata_path,"hcl_os11_v3",input_file))
     input_images = input_hdul[0].data
     header = input_hdul[0].header
     psf_center_x = header['XCENTER']
     psf_center_y = header['YCENTER']
     
     #Get the auxilliary data
-    data = np.loadtxt(os.path.join(tvacdata_path,"hcl_os11_v3",'hlc_os11_batch_info.txt'), skiprows=2)
+    data = np.loadtxt(os.path.join(e2edata_path,"hcl_os11_v3",'hlc_os11_batch_info.txt'), skiprows=2)
     batch = data[:,0].astype(int)
     star = data[:,2].astype(int)
     roll = data[:,3]
@@ -385,17 +385,17 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hcl_os11_v3" with the OS11 data in it.
-    tvacdata_dir = "/Users/maxmb/Data/corgi/corgidrp/" 
+    e2edata_dir = "/Users/maxmb/Data/corgi/corgidrp/" 
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
 
-    test_l2b_to_l3(tvacdata_dir, outputdir)
+    test_l2b_to_l3(e2edata_dir, outputdir)
     test_l3_to_l4(outputdir)

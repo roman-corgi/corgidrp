@@ -15,7 +15,7 @@ import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
 
 @pytest.mark.e2e
-def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
+def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #mock a point source image
     fwhm = 3
     star_flux = 1.5e-09 #erg/(s*cm^2*AA)
@@ -68,13 +68,13 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    tvacdata_dir =  "/home/schreiber/DataCopy/fluxcal_mock_data/"
+    e2edata_dir =  "/home/schreiber/DataCopy/fluxcal_mock_data/"
 
     ap = argparse.ArgumentParser(description="run the l2b-> FluxcalFactor end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
-    test_expected_results_e2e(tvacdata_dir, outputdir)
+    test_expected_results_e2e(e2edata_dir, outputdir)

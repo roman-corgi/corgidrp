@@ -44,7 +44,7 @@ def fix_headers_for_tvac(
 
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
-    tvacdata_path,
+    e2edata_path,
     e2eoutput_path,
     ):
     """ Performs the e2e test to generate a non-linearity calibration object
@@ -52,7 +52,7 @@ def test_nonlin_cal_e2e(
         same data.
 
         Args:
-        tvacdata_path (str): Location of L1 data used to generate the non-linearity
+        e2edata_path (str): Location of L1 data used to generate the non-linearity
             calibration.
         e2eoutput_path (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
@@ -61,9 +61,9 @@ def test_nonlin_cal_e2e(
     """
 
     # figure out paths, assuming everything is located in the same relative location
-    nonlin_l1_datadir = os.path.join(tvacdata_path,
+    nonlin_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
-    tvac_caldir = os.path.join(tvacdata_path, 'TV-36_Coronagraphic_Data', 'Cals')
+    tvac_caldir = os.path.join(e2edata_path, 'TV-36_Coronagraphic_Data', 'Cals')
     e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_nonlin_output')
 
     if not os.path.exists(nonlin_l1_datadir):
@@ -116,7 +116,7 @@ def test_nonlin_cal_e2e(
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
-    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL.fits'))
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL*.fits'))
     nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
     nonlin_drp_filename = nonlin_drp_filepath.split(os.path.sep)[-1]
 
@@ -171,14 +171,14 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=TVACDATA_DIR,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
-    ap.add_argument("-o", "--output_dir", default=OUTPUT_DIR,
+    ap.add_argument("-o", "--outputdir", default=OUTPUT_DIR,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     # Run the e2e test
-    test_nonlin_cal_e2e(args.tvacdata_dir, args.output_dir)
+    test_nonlin_cal_e2e(args.e2edata_dir, args.outputdir)

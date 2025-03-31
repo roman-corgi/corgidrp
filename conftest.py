@@ -12,7 +12,7 @@ def pytest_addoption(parser):
         parser: argument parser object
     """
     # can add path to TVAC data folder
-    parser.addoption("--tvacdata_path", action="store", default="./", help="Filepath to 'CGI TVAC Data' Folder")
+    parser.addoption("--e2edata_path", action="store", default="./", help="Filepath to 'CGI TVAC Data' Folder")
     # can specify output for e2e tests
     parser.addoption("--e2eoutput_path", action="store", default="./", help="Directory to Save E2E Test Outputs")
     # add ability to specify whether to run unit tests, e2e tests, or both
@@ -21,9 +21,9 @@ def pytest_addoption(parser):
     )
 
 @pytest.fixture
-def tvacdata_path(request):
+def e2edata_path(request):
     """
-    Adds the hook to be able to grab the value passed in with the tvacdata_path argument
+    Adds the hook to be able to grab the value passed in with the e2edata_path argument
 
     Args:
         request (FixtureRequest): pytest request of a fixture
@@ -31,7 +31,7 @@ def tvacdata_path(request):
     Returns:
         str: value from this command line argument
     """
-    return request.config.getoption("--tvacdata_path")
+    return request.config.getoption("--e2edata_path")
 
 @pytest.fixture
 def e2eoutput_path(request):

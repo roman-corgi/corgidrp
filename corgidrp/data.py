@@ -659,6 +659,8 @@ class Dark(Image):
                 self.filename = re.sub('_L[0-9].', '', self.filename)
                 # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
                 self.filename = self.filename.replace("_DNM_CAL", "")
+            else:
+                self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -970,7 +972,11 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+            # check whether we're making the bpmap from a flat only, or from L1/2 files. 
+            if "_FLT_CAL" in input_dataset[-1].filename:
+                self.filename = input_dataset[-1].filename.replace("_FLT_CAL", "_BPM_CAL")
+            else:
+                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
             
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?            
