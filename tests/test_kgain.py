@@ -29,7 +29,7 @@ def test_kgain():
     gain_value = np.array([[9.55]])
     gain_err = np.array([[[1.]]])
     kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
-    assert kgain.filename.split(".")[0] == "test2_KGN_CAL"
+    assert kgain.filename.split(".")[0] == "test2_KRN_CAL"
     assert kgain.value == gain_value[0,0]
     assert kgain.data[0,0] == gain_value[0,0]
     
