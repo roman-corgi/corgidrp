@@ -45,7 +45,7 @@ def fix_headers_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
-def test_trad_dark(tvacdata_path, e2eoutput_path):
+def test_trad_dark(e2edata_path, e2eoutput_path):
     '''There is no official II&T code for creating a "traditional" master dark (i.e., a dark made from taking the 
     mean of several darks at the same EM gain and exposure time), but all the parts are there in proc_cgi_frame.  
     So this function compares the DRP's output of build_trad_dark()
@@ -53,15 +53,15 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     which uses proc_cgi_frame code to make a traditional master dark. This is for the full-frame case.
 
     Args:
-        tvacdata_path (str): path to TVAC data root directory
+        e2edata_path (str): path to TVAC data root directory
         e2eoutput_path (str): path to output files made by this test
     '''
     # figure out paths, assuming everything is located in the same relative location    
-    trad_dark_raw_datadir = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'darkmap')
-    #TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
-    TVAC_dark_path = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    trad_dark_raw_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'darkmap')
+    #TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
+    TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
 
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
@@ -97,7 +97,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
             f = os.path.join(root, name)
             trad_dark_data_filelist.append(f)
     # run in order of files input to II&T code to get exactly the same results
-    # trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
+    # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
     # modify headers from TVAC to in-flight headers
@@ -111,7 +111,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     # our unit test version of the NonLinearityCalibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
     pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
@@ -220,10 +220,10 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     # module in the calibration repository:
     mean_frame, _, mean_num_good_fr, _ = mean_combine(dark_frames, bp_frames)
     mean_frame[telem_rows] = np.nan
-    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
-    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
     trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
     ###################
     
@@ -240,7 +240,7 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def test_trad_dark_im(tvacdata_path, e2eoutput_path):
+def test_trad_dark_im(e2edata_path, e2eoutput_path):
     '''There is no official II&T code for creating a "traditional" master dark (i.e., a dark made from taking the 
     mean of several darks at the same EM gain and exposure time), but all the parts are there in proc_cgi_frame.  
     So this function compares the DRP's output of build_trad_dark()
@@ -248,15 +248,15 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     which uses proc_cgi_frame code to make a traditional master dark. This is for the image-area case.
 
     Args:
-        tvacdata_path (str): path to TVAC data root directory
+        e2edata_path (str): path to TVAC data root directory
         e2eoutput_path (str): path to output files made by this test
     '''
     # figure out paths, assuming everything is located in the same relative location    
-    trad_dark_raw_datadir = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'darkmap')
-    #TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
-    TVAC_dark_path = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    trad_dark_raw_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'darkmap')
+    #TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
+    TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
 
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
@@ -292,7 +292,7 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
             f = os.path.join(root, name)
             trad_dark_data_filelist.append(f)
     # run in order of files input to II&T code to get exactly the same results
-    # trad_dark_data_filelist = np.load(os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
+    # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
     # modify headers from TVAC to in-flight headers
@@ -306,7 +306,7 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     # our unit test version of the NonLinearityCalibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
     pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
@@ -415,10 +415,10 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     # module in the calibration repository:
     mean_frame, _, mean_num_good_fr, _ = mean_combine(dark_frames, bp_frames)
     mean_frame[telem_rows] = np.nan
-    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
-    # TVAC_dark_path = os.path.join(tvacdata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
     trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
     ###################
     
@@ -440,19 +440,18 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the build traditional dark end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
-    args_here = ['--tvacdata_dir', tvacdata_dir, '--outputdir', outputdir]
-    #args = ap.parse_args()
-    args = ap.parse_args(args_here)
-    tvacdata_dir = args.tvacdata_dir
+    args = ap.parse_args()
+    # args = ap.parse_args(args_here)
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark_im(tvacdata_dir, outputdir)
-    test_trad_dark(tvacdata_dir, outputdir)
+    test_trad_dark_im(e2edata_dir, outputdir)
+    test_trad_dark(e2edata_dir, outputdir)

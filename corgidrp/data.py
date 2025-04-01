@@ -659,6 +659,8 @@ class Dark(Image):
                 self.filename = re.sub('_L[0-9].', '', self.filename)
                 # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
                 self.filename = self.filename.replace("_DNM_CAL", "")
+            else:
+                self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -883,7 +885,7 @@ class KGain(Image):
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
                 # give it a default filename using the last input file as the base
-                self.filename = re.sub('_L[0-9].', '_KGN_CAL', input_dataset[-1].filename)
+                self.filename = re.sub('_L[0-9].', '_KRN_CAL', input_dataset[-1].filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'Detected Electrons/DN'
@@ -968,7 +970,11 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+            # check whether we're making the bpmap from a flat only, or from L1/2 files. 
+            if "_FLT_CAL" in input_dataset[-1].filename:
+                self.filename = input_dataset[-1].filename.replace("_FLT_CAL", "_BPM_CAL")
+            else:
+                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
             
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?            
@@ -1276,7 +1282,7 @@ class AstrometricCalibration(Image):
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             self.filename = "{0}_AST_CAL.fits".format(orig_input_filename)
-
+            
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
@@ -1408,7 +1414,10 @@ class FluxcalFactor(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+  
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
             #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
@@ -1421,8 +1430,10 @@ class FluxcalFactor(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = re.sub('_L[0-9].', '_ABF_CAL', input_dataset[-1].filename)
-           
+            # slight hack for old mocks not in the stardard filename format
+            self.filename = "{0}_ABF_CAL.fits".format(orig_input_filename)
+            self.filename = re.sub('_L[0-9].', '', self.filename)
+
 class FpamFsamCal(Image):
     """
     Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
