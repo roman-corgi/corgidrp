@@ -62,7 +62,7 @@ def fix_headers_for_tvac(
 
 @pytest.mark.e2e
 def test_nonlin_and_kgain_e2e(
-    tvacdata_path,
+    e2edata_path,
     e2eoutput_path,
     ):
     """ 
@@ -70,16 +70,16 @@ def test_nonlin_and_kgain_e2e(
     L1 pupilimg dataset
 
     Args:
-        tvacdata_path (str): Location of L1 data. Folders for both kgain and nonlin
+        e2edata_path (str): Location of L1 data. Folders for both kgain and nonlin
         e2eoutput_path (str): Location of the output products: recipes, non-linearity
             calibration FITS file, and kgain fits file
 
     """
 
     # figure out paths, assuming everything is located in the same relative location
-    nonlin_l1_datadir = os.path.join(tvacdata_path,
+    nonlin_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
-    kgain_l1_datadir = os.path.join(tvacdata_path,
+    kgain_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'kgain')
 
     e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_and_kgain_output')
@@ -123,12 +123,12 @@ def test_nonlin_and_kgain_e2e(
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP
-    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NonLinearityCalibration.fits'))
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL*.fits'))
     nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
     nonlin = data.NonLinearityCalibration(nonlin_drp_filepath)
 
     # kgain from corgidrp
-    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_kgain.fits'))
+    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_KRN_CAL*.fits'))
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
 
@@ -148,14 +148,14 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=TVACDATA_DIR,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
-    ap.add_argument("-o", "--output_dir", default=OUTPUT_DIR,
+    ap.add_argument("-o", "--outputdir", default=OUTPUT_DIR,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     # Run the e2e test
-    test_nonlin_and_kgain_e2e(args.tvacdata_dir, args.output_dir)
+    test_nonlin_and_kgain_e2e(args.e2edata_dir, args.outputdir)

@@ -301,7 +301,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     prihdr = fits.Header()
     exthdr = fits.Header()
 
-    if arrtype != "SCI":
+    if arrtype == "SCI":
         NAXIS1 = 2200
         NAXIS2 = 1200
     else:
@@ -498,7 +498,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['FWC_EM_E']      = 0             # Full well capacity of detector image area pixel
     exthdr['SAT_DN']        = 0.0           # DN saturation
     exthdr['RECIPE']        = ''            # DRP recipe and steps used to generate this data product
-    exthdr['DRPVERSN']      = '1.1.2'       # Version of DRP software
+    exthdr['DRPVERSN']      = '2.0'       # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
 
     return prihdr, exthdr

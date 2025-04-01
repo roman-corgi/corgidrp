@@ -15,8 +15,8 @@ import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 
 @pytest.mark.e2e
-def test_expected_results_e2e(tvacdata_path, e2eoutput_path):
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     flat_path = os.path.join(processed_cal_path, "flat.fits")
     bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
 
@@ -201,14 +201,14 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    tvacdata_dir =  r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
-    tvacdata_dir = args.tvacdata_dir
-    test_expected_results_e2e(tvacdata_dir, outputdir)
+    e2edata_dir = args.e2edata_dir
+    test_expected_results_e2e(e2edata_dir, outputdir)

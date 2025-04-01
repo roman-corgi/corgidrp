@@ -20,7 +20,7 @@ import pathlib
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
+def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     '''
 
     An end-to-end test that takes the OS11 data and runs it through the L2b to L4 pipeline.
@@ -40,7 +40,7 @@ def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
             - FluxCalibration
     
     Args:
-        tvacdata_path (str): Path to the test data
+        e2edata_path (str): Path to the test data
         e2eoutput_path (str): Path to the output directory
 
 
@@ -84,7 +84,7 @@ def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
 
     #Read in the PSFs
     input_file = 'hlc_os11_no_fpm.fits'
-    input_hdul = fits.open(os.path.join(tvacdata_path, "hcl_os11_v3", input_file))
+    input_hdul = fits.open(os.path.join(e2edata_path, "hcl_os11_v3", input_file))
     input_image = input_hdul[0].data
     header = input_hdul[0].header
     # I think we work with (0,0) at the center of the pixel
@@ -120,9 +120,16 @@ def test_l2b_to_l3(tvacdata_path, e2eoutput_path):
         new_psf_center_x = psf_center_x + col_start
         new_psf_center_y = psf_center_y + row_start
 
+        #Make a BIAS HDU
+        bias_hdu = fits.ImageHDU(data=np.zeros_like(big_array[0]))
+        bias_hdu.nane = 'BIAS'
+        bias_hdu.header['PCOUNT'] = 0
+        bias_hdu.header['GCOUNT'] = 1
+        bias_hdu.header['EXTNAME'] = 'BIAS'
+
         #Create the new Image object
         mock_pri_header, mock_ext_header = create_default_L2b_headers()
-        new_image = Image(big_array, mock_pri_header, mock_ext_header, err=big_err)
+        new_image = Image(big_array, mock_pri_header, mock_ext_header, err=big_err, input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
         new_image.pri_hdr.set('FRAMET', 1)
@@ -294,17 +301,17 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hcl_os11_v3" with the OS11 data in it.
-    tvacdata_dir = "/home/jwang/Desktop/CGI_TVAC_Data/" 
+    e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data/" 
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
 
-    test_l2b_to_l3(tvacdata_dir, outputdir)
+    test_l2b_to_l3(e2edata_dir, outputdir)
     test_l3_to_l4(outputdir)
