@@ -43,11 +43,11 @@ def fix_headers_for_tvac(
 
 
 @pytest.mark.e2e
-def test_astrom_e2e(tvacdata_path, e2eoutput_path):
+def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
-    noise_characterization_path = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
+    noise_characterization_path = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
 
     # make output directory if needed
     astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_output")
@@ -220,15 +220,15 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(astrom_cal)
 
 if __name__ == "__main__":
-    tvacdata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
+    e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_astrom_e2e(tvacdata_dir, outputdir)
+    test_astrom_e2e(e2edata_dir, outputdir)

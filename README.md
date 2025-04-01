@@ -146,7 +146,7 @@ End-to-end testing refers to processing data as one would when we get the real d
 To run the existing end-to-end tests, you need to have downloaded all the TVAC data to your computer. In a terminal, go to the base directory of the corgidrp repo and run the following command, substituting paths for paths on your computer as desired:
 
 ```
-pytest --which e2e --tvacdata_path /path/to/CGI_TVAC_Data --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
+pytest --which e2e --e2edata_path /path/to/CGI_TVAC_Data --e2eoutput_path tests/e2e_tests/ tests/e2e_tests/
 ```
 
 ### Linting
