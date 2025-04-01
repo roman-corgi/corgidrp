@@ -1430,7 +1430,7 @@ class FluxcalFactor(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-
+            # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_ABF_CAL.fits".format(orig_input_filename)
             self.filename = re.sub('_L[0-9].', '', self.filename)
 
