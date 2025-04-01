@@ -301,7 +301,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     prihdr = fits.Header()
     exthdr = fits.Header()
 
-    if arrtype != "SCI":
+    if arrtype == "SCI":
         NAXIS1 = 2200
         NAXIS2 = 1200
     else:

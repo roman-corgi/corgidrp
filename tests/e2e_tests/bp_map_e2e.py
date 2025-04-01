@@ -39,10 +39,10 @@ def fix_headers_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
-def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
+def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
     bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
@@ -216,10 +216,10 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(generated_bp_map_img)
 
 @pytest.mark.e2e
-def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
+def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
     bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
@@ -345,22 +345,22 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    tvacdata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
+    e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
     outputdir = thisfile_dir
 
     # Argument parser setup
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
 
     # Assign parsed arguments to variables
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
 
     # Run the main functions with parsed arguments
-    test_bp_map_master_dark_e2e(tvacdata_dir, outputdir)
-    test_bp_map_simulated_dark_e2e(tvacdata_dir, outputdir)
+    test_bp_map_master_dark_e2e(e2edata_dir, outputdir)
+    test_bp_map_simulated_dark_e2e(e2edata_dir, outputdir)
     
