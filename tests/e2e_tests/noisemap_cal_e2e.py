@@ -89,7 +89,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
     #l2a_data_filelist = sorted(glob(os.path.join(l2a_datadir,"*.fits")))
     # l2a_data_filename = corgidrp.data.Dataset(l2a_data_filelist[:1])[0].filename
-    # output_filename = l2a_data_filename[:24] + '_DetectorNoiseMaps.fits'
+    # output_filename = l2a_data_filename[:24] + '_DNM_CAL.fits'
     mock_cal_filelist = l1_data_filelist[-2:] # grab the last two input data to mock the calibration 
     
     ########## prepping inputs for II&T run
@@ -151,7 +151,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         os.mkdir(noisemap_outputdir)
 
     # remove old DetectorNoiseMaps
-    old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DetectorNoiseMaps.fits')))
+    old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DNM_CAL.fits')))
     for old_DNM in old_DNMs:
         os.remove(old_DNM)
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -189,7 +189,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(kgain)
 
     # getting output filename
-    output_filenamel1 = os.path.split(stack_arr_files[0])[1][:-5] + '_DetectorNoiseMaps.fits'
+    output_filenamel1 = os.path.split(stack_arr_files[0])[1][:-5] + '_DNM_CAL.fits'
     #Since the walker updates to L2a and the filename accordingly:
     output_filename = output_filenamel1.replace('L1','L2a',1)
 
@@ -364,7 +364,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     ####### Now prep and setup necessary calibration files for DRP run
 
     # remove old DetectorNoiseMaps
-    old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DetectorNoiseMaps.fits')))
+    old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DNM_CAL.fits')))
     for old_DNM in old_DNMs:
         os.remove(old_DNM)
     mock_input_dataset = data.Dataset(mock_cal_filelist)
