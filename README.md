@@ -205,6 +205,14 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
+**v2.0**
+ * Major release with L3, L4, and TDA processing
+ * Distortion, Abs Flux, Core Throughput, and ND Filter calibrations
+ * Photon counting L2 processing
+ * New file naming and header keywords
+ * Bug fixes
+
+
 **v1.1.2**
  * Flat field correction marks pixels divided by 0 as bad
 
