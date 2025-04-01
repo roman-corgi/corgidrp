@@ -57,6 +57,7 @@ all_steps = {
     "find_star": corgidrp.l3_to_l4.find_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
+    "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -282,6 +283,8 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
             recipe_filename = "l2b_to_fluxcal_factor.json"
+        elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
+            recipe_filename = 'l2b_to_corethroughput.json'
         else:
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
