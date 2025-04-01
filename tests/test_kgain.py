@@ -22,13 +22,14 @@ def test_kgain():
     ptc_hdr = fits.Header()
     image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
     image2 = image1.copy()
-    image1.filename = "test1"
-    image2.filename = "test2"
+    image1.filename = "test1_L1_.fits"
+    image2.filename = "test2_L1_.fits"
     dataset= data.Dataset([image1, image2])
 
     gain_value = np.array([[9.55]])
     gain_err = np.array([[[1.]]])
     kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    assert kgain.filename.split(".")[0] == "test2_KGN_CAL"
     assert kgain.value == gain_value[0,0]
     assert kgain.data[0,0] == gain_value[0,0]
     
