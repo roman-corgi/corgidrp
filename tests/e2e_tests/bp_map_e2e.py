@@ -39,10 +39,10 @@ def fix_headers_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
-def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
+def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
     bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
@@ -216,10 +216,10 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(generated_bp_map_img)
 
 @pytest.mark.e2e
-def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
+def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
     bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
