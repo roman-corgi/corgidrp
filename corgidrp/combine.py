@@ -90,12 +90,17 @@ def combine_subexposures(input_dataset, num_frames_per_group=None, collapse="mea
         # grab the headers from the first frame in this sub sequence
         pri_hdr = input_dataset[num_frames_per_group*i].pri_hdr.copy()
         ext_hdr = input_dataset[num_frames_per_group*i].ext_hdr.copy()
+        ext_hdr["NUM_FR"] = num_frames_per_group
         err_hdr = input_dataset[num_frames_per_group*i].err_hdr.copy()
         dq_hdr = input_dataset[num_frames_per_group*i].dq_hdr.copy()
         hdulist = input_dataset[num_frames_per_group*i].hdu_list.copy()
         new_image = data.Image(data_collapse, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err_collapse, dq=dq_collapse, err_hdr=err_hdr, 
-                                dq_hdr=dq_hdr, input_hdulist=hdulist)   
-        new_image.filename = input_dataset[num_frames_per_group*i].filename
+                                dq_hdr=dq_hdr, input_hdulist=hdulist)
+                                
+        # always take the last filename in the group for the combined frame
+        last_idx_in_group = num_frames_per_group*(i+1) - 1
+        new_image.filename = input_dataset[last_idx_in_group].filename   
+
         new_image._record_parent_filenames(input_dataset[num_frames_per_group*i:num_frames_per_group*(i+1)])   
         new_dataset.append(new_image)
     new_dataset = data.Dataset(new_dataset)

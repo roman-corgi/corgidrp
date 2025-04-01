@@ -1,19 +1,74 @@
+import numpy as np
+import astropy.wcs as wcs
+
 # A file that holds the functions that transmogrify l2b data to l3 data 
 import numpy as np
 
-def create_wcs(input_dataset):
+def create_wcs(input_dataset, astrom_calibration):
     """
     
     Create the WCS headers for the dataset.
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
+        astrom_calibration (corgidrp.data.AstrometricCalibration): an astrometric calibration file for the input dataset
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
     """
+    updated_dataset = input_dataset.copy()
 
-    return input_dataset.copy()
+    northangle = astrom_calibration.northangle
+    platescale_x, platescale_y = astrom_calibration.platescale
+    ra_offset, dec_offset = astrom_calibration.avg_offset
+
+    # create wcs for each image in the dataset
+    for image in updated_dataset:
+
+        im_data = image.data
+        image_y, image_x = im_data.shape
+        center_pixel = [(image_x-1) // 2, (image_y-1) // 2]
+        target_ra, target_dec = image.pri_hdr['RA'], image.pri_hdr['DEC']
+        corrected_ra, corrected_dec = target_ra - ra_offset, target_dec - dec_offset
+        roll_ang = image.pri_hdr['ROLL']
+
+        vert_ang = np.radians(northangle + roll_ang)  ## might be -roll_ang
+        pc = np.array([[-np.cos(vert_ang), np.sin(vert_ang)], [np.sin(vert_ang), np.cos(vert_ang)]])
+        cdmatrix_x = pc * (platescale_x * 0.001) / 3600.
+        cdmatrix_y = pc * (platescale_y * 0.001) / 3600.
+
+
+        # create dictionary with wcs information
+        wcs_info = {}
+        wcs_info['CD1_1'] = cdmatrix_x[0,0]
+        wcs_info['CD1_2'] = cdmatrix_x[0,1]
+        wcs_info['CD2_1'] = cdmatrix_y[1,0]
+        wcs_info['CD2_2'] = cdmatrix_y[1,1]
+
+        wcs_info['CRPIX1'] = center_pixel[0]
+        wcs_info['CRPIX2'] = center_pixel[1]
+
+        wcs_info['CTYPE1'] = 'RA---TAN'
+        wcs_info['CTYPE2'] = 'DEC--TAN'
+
+        wcs_info['CDELT1'] = (platescale_x * 0.001) / 3600  ## converting to degrees
+        wcs_info['CDELT2'] = (platescale_y * 0.001) / 3600
+
+        wcs_info['CRVAL1'] = corrected_ra
+        wcs_info['CRVAL2'] = corrected_dec
+
+        wcs_info['PLTSCALE'] = np.mean([platescale_x, platescale_y])  ## [mas] / pixel
+
+        # update the image header with wcs information
+        for key, value in wcs_info.items():
+            image.ext_hdr[key] = value
+
+    # update the dataset with new header entries an dhistory message
+    history_msg = 'WCS created'
+
+    updated_dataset.update_after_processing_step(history_msg)
+
+    return updated_dataset
 
 def divide_by_exptime(input_dataset):
     """
@@ -46,7 +101,7 @@ def divide_by_exptime(input_dataset):
         all_data_new[i] = data.frames[i].data
         all_err_new[i] = data.frames[i].err
 
-        data.frames[i].ext_hdr.set('BUNIT', 'electrons/s')
+        data.frames[i].ext_hdr.set('BUNIT', 'photoelectrons/s')
     
     history_msg = 'divided by the exposure time'
     data.update_after_processing_step(history_msg, new_all_data = all_data_new, new_all_err = all_err_new)
@@ -80,7 +135,7 @@ def update_to_l3(input_dataset):
         frame.ext_hdr['DATALVL'] = "L3"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L2b_", "_L3_", 1)
+        frame.filename = frame.filename.replace("_L2b", "_L3_", 1)
 
     history_msg = "Updated Data Level to L3"
     updated_dataset.update_after_processing_step(history_msg)

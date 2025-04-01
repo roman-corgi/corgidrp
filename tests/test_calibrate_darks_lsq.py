@@ -1,3 +1,4 @@
+import re
 import os
 import pytest
 import pickle
@@ -133,14 +134,16 @@ def test_expected_results_sub():
 
     # check headers
     assert(noise_maps.data.ndim == 3)
-    assert('DetectorNoiseMaps' in noise_maps.filename)
+    test_filename = dataset.frames[-1].filename.split('.fits')[0] + '_DNM_CAL.fits'
+    test_filename = re.sub('_L[0-9].', '', test_filename)
+    assert(noise_maps.filename == test_filename)
     assert(noise_maps.ext_hdr["BUNIT"] == "Detected Electrons")
     assert(noise_maps.err_hdr["BUNIT"] == "Detected Electrons")
     assert("DetectorNoiseMaps" in str(noise_maps.ext_hdr["HISTORY"]))
     assert(noise_maps.ext_hdr['B_O_UNIT'] == 'DN')
 
     assert(nm_open.data.ndim == 3)
-    assert('DetectorNoiseMaps' in nm_open.filename)
+    assert(nm_open.filename == test_filename)
     assert(nm_open.ext_hdr["BUNIT"] == "Detected Electrons")
     assert(nm_open.err_hdr["BUNIT"] == "Detected Electrons")
     assert("DetectorNoiseMaps" in str(nm_open.ext_hdr["HISTORY"]))
@@ -223,6 +226,8 @@ def test_mean_num():
 
 
 if __name__ == '__main__':
+    setup_module()
+
     test_mean_num()
     test_expected_results_sub()
     test_sub_stack_len()
@@ -231,6 +236,8 @@ if __name__ == '__main__':
     test_t_arr_unique()
     test_t_gtr_0()
     test_k_gtr_0()
+
+    teardown_module()
 
 
 

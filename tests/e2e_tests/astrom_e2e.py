@@ -1,10 +1,10 @@
 import argparse
 import os
+import glob
 import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
-import astropy.io.ascii as ascii
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -34,6 +34,7 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        exthdr['ISPC'] = False
     # exthdr['KGAINPAR'] = exthdr['KGAIN']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
@@ -93,11 +94,14 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
                     hdulist[0].header[key] = image_sources[0].pri_hdr[key]
 
             for ext_key in image_sources[0].ext_hdr:
-                if ext_key not in hdulist[1].header:
+                if ext_key == "HISTORY":
+                    for item in image_sources[0].ext_hdr[ext_key]:
+                        hdulist[1].header.add_history(item)
+                elif ext_key not in hdulist[1].header:
                     hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
 
             # save to the data dir in the output directory
-            hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'_astrom.fits'), overwrite=True)
+            hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'.fits'), overwrite=True)
 
     # define the raw science data to process
     ## replace w my raw data sets
@@ -194,11 +198,17 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     expected_northangle = 45
     target = (80.553428801, -69.514096821)
 
-    astrom_cal = data.AstrometricCalibration(os.path.join(astrom_cal_outputdir, 'AstrometricCalibration.fits'))
+    astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_AST_CAL.fits'))[0])
+
+    # check that the astrometric calibration filename is based on the last file in the input file list
+    expected_last_filename = sim_data_filelist[-1].split('L1_')[-1].split('.fits')[0]
+    assert astrom_cal.filename.split('L2b')[-1] == expected_last_filename + '_AST_CAL.fits'
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
-    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=0.5)
+
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
@@ -207,8 +217,10 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
 
+    this_caldb.remove_entry(astrom_cal)
+
 if __name__ == "__main__":
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/' #"/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
+    tvacdata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

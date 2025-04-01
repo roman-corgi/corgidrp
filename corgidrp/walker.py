@@ -11,6 +11,8 @@ import corgidrp.data as data
 import corgidrp.caldb as caldb
 import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
+import corgidrp.l2b_to_l3
+import corgidrp.l3_to_l4
 import corgidrp.photon_counting
 import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
@@ -18,6 +20,7 @@ import corgidrp.detector
 import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
+import corgidrp.fluxcal
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -44,7 +47,16 @@ all_steps = {
     "combine_subexposures" : corgidrp.combine.combine_subexposures,
     "build_trad_dark" : corgidrp.darks.build_trad_dark,
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
-    "get_pc_mean" : corgidrp.photon_counting.get_pc_mean
+    "get_pc_mean" : corgidrp.photon_counting.get_pc_mean,
+    "divide_by_exptime" : corgidrp.l2b_to_l3.divide_by_exptime,
+    "northup" : corgidrp.l3_to_l4.northup,
+    "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper,
+    "update_to_l3": corgidrp.l2b_to_l3.update_to_l3,
+    "create_wcs": corgidrp.l2b_to_l3.create_wcs,
+    "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
+    "find_star": corgidrp.l3_to_l4.find_star,
+    "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
+    "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -225,6 +237,8 @@ def guess_template(dataset):
         str or list: the best template filename or a list of multiple template filenames
     """
     image = dataset[0] # first image for convenience
+
+    # L1 -> L2a data processing
     if image.ext_hdr['DATALVL'] == "L1":
         if 'VISTYPE' not in image.pri_hdr:
             # this is probably IIT test data. Do generic processing
@@ -239,7 +253,7 @@ def guess_template(dataset):
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
             _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l1_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l1_to_l2a_noisemap.json"
@@ -248,26 +262,39 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
         else:
-            if image.pri_hdr['PHTCNT']:
-                recipe_filename = "l1_to_l2b_pc.json" 
-            else:  
-                recipe_filename = "l1_to_l2b.json"    
+            recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
+    # L2a -> L2b data processing
     elif image.ext_hdr['DATALVL'] == "L2a":
         if image.pri_hdr['VISTYPE'] == "DARK":
-            _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
-            if image.pri_hdr['PHTCNT']:
+            _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc_dark.json"
             elif len(unique_vals) > 1: # darks for noisemap creation
                 recipe_filename = "l2a_to_l2a_noisemap.json"
             else: # then len(unique_vals) is 1 and not PC: traditional darks
                 recipe_filename = "l2a_build_trad_dark_image.json"
         else:
-            if image.pri_hdr['PHTCNT']:
+            if image.ext_hdr['ISPC']:
                 recipe_filename = "l2a_to_l2b_pc.json"
             else:
-                recipe_filename = "l2a_to_l2b.json"
+                recipe_filename = "l2a_to_l2b.json"  # science data and all else
+    # L2b -> L3 data processing
+    elif image.ext_hdr['DATALVL'] == "L2b":
+        if image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
+            recipe_filename = "l2b_to_fluxcal_factor.json"
+        else:
+            recipe_filename = "l2b_to_l3.json"
+    # L3 -> L4 data processing
+    elif image.ext_hdr['DATALVL'] == "L3":
+        if image.ext_hdr['FSMLOS'] == 1:
+            # coronagraphic obs - PSF subtraction
+            recipe_filename = "l3_to_l4.json"
+        else:
+            # noncorongrpahic obs - no PSF subtraction
+            recipe_filename = "l3_to_l4_nopsfsub.json"
+            
     else:
-        raise NotImplementedError()
+        raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
 
     return recipe_filename
 

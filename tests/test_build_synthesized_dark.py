@@ -105,8 +105,8 @@ def test_exact_case():
     assert(M.data.shape == (rows, cols))
     assert(M.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
     assert(M.ext_hdr['NAXIS2'] == rows)
-    assert(M.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
-    assert(M.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
+    assert(M.ext_hdr['DRPNFILE'] ==n_maps.ext_hdr['DRPNFILE']) 
+    assert(M.filename == 'Mock0_DRK_CAL.fits')
     assert('EM gain = '+str(g) in str(M.ext_hdr['HISTORY']))
     assert('exptime = '+str(t) in str(M.ext_hdr['HISTORY']))
 
@@ -121,8 +121,8 @@ def test_exact_case():
     assert(M_copy.data.shape == (rows, cols))
     assert(M_copy.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
     assert(M_copy.ext_hdr['NAXIS2'] == rows)
-    assert(M_copy.ext_hdr['DRPNFILE'] == 1) #made from 1 DetectorNoiseMaps file
-    assert(M_copy.filename == 'Mock0_DetectorNoiseMaps_dark.fits')
+    assert(M_copy.ext_hdr['DRPNFILE'] ==n_maps.ext_hdr['DRPNFILE']) 
+    assert(M_copy.filename == 'Mock0_DRK_CAL.fits')
     assert('commanded EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
     assert('exptime = '+str(t) in str(M_copy.ext_hdr['HISTORY']))
     pass
@@ -249,3 +249,15 @@ def test_g_range_correct():
         pass
     pass
 
+if __name__ == '__main__':
+    test_success()
+    test_output_size()
+    test_exact_case()
+    test_gain_goes_as_1overg()
+    test_exptime_goes_as_t()
+    test_c_doesnt_change_with_g_or_t()
+    test_bias_subtracted()
+    test_invalid_D_range()
+    test_invalid_C_range()
+    test_g_range_correct()
+    pass

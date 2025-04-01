@@ -23,6 +23,12 @@ master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_data
 # save master dark to disk to be loaded later
 master_dark.save(filedir=calibdir, filename="mockdark.fits")
 
+def test_caldb_init():
+    """
+    Tests that caldb has been initialized. It has to be if it's being imported.
+    """
+    assert caldb.initialized
+
 
 def test_caldb_create_default():
     """
@@ -166,6 +172,7 @@ def test_caldb_scan():
     os.remove(testcaldb_filepath)
 
 if __name__ == "__main__":
+    test_caldb_init()
     test_get_calib()
     test_caldb_create_default()
     test_caldb_custom_filepath()

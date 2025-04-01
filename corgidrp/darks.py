@@ -1,4 +1,5 @@
 import numpy as np
+import re
 import warnings
 from astropy.io import fits
 
@@ -746,8 +747,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
     
-    l2a_data_filename = dataset.copy()[0].filename
-    noise_maps.filename =  l2a_data_filename[:-5] + '_DetectorNoiseMaps.fits'
+    l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
+    noise_maps.filename =  l2a_data_filename + '_DNM_CAL.fits'
+    noise_maps.filename = re.sub('_L[0-9].', '', noise_maps.filename)
 
     return noise_maps
 
@@ -854,11 +856,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         exthdr['DATATYPE'] = 'Dark'
         exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
-        # wipe clean so that the proper documenting occurs for dark
-        exthdr.pop("DRPNFILE", None)
-        exthdr.pop("HISTORY", None)
-        # this makes the filename of the dark have "_DetectorNoiseMaps_Dark" in
-        # the name so that it is known that this Dark came from noise maps
+        # one can check HISTORY to see that this Dark was synthesized from noise maps
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd
         md_noise = np.sqrt(Ferr**2/g**2 + t**2*Derr**2 + Cerr**2)

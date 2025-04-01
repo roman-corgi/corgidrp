@@ -40,6 +40,7 @@ def fix_headers_for_tvac(
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
+        exthdr['ISPC'] = False
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -56,9 +57,9 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
         e2eoutput_path (str): path to output files made by this test
     '''
     # figure out paths, assuming everything is located in the same relative location    
-    trad_dark_raw_datadir = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'darkmap')
+    trad_dark_raw_datadir = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'darkmap')
     #TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
-    TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    TVAC_dark_path = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
 
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -70,6 +71,19 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
     if not os.path.exists(build_trad_dark_outputdir):
         os.mkdir(build_trad_dark_outputdir)
+
+    this_caldb = caldb.CalDB() # connection to cal DB
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'Dark':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'DetectorNoiseMaps':
+            this_caldb._db = this_caldb._db.drop(i)        
+    this_caldb.save()
 
     # define the raw science data to process
     trad_dark_data_filelist = []
@@ -153,7 +167,6 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     kgain.save(filedir=build_trad_dark_outputdir, filename="mock_kgain.fits")
 
     # add calibration files to caldb
-    this_caldb = caldb.CalDB()
     this_caldb.create_entry(nonlinear_cal)
     this_caldb.create_entry(noise_maps)
     this_caldb.create_entry(kgain)
@@ -168,8 +181,11 @@ def test_trad_dark(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(kgain)
     this_caldb.remove_entry(detector_params)
     # find cal file (naming convention for data.Dark class)
-    generated_trad_dark_file = trad_dark_filename[:-5]+'_dark.fits'
-    generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, generated_trad_dark_file) 
+    for f in os.listdir(build_trad_dark_outputdir):
+        if f.endswith('_DRK_CAL.fits'):
+            trad_dark_filename = f
+            break
+    generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, trad_dark_filename) 
     
     ###################### run II&T code on data
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
@@ -236,9 +252,9 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
         e2eoutput_path (str): path to output files made by this test
     '''
     # figure out paths, assuming everything is located in the same relative location    
-    trad_dark_raw_datadir = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'darkmap')
+    trad_dark_raw_datadir = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'darkmap')
     #TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
-    TVAC_dark_path = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    TVAC_dark_path = os.path.join(tvacdata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
 
     processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -250,6 +266,19 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
     if not os.path.exists(build_trad_dark_outputdir):
         os.mkdir(build_trad_dark_outputdir)
+
+    this_caldb = caldb.CalDB() # connection to cal DB
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'Dark':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'DetectorNoiseMaps':
+            this_caldb._db = this_caldb._db.drop(i)        
+    this_caldb.save()
 
     # define the raw science data to process
     trad_dark_data_filelist = []
@@ -333,7 +362,6 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     kgain.save(filedir=build_trad_dark_outputdir, filename="mock_kgain.fits")
 
     # add calibration files to caldb
-    this_caldb = caldb.CalDB()
     this_caldb.create_entry(nonlinear_cal)
     this_caldb.create_entry(noise_maps)
     this_caldb.create_entry(kgain)
@@ -348,8 +376,11 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(kgain)
     this_caldb.remove_entry(detector_params)
     # find cal file (naming convention for data.Dark class)
-    generated_trad_dark_file = trad_dark_filename[:-5]+'_dark.fits'
-    generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, generated_trad_dark_file) 
+    for f in os.listdir(build_trad_dark_outputdir):
+        if f.endswith('_DRK_CAL.fits'):
+            trad_dark_filename = f
+            break
+    generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, trad_dark_filename) 
     
     ###################### run II&T code on data
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
@@ -409,7 +440,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    tvacdata_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     outputdir = thisfile_dir
 

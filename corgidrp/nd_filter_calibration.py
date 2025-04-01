@@ -5,10 +5,10 @@ import numpy as np
 from astropy.io import fits
 import corgidrp.fluxcal as fluxcal
 import corgidrp.astrom as astrom
-from corgidrp.data import FluxcalFactor
-from corgidrp.data import NDFilterSweetSpotDataset
+from corgidrp.data import Dataset, FluxcalFactor, NDFilterSweetSpotDataset
 from corgidrp.astrom import centroid_with_roi
 from scipy.interpolate import griddata
+import warnings
 
 # =============================================================================
 # Helper Functions
@@ -29,7 +29,6 @@ def load_transformation_matrix_from_fits(file_path):
         if data is None:
             data = hdul[1].data
         return np.array(data)
-
 
 def group_by_keyword(dataset, prihdr_keyword=None, exthdr_keyword=None):
     """
@@ -280,7 +279,19 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
         y_values.append(y_center)
 
     od_array = np.array(od_values)
-    star_flag = (np.std(od_array) >= od_raster_threshold) if od_array.size > 0 else False
+
+    # Check for wide variation in OD values
+    # Check for wide variation in OD values
+    if od_array.size > 0:
+        od_std = np.std(od_array)
+        if od_std >= od_raster_threshold:
+            warnings.warn(
+                f"OD variation is high for target '{target}': "
+                f"Standard deviation ({od_std:.3f}) exceeds threshold ({od_raster_threshold:.3f})."
+            )
+    else:
+        od_std = np.nan
+
     average_od = np.mean(od_array) if od_array.size > 0 else np.nan
 
     return {
@@ -290,7 +301,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
         'FPAM_H': common_fpam_h,
         'FPAM_V': common_fpam_v,
         'CFAMNAME': ref_cfam_name,
-        'flag': star_flag,
+        'flag': (od_std >= od_raster_threshold if not np.isnan(od_std) else False),
         'x_values': x_values,
         'y_values': y_values
     }
@@ -317,12 +328,14 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
     """
     final_sweet_spot_data = aggregated_sweet_spot_data.copy()
 
-    # Build the NDFilterSweetSpotDataset
-    pri_hdr = input_dataset[0].pri_hdr
-    ext_hdr = input_dataset[0].ext_hdr
+    # Build the NDFilterSweetSpotDataset, use info from last/ most recent
+    pri_hdr = input_dataset[-1].pri_hdr
+    ext_hdr = input_dataset[-1].ext_hdr
 
     # keeping the common metadata because if you do provide dim stars as part of the dataset
-    # and grab the first header you might get the FPAM info of a frame with no ND filter in.
+    # and grab the last header you might get the FPAM info of a frame with no ND filter in.
+    ext_hdr['BUNIT']    = 'None (dimensionless)'
+    ext_hdr['DATALVL']  = 'CAL'
     ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
     ext_hdr['FPAM_H']   = common_metadata.get('FPAM_H')
     ext_hdr['FPAM_V']   = common_metadata.get('FPAM_V')
@@ -431,12 +444,16 @@ def create_nd_filter_cal(stars_dataset,
     dim_stars_dataset = []
     bright_stars_dataset = []
 
-    # Iterate over each group key, splitting based on "ND" prefix.
     for keyword, records in grouped_nd_files.items():
         if keyword.startswith('ND'):
-            bright_stars_dataset = records
+            # don't overwrite
+            bright_stars_dataset.extend(records)
         else:
-            dim_stars_dataset = records
+            dim_stars_dataset.extend(records)
+
+    bright_stars_dataset = Dataset(bright_stars_dataset)
+    dim_stars_dataset = Dataset(dim_stars_dataset)
+
 
     # 2. If a fluxcal factor was provided, use that for the dim stars
     if fluxcal_factor is not None:

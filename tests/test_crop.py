@@ -57,14 +57,22 @@ def test_2d_square_center_crop():
         raise Exception("Unexpected result for 2D square crop test.")
 
 def test_manual_center_crop():
-    """ Test overriding crop location using centerxy argument.
+    """ Test overriding crop location using centerxy argument and make sure 
+    DETPIX0X/Y header keyword is updated correctly.
     """
 
-    test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
-    cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[50.5,50.5])
+    test_dataset = make_test_dataset(shape=[12,12],centxy=[5.5,5.5])
+    cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[6.5,6.5])
 
     offset_goal_arr = np.zeros((10,10))
     offset_goal_arr[3:5,3:5] = 1
+
+    expected_detpix_xy = (2,2)
+
+    if not (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
+            cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy:
+        raise Exception("Extension header DETPIX0X/Y not updated correctly.")
+    
 
     if not cropped_test_dataset[0].data == pytest.approx(offset_goal_arr):
         raise Exception("Unexpected result for manual crop test.")
@@ -134,8 +142,8 @@ def test_header_updates_2d():
     """
     
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
-    test_dataset[0].ext_hdr["MASKLOCX"] = 49.5
-    test_dataset[0].ext_hdr["MASKLOCY"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCX"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCY"] = 49.5
     test_dataset[0].pri_hdr["CRPIX1"] = 50.5
     test_dataset[0].pri_hdr["CRPIX2"] = 50.5
     
@@ -145,10 +153,6 @@ def test_header_updates_2d():
         raise Exception("Frame header kw STARLOCX not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["STARLOCY"] == 4.5:
         raise Exception("Frame header kw STARLOCY not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCX"] == 4.5:
-        raise Exception("Frame header kw MASKLOCX not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCY"] == 4.5:
-        raise Exception("Frame header kw MASKLOCY not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 5.5:
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
@@ -172,8 +176,8 @@ def test_header_updates_3d():
     """
     
     test_dataset = make_test_dataset(shape=[3,100,100],centxy=[49.5,49.5])
-    test_dataset[0].ext_hdr["MASKLOCX"] = 49.5
-    test_dataset[0].ext_hdr["MASKLOCY"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCX"] = 49.5
+    test_dataset[0].ext_hdr["STARLOCY"] = 49.5
     test_dataset[0].pri_hdr["CRPIX1"] = 50.5
     test_dataset[0].pri_hdr["CRPIX2"] = 50.5
     
@@ -183,10 +187,6 @@ def test_header_updates_3d():
         raise Exception("Frame header kw STARLOCX not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["STARLOCY"] == 4.5:
         raise Exception("Frame header kw STARLOCY not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCX"] == 4.5:
-        raise Exception("Frame header kw MASKLOCX not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["MASKLOCY"] == 4.5:
-        raise Exception("Frame header kw MASKLOCY not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 5.5:
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
@@ -229,15 +229,37 @@ def test_non_nfov_input():
     with pytest.raises(UserWarning):
         _ = crop(test_dataset,sizexy=None,centerxy=None)
 
+def test_detpix0_nonzero():
+    """ Tests that the detector pixel header keyword is updated correctly if it 
+    already exists and is nonzero.
+    """
+    test_dataset = make_test_dataset(shape=[100,40],centxy=[24.5,49.5])
+    test_dataset[0].ext_hdr.set('DETPIX0X',24)
+    test_dataset[0].ext_hdr.set('DETPIX0Y',34)
+
+    expected_detpix_xy = (39,79)
+    
+    cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
+
+    if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr):
+        raise Exception("Unexpected result for 2D rect offcenter crop test with nonzero DETPIX0X/Y.")
+    
+    if not (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
+            cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy:
+        raise Exception("Extension header DETPIX0X/Y not updated correctly.")
+    
 
 if __name__ == "__main__":
-    test_2d_square_center_crop()
-    test_2d_square_offcenter_crop()
-    test_2d_rect_offcenter_crop()
-    test_3d_rect_offcenter_crop()
-    test_edge_of_detector()
-    test_outside_detector_edge()
-    test_nonhalfinteger_centxy()
-    test_header_updates_2d()
-    test_header_updates_3d()
-    test_non_nfov_input()
+    # test_2d_square_center_crop()
+    test_manual_center_crop()
+    # test_2d_square_offcenter_crop()
+    # test_2d_rect_offcenter_crop()
+    # test_3d_rect_offcenter_crop()
+    # test_edge_of_detector()
+    # test_outside_detector_edge()
+    # test_nonhalfinteger_centxy()
+    # test_header_updates_2d()
+    # test_header_updates_3d()
+    # test_non_nfov_input()
+    test_detpix0_nonzero()
+

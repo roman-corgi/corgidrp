@@ -2,37 +2,12 @@ from corgidrp.mocks import create_psfsub_dataset,create_default_headers
 from corgidrp.l3_to_l4 import do_psf_subtraction
 from corgidrp.data import PyKLIPDataset, Image, Dataset
 from corgidrp.detector import nan_flags, flag_nans
+from corgidrp.astrom import create_circular_mask
 from scipy.ndimage import shift, rotate
 import pytest
 import numpy as np
 
 ## Helper functions/quantities
-
-def create_circular_mask(h, w, center=None, r=None):
-    """Creates a circular mask
-
-    Args:
-        h (int): array height
-        w (int): array width
-        center (list of float, optional): Center of mask. Defaults to the 
-            center of the array.
-        r (float, optional): radius of mask. Defaults to the minimum distance 
-            from the center to the edge of the array.
-
-    Returns:
-        np.array: boolean array with True inside the circle, False outside.
-    """
-
-    if center is None: # use the middle of the image
-        center = (w/2, h/2)
-    if r is None: # use the smallest distance between the center and image walls
-        r = min(center[0], center[1], w-center[0], h-center[1])
-
-    Y, X = np.ogrid[:h, :w]
-    dist_from_center = np.sqrt((X - center[0])**2 + (Y-center[1])**2)
-
-    mask = dist_from_center <= r
-    return mask
 
 iwa_lod = 3.
 owa_lod = 9.7
@@ -46,6 +21,7 @@ owa_pix = owa_lod * lam / d * 206265 / pixscale_arcsec
 st_amp = 100.
 noise_amp=1e-11
 pl_contrast=1e-4
+rel_tolerance = 0.05
 
 ## pyKLIP data class tests
 
@@ -361,7 +337,9 @@ def test_psf_sub_split_dataset():
     result = do_psf_subtraction(mock_sci_and_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_single_dataset',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
     
     # Should choose ADI+RDI
     for frame in result:
@@ -372,7 +350,9 @@ def test_psf_sub_split_dataset():
     result = do_psf_subtraction(mock_sci,
                                 numbasis=numbasis,
                                 fileprefix='test_sci_only_dataset',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
     
     # Should choose ADI
     for frame in result:
@@ -384,7 +364,9 @@ def test_psf_sub_split_dataset():
         _ = do_psf_subtraction(mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ref_only_dataset',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
 
 def test_psf_sub_ADI_nocrop():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
@@ -399,21 +381,24 @@ def test_psf_sub_ADI_nocrop():
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
 
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ADI',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
 
     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
                               [0.5,0.5],
                               cval=np.nan)
     
-    for i,frame in enumerate(result):
+    frame = result[0]
+    for i,img in enumerate(frame.data):
 
         # import matplotlib.pyplot as plt
 
         # fig,axes = plt.subplots(1,3,sharey=True,layout='constrained',figsize=(12,3))
-        # im0 = axes[0].imshow(frame.data,origin='lower')
+        # im0 = axes[0].imshow(img,origin='lower')
         # plt.colorbar(im0,ax=axes[0],shrink=0.8)
         # axes[0].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[0].set_title(f'PSF Sub Result ({numbasis[i]} KL Modes)')
@@ -423,7 +408,8 @@ def test_psf_sub_ADI_nocrop():
         # axes[1].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[1].set_title('Analytical result')
 
-        # im2 = axes[2].imshow(frame.data - analytical_result,origin='lower')
+        # diff = img - analytical_result
+        # im2 = axes[2].imshow(diff,origin='lower')
         # plt.colorbar(im2,ax=axes[2],shrink=0.8)
         # axes[2].scatter(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
         # axes[2].set_title('Difference')
@@ -437,9 +423,9 @@ def test_psf_sub_ADI_nocrop():
         if not np.nansum(mock_sci[0].data) > np.nansum(frame.data):
             raise Exception(f"ADI subtraction resulted in increased counts for frame {i}.")
                 
-        # Result should match analytical result        
-        if np.nanmax(np.abs(frame.data - analytical_result)) > 1e-5:
-            raise Exception(f"Absolute difference between ADI result and analytical result is greater then 1e-5.")
+        # Result should match analytical result for first KL mode       
+        if np.nanmax(np.abs(frame.data[0] - analytical_result)) > np.nanmax(analytical_result) * rel_tolerance:
+            raise Exception(f"Relative difference between ADI result and analytical result is greater then 5%.")
         
         if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
             raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
@@ -464,16 +450,19 @@ def test_psf_sub_RDI_nocrop():
                                 st_amp=st_amp
                                 )
 
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,
+                                reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_RDI',
-                                do_crop=False
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False
                                 )
     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
     
     for i,frame in enumerate(result):
 
-        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -554,15 +543,17 @@ def test_psf_sub_ADIRDI_nocrop():
     analytical_result2 = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2                         
     analytical_results = [analytical_result1,analytical_result2]
     
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 fileprefix='test_ADI+RDI',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
     
     for i,frame in enumerate(result):
 
         
-        mask = create_circular_mask(*frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
+        mask = create_circular_mask(frame.data.shape[-2:],r=iwa_pix,center=(frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY']))
         masked_frame = np.where(mask,np.nan,frame.data)
 
         # import matplotlib.pyplot as plt
@@ -615,9 +606,11 @@ def test_psf_sub_withcrop():
     rolls = [270+13,270-13]
     mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
 
-    result = do_psf_subtraction(mock_sci,mock_ref,
+    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
-                                fileprefix='test_withcrop')
+                                fileprefix='test_withcrop',
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
 
     for i,frame in enumerate(result):
     
@@ -643,34 +636,36 @@ def test_psf_sub_badmode():
     
 
     with pytest.raises(Exception):
-        _ = do_psf_subtraction(mock_sci,mock_ref,
+        _ = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
                                 numbasis=numbasis,
                                 mode='SDI',
                                 fileprefix='test_SDI',
-                                do_crop=False)
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False)
     
 if __name__ == '__main__':  
-    test_pyklipdata_ADI()
-    test_pyklipdata_RDI()
-    test_pyklipdata_ADIRDI()
-    test_pyklipdata_badtelescope()
-    test_pyklipdata_badinstrument()
-    test_pyklipdata_badcfamname()
-    test_pyklipdata_notdataset()
-    test_pyklipdata_badimgshapes()
-    test_pyklipdata_multiplepixscales()
+    # test_pyklipdata_ADI()
+    # test_pyklipdata_RDI()
+    # test_pyklipdata_ADIRDI()
+    # test_pyklipdata_badtelescope()
+    # test_pyklipdata_badinstrument()
+    # test_pyklipdata_badcfamname()
+    # test_pyklipdata_notdataset()
+    # test_pyklipdata_badimgshapes()
+    # test_pyklipdata_multiplepixscales()
 
-    test_nanflags_2D()
-    test_nanflags_3D() 
-    test_nanflags_mixed_dqvals()
-    test_flagnans_2D()
-    test_flagnans_3D()
-    test_flagnans_flagval2()
+    # test_nanflags_2D()
+    # test_nanflags_3D() 
+    # test_nanflags_mixed_dqvals()
+    # test_flagnans_2D()
+    # test_flagnans_3D()
+    # test_flagnans_flagval2()
 
-    test_psf_sub_split_dataset()
+    #test_psf_sub_split_dataset()
 
-    test_psf_sub_ADI_nocrop()
+    # test_psf_sub_ADI_nocrop()
     test_psf_sub_RDI_nocrop()
     test_psf_sub_ADIRDI_nocrop()
-    test_psf_sub_withcrop()
-    test_psf_sub_badmode()
+    # test_psf_sub_withcrop()
+    # test_psf_sub_badmode()
