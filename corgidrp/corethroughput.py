@@ -436,8 +436,8 @@ def get_1d_ct(ct_cal,frame,seps,
     x, y, ct = ct_cal.ct_excam
 
     # Get location of mask center in CT coordinates
-    xcen = frame.ext_hdr['MASKLOCX'] + frame.ext_hdr.get("DETPIX0X",0.) + 0.5
-    ycen = frame.ext_hdr['MASKLOCY'] + frame.ext_hdr.get("DETPIX0Y",0.) + 0.5
+    xcen = frame.ext_hdr['STARLOCX'] + frame.ext_hdr.get("DETPIX0X",0.) + 0.5
+    ycen = frame.ext_hdr['STARLOCY'] + frame.ext_hdr.get("DETPIX0Y",0.) + 0.5
 
     ct_seps = np.sqrt((x-xcen)**2 + (y-ycen)**2)
 

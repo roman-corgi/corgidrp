@@ -132,7 +132,7 @@ def create_default_L1_headers(arrtype="SCI"):
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
     prihdr['EXTEND']    = True         # Denotes FIT extensions
-    prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
+    prihdr['VISITID']   = '0000000000000000000' # Full visit ID (placeholder positive integer)
     prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
     prihdr['INSTRUME']  = 'CGI'        # Instrument designation
     prihdr['ORIGIN']    = 'SSC'        # Who is responsible for the data
@@ -313,7 +313,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
     prihdr['EXTEND']    = True         # Denotes FIT extensions
-    prihdr['VISITID']   = '1'          # Full visit ID (placeholder positive integer)
+    prihdr['VISITID']   = '0000000000000000000'          # Full visit ID (placeholder positive integer)
     prihdr['CDMSVERS']  = 'X.X.X'      # SSC CDMS pipeline build version used to generate L1
     prihdr['INSTRUME']  = 'CGI'        # Instrument designation
     prihdr['ORIGIN']    = 'SSC'        # Who is responsible for the data
@@ -527,6 +527,14 @@ def create_default_L2b_headers(arrtype="SCI"):
     exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
     exthdr['DATALVL']      = 'L2b'           # Data level (e.g., 'L1', 'L2a', 'L2b')
     exthdr['PCTHRESH']     = 0.0            # Photon-counting threshold (electrons)
+    # frame selection headers
+    exthdr['FRMSEL01'] = (1, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to 0") # record selection criteria
+    exthdr['FRMSEL02'] = (False, "Are we selecting on the OVEREXP flag?") # record selection criteria
+    exthdr['FRMSEL03'] = (None, "tip rms (Z2VAR) threshold") # record selection criteria
+    exthdr['FRMSEL04'] = (None, "tilt rms (Z3VAR) threshold") # record selection criteria
+    exthdr['FRMSEL05'] = (None, "tip bias (Z2RES) threshold") # record selection criteria
+    exthdr['FRMSEL06'] = (None, "tilt bias (Z3RES) threshold") # record selection criteria
+    exthdr.add_history("Marked 0 frames as bad: ") # history message travking bad frames
 
     return prihdr, exthdr
 
@@ -1431,6 +1439,8 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     dq = np.zeros([1200,2200], dtype = np.uint16)
     image = Image(frame, pri_hdr = prhd, ext_hdr = exthd, err = err,
         dq = dq)
+    # Use a an expected filename
+    image.filename = 'CGI_0200001001001001001_20250415T0305102_L2b.fits'
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
@@ -1708,6 +1718,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         ## save as an Image object
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
         filename = "simcal_astrom.fits"
+        frame.filename = filename
         
         if filedir is not None:
             # save source SkyCoord locations and pixel location estimates
@@ -2868,10 +2879,9 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
    
     # Save file
-    # TO DO: update with file name conventions
     if filedir is not None and file_save:
-        safe_target_name = target_name.replace(' ', '_')
-        filename = os.path.join(f"mock_flux_image_{safe_target_name}_{fsm_x}_{fsm_y}_.fits")
+        ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
+        filename = f'CGI_{prihdr['VISITID']}_{ftimeutc}_L2b.fits'
         frame.save(filedir=filedir, filename=filename)
 
     return frame
@@ -3094,8 +3104,8 @@ def create_ct_psfs_with_mask(fwhm_mas, cfam_name='1F', n_psfs=10, image_shape=(1
     center_x = image_shape[1] // 2
     center_y = image_shape[0] // 2
     image_center = (center_x, center_y)
-    exthd['MASKLOCX'] = center_x
-    exthd['MASKLOCY'] = center_y
+    exthd['STARLOCX'] = center_x
+    exthd['STARLOCY'] = center_y
     
     # Determine the stamp size for the PSF: +/- 3 FWHM in pixels.
     fwhm_pix = int(np.ceil(fwhm_mas / 21.8))
@@ -3549,8 +3559,6 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr["ROLL"] = roll_angles[i]
         
         exthdr['BUNIT'] = 'MJy/sr'
-        exthdr['MASKLOCX'] = psfcentx
-        exthdr['MASKLOCY'] = psfcenty
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
@@ -3724,8 +3732,6 @@ def generate_coron_dataset_with_companions(
         exthdr["STARLOCX"] = host_star_center[0]
         exthdr["STARLOCY"] = host_star_center[1]
         exthdr["DATALVL"]  = "L3"
-        exthdr["MASKLOCX"] = host_star_center[0]
-        exthdr["MASKLOCY"] = host_star_center[1]
         exthdr['LSAMNAME'] = 'NFOV'
         exthdr['FPAMNAME'] = 'HLC12_C2R1'
         # Optional WCS generation.
@@ -3908,8 +3914,8 @@ def create_mock_ct_dataset_and_cal_file(
     # D) Generate the CT cal file
     # ----------------------------
     ct_cal_tmp = corethroughput.generate_ct_cal(dataset_ct_masked_temp)
-    ct_cal_tmp.ext_hdr['MASKLOCX'] = x_center
-    ct_cal_tmp.ext_hdr['MASKLOCY'] = y_center
+    ct_cal_tmp.ext_hdr['STARLOCX'] = x_center
+    ct_cal_tmp.ext_hdr['STARLOCY'] = y_center
 
     if save_cal_file:
         if not cal_filename:

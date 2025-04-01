@@ -597,8 +597,8 @@ def test_get_1d_ct():
     
     pri_hdr = fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr["MASKLOCX"] = 25.
-    ext_hdr["MASKLOCY"] = 30.
+    ext_hdr["STARLOCX"] = 25.
+    ext_hdr["STARLOCY"] = 30.
     frame = Image(np.zeros([80,80]),
                   pri_hdr=pri_hdr,
                   ext_hdr=ext_hdr)
@@ -625,8 +625,8 @@ def test_get_1d_ct():
     
     pri_hdr = fits.Header()
     ext_hdr = fits.Header()
-    ext_hdr["MASKLOCX"] = 25.
-    ext_hdr["MASKLOCY"] = 30.
+    ext_hdr["STARLOCX"] = 25.
+    ext_hdr["STARLOCY"] = 30.
     ext_hdr["DETPIX0X"] = 20
     ext_hdr["DETPIX0Y"] = 5
     frame = Image(np.zeros([80,80]),

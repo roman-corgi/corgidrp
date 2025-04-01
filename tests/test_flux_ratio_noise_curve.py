@@ -116,7 +116,7 @@ def test_expected_flux_ratio_noise():
             klip_tp = klip[1:,:,0]
             klip_fwhms = frame.hdu_list['KL_THRU'].data[1:,:,1]
             core_tp = frame.hdu_list['CT_THRU'].data[1]
-            annular_noise = measure_noise(frame, separations, hw=3, center='star')
+            annular_noise = measure_noise(frame, separations, hw=3)
             noise_amp = annular_noise.T
             # expected planet flux: Guassian integral
             Fp_expected = np.pi*noise_amp*klip_fwhms**2/(4*np.log(2))
@@ -139,7 +139,7 @@ def test_expected_flux_ratio_noise():
         klip_tp = klip[1:,:,0]
         klip_fwhms = frame.hdu_list['KL_THRU'].data[1:,:,1]
         core_tp = frame.hdu_list['CT_THRU'].data[1]
-        annular_noise = measure_noise(frame, requested_separations, hw=3, center='star')
+        annular_noise = measure_noise(frame, requested_separations, hw=3)
         # the last 2 separation values should be close to what is expected from KLIP non-interpolated values
         noise_amp = annular_noise.T[:,1:]
         # expected planet flux: Guassian integral

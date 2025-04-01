@@ -378,10 +378,6 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             exthdr["STARLOCX"] -= x1
             exthdr["STARLOCY"] -= y1
             updated_hdrs.append('STARLOCX/Y')
-        if ("MASKLOCX" in exthdr.keys()):
-            exthdr["MASKLOCX"] -= x1
-            exthdr["MASKLOCY"] -= y1
-            updated_hdrs.append('MASKLOCX/Y')
         if ("CRPIX1" in prihdr.keys()):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
@@ -655,7 +651,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
         use_wcs: if you want to use WCS to correct the north position angle, set True (default). 
-	rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
+	    rot_center: 'im_center', 'starloc', or manual coordinate (x,y). 'im_center' uses the center of the image. 'starloc' refers to 'STARLOCX' and 'STARLOCY' in the header. 
 
     Returns:
         corgidrp.data.Dataset: North is up, East is left
@@ -675,13 +671,13 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
         # define the center for rotation
         if rot_center == 'im_center':
-            xcen, ycen = xlen/2, ylen/2
+            xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
         elif rot_center == 'starloc':
             try:
                 xcen, ycen = sci_hd['STARLOCX'], sci_hd['STARLOCY'] 
             except KeyError:
                 warnings.warn('"STARLOCX/Y" missing from ext_hdr. Rotating about center of array.')
-                xcen, ycen = xlen/2, ylen/2
+                xcen, ycen = [(xlen-1) // 2, (ylen-1) // 2]
         else:
             xcen = rot_center[0]
             ycen = rot_center[1]
@@ -760,8 +756,8 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
-        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file
-        flux_cal (corgidrp.data.FluxCalibration): a FluxCalibration calibration file
+        corethroughput_cal (corgidrp.data.CoreThroughputCalibration): a CoreThroughputCalibration calibration file. Can be None
+        flux_cal (corgidrp.data.FluxCalibration): a FluxCalibration calibration file. Cannot be None
 
     Returns:
         corgidrp.data.Dataset: same dataset now at L4-level
@@ -778,7 +774,10 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     for frame in updated_dataset:
         # update header
         frame.ext_hdr['DATALVL'] = "L4"
-        frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1] #Associate the ct calibration file
+        if corethroughput_cal is not None:
+            frame.ext_hdr['CTCALFN'] = corethroughput_cal.filename.split("/")[-1] #Associate the ct calibration file
+        else:
+            frame.ext_hdr['CTCALFN'] = ''
         frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1

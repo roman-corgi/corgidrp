@@ -418,8 +418,8 @@ def test_measure_noise():
     fwhm = 2. # pix
 
     ext_hdr = fits.Header()
-    ext_hdr['MASKLOCX'] = cenx
-    ext_hdr['MASKLOCY'] = ceny
+    ext_hdr['STARLOCX'] = cenx
+    ext_hdr['STARLOCY'] = ceny
     
     image = np.zeros((2,*frame_shape_yx))
 
@@ -1152,8 +1152,8 @@ def test_psfsub_withKTandCTandCrop_adi():
     # exthdr = fits.Header()
     # exthdr["STARLOCX"] = mock_sci[0].ext_hdr["STARLOCX"]
     # exthdr["STARLOCY"] = mock_sci[0].ext_hdr["STARLOCY"]
-    # exthdr["MASKLOCX"] = mock_sci[0].ext_hdr["MASKLOCX"]
-    # exthdr["MASKLOCY"] = mock_sci[0].ext_hdr["MASKLOCY"]
+    # exthdr["STARLOCX"] = mock_sci[0].ext_hdr["STARLOCX"]
+    # exthdr["STARLOCY"] = mock_sci[0].ext_hdr["STARLOCY"]
     # exthdr.set("LSAMNAME",'NFOV')
     # ar_image = Image(analytical_result,
     #                  prihdr,

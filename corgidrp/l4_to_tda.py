@@ -232,7 +232,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         check.real_positive_scalar(halfwidth, 'halfwidth', ValueError)
         if halfwidth > min_spacing/2:
             warnings.warn('Halfwidth is wider than half the minimum spacing between separation values.')
-        annular_noise = measure_noise(frame, requested_separations, halfwidth, center='star') # in photoelectrons/s
+        annular_noise = measure_noise(frame, requested_separations, halfwidth) # in photoelectrons/s
         # now need to get Fp/Fs
         # For star flux, Fs:  integrated flux of star modeled as analytic formula for volume under 2-D Gaussian defined 
         # by amplitude and FWHM used for KLIP throughput calculation.  Amplitude found by doing Gaussian fit.

@@ -286,7 +286,13 @@ def guess_template(dataset):
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
     elif image.ext_hdr['DATALVL'] == "L3":
-        recipe_filename = "l3_to_l4.json"
+        if image.ext_hdr['FSMLOS'] == 1:
+            # coronagraphic obs - PSF subtraction
+            recipe_filename = "l3_to_l4.json"
+        else:
+            # noncorongrpahic obs - no PSF subtraction
+            recipe_filename = "l3_to_l4_nopsfsub.json"
+            
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
 

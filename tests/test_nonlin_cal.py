@@ -13,8 +13,9 @@ import pandas as pd
 from pathlib import Path
 
 import test_check
+import corgidrp
 from corgidrp import check
-from corgidrp.data import Image, Dataset
+from corgidrp.data import Image, Dataset, NonLinearityCalibration
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException, nonlin_params_default)
 from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 
@@ -149,7 +150,6 @@ def setup_module():
     min_write = 800
     max_write = 10000
 
-
 def teardown_module():
     """
     Runs at the end. Deletes variables
@@ -172,6 +172,9 @@ def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
     nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
         max_write)
+
+    # Test its DATALVL is CAL
+    assert nonlin_out.ext_hdr['DATALVL'] == 'CAL'
         
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
@@ -201,6 +204,30 @@ def test_expected_results_nom_sub():
     assert np.equal(nonlin_out.data[norm_ind+1,-1], 1)
     # check that norm_val is correct
     assert np.equal(nonlin_out.data[norm_ind+1,0], norm_val)
+
+    # Test filename follows convention (as of R3.0.2)
+    datadir = os.path.join(os.path.dirname(__file__), "simdata")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+    nonlin_out.save(filedir=datadir)
+    nln_cal_filename = dataset_nl[-1].filename.replace("_L2b", "_NLN_CAL")
+    nln_cal_filepath = os.path.join(datadir, nln_cal_filename)
+    if os.path.exists(nln_cal_filepath) is False:
+        raise IOError(f'NonLinearity calibration file {nln_cal_filepath} does not exist.')
+    # Load the calibration file to check it has the same data contents
+    nln_cal_file_load = NonLinearityCalibration(nln_cal_filepath)
+    # The first element is a NaN
+    assert np.isnan(nln_cal_file_load.data[0,0])
+    # Compare all other elements but for [0,0], which is a NaN
+    for row in range(nln_cal_file_load.data.shape[0]):
+        for col in range(nln_cal_file_load.data.shape[1]):
+            if row == 0 and col == 0:
+                continue
+            assert np.all(nln_cal_file_load.data[row,col] == nonlin_out.data[row,col])
+
+    # Remove test NLN cal file
+    if os.path.exists(nonlin_out.filepath):
+        os.remove(nonlin_out.filepath)
 
 def test_expected_results_time_sub():
     """Outputs are as expected for the provided frames with datetime values for

@@ -90,14 +90,14 @@ def inject_psf(frame_in, ct_calibration, amp,
     return frame, psf_model, psf_cenxy
 
 
-def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = [], center='mask'):
+def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = []):
     """Calculates the noise (standard deviation of counts) of an 
         annulus at a given separation from the mask or star center.
         TODO: Correct for small sample statistics?
         TODO: Mask known off-axis sources.
     
     Args:
-        frame (corgidrp.Image): Image containing data as well as "MASKLOCX/Y" and "STARLOCX/Y" in header
+        frame (corgidrp.Image): Image containing data as well as "STARLOCX/Y" in header
         seps_pix (np.array of float): Separations (in pixels from specified center) at which to calculate 
             the noise level.
         hw (float): halfwidth of the annulus to use for noise calculation.
@@ -106,20 +106,12 @@ def measure_noise(frame, seps_pix, hw, klmode_index=None, cand_locs = [], center
             truncation choice.  If None (by default), all indices are returned.
         cand_locs (list of tuples, optional): Locations of known off-axis sources, so we can mask them. 
             This is a list of tuples (sep_pix,pa_degrees) for each source. Defaults to [].
-        center (str, optional): 'mask' or 'star'. Defaults to 'mask', which assumes the center at MASKLOCX and MASKLOCY, 
-            whereas 'star' assumes the center at STARLOCX and STARLOCY.
-            truncation choice.
         
     Returns: np.array: array of shape (number of separtions, number of KL modes) containing the annular noise.  If klmode_index 
         specified, the number of KL modes in the output array is 1.
     """
-    if center == 'mask':
-        cenx, ceny = (frame.ext_hdr['MASKLOCX'],frame.ext_hdr['MASKLOCY'])
-    elif center == 'star':
-        cenx, ceny = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
-    else:
-        raise ValueError(f"center must be 'mask' or 'star', got {center}")  
-
+    cenx, ceny = (frame.ext_hdr['STARLOCX'],frame.ext_hdr['STARLOCY'])
+    
     # Mask data outside the specified annulus
     y, x = np.indices(frame.data.shape[1:])
     sep_map = np.sqrt((y-ceny)**2 + (x-cenx)**2)

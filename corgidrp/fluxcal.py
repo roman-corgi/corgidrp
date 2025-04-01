@@ -479,8 +479,12 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
     elif flux_or_irr == 'irr':
         flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
@@ -574,8 +578,12 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
     elif flux_or_irr == 'irr':
         flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     

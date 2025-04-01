@@ -47,6 +47,7 @@ def create_bad_pixel_map(dataset, master_dark, master_flat, dthresh = 5., ffrac 
     dark_hdr = master_dark.pri_hdr.copy()
     dark_ext_hdr = master_dark.ext_hdr.copy()
 
+    dark_ext_hdr['DATALVL']  = 'CAL'
     dark_ext_hdr['HISTORY'] = "Bad Pixel Map created using {} and {}".format(master_dark.filename,master_flat.filename)
 
     input_dataset = Dataset([master_dark,master_flat])
