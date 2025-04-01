@@ -476,9 +476,7 @@ if __name__ == "__main__":
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    args_here = ['--e2edata_dir', e2edata_dir, '--outputdir', outputdir]#, '--e2e_flag',False]
-    #args = ap.parse_args()
-    args = ap.parse_args(args_here)
+    
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     test_noisemap_calibration_from_l1(e2edata_dir, outputdir)
