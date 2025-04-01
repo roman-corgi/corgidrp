@@ -211,7 +211,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
         d[telem_rows] = np.nan
         _, _, _, _, d0, bp0, _ = proc_dark.L1_to_L2a(d)
         d1, bp1, _ = proc_dark.L2a_to_L2b(d0, bp0)
-        d1 *= em_gain # undo gain division
+        # d1 *= em_gain # undo gain division
         d1[telem_rows] = 0
         dark_frames.append(d1)
         bp_frames.append(bp1)
