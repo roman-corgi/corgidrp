@@ -46,7 +46,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(flux_data_filelist, '', fluxcal_outputdir)
     
         ####### Load in the output data. It should be the latest kgain file produced.
-    fluxcal_file = glob.glob(os.path.join(fluxcal_outputdir, '*FluxcalFactor*.fits'))[0]
+    fluxcal_file = glob.glob(os.path.join(fluxcal_outputdir, '*ABF_CAL*.fits'))[0]
     flux_fac = data.FluxcalFactor(fluxcal_file)
     print("used color filter", flux_fac.filter)
     print("used ND filter", flux_fac.nd_filter)

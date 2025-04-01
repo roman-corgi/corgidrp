@@ -128,7 +128,7 @@ def test_nonlin_and_kgain_e2e(
     nonlin = data.NonLinearityCalibration(nonlin_drp_filepath)
 
     # kgain from corgidrp
-    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_kgain.fits'))
+    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_KRN_CAL*.fits'))
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
 

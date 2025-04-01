@@ -884,10 +884,8 @@ class KGain(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # give it a default filename using the first input file as the base
-                # strip off everything starting at .fits
-                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                self.filename = "{0}_kgain.fits".format(orig_input_filename)
+                # give it a default filename using the last input file as the base
+                self.filename = re.sub('_L[0-9].', '_KRN_CAL', input_dataset[-1].filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'Detected Electrons/DN'
@@ -1284,7 +1282,7 @@ class AstrometricCalibration(Image):
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             self.filename = "{0}_AST_CAL.fits".format(orig_input_filename)
-
+            
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
@@ -1418,7 +1416,7 @@ class FluxcalFactor(Image):
                 self._record_parent_filenames(input_dataset)
                 # give it a default filename using the first input file as the base
                 # strip off everything starting at .fits
-                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
@@ -1432,7 +1430,9 @@ class FluxcalFactor(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "{0}_FluxcalFactor_{1}_{2}.fits".format(orig_input_filename, self.filter, self.nd_filter)
+
+            self.filename = "{0}_ABF_CAL.fits".format(orig_input_filename)
+            self.filename = re.sub('_L[0-9].', '', self.filename)
 
 class FpamFsamCal(Image):
     """

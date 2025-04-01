@@ -141,7 +141,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
 
     ####### Load in the output data. It should be the latest kgain file produced.
-    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_kgain.fits'))
+    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_KRN_CAL*.fits'))
     kgain_file = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
 
     kgain = data.KGain(kgain_file)
