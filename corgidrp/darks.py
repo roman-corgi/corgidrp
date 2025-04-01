@@ -134,6 +134,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
+    - have been divided by EM gain
     - have NOT been desmeared. Darks should not be desmeared.  The only component 
     of dark frames that would be subject to a smearing effect is dark current 
     since it linearly increases with time, so the extra row read time affects 
@@ -252,9 +253,9 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['DATATYPE'] = 'Dark'
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
-    master_dark.ext_hdr['BUNIT'] = 'Detected EM Electrons'
-    master_dark.err_hdr['BUNIT'] = 'Detected EM Electrons'
-    master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps); not EM gain-divided, so not intended for dark subtraction in pipeline to L2b since that happens after EM gain division'
+    master_dark.ext_hdr['BUNIT'] = 'Detected Electrons'
+    master_dark.err_hdr['BUNIT'] = 'Detected Electrons'
+    master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps)'
     return master_dark
 
 

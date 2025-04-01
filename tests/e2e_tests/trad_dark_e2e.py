@@ -1,7 +1,7 @@
 import argparse
 import os
 import pytest
-import json
+import re
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -406,7 +406,7 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
         d[telem_rows] = np.nan
         _, _, _, _, d0, bp0, _ = proc_dark.L1_to_L2a(d)
         d1, bp1, _ = proc_dark.L2a_to_L2b(d0, bp0)
-        d1 *= em_gain # undo gain division
+        #d1 *= em_gain # undo gain division
         d1[telem_rows] = 0
         dark_frames.append(d1)
         bp_frames.append(bp1)
@@ -427,6 +427,12 @@ def test_trad_dark_im(tvacdata_path, e2eoutput_path):
     TVAC_trad_dark = detector.slice_section(mean_frame, 'SCI', 'image')
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
+    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
+    assert trad_dark.ext_hdr['BUNIT'] == 'Detected Electrons'
+    assert trad_dark.err_hdr['BUNIT'] == 'Detected Electrons'
+    test_filename = trad_dark_data_filelist[-1].split('.fits')[0] + '_DNM_CAL.fits'
+    test_filename = re.sub('_L[0-9].', '', test_filename)
+    assert(trad_dark.filename == test_filename)
     pass
 
     # remove from caldb
