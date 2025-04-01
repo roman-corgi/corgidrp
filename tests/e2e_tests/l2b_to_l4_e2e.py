@@ -218,7 +218,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     
     #Clean up
     this_caldb.remove_entry(astrom_cal)
-    shutil.rmtree(e2e_data_path)
+    # shutil.rmtree(e2e_data_path)
     # shutil.rmtree(e2eoutput_path)
     
 
@@ -369,9 +369,9 @@ def test_l3_to_l4(e2eoutput_path):
     this_caldb.remove_entry(astrom_cal)
     this_caldb.remove_entry(ct_cal_tmp)
     this_caldb.remove_entry(fluxcal_fac)
-    shutil.rmtree(e2eoutput_path_l4)
-    shutil.rmtree(e2eintput_path)
-    shutil.rmtree(os.path.join(pathlib.Path.home(), ".corgidrp",'KLIP_SUB'))
+    # shutil.rmtree(e2eoutput_path_l4)
+    # shutil.rmtree(e2eintput_path)
+    # shutil.rmtree(os.path.join(pathlib.Path.home(), ".corgidrp",'KLIP_SUB'))
 
 
 
