@@ -16,17 +16,17 @@ import corgidrp.detector as detector
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
+def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     """
     Tests e2e flat field using Neptune in Band 4, full FOV
 
     Args:
-        tvacdata_path (str): path to CGI_TVAC_Data dir
+        e2edata_path (str): path to CGI_TVAC_Data dir
         e2eoutput_path (str): output directory
     """
     # figure out paths, assuming everything is located in the same relative location
-    l1_dark_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
     flat_outputdir = os.path.join(e2eoutput_path, "flat_neptune_output")
@@ -197,17 +197,17 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
+def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     """
     Tests e2e flat field using Uranus in Band 1, only HLC FOV
 
     Args:
-        tvacdata_path (str): path to CGI_TVAC_Data dir
+        e2edata_path (str): path to CGI_TVAC_Data dir
         e2eoutput_path (str): output directory
     """
     # figure out paths, assuming everything is located in the same relative location
-    l1_dark_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
     flat_outputdir = os.path.join(e2eoutput_path, "flat_uranus_output")
@@ -377,17 +377,17 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_flat_creation_neptune(tvacdata_dir, outputdir)
-    test_flat_creation_uranus(tvacdata_dir, outputdir)
+    test_flat_creation_neptune(e2edata_dir, outputdir)
+    test_flat_creation_uranus(e2edata_dir, outputdir)
     

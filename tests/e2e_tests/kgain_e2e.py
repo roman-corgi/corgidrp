@@ -51,13 +51,13 @@ def fix_headers_for_tvac(
 # tvac_readnoise: 121.76070832489948 e-, result from new iit code with specified file input order; used to be 130.12 e-
 
 @pytest.mark.e2e
-def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
+def test_l1_to_kgain(e2edata_path, e2eoutput_path):
 
     # sort and prepare raw files to run through both II&T and DRP
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')
     stack_arr2_f = []
     stack_arr_f = []
-    box_data = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'kgain') 
+    box_data = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'kgain') 
     for f in os.listdir(box_data):
         file = os.path.join(box_data, f)
         if not file.endswith('.fits'):
@@ -141,7 +141,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
 
     ####### Load in the output data. It should be the latest kgain file produced.
-    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_kgain.fits'))
+    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_KRN_CAL*.fits'))
     kgain_file = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
 
     kgain = data.KGain(kgain_file)
@@ -172,15 +172,15 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_l1_to_kgain(tvacdata_dir, outputdir)
+    test_l1_to_kgain(e2edata_dir, outputdir)

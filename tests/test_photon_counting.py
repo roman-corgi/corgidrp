@@ -187,8 +187,8 @@ def test_pc_subsets():
 
 
 if __name__ == '__main__':
+    test_pc_subsets()
     test_pc()
     test_negative()
-    test_pc_subsets()
     
     

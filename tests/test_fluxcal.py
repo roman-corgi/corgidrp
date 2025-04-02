@@ -18,6 +18,8 @@ exthd["FPAMNAME"] = 'ND475'
 prhd["TARGET"] = 'VEGA'
 image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
 image2 = image1.copy()
+image1.filename = "test1_L4_.fits"
+image2.filename = "test2_L4_.fits"
 dataset=Dataset([image1, image2])
 calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
 
@@ -129,6 +131,7 @@ def test_fluxcal_file():
     assert fluxcal_fac.filter == '3C'
     assert fluxcal_fac.fluxcal_fac == fluxcal_factor[0,0]
     assert fluxcal_fac.fluxcal_err == fluxcal_factor_error[0,0,0]
+    assert(fluxcal_fac.filename.split(".")[0] == "test2_ABF_CAL")
     
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     filename = fluxcal_fac.filename
