@@ -3019,11 +3019,10 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     # Default headers
     if e2e:
         prhd, exthd = create_default_L2b_headers()
-        prhd['VISTYPE'] = 'CORETPUT'
-        # Some value
-        exthd['EXPTIME'] = np.pi
     else:
         prhd, exthd = create_default_L3_headers()
+    # These data are for CT calibration
+    prhd['VISTYPE'] = 'CORETPUT'
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
     # Mock ERR
