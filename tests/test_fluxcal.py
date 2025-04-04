@@ -89,6 +89,7 @@ def test_colorcor():
     calspec_name = 'Vega'
     source_name = 'TYC 4424-1286-1'
     output_dataset = l4_to_tda.determine_color_cor(dataset, calspec_name, source_name)
+    assert "1732526_stisnic_009.fits" in str(output_dataset[0].ext_hdr['HISTORY'])
     assert output_dataset[0].ext_hdr['LAM_REF'] == lambda_piv
     assert output_dataset[0].ext_hdr['COL_COR'] == pytest.approx(1,1e-2) 
     
@@ -96,15 +97,17 @@ def test_calspec_download():
     """
     test the download of a calspec fits file
     """
-    filepath = fluxcal.get_calspec_file('Vega')
+    filepath, filename = fluxcal.get_calspec_file('Vega')
     assert os.path.exists(filepath)
+    assert filename == 'alpha_lyr_stis_011.fits'
     os.remove(filepath)
-    filepath = fluxcal.get_calspec_file('TYC 4424-1286-1')
+    filepath, filename = fluxcal.get_calspec_file('TYC 4424-1286-1')
     assert os.path.exists(filepath)
+    assert filename == '1732526_stisnic_009.fits'
     os.remove(filepath)
     
     with pytest.raises(ValueError):
-        filepath = fluxcal.get_calspec_file('Todesstern')
+        filepath, filename = fluxcal.get_calspec_file('Todesstern')
 
 def test_app_mag():
     """
@@ -120,7 +123,9 @@ def test_app_mag():
     assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(0.+-2.5*np.log10(0.5), 0.03)
     output_dataset = l4_to_tda.determine_app_mag(dataset, '109 Vir')
     assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(3.72, 0.05)
-
+    assert 'alpha_lyr_stis_011.fits' in str(output_dataset[0].ext_hdr['HISTORY'])
+    assert '109vir_stis_005.fits' in str(output_dataset[0].ext_hdr['HISTORY'])
+    
 def test_fluxcal_file():
     """ 
     Generate a mock fluxcal factor cal object and test the content and functionality.
@@ -196,7 +201,7 @@ def test_abs_fluxcal():
     dataset = Dataset([flux_image])
     fluxcal_factor = fluxcal.calibrate_fluxcal_aper(dataset, flux_or_irr = 'flux', phot_kwargs=None)
     assert fluxcal_factor.filter == '3C'
-    #band_flux/200 was the input calibration factor cal_factor of the simulated mock image
+    #band_flux/200 was the input calibration factor cal_factor of the simulated mock image"alpha_lyr_stis_011.fits"
     assert fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor, rel = 0.05)
     #divisive error propagation of the aperture phot error
     err_fluxcal_ap = band_flux/flux_el_ap**2*flux_err_ap
@@ -281,10 +286,12 @@ def test_abs_fluxcal():
     fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     assert fluxcal_factor_back.fluxcal_fac == pytest.approx(fluxcal_factor.fluxcal_fac)
     assert fluxcal_factor_back.ext_hdr["LOCBACK"] == back
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back.ext_hdr['HISTORY'])
     fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, flux_or_irr = 'flux', phot_kwargs=gauss_kwargs)
     assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
     assert fluxcal_factor_back_gauss.ext_hdr["LOCBACK"] == back
-
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
+    
     # test l4_to_tda.determine_flux
     input_dataset = Dataset([flux_image_back, flux_image_back])
     output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back,  photo = "aperture", phot_kwargs = aper_kwargs)

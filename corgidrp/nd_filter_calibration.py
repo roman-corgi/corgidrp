@@ -113,7 +113,7 @@ def compute_expected_band_irradiance(star_name, filter_name):
     Raises:
         ValueError: If no matching filter curve file is found.
     """
-    calspec_filepath = fluxcal.get_calspec_file(star_name)
+    calspec_filepath = fluxcal.get_calspec_file(star_name)[0]
     datadir = os.path.join(os.path.dirname(fluxcal.__file__), "data", "filter_curves")
     filter_files = [f for f in os.listdir(datadir) if filter_name in f and f.endswith('.csv')]
     if not filter_files:
