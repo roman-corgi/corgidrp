@@ -45,7 +45,7 @@ def get_calspec_file(star_name):
         star_name (str): 
     
     Returns:
-        str: file path
+        str: file path, fits file name
     """
     if star_name not in calspec_names:
         raise ValueError('{0} is not in list of anticipated standard stars {1}, please check naming'.format(star_name, calspec_names.keys()) )
