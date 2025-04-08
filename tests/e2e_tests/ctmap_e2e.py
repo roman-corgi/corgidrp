@@ -1,7 +1,10 @@
 # E2E Test Code for CoreThroughput Calibration
 
-import argparse
 import os, shutil
+# Debugging
+if os.path.exists('/Users/srhildeb/.corgidrp/'):
+        shutil.rmtree('/Users/srhildeb/.corgidrp/')
+import argparse
 import glob
 import pytest
 import numpy as np
@@ -64,9 +67,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
     output_dir = os.path.join(e2eoutput_path, 'corethroughput_test_data')
-#    if os.path.exists(output_dir):
-#        shutil.rmtree(output_dir)
-#    os.mkdir(output_dir)
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.mkdir(output_dir)
     
     # List of filenames
     corethroughput_data_filelist = ['corethroughput_e2e_{0}_L2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
@@ -74,9 +77,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # make DRP output directory if needed
     corethroughput_outputdir = os.path.join(e2eoutput_path, 'l2b_to_corethroughput_output')
-#    if os.path.exists(corethroughput_outputdir):
-#        shutil.rmtree(corethroughput_outputdir)
-#    os.mkdir(corethroughput_outputdir)
+    if os.path.exists(corethroughput_outputdir):
+        shutil.rmtree(corethroughput_outputdir)
+    os.mkdir(corethroughput_outputdir)
 
     # CT cal file from mock data directly
     # Divide by exposure time
