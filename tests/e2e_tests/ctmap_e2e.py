@@ -1,4 +1,4 @@
-# E2E Test Code for CoreThroughput Calibration
+# e2e test code for corethroughput map
 
 import os, shutil
 # Debugging
@@ -26,7 +26,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Mock a CT dataset (CT PAM, pupil image and off-axis PSFs)
     # Some arbitrary positive value
     exp_time_s = np.pi
-    # Choose some H/V values for FPAM/FSAM  during corethroughput observations
+    # Choose some arbitrary H/V values for FPAM/FSAM  during corethroughput observations
     FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT = 6854, 22524, 29471, 12120
     # Choose a band
     cfam_name = '1F'
@@ -68,33 +68,44 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         image.ext_hdr['STARLOCX'] = 509
         image.ext_hdr['STARLOCY'] = 513
 
+    # Create dataset
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
+    # Define temporary directory to store the individual frames
     output_dir = os.path.join(e2eoutput_path, 'corethroughput_test_data')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.mkdir(output_dir)
     
     # List of filenames
-    corethroughput_data_filelist = ['corethroughput_e2e_{0}_L2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
+    corethroughput_data_filelist = ['corethroughput_e2e_{0}_L2b.fits'.format(i)
+        for i in range(len(corethroughput_dataset))]
+    # Save them
     corethroughput_dataset.save(output_dir, corethroughput_data_filelist)
 
-    # make DRP output directory if needed
-    corethroughput_outputdir = os.path.join(e2eoutput_path, 'l2b_to_corethroughput_output')
+    # Make directory for the CT cal file
+    corethroughput_outputdir = os.path.join(e2eoutput_path, 'l3_to_ct_map')
     if os.path.exists(corethroughput_outputdir):
         shutil.rmtree(corethroughput_outputdir)
     os.mkdir(corethroughput_outputdir)
 
-    # CT cal file from mock data directly
-    # Divide by exposure time
+    # Create CT cal file from the mock data directly
     ct_cal_mock = corethroughput.generate_ct_cal(corethroughput_dataset)
-    # Save it for caldb
+    # Save it
     ct_cal_mock.filedir = corethroughput_outputdir
     ct_cal_mock.save()
+    # Add it to caldb
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(ct_cal_mock)
 
-    # Obtain the CT map using the CT cal file
+    # Create the CT map. Do not save it. We will compare it with the map from
+    # the walker
+    # FPAM/FSAM
+    fpam_fsam_cal = data.FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    # The first entry (dataset) is only used to get the FPM's center
+    ct_map_mock = corethroughput.CreateCTMap(corethroughput_dataset, fpam_fsam_cal,
+        ct_cal_mock, save = False)
 
     # Run the DRP walker
     print('Running walker')
@@ -103,18 +114,14 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(corethroughput_data_filepath, '', corethroughput_outputdir,
         template='l3_to_corethroughput_map.json')
     
-#    # Load in the output data. It should be the latest CTP_CAL file produced.
-#
-#    # Check DRP CT cal file and mock one coincide
-#    # Remember that DRP divides by exposure time to go from L2b to L3 and
-#    # generate_ct_cal() does not, so we need to divide by EXPTIME the off-axis PSFs
-#    assert ct_cal_drp.data == pytest.approx(ct_cal_mock.data/exp_time_s, abs=1e-12)
-#    assert ct_cal_drp.ct_excam == pytest.approx(ct_cal_mock.ct_excam, abs=1e-12)
-#    assert np.all(ct_cal_drp.err == ct_cal_mock.err)
-#    assert np.all(ct_cal_drp.dq == ct_cal_mock.dq)
-#    assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
-#    assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
+    # Read CT map produced by the walker
+    ct_map_filepath = os.path.join(corgidrp.default_cal_dir, 'ct_map.csv')
+    ct_map_walker = np.loadtxt(ct_map_filepath, delimiter=',')
 
+    # Check whether direct ct map and the one from the walker are the same
+    assert np.all(ct_map_walker == ct_map_mock)
+
+    # Clean test data
     # Remove entry from caldb
     corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
         '*CTP_CAL*.fits'))[0]
@@ -130,6 +137,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(corethroughput_outputdir)
 
     # Delete CT map file
+    if os.path.exists(ct_map_filepath):
+        os.remove(ct_map_filepath)
 
     # Print success message
     print('e2e test for corethroughput map passed')
