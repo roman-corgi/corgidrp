@@ -1,9 +1,6 @@
 # e2e test code for corethroughput map
 
 import os, shutil
-# Debugging
-if os.path.exists('/Users/srhildeb/.corgidrp/'):
-        shutil.rmtree('/Users/srhildeb/.corgidrp/')
 import argparse
 import glob
 import pytest
