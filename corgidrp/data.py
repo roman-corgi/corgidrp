@@ -181,7 +181,10 @@ class Dataset():
           scale_factor (np.array or float): scale factor value or array
           scale_name (str): name of the scaling reason
         """
-        if isinstance(scale_factor, float) or scale_factor.ndim == 2:
+        if isinstance(scale_factor, float):
+            for frame in self.frames:
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 2:
             for frame in self.frames:
                 frame.rescale_error(scale_factor, scale_name)
         elif scale_factor.ndim == 3:
@@ -568,7 +571,9 @@ class Image():
         """
         if isinstance(scale_factor, float):
             pass
-        elif scale_factor.ndim != 2 or scale_factor.shape != self.data.shape:
+        elif scale_factor.ndim == 2 or scale_factor.shape == self.data.shape:
+            pass
+        else:
             raise ValueError("we expect a 2-dimensional input array with dimensions {0} or a float value".format(self.data.shape))
 
         self.err = self.err*scale_factor

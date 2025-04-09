@@ -27,7 +27,6 @@ def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     
     #get the noise from the ptc curve
     ptc = kgain.ptc
-    #should we also add the read noise as error layer?
     nem = detector_params.params['NEMGAIN']
     
     for i, frame in enumerate(phot_noise_dataset.frames):
@@ -43,8 +42,6 @@ def add_shot_noise_to_err(input_dataset, kgain, detector_params):
         interp_func = interp1d(ptc[:,0], ptc[:,1], kind='linear', fill_value='extrapolate')
 
         phot_err = interp_func(frame.data)
-        #phot_err = np.sqrt(frame.data), simple first estimate of photon noise, which is only true for high signals
-        #add excess noise in case of em_gain
         if em_gain > 1:
             phot_err *= ENF(em_gain, nem)           
         frame.add_error_term(phot_err, "shotnoise_error")
