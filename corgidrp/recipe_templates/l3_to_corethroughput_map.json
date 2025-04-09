@@ -1,0 +1,24 @@
+{
+    "name" : "l3_to_corethroughput_map",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name": "divide_by_exptime"
+        },
+        {
+            "name" : "CreateCTMap",
+            "calibs": {
+                "FpamFsamCal": "AUTOMATIC",
+                "CoreThroughputCalibration" : "AUTOMATIC"
+            },
+              "keywords" : {
+                "save" : true
+              }
+        }
+    ]
+}

@@ -57,6 +57,8 @@ all_steps = {
     "find_star": corgidrp.l3_to_l4.find_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
+    "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
+    "CreateCTMap": corgidrp.corethroughput.CreateCTMap,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
