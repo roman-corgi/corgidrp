@@ -11,9 +11,6 @@
             "name": "divide_by_exptime"
         },
         {
-            "name" : "generate_ct_cal"
-        },
-        {
             "name" : "CreateCTMap",
             "calibs": {
                 "FpamFsamCal": "AUTOMATIC",
