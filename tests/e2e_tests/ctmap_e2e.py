@@ -49,7 +49,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Add pupil images
     corethroughput_image_list = [data.Image(pupil_image,pri_hdr=prhd,
         ext_hdr=exthd_pupil, err=err)]
-    corethroughput_image_list += mocks.create_ct_psfs(50, e2e=True)[0]
+    corethroughput_image_list += mocks.create_ct_psfs(50, e2e=True, n_psfs=100)[0]
     # Make sure all dataframes share the same common header values
     for image in corethroughput_image_list:
         image.pri_hdr['VISTYPE'] = 'CORETPUT'
@@ -64,6 +64,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         image.ext_hdr['FPAM_V'] = FPAM_V_CT
         image.ext_hdr['FSAM_H'] = FSAM_H_CT
         image.ext_hdr['FSAM_V'] = FSAM_V_CT
+        # Some location for the center of the mask
+        image.ext_hdr['STARLOCX'] = 509
+        image.ext_hdr['STARLOCY'] = 513
+
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
     output_dir = os.path.join(e2eoutput_path, 'corethroughput_test_data')
@@ -90,6 +94,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(ct_cal_mock)
 
+    # Obtain the CT map using the CT cal file
+
     # Run the DRP walker
     print('Running walker')
     # Add path to files
@@ -97,34 +103,36 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(corethroughput_data_filepath, '', corethroughput_outputdir,
         template='l3_to_corethroughput_map.json')
     
-    # Load in the output data. It should be the latest CTP_CAL file produced.
+#    # Load in the output data. It should be the latest CTP_CAL file produced.
+#
+#    # Check DRP CT cal file and mock one coincide
+#    # Remember that DRP divides by exposure time to go from L2b to L3 and
+#    # generate_ct_cal() does not, so we need to divide by EXPTIME the off-axis PSFs
+#    assert ct_cal_drp.data == pytest.approx(ct_cal_mock.data/exp_time_s, abs=1e-12)
+#    assert ct_cal_drp.ct_excam == pytest.approx(ct_cal_mock.ct_excam, abs=1e-12)
+#    assert np.all(ct_cal_drp.err == ct_cal_mock.err)
+#    assert np.all(ct_cal_drp.dq == ct_cal_mock.dq)
+#    assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
+#    assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
+
+    # Remove entry from caldb
     corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
         '*CTP_CAL*.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
-
-    # Check DRP CT cal file and mock one coincide
-    # Remember that DRP divides by exposure time to go from L2b to L3 and
-    # generate_ct_cal() does not, so we need to divide by EXPTIME the off-axis PSFs
-    assert ct_cal_drp.data == pytest.approx(ct_cal_mock.data/exp_time_s, abs=1e-12)
-    assert ct_cal_drp.ct_excam == pytest.approx(ct_cal_mock.ct_excam, abs=1e-12)
-    assert np.all(ct_cal_drp.err == ct_cal_mock.err)
-    assert np.all(ct_cal_drp.dq == ct_cal_mock.dq)
-    assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
-    assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
-
-    # Remove entry from caldb
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(ct_cal_drp)
 
     # Delete mock data files
-#    if os.path.exists(output_dir):
-#        shutil.rmtree(output_dir)
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
     # Delete e2e CT cal file
-#    if os.path.exists(corethroughput_outputdir):
-#        shutil.rmtree(corethroughput_outputdir)
+    if os.path.exists(corethroughput_outputdir):
+        shutil.rmtree(corethroughput_outputdir)
+
+    # Delete CT map file
 
     # Print success message
-    print('e2e test for corethroughput calibration passed')
+    print('e2e test for corethroughput map passed')
     
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

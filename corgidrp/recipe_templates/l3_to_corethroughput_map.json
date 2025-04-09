@@ -15,10 +15,10 @@
             "calibs": {
                 "FpamFsamCal": "AUTOMATIC",
                 "CoreThroughputCalibration" : "AUTOMATIC"
-            }
-        },
-        {
-            "name" : "save"
+            },
+              "keywords" : {
+                "save" : true
+              }
         }
     ]
 }

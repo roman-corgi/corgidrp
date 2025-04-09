@@ -1767,7 +1767,8 @@ class CoreThroughputCalibration(Image):
         # Algorithm
         radii = np.sqrt(x_grid**2 + y_grid**2)
 
-        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero. 
+        # We'll need to mod the input azimuth, so let's subtract the
+        # minimum azimuth so we are relative to zero
         azimuths = np.arctan2(y_grid, x_grid)
         azimuth0 = azimuths.min()
         azimuths = azimuths - azimuth0
@@ -1778,6 +1779,7 @@ class CoreThroughputCalibration(Image):
        
         # Remove interpolation locations that are outside the radius range
         r_good = radius_cor >= radii.min()
+        
         if len(x_cor[r_good]) == 0:
             raise ValueError('All target radius are less than the minimum '
                 'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
