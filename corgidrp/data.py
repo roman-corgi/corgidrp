@@ -730,6 +730,48 @@ class FlatField(Image):
         if self.ext_hdr['DATATYPE'] != 'FlatField':
             raise ValueError("File that was loaded was not a FlatField file.")
 
+class SpectroscopyCentroidPSF(Image):
+    """
+    Calibration product that stores fitted PSF centroid (x, y) positions
+    for a grid of simulated PSFs.
+
+    Args:
+        data_or_filepath (str or np.ndarray): 2D array of (x, y) centroid positions 
+                                              with shape (N, 2), where N is the number of PSFs.
+        pri_hdr (fits.Header): Primary header.
+        ext_hdr (fits.Header): Extension header.
+        input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
+            
+            self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
+            self._record_parent_filenames(input_dataset)
+            self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
+
+            # Generate default output filename
+            base = input_dataset[0].filename.split(".fits")[0]
+            self.filename = f"{base}_psf_centroid.fits"
+
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'PSFCentroidCalibration':
+            raise ValueError("This file is not a valid PSFCentroidCalibration.")
+
+        self.xfit = self.data[:, 0]
+        self.yfit = self.data[:, 1]
+
+    def copy(self, copy_data=True):
+        new_data = np.copy(self.data) if copy_data else self.data
+        new_obj = SpectroscopyCentroidPSF(new_data,
+                                         pri_hdr=self.pri_hdr.copy(),
+                                         ext_hdr=self.ext_hdr.copy())
+        new_obj.filename = self.filename
+        new_obj.filedir = self.filedir
+        return new_obj
+
 
 class NonLinearityCalibration(Image):
     """
@@ -1405,7 +1447,9 @@ datatypes = { "Image" : Image,
               "FlatField" : FlatField,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
-              "TrapCalibration": TrapCalibration }
+              "TrapCalibration": TrapCalibration,
+              "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF
+            }
 
 def autoload(filepath):
     """
