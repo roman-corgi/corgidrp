@@ -13,6 +13,7 @@ import corgidrp.l1_to_l2a
 import corgidrp.l2a_to_l2b
 import corgidrp.l2b_to_l3
 import corgidrp.l3_to_l4
+import corgidrp.nd_filter_calibration
 import corgidrp.photon_counting
 import corgidrp.pump_trap_calibration
 import corgidrp.calibrate_nonlin
@@ -21,6 +22,7 @@ import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
 import corgidrp.fluxcal
+import corgidrp.nd_filter_calibration
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -57,6 +59,7 @@ all_steps = {
     "find_star": corgidrp.l3_to_l4.find_star,
     "do_psf_subtraction": corgidrp.l3_to_l4.do_psf_subtraction,
     "update_to_l4": corgidrp.l3_to_l4.update_to_l4,
+    "create_nd_filter_cal": corgidrp.nd_filter_calibration.create_nd_filter_cal,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
