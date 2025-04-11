@@ -13,11 +13,6 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
-# If a run has crashed before being able to remove the test CT cal file,
-# remove it before importing caldb, which scans for new entries in the cal folder
-ct_cal_files = os.path.join(corgidrp.default_cal_dir, '*_CTP_CAL.fits')
-for ct_filepath_object in glob.glob(ct_cal_files):
-    os.remove(ct_filepath_object)
 # Updates in main that change this file, do not update it, and may crash the run
 drp_cfg_file = os.path.join(corgidrp.default_cal_dir, '..', 'corgidrp_caldb.csv')
 if os.path.exists(drp_cfg_file):
