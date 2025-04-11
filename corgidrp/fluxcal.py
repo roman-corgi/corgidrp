@@ -12,28 +12,31 @@ from photutils.background import LocalBackground
 from photutils.psf import fit_2dgaussian
 from scipy import integrate
 from corgidrp.astrom import centroid_with_roi
-import urllib
+from urllib.request import Request, urlopen, urlretrieve
+from bs4 import BeautifulSoup
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
+
 calspec_names= {
 # bright standards
-'109 Vir': '109vir_stis_005.fits',
-'Vega': 'alpha_lyr_stis_011.fits',
-'Eta Uma': 'etauma_stis_008.fits',
-'Lam Lep': 'lamlep_stis_008.fits',
-'KSI2 CETI': 'ksi2ceti_stis_008.fits',
+'109 vir': '109vir_stis_005.fits',
+'vega': 'alpha_lyr_stis_011.fits',
+'eta uma': 'etauma_stis_008.fits',
+'lam lep': 'lamlep_stis_008.fits',
+'ksi2 ceti': 'ksi2ceti_stis_008.fits',
 # dim standards
-'TYC 4433-1800-1': '1808347_stiswfc_006.fits',
-'TYC 4205-1677-1': '1812095_stisnic_008.fits',
-'TYC 4212-455-1': '1757132_stiswfc_006.fits',
-'TYC 4209-1396-1': '1805292_stisnic_008.fits',
-'TYC 4413-304-1': 'p041c_stisnic_010.fits',
-'UCAC3 313-62260': 'kf08t3_stisnic_005.fits',
-'BPS BS 17447-0067': '1802271_stiswfcnic_006.fits',
-'TYC 4424-1286-1': '1732526_stisnic_009.fits',
-'GSC 02581-02323': 'p330e_stiswfcnic_007.fits',
-'TYC 4207-219-1': '1740346_stisnic_005.fits'
+'tyc 4433-1800-1': '1808347_stiswfc_006.fits',
+'tyc 4205-1677-1': '1812095_stisnic_008.fits',
+'tyc 4212-455-1': '1757132_stiswfc_006.fits',
+'tyc 4209-1396-1': '1805292_stisnic_008.fits',
+'tyc 4413-304-1': 'p041c_stisnic_010.fits',
+'ucac3 313-62260': 'kf08t3_stisnic_005.fits',
+'bps bs 17447-0067': '1802271_stiswfcnic_006.fits',
+'tyc 4424-1286-1': '1732526_stisnic_009.fits',
+'gsc 02581-02323': 'p330e_stiswfcnic_007.fits',
+'tyc 4207-219-1': '1740346_stisnic_005.fits'
 }
+
 
 calspec_url = 'https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_calspec/'
 
@@ -47,18 +50,27 @@ def get_calspec_file(star_name):
     Returns:
         str: file path
     """
-    if star_name not in calspec_names:
-        raise ValueError('{0} is not in list of anticipated standard stars {1}, please check naming'.format(star_name, calspec_names.keys()) )
-    fits_name = calspec_names.get(star_name)
-    # TODO: be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
-    fits_url = calspec_url + fits_name
+    if star_name.lower() not in calspec_names.keys():
+        raise ValueError('{0} is not in list of anticipated standard stars \n {1},\n please check naming'.format(star_name, [*calspec_names])) 
+    fits_name = calspec_names.get(star_name.lower())
+    basic_name = fits_name.split('stis')[0]+'stis'
+    #to be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
+    req = Request(calspec_url)
+    list = urlopen(req).readlines()
+    for line in list:
+        str_line = str(line)
+        if basic_name in str_line: 
+            name = str_line.split(".fits")[1].split(">")[-1] + ".fits"
+            break
+
+    fits_url = calspec_url + name
     try:
         calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
         if not os.path.exists(calspec_dir):
             os.mkdir(calspec_dir)
-        file_name, headers = urllib.request.urlretrieve(fits_url, filename =  os.path.join(calspec_dir, fits_name))
+        file_name, headers = urlretrieve(fits_url, filename =  os.path.join(calspec_dir, name))
     except:
-        raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(fits_name))
+        raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(name))
     return file_name
 
 def get_filter_name(image):
