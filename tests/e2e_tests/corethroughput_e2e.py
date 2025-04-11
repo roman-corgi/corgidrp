@@ -13,10 +13,6 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
-# Updates in main that change this file, do not update it, and may crash the run
-drp_cfg_file = os.path.join(corgidrp.default_cal_dir, '..', 'corgidrp_caldb.csv')
-if os.path.exists(drp_cfg_file):
-    os.remove(drp_cfg_file)
 from corgidrp import caldb
 
 # this file's folder
