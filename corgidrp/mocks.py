@@ -3079,7 +3079,6 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
         
     return data_psf, np.array(psf_loc), np.array(half_psf)
 
-
 def create_ct_psfs_with_mask(fwhm_mas, cfam_name='1F', n_psfs=10, image_shape=(1024,1024),
                    apply_mask=True, total_counts=1e4):
     """

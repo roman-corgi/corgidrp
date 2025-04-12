@@ -284,6 +284,8 @@ def guess_template(dataset):
     elif image.ext_hdr['DATALVL'] == "L2b":
         if image.pri_hdr['VISTYPE'] == "ABSFLXFT" or image.pri_hdr['VISTYPE'] == "ABSFLXBT":
             recipe_filename = "l2b_to_fluxcal_factor.json"
+        elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
+            recipe_filename = 'l2b_to_corethroughput.json'
         else:
             recipe_filename = "l2b_to_l3.json"
     # L3 -> L4 data processing
