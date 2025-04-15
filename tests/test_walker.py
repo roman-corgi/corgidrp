@@ -14,6 +14,7 @@ import corgidrp.caldb as caldb
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 
+np.random.seed(456)
 
 def test_autoreducing():
     """
@@ -31,7 +32,7 @@ def test_autoreducing():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -50,13 +51,13 @@ def test_autoreducing():
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     new_nonlinearity.save()
     # index the sample nonlinearity correction that we need for processing
     # fake the headers because this frame doesn't have the proper headers
-    prihdr, exthdr = mocks.create_default_headers("SCI")
+    prihdr, exthdr = mocks.create_default_L1_headers("SCI")
     new_nonlinearity.pri_hdr = prihdr
     new_nonlinearity.ext_hdr = exthdr
     new_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
@@ -82,10 +83,11 @@ def test_autoreducing():
 
     # check that the output dataset is saved to the output dir
     # filenames have been updated to L2a. 
-    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a_")) for frame in l1_dataset]
+    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a")) for frame in l1_dataset]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     # check that the recipe is saved into the header.
+
     for frame in output_dataset:
         assert "RECIPE" in frame.ext_hdr
         # test recipe was correctly written into the header
@@ -112,7 +114,7 @@ def test_auto_template_identification():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -124,7 +126,7 @@ def test_auto_template_identification():
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(filelist)
@@ -143,7 +145,7 @@ def test_auto_template_identification():
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
@@ -189,7 +191,7 @@ def test_auto_template_identification():
     ### Finally, test the recipe identification
     recipe = walker.autogen_recipe(filelist, outputdir)
 
-    assert recipe['name'] == 'l1_to_l2b'
+    assert recipe['name'] == 'l1_to_l2a_basic'
     assert recipe['template'] == False
 
     # now cleanup
@@ -224,7 +226,7 @@ def test_saving():
     ### Create mock Image data
     l1_dataset = mocks.create_dark_calib_files(filedir=datadir, numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -235,7 +237,7 @@ def test_saving():
 
     # check that the output dataset is saved to the output dir
     # filenames have been appended with a suffix
-    output_files = [os.path.join(outputdir, "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}_test.fits".format(i)) for i in range(len(l1_dataset))]
+    output_files = [os.path.join(outputdir, "CGI_0200001999001000{:03d}_20250415T0305102_L1__test.fits".format(i)) for i in range(len(l1_dataset))]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     
@@ -253,11 +255,11 @@ def test_saving():
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     fake_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     fake_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
-    prihdr, exthdr = mocks.create_default_headers("SCI")
+    prihdr, exthdr = mocks.create_default_L1_headers("SCI")
     fake_nonlinearity.pri_hdr = prihdr
     fake_nonlinearity.ext_hdr = exthdr
     fake_nonlinearity.ext_hdr['DATATYPE'] = 'NonLinearityCalibration'
@@ -305,7 +307,7 @@ def test_skip_missing_calib():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_L1_200_0200001001001100001_20270101T120000_{0:03d}.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -313,7 +315,10 @@ def test_skip_missing_calib():
 
 
     ### Test that we are skipping the steps without calibrations
-    recipe = walker.autogen_recipe(filelist, outputdir)
+    # use l1 to l2b recipe
+    template_filepath = os.path.join(os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2b.json")
+    template_recipe = json.load(open(template_filepath, "r"))
+    recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
     assert recipe['name'] == 'l1_to_l2b'
     assert recipe['template'] == False
@@ -330,7 +335,7 @@ def test_skip_missing_calib():
 
     # check that the output dataset is saved to the output dir
     # filenames have been appended with a suffix
-    output_files = [os.path.join(outputdir, "CGI_L2a_200_0200001001001100001_20270101T120000_{0:03d}.fits".format(i)) for i in range(len(l1_dataset))]
+    output_files = [os.path.join(outputdir, "CGI_0200001999001000{:03d}_20250415T0305102_L2a.fits".format(i)) for i in range(len(l1_dataset))]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
 
@@ -370,7 +375,7 @@ def test_skip_missing_optional_calib():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_L1_200_0200001001001100001_20270101T120000_{0:03d}.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -412,7 +417,7 @@ def test_jit_calibs():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -431,11 +436,11 @@ def test_jit_calibs():
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
-    prihdr, exthdr = mocks.create_default_headers("SCI")
+    prihdr, exthdr = mocks.create_default_L1_headers("SCI")
     new_nonlinearity.pri_hdr = prihdr
     new_nonlinearity.ext_hdr = exthdr
     new_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
@@ -465,7 +470,7 @@ def test_jit_calibs():
 
     # check that the output dataset is saved to the output dir
     # filenames have been updated to L2a. 
-    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a_")) for frame in l1_dataset]
+    output_files = [os.path.join(outputdir, frame.filename.replace("_L1_", "_L2a")) for frame in l1_dataset]
     output_dataset = data.Dataset(output_files)
     assert len(output_dataset) == len(l1_dataset) # check the same number of files
     

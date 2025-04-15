@@ -16,17 +16,17 @@ import corgidrp.detector as detector
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
+def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     """
     Tests e2e flat field using Neptune in Band 4, full FOV
 
     Args:
-        tvacdata_path (str): path to CGI_TVAC_Data dir
+        e2edata_path (str): path to CGI_TVAC_Data dir
         e2eoutput_path (str): output directory
     """
     # figure out paths, assuming everything is located in the same relative location
-    l1_dark_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
     flat_outputdir = os.path.join(e2eoutput_path, "flat_neptune_output")
@@ -74,8 +74,9 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Neptune"
-        base_image.pri_hdr['FILTER'] = 4
+        base_image.ext_hdr['CFAMNAME'] = "4F"
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
 
@@ -105,7 +106,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -120,11 +121,21 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
+    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    ext_hdr['RN'] = 100
+    ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
-    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(kgain, to_disk=False)
+    this_caldb.save()
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
@@ -163,7 +174,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[0].split(os.path.sep)[-1].replace("_L1_", "_L2a_")[:-5] + "_flatfield.fits"
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat # compute residual from true
@@ -173,7 +184,7 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 
 
     ####### Check the bad pixel map result
-    bp_map_filename = "mock_detnoisemaps_dark_bad_pixel_map.fits"
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
@@ -186,17 +197,17 @@ def test_flat_creation_neptune(tvacdata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
+def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     """
     Tests e2e flat field using Uranus in Band 1, only HLC FOV
 
     Args:
-        tvacdata_path (str): path to CGI_TVAC_Data dir
+        e2edata_path (str): path to CGI_TVAC_Data dir
         e2eoutput_path (str): output directory
     """
     # figure out paths, assuming everything is located in the same relative location
-    l1_dark_datadir = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_dark_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
     flat_outputdir = os.path.join(e2eoutput_path, "flat_uranus_output")
@@ -244,8 +255,9 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Uranus"
-        base_image.pri_hdr['FILTER'] = 1
+        base_image.ext_hdr['CFAMNAME'] = "1F"
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
+        base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
         base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
 
@@ -275,7 +287,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -290,11 +302,21 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
+    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
+    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    ext_hdr['RN'] = 100
+    ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
-    this_caldb.create_entry(kgain)
+    this_caldb.create_entry(kgain, to_disk=False)
+    this_caldb.save()
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
@@ -327,7 +349,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
 
     ####### Test the result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[0].split(os.path.sep)[-1].replace("_L1_", "_L2a_")[:-5] + "_flatfield.fits"
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat
@@ -336,7 +358,7 @@ def test_flat_creation_uranus(tvacdata_path, e2eoutput_path):
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
     ####### Check the bad pixel map result
-    bp_map_filename = "mock_detnoisemaps_dark_bad_pixel_map.fits"
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
@@ -355,16 +377,17 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder'
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_flat_creation_neptune(tvacdata_dir, outputdir)
-    test_flat_creation_uranus(tvacdata_dir, outputdir)
+    test_flat_creation_neptune(e2edata_dir, outputdir)
+    test_flat_creation_uranus(e2edata_dir, outputdir)
+    

@@ -17,11 +17,11 @@ column_dtypes = {
     "Date Created": float,
     "Hash": str,
     "DRPVERSN": str,
-    "OBSID": int,
+    "OBSNUM": int,
     "NAXIS1": int,
     "NAXIS2": int,
     "OPMODE": str,
-    "CMDGAIN": float,
+    "EMGAIN_C": float,
     "EXCAMT": float
 }
 
@@ -29,12 +29,18 @@ column_names = list(column_dtypes.keys())
 
 labels = {data.Dark: "Dark",
           data.NonLinearityCalibration: "NonLinearityCalibration",
-          data.BadPixelMap: "BadPixelMap",
           data.KGain : "KGain",
+          data.BadPixelMap: "BadPixelMap",
           data.DetectorNoiseMaps: "DetectorNoiseMaps",
-          data.DetectorParams : "DetectorParams",
           data.FlatField : "FlatField",
-          data.TrapCalibration : "TrapCalibration"}
+          data.DetectorParams : "DetectorParams",
+          data.AstrometricCalibration : "AstrometricCalibration",
+          data.TrapCalibration : "TrapCalibration",
+          data.FluxcalFactor : "FluxcalFactor",
+          data.FpamFsamCal : "FpamFsamCal",
+          data.CoreThroughputCalibration: "CoreThroughputCalibration",
+          data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
+          }
 
 class CalDB:
     """
@@ -116,11 +122,11 @@ class CalDB:
                 "Date Created" : time_now.mjd,
                 "Hash" : hash(time_now),
                 "DRPVERSN" : "0.0",
-                "OBSID" : 0,
+                "OBSNUM" : 000,
                 "NAXIS1": 0,
                 "NAXIS2" : 0,
                 "OPMODE" : "",
-                "CMDGAIN" : 0.,
+                "EMGAIN_C" : 0.,
                 "EXCAMT" : 0
             }
             return list(row_dict.values()), row_dict
@@ -149,13 +155,23 @@ class CalDB:
         else:
             drp_version = ""
 
-        obsid = entry.pri_hdr["OBSID"]
+        obsid = entry.pri_hdr["OBSNUM"]
 
         hash_val = entry.get_hash()
 
         # this only works for 2D images. may need to adapt for non-2D calibration frames
-        naxis1 = entry.data.shape[-1]
-        naxis2 = entry.data.shape[-2]
+        # import IPython; IPython.embed()
+
+        entry_shape = entry.data.shape
+        if len(entry_shape) < 2:
+            naxis1 = entry.data.shape[-1]
+            naxis2 = 0
+        else:
+            naxis1 = entry.data.shape[-1]
+            naxis2 = entry.data.shape[-2]
+
+        # naxis1 = entry.data.shape[-1]
+        # naxis2 = entry.data.shape[-2]
 
         row = [
             filepath,
@@ -168,7 +184,7 @@ class CalDB:
             drp_version,
             obsid,
             naxis1,
-            naxis2,
+            naxis2
         ]
 
         # rest are ext_hdr keys we can copy
@@ -243,7 +259,7 @@ class CalDB:
 
     def get_calib(self, frame, dtype, to_disk=True):
         """
-        Outputs the best calibration file of the given type for the input sciene frame.
+        Outputs the best calibration file of the given type for the input science frame.
 
         Args:
             frame (corgidrp.data.Image): an image frame to request a calibration for. If None is passed in, looks for the 
@@ -288,14 +304,12 @@ class CalDB:
             options = calibdf.loc[
                 (
                     (calibdf["EXPTIME"] == frame_dict["EXPTIME"])
-                    & (calibdf["NAXIS1"] == frame_dict["NAXIS1"])
-                    & (calibdf["NAXIS2"] == frame_dict["NAXIS2"])
                 )
             ]
 
             if len(options) == 0:
-                raise ValueError("No valid Dark with EXPTIME={0} and dimension ({1},{2})"
-                                 .format(frame_dict["EXPTIME"], frame_dict["NAXIS1"], frame_dict["NAXIS2"]))
+                raise ValueError("No valid Dark with EXPTIME={0})"
+                                 .format(frame_dict["EXPTIME"]))
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -346,12 +360,36 @@ class CalDB:
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
 
-### Create set of default calibrations
-# Add default detector_params calibration file if it doesn't exist
-if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00:00:00.000.fits")):
-    default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
-    default_detparams.save(filedir=corgidrp.default_cal_dir)
 
-# add default caldb entries
-default_caldb = CalDB()
-default_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+
+def initialize():
+    """
+    Creates default calibrations and caldb if it doesn't exist
+
+    """
+    global initialized
+
+    ### Create set of default calibrations
+    rescan_needed = False
+    # Add default detector_params calibration file if it doesn't exist
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00:00:00.000.fits")):
+        default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
+        default_detparams.save(filedir=corgidrp.default_cal_dir)
+        rescan_needed = True
+    # Add default FpamFsamCal calibration file if it doesn't exist
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00:00:00.000.fits")):
+        fpamfsam_2excam = data.FpamFsamCal([],
+            date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
+        fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
+        rescan_needed = True
+
+    if rescan_needed:
+        # add default caldb entries
+        default_caldb = CalDB()
+        default_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+
+    # set initialization
+    initialized = True
+
+initialized = False
+initialize()

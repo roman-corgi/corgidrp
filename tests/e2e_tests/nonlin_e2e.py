@@ -16,34 +16,35 @@ from corgidrp import caldb
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
-def set_vistype_for_tvac(
+
+def fix_headers_for_tvac(
     list_of_fits,
     ):
-    """ Adds proper values to VISTYPE for non-linearity calibration.
-
-    This function is unnecessary with future data because data will have
-    the proper values in VISTYPE. Hence, the "tvac" string in its name.
-    For reference, TVAC data used to calibrate non-linearity were the
-    following 382 files with IDs: 51841-51870 (30: mean frame). And NL:
-    51731-51840 (110), 51941-51984 (44), 51986-52051 (66), 55122-55187 (66),
-    55191-55256 (66)  
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
 
     Args:
-    list_of_fits (list): list of FITS files that need to be updated.
+        list_of_fits (list): list of FITS files that need to be updated.
     """
-    print("Adding VISTYPE='PUPILIMG' to TVAC data")
+    print("Fixing TVAC headers")
     for file in list_of_fits:
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
         # Adjust VISTYPE
         prihdr['VISTYPE'] = 'PUPILIMG'
+        # Adjust other keywords
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
-
 @pytest.mark.e2e
 def test_nonlin_cal_e2e(
-    tvacdata_path,
+    e2edata_path,
     e2eoutput_path,
     ):
     """ Performs the e2e test to generate a non-linearity calibration object
@@ -51,7 +52,7 @@ def test_nonlin_cal_e2e(
         same data.
 
         Args:
-        tvacdata_path (str): Location of L1 data used to generate the non-linearity
+        e2edata_path (str): Location of L1 data used to generate the non-linearity
             calibration.
         e2eoutput_path (str): Location of the output products: recipe, non-linearity
             calibration FITS file and summary figure with a comparison of the NL
@@ -60,9 +61,9 @@ def test_nonlin_cal_e2e(
     """
 
     # figure out paths, assuming everything is located in the same relative location
-    nonlin_l1_datadir = os.path.join(tvacdata_path,
+    nonlin_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
-    tvac_caldir = os.path.join(tvacdata_path, 'TV-36_Coronagraphic_Data', 'Cals')
+    tvac_caldir = os.path.join(e2edata_path, 'TV-36_Coronagraphic_Data', 'Cals')
     e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_nonlin_output')
 
     if not os.path.exists(nonlin_l1_datadir):
@@ -79,8 +80,8 @@ def test_nonlin_cal_e2e(
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
     nonlin_l1_list.sort()
 
-    # Set TVAC OBSTYPE to MNFRAME/NONLIN (flight data should have these values)
-    set_vistype_for_tvac(nonlin_l1_list)
+    # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
+    fix_headers_for_tvac(nonlin_l1_list)
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
@@ -89,7 +90,7 @@ def test_nonlin_cal_e2e(
     nonlin_table_from_eng = 'nonlin_table_091224.txt'
     nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,nonlin_table_from_eng),
         delimiter=",")
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(nonlin_l1_list)
@@ -115,7 +116,7 @@ def test_nonlin_cal_e2e(
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
-    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NonLinearityCalibration.fits'))
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL*.fits'))
     nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
     nonlin_drp_filename = nonlin_drp_filepath.split(os.path.sep)[-1]
 
@@ -170,14 +171,14 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    TVACDATA_DIR = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=TVACDATA_DIR,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
-    ap.add_argument("-o", "--output_dir", default=OUTPUT_DIR,
+    ap.add_argument("-o", "--outputdir", default=OUTPUT_DIR,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     # Run the e2e test
-    test_nonlin_cal_e2e(args.tvacdata_dir, args.output_dir)
+    test_nonlin_cal_e2e(args.e2edata_dir, args.outputdir)

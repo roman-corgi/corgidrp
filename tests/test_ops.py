@@ -28,7 +28,7 @@ def test_ops_produces_expected_file():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_L1_100_0200001001001100001_20270101T120000_{0:03d}.fits"
+    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -48,13 +48,13 @@ def test_ops_produces_expected_file():
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), main_cal_dir, test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     new_nonlinearity.save()
     # index the sample nonlinearity correction that we need for processing
     # fake the headers because this frame doesn't have the proper headers
-    prihdr, exthdr = mocks.create_default_headers("SCI")
+    prihdr, exthdr = mocks.create_default_L1_headers("SCI")
     new_nonlinearity.pri_hdr = prihdr
     new_nonlinearity.ext_hdr = exthdr
     new_nonlinearity.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
@@ -77,7 +77,7 @@ def test_ops_produces_expected_file():
     ops.step_3_process_data(filelist, CPGS_XML_filepath, outputdir,template="l1_to_l2a_basic.json")
 
     #Check that the output files are as expected. 
-    output_filelist = [os.path.join(outputdir,os.path.basename(filename).replace("L1", "L2a")) for filename in filelist]
+    output_filelist = [os.path.join(outputdir,os.path.basename(filename).replace("_L1_", "_L2a")) for filename in filelist]
     for output_file in output_filelist:
         assert os.path.exists(output_file), f"Expected output file {output_file} does not exist."
 

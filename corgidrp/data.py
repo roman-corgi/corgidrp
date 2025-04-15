@@ -1,11 +1,20 @@
 import os
+import re
+import warnings
+import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
 import astropy.time as time
 import pandas as pd
-
+import pyklip
+from pyklip.instruments.Instrument import Data as pyKLIP_Data
+from pyklip.instruments.utils.wcsgen import generate_wcs
+from scipy.interpolate import LinearNDInterpolator
+from astropy import wcs
+import copy
 import corgidrp
+from datetime import datetime, timedelta, timezone
 
 class Dataset():
     """
@@ -104,6 +113,8 @@ class Dataset():
             if new_all_err.shape[-2:] != self.all_err.shape[-2:] or new_all_err.shape[0] != self.all_err.shape[0]:
                 raise ValueError("The shape of new_all_err is {0}, whereas we are expecting {1}".format(new_all_err.shape, self.all_err.shape))
             self.all_err = new_all_err
+            for i in range(len(self.frames)):
+                self.frames[i].err = self.all_err[i]
         if new_all_dq is not None:
             if new_all_dq.shape != self.all_dq.shape:
                 raise ValueError("The shape of new_all_dq is {0}, whereas we are expecting {1}".format(new_all_dq.shape, self.all_dq.shape))
@@ -142,19 +153,19 @@ class Dataset():
         Updates Dataset.all_err.
 
         Args:
-          input_error (np.array): 2-d or 3-d error layer
+          input_error (np.array): per-frame or per-dataset error layer
           err_name (str): name of the uncertainty layer
         """
-        if input_error.ndim == 3:
+        if input_error.ndim == self.all_data.ndim:
             for i,frame in enumerate(self.frames):
                 frame.add_error_term(input_error[i], err_name)
 
-        elif input_error.ndim ==2:
+        elif input_error.ndim == self.all_data.ndim - 1:
             for frame in self.frames:
                 frame.add_error_term(input_error, err_name)
 
         else:
-            raise ValueError("input_error is not either a 2D or 3D array.")
+            raise ValueError("input_error is not either a 2D or 3D array for 2D data, or a 3D or 4D array for 3D data.")
 
         # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])
@@ -234,9 +245,6 @@ class Dataset():
 
         return split_datasets, unique_vals
 
-
-
-
 class Image():
     """
     Base class for 2-D image data. Data can be created by passing in the data/header explicitly, or
@@ -284,8 +292,8 @@ class Image():
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
-                    #we want to have a 3 dim error array
-                    if err.ndim > 2:
+                    #we want to have an extra dimension in the error array
+                    if err.ndim == self.data.ndim+1:
                         self.err = err
                     else:
                         self.err = err.reshape((1,)+err.shape)
@@ -293,7 +301,7 @@ class Image():
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
-                    if self.err.ndim == 2:
+                    if self.err.ndim == self.data.ndim:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
@@ -346,7 +354,7 @@ class Image():
                 if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                     raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
                 #we want to have a 3 dim error array
-                if err.ndim > 2:
+                if err.ndim == self.data.ndim + 1:
                     self.err = err
                 else:
                     self.err = err.reshape((1,)+err.shape)
@@ -415,7 +423,8 @@ class Image():
         if not 'IS_BAD' in self.ext_hdr:
             self.ext_hdr.set('IS_BAD', False, "Was this frame deemed bad?")
 
-
+        # the DRP has touched this file so it's origin is now this DRP
+        self.pri_hdr['ORIGIN'] = 'DRP'
 
 
     # create this field dynamically
@@ -493,25 +502,16 @@ class Image():
             corgidrp.data.Image: a copy of this Image
         """
         if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-            new_hdulist = self.hdu_list.copy()
+            new_img = copy.deepcopy(self)
         else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-            new_hdulist = self.hdu_list
-        new_img = Image(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, 
-                        input_hdulist = new_hdulist, err_hdr = self.err_hdr.copy(), dq_hdr = self.dq_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_img.filename = self.filename
-        new_img.filedir = self.filedir
+            new_img = copy.copy(self)
+            # copy the hdu_list and hdu_names list, but not their pointers
+            new_img.hdu_list = self.hdu_list.copy()
+            new_img.hdu_names = copy.copy(self.hdu_names)
 
         # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+        new_img.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+        new_img.ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
         return new_img
 
@@ -527,7 +527,7 @@ class Image():
 
     def add_error_term(self, input_error, err_name):
         """
-        Add a layer of a specific additive uncertainty on the 3-dim error array extension
+        Add a layer of a specific additive uncertainty on the 3- or 4-dim error array extension
         and update the combined uncertainty in the first layer.
         Update the error header and assign the error name.
 
@@ -535,18 +535,22 @@ class Image():
         in the configuration file
 
         Args:
-          input_error (np.array): 2-d error layer
+          input_error (np.array): error layer with same shape as data
           err_name (str): name of the uncertainty layer
         """
-        if input_error.ndim != 2 or input_error.shape != self.data.shape:
-            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        ndim = self.data.ndim
+        if not (input_error.ndim==2 or input_error.ndim==3) or input_error.shape != self.data.shape:
+            raise ValueError("we expect a 2-dimensional or 3-dimensional error layer with dimensions {0}".format(self.data.shape))
 
         #first layer is always the updated combined error
-        self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
+        if ndim == 2:
+            self.err[0,:,:] = np.sqrt(self.err[0,:,:]**2 + input_error**2)
+        elif ndim == 3:
+            self.err[0,:,:,:] = np.sqrt(self.err[0,:,:,:]**2 + input_error**2)
         self.err_hdr["Layer_1"] = "combined_error"
 
         if corgidrp.track_individual_errors:
-            #append new error as layer on 3D cube
+            #append new error as layer on 3D or 4D cube
             self.err=np.append(self.err, [input_error], axis=0)
 
             layer = str(self.err.shape[0])
@@ -612,7 +616,6 @@ class Image():
             self.hdu_names.append(name)
             self.hdu_list.append(new_hdu)
 
-
 class Dark(Image):
     """
     Dark calibration frame for a given exposure time and EM gain.
@@ -621,7 +624,7 @@ class Dark(Image):
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the 2D image data
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
-        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this noise map (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this dark (required only if raw 2D data is passed in and if raw data filenames not already archived in ext_hdr)
         err (np.array): the error array (required only if raw data is passed in)
         err_hdr (astropy.io.fits.Header): the error header (required only if raw data is passed in)
         dq (np.array): the DQ array (required only if raw data is passed in)
@@ -638,22 +641,35 @@ class Dark(Image):
                 raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
             self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected electrons'
-
+            # TO-DO: check PC_STAT and whether this will be in L2s
+            if 'PC_STAT' not in ext_hdr:
+                self.ext_hdr['PC_STAT'] = 'analog master dark'
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys() and input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
 
             # add to history
-            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['CMDGAIN'], self.ext_hdr['DRPNFILE'])
+            self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['EMGAIN_C'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
-                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                self.filename = "{0}_dark.fits".format(orig_input_filename)
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+                self.filename = "{0}_DRK_CAL.fits".format(orig_input_filename)
+                self.filename = re.sub('_L[0-9].', '', self.filename)
+                # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
+                self.filename = self.filename.replace("_DNM_CAL", "")
+            else:
+                self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+        
+        if 'PC_STAT' not in self.ext_hdr:
+            self.ext_hdr['PC_STAT'] = 'analog master dark'
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'detected electrons'
+            self.err_hdr['BUNIT'] = 'Detected Electrons'
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -661,38 +677,6 @@ class Dark(Image):
             raise ValueError("File that was loaded was not a Dark file.")
         if self.ext_hdr['DATATYPE'] != 'Dark':
             raise ValueError("File that was loaded was not a Dark file.")
-
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this Dark file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.NoiseMap): a copy of this Dark
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_dark = Dark(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_dark.filename = self.filename
-        new_dark.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_dark
 
 class FlatField(Image):
     """
@@ -715,6 +699,7 @@ class FlatField(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
             self.ext_hdr['DATATYPE'] = 'FlatField' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['BUNIT'] = "None" # flat field is dimentionless
 
             # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)
@@ -722,10 +707,11 @@ class FlatField(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_flatfield.fits".format(orig_input_filename)
+            # give it a default filename using the last input file as the base
+            self.filename = re.sub('_L[0-9].', '_FLT_CAL', input_dataset[-1].filename)
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a masterflat file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -733,7 +719,6 @@ class FlatField(Image):
             raise ValueError("File that was loaded was not a FlatField file.")
         if self.ext_hdr['DATATYPE'] != 'FlatField':
             raise ValueError("File that was loaded was not a FlatField file.")
-
 
 class NonLinearityCalibration(Image):
     """
@@ -816,11 +801,12 @@ class NonLinearityCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Non Linearity Calibration file created"
 
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_NonLinearityCalibration.fits".format(orig_input_filename)
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL'] = 'CAL'
 
+            # Follow filename convention as of R3.0.2
+            self.filedir = '.'
+            self.filename = re.sub('_L[0-9].', '_NLN_CAL', input_dataset[-1].filename)
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -828,7 +814,8 @@ class NonLinearityCalibration(Image):
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
         if self.ext_hdr['DATATYPE'] != 'NonLinearityCalibration':
             raise ValueError("File that was loaded was not a NonLinearityCalibration file.")
-
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        
 class KGain(Image):
     """
     Class for KGain calibration file. Until further insights it is just one float value.
@@ -852,6 +839,13 @@ class KGain(Image):
        # run the image class contructor
         super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
 
+        # initialize these headers that have been recently added so that older calib files still contain this keyword when initialized and allow for tests that don't require 
+        # these values to run smoothly; if these values are actually required for 
+        # a particular process, the user would be alerted since these values below would result in an error as they aren't numerical
+        if 'RN' not in self.ext_hdr:
+            self.ext_hdr['RN'] = ''
+        if 'RN_ERR' not in self.ext_hdr:
+            self.ext_hdr['RN_ERR'] = ''
         # File format checks
         if self.data.shape != (1,1):
             raise ValueError('The KGain calibration data should be just one float value')
@@ -890,15 +884,16 @@ class KGain(Image):
             else:
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
-                # give it a default filename using the first input file as the base
-                # strip off everything starting at .fits
-                orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-                self.filename = "{0}_kgain.fits".format(orig_input_filename)
+                # give it a default filename using the last input file as the base
+                self.filename = re.sub('_L[0-9].', '_KRN_CAL', input_dataset[-1].filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected electrons/DN'
+            self.ext_hdr['BUNIT'] = 'Detected Electrons/DN'
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a KGain file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -914,40 +909,6 @@ class KGain(Image):
     @property
     def error(self):
         return self._kgain_error
-    
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this KGain file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.KGain: a copy of this KGain
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_ptc = np.copy(self.ptc)
-            new_err = np.copy(self.err)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_ptc = self.ptc
-            new_err = np.copy(self.err)
-        
-        new_kg = KGain(new_data, err = new_err, ptc = new_ptc, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err_hdr = self.err_hdr.copy(), ptc_hdr = self.ptc_hdr.copy())
-        
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_kg.filename = self.filename
-        new_kg.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-        
-        return new_kg
-
 
     def save(self, filedir=None, filename=None):
         """
@@ -978,7 +939,6 @@ class KGain(Image):
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
-
 class BadPixelMap(Image):
     """
     Class for bad pixel map. The bad pixel map indicates which pixels are hot
@@ -1002,7 +962,7 @@ class BadPixelMap(Image):
             if input_dataset is None and 'DRPNFILE' not in ext_hdr.keys():
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new bad pixel map. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this bad pixel map.")
-            self.ext_hdr['DATATYPE'] = 'BadPixelMap' # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'BadPixelMap'
 
             # log all the data that went into making this bad pixel map
             self._record_parent_filenames(input_dataset)
@@ -1010,11 +970,17 @@ class BadPixelMap(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
-            # give it a default filename using the first input file as the base
-            # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_bad_pixel_map.fits".format(orig_input_filename)
-
+            # check whether we're making the bpmap from a flat only, or from L1/2 files. 
+            if "_FLT_CAL" in input_dataset[-1].filename:
+                self.filename = input_dataset[-1].filename.replace("_FLT_CAL", "_BPM_CAL")
+            else:
+                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+            
+            # if no input_dataset is given, do we want to set the filename manually using 
+            # header values?            
+            
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a bad pixel map that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1022,34 +988,8 @@ class BadPixelMap(Image):
             raise ValueError("File that was loaded was not a BadPixelMap file.")
         if self.ext_hdr['DATATYPE'] != 'BadPixelMap':
             raise ValueError("File that was loaded was not a BadPixelMap file.")
-
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this BadPixelMap file. including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            corgidrp.data.BadPixelMap: a copy of this BadPixelMap
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-        else:
-            new_data = self.data # this is just pointer referencing
-        new_bp = BadPixelMap(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy())
-
-        # we got to manually update some parameters. Need to keep track of which ones to update
-        new_bp.filename = self.filename
-        new_bp.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_bp
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        self.err_hdr['COMMENT'] = 'err not meaningful for this calibration; just present for class consistency' 
 
 class DetectorNoiseMaps(Image):
     """
@@ -1096,7 +1036,7 @@ class DetectorNoiseMaps(Image):
                 raise ValueError("This appears to be a new DetectorNoiseMaps instance. The dataset of input files needs to be passed in to the input_dataset keyword to record the history of the files that made the calibration products.")
 
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected electrons'
+            self.ext_hdr['BUNIT'] = 'Detected Electrons'
             # bias offset
             self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
 
@@ -1107,11 +1047,19 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['HISTORY'] = "DetectorNoiseMaps calibration file created"
 
             # give it a default filename
-            orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0]
-            self.filename = "{0}_DetectorNoiseMaps.fits".format(orig_input_filename)
+            if input_dataset is not None:
+                orig_input_filename = input_dataset.frames[-1].filename.split(".fits")[0]
+            else:
+                #running the calibration code gets the name right (based on last filename in input dataset); this is a standby
+                orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0] 
+            
+            self.filename = "{0}_DNM_CAL.fits".format(orig_input_filename)
+            self.filename = re.sub('_L[0-9].', '', self.filename)
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'detected electrons'
+            self.err_hdr['BUNIT'] = 'Detected Electrons'
 
         # double check that this is actually a DetectorNoiseMaps file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1130,39 +1078,6 @@ class DetectorNoiseMaps(Image):
         self.CIC_err = self.err[0][1]
         self.DC_err = self.err[0][2]
 
-
-    def copy(self, copy_data = True):
-        """
-        Make a copy of this DetectorNoiseMaps file, including data and headers.
-        Data copying can be turned off if you only want to modify the headers
-        Headers should always be copied as we should modify them any time we make new edits to the data
-
-        Args:
-            copy_data (bool): (optional) whether the data should be copied. Default is True
-
-        Returns:
-            new_nm (corgidrp.data.DetectorNoiseMaps): a copy of this DetectorNoiseMaps
-        """
-        if copy_data:
-            new_data = np.copy(self.data)
-            new_err = np.copy(self.err)
-            new_dq = np.copy(self.dq)
-        else:
-            new_data = self.data # this is just pointer referencing
-            new_err = self.err
-            new_dq = self.dq
-        new_nm = DetectorNoiseMaps(new_data, pri_hdr=self.pri_hdr.copy(), ext_hdr=self.ext_hdr.copy(), err = new_err, dq = new_dq, err_hdr = self.err_hdr.copy())
-
-        # annoying, but we got to manually update some parameters. Need to keep track of which ones to update
-        new_nm.filename = self.filename
-        new_nm.filedir = self.filedir
-
-        # update DRP version tracking
-        self.ext_hdr['DRPVERSN'] =  corgidrp.version
-        self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
-
-        return new_nm
-
 class DetectorParams(Image):
     """
     Class containing detector parameters that may change over time. 
@@ -1180,38 +1095,40 @@ class DetectorParams(Image):
     Attributes:
         params (dict): the values for various detector parameters specified here
         default_values (dict): default values for detector parameters (fallback values)
+        back_compat_mapping (dict): values to make test FITS files comply with new header standard
     """
-     # default detector params
+    # default detector params
     default_values = {
-        'kgain' : 8.7,
-        'fwc_pp' : 90000.,
-        'fwc_em' : 100000.,
-        'rowreadtime' : 223.5e-6, # seconds
-        # number of EM gain register stages
-        'Nem': 604,
-        # slice of rows that are used for telemetry
-        'telem_rows_start': -1,
-        'telem_rows_end': None, #goes to the end, in other words
-        # pixel full well (e-)
-        'fwc': 90000,
-        # serial full well (e-) in EM gain register in EXCAM EMCCD
-        'fwc_em': 100000,
-        # cosmic ray hit rate (hits/m**2/sec)
-        'X': 5.0e+04,
-        # pixel area (m**2/pixel)
-        'a': 1.69e-10,
-        # Maximum allowable EM gain
-        'gmax': 8000.0,
-        # tolerance in exposure time calculator
-        'delta_constr': 1.0e-4,
-        # Overhead time, in seconds, for each collected frame.  Used to compute
-        # total wall-clock time for data collection
-        'overhead': 3,
-        # Maximum allowed electrons/pixel/frame for photon counting
-        'pc_ecount_max': 0.1,
-        # number of read noise standard deviations at which to set the
-        # photon-counting threshold
-        'T_factor': 5,
+        'KGAINPAR' : 8.7,
+        'FWC_PP_E' : 90000.,
+        'FWC_EM_E' : 100000.,
+        'ROWREADT' : 223.5e-6,  # seconds
+        'NEMGAIN': 604,         # number of EM gain register stages
+        'TELRSTRT': -1,         # slice of rows that are used for telemetry
+        'TELREND': None,        #goes to the end, in other words
+        'CRHITRT': 5.0e+04,     # cosmic ray hit rate (hits/m**2/sec)
+        'PIXAREA': 1.69e-10,    # pixel area (m**2/pixel)
+        'GAINMAX': 8000.0,      # Maximum allowable EM gain
+        'DELCNST': 1.0e-4,      # tolerance in exposure time calculator
+        'OVERHEAD': 3,          # Overhead time, in seconds, for each collected frame.  Used to compute total wall-clock time for data collection
+        'PCECNTMX': 0.1,        # Maximum allowed electrons/pixel/frame for photon counting
+        'TFACTOR': 5,            # number of read noise standard deviations at which to set the photon-counting threshold
+    }
+
+    back_compat_mapping = {
+        "KGAINPAR" : "KGAIN",
+        "FWC_PP_E" : "FWC_PP",
+        'FWC_EM_E' : 'FWC_EM',
+        'ROWREADT' : "rowreadtime",
+        "NEMGAIN" : "NEM",
+        "TELRSTRT" : "telem_rows_start",
+        "TELREND" : "telem_rows_end",
+        "CRHITRT" : "X",
+        "PIXAREA" : "A",
+        "GAINMAX" : "GMAX",
+        "DELCNST" : "delta_constr",
+        "PCECNTMX" : "pc_ecount_max",
+        "TFACTOR" : "T_FACTOR"
     }
 
     def __init__(self, data_or_filepath, date_valid=None):
@@ -1231,36 +1148,32 @@ class DetectorParams(Image):
         else:
             if not isinstance(data_or_filepath, dict):
                 raise ValueError("Input should either be a dictionary or a filepath string")
-            prihdr = fits.Header()
-            exthdr = fits.Header()
-            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
-            exthdr['DRPVERSN'] =  corgidrp.__version__
-            exthdr['DRPCTIME'] =  time.Time.now().isot
+            pri_hdr = fits.Header()
+            ext_hdr = fits.Header()
+            ext_hdr['SCTSRT'] = date_valid.isot # use this for validity date
+            ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            ext_hdr['DRPCTIME'] =  time.Time.now().isot
 
             # fill caldb required keywords with dummy data
-            prihdr['OBSID'] = 0
-            exthdr["EXPTIME"] = 0
-            exthdr['OPMODE'] = ""
-            exthdr['CMDGAIN'] = 1.0
-            exthdr['EXCAMT'] = 40.0
+            pri_hdr["OBSNUM"] = 000     
+            ext_hdr["EXPTIME"] = 1
+            ext_hdr['OPMODE'] = ""
+            ext_hdr['EMGAIN_C'] = 1.0
+            ext_hdr['EXCAMT'] = 40.0
+
+            # Enforce data level = CAL?
+            ext_hdr['DATALVL']    = 'CAL'
 
             # write default values to headers
-            for key in self.default_values:
-                if len(key) > 8:
-                    # to avoid VerifyWarning from fits
-                    exthdr['HIERARCH ' + key] = self.default_values[key]
-                else:
-                    exthdr[key] = self.default_values[key]
+            for key, value in self.default_values.items():
+                ext_hdr[key] = value
             # overwrite default values
-            for key in data_or_filepath:
+            for key, value in data_or_filepath.items():
                 # to avoid VerifyWarning from fits
-                if len(key) > 8:
-                    exthdr['HIERARCH ' + key] = data_or_filepath[key]
-                else:
-                    exthdr[key] = data_or_filepath[key]
+                ext_hdr[key] = value
 
-            self.pri_hdr = prihdr
-            self.ext_hdr = exthdr
+            self.pri_hdr = pri_hdr
+            self.ext_hdr = ext_hdr
             self.data = np.zeros([1,1])
             self.dq = np.zeros([1,1])
             self.err = np.zeros([1,1])
@@ -1274,12 +1187,24 @@ class DetectorParams(Image):
         self.params = {}
         # load back in all the values from the header
         for key in self.default_values:
+            # if this key is not in the header, try the backwards compatability mapping
+            new_key = key
+            if key not in self.ext_hdr:
+                key = self.back_compat_mapping[key]
+
             if len(key) > 8:
                 # to avoid VerifyWarning from fits
-                self.params[key] = self.ext_hdr['HIERARCH ' + key]
+                self.params[new_key] = self.ext_hdr['HIERARCH ' + key]
             else:
-                self.params[key] = self.ext_hdr[key]
+                self.params[new_key] = self.ext_hdr[key]
 
+
+
+        # for backwards compatability:
+        if "OBSID" in self.pri_hdr:
+            self.pri_hdr['OBSNUM'] = self.pri_hdr['OBSID']
+        if "CMDGAIN" in self.ext_hdr:
+            self.ext_hdr["EMGAIN_C"] = self.ext_hdr['CMDGAIN']
 
         # if this is a new DetectorParams file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new DetectorParams file
@@ -1311,27 +1236,34 @@ class AstrometricCalibration(Image):
     Class for astrometric calibration file. 
     
     Args:
-        data_or_filepath (str or np.array); either the filepath to the FITS file to read in OR the 1D array of calibration measurements
+        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR a single array of calibration measurements of the following lengths (boresight: length 2 (RA, DEC), 
+        plate scale: length 2 (floats), north angle: length 1 (float), average offset: length 2 (floats) of average boresight offset in RA/DEC [deg],
+        distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
+        3rd order distortion fit the input array should be length 37.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw 2D data is passed in)
         
     Attrs:
-        boresight (np.array): the [(RA, Dec)] of the center pixel in ([deg], [deg])
-        platescale (float): the platescale value in [mas/pixel]
+        boresight (np.array): the corrected RA/DEC [deg] position of the detector center
+        platescale (float): the platescale value in [mas/pixel] along each axis
         northangle (float): the north angle value in [deg]
+        avg_offset (np.array): the average offset [deg] from the detector center
+        distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map, where the last value of the array is the order of polynomial used
 
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
         # run the image class constructor
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
 
         # File format checks
-        if self.data.shape != (4,):
-            raise ValueError("The AstrometricCalibration data should be a 1D array of four values")
+        if type(self.data) != np.ndarray:
+            raise ValueError("The AstrometricCalibration data should be an array of calibration measurements")
         else:
             self.boresight = self.data[:2]
-            self.platescale = self.data[2]
-            self.northangle = self.data[3]
+            self.platescale = self.data[2:4]
+            self.northangle = self.data[4]
+            self.avg_offset = self.data[5:7]
+            self.distortion_coeffs = self.data[7:]
             
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
@@ -1346,13 +1278,19 @@ class AstrometricCalibration(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Astrometric Calibration file created"
             
-            # give a default filename
-            self.filename = "AstrometricCalibration.fits"
+            # give it a default filename using the first input file as the base
+            # strip off everything starting at .fits
+            orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+            self.filename = "{0}_AST_CAL.fits".format(orig_input_filename)
+            
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # check that this is actually an AstrometricCalibration file that was read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'AstrometricCalibration':
             raise ValueError("File that was loaded was not an AstrometricCalibration file.")    
-        
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency'     
+    
 class TrapCalibration(Image):
     """
 
@@ -1391,17 +1329,1225 @@ class TrapCalibration(Image):
 
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
-            orig_input_filename = input_dataset[0].filename.split(".fits")[0]
-            self.filename = "{0}_trapcal.fits".format(orig_input_filename)
+            orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+            self.filename = "{0}_TPU_CAL.fits".format(orig_input_filename)
+            self.filename = re.sub('_L[0-9].', '', self.filename)
 
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'TrapCalibration':
             raise ValueError("File that was loaded was not a TrapCalibration file.")
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+
+class FluxcalFactor(Image):
+    """
+    Class containing the flux calibration factor (and corresponding error) for each band in unit erg/(s * cm^2 * AA)/photo-electrons/s. 
+
+    To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
+
+    Args:
+        data_or_filepath (dict or str): either a filepath string corresponding to an 
+                                        existing FluxcalFactor file saved to disk or the data and error values of the
+                                        flux cal factor of a certain filter defined in the header
+
+    Attributes:
+        filter (str): used filter name
+        nd_filter (str): used neutral density filter or "No"
+        fluxcal_fac (float): the value of the flux cal factor for the corresponding filter
+        fluxcal_err (float): the error of the flux cal factor for the corresponding filter
+    """
+    def __init__(self, data_or_filepath, err = None, pri_hdr=None, ext_hdr=None, err_hdr = None, input_dataset = None):
+       # run the image class contructor
+        super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
+        # if filepath passed in, just load in from disk as usual
+        # File format checks
+        if self.data.shape != (1,1):
+            raise ValueError('The FluxcalFactor calibration data should be just one float value')
+        
+        #TBC
+        self.nd_filter = "ND0" #no neutral density filter in beam
+        if 'FPAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FPAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        elif 'FSAMNAME' in self.ext_hdr:
+            name = self.ext_hdr['FSAMNAME']
+            if name.startswith("ND"):
+                self.nd_filter = name
+        else:
+            raise ValueError('The FluxcalFactor calibration has no keyword FPAMNAME or FSAMNAME in the header')
+        
+        if 'CFAMNAME' in self.ext_hdr:
+            self.filter = self.ext_hdr['CFAMNAME']
+        else:
+            raise ValueError('The FluxcalFactor calibration has no filter keyword CFAMNAME in the header')
+
+
+        if isinstance(data_or_filepath, str):
+            # double check that this is actually a FluxcalFactor file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError("File that was loaded was not a FluxcalFactor file.")
+            if self.ext_hdr['DATATYPE'] != 'FluxcalFactor':
+                raise ValueError("File that was loaded was not a FluxcalFactor file.")
+        else:
+            self.ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            
+        # make some attributes to be easier to use
+        self.fluxcal_fac = self.data[0,0]
+        self.fluxcal_err =  self.err[0,0,0]
+
+        # if this is a new FluxcalFactors file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                if 'DRPNFILE' not in ext_hdr:
+                    # error check. this is required in this case
+                    raise ValueError("This appears to be a new FluxcalFactor. The dataset of input files needs to be passed \
+                                     in to the input_dataset keyword to record history of this FluxcalFactor file.")
+                else:
+                    pass
+            else:
+                # log all the data that went into making this calibration file
+                self._record_parent_filenames(input_dataset)
+                # give it a default filename using the first input file as the base
+                # strip off everything starting at .fits
+                orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
+  
+            self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
+            # JM: moved the below to fluxcal.py since it varies depending on the method
+            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            # add to history
+            self.ext_hdr['HISTORY'] = "Flux calibration file created"
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+            # use the start date for the filename by default
+            self.filedir = "."
+            # slight hack for old mocks not in the stardard filename format
+            self.filename = "{0}_ABF_CAL.fits".format(orig_input_filename)
+            self.filename = re.sub('_L[0-9].', '', self.filename)
+
+class FpamFsamCal(Image):
+    """
+    Class containing the FPAM to EXCAM and FSAM to EXCAM transformation matrices.
+    CGI model was consistent with FFT/TVAC tests. Transformation matrices are
+    a 2x2 array with real values. Model cases are fpam_to_excam_modelbased and
+    fsam_to_excam_modelbased, see below.
+
+    Args:
+        data_or_filepath (dict or str): either a filepath string corresponding to an
+                                        existing FpamFsamCal file saved to disk or an
+                                        array with the FPAM and FSAM rotation matrices
+        date_valid (astropy.time.Time): date after which these parameters are valid
+
+    Attributes:
+         fpam_to_excam_modelbased (array): default values for FPAM rotation matrices.
+         fsam_to_excam_modelbased (array): default values for FSAM rotation matrices.
+         default_trans (array): array collecting fpam_to_excam_modelbased and
+           fsam_to_excam_modelbased.
+    """
+    # default transformation matrices (model is consistent with FFT/TVAC tests)
+    # Signs +/- have been double checked against FFT/TVAC data
+    fpam_to_excam_modelbased = np.array([[ 0.        ,  0.12285012],
+       [-0.12285012, 0.        ]], dtype=float)
+    # Signs -/- have been double checked against FFT/TVAC data
+    fsam_to_excam_modelbased = np.array([[-0.        , -0.09509319],
+       [-0.09509319, 0.        ]], dtype=float)
+    default_trans = np.array([fpam_to_excam_modelbased, fsam_to_excam_modelbased])
+
+    ###################
+    ### Constructor ###
+    ###################
+
+    def __init__(self, data_or_filepath, date_valid=None):
+        if date_valid is None:
+            date_valid = time.Time.now()
+        # if filepath passed in, just load in from disk as usual
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+
+            # double check that this is actually a FpamFsamCal file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError('File that was loaded was not a FpamFsamCal file.')
+            if self.ext_hdr['DATATYPE'] != 'FpamFsamCal':
+                raise ValueError('File that was loaded was not a FpamFsamCal file.')
+        else:
+            if len(data_or_filepath) == 0:
+                data_or_filepath = self.default_trans
+            elif not isinstance(data_or_filepath, np.ndarray):
+                raise ValueError('Input should either be an array or a filepath string.')
+            if data_or_filepath.shape != (2,2,2):
+                raise ValueError('FpamFsamCal must be a 2x2x2 array')
+            prihdr = fits.Header()
+            exthdr = fits.Header()
+            exthdr['SCTSRT'] = date_valid.isot # use this for validity date
+            exthdr['DRPVERSN'] =  corgidrp.__version__
+            exthdr['DRPCTIME'] =  time.Time.now().isot
+
+            # fill caldb required keywords with dummy data
+            prihdr['OBSNUM'] = 0
+            exthdr["EXPTIME"] = 0
+            exthdr['OPMODE'] = ""
+            exthdr['EMGAIN_C'] = 1.0
+            exthdr['EXCAMT'] = 40.0
+
+            self.pri_hdr = prihdr
+            self.ext_hdr = exthdr
+            self.data = data_or_filepath
+            self.dq = self.data * 0
+            self.err = self.data * 0
+
+            self.err_hdr = fits.Header()
+            self.dq_hdr = fits.Header()
+
+            self.hdu_list = fits.HDUList()
+
+        # if this is a new FpamFsamCal file, we need to bookkeep it in the
+        # header b/c of logic in the super.__init__, we just need to check this
+        # to see if it is a new FpamFsamCal file
+        if isinstance(data_or_filepath, np.ndarray):
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'FpamFsamCal' 
+
+            # add to history
+            self.ext_hdr['HISTORY'] = 'FPAM/FSAM rotation matrices file created'
+
+            # use the start date for the filename by default
+            self.filedir = '.'
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+class CoreThroughputCalibration(Image):
+    """
+    Class containing a core throughput calibration file
+
+    A CoreThroughput calibration file has two main data arrays:
+
+    3-d cube of PSF images, e.g, a N1xN1xN array where N1= +/- 3l/D about
+      PSF's centroid in EXCAM pixels. The N PSF images are the ones in the CT
+      dataset.
+
+    N sets of (x, y, CT measurements). The (x, y) are pixel coordinates of the
+      PSF images in the CT dataset wrt EXCAM (0,0) pixel during core throughput
+      observation.
+
+    Args:
+      data_or_filepath (array or str): either a filepath string corresponding
+        to an existing CoreThroughputCalibration file saved to disk or an array
+        with the elements of the core throughput calibration file.
+      hdu_list (astropy.io.fits.HDUList): an astropy HDUList object that
+        contains the elements of the core throughput calibration file.
+    """
+
+    ###################
+    ### Constructor ###
+    ###################
+
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None,
+        dq=None, err_hdr=None, dq_hdr=None, input_hdulist=None,
+        input_dataset=None):
+        # run the image class contructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
+            err=err, dq=dq, err_hdr=err_hdr, dq_hdr=dq_hdr,
+            input_hdulist=input_hdulist)
+
+        # Verify the extension header corresponds to the PSF cube
+        if self.ext_hdr['EXTNAME'] != 'PSFCUBE':
+            raise ValueError('The input data does not seem to contain the PSF '
+                'cube of measurements')
+
+        # CT array measurements on EXCAM
+        idx_hdu = 0
+        if self.hdu_list[idx_hdu].name == 'CTEXCAM':
+            self.ct_excam = self.hdu_list[idx_hdu].data
+            self.ct_excam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the CT '
+                'array of measurements')
+        # FPAM positions during CT observations
+        idx_hdu = 1
+        if self.hdu_list[idx_hdu].name == 'CTFPAM':
+            self.ct_fpam = self.hdu_list[idx_hdu].data
+            self.ct_fpam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the FPAM '
+                'value during core throughput observations')
+        # FSAM positions during CT observations
+        idx_hdu = 2
+        if self.hdu_list[idx_hdu].name == 'CTFSAM':
+            self.ct_fsam = self.hdu_list[idx_hdu].data
+            self.ct_fsam_hdr = self.hdu_list[idx_hdu].header
+        else:
+            raise ValueError('The HDU list does not seem to contain the FPAM '
+                'value during core throughput observations')
+
+        # File format checks 
+        # Check PSF basis is a 3D set
+        if self.data.ndim != 3:
+            raise ValueError('The PSF basis is an (N,N1,N1) array with N PSFs, '
+                'each with N1 pixels x N1 pixels.')
+        # Check CT array is a 3xN set
+        if len(self.ct_excam) != 3:
+            raise ValueError('The core throughput array of measurements is a '
+                'Nx3 array.')
+        # Check the CT map has the same number of elements as the PSF cube
+        if self.ct_excam.shape[1] != self.data.shape[0]:
+            raise ValueError('The core throughput map must have one PSF location '
+                'and CT value for each PSF.')
+
+        # Additional bookkeeping for a calibration file:
+        # If this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if
+        # it is a new CoreThroughputCalibration file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError('This appears to be a new Core Throughput calibration'
+                                 'File. The dataset of input files needs'
+                                 'to be passed in to the input_dataset keyword'
+                                 'to record history of this calibration file.')
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'CoreThroughputCalibration'
+
+            # log all the data that went into making this calibration file
+            self._record_parent_filenames(input_dataset)
+
+            # add to history if not present
+            if not 'HISTORY' in self.ext_hdr:
+                self.ext_hdr['HISTORY'] = ('Core Throughput calibration derived '
+                    f'from a set of frames on {self.ext_hdr["DATETIME"]}')
+
+            # Default convention: replace _L3_.fits from the filename of the
+            # input dataset by _CTP_CAL.fits
+            self.filedir = '.'
+            self.filename = re.sub('_L[0-9].', '_CTP_CAL', input_dataset[-1].filename)
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+        # double check that this is actually a NonLinearityCalibration file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
+        if self.ext_hdr['DATATYPE'] != 'CoreThroughputCalibration':
+            raise ValueError("File that was loaded was not a CoreThroughputCalibration file.")
+
+    ###############
+    ### Methods ###
+    ###############
+
+    def GetCTFPMPosition(self,
+        corDataset,
+        fpamfsamcal):
+        """ Gets the FPM's center during a Core throughput observing sequence.
+
+        The use of the delta FPAM/FSAM positions and the rotation matrices is
+        based on the prescription provided on 1/14/25: "H/V values to EXCAM
+        row/column pixels"
+
+          delta_pam = np.array([[dh], [dv]]) # fill these in
+          M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
+          delta_pix = M @ delta_pam
+        
+        Args:
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class.
+
+        Returns:
+            Returns the FPM's center during a Core throughput observing sequence.
+        """
+        # Read FPM location during the coronagraphic observations
+        cor_fpm_center = np.array([corDataset[0].ext_hdr['STARLOCX'],
+            corDataset[0].ext_hdr['STARLOCY']])
+        # Read FPAM and FSAM values during the coronagraphic observations
+        cor_fpam = np.array([corDataset[0].ext_hdr['FPAM_H'],
+            corDataset[0].ext_hdr['FPAM_V']])
+        cor_fsam = np.array([corDataset[0].ext_hdr['FSAM_H'],
+            corDataset[0].ext_hdr['FSAM_V']])
+        # Compute delta FPAM and delta FSAM
+        delta_fpam_um = self.ct_fpam - cor_fpam
+        delta_fsam_um = self.ct_fsam - cor_fsam
+        # Follow the array prescription from the doc string
+        delta_fpam_um = np.array([delta_fpam_um]).transpose()
+        delta_fsam_um = np.array([delta_fsam_um]).transpose()
+        # Get the shift in EXCAM pixels for FPAM and FSAM
+        delta_fpam_excam = (fpamfsamcal.data[0] @ delta_fpam_um).transpose()[0]
+        delta_fsam_excam = (fpamfsamcal.data[1] @ delta_fsam_um).transpose()[0]
+        # Return the FPAM and FSAM centers during the core throughput observations
+        return cor_fpm_center + delta_fpam_excam, cor_fpm_center + delta_fsam_excam
+
+    def InterpolateCT(self,
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal,
+        logr=False):
+        """ Interpolate CT value at a desired position of a coronagraphic
+            observation.
+
+        First implementation based on Max Millar-Blanchaer's suggestions
+        https://collaboration.ipac.caltech.edu/display/romancoronagraph/Max%27s+Interpolation+idea
+
+        Here we assume that the core throughput measurements with the star
+        located along a series of radial spikes at various azimuths. 
+
+        It throws an error if the radius of the new points is outside the range
+        of the input radii. If the azimuth is greater than the maximum azimuth
+        of the core throughput dataset, it will mod the azimuth to be within
+        the range of the input azimuths.
+
+        Assumes that the input core_thoughput is between 0 and 1.
+
+        # TODO: review accuracy of the method with simulated data that are more
+        # representative of future mission data, including error budget and 
+        # expected azimuthal dependence on the CT.
+
+        Args:
+          x_cor (numpy.ndarray): Values of the first dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          y_cor (numpy.ndarray): Values of the second dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+          logr (bool) (optional): If True, radii are mapped into their logarithmic
+              values before constructing the interpolant.
+
+        Returns:
+          Returns interpolated value of the CT, first, and positions for valid
+            locations as a numpy ndarray.
+        """
+        if isinstance(x_cor, np.ndarray) is False:
+            if isinstance(x_cor, int) or isinstance(x_cor, float):
+                x_cor = np.array([x_cor])
+            elif isinstance(x_cor, list):
+                x_cor = np.array(x_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+        if isinstance(y_cor, np.ndarray) is False:
+            if isinstance(y_cor, int) or isinstance(y_cor, float):
+                y_cor = np.array([y_cor])
+            elif isinstance(y_cor, list):
+                y_cor = np.array(y_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+
+        if len(x_cor) != len(y_cor):
+            raise ValueError('Target locations must have the same number of '
+                'elements')
+  
+        # Get FPM's center during CT observations
+        fpam_ct_pix_out = self.GetCTFPMPosition(
+                corDataset,
+                fpamfsamcal)[0]
+        # Get CT measurements relative to CT FPM's center
+        x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
+        y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
+        core_throughput = self.ct_excam[2,:]
+        # Algorithm
+        radii = np.sqrt(x_grid**2 + y_grid**2)
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero. 
+        azimuths = np.arctan2(y_grid, x_grid)
+        azimuth0 = azimuths.min()
+        azimuths = azimuths - azimuth0
+        # Now we can create a 2D array of the radii and azimuths
+        
+        # Calculate the new datapoint in the right radius and azimuth coordinates
+        radius_cor = np.sqrt(x_cor**2 + y_cor**2)
+       
+        # Remove interpolation locations that are outside the radius range
+        r_good = radius_cor >= radii.min()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are less than the minimum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_good = radius_cor <= radii.max()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are greater than the maximum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.max()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+
+        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero.
+        azimuth_cor = np.arctan2(y_cor, x_cor) - azimuth0
+       
+        # MOD this azimuth so that we're in the right range: all angles will be
+        # within [0, azimuths.max()), including negative values
+        azimuth_cor = azimuth_cor % azimuths.max()
+       
+        if logr: 
+            radii = np.log10(radii)
+            radius_cor = np.log10(radius_cor)
+       
+        rad_az = np.c_[radii, azimuths]
+        # Make the interpolator
+        interpolator = LinearNDInterpolator(rad_az, core_throughput)
+        # Now interpolate: 
+        interpolated_values = interpolator(radius_cor, azimuth_cor)
+
+        # Raise ValueError if CT < 0, CT> 1
+        if np.any(interpolated_values < 0) or np.any(interpolated_values > 1): 
+            raise ValueError('Some interpolated core throughput values are '
+                f'out of bounds (0,1): ({interpolated_values.min():.2f}, '
+                f'{interpolated_values.max():.2f})')
+
+        # Edge case:
+        # If a target location happens to be part of the CT dataset (i.e., the
+        # interpolator) and its azimuth is equal to the maximum azimuth in the
+        # CT dataset, the interpolated CT may sometimes be assigned to NaN, while
+        # it should simply be the same inout CT value at the same location
+        idx_az_max = np.argwhere(np.isnan(interpolated_values))
+        for idx in idx_az_max:
+            idx_x_arr = np.argwhere(x_cor[idx] == x_grid)
+            idx_y_arr = np.argwhere(y_cor[idx] == y_grid)
+            for idx_x in idx_x_arr:
+                # If and only if the same index is in both, it's the same location
+                if idx_x in idx_y_arr:
+                    interpolated_values[idx_x] = core_throughput[idx_x]
+            
+        # Raise ValueError if all CT are NaN
+        if np.all(np.isnan(interpolated_values)):
+            raise ValueError('There are no valid target positions within the ' +
+                'range of input PSF locations')
+
+        # Extrapolation: Remove NaN values
+        is_valid = np.where(np.isnan(interpolated_values) == False)[0]
+        return np.array([interpolated_values[is_valid],
+            x_cor[is_valid],
+            y_cor[is_valid]])
+
+    def GetPSF(self,
+        x_cor,
+        y_cor,
+        corDataset,
+        fpamfsamcal,
+        method='nearest-polar'):
+        """ Get a PSF at a given (x,y) location on HLC in a coronagraphic
+        observation given a CT calibration file and the PAM transformation from
+        encoder values to EXCAM pixels.
+
+        First implementation: nearest PSF in a polar sense. See below.
+
+        # TODO: Implement an interpolation method that takes into account other
+        # PSF than the nearest one. Comply with any required precision from the
+        # functions that will use the interpolated PSF. 
+
+        Args:
+          x_cor (numpy.ndarray): Values of the first dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          y_cor (numpy.ndarray): Values of the second dimension of the
+              target locations where the CT will be interpolated. Locations are
+              EXCAM pixels measured with respect to the FPM's center.
+          corDataset (corgidrp.data.Dataset): a dataset containing some
+              coronagraphic observations.
+          fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+          method (str): Interpolation method that will be used:
+              'polar-nearest': Given an (x,y) position wrt FPM's center, the
+               associated PSF is the one in the CT calibration dataset whose
+               radial distance to the FPM's center is the closest to
+               sqrt(x**2+y**2). If there is more than one CT PSF at the same
+               radial distance, choose the one whose angular distance to the
+               (x,y) location is the smallest.
+              
+        Returns:
+          psf_interp_list (array): Array of interpolated PSFs for the valid
+              target locations.
+          x_interp_list (array): First dimension of the list of valid target positions. 
+          y_interp_list (array): Second dimension of the list of valid target positions.
+        """
+        if isinstance(x_cor, np.ndarray) is False:
+            if isinstance(x_cor, int) or isinstance(x_cor, float):
+                x_cor = np.array([x_cor])
+            elif isinstance(x_cor, list):
+                x_cor = np.array(x_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+        if isinstance(y_cor, np.ndarray) is False:
+            if isinstance(y_cor, int) or isinstance(y_cor, float):
+                y_cor = np.array([y_cor])
+            elif isinstance(y_cor, list):
+                y_cor = np.array(y_cor)
+            else:
+                raise ValueError('Target locations must be a scalar '
+                    '(int or float), list of int or float values, or '
+                    ' a numpy.ndarray')
+
+        if len(x_cor) != len(y_cor):
+            raise ValueError('Target locations must have the same number of '
+                'elements')
+
+        # We need to translate the PSF locations in the CT cal file to be with
+        # respect to the FPM's center during CT observations:
+        # Get FPM's center during CT observations
+        fpam_ct_pix_out = self.GetCTFPMPosition(
+                corDataset,
+                fpamfsamcal)[0]
+        # Get CT measurements relative to CT FPM's center
+        x_grid = self.ct_excam[0,:] - fpam_ct_pix_out[0]
+        y_grid = self.ct_excam[1,:] - fpam_ct_pix_out[1]
+        # Algorithm:
+        # Radial distances wrt FPM's center
+        radii = np.sqrt(x_grid**2 + y_grid**2)
+        # Azimuths
+        azimuths = np.arctan2(y_grid, x_grid)
+
+        # Radial distances of the target locations
+        radius_cor = np.sqrt(x_cor**2 + y_cor**2)
+
+        # Remove interpolation locations that are outside the radius range
+        r_good = radius_cor >= radii.min()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are less than the minimum '
+                'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_good = radius_cor <= radii.max()
+        if len(x_cor[r_good]) == 0:
+            raise ValueError('All target radius are either less than the minimum'
+                ' radius or greater than the maximum radius in the core throughout'
+                ' data: {:.2f} EXCAM pixels'.format(radii.max()))
+        radius_cor = radius_cor[r_good]
+        # Update x_cor and y_cor
+        x_cor = x_cor[r_good]
+        y_cor = y_cor[r_good]
+        r_cor = np.sqrt(x_cor**2 + y_cor**2)
+
+        psf_interp_list = []
+        x_interp_list = []
+        y_interp_list = []
+        if method.lower() == 'nearest-polar':
+            for i_psf in range(len(x_cor)):
+                # Agreeement for this nearest method is that radial distances are
+                # binned at 1/10th of a pixel. This will be unnecessary as soon as
+                # there's any other interpolation method than the 'nearest' one.
+                # Find the nearest radial position in the CT file (argmin()
+                # returns the first occurence only)
+                diff_r_abs = np.round(10*np.abs(r_cor[i_psf] - radii)/10)
+                idx_near = np.argwhere(diff_r_abs == diff_r_abs.min())
+                # If there's more than one case, select that one with the
+                # smallest angular distance
+                if len(idx_near) > 1:
+                    print("More than one PSF found with the same radial distance from the FPM's center")
+                    # Difference in angle b/w target and grid
+                    # We want to distinguish PSFs at different quadrants
+                    az_grid = np.arctan2(y_grid[idx_near], x_grid[idx_near])
+                    az_cor = np.arctan2(y_cor[i_psf], x_cor[i_psf])
+                    # Flatten into a 1-D array
+                    diff_az_abs = np.abs(az_cor - az_grid).transpose()[0]
+                    # Azimuth binning consistent with the binning of the radial distance
+                    bin_az_fac = 1/10/r_cor[i_psf]
+                    diff_az_abs = bin_az_fac * np.round(diff_az_abs/bin_az_fac)
+                    # Closest angular location to the target location within equal radius
+                    idx_near_az = np.argwhere(diff_az_abs == diff_az_abs.min())
+                    # If there are two locations (half angle), choose the average (agreement)
+                    if len(idx_near_az) == 2: 
+                        psf_interp = np.squeeze(self.data[idx_near[idx_near_az]]).mean(axis=0)
+                    # Otherwise, this is the PSF
+                    elif len(idx_near_az) == 1:
+                        psf_interp = np.squeeze(self.data[idx_near[idx_near_az[0]]])
+                    else:
+                        raise ValueError(f'There are {len(idx_near_az):d} PSFs ',
+                            'equally near the target PSF. This should not happen.')
+                # Otherwise this is the interpolated PSF (nearest)
+                elif len(idx_near) == 1:
+                    psf_interp = np.squeeze(self.data[idx_near[0]])
+                # This should not happen b/c there should always be a closest radius
+                else:
+                    raise Exception('No closest radial distance found. This should not happen.')
+
+                # Add valid case
+                psf_interp_list += [psf_interp]
+                x_interp_list += [x_cor[i_psf]]
+                y_interp_list += [y_cor[i_psf]]
+        else:
+            raise ValueError(f'Unidentified method for the interpolation: {method}')
+
+        return np.array(psf_interp_list), np.array(x_interp_list), np.array(y_interp_list)
+
+class PyKLIPDataset(pyKLIP_Data):
+    """
+    A pyKLIP instrument class for Roman Coronagraph Instrument data.
+
+    # TODO: Add more bandpasses, modes to self.wave_hlc
+    #       Add wcs header info!
+
+    Attrs:
+        input: Input corgiDRP dataset.
+        centers: Star center locations.
+        filenums: file numbers.
+        filenames: file names.
+        PAs: position angles.
+        wvs: wavelengths.
+        wcs: WCS header information. Currently None.
+        IWA: inner working angle.
+        OWA: outer working angle.
+        psflib: corgiDRP dataset containing reference PSF observations.
+        output: PSF subtracted pyKLIP dataset
+
+    """
+    
+    ####################
+    ### Constructors ###
+    ####################
+    
+    def __init__(self,
+                 dataset,
+                 psflib_dataset=None,
+                 highpass=False):
+        """
+        Initialize the pyKLIP instrument class for space telescope data.
+        # TODO: Determine inner working angle based on PAM positions
+                    - Inner working angle based on Focal plane mask (starts with HLC) + color filter ('1F') for primary mode
+                    - Outer working angle based on field stop? (should be R1C1 or R1C3 for primary mode)
+        
+        Args:
+            dataset (corgidrp.data.Dataset):
+                Dataset containing input science observations.
+            psflib_dataset (corgidrp.data.Dataset, optional):
+                Dataset containing input reference observations. The default is None.
+            highpass (bool, optional):
+                Toggle to do highpass filtering. Defaults fo False.
+        """
+        
+        # Initialize pyKLIP Data class.
+        super(PyKLIPDataset, self).__init__()
+
+        # Set filter wavelengths
+        self.wave_hlc = {'1F': 575e-9} # meters
+            
+        # Read science and reference files.
+        self.readdata(dataset, psflib_dataset, highpass)
+        
+        pass
+    
+    ################################
+    ### Instance Required Fields ###
+    ################################
+    
+    @property
+    def input(self):
+        return self._input
+    @input.setter
+    def input(self, newval):
+        self._input = newval
+    
+    @property
+    def centers(self):
+        return self._centers
+    @centers.setter
+    def centers(self, newval):
+        self._centers = newval
+    
+    @property
+    def filenums(self):
+        return self._filenums
+    @filenums.setter
+    def filenums(self, newval):
+        self._filenums = newval
+    
+    @property
+    def filenames(self):
+        return self._filenames
+    @filenames.setter
+    def filenames(self, newval):
+        self._filenames = newval
+    
+    @property
+    def PAs(self):
+        return self._PAs
+    @PAs.setter
+    def PAs(self, newval):
+        self._PAs = newval
+    
+    @property
+    def wvs(self):
+        return self._wvs
+    @wvs.setter
+    def wvs(self, newval):
+        self._wvs = newval
+    
+    @property
+    def wcs(self):
+        return self._wcs
+    @wcs.setter
+    def wcs(self, newval):
+        self._wcs = newval
+    
+    @property
+    def IWA(self):
+        return self._IWA
+    @IWA.setter
+    def IWA(self, newval):
+        self._IWA = newval
+    
+    @property
+    def OWA(self):
+        return self._OWA
+    @OWA.setter
+    def OWA(self, newval):
+        self._OWA = newval
+    
+    @property
+    def psflib(self):
+        return self._psflib
+    @psflib.setter
+    def psflib(self, newval):
+        self._psflib = newval
+    
+    @property
+    def output(self):
+        return self._output
+    @output.setter
+    def output(self, newval):
+        self._output = newval
+    
+    ###############
+    ### Methods ###
+    ###############
+    
+    def readdata(self,
+                 dataset,
+                 psflib_dataset,
+                 highpass=False):
+        """
+        Read the input science observations.
+        
+        Args:
+            dataset (corgidrp.data.Dataset):
+                Dataset containing input science observations.
+            psflib_dataset (corgidrp.data.Dataset, optional):
+                Dataset containing input reference observations. The default is None.
+            highpass (bool, optional):
+                Toggle to do highpass filtering. Defaults fo False.
+        """
+        
+        # Check input.
+        if not isinstance(dataset, corgidrp.data.Dataset):
+            raise UserWarning('Input dataset is not a corgidrp Dataset object.')
+        if len(dataset) == 0:
+            raise UserWarning('No science frames in the input dataset.')
+        
+        if not psflib_dataset is None:
+            if not isinstance(psflib_dataset, corgidrp.data.Dataset):
+                raise UserWarning('Input psflib_dataset is not a corgidrp Dataset object.')
+        
+        # Loop through frames.
+        input_all = []
+        centers_all = []  # pix
+        filenames_all = []
+        PAs_all = []  # deg
+        wvs_all = []  # m
+        wcs_all = []
+        PIXSCALE = []  # arcsec
+
+        psflib_data_all = []
+        psflib_centers_all = []  # pix
+        psflib_filenames_all = []
+
+        # Iterate over frames in dataset
+
+        for i, frame in enumerate(dataset):
+            
+            phead = frame.pri_hdr
+            shead = frame.ext_hdr
+                
+            if 'TELESCOP' in phead:
+                TELESCOP = phead['TELESCOP']
+                if TELESCOP != "ROMAN":
+                    raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. TELESCOP = {0}'.format(TELESCOP))
+            INSTRUME = phead['INSTRUME']
+            if INSTRUME != "CGI":
+                raise UserWarning('Data is not from Roman Space Telescope Coronagraph Instrument. INSTRUME = {0}'.format(INSTRUME))
+            
+            CFAMNAME = shead['CFAMNAME']
+            data = frame.data
+            if data.ndim == 2:
+                data = data[np.newaxis, :]
+            if data.ndim != 3:
+                raise UserWarning('Requires 2D/3D data cube')
+            NINTS = data.shape[0]
+            pix_scale = shead['PLTSCALE'] * 1000. # arcsec
+            PIXSCALE += [pix_scale] 
+
+            # Get centers.
+            centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+
+            # Get metadata.
+            input_all += [data]
+            centers_all += [centers]
+            filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            PAs_all += [phead['ROLL']] * NINTS
+
+            # Get center wavelengths
+            try:
+                CWAVEL = self.wave_hlc[CFAMNAME]
+            except:
+                raise UserWarning(f'CFAM position {CFAMNAME} is not configured in corgidrp.data.PyKLIPDataset .')
+            
+            # Rounding error introduced here?
+            wvs_all += [CWAVEL] * NINTS
+
+            # pyklip will look for wcs.cd, so make sure that attribute exists
+            wcs_obj = wcs.WCS(header=shead)
+
+            if not hasattr(wcs_obj.wcs,'cd'):
+                wcs_obj.wcs.cd = wcs_obj.wcs.pc * wcs_obj.wcs.cdelt
+            
+            for j in range(NINTS):
+                wcs_all += [wcs_obj.deepcopy()]
+                
+        try:
+            input_all = np.concatenate(input_all)
+        except ValueError:
+            raise UserWarning('Unable to concatenate images. Some science files do not have matching image shapes')
+        centers_all = np.concatenate(centers_all).reshape(-1, 2)
+        filenames_all = np.array(filenames_all)
+        filenums_all = np.array(range(len(filenames_all)))
+        PAs_all = np.array(PAs_all)
+        wvs_all = np.array(wvs_all).astype(np.float32)
+        wcs_all = np.array(wcs_all)
+        PIXSCALE = np.unique(np.array(PIXSCALE))
+        if len(PIXSCALE) != 1:
+            raise UserWarning('Some science files do not have matching pixel scales')
+        iwa_all = np.min(wvs_all) / 6.5 * 180. / np.pi * 3600. / PIXSCALE[0]  # pix
+        owa_all = np.sum(np.array(input_all.shape[1:]) / 2.)  # pix
+
+        # Recenter science images so that the star is at the center of the array.
+        new_center = (np.array(data.shape[1:])-1)/ 2.
+        new_center = new_center[::-1]
+        for i, image in enumerate(input_all):
+            recentered_image = pyklip.klip.align_and_scale(image, new_center=new_center, old_center=centers_all[i])
+            input_all[i] = recentered_image
+            centers_all[i] = new_center
+        
+        # Assign pyKLIP variables.
+        self._input = input_all
+        self._centers = centers_all
+        self._filenames = filenames_all
+        self._filenums = filenums_all
+        self._PAs = PAs_all
+        self._wvs = wvs_all
+        self._wcs = wcs_all
+        self._IWA = iwa_all
+        self._OWA = owa_all
+
+        # Prepare reference library
+        if not psflib_dataset is None:
+            psflib_data_all = []
+            psflib_centers_all = []  # pix
+            psflib_filenames_all = []
+
+            for i, frame in enumerate(psflib_dataset):
+                
+                phead = frame.pri_hdr
+                shead = frame.ext_hdr
+                    
+                data = frame.data
+                if data.ndim == 2:
+                    data = data[np.newaxis, :]
+                if data.ndim != 3:
+                    raise UserWarning('Requires 2D/3D data cube')
+                NINTS = data.shape[0]
+                pix_scale = shead['PLTSCALE'] * 1000. # arcsec
+                PIXSCALE += [pix_scale] 
+
+                # Get centers.
+                centers = np.array([shead['STARLOCX'], shead['STARLOCY']] * NINTS)
+
+                psflib_data_all += [data]
+                psflib_centers_all += [centers]
+                psflib_filenames_all += [os.path.split(frame.filename)[1] + '_INT%.0f' % (j + 1) for j in range(NINTS)]
+            
+            psflib_data_all = np.concatenate(psflib_data_all)
+            if psflib_data_all.ndim != 3:
+                raise UserWarning('Some reference files do not have matching image shapes')
+            psflib_centers_all = np.concatenate(psflib_centers_all).reshape(-1, 2)
+            psflib_filenames_all = np.array(psflib_filenames_all)
+            
+            # Recenter reference images.
+            new_center = (np.array(data.shape[1:])-1)/ 2.
+            new_center = new_center[::-1]
+            for i, image in enumerate(psflib_data_all):
+                recentered_image = pyklip.klip.align_and_scale(image, new_center=new_center, old_center=psflib_centers_all[i])
+                psflib_data_all[i] = recentered_image
+                psflib_centers_all[i] = new_center
+            
+            # Append science data.
+            psflib_data_all = np.append(psflib_data_all, self._input, axis=0)
+            psflib_centers_all = np.append(psflib_centers_all, self._centers, axis=0)
+            psflib_filenames_all = np.append(psflib_filenames_all, self._filenames, axis=0)
+            
+            # Initialize PSF library.
+            psflib = pyklip.rdi.PSFLibrary(psflib_data_all, new_center, psflib_filenames_all, compute_correlation=True, highpass=highpass)
+            
+            # Prepare PSF library.
+            psflib.prepare_library(self)
+            
+            # Assign pyKLIP variables.
+            self._psflib = psflib
+        
+        else:
+            self._psflib = None
+        
+        pass
+    
+    def savedata(self,
+                 filepath,
+                 data,
+                 klipparams=None,
+                 filetype='',
+                 zaxis=None,
+                 more_keywords=None):
+        """
+        Function to save the data products that will be called internally by
+        pyKLIP.
+        
+        Args:
+            filepath (path): 
+                Path of the output FITS file.
+            data (3D-array): 
+                KLIP-subtracted data of shape (nkl, ny, nx).
+            klipparams (str, optional): 
+                PyKLIP keyword arguments used for the KLIP subtraction. The default
+                is None.
+            filetype (str, optional): 
+                Data type of the pyKLIP product. The default is ''.
+            zaxis (list, optional): 
+                List of KL modes used for the KLIP subtraction. The default is
+                None.
+            more_keywords (dict, optional): 
+                Dictionary of additional header keywords to be written to the
+                output FITS file. The default is None.
+        """
+        
+        # Make FITS file.
+        hdul = fits.HDUList()
+        hdul.append(fits.PrimaryHDU(data))
+        
+        # Write all used files to header. Ignore duplicates.
+        filenames = np.unique(self.filenames)
+        Nfiles = np.size(filenames)
+        hdul[0].header['DRPNFILE'] = (Nfiles, 'Num raw files used in pyKLIP')
+        for i, filename in enumerate(filenames):
+            if i < 1000:
+                hdul[0].header['FILE_{0}'.format(i)] = filename + '.fits'
+            else:
+                print('WARNING: Too many files to be written to header, skipping')
+                break
+        
+        # Write PSF subtraction parameters and pyKLIP version to header.
+        try:
+            pyklipver = pyklip.__version__
+        except:
+            pyklipver = 'unknown'
+        hdul[0].header['PSFSUB'] = ('pyKLIP', 'PSF Subtraction Algo')
+        hdul[0].header.add_history('Reduced with pyKLIP using commit {0}'.format(pyklipver))
+        hdul[0].header['CREATOR'] = 'pyKLIP-{0}'.format(pyklipver)
+        hdul[0].header['pyklipv'] = (pyklipver, 'pyKLIP version that was used')
+        if klipparams is not None:
+            hdul[0].header['PSFPARAM'] = (klipparams, 'KLIP parameters')
+            hdul[0].header.add_history('pyKLIP reduction with parameters {0}'.format(klipparams))
+        
+        # Write z-axis units to header if necessary.
+        if zaxis is not None:
+            if 'KL Mode' in filetype:
+                hdul[0].header['CTYPE3'] = 'KLMODES'
+                for i, klmode in enumerate(zaxis):
+                    hdul[0].header['KLMODE{0}'.format(i)] = (klmode, 'KL Mode of slice {0}'.format(i))
+
+        # Write extra keywords to header if necessary.
+        if more_keywords is not None:
+            for hdr_key in more_keywords:
+                hdul[0].header[hdr_key] = more_keywords[hdr_key]
+        
+        # Update image center.
+        center = self.output_centers[0]
+        hdul[0].header.update({'PSFCENTX': center[0], 'PSFCENTY': center[1]})
+        hdul[0].header.update({'CRPIX1': center[0] + 1, 'CRPIX2': center[1] + 1})
+        hdul[0].header.add_history('Image recentered to {0}'.format(str(center)))
+        
+        # Write FITS file.
+        try:
+            hdul.writeto(filepath, overwrite=True)
+        except TypeError:
+            hdul.writeto(filepath, clobber=True)
+        hdul.close()
+        
+        pass
+    
+class NDFilterSweetSpotDataset(Image):
+    """
+    Class for an ND filter sweet spot dataset product.
+    Typically stores an N×3 array of data:
+      [OD, x_center, y_center] for each measurement.
+    Args:
+        data_or_filepath (str or np.array): Either the filepath to the FITS file 
+            to read in OR the 2D array of ND filter sweet-spot data (N×3).
+        pri_hdr (astropy.io.fits.Header): The primary header (required only if 
+            raw 2D data is passed in).
+        ext_hdr (astropy.io.fits.Header): The image extension header (required 
+            only if raw 2D data is passed in).
+        input_dataset (corgidrp.data.Dataset): The input dataset used to produce 
+            this calibration file (optional). If this is a new product, you should 
+            pass in the dataset so that the parent filenames can be recorded.
+        err (np.array): Optional 3D error array for the data.
+        dq (np.array): Optional 2D data-quality mask for the data.
+        err_hdr (astropy.io.fits.Header): Optional error extension header.
+    Attributes:
+        od_values (np.array): Array of OD measurements (length N).
+        x_values (np.array): Array of x-centroid positions (length N).
+        y_values (np.array): Array of y-centroid positions (length N).
+    """
+
+    def __init__(
+        self,
+        data_or_filepath,
+        pri_hdr=None,
+        ext_hdr=None,
+        input_dataset=None,
+        err=None,
+        dq=None,
+        err_hdr=None
+    ):
+        # Run the standard Image constructor.
+        super().__init__(
+            data_or_filepath,
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
+            err=err,
+            dq=dq,
+            err_hdr=err_hdr
+        )
+
+        # 1. Check data shape: expect N×3 array for the sweet-spot dataset.
+        if self.data.ndim != 2 or self.data.shape[1] != 3:
+            raise ValueError(
+                "NDFilterSweetSpotDataset data must be a 2D array of shape (N, 3). "
+                f"Received shape {self.data.shape}."
+            )
+
+        # 2. Parse the columns into convenient attributes.
+        #    Column 0: OD, Column 1: x_center, Column 2: y_center.
+        self.od_values = self.data[:, 0]
+        self.x_values = self.data[:, 1]
+        self.y_values = self.data[:, 2]
+
+        # 3. If creating a new product (i.e. ext_hdr was passed in), record metadata.
+        if ext_hdr is not None:
+            if input_dataset is not None:
+                self._record_parent_filenames(input_dataset)
+                self.filename = re.sub('_L[0-9].', '_NDF_CAL', input_dataset[-1].filename)
+            # if no input_dataset is given, do we want to set the filename manually using 
+            # header values?
+
+            self.ext_hdr['DATATYPE'] = 'NDFilterSweetSpotDataset'
+            self.ext_hdr['HISTORY'] = (
+                f"NDFilterSweetSpotDataset created from {self.ext_hdr.get('DRPNFILE','?')} frames"
+            )
+
+            # Enforce data level = CAL
+            self.ext_hdr['DATALVL']    = 'CAL'
+
+
+        # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
+            raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
+
+    def interpolate_od(self, x, y, method="nearest"):
+        """
+        Interpolates the data to get the OD at the requested x/y location
+
+        Args:
+            x (float): x detector pixel location
+            y (float): y detector pixel location
+            method (str): only "nearest" supported currently
+        
+        Returns:
+            float: the OD at the requested point
+        """
+        interpolator = LinearNDInterpolator(np.array([self.x_values, self.y_values]).T, self.od_values)
+
+        return interpolator(x, y)
+
+def format_ftimeutc(ftime_str: str) -> str:
+    """
+    Round the input FTIMEUTC time to the nearest 0.1 sec and reformat as:
+    yyyymmddThhmmsss, where the last three digits represent the two-digit seconds 
+    and one digit for the tenths of a second.
+    
+    For example, an input of "2025-04-15T03:05:10.21" would return "20250415T0305102".
+
+    Args:
+        ftime_str (str): Time string in ISO format, e.g. "2025-04-15T03:05:10.21".
+
+    Returns:
+        formatted_time (str): Reformatted time string that complies with documentation
+            guidelines.
+    """
+    # Parse the input using fromisoformat, which can handle timezone offsets.
+    try:
+        ftime = datetime.fromisoformat(ftime_str)
+    except ValueError as e:
+        raise ValueError(f"Could not parse FTIMEUTC: {ftime_str}") from e
+
+    # If the datetime is timezone aware, convert to UTC and remove tzinfo.
+    if ftime.tzinfo is not None:
+        ftime = ftime.astimezone(timezone.utc).replace(tzinfo=None)
+    
+    # Define rounding interval: 0.1 sec = 100,000 microseconds.
+    rounding_interval = 100000
+    # Round the microseconds to the nearest 0.1 sec.
+    rounded_microsec = int((ftime.microsecond + rounding_interval / 2) // rounding_interval * rounding_interval)
+    
+    # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds, increment the second.
+    if rounded_microsec >= 1000000:
+        ftime = ftime.replace(microsecond=0) + timedelta(seconds=1)
+    else:
+        ftime = ftime.replace(microsecond=rounded_microsec)
+    
+    # Extract seconds (two digits) and the tenths-of-second.
+    sec_int = ftime.second
+    tenth = int(ftime.microsecond / 100000)  # gives one digit (0-9)
+    
+    # Format as YYYYMMDDTHHMM then append seconds and tenth-of-second.
+    formatted_time = ftime.strftime("%Y%m%dT%H%M") + f"{sec_int:02d}{tenth:d}"
+    return formatted_time
+
 
 datatypes = { "Image" : Image,
-             "Dark" : Dark,
+              "Dark" : Dark,
               "NonLinearityCalibration" : NonLinearityCalibration,
               "KGain" : KGain,
               "BadPixelMap" : BadPixelMap,
@@ -1409,7 +2555,11 @@ datatypes = { "Image" : Image,
               "FlatField" : FlatField,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
-              "TrapCalibration": TrapCalibration }
+              "TrapCalibration" : TrapCalibration,
+              "FluxcalFactor" : FluxcalFactor,
+              "FpamFsamCal" : FpamFsamCal,
+              "CoreThroughputCalibration": CoreThroughputCalibration,
+              "NDFilterSweetSpot": NDFilterSweetSpotDataset}
 
 def autoload(filepath):
     """
@@ -1444,3 +2594,88 @@ def autoload(filepath):
     frame = data_class(filepath)
 
     return frame
+
+def unpackbits_64uint(arr, axis):
+    """
+    Unpacking bits from a 64-bit unsigned integer array
+
+    Args:
+        arr (np.ndarray): the array to unpack
+        axis (int): axis to unpack
+
+    Returns:
+        np.ndarray of bits
+    """
+    arr = arr.astype('>u8')
+    n = arr.view('u1')
+    return np.unpackbits(n, axis=axis, bitorder='big')
+
+def packbits_64uint(arr, axis):
+    """
+    Packing bits into a 64-bit unsigned integer array
+
+    Args:
+        arr (np.ndarray): the array to pack 
+        axis (int): axis to pack
+
+    Returns:
+        np.ndarray of 64-bit unsigned integers
+    """
+    return np.packbits(arr, axis=axis, bitorder='big').view('>u8')
+
+def get_flag_to_bit_map():
+    """
+    Returns a dictionary mapping flag names to bit positions.
+    
+    Returns:
+        dict: A dictionary with flag names as keys and bit positions (int) as values.
+    """
+    return {
+        "bad_pixel_unspecified": 0,
+        "data_replaced_by_filled_value": 1,
+        "bad_pixel": 2,
+        "hot_pixel": 3,
+        "not_used": 4,
+        "full_well_saturated_pixel": 5,
+        "non_linear_pixel": 6,
+        "pixel_affected_by_cosmic_ray": 7,
+        "TBD": 8,
+    }
+
+def get_flag_to_value_map():
+    """
+    Returns a dictionary mapping flag names to their decimal flag values. Example usage is as follows:
+    
+    FLAG_TO_VALUE_MAP = get_flag_to_value_map()
+    flag_value = FLAG_TO_VALUE_MAP["TBD"]  # Gives the decimal value corresponding to "TBD"
+
+    Returns:
+        dict: A dictionary with flag names as keys and decimal values (int) as values.
+    """
+    return {name: (1 << bit) for name, bit in get_flag_to_bit_map().items()}
+
+def get_value_to_flag_map():
+    """
+    Returns a dictionary mapping flag decimal values to flag names. Example usage is as follows:
+    
+    FLAG_TO_BIT_MAP = get_flag_to_bit_map()
+    bit_position = FLAG_TO_BIT_MAP["TBD"]  # Gives which index it should be in with the key. 
+    
+    Expected position of bit_position of the unpacked array = 63 - bit_position
+    
+    Returns:
+        dict: A dictionary with decimal values (int) as keys and flag names as values.
+    """
+    return {value: name for name, value in get_flag_to_value_map().items()}
+
+def get_bit_to_flag_map():
+    """
+    Returns a dictionary mapping bit positions to flag names. Example usage is as follows:
+
+    BIT_TO_FLAG_MAP = get_bit_to_flag_map()
+    flag_name_from_bit = BIT_TO_FLAG_MAP[8]  # Expected: "TBD"
+    
+    Returns:
+        dict: A dictionary with bit positions (int) as keys and flag names as values.
+    """
+    return {bit: name for name, bit in get_flag_to_bit_map().items()}

@@ -20,17 +20,44 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
+
+
 # tvac_kgain: 8.49404981510777 e-/DN, result from new iit code with specified file input order; used to be #8.8145 #e/DN,
 # tvac_readnoise: 121.76070832489948 e-, result from new iit code with specified file input order; used to be 130.12 e-
 
 @pytest.mark.e2e
-def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
+def test_l1_to_kgain(e2edata_path, e2eoutput_path):
 
     # sort and prepare raw files to run through both II&T and DRP
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')
     stack_arr2_f = []
     stack_arr_f = []
-    box_data = os.path.join(tvacdata_path, 'TV-20_EXCAM_noise_characterization', 'kgain') 
+    box_data = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'kgain') 
     for f in os.listdir(box_data):
         file = os.path.join(box_data, f)
         if not file.endswith('.fits'):
@@ -93,6 +120,9 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     ####### ordered_filelist is simply the combination of the the two ordered stacks that are II&T inputs is the input needed for the DRP calibration
     ordered_filelist = stack_arr_f+stack_arr2_f
 
+    ##### Fix TVAC headers
+    fix_headers_for_tvac(ordered_filelist)
+
     ########## Calling II&T code
     (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
                     binwidth=68, config_file=default_config_file, 
@@ -111,7 +141,7 @@ def test_l1_to_kgain(tvacdata_path, e2eoutput_path):
     walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
 
     ####### Load in the output data. It should be the latest kgain file produced.
-    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_kgain.fits'))
+    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_KRN_CAL*.fits'))
     kgain_file = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
 
     kgain = data.KGain(kgain_file)
@@ -142,15 +172,15 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    tvacdata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
+    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_l1_to_kgain(tvacdata_dir, outputdir)
+    test_l1_to_kgain(e2edata_dir, outputdir)

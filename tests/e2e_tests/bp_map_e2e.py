@@ -14,11 +14,35 @@ from corgidrp import walker
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 @pytest.mark.e2e
-def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
+def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
     bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
@@ -36,6 +60,9 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     input_image_filelist = []
     l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
+    # update TVAC headers
+    fix_headers_for_tvac(l1_data_filelist)
+
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
     for file in l1_data_filelist:
@@ -43,7 +70,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
             # Modify the extension header to set KGAIN to 8.7
             pri_hdr = hdulist[0].header
             ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-            ext_hdr["KGAIN"] = 8.7
+            ext_hdr["KGAINPAR"] = 8.7
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
@@ -78,7 +105,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    noise_maps.save(filedir=bp_map_outputdir, filename="mock_detnoisemaps.fits")
+    noise_maps.save(filedir=bp_map_outputdir, filename="mock_detnoisemaps_DNM_CAL.fits")
     this_caldb.create_entry(noise_maps)
 
     ## Load and save flat field calibration data
@@ -86,7 +113,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                           input_dataset=mock_input_dataset)
-    flat.save(filedir=bp_map_outputdir, filename="mock_flat.fits")
+    flat.save(filedir=bp_map_outputdir, filename="mock_flat_FLT_CAL.fits")
     this_caldb.create_entry(flat)
 
     # Load and save bad pixel map data
@@ -94,12 +121,12 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                               input_dataset=mock_input_dataset)
-    bp_map.save(filedir=bp_map_outputdir, filename="mock_bpmap.fits")
+    bp_map.save(filedir=bp_map_outputdir, filename="mock_bpmap_BPM_CAL.fits")
     this_caldb.create_entry(bp_map)
 
     # Build and save a synthesized master dark frame
     master_dark = darks.build_synthesized_dark(mock_input_dataset, noise_maps)
-    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
+    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock_DRK_CAL.fits")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
@@ -112,7 +139,7 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(master_dark)
     this_caldb.remove_entry(bp_map)
 
-    generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
+    generated_bp_map_file = os.path.join(bp_map_outputdir, "mock_flat_BPM_CAL.fits")
 
     # Load the generated bad pixel map image and master dark reference data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
@@ -189,10 +216,10 @@ def test_bp_map_master_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(generated_bp_map_img)
 
 @pytest.mark.e2e
-def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
+def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     # Define paths for input L1 data and calibration files
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
     bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
@@ -206,6 +233,9 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
     l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
+
+    # update TVAC headers
+    fix_headers_for_tvac(l1_data_filelist)
 
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
@@ -227,7 +257,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                           input_dataset=mock_input_dataset)
-    flat.save(filedir=bp_map_outputdir, filename="mock_flat.fits")
+    flat.save(filedir=bp_map_outputdir, filename="mock_flat_FLT_CAL.fits")
     this_caldb.create_entry(flat)
 
     # Create a simulated dark frame with random hot pixels for testing
@@ -256,7 +286,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     master_dark = data.Dark(simple_dark_data, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                             input_dataset=mock_input_dataset)
 
-    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock.fits")
+    master_dark.save(filedir=bp_map_outputdir, filename="dark_mock_DRK_CAL.fits")
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
@@ -267,7 +297,7 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(master_dark)
 
-    generated_bp_map_file = os.path.join(bp_map_outputdir, "dark_mock_bad_pixel_map.fits")
+    generated_bp_map_file = os.path.join(bp_map_outputdir, "mock_flat_BPM_CAL.fits")
 
     # Load the generated bad pixel map image and reference dark data
     generated_bp_map_img = data.BadPixelMap(generated_bp_map_file)
@@ -315,22 +345,22 @@ def test_bp_map_simulated_dark_e2e(tvacdata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    # tvacdata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
-    tvacdata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/"
+    e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
     outputdir = thisfile_dir
 
     # Argument parser setup
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
 
     # Assign parsed arguments to variables
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
 
     # Run the main functions with parsed arguments
-    test_bp_map_master_dark_e2e(tvacdata_dir, outputdir)
-    test_bp_map_simulated_dark_e2e(tvacdata_dir, outputdir)
+    test_bp_map_master_dark_e2e(e2edata_dir, outputdir)
+    test_bp_map_simulated_dark_e2e(e2edata_dir, outputdir)
+    
