@@ -16,16 +16,14 @@ import corgidrp.detector as detector
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
-    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
-    flat_path = os.path.join(processed_cal_path, "flat.fits")
-    bp_path = os.path.join(processed_cal_path, "bad_pix.fits")
-
+    # e2edata_path not used at all for this test
     np.random.seed(1234)
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=2, cosmic_rate=1, flux=0.5, bad_frames=1)#Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
     output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
     output_l2a_dir = os.path.join(output_dir, 'l2a')
+    output_l2a_dark_dir = os.path.join(output_dir, 'l2a_dark')
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
     # empty out directory of any previous files
@@ -39,13 +37,15 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         os.mkdir(output_dark_dir)
     if not os.path.exists(output_l2a_dir):
         os.mkdir(output_l2a_dir)
+    if not os.path.exists(output_l2a_dark_dir):
+        os.mkdir(output_l2a_dark_dir)
     # empty out directory of any previous files
     for f in os.listdir(output_ill_dir):
         os.remove(os.path.join(output_ill_dir,f))
     for f in os.listdir(output_dark_dir):
         os.remove(os.path.join(output_dark_dir,f))
-    ill_dataset.save(output_ill_dir, ['pc_frame_ill_{0}.fits'.format(i) for i in range(len(ill_dataset))])
-    dark_dataset.save(output_dark_dir, ['pc_frame_dark_{0}.fits'.format(i) for i in range(len(dark_dataset))])
+    ill_dataset.save(output_ill_dir)#, ['pc_frame_ill_{0}.fits'.format(i) for i in range(len(ill_dataset))])
+    dark_dataset.save(output_dark_dir)#, ['pc_frame_dark_{0}.fits'.format(i) for i in range(len(dark_dataset))])
     l1_data_ill_filelist = []
     l1_data_dark_filelist = []
     for f in os.listdir(output_ill_dir):
@@ -111,22 +111,31 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(new_nonlinearity)
 
     ## Flat field
-    with fits.open(flat_path) as hdulist:
-        flat_dat = hdulist[0].data
+    flat_dat = np.ones((1024,1024))
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     flat.save(filedir=output_dir, filename="mock_flat.fits")
     this_caldb.create_entry(flat)
 
     # bad pixel map
-    with fits.open(bp_path) as hdulist:
-        bp_dat = hdulist[0].data
+    bp_dat = np.zeros((1024,1024))
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     bp_map.save(filedir=output_dir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
     # make PC dark
-    # below I leave out the template specification to check that the walker recipe guesser works as expected
-    walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")
+    # you can leave out the template specification to check that the walker recipe guesser works as expected, going from L1 to L2b for PC dark
+    #walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")
+    # instead, for VAP testing, we choose to go to L2a first and then to L2b PC dark
+    walker.walk_corgidrp(l1_data_dark_filelist, '', output_l2a_dark_dir, template="l1_to_l2a_basic.json")
+    # grab L2a dark files to go to L2b dark
+    l2a_dark_files = []
+    for filepath in l1_data_dark_filelist:
+        # emulate naming change behaviors
+        new_filename = filepath.split(os.path.sep)[-1].replace("_L1_", "_L2a") 
+        # loook in new dir
+        new_filepath = os.path.join(output_l2a_dark_dir, new_filename)
+        l2a_dark_files.append(new_filepath)
+    walker.walk_corgidrp(l2a_dark_files, '', output_dir, template="l2a_to_l2b_pc_dark_VAP.json")
     # calDB was just updated with the PC Dark that was created with the walker above
     master_dark_filename_list = []
     master_dark_filepath_list = []
@@ -151,7 +160,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
-    walker.walk_corgidrp(l2a_files, '', output_dir)
+    walker.walk_corgidrp(l2a_files, '', output_dir, template="l2a_to_l2b_pc_VAP.json")
 
     # get photon-counted frame
     master_ill_filename_list = []
@@ -180,6 +189,52 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
+
+        ############# extra checks for VAP testing
+        # dimensions of output arrays
+        assert pc_frame.shape == (1024,1024)
+        # check frame rejection was correctly applied (for illuminated and dark)
+        pc_ext_hdr = fits.getheader(master_ill_filepath_list[i], 1)
+        assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1
+        pc_dark_ext_hdr = fits.getheader(master_dark_filepath_list[i], 1)
+        assert pc_dark_ext_hdr['NUM_FR'] == len(l1_data_dark_filelist) - 1
+
+    # dimensions of input dark arrays
+    for f in l2a_dark_files:
+        if not f.endswith('.fits'):
+            continue        
+        input_frame = fits.getdata(f)
+        assert input_frame.shape == (1024,1024)
+    # dimensions of input illuminated arrays
+    for f in l2a_files:
+        if not f.endswith('.fits'):
+            continue        
+        input_frame = fits.getdata(f)
+        assert input_frame.shape == (1024,1024)
+    # bpmap is an array of 0 and 1 
+    inds_0 = np.where(bp_map.data.ravel() == 0)
+    inds_1 = np.where(bp_map.data.ravel() == 1)
+    assert len(inds_0[0]) + len(inds_1[0]) == bp_map.data.size
+#XXX separate out each test into its own test function so pytest will show results of all tests simultaneously (and not stop output after first failure when all checks in one large test function)?
+#XXX fix all TPSCHEME* instances to TPSCHEM*, and adjust wiki pages accordingly? (Check with Julia on Wiki pages, though)
+
+# check image conversion from DN to electrons (covered in run_vi_tdd_05_case_02.py)
+# check photon-counting threshold was correctly applied (new test to write)
+# check that the mean-combine of all N thresholded frames has been done correctly (covered in
+# run_vi_tdd_04_case_03.py)
+
+# check that the mean-combine of all N bad pixel maps has been done correctly (covered in run_vi_tdd_04_case_04.py)
+# check that the photon-counting photometric corrections have been properly applied NOTE 
+# check that master dark is correctly generated NOTE
+# check that master dark is divided by gain (covered in run_vi_tdd_05_case_02.py)
+# check that master dark has been correctly photon-counted NOTE
+# check that the master dark has been subtracted from the image NOTE
+# check that desmearing is correctly applied to image if desmear_flag is set to True (currently no desmear_flag, but want to check that it is indeed applied if part of the recipe) (covered in run_vi_tdd_05_case_02.py)
+# check that image is divided by flat field (covered in run_vi_tdd_05_case_02.py)
+# check that flat zero values are correctly handled (covered in run_vi_tdd_05_case_02.py)
+# check that per-frame bad-pixel map are correctly computed from fixed bad pixel map (covered in run_vi_tdd_05_case_02.py)
+# check that pixels are correctly flagged at the frame level (covered in run_vi_tdd_05_case_02.py)
+# Visually inspect the output images from a subject matter standpoint to make sure they look correct.
 
     # load in CalDB again to reflect the PC Dark that was implicitly added in (but not found in this_caldb, which was loaded before the Dark was created)
     post_caldb = caldb.CalDB()

@@ -1038,7 +1038,7 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'Detected Electrons'
             # bias offset
-            self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
+            self.ext_hdr['B_O_UNIT'] = 'DN' # err unit is also in DN
 
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys():
