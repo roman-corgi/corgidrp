@@ -13,7 +13,6 @@ from photutils.psf import fit_2dgaussian
 from scipy import integrate
 from corgidrp.astrom import centroid_with_roi
 from urllib.request import Request, urlopen, urlretrieve
-from bs4 import BeautifulSoup
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
 
