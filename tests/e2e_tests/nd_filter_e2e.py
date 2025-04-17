@@ -26,10 +26,14 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     od_truth = 2.0                   # optical density to recover
     attenuated_flux = true_flux_bright / (10 ** od_truth)
 
-    bright_frames = mocks.create_flux_image(
-        attenuated_flux, fwhm, cal_factor, fpamname='ND225', target_name='Vega'
-    )
-    bright_frames = [bright_frames] if not isinstance(bright_frames, list) else bright_frames
+    fsm_positions = [(0.0, 0.0),                     
+                     (1.0, -1.0)]                   
+
+    bright_frames = []
+    for fsm_x, fsm_y in fsm_positions:
+        frame = mocks.create_flux_image(attenuated_flux, fwhm, cal_factor, fpamname='ND225',     
+            target_name='Vega', fsm_x=fsm_x, fsm_y=fsm_y)
+        bright_frames.append(frame)
 
     # 3. Save raw files for the walker
     simdata_dir = os.path.join(os.path.dirname(e2edata_path), "simdata")
@@ -39,7 +43,6 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     for i, frame in enumerate(dim_frames + bright_frames):
         input_prihdr = frame.pri_hdr
         input_exthdr = frame.ext_hdr
-        input_exthdr['DATALVL'] = 'L3'
         frame.save(simdata_dir, f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L3_.fits")
 
     filelist = [os.path.join(simdata_dir, f) for f in os.listdir(simdata_dir)]
@@ -49,7 +52,8 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     for old_file in glob.glob(os.path.join(e2eoutput_path, "*NDF_CAL.fits")):
         os.remove(old_file)
     out_dir = e2eoutput_path
-    walker.walk_corgidrp(filelist, "", out_dir, template='l3_to_nd_filter.json')
+    #walker.walk_corgidrp(filelist, "", out_dir, template='l2b_to_nd_filter.json')
+    walker.walk_corgidrp(filelist, "", out_dir)
 
     # 5. Load product & assert if calculated OD matches the input
     nd_file = glob.glob(os.path.join(out_dir, "*_NDF_CAL*.fits"))
