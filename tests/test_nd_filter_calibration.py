@@ -557,12 +557,14 @@ def test_calculate_od_at_new_location(output_dir):
     # Expect the final location = (2+3, 2+3) = (5,5).
     # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
     expected_value = 3.5
-    assert abs(interpolated_od - expected_value) < 1e-6, (
+    atol_nd = 1e-6
+    assert abs(interpolated_od - expected_value) < atol_nd, (
         f"Expected OD={expected_value}, got {interpolated_od}"
     )
+    print('')
     print(
-        f"test_calculate_od_at_new_location_nd_sweetspot_real_class PASSED: "
-        f"interpolated OD={interpolated_od}"
+        f"test_calculate_od_at_new_location PASSED: "
+        f"estimated OD = {interpolated_od}, expected OD = {expected_value}"
     )
 
 

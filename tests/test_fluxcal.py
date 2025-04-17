@@ -9,6 +9,8 @@ import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
 import astropy.units as u
+from termcolor import cprint
+
 
 data = np.ones([1024, 1024]) * 2
 err = np.ones([1, 1024, 1024]) * 0.5
@@ -23,6 +25,14 @@ image2.filename = "test2_L4_.fits"
 dataset = Dataset([image1, image2])
 calspec_filepath = os.path.join(
     os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
+
+
+def print_fail():
+    cprint(' FAIL ', "black", "on_red")
+
+
+def print_pass():
+    cprint(' PASS ', "black", "on_green")
 
 
 def test_get_filter_name():
@@ -221,14 +231,11 @@ def test_abs_fluxcal():
     assert fluxcal_factor.filter == '3C'
     # band_flux/200 was the input calibration factor cal_factor of the
     # simulated mock image
-    assert fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor,
-                                                       rel=rel_tol_flux)
-    # Print out the test result
-    if np.isclose(fluxcal_factor.fluxcal_fac, cal_factor, rtol=rel_tol_flux):
-        result = 'PASS'
-    else:
-        result = 'FAIL'
-    print('\n*** Flux from fluxcal.calibrate_fluxcal_aper() is correct to within %.2f%% ***:    %s' % (rel_tol_flux*100, result))
+    test_result = fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor, rel=rel_tol_flux)
+    assert test_result
+    # Print out the result
+    print('\nFlux from fluxcal.calibrate_fluxcal_aper() is correct to within %.2f%% ***: ' % (rel_tol_flux*100), end='')
+    print_pass() if test_result else print_fail()
 
     # divisive error propagation of the aperture phot error
     err_fluxcal_ap = band_flux/flux_el_ap**2*flux_err_ap
@@ -238,14 +245,12 @@ def test_abs_fluxcal():
     fluxcal_factor_gauss = fluxcal.calibrate_fluxcal_gauss2d(
         dataset, flux_or_irr='flux', phot_kwargs=None)
     assert fluxcal_factor_gauss.filter == '3C'
-    assert fluxcal_factor_gauss.fluxcal_fac == pytest.approx(cal_factor,
-                                                             rel=rel_tol_flux)
-    # Print out the test result
-    if np.isclose(fluxcal_factor_gauss.fluxcal_fac, cal_factor, rtol=rel_tol_flux):
-        result = 'PASS'
-    else:
-        result = 'FAIL'
-    print('\n*** Flux from fluxcal.calibrate_fluxcal_gauss2d() is correct to within %.2f%% ***:    %s' % (rel_tol_flux*100, result))
+    test_result = fluxcal_factor_gauss.fluxcal_fac == pytest.approx(
+        cal_factor, rel=rel_tol_flux)
+    assert test_result
+    # Print out the result
+    print('\nFlux from fluxcal.calibrate_fluxcal_gauss2d() is correct to within %.2f%% ***: ' % (rel_tol_flux*100), end='')
+    print_pass() if test_result else print_fail()
 
     # divisive error propagation of the 2D Gaussian fit phot error
     err_fluxcal_gauss = band_flux/flux_el_gauss**2*flux_err_gauss
