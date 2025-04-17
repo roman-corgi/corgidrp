@@ -1,5 +1,5 @@
 {
-    "name": "l3_to_ndf_cal",
+    "name": "l2b_to_ndf_cal",
     "template": true,
     "drpconfig": { "track_individual_errors": false },
     "inputs": [],
