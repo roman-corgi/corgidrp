@@ -128,7 +128,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         elif this_caldb._db['Type'][i] == 'FlatField':
             this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
-    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
     ext_hdr['RN'] = 100
     ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
@@ -309,7 +309,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
         elif this_caldb._db['Type'][i] == 'FlatField':
             this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
-    # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
+    # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
     ext_hdr['RN'] = 100
     ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 

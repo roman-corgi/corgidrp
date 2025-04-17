@@ -1,4 +1,4 @@
-from corgidrp.mocks import create_psfsub_dataset,create_default_headers
+from corgidrp.mocks import create_psfsub_dataset,create_default_L1_headers
 from corgidrp.l3_to_l4 import do_psf_subtraction
 from corgidrp.data import PyKLIPDataset, Image, Dataset
 from corgidrp.detector import nan_flags, flag_nans
@@ -172,7 +172,7 @@ def make_test_data(frame_shape,n_frames=1,):
     
     frames = []
     for i in range(n_frames):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         im_data = np.zeros(frame_shape).astype(np.float64)
         frame = Image(im_data, pri_hdr=prihdr, ext_hdr=exthdr)
 

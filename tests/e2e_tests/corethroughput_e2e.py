@@ -27,7 +27,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT = 6854, 22524, 29471, 12120
     # Choose a band
     cfam_name = '1F'
-    prhd, exthd = mocks.create_default_L2b_headers()
+    prhd, exthd, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     # Mock error
     err = np.ones([1024,1024])
     # Add pupil image(s) of the unocculted source's observation to test that

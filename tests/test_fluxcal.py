@@ -12,7 +12,7 @@ import astropy.units as u
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5
-prhd, exthd = create_default_L3_headers()
+prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
 exthd["CFAMNAME"] = '3C'
 exthd["FPAMNAME"] = 'ND475'
 prhd["TARGET"] = 'VEGA'

@@ -522,7 +522,7 @@ def test_calculate_od_at_new_location(output_dir):
     ], dtype=float)
 
     # Create a fake input dataset to set the filename
-    input_prihdr, input_exthdr = mocks.create_default_L2b_headers()
+    input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
     fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
@@ -541,7 +541,7 @@ def test_calculate_od_at_new_location(output_dir):
     # Shift it by (3,3) => final location (5,5).
     clean_image_data = np.zeros((5, 5), dtype=float)
     clean_image_data[2, 2] = 100.0  # star pixel
-    cframe_prihdr, cframe_exthdr = mocks.create_default_L2b_headers()
+    cframe_prihdr, cframe_exthdr, errhdr, dqhdr, biashdr= mocks.create_default_L2b_headers()
     cframe_exthdr["FPAM_H"] = 3.0
     cframe_exthdr["FPAM_V"] = 3.0
     clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
