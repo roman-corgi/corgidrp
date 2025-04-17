@@ -36,7 +36,6 @@ calspec_names= {
 'tyc 4207-219-1': '1740346_stisnic_005.fits'
 }
 
-
 calspec_url = 'https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_calspec/'
 
 def get_calspec_file(star_name):
@@ -48,6 +47,7 @@ def get_calspec_file(star_name):
     
     Returns:
         str: file path
+        str: fits file name
     """
     if star_name.lower() not in calspec_names.keys():
         raise ValueError('{0} is not in list of anticipated standard stars \n {1},\n please check naming'.format(star_name, [*calspec_names])) 
@@ -70,7 +70,7 @@ def get_calspec_file(star_name):
         file_name, headers = urlretrieve(fits_url, filename =  os.path.join(calspec_dir, name))
     except:
         raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(name))
-    return file_name
+    return file_name, name
 
 def get_filter_name(image):
     """
@@ -207,7 +207,7 @@ def calculate_flux_ref(filter_wavelength, calspec_flux, wave_ref):
 
 def calculate_vega_mag(source_flux, filter_file):
     """
-    determine the apparent Vega magnitude of the source with known flux in CALSPEC units (erg/(s * cm^2 *AA)
+    determine the apparent Vega magnitude of the source with known flux in CALSPEC units erg/(s * cm^2 *AA)
     in the used filter band.
     
     Args:
@@ -220,7 +220,7 @@ def calculate_vega_mag(source_flux, filter_file):
     
     wave, filter_trans = read_filter_curve(filter_file)
     # calculate the flux of VEGA and the source star from the user given CALSPEC file binned on the wavelength grid of the filter
-    vega_filepath = get_calspec_file('Vega')
+    vega_filepath = get_calspec_file('Vega')[0]
     vega_sed = read_cal_spec(vega_filepath, wave)
 
     vega_flux = calculate_band_flux(filter_trans, vega_sed, wave)
@@ -485,7 +485,7 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     
     # Read filter and CALSPEC data.
     wave, filter_trans = read_filter_curve(filter_file)
-    calspec_filepath = get_calspec_file(star_name) 
+    calspec_filepath, calspec_filename = get_calspec_file(star_name) 
     flux_ref = read_cal_spec(calspec_filepath, wave)
     
     if flux_or_irr == 'flux':
@@ -522,7 +522,7 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         fluxcal_obj.ext_hdr['LOCBACK'] = back
 
     # Append to or create a HISTORY entry in the header.
-    history_entry = "Flux calibration factor was determined by aperture photometry."
+    history_entry = "Flux calibration factor was determined by aperture photometry using SED file {0}".format(calspec_filename)
     fluxcal_obj.ext_hdr.add_history(history_entry)
 
     return fluxcal_obj
@@ -584,7 +584,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     filter_file = get_filter_name(image)
     
     wave, filter_trans = read_filter_curve(filter_file)
-    calspec_filepath = get_calspec_file(star_name)
+    calspec_filepath, calspec_filename = get_calspec_file(star_name)
     flux_ref = read_cal_spec(calspec_filepath, wave)
     
     if flux_or_irr == 'flux':
@@ -620,7 +620,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         fluxcal_obj.ext_hdr['LOCBACK'] = back
 
     # Append to or create a HISTORY entry in the header.
-    history_entry = "Flux calibration factor was determined by a Gaussian 2D fit photometry."
+    history_entry = "Flux calibration factor was determined by a Gaussian 2D fit photometry using SED file {0}".format(calspec_filename)
     fluxcal_obj.ext_hdr.add_history(history_entry)
     
     return fluxcal_obj
