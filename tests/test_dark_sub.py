@@ -141,7 +141,7 @@ def test_dark_sub():
     EMgain = 10
     exptime = 4
     frame = (noise_maps.FPN_map + noise_maps.CIC_map*EMgain + noise_maps.DC_map*exptime*EMgain)/EMgain
-    prihdr, exthdr = mocks.create_default_calibration_product_headers()
+    prihdr, exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     image_frame = data.Image(frame, prihdr, exthdr)
     image_frame.ext_hdr['EMGAIN_C'] = EMgain
     image_frame.ext_hdr['EXPTIME'] = exptime

@@ -821,7 +821,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
         corgidrp.data.DetectorNoiseMaps instance
     '''
 
-    prihdr, exthdr = create_default_calibration_product_headers()
+    prihdr, exthdr, errhdr, dqhdr = create_default_calibration_product_headers()
     # taken from end of calibrate_darks_lsq()
 
     err_hdr = fits.Header()
@@ -918,7 +918,7 @@ def create_synthesized_master_dark_calib(detector_areas):
             frame_dn_dark *= eperdn
 
             # Now make this into a bunch of corgidrp.Dataset stacks
-            prihdr, exthdr = create_default_calibration_product_headers()
+            prihdr, exthdr, errhdr, dqhdr = create_default_calibration_product_headers()
             frame = data.Image(frame_dn_dark, pri_hdr=prihdr,
                             ext_hdr=exthdr)
             frame.ext_hdr['EMGAIN_C'] = EMgain_arr[i]
@@ -1371,7 +1371,7 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
     if (filedir is not None) and (not os.path.exists(filedir)):
         os.mkdir(filedir)
 
-    prihdr, exthdr = create_default_calibration_product_headers()
+    prihdr, exthdr, errhdr, dqhdr = create_default_calibration_product_headers()
     exthdr['DATATYPE']      = 'BadPixelMap'
 
     sim_data = np.zeros([1024,1024], dtype = np.uint16)
