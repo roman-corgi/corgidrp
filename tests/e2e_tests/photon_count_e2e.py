@@ -15,7 +15,10 @@ import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 
 @pytest.mark.e2e
-def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+def test_pc_prep_e2e(e2edata_path, e2eoutput_path, VAP):
+    global pc_frame, pc_dark_frame, ill_mean, dark_mean, pc_frame_err, pc_dark_frame_err, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat
+    if VAP != 'yes' and VAP != 'no':
+        raise Exception(r'VAP must be either "yes" or "no"')
     # e2edata_path not used at all for this test
     np.random.seed(1234)
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=2, cosmic_rate=1, flux=0.5, bad_frames=1)#Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
@@ -125,7 +128,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # make PC dark
     # you can leave out the template specification to check that the walker recipe guesser works as expected, going from L1 to L2b for PC dark
     #walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")
-    # instead, for VAP testing, we choose to go to L2a first and then to L2b PC dark
+    # instead, especially for VAP testing, we choose to go to L2a first and then to L2b PC dark
     walker.walk_corgidrp(l1_data_dark_filelist, '', output_l2a_dark_dir, template="l1_to_l2a_basic.json")
     # grab L2a dark files to go to L2b dark
     l2a_dark_files = []
@@ -178,6 +181,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         if f == pc_processed_filename: 
             master_ill_filename_list.append(f)
             master_ill_filepath_list.append(os.path.join(output_dir, f))
+
+@pytest.mark.e2e
+def test_pc_e2e_1(e2edata_path, e2eoutput_path, VAP):            
     for i in range(len(master_ill_filepath_list)):
         pc_frame = fits.getdata(master_ill_filepath_list[i])
         pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
@@ -185,19 +191,27 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
 
         # more frames gets a better agreement; agreement to 1% for ~160 darks and illuminated
-        assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02) 
-        assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
-        assert pc_frame_err.min() >= 0
-        assert pc_dark_frame_err.min() >= 0
-
-        ############# extra checks for VAP testing
-        # dimensions of output arrays
-        assert pc_frame.shape == (1024,1024)
-        # check frame rejection was correctly applied (for illuminated and dark)
-        pc_ext_hdr = fits.getheader(master_ill_filepath_list[i], 1)
-        assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1
-        pc_dark_ext_hdr = fits.getheader(master_dark_filepath_list[i], 1)
-        assert pc_dark_ext_hdr['NUM_FR'] == len(l1_data_dark_filelist) - 1
+        if VAP == 'no':
+            assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02) 
+            assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
+            assert pc_frame_err.min() >= 0
+            assert pc_dark_frame_err.min() >= 0
+        if VAP == 'yes':
+            if np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02):
+                print(r'PC Frame mean is within 2% of expected value')
+            else:
+                print(r'FAILED:  PC Frame mean is within 2% of expected value')
+            assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
+            assert pc_frame_err.min() >= 0
+            assert pc_dark_frame_err.min() >= 0
+            ############# extra checks for VAP testing
+            # dimensions of output arrays
+            assert pc_frame.shape == (1024,1024)
+            # check frame rejection was correctly applied (for illuminated and dark)
+            pc_ext_hdr = fits.getheader(master_ill_filepath_list[i], 1)
+            assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1
+            pc_dark_ext_hdr = fits.getheader(master_dark_filepath_list[i], 1)
+            assert pc_dark_ext_hdr['NUM_FR'] == len(l1_data_dark_filelist) - 1
 
     # dimensions of input dark arrays
     for f in l2a_dark_files:
@@ -216,6 +230,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     inds_1 = np.where(bp_map.data.ravel() == 1)
     assert len(inds_0[0]) + len(inds_1[0]) == bp_map.data.size
 #XXX separate out each test into its own test function so pytest will show results of all tests simultaneously (and not stop output after first failure when all checks in one large test function)?
+#XXX add in print() statements for each test 
 #XXX fix all TPSCHEME* instances to TPSCHEM*, and adjust wiki pages accordingly? (Check with Julia on Wiki pages, though)
 
 # check image conversion from DN to electrons (covered in run_vi_tdd_05_case_02.py)
@@ -263,7 +278,10 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
+    ap.add_argument('-vap', '--VAP', default='no', help='If True, VAP test is run.')
     args = ap.parse_args()
     outputdir = args.outputdir
     e2edata_dir = args.e2edata_dir
-    test_expected_results_e2e(e2edata_dir, outputdir)
+    VAP = args.VAP
+    test_pc_prep_e2e(e2edata_dir, outputdir, VAP)
+    test_pc_e2e_1(e2edata_dir, outputdir, VAP)

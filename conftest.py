@@ -15,6 +15,8 @@ def pytest_addoption(parser):
     parser.addoption("--e2edata_path", action="store", default="./", help="Filepath to 'CGI TVAC Data' Folder")
     # can specify output for e2e tests
     parser.addoption("--e2eoutput_path", action="store", default="./", help="Directory to Save E2E Test Outputs")
+    # can specify whether VAP testing is desired
+    parser.addoption("--VAP", action="store", default='no', help="If True, VAP testing is done.")
     # add ability to specify whether to run unit tests, e2e tests, or both
     parser.addoption(
         "--which", action="store", default="unit", help="which tests to run: unit, e2e, all", choices=("unit", "e2e", "all")
@@ -45,6 +47,20 @@ def e2eoutput_path(request):
         str: value from this command line argument
     """
     return request.config.getoption("--e2eoutput_path")
+
+@pytest.fixture
+def VAP(request):
+    """
+    Adds the hook to be able to grab the value passed in with the VAP argument
+
+    Args:
+        request (FixtureRequest): pytest request of a fixture
+    
+    Returns:
+        str: value from this command line argument
+    """
+    return request.config.getoption("--VAP")
+
 
 
 def pytest_configure(config):
