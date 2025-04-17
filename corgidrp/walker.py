@@ -22,7 +22,6 @@ import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
 import corgidrp.fluxcal
-import corgidrp.nd_filter_calibration
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
