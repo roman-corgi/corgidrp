@@ -20,7 +20,7 @@ err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1
-prihd, exthd, errhd, dqhd, biashdr = create_default_L2a_headers()
+prhd, exthd, errhd, dqhd, biashdr = create_default_L2a_headers()
 errhd["CASE"] = "test"
 dqhd["CASE"] = "test"
 
