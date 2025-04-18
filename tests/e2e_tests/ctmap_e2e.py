@@ -6,6 +6,7 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
+from astropy.io import fits
 
 import corgidrp
 import corgidrp.data as data
@@ -123,8 +124,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     fpam_fsam_cal = data.FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
         'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
     # The first entry (dataset) is only used to get the FPM's center
-    ct_map_mock = corethroughput.CreateCTMap(corDataset, fpam_fsam_cal,
-        ct_cal_mock, save = False)
+    ct_map_mock = corethroughput.create_ct_map(corDataset, fpam_fsam_cal,
+        ct_cal_mock)
 
     # Run the DRP walker
     print('Running walker')
@@ -134,11 +135,16 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         template='l3_to_corethroughput_map.json')
     
     # Read CT map produced by the walker
-    ct_map_filepath = os.path.join(corgidrp.default_cal_dir, 'ct_map.csv')
-    ct_map_walker = np.loadtxt(ct_map_filepath, delimiter=',')
+    ct_map_filepath = os.path.join(ctmap_outputdir, ct_map_mock.filename)
+    ct_map_walker = fits.open(ct_map_filepath)
 
     # Check whether direct ct map and the one from the walker are the same
-    assert np.all(ct_map_walker == ct_map_mock)
+    # CT map values: (x, y, CT) for each location
+    assert np.all(ct_map_walker[1].data == ct_map_mock.data)
+    # ERR
+    assert np.all(ct_map_walker[2].data == ct_map_mock.err)
+    # DQ
+    assert np.all(ct_map_walker[3].data == ct_map_mock.dq)
 
     # Clean test data
     # Remove entry from caldb

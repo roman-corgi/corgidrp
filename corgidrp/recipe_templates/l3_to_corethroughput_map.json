@@ -11,14 +11,14 @@
             "name": "divide_by_exptime"
         },
         {
-            "name" : "CreateCTMap",
+            "name" : "create_ct_map",
             "calibs": {
                 "FpamFsamCal": "AUTOMATIC",
                 "CoreThroughputCalibration" : "AUTOMATIC"
-            },
-              "keywords" : {
-                "save" : true
-              }
+            }
+        },
+        {
+            "name" : "save"
         }
     ]
 }
