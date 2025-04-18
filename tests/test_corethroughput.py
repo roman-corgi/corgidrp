@@ -1,4 +1,5 @@
 import os
+import shutil
 import pytest
 import numpy as np
 import astropy.time as time
@@ -10,14 +11,9 @@ from astropy.modeling.models import Gaussian2D
 import corgidrp
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
     create_ct_interp, create_ct_cal)
-from corgidrp.data import Image, Dataset, FpamFsamCal, CoreThroughputCalibration
+from corgidrp.data import (Image, Dataset, FpamFsamCal, CoreThroughputCalibration,
+    CoreThroughputMap)
 from corgidrp import corethroughput
-
-# If a run has crashed before being able to remove the test CT cal file,
-# remove it before importing caldb, which scans for new entries in the cal folder
-ct_cal_test_file = 'CGI_0200001001001001001_20250415T0305102_CTP_CAL.fits'
-if os.path.exists(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file)):
-    os.remove(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file))
 from corgidrp import caldb
 
 here = os.path.abspath(os.path.dirname(__file__))
@@ -234,6 +230,83 @@ def setup_module():
         data_psf_eq_rad += [Image(image,pri_hdr=prhd, ext_hdr=exthd, err=err)]    
 
     dataset_psf_eq_rad = Dataset(data_psf_eq_rad)
+    
+def test_ct_map():
+    """ Tests the creation of a core throughput map. The method InterpolateCT()
+      has its own unit test and can be considered as tested in the following. """
+
+    # I run the test for two completely different CT datasets: 2D PSFs
+    # randomly distributed (dataset_ct) and the one used for CT interpolation
+    # that has a set of PSFs with pre-stablished CT and locations (dataset_ct_interp)
+
+    for dataset in [dataset_ct_interp, dataset_ct, dataset_ct_interp]:
+        # Generate core throughput calibration file
+        ct_cal = corethroughput.generate_ct_cal(dataset)
+    
+        # FPAM/FSAM
+        fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+            'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    
+        # Create CT map for the HLC area (default)
+        ct_map_def = corethroughput.create_ct_map(dataset_cor, fpam_fsam_cal,
+            ct_cal)
+
+        # CT values are within [0,1]
+        assert ct_map_def.data[2].min() >= 0
+        assert ct_map_def.data[2].max() <= 1
+        # Verify CT values are within the range of the input CT values
+        # Allow some minimum tolerance due to float64 numerical precision
+        tolerance = 1e-14
+        assert ct_map_def.data[2].min() >= ct_cal.ct_excam[2].min() - tolerance
+        assert ct_map_def.data[2].max() <= ct_cal.ct_excam[2].max() + tolerance
+
+        # Additional test to compate the CT map with the expected model from
+        # create_ct_interp (predefined to be radial and linear). The other
+        # dataset, dataset_ct is not suitable for this specific test because
+        # it's made of random 2D Gaussians
+        if dataset == dataset_ct_interp:
+            r_def = np.sqrt(ct_map_def.data[0]**2 + ct_map_def.data[1]**2)
+            ct_def = r_def/r_def.max()
+            # create_ct_interp did not include the pupil lens to imaging lens ratio
+            ct_def /= corethroughput.di_over_pil_transmission(cfam_name)
+  
+            # Differences below 1% are good
+            assert ct_map_def.data[2] == pytest.approx(ct_def, abs=0.01), 'Differences are greater than 1%' 
+    
+        # Test the ability to parse some user-defined locations
+        # If the target pixels are the same as the ones in the CT file, the
+        # locations *and* CT values must agree with the ones in the CT file
+        # Get FPM's center during CT observations
+        ct_fpm = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
+        target_pix = [ct_cal.ct_excam[0] - ct_fpm[0],
+            ct_cal.ct_excam[1] - ct_fpm[1]]
+        ct_map_targ = corethroughput.create_ct_map(dataset_cor, fpam_fsam_cal,
+            ct_cal, target_pix=target_pix)
+    
+        # All locations must have a valid CT value
+        assert target_pix[0] == pytest.approx(ct_map_targ.data[0], abs=1e-14)
+        assert target_pix[1] == pytest.approx(ct_map_targ.data[1], abs=1e-14)
+        # CT values must be the same
+        assert ct_cal.ct_excam[2] == pytest.approx(ct_map_targ.data[2], abs=1e-14)
+
+    # Test it can be saved
+    test_dir = os.path.join(here, 'simdata')
+    if os.path.exists(test_dir):
+        shutil.rmtree(test_dir)
+    os.mkdir(test_dir)
+    ct_map_def.save(filedir=test_dir)
+    assert os.path.exists(ct_map_def.filepath), f"File not found: {default_filepath}"
+
+    # Add open the file and compare content
+    ct_map_saved = fits.open(ct_map_def.filepath)
+    # CT map values: (x, y, CT) for each location
+    assert np.all(ct_map_saved[1].data == ct_map_def.data)
+    # ERR
+    assert np.all(ct_map_saved[2].data == ct_map_def.err)
+    # DQ
+    assert np.all(ct_map_saved[3].data == ct_map_def.dq)
+
+    print('Tests about CT map passed')
 
 def test_psf_pix_and_ct():
     """
@@ -343,11 +416,16 @@ def test_cal_file():
 
     # Write core throughput calibration file
     ct_cal_file_in = corethroughput.generate_ct_cal(dataset_ct)
-    ct_cal_file_in.save(filedir=corgidrp.default_cal_dir)
+    test_dir = os.path.join(here, 'simdata')
+    # Start with all clean
+    if os.path.exists(test_dir):
+        shutil.rmtree(test_dir)
+    os.mkdir(test_dir) 
+    ct_cal_file_in.save(filedir=test_dir)
 
     # Check that the filename is what we expect
     ct_cal_filename = dataset_ct[-1].filename.replace("_L2b", "_CTP_CAL")
-    ct_cal_filepath = os.path.join(corgidrp.default_cal_dir,ct_cal_filename)
+    ct_cal_filepath = os.path.join(test_dir,ct_cal_filename)
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
     # Load the calibration file to check it has the same data contents
@@ -644,76 +722,6 @@ def test_get_1d_ct():
 
     for i,arg in enumerate(expected_args):
         assert ct_1d[1,i] == ctcal.ct_excam[2,arg]
-
-
-def test_ct_map():
-    """ Tests the creation of a core throughput map. The method InterpolateCT()
-      has its own unit test and can be considered as tested in the following. """
-
-    # I run the test for two completely different CT datasets: 2D PSFs
-    # randomly distributed (dataset_ct) and the one used for CT interpolation
-    # that has a set of PSFs with pre-stablished CT and locations (dataset_ct_interp)
-
-    for dataset in [dataset_ct, dataset_ct_interp]:
-        # Generate core throughput calibration file
-        ct_cal = corethroughput.generate_ct_cal(dataset)
-    
-        # FPAM/FSAM
-        fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-            'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
-    
-        # Create CT map for the HLC area (default)
-        ct_map_def = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal)
-
-        # CT values are within [0,1]
-        assert ct_map_def[2].min() >= 0
-        assert ct_map_def[2].max() <= 1
-        # Verify CT values are within the range of the input CT values
-        # Allow some minimum tolerance due to float64 numerical precision
-        tolerance = 1e-14
-        assert ct_map_def[2].min() >= ct_cal.ct_excam[2].min() - tolerance
-        assert ct_map_def[2].max() <= ct_cal.ct_excam[2].max() + tolerance
-
-        # Additional test to compate the CT map with the expected model from
-        # create_ct_interp (predefined to be radial and linear). The other
-        # dataset, dataset_ct is not suitable for this specific test because
-        # it's made of random 2D Gaussians
-        if dataset == dataset_ct_interp:
-            r_def = np.sqrt(ct_map_def[0]**2 + ct_map_def[1]**2)
-            ct_def = r_def/r_def.max()
-            # create_ct_interp did not include the pupil lens to imaging lens ratio
-            ct_def /= corethroughput.di_over_pil_transmission(cfam_name)
-  
-            # Differences below 1% are good
-            assert ct_map_def[2] == pytest.approx(ct_def, abs=0.01), 'Differences are greater than 1%' 
-    
-        # Test the ability to parse some user-defined locations
-        # If the target pixels are the same as the ones in the CT file, the
-        # locations *and* CT values must agree with the ones in the CT file
-        # Get FPM's center during CT observations
-        ct_fpm = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
-        target_pix = [ct_cal.ct_excam[0] - ct_fpm[0],
-            ct_cal.ct_excam[1] - ct_fpm[1]]
-        ct_map_targ = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal,
-            target_pix=target_pix)
-    
-        # All locations must have a valid CT value
-        assert target_pix[0] == pytest.approx(ct_map_targ[0], abs=1e-14)
-        assert target_pix[1] == pytest.approx(ct_map_targ[1], abs=1e-14)
-        # CT values must be the same
-        assert ct_cal.ct_excam[2] == pytest.approx(ct_map_targ[2], abs=1e-14)
-
-    # Test it can be saved
-    default_filepath = os.path.join(corgidrp.default_cal_dir, 'ct_map.csv')
-    ct_map_def = corethroughput.CreateCTMap(dataset_cor, fpam_fsam_cal, ct_cal,
-        save = True)
-    assert os.path.exists(default_filepath), f"File not found: {default_filepath}"
-
-    # Add open the file and compare content
-    ct_map_saved = np.loadtxt(default_filepath, delimiter=',')
-    assert np.all(ct_map_saved == ct_map_def)
-
-    print('Tests about CT map passed')
 
 def test_psf_interp():
     """

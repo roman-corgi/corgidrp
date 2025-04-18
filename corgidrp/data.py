@@ -1998,6 +1998,79 @@ class CoreThroughputCalibration(Image):
 
         return np.array(psf_interp_list), np.array(x_interp_list), np.array(y_interp_list)
 
+class CoreThroughputMap(Image):
+    """ Class containing a corethroughput map.
+
+    The corethroughput map consists of M sets of (x, y, CT estimated). The
+      (x, y) are pixel coordinates wrt the FPM's center. More details about the
+      corethroughput map array can be found in the class method create_ct_map().
+
+    Args:
+      data_or_filepath (array or str): either the filepath to the FITS file to
+      read in OR the 2D image data. The FITS file or data must be from a
+      coronagraphic observation because the FPM's center is needed during the
+      creation of the corethroughput map.
+    """
+
+    ###################
+    ### Constructor ###
+    ###################
+
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
+        # run the image class constructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
+
+        # Check it has the FPM's center information 
+        if ('STARLOCX' not in self.ext_hdr) or ('STARLOCY' not in self.ext_hdr):
+            raise ValueError('The input dataset does not contain the information'
+                'about the FPM center')
+        # Check data have the expected format (x,y,ct)
+        if isinstance(data_or_filepath, str) is False:
+            data_or_filepath.shape[0] == 3
+            if data_or_filepath[2,:].max() > 1 or data_or_filepath[2,:].min() < 0:
+                raise ValueError('Corethroughput map values should be within 0 and 1')
+
+        # Additional bookkeeping for a calibration file:
+        # If this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if
+        # it is a new CoreThroughputMap file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError('This appears to be a new CoreThroughputMap '
+                                 'file. The dataset of input files needs '
+                                 'to be passed in to the input_dataset keyword '
+                                 'to record history of this calibration file.')
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'CoreThroughputMap'
+
+            # log all the data that went into making this calibration file
+            self._record_parent_filenames(input_dataset)
+
+            # add to history if not present
+            if not 'HISTORY' in self.ext_hdr:
+                self.ext_hdr['HISTORY'] = ('CoreThroughputMap derived '
+                    f'from a set of frames on {self.ext_hdr["DATETIME"]}')
+
+            # The corethroughput map is not a calibration product as of writing
+            # this class. The filename does not follow the convention for
+            # calibration files
+            self.filedir = '.'
+            self.filename = 'corethroughput_map.fits'
+
+            # Enforce data level = L3
+            self.ext_hdr['DATALVL']    = 'L3'
+
+        # Keep track of the coronagraphic files used to create the CT map
+        if input_dataset is not None:
+            self._record_parent_filenames(input_dataset)
+        # double check that this is actually a NonLinearityCalibration file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a CoreThroughputMap file.")
+        if self.ext_hdr['DATATYPE'] != 'CoreThroughputMap':
+            raise ValueError("File that was loaded was not a CoreThroughputMap file.")
+
 class PyKLIPDataset(pyKLIP_Data):
     """
     A pyKLIP instrument class for Roman Coronagraph Instrument data.
