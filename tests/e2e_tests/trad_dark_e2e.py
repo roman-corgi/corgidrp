@@ -241,9 +241,6 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # remove from caldb
     trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
     this_caldb.remove_entry(trad_dark)
-    # clean out output files that were made
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
 
 
 @pytest.mark.e2e
@@ -448,9 +445,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
 
     # remove from caldb
     this_caldb.remove_entry(trad_dark)
-    # clean out output files that were made
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
+
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
