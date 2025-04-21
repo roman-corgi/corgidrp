@@ -104,7 +104,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     corDataset.save(output_dir, corDataset_filelist)
 
     # Make directory for the CT cal file
-    ctmap_outputdir = os.path.join(e2eoutput_path, 'l3_to_ct_map')
+    ctmap_outputdir = os.path.join(e2eoutput_path, 'l2a_to_ct_map')
     if os.path.exists(ctmap_outputdir):
         shutil.rmtree(ctmap_outputdir)
     os.mkdir(ctmap_outputdir)
@@ -132,7 +132,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Add path to files
     corDataset_filepath = [os.path.join(output_dir, f) for f in corDataset_filelist]
     walker.walk_corgidrp(corDataset_filepath, '', ctmap_outputdir,
-        template='l3_to_corethroughput_map.json')
+        template='l2a_to_corethroughput_map.json')
     
     # Read CT map produced by the walker
     ct_map_filepath = os.path.join(ctmap_outputdir, ct_map_mock.filename)

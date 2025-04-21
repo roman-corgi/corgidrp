@@ -1,5 +1,5 @@
 {
-    "name" : "l3_to_corethroughput_map",
+    "name" : "l2a_to_corethroughput_map",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
