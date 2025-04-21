@@ -259,6 +259,24 @@ def test_get_polar_dist():
 
     pass
 
+def test_transform_coeff_to_distortion_map():
+    """Test that astrom.transform_coeff_to_map() produces the correct distortion map from given
+    legendre coefficients."""
+
+    im_shape = np.array([1024, 1024])
+    fit_order = 3
+
+    # Test coeffs corresponding to no distortion
+    zero_coeffs = np.array([  0,   0,   0,   0, 500,   0,   0,   0,   0,   0,   0,   0,   0,
+         0,   0,   0,   0, 500,   0,   0,   0,   0,   0,   0,   0,   0,
+         0,   0,   0,   0,   0,   0])
+
+    z_xdiff, z_ydiff = astrom.transform_coeff_to_map(zero_coeffs, fit_order, im_shape)
+
+    # Check that the computed distortion map is zero everywhere
+    assert np.all(z_xdiff == 0)
+    assert np.all(z_ydiff == 0)
+
 if __name__ == "__main__":
     test_astrom()
     test_distortion()
@@ -266,3 +284,4 @@ if __name__ == "__main__":
     test_seppa2xy()
     test_create_circular_mask()
     test_get_polar_dist()
+    test_transform_coeff_to_distortion_map()
