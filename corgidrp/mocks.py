@@ -100,7 +100,7 @@ detector_areas_test= {
         }
 }
 
-def create_default_L1_headers(arrtype="SCI"):
+def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     """
     Creates an empty primary header and an Image extension header with currently
         defined keywords.
@@ -148,9 +148,9 @@ def create_default_L1_headers(arrtype="SCI"):
     prihdr['VISNUM']    = 000          # The Visit number in visit hierarchy (digits 17-19)
     prihdr['CPGSFILE']  = 'N/A'        # Campaign-level XML containing the current visit
     prihdr['AUXFILE']   = 'N/A'        # An AUX file associated with this observation
-    prihdr['VISTYPE']   = 'MOCK'       # Visit file template (enum values as defined)
+    prihdr['VISTYPE']   = vistype      # Visit file template (enum values as defined)
     prihdr['OBSNAME']   = 'MOCK'       # User-defined label for the associated observation plan
-    prihdr['TARGET']    = ''           # Name of pointing target
+    prihdr['TARGET']    = 'MOCK'       # Name of pointing target
     prihdr['RA']        = 0.0          # Commanded RA in mas
     prihdr['DEC']       = 0.0          # Commanded DEC in mas
     prihdr['EQUINOX']   = '2000.0'     # Reference equinox (J2000)
@@ -184,7 +184,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['STATUS']      = 0               # Housekeeping packet health check status: 0=Nominal, 1=Off-nominal
     exthdr['HVCBIAS']     = 0               # HV clock bias value (DAC value controlling EM-gain)
     exthdr['OPMODE']      = 'NONE_DETON_0'  # EXCAM readout operational mode
-    exthdr['EXPTIME']     = 1.0             # Commanded exposure time (sec)
+    exthdr['EXPTIME']     = 60.0             # Commanded exposure time (sec)
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain
     exthdr['EMGAINA1']    = 0.0             # "Actual" gain calculation a1 coefficient
     exthdr['EMGAINA2']    = 0.0             # "Actual" gain calculation a2 coefficient
@@ -212,8 +212,8 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['FSMSG1']      = 0.0             # Average measurement (volts) for strain gauge 1
     exthdr['FSMSG2']      = 0.0             # Average measurement (volts) for strain gauge 2
     exthdr['FSMSG3']      = 0.0             # Average measurement (volts) for strain gauge 3
-    exthdr['FSMX']        = 0.0             # Derived FSM X position relative to home (mas)
-    exthdr['FSMY']        = 0.0             # Derived FSM Y position relative to home (mas)
+    exthdr['FSMX']        = 50.0            # Derived FSM X position relative to home (mas)
+    exthdr['FSMY']        = 50.0            # Derived FSM Y position relative to home (mas)
     exthdr['EACQ_ROW']    = 0.0             # Desired pixel row for most recent star acquisition via EXCAM
     exthdr['EACQ_COL']    = 0.0             # Desired pixel col for most recent star acquisition via EXCAM
     exthdr['SB_FP_DX']    = 0.0             # X pixels offset (from EXCAM center), from FPAM speckle balance alignment
@@ -250,32 +250,32 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['Z14AVG']      = 0.0             # Average Z14 value (nm) for 10,000 samples
     exthdr['SPAM_H']      = 0.0             # SPAM absolute position of the H-axis (µm)
     exthdr['SPAM_V']      = 0.0             # SPAM absolute position of the V-axis (µm)
-    exthdr['SPAMNAME']    = ''              # Closest named SPAM position from PAM dictionary
+    exthdr['SPAMNAME']    = 'OPEN'          # Closest named SPAM position from PAM dictionary
     exthdr['SPAMSP_H']    = 0.0             # SPAM set point H (µm)
     exthdr['SPAMSP_V']    = 0.0             # SPAM set point V (µm)
     exthdr['FPAM_H']      = 0.0             # FPAM absolute position of the H-axis (µm)
     exthdr['FPAM_V']      = 0.0             # FPAM absolute position of the V-axis (µm)
-    exthdr['FPAMNAME']    = ''              # Closest named FPAM position from PAM dictionary
+    exthdr['FPAMNAME']    = 'HLC12_C2R1'    # Closest named FPAM position from PAM dictionary
     exthdr['FPAMSP_H']    = 0.0             # FPAM set point H (µm)
     exthdr['FPAMSP_V']    = 0.0             # FPAM set point V (µm)
     exthdr['LSAM_H']      = 0.0             # LSAM absolute position of the H-axis (µm)
     exthdr['LSAM_V']      = 0.0             # LSAM absolute position of the V-axis (µm)
-    exthdr['LSAMNAME']    = ''              # Closest named LSAM position from PAM dictionary
+    exthdr['LSAMNAME']    = 'NFOV'          # Closest named LSAM position from PAM dictionary
     exthdr['LSAMSP_H']    = 0.0             # LSAM set point H (µm)
     exthdr['LSAMSP_V']    = 0.0             # LSAM set point V (µm)
     exthdr['FSAM_H']      = 0.0             # FSAM absolute position of the H-axis (µm)
     exthdr['FSAM_V']      = 0.0             # FSAM absolute position of the V-axis (µm)
-    exthdr['FSAMNAME']    = ''              # Closest named FSAM position from PAM dictionary
+    exthdr['FSAMNAME']    = 'R1C1'          # Closest named FSAM position from PAM dictionary
     exthdr['FSAMSP_H']    = 0.0             # FSAM set point H (µm)
     exthdr['FSAMSP_V']    = 0.0             # FSAM set point V (µm)
     exthdr['CFAM_H']      = 0.0             # CFAM absolute position of the H-axis (µm)
     exthdr['CFAM_V']      = 0.0             # CFAM absolute position of the V-axis (µm)
-    exthdr['CFAMNAME']    = ''              # Closest named CFAM position from PAM dictionary
+    exthdr['CFAMNAME']    = '1F'            # Closest named CFAM position from PAM dictionary
     exthdr['CFAMSP_H']    = 0.0             # CFAM set point H (µm)
     exthdr['CFAMSP_V']    = 0.0             # CFAM set point V (µm)
     exthdr['DPAM_H']      = 0.0             # DPAM absolute position of the H-axis (µm)
     exthdr['DPAM_V']      = 0.0             # DPAM absolute position of the V-axis (µm)
-    exthdr['DPAMNAME']    = ''              # Closest named DPAM position from PAM dictionary
+    exthdr['DPAMNAME']    = 'IMAGING'       # Closest named DPAM position from PAM dictionary
     exthdr['DPAMSP_H']    = 0.0             # DPAM set point H (µm)
     exthdr['DPAMSP_V']    = 0.0             # DPAM set point V (µm)
     exthdr['DATETIME']    = dt_str          # Time of preceding 1Hz HK packet (TAI)

@@ -528,7 +528,7 @@ def test_calculate_od_at_new_location(output_dir):
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
     # Build the NDFilterSweetSpotDataset
-    ndcal_prihdr, ndcal_exthdr = mocks.create_default_calibration_product_headers()
+    ndcal_prihdr, ndcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ndcal_exthdr["FPAM_H"] = 0.0
     ndcal_exthdr["FPAM_V"] = 0.0
     nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
@@ -565,7 +565,7 @@ def test_calculate_od_at_new_location(output_dir):
         f"interpolated OD={interpolated_od}"
     )
 
-
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -653,3 +653,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''
