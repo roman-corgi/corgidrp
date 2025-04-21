@@ -107,6 +107,7 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
 
     Args:
         arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
+        vistype (str): Visit type. Defaults to "TDEMO"
 
     Returns:
         tuple:
@@ -491,6 +492,10 @@ def create_default_L2a_headers(arrtype="SCI"):
         tuple:
             prihdr (fits.Header): Primary FITS Header
             exthdr (fits.Header): Extension FITS Header
+            errhdr (fits.Header): Error FITS Header
+            dqhdr (fits.Header): Data quality FITS Header
+            biashdr (fits.Header): Bias FITS Header
+
 
     """
     # TO DO: Update this once L2a headers have been finalized
@@ -566,6 +571,9 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
         tuple:
             prihdr (fits.Header): Primary FITS Header
             exthdr (fits.Header): Extension FITS Header
+            errhdr (fits.Header): Error FITS Header
+            dqhdr (fits.Header): Data quality FITS Header
+            biashdr (fits.Header): Bias FITS Header
 
     """
     # TO DO: Update this once L2a headers have been finalized
@@ -642,6 +650,9 @@ def create_default_L2b_headers(arrtype="SCI"):
         tuple:
             prihdr (fits.Header): Primary FITS Header
             exthdr (fits.Header): Extension FITS Header
+            errhdr (fits.Header): Error FITS Header
+            dqhdr (fits.Header): Data quality FITS Header
+            biashdr (fits.Header): Bias FITS Header
 
     """
 
@@ -682,6 +693,9 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
         tuple:
             prihdr (fits.Header): Primary FITS Header
             exthdr (fits.Header): Extension FITS Header
+            errhdr (fits.Header): Error FITS Header
+            dqhdr (fits.Header): Data quality FITS Header
+            biashdr (fits.Header): Bias FITS Header
 
     """
 
@@ -724,6 +738,8 @@ def create_default_L3_headers(arrtype="SCI"):
         tuple:
             prihdr (fits.Header): Primary FITS Header
             exthdr (fits.Header): Extension FITS Header
+            errhdr (fits.Header): Error FITS Header
+            dqhdr (fits.Header): Data quality FITS Header
 
     """
     # TO DO: Update this once L3 headers have been finalized
@@ -760,6 +776,8 @@ def create_default_L4_headers(arrtype="SCI"):
         tuple:
             prihdr (fits.Header): Primary FITS Header
             exthdr (fits.Header): Extension FITS Header
+            errhdr (fits.Header): Error FITS Header
+            dqhdr (fits.Header): Data quality FITS Header
 
     """
     # TO DO: Update this once L4 headers have been finalized
@@ -793,6 +811,8 @@ def create_default_calibration_product_headers():
         tuple:
             prihdr (fits.Header): Primary FITS Header
             exthdr (fits.Header): Extension FITS Header
+            errhdr (fits.Header): Error FITS Header
+            dqhdr (fits.Header): Data quality FITS Header
     '''
     # TO DO: update when this has been more defined
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
