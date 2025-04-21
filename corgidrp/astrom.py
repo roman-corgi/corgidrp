@@ -1190,3 +1190,49 @@ def create_circular_mask(shape_yx, center=None, r=None):
 
     mask = dist_from_center <= r
     return mask
+
+def transform_coeff_to_map(distortion_coeffs, fit_order, image_shape):
+    """
+    Creates two, 2D maps of distortion for the X and Y directions from given legendre polynomial coefficients.
+    
+    Args:
+        distortion_coeffs (array of float): the array of legendre polynomial coefficients that describe the distortion map in x and y directions
+        fit_order (int): the order of legendre polynomial used to fit distortion
+        image_shape (list-like of int): the xy pixel shape of the image
+        
+    Returns:
+        x_dist_map (np.ndarray): a 2D array of distortion in the x direction across the image
+        y_dist_map (np.ndarray): a 2D array of distortion in the y direction across the image
+    
+    """
+        # correct indices to start at image center
+    yorig, xorig = np.indices(image_shape)
+    y0, x0 = image_shape[0]//2, image_shape[1]//2
+    yorig -= y0
+    xorig -= x0
+
+        # get the number of fitting params from the polynomial order
+    fitparams = (fit_order + 1)**2
+
+        # reshape the coeff arrays for the given params (X)
+    params_x = distortion_coeffs[:fitparams]
+    params_x = params_x.reshape(fit_order+1, fit_order+1)
+    total_orders = np.arange(fit_order+1)[:,None] + np.arange(fit_order+1)[None,:]
+    params_x = params_x / 500**(total_orders)
+
+        # evaluate the polynomial at all pixel positions
+    x_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), params_x)
+    x_corr = x_corr.reshape(xorig.shape)
+    x_diff = x_corr - xorig
+
+        # reshape the coeff arrays for the given params (Y)
+        # evaluate the polynomial at all pixel positions
+    params_y = distortion_coeffs[fitparams:]
+    params_y = params_y.reshape(fit_order+1, fit_order+1)
+    params_y = params_y / 500**total_orders
+
+    y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), params_y)
+    y_corr = y_corr.reshape(yorig.shape)
+    y_diff = y_corr - yorig
+
+    return x_diff, y_diff
