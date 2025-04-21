@@ -1,7 +1,5 @@
 import numpy as np
 import os
-import sys
-sys.path.insert(0, '/Users/macuser/Roman/corgidrp')
 
 import corgidrp.data
 
