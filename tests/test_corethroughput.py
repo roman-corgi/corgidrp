@@ -261,21 +261,46 @@ def test_psf_pix_and_ct():
     # Difference between expected and retrieved locations for the max (peak) method
     diff_psf_loc = psf_loc_in - psf_loc_est
     # Set a difference of 0.005 pixels
-    assert np.all(np.abs(diff_psf_loc) <= 0.005)
+    atol_psf_loc = 0.005
+    atol_ct = 0.01
+
+    test_result = np.all(np.abs(diff_psf_loc) <= atol_psf_loc)
+    assert test_result
+    # Print out the result
+    print('\nGaussian position from estimate_psf_pix_and_ct() is correct to within %.3f pixels: ' % (atol_psf_loc), end='')
+    print_pass() if test_result else print_fail()
+
+    # comparison between I/O values (<=1% due to pixelization effects vs.
+    # expected analytical value)
+    test_result = np.all(np.abs(ct_est-ct_in) <= atol_ct)
+    assert test_result
+    # Print out the result
+    print('\nGaussian CT value from estimate_psf_pix_and_ct() is correct to within %.1f%%: ' % (atol_ct*100), end='')
+    print_pass() if test_result else print_fail()
+
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
-    # comparison between I/O values (<=1% due to pixelization effects vs.
-    # expected analytical value)
-    assert np.all(np.abs(ct_est-ct_in) <= 0.01)
+
 
     # Test 2:
     # Functional test with some mock data with known PSF location and CT
     # Synthetic PSF from setup_module
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct_syn)
     # In this test, there must be an exact agreement
-    assert np.all(psf_loc_est[0] == psf_loc_syn)
-    assert np.abs(ct_est[0]-ct_syn) < 1e-16
+
+    test_result = np.all(psf_loc_est[0] == psf_loc_syn)
+    assert test_result
+    # Print out the result
+    print('Synthetic PSF position from estimate_psf_pix_and_ct() is exactly correct: ', end='')
+    print_pass() if test_result else print_fail()
+
+    atol_ct = 1e-16
+    test_result = np.abs(ct_est[0]-ct_syn) < atol_ct
+    assert test_result
+    # Print out the result
+    print('Synthetic PSF CT value from estimate_psf_pix_and_ct() is correct to within %.1g: ' % (atol_ct), end='')
+    print_pass() if test_result else print_fail()
 
     print('Tests about PSF locations and CT values passed')
 
