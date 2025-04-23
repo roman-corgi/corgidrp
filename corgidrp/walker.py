@@ -283,11 +283,12 @@ def guess_template(dataset):
                 recipe_filename = "l2a_to_l2b.json"  # science data and all else
     # L2b -> L3 data processing
     elif image.ext_hdr['DATALVL'] == "L2b":
-        _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
-        if len(fsm_unique) > 1:
-            recipe_filename = "l2b_to_nd_filter.json"
-        elif len(fsm_unique) == 1 and image.pri_hdr['VISTYPE'] in ("ABSFLXFT", "ABSFLXBT"):
-            recipe_filename = "l2b_to_fluxcal_factor.json"
+        if image.pri_hdr['VISTYPE'] in ("ABSFLXFT", "ABSFLXBT"):
+            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+            if len(fsm_unique) > 1:
+                recipe_filename = "l2b_to_nd_filter.json"
+            else:
+                recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
             recipe_filename = 'l2b_to_corethroughput.json'
         else:
