@@ -605,7 +605,7 @@ def test_calculate_od_at_new_location(output_dir):
     ndcal_exthdr["FPAM_V"] = 0.0
     nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
                                                     input_dataset=fake_input_dataset)
- 
+
     # Create an identity transformation matrix FITS file in output_dir
     transformation_matrix_file = mock_transformation_matrix(output_dir)
 
@@ -630,7 +630,11 @@ def test_calculate_od_at_new_location(output_dir):
     # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
     expected_value = 3.5
     atol_nd = 1e-6
-    assert abs(interpolated_od - expected_value) < atol_nd, (
+    test_result_od_accuracy = abs(interpolated_od - expected_value) < atol_nd
+    print(f'calculate_od_at_new_location() estimates OD as {expected_value} +/- {atol_nd}: ', end='')
+    print_pass() if test_result_od_accuracy else print_fail()
+
+    assert test_result_od_accuracy, (
         f"Expected OD={expected_value}, got {interpolated_od}"
     )
     print('')

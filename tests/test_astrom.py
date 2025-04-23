@@ -7,11 +7,21 @@ import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.data as data
 import astropy.io.ascii as ascii
+from termcolor import cprint
+
+
+def print_fail():
+    cprint(' FAIL ', "black", "on_red")
+
+
+def print_pass():
+    cprint(' PASS ', "black", "on_green")
+
 
 def test_astrom():
-    """ 
+    """
     Generate a simulated image and test the astrometric calibration computation.
-    
+
     """
     # create a simulated image with source guesses and true positions
     # check that the simulated image folder exists and create if not
@@ -20,7 +30,7 @@ def test_astrom():
         os.mkdir(datadir)
 
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
-    
+
     # create a dataset with dithers
     # dataset = mocks.create_astrom_data(field_path=field_path, filedir=datadir, rotation=20, dither_pointings=4)
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, dither_pointings=4)
@@ -68,10 +78,11 @@ def test_astrom():
     pickled_astrom = pickle.loads(pickled)
     assert np.all((astrom_cal.data == pickled_astrom.data)) # check it is the same as the original
 
+
 def test_distortion():
-    """ 
+    """
     Generate a simulated image and test the distortion map creation as part of the boresight calibration.
-    
+
     """
     # create a simulated image with source guesses and true positions
     # check that the simulated image folder exists and create if not

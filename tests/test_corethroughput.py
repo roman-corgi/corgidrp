@@ -304,6 +304,7 @@ def test_psf_pix_and_ct():
 
     print('Tests about PSF locations and CT values passed')
 
+
 def test_fpm_pos():
     """
     Test 1090882 - Given 1) the location of the center of the FPM coronagraphic
@@ -313,42 +314,48 @@ def test_fpm_pos():
     FPM coronagraphic mask during the core throughput observing sequence.
 
     Python algorithm written during TVAC for using FPAM and FSAM matrices
-    
+
           delta_pam = np.array([[dh], [dv]]) # fill these in
           # read FPAM or FSAM matrices: 
           M = np.array([[ M00, M01], [M10, M11]], dtype=float32)
           delta_pix = M @ delta_pam
     """
     # FPAM/FSAM transformations
-    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+    fpam_fsam_cal = FpamFsamCal(os.path.join(
+        corgidrp.default_cal_dir,
         'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
-    
+
     fpam2excam_matrix, fsam2excam_matrix = fpam_fsam_cal.data
     # TVAC files
-    fpam2excam_matrix_tvac = fits.getdata(os.path.join(here, 'test_data',
-        'fpam_to_excam_modelbased.fits'))
-    fsam2excam_matrix_tvac = fits.getdata(os.path.join(here, 'test_data',
-        'fsam_to_excam_modelbased.fits'))
+    fpam2excam_matrix_tvac = fits.getdata(os.path.join(
+        here, 'test_data', 'fpam_to_excam_modelbased.fits'))
+    fsam2excam_matrix_tvac = fits.getdata(os.path.join(
+        here, 'test_data', 'fsam_to_excam_modelbased.fits'))
 
     # test 1:
     # Check that DRP calibration files for FPAM and FSAM agree with TVAC files
     # Some irrelevant rounding happens when defining FpamFsamCal() in data.py
     assert np.all(fpam2excam_matrix - fpam2excam_matrix_tvac <= 1e-9)
     assert np.all(fsam2excam_matrix - fsam2excam_matrix_tvac <= 1e-9)
-   
+
     # test 2:
     # Using values within the range should return a meaningful value. Tested 10 times
-    FPM_center_pos_pix = np.array([dataset_cor[0].ext_hdr['STARLOCX'],
-            dataset_cor[0].ext_hdr['STARLOCY']])
-    FPAM_center_pos_um = np.array([dataset_cor[0].ext_hdr['FPAM_H'],
-            dataset_cor[0].ext_hdr['FPAM_V']])
-    FSAM_center_pos_um =  np.array([dataset_cor[0].ext_hdr['FSAM_H'],
-            dataset_cor[0].ext_hdr['FSAM_V']])
+    FPM_center_pos_pix = np.array(
+        [dataset_cor[0].ext_hdr['STARLOCX'],
+         dataset_cor[0].ext_hdr['STARLOCY']])
+    FPAM_center_pos_um = np.array(
+        [dataset_cor[0].ext_hdr['FPAM_H'],
+         dataset_cor[0].ext_hdr['FPAM_V']])
+    FSAM_center_pos_um = np.array(
+        [dataset_cor[0].ext_hdr['FSAM_H'],
+         dataset_cor[0].ext_hdr['FSAM_V']])
     rng = np.random.default_rng(0)
-    for _ in range(10):
+    fpm_pos_result_list = []  # initialize
+    n_trials = 10
+    for ii in range(n_trials):
         # Random shift for Delta H/V in um
-        delta_fpam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
-        delta_fsam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
+        delta_fpam_um = np.array([rng.uniform(1, 10), rng.uniform(1, 10)])
+        delta_fsam_um = np.array([rng.uniform(1, 10), rng.uniform(1, 10)])
         # Update dataset_ct headers
         dataset_ct[0].ext_hdr['FPAM_H'] = dataset_cor[0].ext_hdr['FPAM_H'] + delta_fpam_um[0]
         dataset_ct[0].ext_hdr['FPAM_V'] = dataset_cor[0].ext_hdr['FPAM_V'] + delta_fpam_um[1]
@@ -366,12 +373,24 @@ def test_fpm_pos():
         delta_fsam_pix = fsam2excam_matrix @ delta_fsam_um
         # Compare output and input: Some of the random tests have differences
         # of ~1e-13, while others are exactly equal
+        atol_fpm_pos = 1e-12
         fpam_ct_pix_in = FPM_center_pos_pix + delta_fpam_pix
-        assert np.all(fpam_ct_pix_out - fpam_ct_pix_in <= 1e-12)
+        test_result_fpm_pos = np.all(fpam_ct_pix_out - fpam_ct_pix_in <= atol_fpm_pos)
+        assert test_result_fpm_pos
+        fpm_pos_result_list.append(test_result_fpm_pos)
+        # print(f'Trial {ii}: FPM position from FpamFsamCal() is correct within {atol_fpm_pos}: ', end='')
+        # print_pass() if test_result_fpm_pos else print_fail()
+
+        atol_fs_pos = 1e-12
         fsam_ct_pix_in = FPM_center_pos_pix + delta_fsam_pix
-        assert np.all(fsam_ct_pix_out - fsam_ct_pix_in <= 1e-12)
+        assert np.all(fsam_ct_pix_out - fsam_ct_pix_in <= atol_fs_pos)
+
+    test_result_fpm_pos_all = np.all(fpm_pos_result_list)
+    print(f'For all {n_trials} trials, FPM position from FpamFsamCal() is correct within {atol_fpm_pos}: ', end='')
+    print_pass() if test_result_fpm_pos_all else print_fail()
 
     print('Tests about FPAM/FSAM to EXCAM passed')
+
 
 def test_cal_file():
     """ Test creation of core throughput calibration file. """
@@ -393,7 +412,7 @@ def test_cal_file():
     assert np.all(ct_cal_file_load.ct_excam == ct_cal_file_in.ct_excam)
     assert np.all(ct_cal_file_load.ct_fpam == ct_cal_file_in.ct_fpam)
     assert np.all(ct_cal_file_load.ct_fsam == ct_cal_file_in.ct_fsam)
-    
+
     # This test checks that the CT cal file has the right information by making
     # sure that I=O (Note: the comparison b/w analytical predictions
     # vs. centroid/pixelized data is part of the tests on test_psf_pix_and_ct before)
@@ -401,6 +420,7 @@ def test_cal_file():
     # Input values for PSF centers and corresponding CT values
     psf_loc_input, ct_input = \
         corethroughput.estimate_psf_pix_and_ct(dataset_ct)
+    n_pos = len(psf_loc_input)
 
     # Test: open calibration file
     try:
@@ -408,19 +428,23 @@ def test_cal_file():
     except:
         raise IOError('CT cal file was not saved')
 
+    test_slice_count = n_pos == ct_cal_file.data.shape[0]
+    print(f'Number of slices, N = {n_pos}, in datacube from generate_ct_cal() is correct: ', end='')
+    print_pass() if test_slice_count else print_fail()
+
     # Test 1: PSF cube
     # Recover off-axis PSF cube from CT Dataset
     psf_cube_in = []
     for frame in dataset_ct:
         try:
-        # Pupil images of the unocculted source satisfy:
-        # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
+            # Pupil images of the unocculted source satisfy:
+            # DPAM=PUPIL, LSAM=OPEN, FSAM=OPEN and FPAM=OPEN_12
             exthd = frame.ext_hdr
             if (exthd['DPAMNAME']=='PUPIL' and exthd['LSAMNAME']=='OPEN' and
                 exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
                 continue
         except:
-           pass
+            pass
         psf_cube_in += [frame.data]
     psf_cube_in = np.array(psf_cube_in)
 
@@ -430,17 +454,34 @@ def test_cal_file():
     cal_file_side_1 = ct_cal_file.data.shape[2]
     for i_psf, psf in enumerate(psf_cube_in):
         loc_00 = np.argwhere(psf == ct_cal_file.data[i_psf][0][0])[0]
-        assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
-            loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
+        assert np.all(
+            psf[loc_00[0]:loc_00[0]+cal_file_side_0,
+                loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
+
+    # Verify that the PSF images are best centered at each set of coordinates.
+    test_result_psf_max_row = []  # intialize
+    test_result_psf_max_col = []  # intialize
+    row_expected = cal_file_side_0//2
+    col_expected = cal_file_side_1//2
+    for i_psf in range(n_pos):
+        psf = ct_cal_file.data[i_psf, :, :]
+        index_flat = np.argmax(psf)
+        row_index, col_index = np.unravel_index(index_flat, psf.shape)
+        test_result_psf_max_row.append(row_index == row_expected)
+        test_result_psf_max_col.append(col_index == col_expected)
+
+    test_result_recentering = np.all(test_result_psf_max_row) and np.all(test_result_psf_max_col)
+    print('generate_ct_cal() returns PSFs that are best centered at each set of coordinates: ', end='')
+    print_pass() if test_result_recentering else print_fail()
 
     # Test 2: PSF positions and CT map
     # Check EXTNAME is as expected
     if ct_cal_file.ct_excam_hdr['EXTNAME'] != 'CTEXCAM':
         raise ValueError('The extension name of the CT values on EXCAM is not correct')
     # x location wrt FPM
-    assert np.all(psf_loc_input[:,0] == ct_cal_file.ct_excam[0])
+    assert np.all(psf_loc_input[:, 0] == ct_cal_file.ct_excam[0])
     # y location wrt FPM
-    assert np.all(psf_loc_input[:,1] == ct_cal_file.ct_excam[1])
+    assert np.all(psf_loc_input[:, 1] == ct_cal_file.ct_excam[1])
     # CT map
     assert np.all(ct_input == ct_cal_file.ct_excam[2])
 
@@ -449,17 +490,19 @@ def test_cal_file():
     if ct_cal_file.ct_fpam_hdr['EXTNAME'] != 'CTFPAM':
         raise ValueError('The extension name of the FPAM values on EXCAM is not correct')
     assert np.all(ct_cal_file.ct_fpam == np.array([dataset_ct[0].ext_hdr['FPAM_H'],
-        dataset_ct[0].ext_hdr['FPAM_V']]))
+                                                   dataset_ct[0].ext_hdr['FPAM_V']]))
     if ct_cal_file.ct_fsam_hdr['EXTNAME'] != 'CTFSAM':
         raise ValueError('The extension name of the FSAM values on EXCAM is not correct')
-    assert np.all(ct_cal_file.ct_fsam == np.array([dataset_ct[0].ext_hdr['FSAM_H'],
-        dataset_ct[0].ext_hdr['FSAM_V']]))
-    
+    assert np.all(
+        ct_cal_file.ct_fsam == np.array([dataset_ct[0].ext_hdr['FSAM_H'],
+                                         dataset_ct[0].ext_hdr['FSAM_V']]))
+
     # Remove test CT cal file
     if os.path.exists(ct_cal_file.filepath):
         os.remove(ct_cal_file.filepath)
 
     print('Tests about the CT cal file passed')
+
 
 def test_ct_interp():
     """ Tests the interpolation within the standard range by popping out data
@@ -471,15 +514,15 @@ def test_ct_interp():
     ct_cal_in = corethroughput.generate_ct_cal(dataset_ct_interp)
     # Get CT FPM center
     # FPAM/FSAM
-    fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    fpam_fsam_cal = FpamFsamCal(os.path.join(
+        corgidrp.default_cal_dir, 'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
     fpam_ct_pix = ct_cal_in.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # Reference grid to test the interpolation: wrt CT FPM because the positions
     # used to interpolate the CT are, by definition, wrt the FPM
-    x_grid = ct_cal_in.ct_excam[0,:] - fpam_ct_pix[0]
-    y_grid = ct_cal_in.ct_excam[1,:] - fpam_ct_pix[1]
-    core_throughput = ct_cal_in.ct_excam[2,:]
-    
+    x_grid = ct_cal_in.ct_excam[0, :] - fpam_ct_pix[0]
+    y_grid = ct_cal_in.ct_excam[1, :] - fpam_ct_pix[1]
+    core_throughput = ct_cal_in.ct_excam[2, :]
+
     # In this test, we will estimate the CT at a location that agrees with one
     # of the locations used to build the CT interpolation set by removing
     # the data point and estimating the CT with the remaining unchanged set
@@ -488,7 +531,7 @@ def test_ct_interp():
     # off-axis PSF is removed
     pupil_image = np.zeros([1024, 1024])
     # Set it to some known value for a selected range of pixels
-    pupil_image[510:530, 510:530]=1
+    pupil_image[510:530, 510:530] = 1
     prhd, exthd_pupil = create_default_L3_headers()
     # DRP
     exthd_pupil['DRPCTIME'] = time.Time.now().isot
@@ -510,19 +553,21 @@ def test_ct_interp():
     exthd_pupil['FSAM_H'] = FSAM_H_CT
     exthd_pupil['FSAM_V'] = FSAM_V_CT
     # Mock error
-    err = np.ones([1024,1024])
+    err = np.ones([1024, 1024])
     # Generate random indices between 0 and the number of radii and azimuths,
-    # excluding the edge cases 
+    # excluding the edge cases
     n_random = 50
+    rtol_ct = 0.05
+    ct_result_list = []  # initialize
     # Set seed for reproducibility of test data
     rng = np.random.default_rng(0)
     for idx in range(n_random):
         random_index_radius = rng.choice(np.arange(1, n_radii-1), 1)
         random_index_az = rng.choice(np.arange(1, n_azimuths-1), 1)
-     
-        #Convert these to flattned indices
+
+        # Convert these to flattned indices
         random_indices_flat = random_index_radius + random_index_az*n_radii
-        
+
         # Record the missing value
         missing_x = x_grid[random_indices_flat]
         missing_y = y_grid[random_indices_flat]
@@ -530,7 +575,10 @@ def test_ct_interp():
         # Generate CT dataset w/o the latter (needed to call the interpolant
         # without this location)
         # Dataset for CT map interpolation: pupil images plus off-axis PSFs
-        data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil, err = err)]
+        data_ct = [Image(pupil_image,
+                         pri_hdr=prhd,
+                         ext_hdr=exthd_pupil,
+                         err=err)]
         data_ct += create_ct_interp(
             n_radii=n_radii,
             n_azimuths=n_azimuths,
@@ -546,15 +594,23 @@ def test_ct_interp():
         # Test with linear mapping of radii
         interpolated_value = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
-        # Good to within 2% 
-        assert interpolated_value == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (linear radii mapping)'
+        # Good to within 5%
+        test_result_ct = interpolated_value == pytest.approx(missing_core_throughput, rel=rtol_ct)
+        ct_result_list.append(test_result_ct)
+        print(f'Trial {idx}: Core throughput estimate is correct: {interpolated_value} +/- {100*rtol_ct}% relative: ', end='')
+        print('') if test_result_ct else print_fail()
+        assert test_result_ct, 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
-        # constructing the interpolant 
+        # constructing the interpolant
         interpolated_value_log = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
         # Good to within 2%
-        assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (logarithmic radii mapping)'
-        
+        assert interpolated_value_log == pytest.approx(missing_core_throughput, rel=rtol_ct), 'Error more than 5% (logarithmic radii mapping)'
+
+    test_result_ct_all = np.all(ct_result_list)
+    print(f'All {n_random} CT estimates are correct to within {100*rtol_ct}% relative: ', end='')
+    print_pass() if test_result_ct_all else print_fail()
+
     # Test that if the radius is out of the range then an error is thrown
     # Pick a data point that is out of the range. For instance, set y to zero
     # and x to a value that is greater than the maximum radius
@@ -562,9 +618,9 @@ def test_ct_interp():
     with pytest.raises(ValueError):
         # Too Big
         ct_cal_tmp.InterpolateCT(radii.max()+1, 0, dataset_cor, fpam_fsam_cal) 
-             
+
     with pytest.raises(ValueError):
-        #Too small
+        # Too small
         ct_cal_tmp.InterpolateCT(0.9*radii.min(), 0, dataset_cor, fpam_fsam_cal)
 
     # Test that something with an azimuth out of range returns the same result
@@ -581,10 +637,12 @@ def test_ct_interp():
     interpolated_value_in = ct_cal_tmp.InterpolateCT(
         x_new_in, y_new_in, dataset_cor, fpam_fsam_cal)[0]
 
-    assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than 1% error"
+    assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than 1%% error"
     # Make sure it still works with a non-zero starting azimuth: min_angle below
-    data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil,
-            err = err)]
+    data_ct = [Image(pupil_image,
+                     pri_hdr=prhd,
+                     ext_hdr=exthd_pupil,
+                     err=err)]
     data_ct_interp = create_ct_interp(
         n_radii=n_radii,
         n_azimuths=n_azimuths,
@@ -609,10 +667,11 @@ def test_ct_interp():
     y_az_in = 0.9*np.max(radii) * np.sin(0.2)
     interpolated_value_az_in = ct_cal_az.InterpolateCT(
         x_az_in, y_az_in, dataset_cor, fpam_fsam_cal)[0]
-    
+
     assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
 
     print('Tests about CT interpolation passed')
+
 
 def test_get_1d_ct():
     """Test that corethroughput.get_1d_ct() produces an array of the correct 
