@@ -6,6 +6,7 @@ from astropy.io import fits
 from scipy.signal import decimate
 from astropy.modeling import models
 from astropy.modeling.models import Gaussian2D
+from termcolor import cprint
 
 import corgidrp
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
@@ -21,6 +22,15 @@ if os.path.exists(os.path.join(corgidrp.default_cal_dir, ct_cal_test_file)):
 from corgidrp import caldb
 
 here = os.path.abspath(os.path.dirname(__file__))
+
+
+def print_fail():
+    cprint(' FAIL ', "black", "on_red")
+
+
+def print_pass():
+    cprint(' PASS ', "black", "on_green")
+
 
 def setup_module():
     """

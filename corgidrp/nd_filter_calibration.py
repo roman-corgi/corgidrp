@@ -14,13 +14,14 @@ import warnings
 # Helper Functions
 # =============================================================================
 
+
 def load_transformation_matrix_from_fits(file_path):
     """
     Load a transformation matrix from a FITS file.
-    
+
     Parameters:
         file_path (str): Path to the FITS file containing the transformation matrix.
-    
+
     Returns:
         np.ndarray: The transformation matrix extracted from the FITS file.
     """
@@ -29,6 +30,7 @@ def load_transformation_matrix_from_fits(file_path):
         if data is None:
             data = hdul[1].data
         return np.array(data)
+
 
 def group_by_keyword(dataset, prihdr_keyword=None, exthdr_keyword=None):
     """
@@ -43,7 +45,7 @@ def group_by_keyword(dataset, prihdr_keyword=None, exthdr_keyword=None):
     Returns:
         dict: A dictionary where keys are unique target values and values are the 
             corresponding dataset subsets.
-    
+
     Raises:
         ValueError: If neither keyword is provided.
     """
@@ -169,7 +171,7 @@ def _compute_od_for_file(entry, target, phot_method, phot_kwargs, ref_fpam_name,
       2. Compute centroid (x, y).
       3. Perform photometry (Aperture or Gaussian).
       4. Compute OD from measured flux and the expected flux.
-    
+
     Parameters:
         entry (corgidrp.Data.Image): The dataset entry containing image data and metadata.
         target (str): The target identifier for the dataset entry.
@@ -228,10 +230,10 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
     Process bright star files for one target to compute optical density (OD)
     and (x, y) centroids for each dithered observation.
     Checks that FPAM keywords are consistent across all files.
-    
+
     Additional photometry options are passed via phot_kwargs.
     This allows users to override default settings for functions like aper_phot.
-    
+
     Parameters:
         target (str): The target star name.
         files (corgidrp.data.Dataset): Dataset of bright star images
@@ -239,7 +241,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
         od_raster_threshold (float): Threshold for flagging OD variations.
         phot_method (str): Photometry method to use ("Aperture" or "Gaussian").
         phot_kwargs (dict, optional): Dictionary of keyword arguments to forward to the photometry function.
-    
+
     Returns:
         dict: A dictionary containing computed OD values, centroids, and other metadata.
     """
@@ -269,7 +271,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
                                                       phot_kwargs, common_fpam_name, 
                                                       common_fpam_h, common_fpam_v, 
                                                       ref_cfam_name, expected_flux)
-        
+
         # Skip if centroid was not valid
         if od is None:
             continue
@@ -311,7 +313,7 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
                                  input_dataset):
     """
     Create an NDFilterSweetSpotDataset FITS file with the Nx3 sweet-spot array.
-    
+
     Parameters:
         aggregated_sweet_spot_data (numpy.ndarray): The aggregated Nx3 array containing 
             sweet-spot data in the format [OD, x, y].
@@ -357,7 +359,7 @@ def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file,
     """
     Use the NDFilterSweetSpot Dataset to calculate the OD at a new location for an input 
     image, using a provided EXCAM to FPAM transformation_matrix.
-    
+
     Parameters:
         clean_frame_entry (corgidrp.Data.Image): A clean frame image.
         transformation_matrix_file (string): File path to the 2x2 matrix for transforming 
@@ -402,7 +404,7 @@ def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file,
 # =============================================================================
 
 def create_nd_filter_cal(stars_dataset,
-                         od_raster_threshold = 0.1,
+                         od_raster_threshold=0.1,
                          phot_method="Aperture",
                          flux_or_irr="irr",
                          phot_kwargs=None,
@@ -413,16 +415,16 @@ def create_nd_filter_cal(stars_dataset,
       2. Compute avg calibration factor from dim stars.
       2. Group bright star frames by target + measure OD, centroids.
       3. Combine all sweet-spot data into a single Nx3 array.
-    
+
     Parameters:
         stars_dataset (Dataset): Dataset containing star images. The splitting into bright and dim stars
             is performed based on the 'FPAMNAME' value in the FITS header. For example, entries with 'FPAMNAME'
             containing "dim" (case-insensitive) are considered dim stars.
         od_raster_threshold (float): Threshold for flagging OD variations.
-            # TO DO: figure out what a reasonable value for this should be 
+            # TO DO: figure out what a reasonable value for this should be
         phot_method (str): Photometry method ("Aperture" or "Gaussian").
         flux_or_irr (str): Either 'flux' or 'irr' for the calibration approach.
-        phot_kwargs (dict, optional): Extra arguments for the actual photometry function 
+        phot_kwargs (dict, optional): Extra arguments for the actual photometry function
             (e.g., aper_phot).
         fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): A pre-computed flux factor calibration product to use
             if dim stars are not included as part of the input dataset
@@ -440,7 +442,7 @@ def create_nd_filter_cal(stars_dataset,
         grouped_nd_files = group_by_keyword(stars_dataset, prihdr_keyword=None, exthdr_keyword='FPAMNAME')
     except:
         grouped_nd_files = group_by_keyword(stars_dataset, prihdr_keyword=None, exthdr_keyword='FSAMNAME')
-        
+
     dim_stars_dataset = []
     bright_stars_dataset = []
 
@@ -517,11 +519,11 @@ def create_nd_filter_cal(stars_dataset,
     print(f"Average OD across bright targets: {overall_avg_od}")
 
     # 5. Create the final NDFilterSweetSpotDataset
-    
+
     sweet_spot_dataset = create_nd_sweet_spot_dataset(
         aggregated_sweet_spot_data=combined_sweet_spot_data,
         common_metadata=common_metadata, od_var_flag = od_var_flag, input_dataset = stars_dataset
     )
 
-    #TO DO: do we want to return flux?
+    # TO DO: do we want to return flux?
     return sweet_spot_dataset
