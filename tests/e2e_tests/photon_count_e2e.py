@@ -15,10 +15,8 @@ import corgidrp.caldb as caldb
 import corgidrp.detector as detector
 
 @pytest.mark.e2e
-def test_pc_prep_e2e(e2edata_path, e2eoutput_path, VAP):
+def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
     global pc_frame, pc_dark_frame, ill_mean, dark_mean, pc_frame_err, pc_dark_frame_err, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat
-    if VAP != 'yes' and VAP != 'no':
-        raise Exception(r'VAP must be either "yes" or "no"')
     # e2edata_path not used at all for this test
     np.random.seed(1234)
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=2, cosmic_rate=1, flux=0.5, bad_frames=1)#Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
@@ -183,57 +181,142 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path, VAP):
             master_ill_filepath_list.append(os.path.join(output_dir, f))
 
 @pytest.mark.e2e
-def test_pc_e2e_1(e2edata_path, e2eoutput_path, VAP):            
+def test_pc_e2e_pc_frame(e2edata_path, e2eoutput_path):            
     for i in range(len(master_ill_filepath_list)):
         pc_frame = fits.getdata(master_ill_filepath_list[i])
-        pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
-        pc_dark_frame = fits.getdata(master_dark_filepath_list[i])
-        pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
-
         # more frames gets a better agreement; agreement to 1% for ~160 darks and illuminated
-        if VAP == 'no':
-            assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02) 
-            assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
-            assert pc_frame_err.min() >= 0
-            assert pc_dark_frame_err.min() >= 0
-        if VAP == 'yes':
-            if np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02):
-                print(r'PC Frame mean is within 2% of expected value')
-            else:
-                print(r'FAILED:  PC Frame mean is within 2% of expected value')
-            assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
-            assert pc_frame_err.min() >= 0
-            assert pc_dark_frame_err.min() >= 0
-            ############# extra checks for VAP testing
-            # dimensions of output arrays
-            assert pc_frame.shape == (1024,1024)
-            # check frame rejection was correctly applied (for illuminated and dark)
-            pc_ext_hdr = fits.getheader(master_ill_filepath_list[i], 1)
-            assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1
-            pc_dark_ext_hdr = fits.getheader(master_dark_filepath_list[i], 1)
-            assert pc_dark_ext_hdr['NUM_FR'] == len(l1_data_dark_filelist) - 1
+        if np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02):
+            print(r'dark-subtracted PC frame mean within 2% of expected value:  PASS')
+        else:
+            print(r'dark-subtracted PC frame mean within 2% of expected value:  FAIL')
+        assert np.isclose(np.nanmean(pc_frame), ill_mean - dark_mean, rtol=0.02)
 
+@pytest.mark.e2e
+def test_pc_e2e_pc_dark_frame(e2edata_path, e2eoutput_path):            
+    for i in range(len(master_ill_filepath_list)):
+        pc_dark_frame = fits.getdata(master_dark_filepath_list[i])
+        # more frames gets a better agreement; agreement to 1% for ~160 darks and illuminated
+        if np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01):
+            print(r'PC dark frame mean within 1% of expected value:  PASS')
+        else:
+            print(r'PC dark frame mean within 1% of expected value:  FAIL')
+        assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01)
+
+@pytest.mark.e2e
+def test_pc_e2e_pc_err_frame(e2edata_path, e2eoutput_path):            
+    for i in range(len(master_ill_filepath_list)):
+        pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
+        if pc_frame_err.min() >= 0:
+            print(r'PC frame error array has no negative values:  PASS')
+        else:
+            print(r'PC frame error array has no negative values:  FAIL')
+        assert pc_frame_err.min() >= 0
+
+@pytest.mark.e2e
+def test_pc_e2e_pc_err_dark_frame(e2edata_path, e2eoutput_path):            
+    for i in range(len(master_ill_filepath_list)):
+        pc_dark_frame_err = fits.getdata(master_dark_filepath_list[i], 'ERR')
+        if pc_dark_frame_err.min() >= 0:
+            print(r'PC dark frame error array has no negative values:  PASS')
+        else:
+            print(r'PC dark frame error array has no negative values:  FAIL')
+        assert pc_dark_frame_err.min() >= 0
+
+############# extra checks for VAP testing
+
+@pytest.mark.e2e
+def test_pc_e2e_output_array_dims(e2edata_path, e2eoutput_path):            
+    for i in range(len(master_ill_filepath_list)):
+        pc_frame = fits.getdata(master_ill_filepath_list[i])     
+        # dimensions of output arrays
+        if pc_frame.shape == (1024,1024):
+            print(r'PC frame array has dimensions of 1024x1024:  PASS')
+        else:
+            print(r'PC frame array has dimensions of 1024x1024:  FAIL')
+        assert pc_frame.shape == (1024,1024)
+        
+@pytest.mark.e2e
+def test_pc_e2e_frame_rejection_ill(e2edata_path, e2eoutput_path):            
+    for i in range(len(master_ill_filepath_list)):     
+        # check frame rejection was correctly applied (for illuminated)
+        pc_ext_hdr = fits.getheader(master_ill_filepath_list[i], 1)
+        if pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1:
+            print(r'PC frame rejection was correctly applied:  PASS')
+        else:
+            print(r'PC frame rejection was correctly applied:  FAIL')
+        assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1
+
+@pytest.mark.e2e
+def test_pc_e2e_frame_rejection_dark(e2edata_path, e2eoutput_path):            
+    for i in range(len(master_ill_filepath_list)):    
+        # check frame rejection was correctly applied (for dark)
+        pc_dark_ext_hdr = fits.getheader(master_dark_filepath_list[i], 1)
+        if pc_dark_ext_hdr['NUM_FR'] == len(l1_data_dark_filelist) - 1:
+            print(r'PC dark frame rejection was applied:  PASS')
+        else:
+            print(r'PC dark frame rejection was applied:  FAIL')
+        assert pc_dark_ext_hdr['NUM_FR'] == len(l1_data_dark_filelist) - 1
+
+
+@pytest.mark.e2e
+def test_pc_e2e_input_dark_array_dims(e2edata_path, e2eoutput_path):            
     # dimensions of input dark arrays
     for f in l2a_dark_files:
         if not f.endswith('.fits'):
             continue        
         input_frame = fits.getdata(f)
+        if input_frame.shape == (1024,1024):
+            print(r'Input dark frame has dimensions of 1024x1024:  PASS')
+        else:
+            print(r'Input dark frame has dimensions of 1024x1024:  FAIL')
         assert input_frame.shape == (1024,1024)
+
+@pytest.mark.e2e
+def test_pc_e2e_input_ill_array_dims(e2edata_path, e2eoutput_path):   
     # dimensions of input illuminated arrays
     for f in l2a_files:
         if not f.endswith('.fits'):
             continue        
         input_frame = fits.getdata(f)
+        if input_frame.shape == (1024,1024):
+            print(r'Input illuminated frame has dimensions of 1024x1024:  PASS')
+        else:
+            print(r'Input illuminated frame has dimensions of 1024x1024:  FAIL')
         assert input_frame.shape == (1024,1024)
+
+@pytest.mark.e2e
+def test_pc_e2e_bpmap(e2edata_path, e2eoutput_path):   
     # bpmap is an array of 0 and 1 
     inds_0 = np.where(bp_map.data.ravel() == 0)
     inds_1 = np.where(bp_map.data.ravel() == 1)
+    if len(inds_0[0]) + len(inds_1[0]) == bp_map.data.size:
+        print(r'Bad pixel map has only 0 and 1 values:  PASS')
+    else:
+        print(r'Bad pixel map has only 0 and 1 values:  FAIL')
     assert len(inds_0[0]) + len(inds_1[0]) == bp_map.data.size
-#XXX separate out each test into its own test function so pytest will show results of all tests simultaneously (and not stop output after first failure when all checks in one large test function)?
-#XXX add in print() statements for each test 
-#XXX fix all TPSCHEME* instances to TPSCHEM*, and adjust wiki pages accordingly? (Check with Julia on Wiki pages, though)
 
-# check image conversion from DN to electrons (covered in run_vi_tdd_05_case_02.py)
+@pytest.mark.e2e
+def test_pc_e2e_kgain_conversion(e2edata_path, e2eoutput_path):   
+    # check image conversion from DN to electrons
+    input_frames = []
+    for f in l2a_files:
+        if not f.endswith('.fits'):
+            continue        
+        input_frame = fits.getdata(f)  
+        input_frames.append(input_frame)  
+    mean_DN = np.mean(input_frames)
+    for i in range(len(master_ill_filepath_list)):
+        pc_frame = fits.getdata(master_ill_filepath_list[i])
+        pc_frame_bias = fits.getdata(master_ill_filepath_list[i], 4)
+        mean_DN_back_calculated = np.mean(pc_frame/kgain._kgain + pc_frame_bias)
+        if np.isclose(mean_DN_back_calculated, mean_DN, rtol=0.1):
+            print(r'Image conversion from DN to electrons was applied:  PASS')
+        else:
+            print(r'Image conversion from DN to electrons was applied:  FAIL')
+        assert np.isclose(mean_DN_back_calculated, mean_DN, rtol=0.1)  
+
+
+# check image conversion from DN to electrons (covered in run_vi_tdd_05_case_02.py) NOTE
 # check photon-counting threshold was correctly applied (new test to write)
 # check that the mean-combine of all N thresholded frames has been done correctly (covered in
 # run_vi_tdd_04_case_03.py)
@@ -278,10 +361,7 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
-    ap.add_argument('-vap', '--VAP', default='no', help='If True, VAP test is run.')
     args = ap.parse_args()
     outputdir = args.outputdir
     e2edata_dir = args.e2edata_dir
-    VAP = args.VAP
-    test_pc_prep_e2e(e2edata_dir, outputdir, VAP)
-    test_pc_e2e_1(e2edata_dir, outputdir, VAP)
+    test_pc_prep_e2e(e2edata_dir, outputdir)

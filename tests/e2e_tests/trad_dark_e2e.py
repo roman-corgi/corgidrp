@@ -35,13 +35,22 @@ def fix_headers_for_tvac(
         exthdr = fits_file[1].header
         # Adjust VISTYPE
         prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['CMDGAIN'] = 1.340000033378601
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
-        # Update FITS file
+        prihdr1, exthdr1 = mocks.create_default_L1_headers()
+        for key in prihdr1:
+            if key not in prihdr:
+                prihdr[key] = prihdr1[key]
+        for key in exthdr1:
+            if key not in exthdr:
+                exthdr[key] = exthdr1[key]
+        prihdr['VISTYPE'] = 'DARK'
+        # Update FITS file  
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
@@ -227,7 +236,16 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark = trad_dark_fits[1].data
+    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
+    trad_dark_prihdr = trad_dark_fits[0].header
+    trad_dark_exthdr = trad_dark_fits[1].header
+    trad_dark_prihdr.remove('BUILD')
+    trad_dark_exthdr.remove('DATA_LEVEL')
+    trad_dark_prihdr.remove('OBSTYPE')
+    trad_dark_exthdr.remove('CMDGAIN')
+    trad_dark_prihdr.remove('OBSID')
     ###################
     
     ##### Check against TVAC traditional dark result
@@ -237,11 +255,10 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
     pass
 
+    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1), pri_hdr=trad_dark_prihdr, ext_hdr=trad_dark_exthdr)
+    trad_dark.save(filedir=build_trad_dark_outputdir, filename=trad_dark.filename) #to have example cal file with all the right headers with no extras
     # remove from caldb
-    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
     this_caldb.remove_entry(trad_dark)
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
 
 
 @pytest.mark.e2e
@@ -427,7 +444,16 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark = trad_dark_fits[1].data
+    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
+    trad_dark_prihdr = trad_dark_fits[0].header
+    trad_dark_exthdr = trad_dark_fits[1].header
+    trad_dark_prihdr.remove('BUILD')
+    trad_dark_exthdr.remove('DATA_LEVEL')
+    trad_dark_prihdr.remove('OBSTYPE')
+    trad_dark_exthdr.remove('CMDGAIN')
+    trad_dark_prihdr.remove('OBSID')
     ###################
     
     ##### Check against TVAC traditional dark result
@@ -444,10 +470,11 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert(trad_dark.filename == test_filename)
     pass
 
+    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1), pri_hdr=trad_dark_prihdr, ext_hdr=trad_dark_exthdr)
+    trad_dark.save(filedir=build_trad_dark_outputdir, filename=trad_dark.filename) #to have example cal file with all the right headers with no extras
     # remove from caldb
     this_caldb.remove_entry(trad_dark)
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
+
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
