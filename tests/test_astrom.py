@@ -161,7 +161,7 @@ def test_distortion():
     true_params_y = expected_coeffs[:-1][true_fitparams:]
     true_params_y = true_params_y.reshape(true_fitorder+1, true_fitorder+1)
     true_params_y = true_params_y / 500**(true_total_orders)
-
+    
         # evaluate the polynomial at all pixel positions
     y_corr = np.polynomial.legendre.legval2d(xorig.ravel(), yorig.ravel(), best_params_y)
     y_corr = y_corr.reshape(yorig.shape)
@@ -212,7 +212,7 @@ def test_distortion():
 def test_seppa2dxdy():
     """Test that conversion from separation/position angle to delta x/y 
     produces the expected result for varying input separations and angles."""
-    
+
     seps = np.array([10.0,15.0,20,10,10,10,10])
     pas = np.array([0.,90.,-90,45,-45,135,-135])
 
@@ -264,7 +264,7 @@ def test_create_circular_mask():
 def test_get_polar_dist():
     """Test that astrom.get_polar_dist() calculates distances correctly 
     in varying directions."""
-
+    
     # Test vertical line
     seppa1 = (10,0)
     seppa2 = (10,180)
