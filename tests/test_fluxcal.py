@@ -22,9 +22,8 @@ image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
 image2 = image1.copy()
 image1.filename = "test1_L4_.fits"
 image2.filename = "test2_L4_.fits"
-dataset = Dataset([image1, image2])
-calspec_filepath = os.path.join(
-    os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
+dataset=Dataset([image1, image2])
+calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
 
 
 def print_fail():
@@ -48,7 +47,7 @@ def test_get_filter_name():
     
     assert np.any(wave>=7130)
     assert np.any(transmission < 1.)
-
+    
     #test a wrong filter name
     image3 = image1.copy()
     image3.ext_hdr["CFAMNAME"] = '5C'
@@ -65,7 +64,7 @@ def test_flux_calc():
     global band_flux
     calspec_flux = fluxcal.read_cal_spec(calspec_filepath, wave)
     assert calspec_flux[0] == pytest.approx(1.6121e-09, 1e-15) 
-
+    
     band_flux = fluxcal.calculate_band_flux(transmission, calspec_flux, wave)
     eff_lambda = fluxcal.calculate_effective_lambda(transmission, calspec_flux, wave)
     assert eff_lambda == pytest.approx((wave[0]+wave[-1])/2., 3)
@@ -85,7 +84,7 @@ def test_colorcor():
     flux_source = BlackBody(scale = bbscale, temperature=54000.0 * u.K)
     K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave))
     assert K_bb == pytest.approx(1., 0.01)
-
+    
     flux_source = BlackBody(scale = bbscale, temperature=100. * u.K)
     K_bb = fluxcal.compute_color_cor(transmission, wave, calspec_flux, lambda_piv, flux_source(wave))
     assert K_bb > 2#weakest star to be detected
@@ -128,7 +127,7 @@ def test_app_mag():
     assert output_dataset[0].ext_hdr['APP_MAG'] == 0.
     output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath)
     assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(0.0, 0.03) 
-    output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath, scale_factor=0.5)
+    output_dataset = l4_to_tda.determine_app_mag(dataset, calspec_filepath, scale_factor = 0.5)
     assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(0.+-2.5*np.log10(0.5), 0.03)
     output_dataset = l4_to_tda.determine_app_mag(dataset, '109 Vir')
     assert output_dataset[0].ext_hdr['APP_MAG'] == pytest.approx(3.72, 0.05)
@@ -141,8 +140,8 @@ def test_fluxcal_file():
     fluxcal_factor_error = np.array([[[1e-14]]])
     fluxcal_fac = FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
     assert fluxcal_fac.filter == '3C'
-    assert fluxcal_fac.fluxcal_fac == fluxcal_factor[0, 0]
-    assert fluxcal_fac.fluxcal_err == fluxcal_factor_error[0, 0, 0]
+    assert fluxcal_fac.fluxcal_fac == fluxcal_factor[0,0]
+    assert fluxcal_fac.fluxcal_err == fluxcal_factor_error[0,0,0]
     assert(fluxcal_fac.filename.split(".")[0] == "test2_ABF_CAL")
     
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
@@ -201,15 +200,15 @@ def test_abs_fluxcal():
     #200 is the input count of photo electrons
     assert flux_el_ap == pytest.approx(200, rel = 0.05)
     assert flux_err_ap == pytest.approx(error_sum, rel = 0.05)
-
-
+    
+    
     #Test the 2D Gaussian fit photometry
     #The error of one pixel is 1, so the error of a circular aperture with radius of 2 sigma should be about:
     error_gauss = np.sqrt(np.pi * 4 * sigma * sigma)
     flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm, fit_shape = 41)
     assert flux_el_gauss == pytest.approx(200, rel = 0.05)
     assert flux_err_gauss == pytest.approx(error_gauss, rel = 0.05)
-
+    
     flux_el_gauss, flux_err_gauss = fluxcal.phot_by_gauss2d_fit(flux_image, fwhm)
     assert flux_el_gauss == pytest.approx(200, rel = 0.05)
     assert flux_err_gauss == pytest.approx(error_gauss, rel = 0.05)
@@ -364,3 +363,6 @@ if __name__ == '__main__':
     test_app_mag()
     test_fluxcal_file()
     test_abs_fluxcal()
+
+
+
