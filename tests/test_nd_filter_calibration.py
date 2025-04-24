@@ -87,7 +87,7 @@ def is_real_positive_scalar(var):
         var (float): variable to check
 
     Returns:
-     result (bool): Whether the check passes or not.
+        result (bool): Whether the check passes or not.
 
     """
     result = True
@@ -97,13 +97,14 @@ def is_real_positive_scalar(var):
         result = False
     if var <= 0:
         result = False
+
     return result
 
 
 # ---------------------------------------------------------------------------
 # Functions to generate mocks
 # ---------------------------------------------------------------------------
-def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, output_path=None, 
+def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, output_path=None,
                            background_val=0, add_gauss_noise_val=False):
     """
     Generate and save mock dim dataset files for specified exposure time and filter.
@@ -270,7 +271,7 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
     ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
-        fluxcal_factor=None)
+        fluxcal_factor = None)
 
     results.save(filedir=default_cal_dir)
 
@@ -288,7 +289,7 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
 
 def test_output_filename_convention(stars_dataset_cached):
     print("**Testing output filename naming conventions**")
-
+    
     # Make a copy of the dataset and retrieve expected values.
     ds_copy = copy.deepcopy(stars_dataset_cached)
 
@@ -314,10 +315,10 @@ def test_average_od_within_tolerance(stars_dataset_cached_bright_count):
     ds_copy, n_bright = copy.deepcopy(stars_dataset_cached_bright_count)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
-        fluxcal_factor=None)
+        fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
-    std_od = np.std(ods[:, 0])
+    std_od = np.std(ods[:,0])
     results_hdr = results.ext_hdr
     od_flag = results_hdr.get('ODFLAG')
 
@@ -326,6 +327,7 @@ def test_average_od_within_tolerance(stars_dataset_cached_bright_count):
     )
     if std_od < OD_RASTER_THRESHOLD:
         assert not od_flag, f"Low OD variation but flag is set"
+
     else:
         assert od_flag, f"High OD variation but flag is not set"
 
@@ -406,14 +408,14 @@ def test_multiple_nd_levels(dim_dir, output_dir, test_od):
         BRIGHT_EXPTIME, FILTER_USED, test_od, CAL_FACTOR, save_mocks=True, output_path=bright_mocks_dir
     )
 
-    dim_filepaths = glob.glob(os.path.join(dim_dir, "*"))  # use cached dim images
+    dim_filepaths = glob.glob(os.path.join(dim_dir, "*")) # use cached dim images
     dim_images = [Image(path) for path in dim_filepaths]
     combined_files = bright_images + dim_images
     combined_dataset = l2b_tol3.divide_by_exptime(Dataset(combined_files))
 
     results = nd_filter_calibration.create_nd_filter_cal(
-        combined_dataset, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
-        fluxcal_factor=None)
+        combined_dataset, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
     assert abs(avg_od - test_od) < 0.2, (
@@ -511,7 +513,7 @@ def test_aperture_radius_sensitivity(stars_dataset_cached, aper_radius):
     ds_copy = copy.deepcopy(stars_dataset_cached)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, "Aperture", "irr", phot_args, 
-        fluxcal_factor=None)
+        fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
     assert abs(avg_od - INPUT_OD) < 0.3, (
