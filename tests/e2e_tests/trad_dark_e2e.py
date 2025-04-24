@@ -113,7 +113,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -308,7 +308,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
