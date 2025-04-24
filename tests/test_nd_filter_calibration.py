@@ -104,7 +104,7 @@ def is_real_positive_scalar(var):
 # ---------------------------------------------------------------------------
 # Functions to generate mocks
 # ---------------------------------------------------------------------------
-def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, output_path=None,
+def mock_dim_dataset_files(dim_exptime, filter_used, cal_factor, save_mocks, output_path=None, 
                            background_val=0, add_gauss_noise_val=False):
     """
     Generate and save mock dim dataset files for specified exposure time and filter.
@@ -272,7 +272,7 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
-
+    
     results.save(filedir=default_cal_dir)
 
     nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_NDF_CAL.fits')]
@@ -314,7 +314,7 @@ def test_average_od_within_tolerance(stars_dataset_cached_bright_count):
     print("**Testing computed OD within tolerance**")
     ds_copy, n_bright = copy.deepcopy(stars_dataset_cached_bright_count)
     results = nd_filter_calibration.create_nd_filter_cal(
-        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS,
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
     ods = results.data
     avg_od = np.mean(ods[:, 0])
@@ -607,7 +607,7 @@ def test_calculate_od_at_new_location(output_dir):
     ndcal_exthdr["FPAM_V"] = 0.0
     nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
                                                     input_dataset=fake_input_dataset)
-
+ 
     # Create an identity transformation matrix FITS file in output_dir
     transformation_matrix_file = mock_transformation_matrix(output_dir)
 
