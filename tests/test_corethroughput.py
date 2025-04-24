@@ -7,6 +7,7 @@ from astropy.io import fits
 from scipy.signal import decimate
 from astropy.modeling import models
 from astropy.modeling.models import Gaussian2D
+from termcolor import cprint
 
 import corgidrp
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
@@ -17,6 +18,15 @@ from corgidrp import corethroughput
 from corgidrp import caldb
 
 here = os.path.abspath(os.path.dirname(__file__))
+
+
+def print_fail():
+    cprint(' FAIL ', "black", "on_red")
+
+
+def print_pass():
+    cprint(' PASS ', "black", "on_green")
+
 
 def setup_module():
     """
@@ -247,7 +257,23 @@ def test_psf_pix_and_ct():
     # Difference between expected and retrieved locations for the max (peak) method
     diff_psf_loc = psf_loc_in - psf_loc_est
     # Set a difference of 0.005 pixels
-    assert np.all(np.abs(diff_psf_loc) <= 0.005)
+    atol_psf_loc = 0.005
+    atol_ct = 0.01
+
+    test_result = np.all(np.abs(diff_psf_loc) <= atol_psf_loc)
+    assert test_result
+    # Print out the result
+    print('\nGaussian position from estimate_psf_pix_and_ct() is correct to within %.3f pixels: ' % (atol_psf_loc), end='')
+    print_pass() if test_result else print_fail()
+
+    # comparison between I/O values (<=1% due to pixelization effects vs.
+    # expected analytical value)
+    test_result = np.all(np.abs(ct_est-ct_in) <= atol_ct)
+    assert test_result
+    # Print out the result
+    print('\nGaussian CT value from estimate_psf_pix_and_ct() is correct to within %.1f%%: ' % (atol_ct*100), end='')
+    print_pass() if test_result else print_fail()
+
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
@@ -260,8 +286,19 @@ def test_psf_pix_and_ct():
     # Synthetic PSF from setup_module
     psf_loc_est, ct_est = corethroughput.estimate_psf_pix_and_ct(dataset_ct_syn)
     # In this test, there must be an exact agreement
-    assert np.all(psf_loc_est[0] == psf_loc_syn)
-    assert np.abs(ct_est[0]-ct_syn) < 1e-16
+
+    test_result = np.all(psf_loc_est[0] == psf_loc_syn)
+    assert test_result
+    # Print out the result
+    print('Synthetic PSF position from estimate_psf_pix_and_ct() is exactly correct: ', end='')
+    print_pass() if test_result else print_fail()
+
+    atol_ct = 1e-16
+    test_result = np.abs(ct_est[0]-ct_syn) < atol_ct
+    assert test_result
+    # Print out the result
+    print('Synthetic PSF CT value from estimate_psf_pix_and_ct() is correct to within %.1g: ' % (atol_ct), end='')
+    print_pass() if test_result else print_fail()
 
     print('Tests about PSF locations and CT values passed')
 
@@ -291,6 +328,7 @@ def test_fpm_pos():
     fsam2excam_matrix_tvac = fits.getdata(os.path.join(here, 'test_data',
         'fsam_to_excam_modelbased.fits'))
 
+
     # test 1:
     # Check that DRP calibration files for FPAM and FSAM agree with TVAC files
     # Some irrelevant rounding happens when defining FpamFsamCal() in data.py
@@ -306,7 +344,9 @@ def test_fpm_pos():
     FSAM_center_pos_um =  np.array([dataset_cor[0].ext_hdr['FSAM_H'],
             dataset_cor[0].ext_hdr['FSAM_V']])
     rng = np.random.default_rng(0)
-    for _ in range(10):
+    fpm_pos_result_list = []  # initialize
+    n_trials = 10
+    for ii in range(n_trials):
         # Random shift for Delta H/V in um
         delta_fpam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
         delta_fsam_um = np.array([rng.uniform(1,10), rng.uniform(1,10)])
@@ -327,10 +367,21 @@ def test_fpm_pos():
         delta_fsam_pix = fsam2excam_matrix @ delta_fsam_um
         # Compare output and input: Some of the random tests have differences
         # of ~1e-13, while others are exactly equal
+        atol_fpm_pos = 1e-12
         fpam_ct_pix_in = FPM_center_pos_pix + delta_fpam_pix
-        assert np.all(fpam_ct_pix_out - fpam_ct_pix_in <= 1e-12)
+        test_result_fpm_pos = np.all(fpam_ct_pix_out - fpam_ct_pix_in <= atol_fpm_pos)
+        assert test_result_fpm_pos
+        fpm_pos_result_list.append(test_result_fpm_pos)
+        # print(f'Trial {ii}: FPM position from FpamFsamCal() is correct within {atol_fpm_pos}: ', end='')
+        # print_pass() if test_result_fpm_pos else print_fail()
+
+        atol_fs_pos = 1e-12
         fsam_ct_pix_in = FPM_center_pos_pix + delta_fsam_pix
-        assert np.all(fsam_ct_pix_out - fsam_ct_pix_in <= 1e-12)
+        assert np.all(fsam_ct_pix_out - fsam_ct_pix_in <= atol_fs_pos)
+
+    test_result_fpm_pos_all = np.all(fpm_pos_result_list)
+    print(f'For all {n_trials} trials, FPM position from FpamFsamCal() is correct within {atol_fpm_pos}: ', end='')
+    print_pass() if test_result_fpm_pos_all else print_fail()
 
     print('Tests about FPAM/FSAM to EXCAM passed')
 
@@ -367,12 +418,17 @@ def test_cal_file():
     # Input values for PSF centers and corresponding CT values
     psf_loc_input, ct_input = \
         corethroughput.estimate_psf_pix_and_ct(dataset_ct)
+    n_pos = len(psf_loc_input)
 
     # Test: open calibration file
     try:
         ct_cal_file = corgidrp.data.CoreThroughputCalibration(ct_cal_file_in.filepath)
     except:
         raise IOError('CT cal file was not saved')
+
+    test_slice_count = n_pos == ct_cal_file.data.shape[0]
+    print(f'Number of slices, N = {n_pos}, in datacube from generate_ct_cal() is correct: ', end='')
+    print_pass() if test_slice_count else print_fail()
 
     # Test 1: PSF cube
     # Recover off-axis PSF cube from CT Dataset
@@ -386,7 +442,7 @@ def test_cal_file():
                 exthd['FSAMNAME']=='OPEN' and exthd['FPAMNAME']=='OPEN_12'):
                 continue
         except:
-           pass
+            pass
         psf_cube_in += [frame.data]
     psf_cube_in = np.array(psf_cube_in)
 
@@ -398,6 +454,22 @@ def test_cal_file():
         loc_00 = np.argwhere(psf == ct_cal_file.data[i_psf][0][0])[0]
         assert np.all(psf[loc_00[0]:loc_00[0]+cal_file_side_0,
             loc_00[1]:loc_00[1]+cal_file_side_1] == ct_cal_file.data[i_psf])
+
+    # Verify that the PSF images are best centered at each set of coordinates.
+    test_result_psf_max_row = []  # intialize
+    test_result_psf_max_col = []  # intialize
+    row_expected = cal_file_side_0//2
+    col_expected = cal_file_side_1//2
+    for i_psf in range(n_pos):
+        psf = ct_cal_file.data[i_psf, :, :]
+        index_flat = np.argmax(psf)
+        row_index, col_index = np.unravel_index(index_flat, psf.shape)
+        test_result_psf_max_row.append(row_index == row_expected)
+        test_result_psf_max_col.append(col_index == col_expected)
+
+    test_result_recentering = np.all(test_result_psf_max_row) and np.all(test_result_psf_max_col)
+    print('generate_ct_cal() returns PSFs that are best centered at each set of coordinates: ', end='')
+    print_pass() if test_result_recentering else print_fail()
 
     # Test 2: PSF positions and CT map
     # Check EXTNAME is as expected
@@ -480,6 +552,8 @@ def test_ct_interp():
     # Generate random indices between 0 and the number of radii and azimuths,
     # excluding the edge cases 
     n_random = 50
+    rtol_ct = 0.05
+    ct_result_list = []  # initialize
     # Set seed for reproducibility of test data
     rng = np.random.default_rng(0)
     for idx in range(n_random):
@@ -512,15 +586,23 @@ def test_ct_interp():
         # Test with linear mapping of radii
         interpolated_value = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=False)[0]
-        # Good to within 2% 
-        assert interpolated_value == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (linear radii mapping)'
+        # Good to within 5%
+        test_result_ct = interpolated_value == pytest.approx(missing_core_throughput, rel=rtol_ct)
+        ct_result_list.append(test_result_ct)
+        print(f'Trial {idx}: Core throughput estimate is correct: {interpolated_value} +/- {100*rtol_ct}% relative: ', end='')
+        print('') if test_result_ct else print_fail()
+        assert test_result_ct, 'Error more than 5% (linear radii mapping)'
         # Test with radii mapped into their logarithmic values before
         # constructing the interpolant 
         interpolated_value_log = ct_cal_tmp.InterpolateCT(
             missing_x, missing_y, dataset_cor, fpam_fsam_cal, logr=True)[0]
         # Good to within 2%
-        assert interpolated_value_log == pytest.approx(missing_core_throughput, abs=0.05), 'Error more than 5% (logarithmic radii mapping)'
-        
+        assert interpolated_value_log == pytest.approx(missing_core_throughput, rel=rtol_ct), 'Error more than 5% (logarithmic radii mapping)'
+
+    test_result_ct_all = np.all(ct_result_list)
+    print(f'All {n_random} CT estimates are correct to within {100*rtol_ct}% relative: ', end='')
+    print_pass() if test_result_ct_all else print_fail()
+
     # Test that if the radius is out of the range then an error is thrown
     # Pick a data point that is out of the range. For instance, set y to zero
     # and x to a value that is greater than the maximum radius
