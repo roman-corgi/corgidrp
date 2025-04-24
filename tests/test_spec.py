@@ -1,7 +1,6 @@
 import os
 import numpy as np
 from astropy.io import fits
-from astropy.table import Table
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_headers
@@ -17,9 +16,15 @@ def test_psf_centroid():
     # Load FITS data and table (contains true values for testing)
     with fits.open(file_path) as hdul:
         psf_array = hdul[0].data
-        psf_table = Table(hdul[1].data)
+        table_data = hdul[1].data
         print(f"FITS file loaded. PSF Array shape: {psf_array.shape}")
-        print(f"Metadata rows: {len(psf_table)}")
+        print(f"Metadata rows: {len(table_data)}")
+
+    # Convert table data to dictionary for initial_cent
+    initial_cent = {
+        "xcent": np.array(table_data["xcent"]),
+        "ycent": np.array(table_data["ycent"])
+    }
 
     # Create Dataset object for traceability
     dataset = Dataset([file_path])
@@ -35,7 +40,7 @@ def test_psf_centroid():
     print("Running the PSF Centroid Step...")
     calibration = steps.compute_psf_centroid(
         psf_array=psf_array,
-        psf_table=psf_table,
+        initial_cent=initial_cent,
         pri_hdr=pri_hdr,
         ext_hdr=ext_hdr,
         input_dataset=dataset,
@@ -51,13 +56,12 @@ def test_psf_centroid():
     yfit = calibration.yfit
 
     # Get true centroids from test data
-    xtrue = np.array(psf_table["xcent"])
-    ytrue = np.array(psf_table["ycent"])
+    xtrue = np.array(initial_cent["xcent"])
+    ytrue = np.array(initial_cent["ycent"])
 
     x_error = xfit - xtrue
     y_error = yfit - ytrue
 
-    
     print(f"Mean centroid error (x, y): {np.mean(x_error):.3e}, {np.mean(y_error):.3e} pixels")
     print(f"Std dev of centroid error (x, y): {np.std(x_error):.2E}, {np.std(y_error):.2E} pixels")
 
@@ -68,7 +72,6 @@ def test_psf_centroid():
 
     print("PSF centroid fit accuracy test passed.")
 
-   
     calibration_path = os.path.join(output_dir, calibration.filename)
     assert os.path.exists(calibration_path), "Calibration file not created"
 

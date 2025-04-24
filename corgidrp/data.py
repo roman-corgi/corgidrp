@@ -762,17 +762,7 @@ class SpectroscopyCentroidPSF(Image):
 
         self.xfit = self.data[:, 0]
         self.yfit = self.data[:, 1]
-
-    def copy(self, copy_data=True):
-        new_data = np.copy(self.data) if copy_data else self.data
-        new_obj = SpectroscopyCentroidPSF(new_data,
-                                         pri_hdr=self.pri_hdr.copy(),
-                                         ext_hdr=self.ext_hdr.copy())
-        new_obj.filename = self.filename
-        new_obj.filedir = self.filedir
-        return new_obj
-
-
+        
 class NonLinearityCalibration(Image):
     """
     Class for non-linearity calibration files. Although it's not strictly an image that you might look at, it is a 2D array of data
