@@ -281,7 +281,9 @@ def test_psf_pix_and_ct():
     # core throughput in (0,1]
     assert np.all(ct_est) > 0
     assert np.all(ct_est) <= 1
-
+    # comparison between I/O values (<=1% due to pixelization effects vs.
+    # expected analytical value)
+    assert np.all(np.abs(ct_est-ct_in) <= 0.01)
 
     # Test 2:
     # Functional test with some mock data with known PSF location and CT
@@ -489,7 +491,7 @@ def test_cal_file():
         raise ValueError('The extension name of the FSAM values on EXCAM is not correct')
     assert np.all(ct_cal_file.ct_fsam == np.array([dataset_ct[0].ext_hdr['FSAM_H'],
         dataset_ct[0].ext_hdr['FSAM_V']]))
-
+    
     # Remove test CT cal file
     if os.path.exists(ct_cal_file.filepath):
         os.remove(ct_cal_file.filepath)
@@ -514,7 +516,7 @@ def test_ct_interp():
     x_grid = ct_cal_in.ct_excam[0,:] - fpam_ct_pix[0]
     y_grid = ct_cal_in.ct_excam[1,:] - fpam_ct_pix[1]
     core_throughput = ct_cal_in.ct_excam[2,:]
-
+    
     # In this test, we will estimate the CT at a location that agrees with one
     # of the locations used to build the CT interpolation set by removing
     # the data point and estimating the CT with the remaining unchanged set
@@ -626,7 +628,7 @@ def test_ct_interp():
     interpolated_value_in = ct_cal_tmp.InterpolateCT(
         x_new_in, y_new_in, dataset_cor, fpam_fsam_cal)[0]
 
-    assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than  error"
+    assert interpolated_value_out == pytest.approx(interpolated_value_in, abs=0.01), "Error more than 1% error"
     # Make sure it still works with a non-zero starting azimuth: min_angle below
     data_ct = [Image(pupil_image,pri_hdr = prhd, ext_hdr = exthd_pupil,
             err = err)]
@@ -648,13 +650,13 @@ def test_ct_interp():
     y_az_out = 0.9*np.max(radii) * np.sin(max_angle + 0.2)
     interpolated_value_az_out = ct_cal_az.InterpolateCT(
         x_az_out, y_az_out, dataset_cor, fpam_fsam_cal)[0]
-    
+
     # In range of the new shifted azimuths
     x_az_in = 0.9*np.max(radii) * np.cos(0.2)
     y_az_in = 0.9*np.max(radii) * np.sin(0.2)
     interpolated_value_az_in = ct_cal_az.InterpolateCT(
         x_az_in, y_az_in, dataset_cor, fpam_fsam_cal)[0]
-
+    
     assert interpolated_value_az_out == pytest.approx(interpolated_value_az_in, abs=0.01), "Error more than 1% error"
 
     print('Tests about CT interpolation passed')
