@@ -129,7 +129,7 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
         NAXIS2 = 2200
 
      # fill in prihdr
-    prihdr['SIMPLE']    = 'T'          # Conforms to FITS Standard
+    prihdr['SIMPLE']    = True          # Conforms to FITS Standard
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
     prihdr['EXTEND']    = True         # Denotes FIT extensions
@@ -140,13 +140,13 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     prihdr['INSTRUME']  = 'CGI'        # Instrument designation
     prihdr['ORIGIN']    = 'SSC'        # Who is responsible for the data
     prihdr['FILETIME']  = '2025-02-16T00:00:00' # When file was created (placeholder datetime)
-    prihdr['DATAVERS']  = ''           # Version of data (increments for reprocessing)         
-    prihdr['PROGNUM']   = 00000        # The Program ID in visit hierarchy (first 5 digits)
-    prihdr['EXECNUM']   = 00           # The Execution Number in visit hierarchy (digits 6-7)
-    prihdr['CAMPAIGN']  = 000          # The Pass/Campaign in visit hierarchy (digits 8-10)
-    prihdr['SEGMENT']   = 000          # The Segment Number in visit hierarchy (digits 11-13)
-    prihdr['OBSNUM']    = 000          # The Observation Number in visit hierarchy (digits 14-16)
-    prihdr['VISNUM']    = 000          # The Visit number in visit hierarchy (digits 17-19)
+    prihdr['DATAVERS']  = 1           # Version of data (increments for reprocessing)         
+    prihdr['PROGNUM']   = '00000'        # The Program ID in visit hierarchy (first 5 digits)
+    prihdr['EXECNUM']   = '00'           # The Execution Number in visit hierarchy (digits 6-7)
+    prihdr['CAMPAIGN']  = '000'          # The Pass/Campaign in visit hierarchy (digits 8-10)
+    prihdr['SEGMENT']   = '000'          # The Segment Number in visit hierarchy (digits 11-13)
+    prihdr['OBSNUM']    = '000'          # The Observation Number in visit hierarchy (digits 14-16)
+    prihdr['VISNUM']    = '000'          # The Visit number in visit hierarchy (digits 17-19)
     prihdr['CPGSFILE']  = 'N/A'        # Campaign-level XML containing the current visit
     prihdr['AUXFILE']   = 'N/A'        # An AUX file associated with this observation
     prihdr['VISTYPE']   = vistype      # Visit file template (enum values as defined)
@@ -315,7 +315,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
         NAXIS2 = 2200
 
     # fill in prihdr
-    prihdr['SIMPLE']    = 'T'          # Conforms to FITS Standard
+    prihdr['SIMPLE']    = True          # Conforms to FITS Standard
     prihdr['BITPIX']    = 8            # Array data type (no array in this HDU)
     prihdr['NAXIS']     = 0            # Number of array dimensions
     prihdr['EXTEND']    = True         # Denotes FIT extensions
