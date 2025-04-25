@@ -55,15 +55,7 @@ def test_astrom():
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
-    test_result_platescale_x = astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=atol_platescale)
-    assert test_result_platescale_x
-    test_result_platescale_y = astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=atol_platescale)
-    assert test_result_platescale_y
-
-    test_result_platescale = test_result_platescale_x and test_result_platescale_y
-    print(f'\nPlate scale estimates from boresight_calibration() are accurate: {expected_platescale} +/- {atol_platescale}: ', end='')
-    print_pass() if test_result_platescale else print_fail()
-
+    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=atol_platescale)
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle)
 
     # check that the center is correct within 3 [mas]
@@ -105,13 +97,6 @@ def test_distortion():
     # create dithered dataset 
     # mocks.create_astrom_data(field_path=field_path, filedir=datadir, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
-
-    # image_path = os.path.join(datadir, 'simcal_astrom.fits')
-    # source_match_path = os.path.join(datadir, 'guesses.csv')
-    # matches = ascii.read(source_match_path)
-
-    # open the image
-    # dataset = data.Dataset([image_path])
 
     # perform the astrometric calibration
     astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=400, find_distortion=True, fitorder=3, position_error=0.5)
