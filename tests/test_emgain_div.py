@@ -9,6 +9,8 @@ def test_emgain_div():
     err = np.ones([1,1024,1024]) *0.5
     prhd, exthd = create_default_L1_headers()
     exthd["EMGAIN_C"] = 1000
+    #kgain conversion must have been done already
+    exthd["BUNIT"] = "detected EM electron"
     image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
     image2 = image1.copy()
     dataset=Dataset([image1, image2])

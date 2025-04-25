@@ -81,6 +81,8 @@ def divide_by_exptime(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in units of electrons/s
     """
+    if input_dataset[0].ext_hdr['BUNIT'] != "electron":
+        raise ValueError("input dataset must have unit electron for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     data = input_dataset.copy()
 
     all_data_new = np.zeros(data.all_data.shape)

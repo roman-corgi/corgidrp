@@ -1755,7 +1755,7 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     frames = []
     for i in range(numfiles):
         # TO DO: Determine what level this image should be
-        prihdr, exthdr = create_default_L1_headers()
+        prihdr, exthdr = create_default_L2b_headers()
 
         sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024,1024)), dtype=float)
         sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024,1024)), dtype=float)
@@ -2853,7 +2853,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fpam_v = 6124.9
 
     # Create image object
-    prihdr, exthdr = create_default_L2b_headers()
+    prihdr, exthdr = create_default_L4_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]

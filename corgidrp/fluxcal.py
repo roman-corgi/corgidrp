@@ -459,13 +459,15 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
             flux calibration factor in (TO DO: what units should this be in)
     """
-    if isinstance(dataset_or_image, corgidrp.data.Dataset):
-        image = dataset_or_image[0]
-        dataset = dataset_or_image
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, corgidrp.data.Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
     else:
-        image = dataset_or_image
+        image = d_or_i
         dataset = corgidrp.data.Dataset([image])
-    
+    if image.ext_hdr['BUNIT'] != "electron/s":
+        raise ValueError("input dataset must have unit electron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     if phot_kwargs is None:
         phot_kwargs = {
             'encircled_radius': 5,
@@ -562,13 +564,15 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
             flux calibration factor in (TO DO: what units should this be in)
     """
-    if isinstance(dataset_or_image, corgidrp.data.Dataset):
-        image = dataset_or_image[0]
-        dataset = dataset_or_image
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, corgidrp.data.Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
     else:
-        image = dataset_or_image
+        image = d_or_i
         dataset = corgidrp.data.Dataset([image])
-    
+    if image.ext_hdr['BUNIT'] != "electron/s":
+        raise ValueError("input dataset must have unit electron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     if phot_kwargs is None:
         phot_kwargs = {
         'fwhm': 3,

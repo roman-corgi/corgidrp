@@ -149,7 +149,9 @@ def convert_to_flux(input_dataset, fluxcal_factor):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in flux units
     """
-   # you should make a copy the dataset to start
+    # you should make a copy the dataset to start
+    if input_dataset[0].ext_hdr['BUNIT'] != "electron/s":
+        raise ValueError("input dataset must have unit electron/s for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     flux_dataset = input_dataset.copy()
     flux_cube = flux_dataset.all_data
     flux_error = flux_dataset.all_err
@@ -334,7 +336,9 @@ def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwar
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in flux units
     """
-   # you should make a copy the dataset to start
+    # you should make a copy the dataset to start
+    if input_dataset[0].ext_hdr['BUNIT'] != "electron/s":
+        raise ValueError("input dataset must have unit electron/s for the flux determination, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     flux_dataset = input_dataset.copy()
     if "COL_COR" in flux_dataset[0].ext_hdr:
         color_cor_fac = flux_dataset[0].ext_hdr['COL_COR']

@@ -58,6 +58,8 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     Returns:
         corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
+    if input_dataset[0].ext_hdr['BUNIT'] != "detected electron":
+        raise ValueError ("input dataset must have unit 'detected electron' for dark subtraction, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
@@ -266,7 +268,9 @@ def convert_to_electrons(input_dataset, k_gain):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in electrons
     """
-   # you should make a copy the dataset to start
+    if input_dataset[0].ext_hdr['BUNIT'] != "DN":
+        raise ValueError("input dataset must have unit DN for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
+    # you should make a copy the dataset to start
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
 
@@ -297,7 +301,8 @@ def em_gain_division(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in units "detected electrons"
     """
-
+    if input_dataset[0].ext_hdr['BUNIT'] != "detected EM electron":
+        raise ValueError("input dataset must have unit 'detected EM electron' for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     # you should make a copy the dataset to start
     emgain_dataset = input_dataset.copy()
     emgain_cube = emgain_dataset.all_data
