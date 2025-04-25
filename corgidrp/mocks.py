@@ -521,7 +521,7 @@ def create_default_L2b_headers(arrtype="SCI"):
     # TO DO: Update this once L2a headers have been finalized
     prihdr, exthdr = create_default_L2a_headers(arrtype)
 
-    exthdr['BUNIT'] = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT'] = 'electron'   # Physical unit of the array (brightness unit)
     exthdr['DESMEAR']       = False         # Whether desmearing was used
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
     exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
@@ -558,7 +558,7 @@ def create_default_L3_headers(arrtype="SCI"):
 
     prihdr['TARGET'] = ''
     
-    exthdr['BUNIT'] = 'Photoelectrons / s'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT'] = 'electron/s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
@@ -641,8 +641,6 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     prihdr, exthdr = create_default_calibration_product_headers()
     # taken from end of calibrate_darks_lsq()
 
-    err_hdr = fits.Header()
-    err_hdr['BUNIT']        = 'Photoelectrons'
     exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
     exthdr['DATALVL']      = 'CalibrationProduct'
@@ -655,7 +653,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     exthdr['B_O_ERR'] = 0.001
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
     input_data = np.stack([FPN_map, CIC_map, DC_map])
     err = np.stack([[FPN_map_err, CIC_map_err, DC_map_err]])
@@ -1268,7 +1266,7 @@ def create_default_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr['DATETIME'] = '2024-01-01T11:00:00.000Z'
     exthdr['HIERARCH DATA_LEVEL'] = "L1"
     exthdr['MISSING'] = False
-    exthdr['BUNIT'] = ""
+    exthdr['BUNIT'] = ''
 
     return prihdr, exthdr
 
@@ -3558,7 +3556,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['YOFFSET'] = 0.0
         prihdr["ROLL"] = roll_angles[i]
         
-        exthdr['BUNIT'] = 'MJy/sr'
+        exthdr['BUNIT'] = 'electron/s'
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!

@@ -84,8 +84,8 @@ def test_kgain():
     assert np.mean(gain_dataset[0].err) == pytest.approx(k_gain * np.mean(dataset[0].err), abs = 1e-4)
 
     #test header updates
-    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
-    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
+    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electron"
+    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electron"
     assert gain_dataset[0].ext_hdr["KGAINPAR"] == k_gain
     assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error[0]
     assert gain_dataset[0].ext_hdr["RN"] > 0

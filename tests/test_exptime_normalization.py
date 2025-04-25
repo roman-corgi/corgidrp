@@ -36,7 +36,7 @@ def test_exptime_normalization():
     for i in range(len(not_normalized_dataset.frames)):
 
         # test that the unit in the header is in electrons/s
-        assert norm_dataset.frames[i].ext_hdr['BUNIT'] == "photoelectrons/s"
+        assert norm_dataset.frames[i].ext_hdr['BUNIT'] == "electron/s"
 
         #check that the quality flag has exists and it's 1 everywhere
         assert np.mean(not_normalized_dataset.frames[i].dq) == pytest.approx(0, abs=1e-6)

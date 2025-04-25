@@ -312,7 +312,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         requested_mas = requested_separations * pixscale_mas
         flux_ratio_noise_curve = np.vstack([requested_separations, requested_mas, frn_vals])
         hdr = fits.Header()
-        hdr['BUNIT'] = "Fp/Fs"
+        hdr['BUNIT'] = '' #dimensionless
         hdr['COMMENT'] = "Flux ratio noise curve as a function of radial separation.  First row:  separation radii in pixels.  Second row:  separation radii in mas.  Remaining rows:  flux ratio noise curve values for KL mode truncations."
         frame.add_extension_hdu('FRN_CRV', data = flux_ratio_noise_curve, header=hdr)
         history_msg = 'Calibrated flux ratio noise curve added to extension header FRN_CRV.'

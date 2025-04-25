@@ -640,7 +640,7 @@ class Dark(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
             self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected electrons'
+            self.ext_hdr['BUNIT'] = 'detected electron'
             # TO-DO: check PC_STAT and whether this will be in L2s
             if 'PC_STAT' not in ext_hdr:
                 self.ext_hdr['PC_STAT'] = 'analog master dark'
@@ -669,7 +669,7 @@ class Dark(Image):
             self.ext_hdr['PC_STAT'] = 'analog master dark'
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'Detected Electrons'
+            self.err_hdr['BUNIT'] = 'detected electron'
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -699,7 +699,7 @@ class FlatField(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
             self.ext_hdr['DATATYPE'] = 'FlatField' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = "None" # flat field is dimentionless
+            self.ext_hdr['BUNIT'] = '' # flat field is dimensionless
 
             # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)
@@ -888,13 +888,15 @@ class KGain(Image):
                 self.filename = re.sub('_L[0-9].', '_KRN_CAL', input_dataset[-1].filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'Detected Electrons/DN'
+            self.ext_hdr['BUNIT'] = 'detected EM electron/DN'
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
-
+        
+        if err_hdr is not None:
+            self.err_hdr['BUNIT'] = 'detected EM electron/DN'
         # double check that this is actually a KGain file that got read in
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr:
@@ -1036,7 +1038,7 @@ class DetectorNoiseMaps(Image):
                 raise ValueError("This appears to be a new DetectorNoiseMaps instance. The dataset of input files needs to be passed in to the input_dataset keyword to record the history of the files that made the calibration products.")
 
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'Detected Electrons'
+            self.ext_hdr['BUNIT'] = 'detected electron'
             # bias offset
             self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
 
@@ -1059,7 +1061,7 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['DATALVL']    = 'CAL'
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'Detected Electrons'
+            self.err_hdr['BUNIT'] = 'detected electron'
 
         # double check that this is actually a DetectorNoiseMaps file that got read in
         # since if only a filepath was passed in, any file could have been read in
