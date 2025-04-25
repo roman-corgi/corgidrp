@@ -1767,7 +1767,8 @@ class CoreThroughputCalibration(Image):
         # Algorithm
         radii = np.sqrt(x_grid**2 + y_grid**2)
 
-        # We'll need to mod the input azimuth, so let's subtract the minimum azimuth so we are relative to zero. 
+        # We'll need to mod the input azimuth, so let's subtract the
+        # minimum azimuth so we are relative to zero
         azimuths = np.arctan2(y_grid, x_grid)
         azimuth0 = azimuths.min()
         azimuths = azimuths - azimuth0
@@ -1778,6 +1779,7 @@ class CoreThroughputCalibration(Image):
        
         # Remove interpolation locations that are outside the radius range
         r_good = radius_cor >= radii.min()
+        
         if len(x_cor[r_good]) == 0:
             raise ValueError('All target radius are less than the minimum '
                 'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
@@ -1995,6 +1997,79 @@ class CoreThroughputCalibration(Image):
             raise ValueError(f'Unidentified method for the interpolation: {method}')
 
         return np.array(psf_interp_list), np.array(x_interp_list), np.array(y_interp_list)
+
+class CoreThroughputMap(Image):
+    """ Class containing a corethroughput map.
+
+    The corethroughput map consists of M sets of (x, y, CT estimated). The
+      (x, y) are pixel coordinates wrt the FPM's center. More details about the
+      corethroughput map array can be found in the class method create_ct_map().
+
+    Args:
+      data_or_filepath (array or str): either the filepath to the FITS file to
+      read in OR the 2D image data. The FITS file or data must be from a
+      coronagraphic observation because the FPM's center is needed during the
+      creation of the corethroughput map.
+    """
+
+    ###################
+    ### Constructor ###
+    ###################
+
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err=None, input_dataset=None):
+        # run the image class constructor
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=err)
+
+        # Check it has the FPM's center information 
+        if ('STARLOCX' not in self.ext_hdr) or ('STARLOCY' not in self.ext_hdr):
+            raise ValueError('The input dataset does not contain the information'
+                'about the FPM center')
+        # Check data have the expected format (x,y,ct)
+        if isinstance(data_or_filepath, str) is False:
+            data_or_filepath.shape[0] == 3
+            if data_or_filepath[2,:].max() > 1 or data_or_filepath[2,:].min() < 0:
+                raise ValueError('Corethroughput map values should be within 0 and 1')
+
+        # Additional bookkeeping for a calibration file:
+        # If this is a new calibration file, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if
+        # it is a new CoreThroughputMap file
+        if ext_hdr is not None:
+            if input_dataset is None:
+                # error check. this is required in this case
+                raise ValueError('This appears to be a new CoreThroughputMap '
+                                 'file. The dataset of input files needs '
+                                 'to be passed in to the input_dataset keyword '
+                                 'to record history of this calibration file.')
+            # corgidrp specific keyword for saving to disk
+            self.ext_hdr['DATATYPE'] = 'CoreThroughputMap'
+
+            # log all the data that went into making this calibration file
+            self._record_parent_filenames(input_dataset)
+
+            # add to history if not present
+            if not 'HISTORY' in self.ext_hdr:
+                self.ext_hdr['HISTORY'] = ('CoreThroughputMap derived '
+                    f'from a set of frames on {self.ext_hdr["DATETIME"]}')
+
+            # The corethroughput map is not a calibration product as of writing
+            # this class. The filename does not follow the convention for
+            # calibration files
+            self.filedir = '.'
+            self.filename = 'corethroughput_map.fits'
+
+            # Enforce data level = L3
+            self.ext_hdr['DATALVL']    = 'L3'
+
+        # Keep track of the coronagraphic files used to create the CT map
+        if input_dataset is not None:
+            self._record_parent_filenames(input_dataset)
+        # double check that this is actually a NonLinearityCalibration file that got read in
+        # since if only a filepath was passed in, any file could have been read in
+        if 'DATATYPE' not in self.ext_hdr:
+            raise ValueError("File that was loaded was not a CoreThroughputMap file.")
+        if self.ext_hdr['DATATYPE'] != 'CoreThroughputMap':
+            raise ValueError("File that was loaded was not a CoreThroughputMap file.")
 
 class PyKLIPDataset(pyKLIP_Data):
     """
@@ -2480,7 +2555,6 @@ class NDFilterSweetSpotDataset(Image):
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
-
         # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
             raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
@@ -2501,13 +2575,10 @@ class NDFilterSweetSpotDataset(Image):
 
         return interpolator(x, y)
 
-def format_ftimeutc(ftime_str: str) -> str:
+def format_ftimeutc(ftime_str):
     """
-    Round the input FTIMEUTC time to the nearest 0.1 sec and reformat as:
-    yyyymmddThhmmsss, where the last three digits represent the two-digit seconds 
-    and one digit for the tenths of a second.
-    
-    For example, an input of "2025-04-15T03:05:10.21" would return "20250415T0305102".
+    Round the input FTIMEUTC time to the nearest 0.01 sec and reformat as:
+    yyyymmddThhmmssss.
 
     Args:
         ftime_str (str): Time string in ISO format, e.g. "2025-04-15T03:05:10.21".
@@ -2526,22 +2597,22 @@ def format_ftimeutc(ftime_str: str) -> str:
     if ftime.tzinfo is not None:
         ftime = ftime.astimezone(timezone.utc).replace(tzinfo=None)
     
-    # Define rounding interval: 0.1 sec = 100,000 microseconds.
-    rounding_interval = 100000
+    # Define rounding interval: 0.01 sec = 10,000 microseconds.
+    rounding_interval = 10000
     # Round the microseconds to the nearest 0.1 sec.
     rounded_microsec = int((ftime.microsecond + rounding_interval / 2) // rounding_interval * rounding_interval)
     
-    # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds, increment the second.
+    # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds increment the second
     if rounded_microsec >= 1000000:
         ftime = ftime.replace(microsecond=0) + timedelta(seconds=1)
     else:
         ftime = ftime.replace(microsecond=rounded_microsec)
     
-    # Extract seconds (two digits) and the tenths-of-second.
+    # Extract seconds (two digits) and the hundredths of seconds
     sec_int = ftime.second
-    tenth = int(ftime.microsecond / 100000)  # gives one digit (0-9)
+    tenth = int(ftime.microsecond / 10000)  # (0-99)
     
-    # Format as YYYYMMDDTHHMM then append seconds and tenth-of-second.
+    # Format as YYYYMMDDTHHMM then append seconds and hundredths of seconds
     formatted_time = ftime.strftime("%Y%m%dT%H%M") + f"{sec_int:02d}{tenth:d}"
     return formatted_time
 
@@ -2559,7 +2630,7 @@ datatypes = { "Image" : Image,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
               "CoreThroughputCalibration": CoreThroughputCalibration,
-              "NDFilterSweetSpot": NDFilterSweetSpotDataset}
+              "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset}
 
 def autoload(filepath):
     """

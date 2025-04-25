@@ -9,6 +9,8 @@ import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
 from astropy.modeling.models import BlackBody
 import astropy.units as u
+from termcolor import cprint
+
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5
@@ -22,6 +24,15 @@ image1.filename = "test1_L4_.fits"
 image2.filename = "test2_L4_.fits"
 dataset=Dataset([image1, image2])
 calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
+
+
+def print_fail():
+    cprint(' FAIL ', "black", "on_red")
+
+
+def print_pass():
+    cprint(' PASS ', "black", "on_green")
+
 
 def test_get_filter_name():
     """
@@ -154,21 +165,30 @@ def test_abs_fluxcal():
     Generate a simulated image and test the flux calibration computation.
     
     """
+    rel_tol_flux = 0.05
+
     # create a simulated image with source guesses and true positions
     # check that the simulated image folder exists and create if not
     datadir = os.path.join(os.path.dirname(__file__), "test_data", "sim_fluxcal")
     if not os.path.exists(datadir):
         os.mkdir(datadir)
-    
+
+    # check that the results folder exists and create if not
+    resdir = os.path.join(os.path.dirname(__file__), "test_data", "results")
+    if not os.path.exists(resdir):
+        os.mkdir(resdir)
+
     fwhm = 3
-    cal_factor = band_flux/200
-    #create a simulated mock image with a central point source + noise that has a flux band_flux 
-    #and a flux calibration factor band_flux/200
-    #that results in a total extracted count of 200 photo electrons
-    flux_image = create_flux_image(band_flux, fwhm, cal_factor, filter='3C', target_name='Vega', fsm_x=0.0, 
-                      fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8, background=0,
-                      add_gauss_noise=True, noise_scale=1., file_save=True)
-    assert type(flux_image) == Image
+    flux_ratio = 200
+    cal_factor = band_flux/flux_ratio
+    # create a simulated mock image with a central point source + noise that
+    # has a flux band_flux and a flux calibration factor band_flux/200
+    # that results in a total extracted count of 200 photo electrons
+    flux_image = create_flux_image(
+        band_flux, fwhm, cal_factor, filter='3C', target_name='Vega',
+        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
+        background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
+    assert isinstance(flux_image, Image)
     sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
     radius = 3.* sigma
     
@@ -196,17 +216,30 @@ def test_abs_fluxcal():
     dataset = Dataset([flux_image])
     fluxcal_factor = fluxcal.calibrate_fluxcal_aper(dataset, flux_or_irr = 'flux', phot_kwargs=None)
     assert fluxcal_factor.filter == '3C'
-    #band_flux/200 was the input calibration factor cal_factor of the simulated mock image
-    assert fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor, rel = 0.05)
-    #divisive error propagation of the aperture phot error
+    # band_flux/200 was the input calibration factor cal_factor of the
+    # simulated mock image
+    test_result = fluxcal_factor.fluxcal_fac == pytest.approx(cal_factor, rel=rel_tol_flux)
+    assert test_result
+    # Print out the result
+    print('\nFlux from fluxcal.calibrate_fluxcal_aper() is correct to within %.2f%% ***: ' % (rel_tol_flux*100), end='')
+    print_pass() if test_result else print_fail()
+
+    # divisive error propagation of the aperture phot error
     err_fluxcal_ap = band_flux/flux_el_ap**2*flux_err_ap
     assert fluxcal_factor.fluxcal_err == pytest.approx(err_fluxcal_ap)
     # TO DO: add this test back in when filename conventions are settled
-    #assert fluxcal_factor.filename == 'mock_flux_image_Vega_0.0_0.0_FluxcalFactor_3C_ND475.fits'
-    fluxcal_factor_gauss = fluxcal.calibrate_fluxcal_gauss2d(dataset, flux_or_irr = 'flux', phot_kwargs=None)
+    # assert fluxcal_factor.filename == 'mock_flux_image_Vega_0.0_0.0_FluxcalFactor_3C_ND475.fits'
+    fluxcal_factor_gauss = fluxcal.calibrate_fluxcal_gauss2d(
+        dataset, flux_or_irr='flux', phot_kwargs=None)
     assert fluxcal_factor_gauss.filter == '3C'
-    assert fluxcal_factor_gauss.fluxcal_fac == pytest.approx(cal_factor,rel = 0.05)
-    #divisive error propagation of the 2D Gaussian fit phot error
+    test_result = fluxcal_factor_gauss.fluxcal_fac == pytest.approx(
+        cal_factor, rel=rel_tol_flux)
+    assert test_result
+    # Print out the result
+    print('\nFlux from fluxcal.calibrate_fluxcal_gauss2d() is correct to within %.2f%% ***: ' % (rel_tol_flux*100), end='')
+    print_pass() if test_result else print_fail()
+
+    # divisive error propagation of the 2D Gaussian fit phot error
     err_fluxcal_gauss = band_flux/flux_el_gauss**2*flux_err_gauss
     assert fluxcal_factor_gauss.fluxcal_err == pytest.approx(err_fluxcal_gauss)
     

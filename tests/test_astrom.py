@@ -7,6 +7,16 @@ import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.data as data
 import astropy.io.ascii as ascii
+from termcolor import cprint
+
+
+def print_fail():
+    cprint(' FAIL ', "black", "on_red")
+
+
+def print_pass():
+    cprint(' PASS ', "black", "on_green")
+
 
 def test_astrom():
     """ 
@@ -31,21 +41,30 @@ def test_astrom():
 
     # check the dataset format
     assert len(dataset) == 5  # one pointing + 4 dithers
-    assert type(dataset[0]) == data.Image
+    assert isinstance(dataset[0], data.Image)
 
     # perform the astrometric calibration
     astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=200)
 
     # the data was generated to have the following image properties
     expected_platescale = 21.8
+    atol_platescale = 0.5
+
     expected_northangle = 20
+    atol_northangle = 0.05
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
-    assert astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=0.5)
-    assert astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=0.5)
+    test_result_platescale_x = astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=atol_platescale)
+    assert test_result_platescale_x
+    test_result_platescale_y = astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=atol_platescale)
+    assert test_result_platescale_y
 
-    assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
+    test_result_platescale = test_result_platescale_x and test_result_platescale_y
+    print(f'\nPlate scale estimates from boresight_calibration() are accurate: {expected_platescale} +/- {atol_platescale}: ', end='')
+    print_pass() if test_result_platescale else print_fail()
+
+    assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle)
 
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
@@ -154,6 +173,9 @@ def test_distortion():
 
     # check that the distortion error in the central 1" x 1" region (center ~45 x 45 pixels) 
     # has distortion error < 4 [mas] (~0.1835 [pixel])
+    atol_dist_mas = 4
+    mas_per_pix = 21.8
+    atol_dist_pix = atol_dist_mas/mas_per_pix
     lower_lim, upper_lim = int((1024//2) - ((1000/21.8)//2)), int((1024//2) + ((1000/21.8)//2))
 
     central_1arcsec_x = x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
@@ -162,8 +184,15 @@ def test_distortion():
     true_1arcsec_x = true_x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
     true_1arcsec_y = true_y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
 
-    assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
-    assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
+    test_result_distortion_x = np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < atol_dist_pix)
+    print(f'\nDistortion map in x is accurate within {atol_dist_mas} mas in central square arcsecond: ', end='')
+    print_pass() if test_result_distortion_x else print_fail()
+    assert test_result_distortion_x
+
+    test_result_distortion_y = np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < atol_dist_pix)
+    print(f'\nDistortion map in y is accurate within {atol_dist_mas} mas in central square arcsecond: ', end='')
+    print_pass() if test_result_distortion_y else print_fail()
+    assert test_result_distortion_y
 
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(astrom_cal)
