@@ -50,13 +50,16 @@ def test_astrom():
     expected_platescale = 21.8
     atol_platescale = 0.5
 
-    expected_northangle = 20
-    atol_northangle = 0.05
-
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
+    expected_northangle = 20
+    atol_northangle = 0.05
+    test_result_platescale = (astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle))
+    print(f'\nPlate scale estimate from boresight_calibration() is accurate: {expected_platescale} +/- {atol_platescale}: ', end='')
+    print_pass() if test_result_platescale else print_fail()
+    assert test_result_platescale
     assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=atol_platescale)
-    assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle)
+
 
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
@@ -160,8 +163,9 @@ def test_distortion():
     # has distortion error < 4 [mas] (~0.1835 [pixel])
     atol_dist_mas = 4
     mas_per_pix = 21.8
+    mas_across = 1000
     atol_dist_pix = atol_dist_mas/mas_per_pix
-    lower_lim, upper_lim = int((1024//2) - ((1000/21.8)//2)), int((1024//2) + ((1000/21.8)//2))
+    lower_lim, upper_lim = int((1024//2) - ((mas_across/mas_per_pix)//2)), int((1024//2) + ((mas_across/mas_per_pix)//2))
 
     central_1arcsec_x = x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
     central_1arcsec_y = y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
@@ -170,12 +174,12 @@ def test_distortion():
     true_1arcsec_y = true_y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
 
     test_result_distortion_x = np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < atol_dist_pix)
-    print(f'\nDistortion map in x is accurate within {atol_dist_mas} mas in central square arcsecond: ', end='')
+    print(f'\nDistortion map in x is accurate within {atol_dist_mas} mas in central {mas_across} mas x {mas_across} mas: ', end='')
     print_pass() if test_result_distortion_x else print_fail()
     assert test_result_distortion_x
 
     test_result_distortion_y = np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < atol_dist_pix)
-    print(f'\nDistortion map in y is accurate within {atol_dist_mas} mas in central square arcsecond: ', end='')
+    print(f'\nDistortion map in y is accurate within {atol_dist_mas} mas in central {mas_across} mas x {mas_across} mas: ', end='')
     print_pass() if test_result_distortion_y else print_fail()
     assert test_result_distortion_y
 
