@@ -1119,7 +1119,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
         corrected_positions_boresight.append([corr_ra, corr_dec])
 
         # return a single AstrometricCalibration data file
-        astrom_data = np.array([corr_ra, corr_dec, cal_properties[0], cal_properties[0], cal_properties[1], ra, dec, np.inf, np.inf])
+        astrom_data = np.array([corr_ra, corr_dec, cal_properties[0], cal_properties[1], ra, dec, np.inf, np.inf])
         astrom_cal = corgidrp.data.AstrometricCalibration(astrom_data, pri_hdr=dataset[i].pri_hdr, ext_hdr=dataset[i].ext_hdr, input_dataset=in_dataset)
         # change the filename here since the astrom_cals will be averaged later and arent individually saved ('_AST_CAL' will be added to filename twice otherwise)
         astrom_cal.filename = astrom_cal.filename.split("_AST_CAL")[0] + '.fits'
@@ -1128,16 +1128,14 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
     # average the calibration properties over all frames
     avg_ra = np.mean([astro.avg_offset[0] for astro in astroms])  # this is the average ra offset [deg]
     avg_dec = np.mean([astro.avg_offset[1] for astro in astroms])
-    avg_platescale_x = np.mean([astro.platescale[0] for astro in astroms])
-    avg_platescale_y = np.mean([astro.platescale[1] for astro in astroms])
+    avg_platescale = np.mean([astro.platescale for astro in astroms])
     avg_northangle = np.mean([astro.northangle for astro in astroms])
 
     # compute the distortion map coeffs
     if find_distortion:
         # use the found matches for distortion
         first_stars, offsets, true_offsets, errs = format_distortion_inputs(input_dataset, source_matches=hold_matches, ref_star_pos=target_coord_tables, position_error=position_error)
-        mean_xy_platescale = np.mean([avg_platescale_x, avg_platescale_y])
-        distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=mean_xy_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
+        distortion_coeffs, order = compute_distortion(input_dataset, first_stars, offsets, true_offsets, errs, platescale=avg_platescale, northangle=avg_northangle, fitorder=fitorder, initial_guess=initial_dist_guess)
     else:
         # set default coeffs to produce zero distortion
         fitparams = (fitorder + 1)**2
@@ -1147,7 +1145,7 @@ def boresight_calibration(input_dataset, field_path='JWST_CALFIELD2020.csv', fie
 
     # assume that the undithered image with original pointing position is the first frame in dataset
     corr_pos_ra, corr_pos_dec = corrected_positions_boresight[0]
-    astromcal_data = np.concatenate((np.array([corr_pos_ra, corr_pos_dec, avg_platescale_x, avg_platescale_y, avg_northangle, avg_ra, avg_dec]), np.array(distortion_coeffs), np.array([order])), axis=0)
+    astromcal_data = np.concatenate((np.array([corr_pos_ra, corr_pos_dec, avg_platescale, avg_northangle, avg_ra, avg_dec]), np.array(distortion_coeffs), np.array([order])), axis=0)
 
     astroms_dataset = corgidrp.data.Dataset(astroms)
     avg_cal = corgidrp.data.AstrometricCalibration(astromcal_data, pri_hdr=input_dataset[0].pri_hdr, ext_hdr=input_dataset[0].ext_hdr, input_dataset=astroms_dataset)
