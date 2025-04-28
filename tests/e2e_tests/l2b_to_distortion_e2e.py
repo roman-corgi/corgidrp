@@ -36,9 +36,9 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     if not os.path.exists(e2eoutput_path):
         os.mkdir(e2eoutput_path)
 
-    e2e_data_path = os.path.join(e2eoutput_path, "astrom_distortion")
-    if not os.path.exists(e2e_data_path):
-        os.mkdir(e2e_data_path)
+    e2e_mockdata_path = os.path.join(e2eoutput_path, "astrom_distortion")
+    if not os.path.exists(e2e_mockdata_path):
+        os.mkdir(e2e_mockdata_path)
 
 
     #################################
@@ -49,7 +49,7 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__),"..","test_data", "distortion_expected_coeffs.csv")
 
     #Create the mock dataset
-    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=e2e_data_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=3)
+    mock_dataset = mocks.create_astrom_data(field_path=field_path, filedir=e2e_mockdata_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=3)
 
     # expected_platescale, expected_northangle = 21.8, 20.
     expected_coeffs = np.genfromtxt(distortion_coeffs_path)
@@ -58,7 +58,7 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     #### Pass the data to the walker ####
     #####################################
 
-    l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_data_path, "*.fits")))
+    l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_mockdata_path, "*.fits")))
     template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),"corgidrp","recipe_templates","l2b_to_distortion.json")
 
     # template_path = '/Users/macuser/Roman/corgidrp/corgidrp/recipe_templates/l2b_to_distortion.json'
