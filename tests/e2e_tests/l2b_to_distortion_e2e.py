@@ -13,7 +13,7 @@ import glob
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
 @pytest.mark.e2e
-def test_l2b_to_distortion(e2eoutput_path):
+def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     '''
 
     An end-to-end test that creates L2b level data and runs it through the astrometric calibration distortion map solution step.
@@ -26,6 +26,7 @@ def test_l2b_to_distortion(e2eoutput_path):
             - L2b level dataset - created in the test
     
     Args:
+        e2edata_path (str): Path to the test data
         e2eoutput_path (str): Path to the output directory
 
 
@@ -99,15 +100,16 @@ if __name__ == "__main__":
     # workflow.
 
     outputdir = thisfile_dir
+    e2edata_dir = '/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC'
 
     ap = argparse.ArgumentParser(description="run the l2b->distortion end-to-end test")
 
-    # ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
-    #                 help="Path to CGI_TVAC_Data Folder [%(default)s]")
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    # e2edata_dir = args.e2edata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
 
-    test_l2b_to_distortion(outputdir)
+    test_l2b_to_distortion(e2edata_dir, outputdir)
