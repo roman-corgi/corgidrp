@@ -32,11 +32,11 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
 
     '''
 
-    e2eoutput_path = os.path.join(e2eoutput_path, "l2b_to_distortion_output")
-    if not os.path.exists(e2eoutput_path):
-        os.mkdir(e2eoutput_path)
+    distortion_outputdir = os.path.join(e2eoutput_path, "l2b_to_distortion_output")
+    if not os.path.exists(distortion_outputdir):
+        os.mkdir(distortion_outputdir)
 
-    e2e_mockdata_path = os.path.join(e2eoutput_path, "astrom_distortion")
+    e2e_mockdata_path = os.path.join(distortion_outputdir, "astrom_distortion")
     if not os.path.exists(e2e_mockdata_path):
         os.mkdir(e2e_mockdata_path)
 
@@ -62,10 +62,10 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),"corgidrp","recipe_templates","l2b_to_distortion.json")
 
     # template_path = '/Users/macuser/Roman/corgidrp/corgidrp/recipe_templates/l2b_to_distortion.json'
-    walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path, template=template_path)
+    walker.walk_corgidrp(l2b_data_filelist, "", distortion_outputdir, template=template_path)
 
     #Read in th Astrometric Calibration file
-    ast_cal_filename = glob.glob(os.path.join(e2eoutput_path, "*AST_CAL.fits"))[0]
+    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*AST_CAL.fits"))[0]
     ast_cal = AstrometricCalibration(ast_cal_filename)
 
     #Check that distortion map error within the central 1" x 1" region of the detector is <4 [mas] (~0.1835 [pixel])
