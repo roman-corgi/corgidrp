@@ -58,8 +58,9 @@ def test_astrom():
     print(f'\nPlate scale estimate from boresight_calibration() is accurate: {expected_platescale} +/- {atol_platescale}: ', end='')
     print_pass() if test_result_platescale else print_fail()
     assert test_result_platescale
-    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=atol_platescale)
 
+    test_result_northangle = (astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle))
+    assert test_result_northangle
 
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
