@@ -81,8 +81,8 @@ def divide_by_exptime(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in units of electrons/s
     """
-    if input_dataset[0].ext_hdr['BUNIT'] != "electron":
-        raise ValueError("input dataset must have unit electron for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
+    if input_dataset[0].ext_hdr['BUNIT'] != "photoelectron":
+        raise ValueError("input dataset must have unit photoelectron for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     data = input_dataset.copy()
 
     all_data_new = np.zeros(data.all_data.shape)
@@ -103,7 +103,7 @@ def divide_by_exptime(input_dataset):
         all_data_new[i] = data.frames[i].data
         all_err_new[i] = data.frames[i].err
 
-        data.frames[i].ext_hdr.set('BUNIT', 'electron/s')
+        data.frames[i].ext_hdr.set('BUNIT', 'photoelectron/s')
     
     history_msg = 'divided by the exposure time'
     data.update_after_processing_step(history_msg, new_all_data = all_data_new, new_all_err = all_err_new)

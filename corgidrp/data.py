@@ -1422,8 +1422,8 @@ class FluxcalFactor(Image):
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
-            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
-            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 

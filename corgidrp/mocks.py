@@ -357,7 +357,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'detected EM electron'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -521,7 +521,7 @@ def create_default_L2b_headers(arrtype="SCI"):
     # TO DO: Update this once L2a headers have been finalized
     prihdr, exthdr = create_default_L2a_headers(arrtype)
 
-    exthdr['BUNIT'] = 'electron'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT'] = 'photoelectron'   # Physical unit of the array (brightness unit)
     exthdr['DESMEAR']       = False         # Whether desmearing was used
     exthdr['CTI_CORR']      = False         # Whether CTI correction was applied to this frame
     exthdr['IS_BAD']        = False         # Whether the frame was deemed bad
@@ -558,7 +558,7 @@ def create_default_L3_headers(arrtype="SCI"):
 
     prihdr['TARGET'] = ''
     
-    exthdr['BUNIT'] = 'electron/s'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
@@ -768,6 +768,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
         prihdr["OBSNUM"] = 000
         exthdr['KGAINPAR'] = 7
+        exthdr['BUNIT'] = "detected electron"
         #np.random.seed(456+i); 
         sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -2800,8 +2801,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     xpos = center[0] + fsm_x_shift
     ypos = center[1] + fsm_y_shift
 
-    # Convert flux from calspec units to photo-electrons
-    flux = (star_flux * exptime) / cal_factor
+    # Convert flux from calspec units to photo-electrons/s
+    flux = star_flux / cal_factor
 
     # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
@@ -3556,7 +3557,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['YOFFSET'] = 0.0
         prihdr["ROLL"] = roll_angles[i]
         
-        exthdr['BUNIT'] = 'electron/s'
+        exthdr['BUNIT'] = 'photoelectron/s'
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!

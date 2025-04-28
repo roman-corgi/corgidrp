@@ -140,7 +140,7 @@ def determine_color_cor(input_dataset, ref_star, source_star):
 def convert_to_flux(input_dataset, fluxcal_factor):
     """
 
-    Convert the data from electron unit to flux unit erg/(s * cm^2 * AA).
+    Convert the data from photoelectron unit to flux unit erg/(s * cm^2 * AA).
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images
@@ -150,7 +150,7 @@ def convert_to_flux(input_dataset, fluxcal_factor):
         corgidrp.data.Dataset: a version of the input dataset with the data in flux units
     """
     # you should make a copy the dataset to start
-    if input_dataset[0].ext_hdr['BUNIT'] != "electron/s":
+    if input_dataset[0].ext_hdr['BUNIT'] != "photoelectron/s":
         raise ValueError("input dataset must have unit electron/s for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     flux_dataset = input_dataset.copy()
     flux_cube = flux_dataset.all_data
@@ -314,7 +314,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
         requested_mas = requested_separations * pixscale_mas
         flux_ratio_noise_curve = np.vstack([requested_separations, requested_mas, frn_vals])
         hdr = fits.Header()
-        hdr['BUNIT'] = '' #dimensionless
+        hdr['BUNIT'] = '' #dimensionless Fp/Fs
         hdr['COMMENT'] = "Flux ratio noise curve as a function of radial separation.  First row:  separation radii in pixels.  Second row:  separation radii in mas.  Remaining rows:  flux ratio noise curve values for KL mode truncations."
         frame.add_extension_hdu('FRN_CRV', data = flux_ratio_noise_curve, header=hdr)
         history_msg = 'Calibrated flux ratio noise curve added to extension header FRN_CRV.'
@@ -337,7 +337,7 @@ def determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwar
         corgidrp.data.Dataset: a version of the input dataset with the data in flux units
     """
     # you should make a copy the dataset to start
-    if input_dataset[0].ext_hdr['BUNIT'] != "electron/s":
+    if input_dataset[0].ext_hdr['BUNIT'] != "photoelectron/s":
         raise ValueError("input dataset must have unit electron/s for the flux determination, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     flux_dataset = input_dataset.copy()
     if "COL_COR" in flux_dataset[0].ext_hdr:

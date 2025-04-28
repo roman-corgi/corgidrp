@@ -113,7 +113,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     history_msg = "Dark subtracted using dark {0}.  Units changed from detected electrons to photoelectrons.".format(dark.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"electron"})
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"photoelectron"})
 
     return darksub_dataset
 
