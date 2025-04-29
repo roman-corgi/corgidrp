@@ -55,8 +55,8 @@ Helper function to standardize TVAC FITS headers for pipeline compatibility:
 .. code-block:: python
 
     def fix_headers_for_tvac(list_of_fits):
-    print("Fixing TVAC headers")
-    for file in list_of_fits:
+        print("Fixing TVAC headers")
+        for file in list_of_fits:
             fits_file = fits.open(file)
             prihdr = fits_file[0].header
             exthdr = fits_file[1].header
@@ -81,7 +81,7 @@ Set up directory paths for input and output data:
     1. Have downloaded pre-processed calibration FITS files that just need to be added to the caldb
     2. Have processed the calibrations themselves locally, in which case the calibration files should already exist in their caldb (located in ``~/.corgidrp/``)
     
-    The code below demonstrates how we adapt the TVAC test data to fit the official corgidrp calibration format. This is not the typical workflow for real data processing.
+    The code below demonstrates how we adapt the TVAC test data to fit the official corgidrp calibration format. This is not the typical workflow for real data processing. We return to the intended workflow at the start of the "Pipeline Execution" section.
 
 .. code-block:: python
 
@@ -90,19 +90,21 @@ Set up directory paths for input and output data:
 
     # Paths for TVAC test data
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
-    l2a_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2a")
-    l2b_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2b")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Output directories for the test
     test_outputdir = os.path.join(output_path, "l1_to_l2b_output")
-    l2a_outputdir = os.path.join(test_outputdir, "l2a")
-    l2b_outputdir = os.path.join(test_outputdir, "l2b")
 
-    for d in [test_outputdir, l2a_outputdir, l2b_outputdir]:
+    for d in [test_outputdir]:
         os.makedirs(d, exist_ok=True)
 
 Define input files and prepare mock headers:
+
+.. note::
+    The following code is specifically for converting TVAC test data into corgidrp's expected format. 
+    This mocking process is NOT needed for real data processing, where calibration files will already 
+    be in the correct format either from download or from corgidrp's calibration pipeline.
+
 
 .. code-block:: python
 
@@ -118,11 +120,6 @@ Define input files and prepare mock headers:
     fix_headers_for_tvac(l1_data_filelist)
 
 Initialize calibration database and set up mock headers:
-
-.. note::
-    The following code is specifically for converting TVAC test data into corgidrp's expected format. 
-    This mocking process is NOT needed for real data processing, where calibration files will already 
-    be in the correct format either from download or from corgidrp's calibration pipeline.
 
 .. code-block:: python
 
