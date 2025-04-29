@@ -125,7 +125,7 @@ def calibrate_nonlin(dataset_nl,
                      lowess_frac = 0.1, rms_low_limit = 0.004, rms_upp_limit = 0.2,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
-                     make_plot=True, plot_outdir='figures', show_plot=False,
+                     make_plot=False, plot_outdir='figures', show_plot=False,
                      verbose=False, nonlin_params=None):
     """
     Function that derives the non-linearity calibration table for a set of DN

@@ -112,6 +112,7 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
     new_nonlinearity.filename = nonlin_fits_filepath
     new_nonlinearity.pri_hdr = pri_hdr
     new_nonlinearity.ext_hdr = ext_hdr
+    new_nonlinearity.save(filedir=output_dir, filename=test_non_linearity_filename)
     this_caldb.create_entry(new_nonlinearity)
 
     ## Flat field
