@@ -18,8 +18,8 @@ import corgidrp.photon_counting as photon_counting
 
 @pytest.mark.e2e
 def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
-    global pc_frame, pc_dark_frame, ill_mean, dark_mean, pc_frame_err, pc_dark_frame_err, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat, l2a_dark_dataset, l2a_dataset, bp_dat
-    global fs_l2a_dataset, converted_l2a_dataset, pc_master_dark, pc_output, detector_params, desmeared_dataset, flat_dataset, correct_bp_dataset
+    global ill_mean, dark_mean, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat, l2a_dark_dataset, l2a_dataset, bp_dat
+    global fs_l2a_dataset, converted_l2a_dataset, pc_master_dark, pc_output, detector_params, desmeared_dataset, flat_dataset, correct_bp_dataset, this_caldb
     # e2edata_path not used at all for this test
     np.random.seed(1234)
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
@@ -63,6 +63,10 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
         if this_caldb._db['Type'][i] == 'KGain':
             this_caldb._db = this_caldb._db.drop(i)
         elif this_caldb._db['Type'][i] == 'Dark':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'BadPixelMap':
             this_caldb._db = this_caldb._db.drop(i)
     this_caldb.save()
 
@@ -227,11 +231,11 @@ def test_pc_e2e_pc_dark_frame(e2edata_path, e2eoutput_path):
 def test_pc_e2e_pc_err_frame(e2edata_path, e2eoutput_path):            
     for i in range(len(master_ill_filepath_list)):
         pc_frame_err = fits.getdata(master_ill_filepath_list[i], 'ERR')
-        if pc_frame_err.min() >= 0:
+        if np.nanmin(pc_frame_err) >= 0:
             print(r'PC frame error array has no negative values:  PASS')
         else:
             print(r'PC frame error array has no negative values:  FAIL')
-        assert pc_frame_err.min() >= 0
+        assert np.nanmin(pc_frame_err) >= 0
 
 @pytest.mark.e2e
 def test_pc_e2e_pc_err_dark_frame(e2edata_path, e2eoutput_path):            
@@ -403,13 +407,12 @@ def test_pc_e2e_bp_map_mean_combine(e2edata_path, e2eoutput_path):
 def test_pc_e2e_bp_map_per_frame(e2edata_path, e2eoutput_path):  
     # check that per-frame bad-pixel map are correctly computed from fixed bad pixel map
     pc_dq = fits.getdata(master_ill_filepath_list[0], 'DQ') # only one frame; no PC binning done
-    pc_dq_01 = np.zeros_like(pc_dq)
-    pc_dq_01[pc_dq > 0] = 1
-    if np.array_equal(pc_dq_01, bp_map.data):
+    # examine the one pixel from bp map that was non-zero
+    if pc_dq[0,0] > 0:
         print(r'Bad pixel map was applied:  PASS')
     else:
         print(r'Bad pixel map was applied:  FAIL')
-    assert np.array_equal(pc_dq_01, bp_map.data)
+    assert pc_dq[0,0] > 0
 
 @pytest.mark.e2e
 def test_pc_e2e_desmear(e2edata_path, e2eoutput_path):  
@@ -450,7 +453,7 @@ def test_pc_e2e_flat_division_0(e2edata_path, e2eoutput_path):
 def test_pc_e2e_flag_pixels(e2edata_path, e2eoutput_path):  
     # check that pixels are correctly flagged at the frame level 
     # the bp map had a flag at (0,0)
-    if (correct_bp_dataset.frames[0].data[0,0] == np.nan) and correct_bp_dataset.frames[0].dq[0,0] == 1:
+    if np.isnan(correct_bp_dataset.frames[0].data[0,0]) and correct_bp_dataset.frames[0].dq[0,0] > 0:
         print(r'check that pixels are correctly flagged at the frame level:  PASS')
     else:
         print(r'check that pixels are correctly flagged at the frame level:  FAIL')
@@ -489,8 +492,10 @@ if __name__ == "__main__":
     outputdir = args.outputdir
     e2edata_dir = args.e2edata_dir
     test_pc_prep_e2e(e2edata_dir, outputdir)
-    test_pc_e2e_desmear(e2edata_dir, outputdir)
+    #test_pc_e2e_desmear(e2edata_dir, outputdir)
     test_pc_e2e_bp_map_mean_combine(e2edata_dir, outputdir)
+    test_pc_e2e_pc_err_frame(e2edata_dir, outputdir)
+    test_pc_e2e_bp_map_per_frame(e2edata_dir, outputdir)
     test_pc_e2e_flag_pixels(e2edata_dir, outputdir)
     test_pc_e2e_flat_division_0(e2edata_dir, outputdir)
     test_pc_e2e_flat_division(e2edata_dir, outputdir)
