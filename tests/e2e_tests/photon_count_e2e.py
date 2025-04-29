@@ -22,7 +22,7 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
     global fs_l2a_dataset, converted_l2a_dataset, pc_master_dark, pc_output, detector_params, desmeared_dataset, flat_dataset, correct_bp_dataset
     # e2edata_path not used at all for this test
     np.random.seed(1234)
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=50, Ndarks=51, cosmic_rate=1, flux=0.5, bad_frames=1)#Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
     output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
@@ -267,8 +267,7 @@ def test_pc_e2e_frame_rejection_ill(e2edata_path, e2eoutput_path):
         len(l2a_dark_dataset)
         assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1 
     # and a more direct test; I simulated one bad frame
-    fs_ill_dataset = l2a_to_l2b.frame_select(l2a_dark_dataset, overexp=True)
-    assert len(fs_ill_dataset) == len(l1_data_ill_filelist) - 1
+    assert len(fs_l2a_dataset) == len(l1_data_ill_filelist) - 1
 
 @pytest.mark.e2e
 def test_pc_e2e_frame_rejection_dark(e2edata_path, e2eoutput_path):            
@@ -325,8 +324,6 @@ def test_pc_e2e_bpmap(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_pc_e2e_kgain_conversion_ill(e2edata_path, e2eoutput_path):   
     # check illuminated image conversion from DN to electrons
-    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset, overexp=True)
-    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
     kgain_empirical = np.divide(converted_l2a_dataset.all_data, fs_l2a_dataset.all_data, where=fs_l2a_dataset.all_data!=0)
     kgain_empirical = np.nanmedian(kgain_empirical)
     for i in range(len(master_ill_filepath_list)):
@@ -340,8 +337,6 @@ def test_pc_e2e_kgain_conversion_ill(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_pc_e2e_kgain_conversion_dark(e2edata_path, e2eoutput_path):   
     # check illuminated image conversion from DN to electrons
-    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset, overexp=True)
-    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
     kgain_empirical = np.divide(converted_l2a_dataset.all_data, fs_l2a_dataset.all_data, where=fs_l2a_dataset.all_data!=0)
     kgain_empirical = np.nanmedian(kgain_empirical)
     for i in range(len(master_dark_filepath_list)):
@@ -358,8 +353,6 @@ def test_pc_e2e_pc_ill_threshold(e2edata_path, e2eoutput_path):
     # check photon-counting threshold for illuminated frames was correctly applied 
     pc_ill = fits.open(master_ill_filepath_list[0])
     pc_thresh = pc_ill[1].header['PCTHRESH'] # this is the same for each binned output PC frame
-    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset, overexp=True)
-    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
     trues = 0 #initiailize counter
     for frame in converted_l2a_dataset:
         # photon_count called to do the thresholding
@@ -380,8 +373,6 @@ def test_pc_e2e_pc_dark_threshold(e2edata_path, e2eoutput_path):
     # check photon-counting threshold for dark frames was correctly applied 
     pc_dark = fits.open(master_dark_filepath_list[0])
     pc_thresh = pc_dark[1].header['PCTHRESH'] # this is the same for each binned output PC frame
-    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset,overexp=True)
-    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
     trues = 0 #initiailize counter
     for frame in converted_l2a_dataset:
         # photon_count called to do the thresholding
