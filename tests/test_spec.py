@@ -9,8 +9,12 @@ def test_psf_centroid():
     """
     Test PSF centroid computation with mock data and validate results
     """
-    # Define file path to test input
-    file_path = os.path.abspath("tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
+    # Define file path to test input using relative path from test directory
+    datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
+    if not os.path.exists(datadir):
+        os.makedirs(datadir)
+        
+    file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
     print(f"Attempting to load FITS file: {file_path}")
 
     # Load FITS data and table (contains true values for testing)
