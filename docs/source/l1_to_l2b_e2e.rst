@@ -1,7 +1,11 @@
 Process L1 to L2b data
 -----------------------
 
-This section demonstrates how process Level 1 (L1) data into Level 2b (L2b) data using the ``corgidrp`` package.
+This section demonstrates how to process Level 1 (L1) data into Level 2b (L2b) data using the ``corgidrp`` package. The complete test implementation can be found in the `l1_to_l2b_e2e.py <https://github.com/roman-corgi/corgidrp/blob/main/tests/e2e_tests/l1_to_l2b_e2e.py>`_ test file.
+
+The pipeline processes data in two main steps:
+1. L1 → L2a: Initial processing of raw data
+2. L2a → L2b: Further processing of L2a data to produce the final L2b products
 
 The focus is on explaining the key steps involved in processing data, including setting up calibration files, running the data processing pipeline, and understanding the core steps for transforming raw data into processed output. The test can be run by processing raw L1 data into L2b data using the ``walker.walk_corgidrp`` function. This function is the core of the pipeline and is responsible for the actual data processing. Here is how you can set up and run the test:
 
@@ -10,10 +14,10 @@ Calibration Files
 
 To process the L1 data, you will need several calibration files. These files are used in the calibration process to adjust the raw data accordingly. The following calibration files are required:
 
-    - Noise Maps: Used to account for noise in the sensor data.
-    - Non-Linearity Calibration: Corrects for any non-linearities in the sensor's response.
-    - Dark Current Calibration: Accounts for any dark current noise in the sensor.
-    - Flat Field Calibration: Used to correct for uneven sensitivity across the detector.
+    - Detector Noise Maps: quantifies different noise sources from the sensor.
+    - Non-Linearity: Corrects for any non-linearities in the sensor's response.
+    - Darks: generated from Detector Noise Maps to account for dark current in the sensor.
+    - Flat Field: Used to correct for uneven sensitivity across the detector.
     - Bad Pixel Maps: Identifies pixels that are defective or not functioning properly.
 
 
@@ -50,38 +54,47 @@ Helper function to standardize TVAC FITS headers for pipeline compatibility:
 
 .. code-block:: python
 
-    
-        def fix_headers_for_tvac(list_of_fits):
-        print("Fixing TVAC headers")
-        for file in list_of_fits:
-                fits_file = fits.open(file)
-                prihdr = fits_file[0].header
-                exthdr = fits_file[1].header
-                prihdr['VISTYPE'] = "TDEMO"
-                prihdr['OBSNUM'] = prihdr['OBSID']
-                exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
-                exthdr['EMGAIN_A'] = -1
-                exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-                exthdr['KGAINPAR'] = exthdr.get('KGAIN', 8.7)
-                prihdr["OBSNAME"] = prihdr['OBSTYPE']
-                prihdr['PHTCNT'] = False
-                exthdr['ISPC'] = False
-                fits_file.writeto(file, overwrite=True)
+    def fix_headers_for_tvac(list_of_fits):
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+            fits_file = fits.open(file)
+            prihdr = fits_file[0].header
+            exthdr = fits_file[1].header
+            prihdr['VISTYPE'] = "TDEMO"
+            prihdr['OBSNUM'] = prihdr['OBSID']
+            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+            exthdr['EMGAIN_A'] = -1
+            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+            exthdr['KGAINPAR'] = exthdr.get('KGAIN', 8.7)
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
+            prihdr['PHTCNT'] = False
+            exthdr['ISPC'] = False
+            fits_file.writeto(file, overwrite=True)
 
 This function modifies TVAC FITS headers to match the structure expected by the pipeline.
 
 Set up directory paths for input and output data:
+
+.. note::
+    The following calibration setup is specifically for the example TVAC test data. For real data processing, users will either:
+    
+    1. Have downloaded pre-processed calibration FITS files that just need to be added to the caldb
+    2. Have processed the calibrations themselves locally, in which case the calibration files should already exist in their caldb (located in ``~/.corgidrp/``)
+    
+    The code below demonstrates how we adapt the TVAC test data to fit the official corgidrp calibration format. This is not the typical workflow for real data processing.
 
 .. code-block:: python
 
     e2edata_path = "/path/to/CGI_TVAC_Data"
     output_path = os.getcwd()
 
+    # Paths for TVAC test data
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     l2a_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2a")
     l2b_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L2b")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
+    # Output directories for the test
     test_outputdir = os.path.join(output_path, "l1_to_l2b_output")
     l2a_outputdir = os.path.join(test_outputdir, "l2a")
     l2b_outputdir = os.path.join(test_outputdir, "l2b")
@@ -89,21 +102,31 @@ Set up directory paths for input and output data:
     for d in [test_outputdir, l2a_outputdir, l2b_outputdir]:
         os.makedirs(d, exist_ok=True)
 
-Define input files and prepare headers:
+Define input files and prepare mock headers:
 
 .. code-block:: python
 
+    # Define science data files for processing
     l1_data_filelist = [os.path.join(l1_datadir, f"{i}.fits") for i in [90499, 90500]]
+    
+    # Create fake calibration files from TVAC data
+    # In real processing, these would be actual calibration files from the pipeline
     mock_cal_filelist = [os.path.join(l1_datadir, f"{i}.fits") for i in [90526, 90527]]
-    tvac_l2a_filelist = [os.path.join(l2a_datadir, f"{i}.fits") for i in [90528, 90530]]
-    tvac_l2b_filelist = [os.path.join(l2b_datadir, f"{i}.fits") for i in [90529, 90531]]
-
+    
+    # Modify TVAC headers to match expected format
+    # This step is only needed for test data, not for real observations
     fix_headers_for_tvac(l1_data_filelist)
 
-Initialize calibration database and set up headers:
+Initialize calibration database and set up mock headers:
+
+.. note::
+    The following code is specifically for converting TVAC test data into corgidrp's expected format. 
+    This mocking process is NOT needed for real data processing, where calibration files will already 
+    be in the correct format either from download or from corgidrp's calibration pipeline.
 
 .. code-block:: python
 
+    # Mock headers and database setup - only needed for test data conversion
     pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] = corgidrp.__version__
@@ -133,6 +156,7 @@ Calibration files such as non-linearity tables, dark current, flat fields, and b
 
     def load_fits(path): return fits.open(path)[0].data
 
+    # Example TVAC test filenames - real data will use different conventions
     fpn = load_fits(os.path.join(processed_cal_path, "fpn_20240322.fits"))
     cic = load_fits(os.path.join(processed_cal_path, "cic_20240322.fits"))
     dark = load_fits(os.path.join(processed_cal_path, "dark_current_20240322.fits"))
@@ -158,29 +182,17 @@ Calibration files such as non-linearity tables, dark current, flat fields, and b
     bp.save(test_outputdir, "mock_bpmap.fits")
     this_caldb.create_entry(bp)
 
-Piepline Execution
+Pipeline Execution
 ~~~~~~~~~~~~~~~~~~~
 
 Execute the pipeline to process L1 data through L2b:
-The ``walker.walk_corgidrp`` function is the main part of the pipeline responsible for transforming the raw L1 data into L2b data. This function applies all necessary calibration steps and generates the output files.
+The ``walker.walk_corgidrp`` function is the main part of the pipeline responsible for transforming the raw L1 data into L2b data. This function applies all necessary calibration steps and generates the output files, first processing L1 to L2a data, and then L2a to L2b data.
 
 .. code-block:: python
 
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir)
     new_l2a_filenames = [os.path.join(l2a_outputdir, f"{i}.fits") for i in [90499, 90500]]
     walker.walk_corgidrp(new_l2a_filenames, "", l2b_outputdir)
-
-Validate the pipeline results:
-
-.. code-block:: python
-
-    new_l2b_filenames = [os.path.join(l2b_outputdir, f"{i}.fits") for i in [90499, 90500]]
-
-    for new_file, ref_file in zip(new_l2b_filenames, tvac_l2b_filelist):
-        img = data.Image(new_file)
-        tvac_data = fits.open(ref_file)[1].data
-        diff = img.data - tvac_data
-        assert np.all(np.abs(diff) < 1e-5)
 
 Cleanup (optional):
 
