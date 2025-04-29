@@ -1237,7 +1237,7 @@ class AstrometricCalibration(Image):
     
     Args:
         data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR a single array of calibration measurements of the following lengths (boresight: length 2 (RA, DEC), 
-        plate scale: length 2 (floats), north angle: length 1 (float), average offset: length 2 (floats) of average boresight offset in RA/DEC [deg],
+        plate scale: length 1 (float), north angle: length 1 (float), average offset: length 2 (floats) of average boresight offset in RA/DEC [deg],
         distortion coeffs: length dependent on order of polynomial fit but the last value should be an int describing the polynomial order). For a 
         3rd order distortion fit the input array should be length 37.
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw 2D data is passed in)
@@ -1245,7 +1245,7 @@ class AstrometricCalibration(Image):
         
     Attrs:
         boresight (np.array): the corrected RA/DEC [deg] position of the detector center
-        platescale (float): the platescale value in [mas/pixel] along each axis
+        platescale (float): the platescale value in [mas/pixel]
         northangle (float): the north angle value in [deg]
         avg_offset (np.array): the average offset [deg] from the detector center
         distortion_coeffs (np.array): the array of legendre polynomial coefficients that describe the distortion map, where the last value of the array is the order of polynomial used
@@ -1260,10 +1260,10 @@ class AstrometricCalibration(Image):
             raise ValueError("The AstrometricCalibration data should be an array of calibration measurements")
         else:
             self.boresight = self.data[:2]
-            self.platescale = self.data[2:4]
-            self.northangle = self.data[4]
-            self.avg_offset = self.data[5:7]
-            self.distortion_coeffs = self.data[7:]
+            self.platescale = self.data[2]
+            self.northangle = self.data[3]
+            self.avg_offset = self.data[4:6]
+            self.distortion_coeffs = self.data[6:]
             
         # if this is a new astrometric calibration file, bookkeep it in the header
         # we need to check if it is new
@@ -2555,7 +2555,6 @@ class NDFilterSweetSpotDataset(Image):
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
-
         # 4. If reading from a file, verify that the header indicates the correct DATATYPE.
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'NDFilterSweetSpotDataset':
             raise ValueError("File that was loaded is not labeled as an NDFilterSweetSpotDataset file.")
@@ -2576,13 +2575,10 @@ class NDFilterSweetSpotDataset(Image):
 
         return interpolator(x, y)
 
-def format_ftimeutc(ftime_str: str) -> str:
+def format_ftimeutc(ftime_str):
     """
-    Round the input FTIMEUTC time to the nearest 0.1 sec and reformat as:
-    yyyymmddThhmmsss, where the last three digits represent the two-digit seconds 
-    and one digit for the tenths of a second.
-    
-    For example, an input of "2025-04-15T03:05:10.21" would return "20250415T0305102".
+    Round the input FTIMEUTC time to the nearest 0.01 sec and reformat as:
+    yyyymmddThhmmssss.
 
     Args:
         ftime_str (str): Time string in ISO format, e.g. "2025-04-15T03:05:10.21".
@@ -2601,22 +2597,22 @@ def format_ftimeutc(ftime_str: str) -> str:
     if ftime.tzinfo is not None:
         ftime = ftime.astimezone(timezone.utc).replace(tzinfo=None)
     
-    # Define rounding interval: 0.1 sec = 100,000 microseconds.
-    rounding_interval = 100000
+    # Define rounding interval: 0.01 sec = 10,000 microseconds.
+    rounding_interval = 10000
     # Round the microseconds to the nearest 0.1 sec.
     rounded_microsec = int((ftime.microsecond + rounding_interval / 2) // rounding_interval * rounding_interval)
     
-    # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds, increment the second.
+    # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds increment the second
     if rounded_microsec >= 1000000:
         ftime = ftime.replace(microsecond=0) + timedelta(seconds=1)
     else:
         ftime = ftime.replace(microsecond=rounded_microsec)
     
-    # Extract seconds (two digits) and the tenths-of-second.
+    # Extract seconds (two digits) and the hundredths of seconds
     sec_int = ftime.second
-    tenth = int(ftime.microsecond / 100000)  # gives one digit (0-9)
+    tenth = int(ftime.microsecond / 10000)  # (0-99)
     
-    # Format as YYYYMMDDTHHMM then append seconds and tenth-of-second.
+    # Format as YYYYMMDDTHHMM then append seconds and hundredths of seconds
     formatted_time = ftime.strftime("%Y%m%dT%H%M") + f"{sec_int:02d}{tenth:d}"
     return formatted_time
 
@@ -2634,7 +2630,7 @@ datatypes = { "Image" : Image,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
               "CoreThroughputCalibration": CoreThroughputCalibration,
-              "NDFilterSweetSpot": NDFilterSweetSpotDataset}
+              "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset}
 
 def autoload(filepath):
     """
