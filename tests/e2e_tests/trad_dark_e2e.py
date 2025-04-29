@@ -35,7 +35,6 @@ def fix_headers_for_tvac(
         exthdr = fits_file[1].header
         # Adjust VISTYPE
         prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['CMDGAIN'] = 1.340000033378601
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']

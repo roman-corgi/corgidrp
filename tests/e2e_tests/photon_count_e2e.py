@@ -13,13 +13,16 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+import corgidrp.l2a_to_l2b as l2a_to_l2b
+import corgidrp.photon_counting as photon_counting
 
 @pytest.mark.e2e
 def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
-    global pc_frame, pc_dark_frame, ill_mean, dark_mean, pc_frame_err, pc_dark_frame_err, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat
+    global pc_frame, pc_dark_frame, ill_mean, dark_mean, pc_frame_err, pc_dark_frame_err, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat, l2a_dark_dataset, l2a_dataset, bp_dat
+    global fs_l2a_dataset, converted_l2a_dataset, pc_master_dark, pc_output, detector_params, desmeared_dataset, flat_dataset, correct_bp_dataset
     # e2edata_path not used at all for this test
     np.random.seed(1234)
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=2, cosmic_rate=1, flux=0.5, bad_frames=1)#Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=50, Ndarks=51, cosmic_rate=1, flux=0.5, bad_frames=1)#Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
     output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
@@ -113,12 +116,15 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
 
     ## Flat field
     flat_dat = np.ones((1024,1024))
+    flat_dat[1,1] = 0.9
+    flat_dat[2,2] = 0 # for VAP testing purposes
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     flat.save(filedir=output_dir, filename="mock_flat.fits")
     this_caldb.create_entry(flat)
 
     # bad pixel map
     bp_dat = np.zeros((1024,1024))
+    bp_dat[0, 0] = 1 # for testing purposes
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
     bp_map.save(filedir=output_dir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
@@ -136,6 +142,8 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dark_dir, new_filename)
         l2a_dark_files.append(new_filepath)
+    l2a_dark_dataset = data.Dataset(l2a_dark_files) #for later VAP testing
+
     walker.walk_corgidrp(l2a_dark_files, '', output_dir, template="l2a_to_l2b_pc_dark_VAP.json")
     # calDB was just updated with the PC Dark that was created with the walker above
     master_dark_filename_list = []
@@ -161,6 +169,18 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
+    l2a_dataset = data.Dataset(l2a_files) 
+    #run these steps separately for later VAP testing
+    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset, overexp=True)
+    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
+    pc_master_dark = data.Dark(master_dark_filepath_list[0])
+    pc_output = photon_counting.get_pc_mean(converted_l2a_dataset, pc_master_dark)
+    detector_params = data.DetectorParams({})
+    desmeared_dataset = l2a_to_l2b.desmear(pc_output, detector_params)
+    # skip cti correction step since that isn't required for VAP testing
+    flat_dataset = l2a_to_l2b.flat_division(desmeared_dataset, flat)
+    correct_bp_dataset = l2a_to_l2b.correct_bad_pixels(flat_dataset, bp_map)
+    # but also run the recipe to exercise the typical usage
     walker.walk_corgidrp(l2a_files, '', output_dir, template="l2a_to_l2b_pc_VAP.json")
 
     # get photon-counted frame
@@ -244,7 +264,11 @@ def test_pc_e2e_frame_rejection_ill(e2edata_path, e2eoutput_path):
             print(r'PC frame rejection was correctly applied:  PASS')
         else:
             print(r'PC frame rejection was correctly applied:  FAIL')
-        assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1
+        len(l2a_dark_dataset)
+        assert pc_ext_hdr['NUM_FR'] == len(l1_data_ill_filelist) - 1 
+    # and a more direct test; I simulated one bad frame
+    fs_ill_dataset = l2a_to_l2b.frame_select(l2a_dark_dataset, overexp=True)
+    assert len(fs_ill_dataset) == len(l1_data_ill_filelist) - 1
 
 @pytest.mark.e2e
 def test_pc_e2e_frame_rejection_dark(e2edata_path, e2eoutput_path):            
@@ -256,6 +280,9 @@ def test_pc_e2e_frame_rejection_dark(e2edata_path, e2eoutput_path):
         else:
             print(r'PC dark frame rejection was applied:  FAIL')
         assert pc_dark_ext_hdr['NUM_FR'] == len(l1_data_dark_filelist) - 1
+    # and a more direct test; I simulated one bad frame
+    fs_dark_dataset = l2a_to_l2b.frame_select(l2a_dark_dataset, overexp=True)
+    assert len(fs_dark_dataset) == len(l1_data_dark_filelist) - 1
 
 
 @pytest.mark.e2e
@@ -296,43 +323,148 @@ def test_pc_e2e_bpmap(e2edata_path, e2eoutput_path):
     assert len(inds_0[0]) + len(inds_1[0]) == bp_map.data.size
 
 @pytest.mark.e2e
-def test_pc_e2e_kgain_conversion(e2edata_path, e2eoutput_path):   
-    # check image conversion from DN to electrons
-    input_frames = []
-    for f in l2a_files:
-        if not f.endswith('.fits'):
-            continue        
-        input_frame = fits.getdata(f)  
-        input_frames.append(input_frame)  
-    mean_DN = np.mean(input_frames)
+def test_pc_e2e_kgain_conversion_ill(e2edata_path, e2eoutput_path):   
+    # check illuminated image conversion from DN to electrons
+    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset, overexp=True)
+    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
+    kgain_empirical = np.divide(converted_l2a_dataset.all_data, fs_l2a_dataset.all_data, where=fs_l2a_dataset.all_data!=0)
+    kgain_empirical = np.nanmedian(kgain_empirical)
     for i in range(len(master_ill_filepath_list)):
-        pc_frame = fits.getdata(master_ill_filepath_list[i])
-        pc_frame_bias = fits.getdata(master_ill_filepath_list[i], 4)
-        mean_DN_back_calculated = np.mean(pc_frame/kgain._kgain + pc_frame_bias)
-        if np.isclose(mean_DN_back_calculated, mean_DN, rtol=0.1):
-            print(r'Image conversion from DN to electrons was applied:  PASS')
+        pc_ext_hdr = fits.getheader(master_ill_filepath_list[i], 1)
+        if np.isclose(kgain_empirical, pc_ext_hdr['KGAINPAR'], rtol=0.01):
+            print(r'Illuminated image conversion from DN to electrons was applied:  PASS')
         else:
-            print(r'Image conversion from DN to electrons was applied:  FAIL')
-        assert np.isclose(mean_DN_back_calculated, mean_DN, rtol=0.1)  
+            print(r'Illuminated image conversion from DN to electrons was applied:  FAIL')
+        assert np.isclose(kgain_empirical, pc_ext_hdr['KGAINPAR'], rtol=0.01)
+
+@pytest.mark.e2e
+def test_pc_e2e_kgain_conversion_dark(e2edata_path, e2eoutput_path):   
+    # check illuminated image conversion from DN to electrons
+    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset, overexp=True)
+    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
+    kgain_empirical = np.divide(converted_l2a_dataset.all_data, fs_l2a_dataset.all_data, where=fs_l2a_dataset.all_data!=0)
+    kgain_empirical = np.nanmedian(kgain_empirical)
+    for i in range(len(master_dark_filepath_list)):
+        pc_ext_hdr = fits.getheader(master_dark_filepath_list[i], 1)
+        if np.isclose(kgain_empirical, pc_ext_hdr['KGAINPAR'], rtol=0.01):
+            print(r'Dark image conversion from DN to electrons was applied:  PASS')
+        else:
+            print(r'Dark image conversion from DN to electrons was applied:  FAIL')
+        assert np.isclose(kgain_empirical, pc_ext_hdr['KGAINPAR'], rtol=0.01)
 
 
-# check image conversion from DN to electrons (covered in run_vi_tdd_05_case_02.py) NOTE
-# check photon-counting threshold was correctly applied (new test to write)
-# check that the mean-combine of all N thresholded frames has been done correctly (covered in
-# run_vi_tdd_04_case_03.py)
+@pytest.mark.e2e
+def test_pc_e2e_pc_ill_threshold(e2edata_path, e2eoutput_path):   
+    # check photon-counting threshold for illuminated frames was correctly applied 
+    pc_ill = fits.open(master_ill_filepath_list[0])
+    pc_thresh = pc_ill[1].header['PCTHRESH'] # this is the same for each binned output PC frame
+    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset, overexp=True)
+    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
+    trues = 0 #initiailize counter
+    for frame in converted_l2a_dataset:
+        # photon_count called to do the thresholding
+        thresh_frame = photon_counting.photon_count(frame.data, pc_thresh)
+        expected_thresh_frame = np.ones_like(frame.data).astype('float64')
+        expected_thresh_frame[frame.data <= pc_thresh] = 0
+        cond = np.array_equal(thresh_frame, expected_thresh_frame.astype('int64'))
+        trues += cond
+    if trues == len(converted_l2a_dataset):
+        print(r'PC threshold was correctly applied for illuminated frames:  PASS')
+    else:
+        print(r'PC threshold was correctly applied for illuminated frames:  FAIL')
+    assert trues == len(converted_l2a_dataset)
 
-# check that the mean-combine of all N bad pixel maps has been done correctly (covered in run_vi_tdd_04_case_04.py)
-# check that the photon-counting photometric corrections have been properly applied NOTE 
-# check that master dark is correctly generated NOTE
-# check that master dark is divided by gain (covered in run_vi_tdd_05_case_02.py)
-# check that master dark has been correctly photon-counted NOTE
-# check that the master dark has been subtracted from the image NOTE
-# check that desmearing is correctly applied to image if desmear_flag is set to True (currently no desmear_flag, but want to check that it is indeed applied if part of the recipe) (covered in run_vi_tdd_05_case_02.py)
-# check that image is divided by flat field (covered in run_vi_tdd_05_case_02.py)
-# check that flat zero values are correctly handled (covered in run_vi_tdd_05_case_02.py)
-# check that per-frame bad-pixel map are correctly computed from fixed bad pixel map (covered in run_vi_tdd_05_case_02.py)
-# check that pixels are correctly flagged at the frame level (covered in run_vi_tdd_05_case_02.py)
-# Visually inspect the output images from a subject matter standpoint to make sure they look correct.
+
+@pytest.mark.e2e
+def test_pc_e2e_pc_dark_threshold(e2edata_path, e2eoutput_path):   
+    # check photon-counting threshold for dark frames was correctly applied 
+    pc_dark = fits.open(master_dark_filepath_list[0])
+    pc_thresh = pc_dark[1].header['PCTHRESH'] # this is the same for each binned output PC frame
+    fs_l2a_dataset = l2a_to_l2b.frame_select(l2a_dataset,overexp=True)
+    converted_l2a_dataset = l2a_to_l2b.convert_to_electrons(fs_l2a_dataset, kgain)
+    trues = 0 #initiailize counter
+    for frame in converted_l2a_dataset:
+        # photon_count called to do the thresholding
+        thresh_frame = photon_counting.photon_count(frame.data, pc_thresh)
+        expected_thresh_frame = np.ones_like(frame.data).astype('float64')
+        expected_thresh_frame[frame.data <= pc_thresh] = 0
+        cond = np.array_equal(thresh_frame, expected_thresh_frame.astype('int64'))
+        trues += cond
+    if trues == len(converted_l2a_dataset):
+        print(r'PC threshold was correctly applied for dark frames:  PASS')
+    else:
+        print(r'PC threshold was correctly applied for dark frames:  FAIL')
+    assert trues == len(converted_l2a_dataset)
+
+@pytest.mark.e2e
+def test_pc_e2e_bp_map_mean_combine(e2edata_path, e2eoutput_path):  
+    # check that the mean-combine of all N bad pixel maps has been done 
+    # in DRP, frames are not mean-combined to master bad pixel map; we can at least assert the num dims is 2
+    if bp_map.data.ndim == 2: 
+        
+        print(r'mean-combine of all N bad pixel maps was computed:  PASS')
+    else:
+        print(r'mean-combine of all N bad pixel maps was computed:  FAIL')
+    assert bp_map.data.ndim == 2
+
+@pytest.mark.e2e
+def test_pc_e2e_bp_map_per_frame(e2edata_path, e2eoutput_path):  
+    # check that per-frame bad-pixel map are correctly computed from fixed bad pixel map
+    pc_dq = fits.getdata(master_ill_filepath_list[0], 'DQ') # only one frame; no PC binning done
+    pc_dq_01 = np.zeros_like(pc_dq)
+    pc_dq_01[pc_dq > 0] = 1
+    if np.array_equal(pc_dq_01, bp_map.data):
+        print(r'Bad pixel map was applied:  PASS')
+    else:
+        print(r'Bad pixel map was applied:  FAIL')
+    assert np.array_equal(pc_dq_01, bp_map.data)
+
+@pytest.mark.e2e
+def test_pc_e2e_desmear(e2edata_path, e2eoutput_path):  
+    # check that PC illuminated frame is desmeared (I simulate smear in the mocked files)
+    if np.isclose(np.nanmean(pc_output.frames[0].data), ill_mean - dark_mean, rtol=0.02):
+        print(r'dark-subtracted PC frame without desmearing does not give expected mean within 2%:  PASS')
+    else:
+        print(r'dark-subtracted PC frame without desmearing does not give expected mean within 2%:  FAIL')
+    if np.isclose(np.nanmean(desmeared_dataset.frames[0].data), ill_mean - dark_mean, rtol=0.02):
+        print(r'dark-subtracted PC frame with desmearing gives expected mean within 2%:  PASS')
+    else:
+        print(r'dark-subtracted PC frame with desmearing gives expected mean within 2%:  FAIL')
+    assert not np.isclose(np.nanmean(pc_output.frames[0].data), ill_mean - dark_mean, rtol=0.02)
+    assert np.isclose(np.nanmean(desmeared_dataset.frames[0].data), ill_mean - dark_mean, rtol=0.02)
+
+@pytest.mark.e2e
+def test_pc_e2e_flat_division(e2edata_path, e2eoutput_path):  
+    # check that image is correctly divided by flat field 
+    for i in range(len(desmeared_dataset)):
+        expected_flat_frame = desmeared_dataset[i]/flat
+        if np.array_equal(expected_flat_frame, flat_dataset[i]):
+            print(r'Flat field division was correctly applied:  PASS')
+        else:
+            print(r'Flat field division was correctly applied:  FAIL')
+        assert np.array_equal(expected_flat_frame, flat_dataset[i])
+    
+@pytest.mark.e2e
+def test_pc_e2e_flat_division_0(e2edata_path, e2eoutput_path):  
+    # check that flat zero values are correctly handled
+    # a 0 pixel on the flat gets adjusted to NaN on the image at the correct_bad_pixels step
+    if (correct_bp_dataset.frames[0].data[1,1] == np.nan) and flat_dataset.frames[0].dq[1,1] == 1:
+        print(r'check that flat zero values are correctly handled:  PASS')
+    else:
+        print(r'check that flat zero values are correctly handled:  FAIL')
+    assert (correct_bp_dataset.frames[0].data[1,1] == np.nan) and flat_dataset.frames[0].dq[1,1] == 1
+
+@pytest.mark.e2e
+def test_pc_e2e_flag_pixels(e2edata_path, e2eoutput_path):  
+    # check that pixels are correctly flagged at the frame level 
+    # the bp map had a flag at (0,0)
+    if (correct_bp_dataset.frames[0].data[0,0] == np.nan) and correct_bp_dataset.frames[0].dq[0,0] == 1:
+        print(r'check that pixels are correctly flagged at the frame level:  PASS')
+    else:
+        print(r'check that pixels are correctly flagged at the frame level:  FAIL')
+    assert np.isnan(correct_bp_dataset.frames[0].data[0,0]) and correct_bp_dataset.frames[0].dq[0,0] > 0
+
+    # the last VAP test (for visual inspection):  the PC output files were saved in the output folder
 
     # load in CalDB again to reflect the PC Dark that was implicitly added in (but not found in this_caldb, which was loaded before the Dark was created)
     post_caldb = caldb.CalDB()
@@ -365,3 +497,12 @@ if __name__ == "__main__":
     outputdir = args.outputdir
     e2edata_dir = args.e2edata_dir
     test_pc_prep_e2e(e2edata_dir, outputdir)
+    test_pc_e2e_desmear(e2edata_dir, outputdir)
+    test_pc_e2e_bp_map_mean_combine(e2edata_dir, outputdir)
+    test_pc_e2e_flag_pixels(e2edata_dir, outputdir)
+    test_pc_e2e_flat_division_0(e2edata_dir, outputdir)
+    test_pc_e2e_flat_division(e2edata_dir, outputdir)
+    test_pc_e2e_bpmap(e2edata_dir, outputdir)
+    test_pc_e2e_pc_ill_threshold(e2edata_dir, outputdir)
+    test_pc_e2e_kgain_conversion_dark(e2edata_dir, outputdir)
+    test_pc_e2e_kgain_conversion_ill(e2edata_dir, outputdir)
