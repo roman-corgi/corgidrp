@@ -471,7 +471,14 @@ def test_pc_e2e_flag_pixels(e2edata_path, e2eoutput_path):
     for filepath in master_dark_filepath_list:
         pc_dark = data.Dark(filepath)
         post_caldb.remove_entry(pc_dark)
-
+    
+    
+@pytest.mark.e2e
+def test_pc_e2e_del_global_vars(e2edata_path, e2eoutput_path):
+    global ill_mean, dark_mean, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat, l2a_dark_dataset, l2a_dataset, bp_dat
+    global fs_l2a_dataset, converted_l2a_dataset, pc_master_dark, pc_output, detector_params, desmeared_dataset, flat_dataset, correct_bp_dataset, this_caldb
+    del ill_mean, dark_mean, master_ill_filepath_list, l1_data_ill_filelist, master_dark_filepath_list, l1_data_dark_filelist, l2a_files, l2a_dark_files, bp_map, kgain, noise_map, new_nonlinearity, flat, l2a_dark_dataset, l2a_dataset, bp_dat
+    del fs_l2a_dataset, converted_l2a_dataset, pc_master_dark, pc_output, detector_params, desmeared_dataset, flat_dataset, correct_bp_dataset, this_caldb
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -497,9 +504,10 @@ if __name__ == "__main__":
     test_pc_e2e_pc_err_frame(e2edata_dir, outputdir)
     test_pc_e2e_bp_map_per_frame(e2edata_dir, outputdir)
     test_pc_e2e_flag_pixels(e2edata_dir, outputdir)
-    test_pc_e2e_flat_division_0(e2edata_dir, outputdir)
-    test_pc_e2e_flat_division(e2edata_dir, outputdir)
-    test_pc_e2e_bpmap(e2edata_dir, outputdir)
-    test_pc_e2e_pc_ill_threshold(e2edata_dir, outputdir)
-    test_pc_e2e_kgain_conversion_dark(e2edata_dir, outputdir)
-    test_pc_e2e_kgain_conversion_ill(e2edata_dir, outputdir)
+    test_pc_e2e_del_global_vars(e2edata_dir, outputdir)
+    # test_pc_e2e_flat_division_0(e2edata_dir, outputdir)
+    # test_pc_e2e_flat_division(e2edata_dir, outputdir)
+    # test_pc_e2e_bpmap(e2edata_dir, outputdir)
+    # test_pc_e2e_pc_ill_threshold(e2edata_dir, outputdir)
+    # test_pc_e2e_kgain_conversion_dark(e2edata_dir, outputdir)
+    # test_pc_e2e_kgain_conversion_ill(e2edata_dir, outputdir)
