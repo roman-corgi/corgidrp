@@ -2854,7 +2854,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fpam_v = 6124.9
 
     # Create image object
-    prihdr, exthdr = create_default_L4_headers()
+    prihdr, exthdr = create_default_L2b_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
@@ -2875,6 +2875,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CDELT2']   = (platescale * 0.001) / 3600
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
+    exthdr['BUNIT'] = 'photoelectron/s'
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
    
     # Save file

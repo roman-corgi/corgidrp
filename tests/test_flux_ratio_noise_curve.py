@@ -127,7 +127,7 @@ def test_expected_flux_ratio_noise():
             assert np.array_equal(frn_seps, separations)
             assert np.allclose(flux_ratio_noise[2:], frn_expected, rtol=0.05)
             assert 'FRN_CRV' in frn_dataset[0].ext_hdr["HISTORY"][-1]
-            assert frn_dataset[0].hdu_list['FRN_CRV'].header['BUNIT'] == ''
+            assert frn_dataset[0].hdu_list['FRN_CRV'].header['BUNIT'] == 'Fp/Fs'
 
     # last 2 separations below close to what they are in the KLIP extension, and increased the length from 2 separations in KLIP extension to 3 here to make sure that can be interpolated and handled
     requested_separations = np.array([26.5, 6.4, 14.8]) 
