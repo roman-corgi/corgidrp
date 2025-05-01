@@ -1,8 +1,11 @@
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
-from corgidrp.data import SpectroscopyCentroidPSF
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image
 from corgidrp import mocks
+import os
+from astropy.io import fits
+
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
@@ -296,14 +299,20 @@ def fit_psf_centroid(psf_data, psf_template,
     guess_params = (xoffset_guess, yoffset_guess, amp_guess)
 
     registration_result = optimize.minimize(psf_registration_costfunc, guess_params, 
-                                            args = (template_stamp, data_stamp), method='Powell')
-    xfit = xcent_template + (xcom_data - xcom_template) + registration_result.x[0]
-    yfit = ycent_template + (ycom_data - ycom_template) + registration_result.x[1]
-
-    #(fit_popt, pcov, 
-    # infodict, mesg, ier) = optimize.curve_fit(shift_and_scale_2darray, template_stamp, 
-    #                                           np.ravel(data_stamp), p0=guess_params, full_output=True)
+                                         args=(template_stamp, data_stamp), 
+                                         method='Nelder-Mead',  # Change to Nelder-Mead for better convergence
+                                         options={'maxiter': 5000})
     
+    if not registration_result.success:
+        print(f"Warning: Registration optimization did not converge: {registration_result.message}")
+    
+    # Don't round the template positions
+    xcom_template, ycom_template = xcent_template, ycent_template
+    xcom_data, ycom_data = xcent_guess, ycent_guess
+    
+    xfit = xcom_template + registration_result.x[0]
+    yfit = ycom_template + registration_result.x[1]
+
     psf_data_bkg = psf_data.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
     psf_peakpix_snr = np.max(psf_data) / np.nanstd(psf_data_bkg)
@@ -323,12 +332,12 @@ def fit_psf_centroid(psf_data, psf_template,
 
     return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
 
-def compute_psf_centroid(psf_array, initial_cent, pri_hdr=None, ext_hdr=None, input_dataset=None, output_path=None, verbose=False, halfwidth=10, halfheight=10):
+def compute_psf_centroid(dataset, initial_cent, output_path=None, verbose=False, halfwidth=10, halfheight=10):
     """
     Compute PSF centroids for a grid of PSFs and store them in a calibration file.
 
     Args:
-        psf_array (np.ndarray): 3D array of PSF images with shape (N, H, W).
+        dataset (Dataset): Dataset containing 2D PSF images. Each image must include pri_hdr and ext_hdr.
         initial_cent (dict): Dictionary with initial guesses for PSF centroids.
                              Must include keys 'xcent' and 'ycent', each mapping to an array of shape (N,).
                              Example:
@@ -336,45 +345,49 @@ def compute_psf_centroid(psf_array, initial_cent, pri_hdr=None, ext_hdr=None, in
                                      'xcent': [12.0, 15.5, 10.3],
                                      'ycent': [8.2, 14.1, 9.9]
                                  }
-        pri_hdr (fits.Header, optional): Primary FITS header. If None, empty header will be used.
-        ext_hdr (fits.Header, optional): Extension FITS header. If None, empty header will be used.
-        input_dataset (Dataset, optional): Reference dataset to record parent filenames.
-        output_path (str, optional): If provided, write output to this FITS file.
-        verbose (bool): Whether to print centroid positions.
+        output_path (str, optional): Path to write the resulting FITS file. Directory must exist.
+        verbose (bool): If True, prints fitted centroid values for each frame.
+        halfwidth (int): Half-width of the PSF fitting box. Default is 10.
+        halfheight (int): Half-height of the PSF fitting box. Default is 10.
 
     Returns:
         SpectroscopyCentroidPSF: Calibration object with fitted (x, y) centroids.
     """
-    if psf_array.ndim != 3:
-        raise ValueError(f"Expected 3D PSF array, got shape {psf_array.shape}")
+    from corgidrp.data import Dataset
 
-    if not isinstance(initial_cent, dict):
-        raise TypeError("initial_cent must be a dictionary with 'xcent' and 'ycent' keys.")
+    if not isinstance(dataset, Dataset):
+        raise TypeError("Input must be a corgidrp.data.Dataset object.")
 
     xcent = np.asarray(initial_cent.get("xcent"))
     ycent = np.asarray(initial_cent.get("ycent"))
 
     if xcent is None or ycent is None:
         raise ValueError("initial_cent dictionary must contain 'xcent' and 'ycent' arrays.")
-    if len(psf_array) != len(xcent) or len(psf_array) != len(ycent):
-        raise ValueError("Mismatch between PSF array length and guess arrays.")
+    if len(dataset) != len(xcent) or len(dataset) != len(ycent):
+        raise ValueError("Mismatch between dataset length and centroid guess arrays.")
 
-    centroids = np.zeros((len(psf_array), 2))  # Store (x, y) for each PSF
+    centroids = np.zeros((len(dataset), 2))
 
-    for idx in range(len(psf_array)):
-        psf_data = psf_array[idx]
+    # Use headers from the first frame in dataset
+    pri_hdr = dataset[0].pri_hdr.copy()
+    ext_hdr = dataset[0].ext_hdr.copy()
+
+    for idx, frame in enumerate(dataset):
+        psf_data = frame.data
         xguess = xcent[idx]
         yguess = ycent[idx]
 
         xfit, yfit, *_ = fit_psf_centroid(
-            psf_data, psf_data,  # Using PSF as its own template
-            xguess, yguess,
+            psf_data, psf_data,
+            xcent_template=xguess,
+            ycent_template=yguess,
+            xcent_guess=xguess,
+            ycent_guess=yguess,
             halfwidth=halfwidth,
             halfheight=halfheight
         )
 
-        centroids[idx, 0] = xfit
-        centroids[idx, 1] = yfit
+        centroids[idx] = [xfit, yfit]
 
         if verbose:
             print(f"Slice {idx}: x = {xfit:.3f}, y = {yfit:.3f}")
@@ -383,10 +396,14 @@ def compute_psf_centroid(psf_array, initial_cent, pri_hdr=None, ext_hdr=None, in
         centroids,
         pri_hdr=pri_hdr,
         ext_hdr=ext_hdr,
-        input_dataset=input_dataset
+        input_dataset=dataset
     )
 
     if output_path:
+        calibration.save(output_path)
+
+        # Set EXTNAME keyword before saving
+        calibration.ext_hdr["EXTNAME"] = "CENTROIDS"
         calibration.save(output_path)
         print(f"Calibration written to: {output_path}")
 
