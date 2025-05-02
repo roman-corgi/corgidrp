@@ -158,12 +158,12 @@ def test_output_filename_convention():
     ], dtype=float)
 
     # Create a fake input dataset to set the filename
-    input_prihdr, input_exthdr = mocks.create_default_L2b_headers()
+    input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = data.Image(bp_fake_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
     fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
     fake_input_dataset = data.Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
-    bpcal_prihdr, bpcal_exthdr = mocks.create_default_calibration_product_headers()
+    bpcal_prihdr, bpcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     
     badpixelmap = data.BadPixelMap(bp_fake_data, pri_hdr=bpcal_prihdr, ext_hdr=bpcal_exthdr, input_dataset=fake_input_dataset)
     badpixelmap.save(filedir=default_cal_dir)
