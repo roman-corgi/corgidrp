@@ -130,12 +130,12 @@ def test_fluxcal_file():
     """ 
     Generate a mock fluxcal factor cal object and test the content and functionality.
     """
-    fluxcal_factor = np.array([[2e-12]])
-    fluxcal_factor_error = np.array([[[1e-14]]])
+    fluxcal_factor = 2e-12
+    fluxcal_factor_error = 1e-14
     fluxcal_fac = FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
     assert fluxcal_fac.filter == '3C'
-    assert fluxcal_fac.fluxcal_fac == fluxcal_factor[0,0]
-    assert fluxcal_fac.fluxcal_err == fluxcal_factor_error[0,0,0]
+    assert fluxcal_fac.fluxcal_fac == fluxcal_factor
+    assert fluxcal_fac.fluxcal_err == fluxcal_factor_error
     assert(fluxcal_fac.filename.split(".")[0] == "test2_ABF_CAL")
     
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
@@ -148,8 +148,8 @@ def test_fluxcal_file():
 
     fluxcal_fac_file = FluxcalFactor(fluxcal_filepath)
     assert fluxcal_fac_file.filter == '3C'
-    assert fluxcal_fac_file.fluxcal_fac == fluxcal_factor[0,0]
-    assert fluxcal_fac_file.fluxcal_err == fluxcal_factor_error[0,0,0]
+    assert fluxcal_fac_file.fluxcal_fac == fluxcal_factor
+    assert fluxcal_fac_file.fluxcal_err == fluxcal_factor_error
     # JM: I moved this out of the fluxcal class and into fluxcal.py because, depending on the method you use to 
     # make the fluxcal factor, the BUNIT will vary. Doing a mock without running fluxcal methods won't update BUNIT
     #assert fluxcal_fac_file.ext_hdr["BUNIT"] == 'erg/(s * cm^2 * AA)/(electron/s)'
