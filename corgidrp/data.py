@@ -290,10 +290,12 @@ class Image():
 
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
-                    if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
+                    if isinstance(err, float):
+                        self.err = np.array([err])
+                    elif np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
                     #we want to have an extra dimension in the error array
-                    if err.ndim == self.data.ndim+1:
+                    elif err.ndim == self.data.ndim+1:
                         self.err = err
                     else:
                         self.err = err.reshape((1,)+err.shape)

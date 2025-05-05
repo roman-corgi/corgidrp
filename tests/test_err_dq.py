@@ -65,6 +65,11 @@ def test_single_float_data():
     image3 = image1.copy()
     assert image3.data[0] == float_data
     assert image3.err[0] == float_err
+    
+    image4 = Image('test_image3.fits', err = float_err/2.)
+    assert image4.data[0] == float_data
+    assert image4.err[0] == float_err/2.
+    
 
 def test_err_dq_creation():
     """
