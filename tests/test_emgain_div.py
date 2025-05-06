@@ -9,6 +9,8 @@ def test_emgain_div():
     err = np.ones([1,1024,1024]) *0.5
     prhd, exthd = create_default_L1_headers()
     exthd["EMGAIN_C"] = 1000
+    #kgain conversion must have been done already
+    exthd["BUNIT"] = "detected EM electron"
     image1 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err)
     image2 = image1.copy()
     dataset=Dataset([image1, image2])
@@ -22,8 +24,8 @@ def test_emgain_div():
     # check the level of the dataset
     assert np.mean(gain_dataset.all_data) == pytest.approx(np.mean(dataset.all_data)/emgain, abs=1e-3)
     assert np.mean(gain_dataset.all_err) == pytest.approx(np.mean(dataset.all_err)/emgain, abs=1e-3)
-    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected electrons"
-    assert gain_dataset[0].err_hdr["BUNIT"] == "detected electrons"
+    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected electron"
+    assert gain_dataset[0].err_hdr["BUNIT"] == "detected electron"
     
     # check non-unique emgain
     emgain1 = 100
