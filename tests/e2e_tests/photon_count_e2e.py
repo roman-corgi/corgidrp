@@ -22,7 +22,7 @@ def test_pc_prep_e2e(e2edata_path, e2eoutput_path):
     global fs_l2a_dataset, converted_l2a_dataset, pc_master_dark, pc_output, detector_params, desmeared_dataset, flat_dataset, correct_bp_dataset, this_caldb
     # e2edata_path not used at all for this test
     np.random.seed(1234)
-    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=2, Ndarks=3, cosmic_rate=1, flux=0.5, bad_frames=1)
+    ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5, bad_frames=1)
     output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
@@ -443,11 +443,11 @@ def test_pc_e2e_flat_division(e2edata_path, e2eoutput_path):
 def test_pc_e2e_flat_division_0(e2edata_path, e2eoutput_path):  
     # check that flat zero values are correctly handled
     # a 0 pixel on the flat gets adjusted to NaN on the image at the correct_bad_pixels step
-    if (correct_bp_dataset.frames[0].data[2,2] == np.nan) and flat_dataset.frames[0].dq[2,2] == 1:
+    if np.isnan(correct_bp_dataset.frames[0].data[2,2]) and flat_dataset.frames[0].dq[2,2] > 0:
         print(r'check that flat zero values are correctly handled:  PASS')
     else:
         print(r'check that flat zero values are correctly handled:  FAIL')
-    assert (correct_bp_dataset.frames[0].data[2,2] == np.nan) and flat_dataset.frames[0].dq[2,2] == 1
+    assert np.isnan(correct_bp_dataset.frames[0].data[2,2]) and flat_dataset.frames[0].dq[2,2] > 0
 
 @pytest.mark.e2e
 def test_pc_e2e_flag_pixels(e2edata_path, e2eoutput_path):  
