@@ -205,6 +205,18 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
+
+**v2.2**
+ * Specific print statements in unit tests for AAC testing
+ * E2E test for ND filter calibration
+ * Revert to using only 1 platescale, instead of separate x and y axis platescales
+
+**v2.1**
+ * E2E Test bug fixes
+   * Fix bug that tradiational dark requires a clean output directory to pass
+   * Fix bug where photon counting depends on a missing calibration file sometimes
+ * Added E2E tests for core throughput and core throughput map
+
 **v2.0**
  * Major release with L3, L4, and TDA processing
  * Distortion, Abs Flux, Core Throughput, and ND Filter calibrations
