@@ -3,6 +3,9 @@
 
 name: E2E tests
 
+on:
+  workflow_dispatch 
+
 permissions:
   contents: read
 
