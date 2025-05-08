@@ -3,7 +3,12 @@
 
 name: E2E tests
 
-on: workflow_dispatch 
+# on: workflow_dispatch 
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
 
 permissions:
   contents: read
