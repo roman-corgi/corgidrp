@@ -28,13 +28,15 @@ def test_kgain():
 
     gain_value = np.array([[9.55]])
     gain_err = np.array([[[1.]]])
-    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    prhd_kgain = prhd.copy()
+    exthd_kgain = exthd.copy()
+    kgain = data.KGain(gain_value, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)
     assert kgain.filename.split(".")[0] == "test2_KRN_CAL"
     assert kgain.value == gain_value[0,0]
     assert kgain.data[0,0] == gain_value[0,0]
     
     #test ptc and error extension
-    kgain_ptc = data.KGain(gain_value, err = gain_err, ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, ptc_hdr = ptc_hdr, input_dataset = dataset)
+    kgain_ptc = data.KGain(gain_value, err = gain_err, ptc = ptc, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, ptc_hdr = ptc_hdr, input_dataset = dataset)
     assert kgain_ptc.error == gain_err[0,0]
     assert kgain_ptc.ptc[0,0] == 1.
     assert kgain_ptc.ptc_hdr is not None
@@ -84,8 +86,8 @@ def test_kgain():
     assert np.mean(gain_dataset[0].err) == pytest.approx(k_gain * np.mean(dataset[0].err), abs = 1e-4)
 
     #test header updates
-    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
-    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
+    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electron"
+    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electron"
     assert gain_dataset[0].ext_hdr["KGAINPAR"] == k_gain
     assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error[0]
     assert gain_dataset[0].ext_hdr["RN"] > 0

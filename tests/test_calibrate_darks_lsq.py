@@ -137,15 +137,15 @@ def test_expected_results_sub():
     test_filename = dataset.frames[-1].filename.split('.fits')[0] + '_DNM_CAL.fits'
     test_filename = re.sub('_L[0-9].', '', test_filename)
     assert(noise_maps.filename == test_filename)
-    assert(noise_maps.ext_hdr["BUNIT"] == "Detected Electrons")
-    assert(noise_maps.err_hdr["BUNIT"] == "Detected Electrons")
+    assert(noise_maps.ext_hdr["BUNIT"] == "detected electron")
+    assert(noise_maps.err_hdr["BUNIT"] == "detected electron")
     assert("DetectorNoiseMaps" in str(noise_maps.ext_hdr["HISTORY"]))
     assert(noise_maps.ext_hdr['B_O_UNIT'] == 'DN')
 
     assert(nm_open.data.ndim == 3)
     assert(nm_open.filename == test_filename)
-    assert(nm_open.ext_hdr["BUNIT"] == "Detected Electrons")
-    assert(nm_open.err_hdr["BUNIT"] == "Detected Electrons")
+    assert(nm_open.ext_hdr["BUNIT"] == "detected electron")
+    assert(nm_open.err_hdr["BUNIT"] == "detected electron")
     assert("DetectorNoiseMaps" in str(nm_open.ext_hdr["HISTORY"]))
     assert(nm_open.ext_hdr['B_O_UNIT'] == 'DN')
 
