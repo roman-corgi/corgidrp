@@ -1,0 +1,194 @@
+import os
+import argparse
+import pytest
+import numpy as np
+import astropy.io.fits as fits
+
+thisfile_dir = os.path.dirname(__file__) # this file's folder
+
+def generate_template(hdulist):
+    """
+    Generates an rst documentation page of the data entries
+
+    Args:
+        hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
+
+    Returns:
+        str: the rst page contents
+    """
+
+    datalvl = hdulist[1].header['DATALVL']
+
+    # for now
+    datatype = datalvl
+
+    template_filepath = os.path.join(thisfile_dir, "data_format_template.rst")
+    with open(template_filepath, "r") as f:
+        template = f.read()
+
+    # make the data format table
+    hdu_table = generate_hdustructure(hdulist)
+
+    # make the header tables
+    hdr_tables = ""
+
+    for i, hdu in enumerate(hdulist):
+        # name
+        if i == 0:
+            hdu_name = "Primary"
+        elif i == 1:
+            hdu_name = "Image"
+        else:
+            hdu_name = hdu.header['EXTNAME']
+        title = "{0} Header (HDU {1})".format(hdu_name, i)
+        title_delim = "".join(["^" for _ in range(len(title))])
+        this_hdr_table = generate_header_table(hdu)
+
+        hdr_tables += title
+        hdr_tables += "\n"
+        hdr_tables += title_delim
+        hdr_tables += "\n\n"
+        hdr_tables += this_hdr_table
+        hdr_tables += "\n\n"
+
+
+    doc = template.format(datatype.lower(), datatype, hdu_table, hdr_tables)
+
+    return doc
+
+    
+
+def generate_hdustructure(hdulist):
+    """
+    Generates the hdulist structure rst table
+
+    Args:
+        hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
+
+    Returns:
+        str: rst table with hdulist structure
+    """
+
+    hdu_table = '''
++-------+------------+----------+------------------+
+| Index | Name       | Datatype | Array Size       |
++=======+============+==========+==================+
+'''
+
+    row_template = "| {0:<5} | {1:<10} | {2:<8} | {3:<16} |"
+    row_delimiter = "+-------+------------+----------+------------------+"
+
+    for i, hdu in enumerate(hdulist):
+        # name
+        if i == 0:
+            hdu_name = "Primary"
+        elif i == 1:
+            hdu_name = "Image"
+        else:
+            hdu_name = hdu.header['EXTNAME']
+
+        # datatype
+        if hdu.data is None:
+            datatype = "None"
+            arr_size = 0
+        elif isinstance(hdu.data, np.ndarray):
+            datatype = hdu.data.dtype.name
+            arr_size = str(hdu.data.shape)
+        else:
+            datatype = type(hdu.data).split("'")[1]
+            arr_size = '1'
+
+        hdu_table += row_template.format(i, hdu_name, datatype, arr_size)
+        hdu_table += "\n"
+        hdu_table += row_delimiter
+        hdu_table += "\n"
+
+    return hdu_table
+        
+def generate_header_table(hdu):
+    """
+    Generates the hdulist structure rst table
+
+    Args:
+        hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
+
+    Returns:
+        str: rst table with hdulist structure
+    """
+
+    header_table = '''
++------------+------------+--------------------------------+----------------------------------------------------+
+| Keyword    | Datatype   | Example Value                  | Description                                        |
++============+============+================================+====================================================+
+'''
+    row_template = "| {0:<10} | {1:<10} | {2:<30} | {3:<50} |"
+    row_delimiter = "+------------+------------+--------------------------------+----------------------------------------------------+"
+
+    history_recorded = False
+
+    hdr = hdu.header
+    for key in hdr:
+        if key == "HISTORY":
+            if history_recorded:
+                # only need to record one history entry
+                continue
+            else:
+                history_recorded = True
+                datatype = "str"
+        else:
+            datatype = str(type(hdr[key])).split("'")[1]
+
+        example_value = str(hdr[key])
+        if len(example_value) > 30:
+            # truncate string
+            example_value = example_value[:27] + "..."
+
+        description = hdr.comments[key]
+        if len(description) > 50:
+            # truncate string
+            description = description[:47] + "..."
+
+        header_table += row_template.format(key, datatype, example_value, description)
+        header_table += "\n"
+        header_table += row_delimiter
+        header_table += "\n"   
+
+    return header_table
+
+
+@pytest.mark.e2e
+def l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l2a_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2a")
+    l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(l2a_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "l2a.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+if __name__ == "__main__":
+    # Use arguments to run the test. Users can then write their own scripts
+    # that call this script with the correct arguments and they do not need
+    # to edit the file. The arguments use the variables in this file as their
+    # defaults allowing the use to edit the file if that is their preferred
+    # workflow.
+    e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
+    outputdir = thisfile_dir
+
+    ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
+                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
+    ap.add_argument("-o", "--outputdir", default=outputdir,
+                    help="directory to write results to [%(default)s]")
+    args = ap.parse_args()
+    e2edata_dir = args.e2edata_dir
+    outputdir = args.outputdir
+    l2a_dataformat_e2e(e2edata_dir, outputdir)
