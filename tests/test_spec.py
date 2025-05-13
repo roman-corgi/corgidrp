@@ -46,20 +46,23 @@ def test_psf_centroid():
 
     output_dir = os.path.join(os.path.dirname(__file__), "calibrations")
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir)
 
     calibration = steps.compute_psf_centroid(
         dataset=dataset,
         initial_cent=initial_cent,
-        output_path=output_path,
         verbose=False
     )
 
-    calibration_path = os.path.join(output_dir, calibration.filename)
-    assert os.path.exists(calibration_path), "Calibration file not created"
+    # Manually assign filedir and filename before saving
+    calibration.filename = "centroid_calibration.fits"
+    calibration.filedir = output_dir
+    calibration.save()
+
+    output_file = os.path.join(output_dir, calibration.filename)
+    assert os.path.exists(output_file), "Calibration file not created"
 
     # Validate calibration file structure and contents
-    with fits.open(calibration_path) as hdul:
+    with fits.open(output_file) as hdul:
         assert len(hdul) >= 2, "Expected at least 2 HDUs (primary + extension)"
         assert isinstance(hdul[0].header, fits.Header), "Missing primary header"
         assert isinstance(hdul[1].header, fits.Header), "Missing extension header"

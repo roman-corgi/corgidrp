@@ -5,6 +5,8 @@ from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image
 from corgidrp import mocks
 import os
 from astropy.io import fits
+from corgidrp.data import Dataset
+
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
@@ -332,29 +334,21 @@ def fit_psf_centroid(psf_data, psf_template,
 
     return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
 
-def compute_psf_centroid(dataset, initial_cent, output_path=None, verbose=False, halfwidth=10, halfheight=10):
+def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, halfheight=10):
     """
-    Compute PSF centroids for a grid of PSFs and store them in a calibration file.
+    Compute PSF centroids for a grid of PSFs and return them as a calibration object.
 
     Args:
         dataset (Dataset): Dataset containing 2D PSF images. Each image must include pri_hdr and ext_hdr.
         initial_cent (dict): Dictionary with initial guesses for PSF centroids.
                              Must include keys 'xcent' and 'ycent', each mapping to an array of shape (N,).
-                             Example:
-                                 initial_cent = {
-                                     'xcent': [12.0, 15.5, 10.3],
-                                     'ycent': [8.2, 14.1, 9.9]
-                                 }
-        output_path (str, optional): Path to write the resulting FITS file. Directory must exist.
         verbose (bool): If True, prints fitted centroid values for each frame.
-        halfwidth (int): Half-width of the PSF fitting box. Default is 10.
-        halfheight (int): Half-height of the PSF fitting box. Default is 10.
+        halfwidth (int): Half-width of the PSF fitting box.
+        halfheight (int): Half-height of the PSF fitting box.
 
     Returns:
         SpectroscopyCentroidPSF: Calibration object with fitted (x, y) centroids.
     """
-    from corgidrp.data import Dataset
-
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
 
@@ -368,7 +362,6 @@ def compute_psf_centroid(dataset, initial_cent, output_path=None, verbose=False,
 
     centroids = np.zeros((len(dataset), 2))
 
-    # Use headers from the first frame in dataset
     pri_hdr = dataset[0].pri_hdr.copy()
     ext_hdr = dataset[0].ext_hdr.copy()
 
@@ -398,13 +391,7 @@ def compute_psf_centroid(dataset, initial_cent, output_path=None, verbose=False,
         ext_hdr=ext_hdr,
         input_dataset=dataset
     )
-
-    if output_path:
-        calibration.save(output_path)
-
-        # Set EXTNAME keyword before saving
-        calibration.ext_hdr["EXTNAME"] = "CENTROIDS"
-        calibration.save(output_path)
-        print(f"Calibration written to: {output_path}")
-
+    
+    calibration.ext_hdr["EXTNAME"] = "CENTROIDS"
+    
     return calibration
