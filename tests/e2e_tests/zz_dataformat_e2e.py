@@ -125,6 +125,8 @@ def generate_header_table(hdu):
     row_delimiter = "+------------+------------+--------------------------------+----------------------------------------------------+"
 
     history_recorded = False
+    comment_recorded = False
+    filen_recorded = False
 
     hdr = hdu.header
     for key in hdr:
@@ -135,10 +137,17 @@ def generate_header_table(hdu):
             else:
                 history_recorded = True
                 datatype = "str"
+        elif key == "COMMENT":
+            if comment_recorded:
+                # only need to record one history entry
+                continue
+            else:
+                comment_recorded = True
+                datatype = "str"
         else:
             datatype = str(type(hdr[key])).split("'")[1]
 
-        example_value = str(hdr[key])
+        example_value = str(hdr[key]).replace("\n", " ")
         if len(example_value) > 30:
             # truncate string
             example_value = example_value[:27] + "..."
@@ -148,12 +157,25 @@ def generate_header_table(hdu):
             # truncate string
             description = description[:47] + "..."
 
+        if key[:4] == "FILE":
+            if filen_recorded:
+                continue
+            else:
+                description = "File name for the *th science file used"
+                filen_recorded = True
+
+
         header_table += row_template.format(key, datatype, example_value, description)
         header_table += "\n"
         header_table += row_delimiter
         header_table += "\n"   
 
     return header_table
+
+
+###########################
+### Begin Tests ###########
+###########################
 
 
 @pytest.mark.e2e
@@ -185,15 +207,15 @@ def l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def l2b_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    l2a_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2b")
-    l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
+    l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2b")
+    l2b_data_file = os.path.join(l2b_data_dir, "90499.fits")
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
         os.mkdir(doc_dir)
 
 
-    with fits.open(l2a_data_file) as hdulist:
+    with fits.open(l2b_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
 
     doc_filepath = os.path.join(doc_dir, "l2b.rst")
@@ -207,6 +229,138 @@ def l2b_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # don't worry about leading and trailing whitespace
         assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def l3_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l3_data_dir = os.path.join(thisfile_dir, "l2b_to_l3_output")
+    l3_data_file = os.path.join(l3_data_dir, "CGI_0200001999001000000_20250415T0305102_L3_.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(l3_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "l3.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l3.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+
+@pytest.mark.e2e
+def l4_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l4_data_dir = os.path.join(thisfile_dir, "l3_to_l4_output")
+    l4_data_file = os.path.join(l4_data_dir, "CGI_0200001999001000020_20250415T0305102_L4_.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(l4_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "l4.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l4.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+
+@pytest.mark.e2e
+def astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    astrom_data_file = os.path.join(thisfile_dir, "astrom_cal_output", "CGI_EXCAM_L2b0000064236_AST_CAL.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(astrom_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "astrom.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "astrom.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    bpmap_data_file = os.path.join(thisfile_dir, "flat_neptune_output", "CGI_EXCAM_BPM_CAL0000052292.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(bpmap_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "bpmap.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "bpmap.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+
+@pytest.mark.e2e
+def flat_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    flat_data_file = os.path.join(thisfile_dir, "flat_neptune_output", "CGI_EXCAM_FLT_CAL0000052292.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(flat_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "flat.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "flat.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -227,3 +381,8 @@ if __name__ == "__main__":
     outputdir = args.outputdir
     l2a_dataformat_e2e(e2edata_dir, outputdir)
     l2b_dataformat_e2e(e2edata_dir, outputdir)
+    l3_dataformat_e2e(e2edata_dir, outputdir)
+    l4_dataformat_e2e(e2edata_dir, outputdir)
+    astrom_dataformat_e2e(e2edata_dir, outputdir)
+    bpmap_dataformat_e2e(e2edata_dir, outputdir)
+    flat_dataformat_e2e(e2edata_dir, outputdir)
