@@ -745,6 +745,8 @@ class SpectroscopyCentroidPSF(Image):
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
+        self.ext_hdr["EXTNAME"] = "CENTROIDS"
+
         if ext_hdr is not None:
             if input_dataset is None:
                 raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
@@ -762,6 +764,8 @@ class SpectroscopyCentroidPSF(Image):
 
         self.xfit = self.data[:, 0]
         self.yfit = self.data[:, 1]
+
+
         
 class NonLinearityCalibration(Image):
     """

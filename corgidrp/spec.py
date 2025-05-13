@@ -391,7 +391,5 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
         ext_hdr=ext_hdr,
         input_dataset=dataset
     )
-    
-    calibration.ext_hdr["EXTNAME"] = "CENTROIDS"
-    
+        
     return calibration
