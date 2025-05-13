@@ -745,12 +745,15 @@ class SpectroscopyCentroidPSF(Image):
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
-        self.ext_hdr["EXTNAME"] = "CENTROIDS"
 
+        # if this is a new master flat, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new masterflat
         if ext_hdr is not None:
             if input_dataset is None:
                 raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
             
+            self.ext_hdr["EXTNAME"] = "CENTROIDS"
+
             self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
