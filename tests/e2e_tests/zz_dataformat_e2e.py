@@ -162,6 +162,32 @@ def l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
     l2a_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2a")
     l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
 
+    doc_output_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_output_dir):
+        os.mkdir(doc_output_dir)
+
+
+    with fits.open(l2a_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_output_dir, "l2a.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l2a.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def l2b_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l2a_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2b")
+    l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
+
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
         os.mkdir(doc_dir)
@@ -170,9 +196,17 @@ def l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
     with fits.open(l2a_data_file) as hdulist:
         doc_contents = generate_template(hdulist)
 
-    doc_filepath = os.path.join(doc_dir, "l2a.rst")
+    doc_filepath = os.path.join(doc_dir, "l2b.rst")
     with open(doc_filepath, "w") as f:
         f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l2b.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -192,3 +226,4 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     l2a_dataformat_e2e(e2edata_dir, outputdir)
+    l2b_dataformat_e2e(e2edata_dir, outputdir)
