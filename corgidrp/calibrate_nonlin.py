@@ -559,9 +559,9 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
+                        frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, 
+                        frame_1_back2 = np.nanmean(frame_1[rowback2[0]:rowback2[-1]+1, 
                                                         colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
         
@@ -573,13 +573,13 @@ def calibrate_nonlin(dataset_nl,
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
         
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
                         
                         mean_frame_index += 1
-                    mean_signal.append(np.mean(frame_mean))
+                    mean_signal.append(np.nanmean(frame_mean))
                 elif repeat_flag:
                     # for repeated exposure frames, split into the first half/set
                     # and the second half/set
@@ -590,9 +590,9 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
+                        frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, 
+                        frame_1_back2 = np.nanmean(frame_1[rowback2[0]:rowback2[-1]+1, 
                                                         colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
         
@@ -605,7 +605,7 @@ def calibrate_nonlin(dataset_nl,
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
                         
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
@@ -621,8 +621,8 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, colback2[0]:colback2[-1]+1])
+                        frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, colback1[0]:colback1[-1]+1])
+                        frame_1_back2 = np.nanmean(frame_1[rowback2[0]:rowback2[-1]+1, colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
         
                         # Calculate counts and mean
@@ -631,7 +631,7 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 = frame_1 - frame_back
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
         
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
@@ -874,6 +874,8 @@ def nonlin_dataset_2_stack(dataset):
         len_cal_frames = 0
         record_gain = True 
         for frame in data_set.frames:
+            bad = np.where(frame.dq > 0)
+            frame.data[bad] = np.nan
             if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 

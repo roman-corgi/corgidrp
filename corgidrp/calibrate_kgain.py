@@ -146,7 +146,7 @@ def diff2std(diff_frame, detector_regions=None):
         
     selected_area = slice_section(diff_frame, 'SCI', 'prescan_reliable',
         detector_regions)
-    std_value = np.std(selected_area.reshape(-1), ddof=1)
+    std_value = np.nanstd(selected_area.reshape(-1), ddof=1)
     # dividing by sqrt(2) since we want std of one frame
     return std_value / np.sqrt(2)
     
@@ -261,8 +261,8 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
     clipped_data = data.copy()
       
     for i in range(max_iters):
-        mean = np.mean(clipped_data)
-        std = np.std(clipped_data)
+        mean = np.nanmean(clipped_data)
+        std = np.nanstd(clipped_data)
         mask = np.abs(clipped_data - mean) > sigma * std
         if not np.any(mask):
             break
@@ -524,11 +524,11 @@ def calibrate_kgain(dataset_kgain,
             in range(len(frames_diff))]
         
         # split each frame up into bins, take std and mean of each region
-        mean_frames_mean_curr0 = np.mean(frames, axis=0)
-        mean_frames_mean_curr = np.mean(mean_frames_mean_curr0[rowroi,colroi])
+        mean_frames_mean_curr0 = np.nanmean(frames, axis=0)
+        mean_frames_mean_curr = np.nanmean(mean_frames_mean_curr0[rowroi,colroi])
         
         # Calculate the means
-        mean_good_mean_frame_roi = np.mean(good_mean_frame[rowroi,colroi])
+        mean_good_mean_frame_roi = np.nanmean(good_mean_frame[rowroi,colroi])
     
         # Compute the scaling factor
         scaling_factor = mean_frames_mean_curr / mean_good_mean_frame_roi
@@ -588,11 +588,11 @@ def calibrate_kgain(dataset_kgain,
     
         # Compute statistics if there are data points within the bin
         if current_binned_averages.size > 0:
-            binned_averages_compiled.append(np.mean(current_binned_averages))
-            binned_averages_error.append(np.std(current_binned_averages, ddof=1) / np.sqrt(current_binned_averages.size))
-            binned_shot_deviations_compiled.append(np.mean(current_binned_deviations))
-            binned_deviations_error.append(np.std(current_binned_deviations, ddof=1) / np.sqrt(current_binned_averages.size))
-            binned_total_deviations.append(np.mean(current_binned_total_deviations))
+            binned_averages_compiled.append(np.nanmean(current_binned_averages))
+            binned_averages_error.append(np.nanstd(current_binned_averages, ddof=1) / np.sqrt(current_binned_averages.size))
+            binned_shot_deviations_compiled.append(np.nanmean(current_binned_deviations))
+            binned_deviations_error.append(np.nanstd(current_binned_deviations, ddof=1) / np.sqrt(current_binned_averages.size))
+            binned_total_deviations.append(np.nanmean(current_binned_total_deviations))
         else:
             # Append NaN or some other placeholder if no data points in the bin
             binned_averages_compiled.append(np.nan)
@@ -700,10 +700,10 @@ def calibrate_kgain(dataset_kgain,
     parm1 = -0.5*np.log10(kgain)
     
     # Gaussian read noise value in DN
-    mean_rn_gauss_DN = np.mean(rn_gauss)
+    mean_rn_gauss_DN = np.nanmean(rn_gauss)
     mean_rn_gauss_e = mean_rn_gauss_DN * kgain
     
-    mean_rn_std_DN = np.mean(read_noise)
+    mean_rn_std_DN = np.nanmean(read_noise)
     mean_rn_std_e = mean_rn_std_DN * kgain
     
     # If requested, plotting
@@ -779,8 +779,8 @@ def calibrate_kgain(dataset_kgain,
     
     # rn err depends on spread of data that determines rn and the error in kgain,
     # so use error propagation to find error in (rn in DN)*kgain
-    kgain_err = np.std(kgain_clipped)
-    rn_err_DN = np.std(rn_gauss)
+    kgain_err = np.nanstd(kgain_clipped)
+    rn_err_DN = np.nanstd(rn_gauss)
     rn_err_e = np.sqrt((kgain*rn_err_DN)**2 + (mean_rn_gauss_DN*kgain_err)**2)
     exthd['RN_ERR'] = rn_err_e
     exthd['RN_UNIT'] = 'detected electrons'
@@ -789,7 +789,7 @@ def calibrate_kgain(dataset_kgain,
     exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
     gain_value = np.array([[kgain]])
 
-    kgain = data.KGain(gain_value, err = np.array([[np.std(kgain_clipped)]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
+    kgain = data.KGain(gain_value, err = np.array([[np.nanstd(kgain_clipped)]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
     
     return kgain
 
@@ -838,6 +838,8 @@ def kgain_dataset_2_list(dataset):
         record_len = True
         record_gain = True
         for frame in data_set.frames:
+            bad = np.where(frame.dq > 0)
+            frame.data[bad] = np.nan
             if record_exp_time:
                 exp_time_mean_frame = frame.ext_hdr['EXPTIME']
                 record_exp_time = False
@@ -910,6 +912,6 @@ def kgain_dataset_2_list(dataset):
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
     # When measuring k_gain, there can only be one gain for all exposure times
-    actual_gain = np.mean(gains) # not actually used in k gain calibration since frames already gain-divided
+    actual_gain = np.nanmean(gains) # not actually used in k gain calibration since frames already gain-divided
     
     return stack, mean_frame_stack, actual_gain
