@@ -196,6 +196,7 @@ def test_binwidth():
         calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, 9)
  
 if __name__ == '__main__':
+    setup_module()
     print('Running test_expected_results_sub')
     test_expected_results_sub()
     print('Running test_psi')
