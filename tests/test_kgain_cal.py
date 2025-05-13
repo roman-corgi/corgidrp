@@ -108,6 +108,9 @@ def setup_module():
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
         image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
+        if j == 1:
+            #to test the correct handling of cosmic ray flags
+            image_sim.dq[500, 1200:1400] = 128
         frame_list.append(image_sim)
 
     index = 0
@@ -132,6 +135,9 @@ def setup_module():
             image_sim.ext_hdr['DATETIME'] = time_stack_arr0[t+j*exp_repeat_counts[j]]
             # OBSNAME has no KGAIN value, but NONLIN
             image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
+            #to test the correct handling of cosmic ray flags
+            if t == 1:
+                image_sim.dq[500, 200:300] = 128
             frame_list.append(image_sim)
     dataset_kg = Dataset(frame_list)
 
@@ -190,6 +196,7 @@ def test_binwidth():
         calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, 9)
  
 if __name__ == '__main__':
+    setup_module()
     print('Running test_expected_results_sub')
     test_expected_results_sub()
     print('Running test_psi')
