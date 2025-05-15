@@ -415,8 +415,8 @@ def do_psf_subtraction(input_dataset,
                        kt_snr=20.,
                        num_processes=None
                        ):
-    """
     
+    """
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
         Handle propagate DQ array
@@ -425,6 +425,11 @@ def do_psf_subtraction(input_dataset,
         Add comments to new ext header cards
         Do we want pyklip output to be centered on 1 pixel or 4 pixels? can use aligned_center kw to do this.
         Make sure psfsub test output data gets saved in a reasonable place
+        Update output filename to: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
+        other pyklip_parallelized kwargs to consider using:
+            minrot: minimum PA rotation (in degrees) to be considered for use as a reference PSF (good for disks)
+            maxrot: maximum PA rotation (in degrees) to be considered for use as a reference PSF (temporal variability)
+            save_aligned:	Save the aligned and scaled images (as well as various wcs information), True/False
         
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
@@ -468,13 +473,6 @@ def do_psf_subtraction(input_dataset,
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
-    """
-
-    """ other pyklip_parallelized kwargs to consider using:
-        numthreads: number of threads to use. If none, defaults to using all the cores of the cpu
-        minrot: minimum PA rotation (in degrees) to be considered for use as a reference PSF (good for disks)
-        maxrot: maximum PA rotation (in degrees) to be considered for use as a reference PSF (temporal variability)
-        save_aligned:	Save the aligned and scaled images (as well as various wcs information), True/False
     """
 
     sci_dataset = input_dataset.copy()
@@ -563,7 +561,6 @@ def do_psf_subtraction(input_dataset,
     pyklip_data = fits.getdata(result_fpath)
     pyklip_hdr = fits.getheader(result_fpath)
 
-    # TODO: Handle errors correctly
     err = np.zeros([1,*pyklip_data.shape])
     dq = np.zeros_like(pyklip_data) # This will get filled out later
 
