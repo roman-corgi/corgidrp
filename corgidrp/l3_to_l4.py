@@ -432,17 +432,16 @@ def do_psf_subtraction(input_dataset,
             if measuring KLIP throughput or 1D core throughput. Defaults to None.
         reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
             star. If not provided, references will be searched for in the input dataset.
-        klip_kwargs (dict, optional): keyword arguments to be passed to pyklip.parallelized.klip_parallelized(). 
-            Available parameters are:
-                mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously 
-                    if not specified.
-                annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
-                annuli_spacing: how to distribute the annuli radially. Currently three options. 'constant' (equally spaced), 
-                    'log' (logarithmical expansion with r), and 'linear' (linearly expansion with r). Defaults to constant.
-                subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
-                movement (int): minimum amount of movement (in pixels) of an astrophysical source
-                    to consider using that image for a refernece PSF. Defaults to 1.
-                numbasis (int or list of int): number of KLIP modes to retain. Defaults to [1,4,8,16].
+        klip_kwargs (dict, optional): keyword arguments to be passed to pyklip.parallelized.klip_parallelized(). Available 
+            parameters are:
+            mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously if not specified.
+            annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
+            annuli_spacing: how to distribute the annuli radially. Currently three options. 'constant' (equally spaced), 
+            'log' (logarithmical expansion with r), and 'linear' (linearly expansion with r). Defaults to constant.
+            subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
+            movement (int): minimum amount of movement (in pixels) of an astrophysical source to consider using that 
+            image for a refernece PSF. Defaults to 1.
+            numbasis (int or list of int): number of KLIP modes to retain. Defaults to [1,4,8,16].
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
         do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
