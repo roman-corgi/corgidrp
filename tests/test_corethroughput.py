@@ -46,7 +46,7 @@ def setup_module():
     global ct_in, ct_syn
    
     # Default headers
-    prhd, exthd = create_default_L3_headers()
+    prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
     # DRP
     exthd['DRPCTIME'] = time.Time.now().isot
     exthd['DRPVERSN'] = corgidrp.__version__
@@ -137,7 +137,7 @@ def setup_module():
     pupil_image = np.zeros([1024, 1024])
     # Set it to some known value for a selected range of pixels
     pupil_image[510:530, 510:530]=1
-    prhd, exthd_pupil = create_default_L3_headers()
+    prhd, exthd_pupil, errhdr, dqhdr = create_default_L3_headers()
     # DRP
     exthd_pupil['DRPCTIME'] = time.Time.now().isot
     exthd_pupil['DRPVERSN'] = corgidrp.__version__
@@ -527,7 +527,7 @@ def test_ct_interp():
     pupil_image = np.zeros([1024, 1024])
     # Set it to some known value for a selected range of pixels
     pupil_image[510:530, 510:530]=1
-    prhd, exthd_pupil = create_default_L3_headers()
+    prhd, exthd_pupil, errhdr, dqhdr = create_default_L3_headers()
     # DRP
     exthd_pupil['DRPCTIME'] = time.Time.now().isot
     exthd_pupil['DRPVERSN'] = corgidrp.__version__

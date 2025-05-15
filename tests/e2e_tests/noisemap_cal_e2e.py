@@ -319,7 +319,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     l2a_filepaths = []
     if not os.path.exists(L2a_output_dir):
         os.mkdir(L2a_output_dir)
-    pri_hdr, ext_hdr = mocks.create_default_L2a_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2a_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     exptime_arr = []

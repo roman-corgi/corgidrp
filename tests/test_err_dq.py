@@ -20,10 +20,8 @@ err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1
-prhd, exthd = create_default_L2a_headers()
-errhd = fits.Header()
+prhd, exthd, errhd, dqhd, biashdr = create_default_L2a_headers()
 errhd["CASE"] = "test"
-dqhd = fits.Header()
 dqhd["CASE"] = "test"
 
 data_3d = np.ones([2,1024,1024]) * 2

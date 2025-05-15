@@ -43,7 +43,7 @@ def test_l1_to_l4():
         assert frame.filename == "CGI_0000011222333OOO111_20250101T12{0:02d}00_L3_.fits".format(i)
 
     #Create dummy dataset to pass in to update_to_l4 (which needs filenames)
-    pri_hdr, ext_hdr = mocks.create_default_L3_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_L3_headers()
     test = Image(np.array([1,1]),pri_hdr = pri_hdr, ext_hdr = ext_hdr)
     # expect an exception
 
@@ -92,7 +92,7 @@ def test_l3_to_l4_bad():
     l1_dataset = mocks.create_dark_calib_files(numfiles=2)
     
     #Create dummy dataset to pass in to update_to_l4 (which needs filenames)
-    pri_hdr, ext_hdr = mocks.create_default_L3_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_L3_headers()
     test = Image(np.array([1,1]),pri_hdr = pri_hdr, ext_hdr = ext_hdr)
     # expect an exception
     with pytest.raises(ValueError):
