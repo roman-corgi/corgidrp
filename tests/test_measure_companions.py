@@ -239,7 +239,6 @@ def generate_test_data(out_dir):
         ct_calibration=ct_cal,
         klip_kwargs={'numbasis' : NUMBASIS,
                      'mode' : 'RDI'},
-        numbasis=NUMBASIS,
         do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE,
         cand_locs=cand_locs,
         num_processes=1,
