@@ -237,7 +237,8 @@ def generate_test_data(out_dir):
     psf_sub_dataset = l3_to_l4.do_psf_subtraction(
         coron_data, reference_star_dataset=ref_data,
         ct_calibration=ct_cal,
-        mode="RDI",
+        klip_kwargs={'numbasis' : NUMBASIS,
+                     'mode' : 'RDI'},
         numbasis=NUMBASIS,
         do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE,
         cand_locs=cand_locs,
