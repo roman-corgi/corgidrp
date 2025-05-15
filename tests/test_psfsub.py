@@ -450,13 +450,30 @@ def test_psf_sub_ADI_nocrop():
         if np.nanmax(np.abs(frame.data[0] - analytical_result)) > np.nanmax(analytical_result) * rel_tolerance:
             raise Exception(f"Relative difference between ADI result and analytical result is greater then 5%.")
         
-        if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
-            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
-
     # Check expected data shape
     expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
+
+    # Parse PSFPARAM header string
+    psfparams = frame.ext_hdr['PSFPARAM'].split(',')
+    psfparams_dict = {}
+    for pair in psfparams:
+        param, val = pair.strip().split('=')
+        psfparams_dict[param] = val
+
+    # Check values
+    if psfparams_dict['mode'] != 'ADI':
+        raise Exception(f"Chose {psfparams_dict['mode']} instead of 'ADI' when provided 2 science images and no references.")
+    if psfparams_dict['annuli'] != '1':
+        raise Exception(f"Unexpected number of annuli was used in KLIP parameters.")
+    if psfparams_dict['subsect'] != '1':
+        raise Exception(f"Unexpected number of subsections was used in KLIP parameters.")
+    if psfparams_dict['minmove'] != '1':
+        raise Exception(f"Unexpected minimum movement was used in KLIP parameters.")
+    if psfparams_dict['numbasis'] != f'{numbasis}/1':
+        raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
+
 
 def test_psf_sub_RDI_nocrop(): 
     """Tests that psf subtraction step correctly identifies an RDI dataset (single roll, 1 or more references), 
@@ -685,9 +702,9 @@ if __name__ == '__main__':
     # test_flagnans_3D()
     # test_flagnans_flagval2()
 
-    test_psf_sub_split_dataset()
+    # test_psf_sub_split_dataset()
 
-    # test_psf_sub_ADI_nocrop()
+    test_psf_sub_ADI_nocrop()
     # test_psf_sub_RDI_nocrop()
     # test_psf_sub_ADIRDI_nocrop()
     # test_psf_sub_withcrop()
