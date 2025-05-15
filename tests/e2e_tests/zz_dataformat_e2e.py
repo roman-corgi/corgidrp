@@ -361,6 +361,105 @@ def flat_dataformat_e2e(e2edata_path, e2eoutput_path):
         assert ref_doc_contents.strip() == doc_contents.strip()
 
 
+@pytest.mark.e2e
+def ct_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    ct_data_file = os.path.join(thisfile_dir, "l2b_to_corethroughput_output", "corethroughput_e2e_10_CTP_CAL.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(ct_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "corethroughput.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "corethroughput.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    ctmap_data_file = os.path.join(thisfile_dir, "l2a_to_ct_map", "corethroughput_map.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(ctmap_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "corethroughput_map.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "corethroughput_map.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    fluxcal_data_file = os.path.join(thisfile_dir, "l2b_to_fluxcal_factor_output", "flux_e2e_0_ABF_CAL.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(fluxcal_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "fluxcal.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "fluxcal.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    kgain_data_file = os.path.join(thisfile_dir, "l1_to_kgain_output", "CGI_EXCAM_KRN_CAL0000051840.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(kgain_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "kgain.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "kgain.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -386,3 +485,7 @@ if __name__ == "__main__":
     astrom_dataformat_e2e(e2edata_dir, outputdir)
     bpmap_dataformat_e2e(e2edata_dir, outputdir)
     flat_dataformat_e2e(e2edata_dir, outputdir)
+    ct_dataformat_e2e(e2edata_dir, outputdir)
+    ctmap_dataformat_e2e(e2edata_dir, outputdir)
+    fluxcal_dataformat_e2e(e2edata_dir, outputdir)
+    kgain_dataformat_e2e(e2edata_dir, outputdir)
