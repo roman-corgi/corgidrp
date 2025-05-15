@@ -526,9 +526,10 @@ def test_meas_klip_ADI():
 
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
-                                mode=mode,
+                                klip_kwargs={
+                                    'numbasis' : numbasis,
+                                    'mode' : mode},
                                 do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
@@ -630,9 +631,10 @@ def test_meas_klip_RDI():
 
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={
+                                    'numbasis' : numbasis,
+                                    'mode' : mode},
                                 fileprefix='test_KL_THRU',
-                                mode=mode,
                                 do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
@@ -686,9 +688,10 @@ def test_meas_klip_ADIRDI():
 
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
-                                fileprefix='test_KL_THRU',
-                                mode=mode,
+                                klip_kwargs={
+                                    'numbasis' : numbasis,
+                                    'mode' : mode},
+                                    fileprefix='test_KL_THRU',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
@@ -761,9 +764,9 @@ def test_psfsub_withklipandctmeas_adi():
     
     psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={
+                                    'numbasis' : numbasis},
                                 fileprefix='test_KL_THRU',
-                                mode=None,
                                 do_crop=False,
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
@@ -940,9 +943,9 @@ def test_psfsub_withklipandctmeas_rdi():
     
     psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={
+                                    'numbasis' : numbasis},
                                 fileprefix='test_KL_THRU',
-                                mode=None,
                                 do_crop=False,
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
@@ -1129,9 +1132,9 @@ def test_psfsub_withKTandCTandCrop_adi():
     
     psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={
+                                    'numbasis' : numbasis},
                                 fileprefix='test_KL_THRU',
-                                mode=None,
                                 do_crop=True,
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,

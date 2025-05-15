@@ -322,7 +322,10 @@ def test_psf_sub_split_dataset():
     """
 
     # Sci & Ref
-    numbasis = [1,4,8]
+    numbasis = [1]
+    subsections = 2
+    annuli = 2
+    movement = 2
     rolls = [270+13,270-13,0,0]
     mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
                                               st_amp=st_amp,
@@ -335,20 +338,40 @@ def test_psf_sub_split_dataset():
 
     # Pass combined dataset to do_psf_subtraction
     result = do_psf_subtraction(mock_sci_and_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={"numbasis":numbasis,
+                                             "subsections":subsections,
+                                             "annuli":annuli,
+                                             "movement":movement,},
                                 fileprefix='test_single_dataset',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
     
-    # Should choose ADI+RDI
+    # Check correct KLIP parameters are used (Should choose ADI+RDI)
     for frame in result:
-        if not frame.pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 2 references.")
 
+        # Parse PSFPARAM header string
+        psfparams = frame.ext_hdr['PSFPARAM'].split(',')
+        psfparams_dict = {}
+        for pair in psfparams:
+            param, val = pair.strip().split('=')
+            psfparams_dict[param] = val
+
+        # Check values
+        if psfparams_dict['mode'] != 'ADI+RDI':
+            raise Exception(f"Chose {psfparams_dict['mode']} instead of 'ADI+RDI' when provided 2 science images and 2 references.")
+        if psfparams_dict['annuli'] != str(annuli):
+            raise Exception(f"Unexpected number of annuli was used in KLIP parameters.")
+        if psfparams_dict['subsect'] != str(subsections):
+            raise Exception(f"Unexpected number of subsections was used in KLIP parameters.")
+        if psfparams_dict['minmove'] != str(movement):
+            raise Exception(f"Unexpected minimum movement was used in KLIP parameters.")
+        if psfparams_dict['numbasis'] != f'{numbasis}/1':
+            raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
+        
     # Try passing only science frames
     result = do_psf_subtraction(mock_sci,
-                                numbasis=numbasis,
+                                klip_kwargs={"numbasis":numbasis},
                                 fileprefix='test_sci_only_dataset',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
@@ -362,7 +385,7 @@ def test_psf_sub_split_dataset():
     # pass only reference frames (should fail)
     with pytest.raises(UserWarning):
         _ = do_psf_subtraction(mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={"numbasis":numbasis},
                                 fileprefix='test_ref_only_dataset',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
@@ -382,7 +405,7 @@ def test_psf_sub_ADI_nocrop():
                                               pl_contrast=pl_contrast)
 
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={"numbasis":numbasis},
                                 fileprefix='test_ADI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
@@ -452,7 +475,7 @@ def test_psf_sub_RDI_nocrop():
 
     result = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={"numbasis":numbasis},
                                 fileprefix='test_RDI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
@@ -544,7 +567,7 @@ def test_psf_sub_ADIRDI_nocrop():
     analytical_results = [analytical_result1,analytical_result2]
     
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={"numbasis":numbasis},
                                 fileprefix='test_ADI+RDI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
@@ -607,7 +630,7 @@ def test_psf_sub_withcrop():
     mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
 
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                klip_kwargs={"numbasis":numbasis},
                                 fileprefix='test_withcrop',
                                 measure_klip_thrupt=False,
                                 measure_1d_core_thrupt=False)
@@ -637,8 +660,8 @@ def test_psf_sub_badmode():
 
     with pytest.raises(Exception):
         _ = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
-                                mode='SDI',
+                                klip_kwargs={"numbasis":numbasis,
+                                             "mode" : 'SDI'},
                                 fileprefix='test_SDI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
@@ -662,10 +685,10 @@ if __name__ == '__main__':
     # test_flagnans_3D()
     # test_flagnans_flagval2()
 
-    #test_psf_sub_split_dataset()
+    test_psf_sub_split_dataset()
 
     # test_psf_sub_ADI_nocrop()
-    test_psf_sub_RDI_nocrop()
-    test_psf_sub_ADIRDI_nocrop()
+    # test_psf_sub_RDI_nocrop()
+    # test_psf_sub_ADIRDI_nocrop()
     # test_psf_sub_withcrop()
     # test_psf_sub_badmode()
