@@ -399,6 +399,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
     
     return output_dataset
 
+
 def do_psf_subtraction(input_dataset, 
                        ct_calibration=None,
                        reference_star_dataset=None,
@@ -436,8 +437,8 @@ def do_psf_subtraction(input_dataset,
                 mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously 
                     if not specified.
                 annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
-                annuli_spacing: how to distribute the annuli radially. Currently three options. Constant (equally spaced), 
-                    log (logarithmical expansion with r), and linear (linearly expansion with r). Defaults to constant.
+                annuli_spacing: how to distribute the annuli radially. Currently three options. 'constant' (equally spaced), 
+                    'log' (logarithmical expansion with r), and 'linear' (linearly expansion with r). Defaults to constant.
                 subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
                 movement (int): minimum amount of movement (in pixels) of an astrophysical source
                     to consider using that image for a refernece PSF. Defaults to 1.
@@ -520,6 +521,9 @@ def do_psf_subtraction(input_dataset,
 
     if 'annuli' not in klip_kwargs.keys():
         klip_kwargs['annuli'] = 1
+
+    if 'annuli_spacing' not in klip_kwargs.keys():
+        klip_kwargs['annuli_spacing'] = 'constant'
 
     if 'subsections' not in klip_kwargs.keys():
         klip_kwargs['subsections'] = 1
@@ -663,6 +667,7 @@ def do_psf_subtraction(input_dataset,
             
     return dataset_out
 
+
 def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     """
     Derotate the Image, ERR, and DQ data by the angle offset to make the FoV up to North. 
@@ -768,6 +773,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
                                                    new_all_dq=np.array(new_all_dq))
 
     return processed_dataset 
+
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
