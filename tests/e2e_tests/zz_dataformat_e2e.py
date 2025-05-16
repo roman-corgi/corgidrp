@@ -6,12 +6,13 @@ import astropy.io.fits as fits
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
-def generate_template(hdulist):
+def generate_template(hdulist, dtype_name=None):
     """
     Generates an rst documentation page of the data entries
 
     Args:
         hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
+        dtype_name (str): if not None, custom name to use for page title and label
 
     Returns:
         str: the rst page contents
@@ -19,8 +20,10 @@ def generate_template(hdulist):
 
     datalvl = hdulist[1].header['DATALVL']
 
-    # for now
-    datatype = datalvl
+    if dtype_name is None:
+        datatype = datalvl
+    else:
+        datatype = dtype_name
 
     template_filepath = os.path.join(thisfile_dir, "data_format_template.rst")
     with open(template_filepath, "r") as f:
@@ -258,7 +261,7 @@ def l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def l4_dataformat_e2e(e2edata_path, e2eoutput_path):
+def l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l4_data_dir = os.path.join(thisfile_dir, "l3_to_l4_output")
     l4_data_file = os.path.join(l4_data_dir, "CGI_0200001999001000020_20250415T0305102_L4_.fits")
@@ -269,20 +272,44 @@ def l4_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(l4_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, dtype_name="L4-Coronagraphic")
 
-    doc_filepath = os.path.join(doc_dir, "l4.rst")
+    doc_filepath = os.path.join(doc_dir, "l4coron.rst")
     with open(doc_filepath, "w") as f:
         f.write(doc_contents)
 
     ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
-    ref_doc = os.path.join(ref_doc_dir, "l4.rst")
+    ref_doc = os.path.join(ref_doc_dir, "l4coron.rst")
     if os.path.exists(ref_doc):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # don't worry about leading and trailing whitespace
         assert ref_doc_contents.strip() == doc_contents.strip()
 
+@pytest.mark.e2e
+def l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    kgain_data_file = os.path.join(thisfile_dir, "l3_to_l4_noncoron_output", "CGI_0200001999001000001_20250415T030504_L4_.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(kgain_data_file) as hdulist:
+        doc_contents = generate_template(hdulist, dtype_name="L4-Noncoron")
+
+    doc_filepath = os.path.join(doc_dir, "l4noncoron.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l4noncoron.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
 
 @pytest.mark.e2e
 def astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -461,6 +488,8 @@ def kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
         # don't worry about leading and trailing whitespace
         assert ref_doc_contents.strip() == doc_contents.strip()
 
+
+
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
     # that call this script with the correct arguments and they do not need
@@ -481,7 +510,8 @@ if __name__ == "__main__":
     l2a_dataformat_e2e(e2edata_dir, outputdir)
     l2b_dataformat_e2e(e2edata_dir, outputdir)
     l3_dataformat_e2e(e2edata_dir, outputdir)
-    l4_dataformat_e2e(e2edata_dir, outputdir)
+    l4coron_dataformat_e2e(e2edata_dir, outputdir)
+    l4noncoron_dataformat_e2e(e2edata_dir, outputdir)
     astrom_dataformat_e2e(e2edata_dir, outputdir)
     bpmap_dataformat_e2e(e2edata_dir, outputdir)
     flat_dataformat_e2e(e2edata_dir, outputdir)
