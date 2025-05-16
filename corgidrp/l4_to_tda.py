@@ -22,7 +22,7 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
         input_data (corgidrp.data.Dataset or corgidrp.data.Image): 
             A dataset of Images (L2b-level) or a single Image. Must be all of the same source with same filter.
         source_star (str): either the fits file path of the flux model of the observed source in 
-                           CALSPEC units erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
+                           CALSPEC units (erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
         scale_factor (float): factor applied to the flux of the calspec standard source, so that you can apply it 
                               if you have a different source with similiar spectral type, but no calspec standard.
                               Defaults to 1.
@@ -58,14 +58,14 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
 
     # read the transmission curve from the color filter file
     wave, filter_trans = fluxcal.read_filter_curve(filter_name)
-    
+
     if source_star.split(".")[-1] == "fits":
         source_filepath = source_star
-        source_filename = source_star
     else:
-        source_filepath, source_filename = fluxcal.get_calspec_file(source_star)
+        source_filepath = fluxcal.get_calspec_file(source_star)
     
-    vega_filepath, vega_filename = fluxcal.get_calspec_file('Vega')
+    vega_filepath = fluxcal.get_calspec_file('Vega')
+    
     # calculate the flux of VEGA and the source star from the user given CALSPEC file binned on the wavelength grid of the filter
     vega_sed = fluxcal.read_cal_spec(vega_filepath, wave)
     source_sed = fluxcal.read_cal_spec(source_filepath, wave) * scale_factor
@@ -77,7 +77,7 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
     app_mag = -2.5 * np.log10(source_irr/vega_irr)
 
     # write the reference wavelength and the color correction factor to the header (keyword names tbd)
-    history_msg = "the apparent Vega magnitude is calculated and added to the header {0} applying source SED file {1} and VEGA SED file {2}".format(str(app_mag), source_filename, vega_filename)
+    history_msg = "the apparent Vega magnitude is calculated and added to the header {0}".format(str(app_mag))
     # update the header of the output dataset and update the history
     mag_data.update_after_processing_step(history_msg, header_entries = {"APP_MAG": app_mag})
     
@@ -95,7 +95,7 @@ def determine_color_cor(input_dataset, ref_star, source_star):
         ref_star (str): either the fits file path of the known reference flux (usually CALSPEC),
                         or the (SIMBAD) name of a CALSPEC star
         source_star (str): either the fits file path of the flux model of the observed source in 
-                           CALSPEC units erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
+                           CALSPEC units (erg/(s * cm^2 * AA) and format or the (SIMBAD) name of a CALSPEC star
     
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with updated header including 
@@ -112,14 +112,12 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     # ref_star/source_star is either the star name or the file path to fits file
     if ref_star.split(".")[-1] == "fits":
         calspec_filepath = ref_star
-        calspec_ref_name = ref_star
     else:
-        calspec_filepath, calspec_ref_name = fluxcal.get_calspec_file(ref_star)
+        calspec_filepath = fluxcal.get_calspec_file(ref_star)
     if source_star.split(".")[-1] == "fits":
         source_filepath = source_star
-        source_filename = source_star
     else:
-        source_filepath, source_filename = fluxcal.get_calspec_file(source_star)
+        source_filepath = fluxcal.get_calspec_file(source_star)
     
     # calculate the flux from the user given CALSPEC file binned on the wavelength grid of the filter
     flux_ref = fluxcal.read_cal_spec(calspec_filepath, wave)
@@ -130,7 +128,7 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     k = fluxcal.compute_color_cor(filter_trans, wave, flux_ref, lambda_ref, source_sed)
     
     # write the reference wavelength and the color correction factor to the header (keyword names tbd)
-    history_msg = "the color correction is calculated and added to the header: {0}, source SED file: {1}, reference SED file: {2}".format(str(k), source_filename, calspec_ref_name)
+    history_msg = "the color correction is calculated and added to the header {0}".format(str(k))
     # update the header of the output dataset and update the history
     color_dataset.update_after_processing_step(history_msg, header_entries = {"LAM_REF": lambda_ref, "COL_COR": k})
     
