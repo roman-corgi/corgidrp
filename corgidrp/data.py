@@ -291,6 +291,8 @@ class Image():
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
                     if isinstance(err, float):
+                        if np.size(self.data) != 1:
+                            raise ValueError("err can only be a float if data is a float value")
                         self.err = np.array([err])
                     elif np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
@@ -342,12 +344,6 @@ class Image():
         else:
             # data has been passed in directly
             # creation of a new file in DRP eyes
-            if pri_hdr is None or ext_hdr is None:
-                raise ValueError("Missing primary and/or extension headers, because you passed in raw data")
-            self.pri_hdr = pri_hdr
-            self.ext_hdr = ext_hdr
-            self.filedir = "."
-            self.filename = ""
             if isinstance(data_or_filepath, float):
                 self.data = np.array([data_or_filepath])
                 if err is not None and isinstance(err, float):
@@ -356,7 +352,6 @@ class Image():
                     self.err = np.array([0])
             else:
                 self.data = data_or_filepath
-
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
@@ -367,6 +362,12 @@ class Image():
                         self.err = err.reshape((1,)+err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
+            if pri_hdr is None or ext_hdr is None:
+                raise ValueError("Missing primary and/or extension headers, because you passed in raw data")
+            self.pri_hdr = pri_hdr
+            self.ext_hdr = ext_hdr
+            self.filedir = "."
+            self.filename = ""
 
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
@@ -387,11 +388,6 @@ class Image():
                     self.hdu_names.append(hdu.name)
             else: 
                 self.hdu_list = fits.HDUList()
-
-            
-            
-            #A list of extensions
-            
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
