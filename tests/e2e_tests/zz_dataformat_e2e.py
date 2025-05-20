@@ -20,10 +20,14 @@ def generate_template(hdulist, dtype_name=None):
 
     datalvl = hdulist[1].header['DATALVL']
 
-    if dtype_name is None:
-        datatype = datalvl
-    else:
+    if dtype_name is not None:
         datatype = dtype_name
+    elif datalvl.lower() == "cal":
+        datatype = hdulist[1].header['DATATYPE']
+    else:
+        datatype = datalvl
+
+        
 
     template_filepath = os.path.join(thisfile_dir, "data_format_template.rst")
     with open(template_filepath, "r") as f:
@@ -73,13 +77,13 @@ def generate_hdustructure(hdulist):
     """
 
     hdu_table = '''
-+-------+------------+----------+------------------+
-| Index | Name       | Datatype | Array Size       |
-+=======+============+==========+==================+
++-------+------------------+----------+----------------------+
+| Index | Name             | Datatype | Array Size           |
++=======+==================+==========+======================+
 '''
 
-    row_template = "| {0:<5} | {1:<10} | {2:<8} | {3:<16} |"
-    row_delimiter = "+-------+------------+----------+------------------+"
+    row_template = "| {0:<5} | {1:<16} | {2:<8} | {3:<20} |"
+    row_delimiter = "+-------+------------------+----------+----------------------+"
 
     for i, hdu in enumerate(hdulist):
         # name
@@ -160,11 +164,11 @@ def generate_header_table(hdu):
             # truncate string
             description = description[:47] + "..."
 
-        if key[:4] == "FILE":
+        if key[:4] == "FILE" and key[4:].isdigit():
             if filen_recorded:
                 continue
             else:
-                description = "File name for the *th science file used"
+                description = "File name for the n-th science file used"
                 filen_recorded = True
 
 
@@ -208,7 +212,7 @@ def l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
         assert ref_doc_contents.strip() == doc_contents.strip()
 
 @pytest.mark.e2e
-def l2b_dataformat_e2e(e2edata_path, e2eoutput_path):
+def l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2b")
     l2b_data_file = os.path.join(l2b_data_dir, "90499.fits")
@@ -219,19 +223,46 @@ def l2b_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(l2b_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, dtype_name="L2-Analog")
 
-    doc_filepath = os.path.join(doc_dir, "l2b.rst")
+    doc_filepath = os.path.join(doc_dir, "l2b_analog.rst")
     with open(doc_filepath, "w") as f:
         f.write(doc_contents)
 
     ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
-    ref_doc = os.path.join(ref_doc_dir, "l2b.rst")
+    ref_doc = os.path.join(ref_doc_dir, "l2b_analog.rst")
     if os.path.exists(ref_doc):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # don't worry about leading and trailing whitespace
         assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    l2b_data_dir = os.path.join(thisfile_dir, "pc_sim_test_data")
+    l2b_data_file = os.path.join(l2b_data_dir, "pc_frame_ill_115.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(l2b_data_file) as hdulist:
+        doc_contents = generate_template(hdulist, dtype_name="L2-PhotonCounting")
+
+    doc_filepath = os.path.join(doc_dir, "l2b_pc.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "l2b_pc.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
 
 @pytest.mark.e2e
 def l3_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -424,7 +455,7 @@ def ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
     with fits.open(ctmap_data_file) as hdulist:
-        doc_contents = generate_template(hdulist)
+        doc_contents = generate_template(hdulist, dtype_name="CoreThroughputMap")
 
     doc_filepath = os.path.join(doc_dir, "corethroughput_map.rst")
     with open(doc_filepath, "w") as f:
@@ -466,7 +497,7 @@ def fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    kgain_data_file = os.path.join(thisfile_dir, "l1_to_kgain_output", "CGI_EXCAM_KRN_CAL0000051840.fits")
+    kgain_data_file = os.path.join(thisfile_dir, "nonlin_and_kgain_output", "CGI_EXCAM_KRN_CAL0000051840.fits")
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -489,6 +520,133 @@ def kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
         assert ref_doc_contents.strip() == doc_contents.strip()
 
 
+@pytest.mark.e2e
+def ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    nonlin_data_file = os.path.join(thisfile_dir, "nonlin_and_kgain_output", "CGI_EXCAM_NLN_CAL0000051840.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(nonlin_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "nonlin.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "nonlin.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    nonlin_data_file = os.path.join(thisfile_dir, "nd_filter_e2e_output", "CGI_0000000000000000000_20250520T00421886_NDF_CAL.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(nonlin_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "ndfilter.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "ndfilter.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+@pytest.mark.e2e
+def noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    noisemaps_data_file = os.path.join(thisfile_dir, "noisemap_output", "CGI_EXCAM_0000064232_DNM_CAL.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(noisemaps_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "noisemaps.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "noisemaps.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+
+@pytest.mark.e2e
+def dark_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    dark_data_file = os.path.join(thisfile_dir, "build_trad_dark_output", "CGI_EXCAM0000064236_DRK_CAL.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(dark_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "dark.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "dark.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
+
+@pytest.mark.e2e
+def tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
+
+    tpump_data_file = os.path.join(thisfile_dir, "trap_pump_cal_output", "180KScheme_1TPUMP_Npumps50000_gain1.5_phasetime166.81005372000593_TPU_CAL.fits")
+
+    doc_dir = os.path.join(thisfile_dir, "data_format_docs")
+    if not os.path.exists(doc_dir):
+        os.mkdir(doc_dir)
+
+
+    with fits.open(tpump_data_file) as hdulist:
+        doc_contents = generate_template(hdulist)
+
+    doc_filepath = os.path.join(doc_dir, "tpump.rst")
+    with open(doc_filepath, "w") as f:
+        f.write(doc_contents)
+
+    ref_doc_dir = os.path.join(thisfile_dir, "..", "..", "docs", "source", "data_formats")
+    ref_doc = os.path.join(ref_doc_dir, "tpump.rst")
+    if os.path.exists(ref_doc):
+        with open(ref_doc, "r") as f2:
+            ref_doc_contents = f2.read()
+        # don't worry about leading and trailing whitespace
+        assert ref_doc_contents.strip() == doc_contents.strip()
+
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -508,7 +666,8 @@ if __name__ == "__main__":
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
     l2a_dataformat_e2e(e2edata_dir, outputdir)
-    l2b_dataformat_e2e(e2edata_dir, outputdir)
+    l2banalog_dataformat_e2e(e2edata_dir, outputdir)
+    l2bpc_dataformat_e2e(e2edata_dir, outputdir)
     l3_dataformat_e2e(e2edata_dir, outputdir)
     l4coron_dataformat_e2e(e2edata_dir, outputdir)
     l4noncoron_dataformat_e2e(e2edata_dir, outputdir)
@@ -519,3 +678,7 @@ if __name__ == "__main__":
     ctmap_dataformat_e2e(e2edata_dir, outputdir)
     fluxcal_dataformat_e2e(e2edata_dir, outputdir)
     kgain_dataformat_e2e(e2edata_dir, outputdir)
+    ndfilter_dataformat_e2e(e2edata_dir, outputdir)
+    noisemaps_dataformat_e2e(e2edata_dir, outputdir)
+    dark_dataformat_e2e(e2edata_dir, outputdir)
+    tpump_dataformat_e2e(e2edata_dir, outputdir)
