@@ -117,7 +117,7 @@ def generate_header_table(hdu):
     Generates the hdulist structure rst table
 
     Args:
-        hdulist (astropy.io.fits.HDUList): hdulist from fits file to be documented
+        hdu (astropy.io.fits.hdu): Single hdu from fits file to be documented
 
     Returns:
         str: rst table with hdulist structure
