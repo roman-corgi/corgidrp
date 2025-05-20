@@ -2,15 +2,15 @@ import os
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_headers
 
+datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
 def test_psf_centroid():
     """
     Test PSF centroid computation with mock data and assert correctness of output FITS structure.
     """
-    datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
     file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
 
@@ -75,5 +75,33 @@ def test_psf_centroid():
 
         print(f"Centroid FITS file validated: {centroid_data.shape[0]} rows")
 
+def test_dispersion_model():
+    prhdr, exthdr = create_default_headers()
+    disp_file_path = os.path.join(datadir, "TVAC_PRISM3_dispersion_profile.npz")
+    assert os.path.exists(disp_file_path), f"Test file not found: {disp_file_path}"
+    disp_params = np.load(disp_file_path)
+    disp_dict = {'clocking_angle': disp_params['clocking_angle'],
+                'clocking_angle_uncertainty': disp_params['clocking_angle_uncertainty'],
+                'pos_vs_wavlen_polycoeff': disp_params['pos_vs_wavlen_polycoeff'],
+                'pos_vs_wavlen_cov' : disp_params['pos_vs_wavlen_cov'],
+                'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
+                'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
+    
+    disp_model = DispersionModel(disp_dict, pri_hdr = prhdr, ext_hdr = exthdr)
+    print(disp_model.data)
+    assert disp_model.clocking_angle == disp_dict.get('clocking_angle')
+    assert disp_model.clocking_angle_uncertainty == disp_dict.get('clocking_angle_uncertainty')
+    assert np.array_equal(disp_model.pos_vs_wavlen_polycoeff, disp_dict.get('pos_vs_wavlen_polycoeff'))
+    assert np.array_equal(disp_model.pos_vs_wavlen_cov, disp_dict.get('pos_vs_wavlen_cov'))
+    assert np.array_equal(disp_model.wavlen_vs_pos_polycoeff, disp_dict.get('wavlen_vs_pos_polycoeff'))
+    assert np.array_equal(disp_model.wavlen_vs_pos_cov, disp_dict.get('wavlen_vs_pos_cov'))
+    #disp_model_copy = disp_model.copy()
+    #assert disp_model.clocking_angle == disp_model_copy.clocking_angle
+    #disp_model_copy = disp_model.copy(copy_data = False)
+    #assert disp_model.clocking_angle == disp_model_copy.clocking_angle
+    #disp_model.save(datadir, disp_model.filename)
+    
+
 if __name__ == "__main__":
     test_psf_centroid()
+    test_dispersion_model()

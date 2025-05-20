@@ -2,11 +2,6 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image
-from corgidrp import mocks
-import os
-from astropy.io import fits
-from corgidrp.data import Dataset
-
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):

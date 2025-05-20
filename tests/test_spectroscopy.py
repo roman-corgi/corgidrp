@@ -135,6 +135,8 @@ def test_dispersion_fit(errortol_nm = 0.5, prism = 'PRISM3', test_product_path =
         ref_wavlen = 730.0
         ref_cfam = '3'
         bandpass = [675, 785]
+    disp_params = np.load(tvac_dispersion_params_fname)
+    print(disp_params)
     tvac_dispersion = spectroscopy.DispersionModel(tvac_dispersion_params_fname)
     pixel_pitch_um = 13.0 # EXCAM pixel pitch (microns)
 

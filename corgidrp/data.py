@@ -746,8 +746,8 @@ class SpectroscopyCentroidPSF(Image):
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
 
 
-        # if this is a new master flat, we need to bookkeep it in the header
-        # b/c of logic in the super.__init__, we just need to check this to see if it is a new masterflat
+        # if this is a new SpectroscopyCentroidPSF, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpectroscopyCentroidPSF 
         if ext_hdr is not None:
             if input_dataset is None:
                 raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
@@ -769,7 +769,103 @@ class SpectroscopyCentroidPSF(Image):
         self.yfit = self.data[:, 1]
 
 
-        
+class DispersionModel(Image):
+    """ 
+    Class for dispersion model parameter data structure
+
+    Args:
+        data_or_filepath (str or dict): either the filepath to the FITS file to read in OR the dictionary containing the dispersion data
+        pri_hdr (fits.Header): Primary header.
+        ext_hdr (fits.Header): Extension header.
+        input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
+    Attributes:
+        data (dict): dictionary containing the dispersion data
+        clocking_angle (float): Clocking angle of the dispersion axis, theta,
+        oriented in the direction of increasing wavelength, measured in degrees
+        counterclockwise from the positive x-axis on the EXCAM data array
+        (direction of increasing column index).
+        clocking_angle_uncertainty (float): Uncertainty of the dispersion axis
+        clocking angle in degrees.
+        pos_vs_wavlen_polycoeff (numpy.ndarray): Polynomial fit to the
+        source displacement on EXCAM along the dispersion axis as a function of
+        wavelength, relative to the source position at the band reference
+        wavelength (lambda_c = 730.0 nm for Band 3) in units of millimeters.
+        pos_vs_wavlen_cov (numpy.ndarray): Covariance matrix of the
+        polynomial coefficients
+        wavlen_vs_pos_polycoeff (numpy.ndarray): Polynomial fit to the
+        wavelength as a function of displacement along the dispersion axis on
+        EXCAM, relative to the source position at the Band 3 reference
+        wavelength (x_c at lambda_c = 730.0 nm) in units of nanometers. 
+        wavlen_vs_pos_cov (numpy.ndarray): Covariance matrix of the
+        polynomial coefficients
+        params_key (list): key names of the parameters
+    """
+    
+    params_key = ['clocking_angle', 'clocking_angle_uncertainty', 'pos_vs_wavlen_polycoeff', 'pos_vs_wavlen_cov', 'wavlen_vs_pos_polycoeff', 'wavlen_vs_pos_cov']
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+
+            # double check that this is actually a DispersionModel file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError("File that was loaded was not a DispersionModel file.")
+            if self.ext_hdr['DATATYPE'] != 'DispersionModel':
+                raise ValueError("File that was loaded was not a DispersionModel file.")
+        else:
+            if not isinstance(data_or_filepath, dict):
+                raise ValueError("Input should either be a dictionary or a filepath string")
+            if pri_hdr == None:
+                pri_hdr = fits.Header()
+            if ext_hdr == None:
+                ext_hdr = fits.Header()
+            ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.pri_hdr = pri_hdr
+            self.ext_hdr = ext_hdr
+            self.ext_hdr['DATATYPE'] = 'DispersionModel' # corgidrp specific keyword for saving to disk
+            # add to history
+            self.ext_hdr['HISTORY'] = "DispersionModel file created"
+            self.data = data_or_filepath
+            # use the start date for the filename by default
+            self.filedir = "."
+            self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['SCTSRT'])
+        #check which keys are available
+        for key in self.params_key:
+            if key not in self.data:
+                raise ValueError("parameter {0} is missing in the data").format(key)
+        # initialization data passed in
+        self.clocking_angle = self.data.get('clocking_angle')
+        self.clocking_angle_uncertainty = self.data.get('clocking_angle_uncertainty')
+        self.pos_vs_wavlen_polycoeff = np.array(self.data.get('pos_vs_wavlen_polycoeff'))
+        self.pos_vs_wavlen_cov = np.array(self.data.get('pos_vs_wavlen_cov'))
+        self.wavlen_vs_pos_polycoeff = np.array(self.data.get('wavlen_vs_pos_polycoeff'))
+        self.wavlen_vs_pos_cov = np.array(self.data.get('wavlen_vs_pos_cov'))
+
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
+       
 class NonLinearityCalibration(Image):
     """
     Class for non-linearity calibration files. Although it's not strictly an image that you might look at, it is a 2D array of data
