@@ -195,7 +195,7 @@ def Single_peakfit(xdata, ydata):
     Returns:
       float: sigma
     """
-    astart = np.max(ydata)
+    astart = np.nanmax(ydata)
     mustart = xdata[np.argmax(ydata)]
     sigmastart = 10
     sgaussinp = [astart, mustart, sigmastart]
@@ -567,7 +567,7 @@ def calibrate_kgain(dataset_kgain,
     averages_deviations_vector = np.column_stack((averages, np.abs(deviations_shot)))
     
     # Generate linearly spaced bins
-    signal_bins = np.linspace(np.min(averages), np.max(averages), signal_bins_N)
+    signal_bins = np.linspace(np.nanmin(averages), np.nanmax(averages), signal_bins_N)
     signal_bins = np.insert(signal_bins, 0, 0)  # Insert 0 at the beginning
     
     # Initialize containers for the results
@@ -611,8 +611,8 @@ def calibrate_kgain(dataset_kgain,
     # define bounds for linearity fit
     # lower bound indices should include as many data points as possible
     # upper bound indices should avoid nonlin region
-    lower_bound = np.min(np.where(compiled_binned_averages > min_val)[0])
-    upper_bound = np.max(np.where(compiled_binned_averages < max_val)[0])
+    lower_bound = np.nanmin(np.where(compiled_binned_averages > min_val)[0])
+    upper_bound = np.nanmax(np.where(compiled_binned_averages < max_val)[0])
     
     # Logarithmic transformation of specific array segments
     logged_averages = np.log10(compiled_binned_averages[lower_bound:upper_bound])

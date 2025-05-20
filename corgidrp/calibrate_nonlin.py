@@ -733,8 +733,8 @@ def calibrate_nonlin(dataset_nl,
                             corr_mean_signal_sorted, frac=lowess_frac)[:, 1]
         
         # find the min/max values of corrected measured means and append array
-        temp_min = np.min(corr_mean_signal_sorted)
-        temp_max = np.max(corr_mean_signal_sorted)
+        temp_min = np.nanmin(corr_mean_signal_sorted)
+        temp_max = np.nanmax(corr_mean_signal_sorted)
         
         if make_plot:
             # Plotting Signal vs. Relative Gain
