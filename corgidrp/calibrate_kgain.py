@@ -274,7 +274,7 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
 
 def calibrate_kgain(dataset_kgain, 
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
-                    make_plot=True,plot_outdir='figures', show_plot=False,
+                    make_plot=False,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
                     verbose=False, detector_regions=None, kgain_params=None):
     """
