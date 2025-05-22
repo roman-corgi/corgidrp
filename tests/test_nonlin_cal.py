@@ -273,25 +273,6 @@ def test_expected_results_time_sub():
     assert np.less(rms2,rms_test)
     assert np.less(rms3,rms_test)
     assert np.less(rms4,rms_test)
-  
-
-def teardown_module():
-    """
-    Run at end of tests. Deletes variables
-
-    """
-    global n_cal, n_mean
-    global init_nonlins_arr
-    global rms_test
-    global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
-    global dataset_nl
-
-    del n_cal, n_mean
-    del init_nonlins_arr
-    del rms_test
-    del exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
-    del dataset_nl
-
 
 def test_norm_val():
     """norm_val must be divisible by 20."""
