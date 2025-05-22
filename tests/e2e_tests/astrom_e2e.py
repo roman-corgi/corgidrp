@@ -206,8 +206,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
-    assert astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=0.5)
-    assert astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=0.5)
+    assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
 
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
