@@ -316,6 +316,8 @@ def test_nonlin_params():
                         nonlin_params=nonlin_params_bad)
  
 if __name__ == '__main__':
+    print('Running setup_module')
+    setup_module()
     print('Running test_nonlin_params')
     test_nonlin_params()
     print('Running test_expected_results_nom_sub')
@@ -330,4 +332,6 @@ if __name__ == '__main__':
     test_max_gt_min()
     print('Running test_psi')
     test_psi()
+    print('Running teardown_module')
+    teardown_module()
     print('Non-Linearity Calibration tests passed')
