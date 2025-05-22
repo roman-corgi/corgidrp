@@ -1,6 +1,6 @@
-.. _l2-analog-label:
+.. _l2b-analog-label:
 
-L2-Analog Data Product
+L2b-Analog Data Product
 ========================================
 
 
