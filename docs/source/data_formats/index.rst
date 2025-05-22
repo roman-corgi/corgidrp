@@ -27,5 +27,6 @@ Data Formats
    fluxcal.rst
    kgain.rst
    ndfilter.rst
+   nonlin.rst
    noisemaps.rst
    tpump.rst
