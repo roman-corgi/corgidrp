@@ -102,6 +102,9 @@ def setup_module():
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
         image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
+        #to test the correct handling of cosmic ray flags
+        if j == 1:
+            image_sim.dq[400, 200:300] = 128
         frame_list.append(image_sim)
 
     init_nonlins = []
@@ -135,6 +138,9 @@ def setup_module():
                 image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                     nonlin_flag=nonlin_flag)
                 image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            #to test the correct handling of cosmic ray flags
+            if idx_t == 1:
+                image_sim.dq[400, 200:300] = 128
             image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
             frame_list.append(image_sim)
     # Join all frames in a Dataset
@@ -335,6 +341,7 @@ def test_nonlin_params():
                         nonlin_params=nonlin_params_bad)
  
 if __name__ == '__main__':
+    setup_module()
     print('Running test_nonlin_params')
     test_nonlin_params()
     print('Running test_expected_results_nom_sub')
