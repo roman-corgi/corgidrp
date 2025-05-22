@@ -163,7 +163,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_dat = 8.7
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -361,7 +361,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_dat = 8.7
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,

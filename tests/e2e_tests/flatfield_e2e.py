@@ -131,7 +131,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
     ext_hdr['RN'] = 100
     ext_hdr['RN_ERR'] = 0
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain, to_disk=False)
@@ -312,7 +312,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     # add in keywords not provided by create_default_headers() (since L1 headers are simulated from that function)
     ext_hdr['RN'] = 100
     ext_hdr['RN_ERR'] = 0
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain, to_disk=False)
