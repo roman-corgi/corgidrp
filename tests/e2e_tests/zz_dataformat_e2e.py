@@ -589,7 +589,7 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    nonlin_data_file = os.path.join(thisfile_dir, "nonlin_and_kgain_output", "CGI_EXCAM_NLN_CAL0000051840.fits")
+    nonlin_data_file = os.path.join(thisfile_dir, "nonlin_and_kgain_output", "CGI_EXCAM_NLN_CAL0000055256.fits")
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
