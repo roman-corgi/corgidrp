@@ -150,24 +150,6 @@ def setup_module():
     min_write = 800
     max_write = 10000
 
-def teardown_module():
-    """
-    Runs at the end. Deletes variables
-    """
-    global n_cal, n_mean
-    global init_nonlins_arr
-    global rms_test
-    global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
-    global dataset_nl
-    global norm_val, min_write, max_write
-
-    del n_cal, n_mean
-    del init_nonlins_arr
-    del rms_test
-    del exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
-    del dataset_nl
-    del norm_val, min_write, max_write
-
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
     nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
@@ -273,6 +255,24 @@ def test_expected_results_time_sub():
     assert np.less(rms2,rms_test)
     assert np.less(rms3,rms_test)
     assert np.less(rms4,rms_test)
+
+def teardown_module():
+    """
+    Runs at the end of tests; deletes variables
+    """
+    global n_cal, n_mean
+    global init_nonlins_arr
+    global rms_test
+    global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
+    global dataset_nl
+    global norm_val, min_write, max_write
+
+    del n_cal, n_mean
+    del init_nonlins_arr
+    del rms_test
+    del exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
+    del dataset_nl
+    del norm_val, min_write, max_write
 
 def test_norm_val():
     """norm_val must be divisible by 20."""
