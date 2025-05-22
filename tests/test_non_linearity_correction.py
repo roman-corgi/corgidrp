@@ -1,6 +1,7 @@
 #A file to test the non-linearity correction, including a comparison with the II&T pipeline
 import os
 import glob
+import pickle
 import numpy as np
 import corgidrp.mocks as mocks
 import corgidrp.data as data
@@ -134,9 +135,14 @@ def test_non_linearity_correction():
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
 
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     non_linearity_correction.save(filename = test_non_linearity_path)
+
+    # check the nonlin can be pickled (for CTC operations)
+    pickled = pickle.dumps(non_linearity_correction)
+    pickled_nonlin = pickle.loads(pickled)
+    assert np.all((non_linearity_correction.data == pickled_nonlin.data) | np.isnan(non_linearity_correction.data))
 
     # import IPython; IPython.embed()
 
@@ -156,6 +162,28 @@ def test_non_linearity_correction():
 
     ######## perform non-linearity correction
     non_linearity_correction = data.NonLinearityCalibration(test_non_linearity_path)
+
+    # check the nonlin can be pickled (for CTC operations)
+    pickled = pickle.dumps(non_linearity_correction)
+    pickled_nonlin = pickle.loads(pickled)
+    assert np.all((non_linearity_correction.data == pickled_nonlin.data) | np.isnan(non_linearity_correction.data))
+
+    # set up values for testing flags and the value of the flag
+    non_linear_flag = 64
+    non_linear_pixel_value = 1e12
+
+    # seperate dataset to test flagging
+    flagged_dataset = nonlinear_dataset.copy()
+
+    # Inject a non-linear pixel and check that if it is flagged
+    flagged_dataset.all_data[0,0,0] = non_linear_pixel_value
+    flagged_dataset = l1_to_l2a.correct_nonlinearity(flagged_dataset, non_linearity_correction,threshold=non_linear_pixel_value-1)
+
+    assert flagged_dataset.all_dq[0,0,0] >= non_linear_flag # flagged_dataset.all_data[0,0,0] should be flagged
+    flagged_dataset.all_dq[0,0,0] = 0 # reset the flag
+
+    assert np.all(flagged_dataset.all_dq < non_linear_flag) # all other pixels should not be flagged 
+
     linear_dataset = l1_to_l2a.correct_nonlinearity(nonlinear_dataset, non_linearity_correction)
 
     #The data was generated with a ramp in the x-direction going from 10 to 65536
@@ -169,7 +197,7 @@ def test_non_linearity_correction():
     #We are happy if the relative correction is less than 1% [TBC]
     assert np.all(relative_correction < 1e-2)
 
-    
+
     #Let's test that this returns the same thing as the II&T pipeline
     linear_data_iit = nonlinear_dataset.all_data*get_relgains(nonlinear_dataset.all_data,emgain,input_non_linearity_path)
 

@@ -5,11 +5,12 @@ import astropy.io.fits as fits
 import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L2a_headers
 from corgidrp.data import Image, Dataset, DetectorParams
 import corgidrp.caldb as caldb
 from corgidrp.darks import build_trad_dark
 
+np.random.seed(123)
 
 data = np.ones([1024,1024]) * 2
 err = np.zeros([1024,1024])
@@ -19,11 +20,20 @@ err3 = np.ones([1,1024,1024]) * 0.5
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1
-prhd, exthd = create_default_headers()
+prhd, exthd = create_default_L2a_headers()
 errhd = fits.Header()
 errhd["CASE"] = "test"
 dqhd = fits.Header()
 dqhd["CASE"] = "test"
+
+data_3d = np.ones([2,1024,1024]) * 2
+err_3d = np.zeros([2,1024,1024])
+err1_3d = np.ones([2,1024,1024])
+err2_3d = err1_3d.copy()
+err3_3d = np.ones([2,1,1024,1024]) * 0.5
+dq_3d = np.zeros([2,1024,1024], dtype = int)
+dq1_3d = dq_3d.copy()
+dq1_3d[0,0,0] = 1
 
 old_err_tracking = corgidrp.track_individual_errors
 # use default parameters
@@ -51,11 +61,6 @@ def test_err_dq_creation():
     image1.save(filename='test_image1.fits')
 
     image2 = Image(data,pri_hdr = prhd, ext_hdr = exthd, err = err, dq = dq1, err_hdr = errhd, dq_hdr = dqhd)
-    print("data", image2.data)
-    print("error", image2.err)
-    print("dq", image2.dq)
-    print("err_hdr", image2.err_hdr)
-    print("dq_hdr", image2.dq_hdr)
     # test the user defined error and dq headers
     assert image2.err_hdr["CASE"] == errhd["CASE"]
     assert image2.dq_hdr["CASE"] == dqhd["CASE"]
@@ -117,6 +122,22 @@ def test_add_error_term():
     assert image_test.err_hdr["Layer_2"] == "error_noid"
     assert image_test.err_hdr["Layer_3"] == "error_nuts"
 
+    image_3d = Image(data_3d,prhd,exthd,err_3d,dq_3d,errhd,dqhd)
+    image_3d.add_error_term(err1_3d, "error_noid")
+    assert image_3d.err[0,0,0,0] == err_3d[0,0,0]
+    image_3d.add_error_term(err2_3d, "error_nuts")
+    assert image_3d.err.shape == (3,2,1024,1024)
+    assert image_3d.err[0,0,0,0] == np.sqrt(err1_3d[0,0,0]**2 + err2_3d[0,0,0]**2)
+    image_3d.save(filename="test_image3d.fits")
+
+    image_test_3d = Image('test_image3d.fits')
+    assert np.array_equal(image_test_3d.dq, dq_3d)
+    assert np.array_equal(image_test_3d.err, image_3d.err)
+    assert image_test_3d.err.shape == (3,2,1024,1024)
+    assert image_test_3d.err_hdr["Layer_1"] == "combined_error"
+    assert image_test_3d.err_hdr["Layer_2"] == "error_noid"
+    assert image_test_3d.err_hdr["Layer_3"] == "error_nuts"
+
 def test_err_dq_dataset():
     """
     test the behavior of the err and data arrays in the dataset
@@ -141,14 +162,11 @@ def test_get_masked_data():
     """
     image2 = Image('test_image2.fits')
     masked_data = image2.get_masked_data()
-    print("masked data", masked_data.data)
-    print("mask", masked_data.mask)
     assert masked_data.data[0,1] == 2
     #check that pixel 0,0 is masked and not considered
     assert masked_data.mask[0,0] == True
     assert masked_data.mean()==2
     assert masked_data.sum()==image2.data.sum()-2
-
 
 def test_err_adderr_notrack():
     """
@@ -171,7 +189,6 @@ def test_err_adderr_notrack():
     assert image1.err.shape == (1,1024,1024)
     assert image1.err[0,0,0] == np.sqrt(err1[0,0]**2 + err2[0,0]**2)
 
-
 def test_read_many_errors_notrack():
     """
     Check that we can successfully discard errors when reading in a frame with multiple errors
@@ -186,7 +203,6 @@ def test_read_many_errors_notrack():
         assert image_test.err_hdr["Layer_2"] == "error_noid"
     with pytest.raises(KeyError):
         assert image_test.err_hdr["Layer_3"] == "error_nuts"
-
 
 def test_err_array_sizes():
     '''
@@ -205,11 +221,15 @@ def test_err_array_sizes():
     dark_frame = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
 
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
+    # clean out directory of old cals .fits files
+    for filename in os.listdir(calibdir):
+        if filename.endswith(".fits"):
+            os.remove(os.path.join(calibdir, filename))
+            
     dark_filename = "sim_dark_calib.fits"
     if not os.path.exists(calibdir):
             os.mkdir(calibdir)
     dark_frame.save(filedir=calibdir, filename=dark_filename)
-
 
     ##### Scan the caldb ##### - This tests for previous bug that darks weren't in the right format.
     testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
@@ -220,8 +240,6 @@ def test_err_array_sizes():
     dark_frame.err = np.ones(dark_frame.data.shape)
     dark_frame.save(filedir=calibdir, filename=dark_filename)
     testcaldb.scan_dir_for_new_entries(calibdir)
-
-
 
 def teardown_module():
     """
@@ -234,7 +252,6 @@ def teardown_module():
 
     corgidrp.track_individual_errors = old_err_tracking
 
-
 # for debugging. does not run with pytest!!
 if __name__ == '__main__':
     test_err_array_sizes()
@@ -243,6 +260,10 @@ if __name__ == '__main__':
     test_add_error_term()
     test_err_dq_dataset()
     test_get_masked_data()
+    test_err_adderr_notrack()
+    test_read_many_errors_notrack()
+    test_err_array_sizes()
 
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))
+    os.remove('test_image3d.fits')

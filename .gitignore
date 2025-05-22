@@ -22,6 +22,8 @@ var/
 *.egg-info/
 .installed.cfg
 *.egg
+src/ 
+# II&T code for e2e tests may install in src/ if package by same name already installed in your env library
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -51,7 +53,7 @@ coverage.xml
 *.log
 
 # Sphinx documentation
-docs/_build/
+docs/source/_build/
 
 # PyBuilder
 target/
@@ -61,6 +63,9 @@ tests/simdata/*
 tests/walker_output/*
 tests/testcalib/*
 tests/e2e_tests/*/*.json
+tests/ops_output/*.json
+tests/test_data/L4_to_TDA_Inputs/*
+tests/e2e_tests/pc_sim_test_data/l2a/*.json
 
 # editor files
 .vscode/*
@@ -81,4 +86,5 @@ tests/e2e_tests/*/*.json
 figures/
 tests/figures/
 tests/e2e_tests/*/*.png
+tests/e2e_tests/*_output
 tests/test_data/simastrom/guesses.csv

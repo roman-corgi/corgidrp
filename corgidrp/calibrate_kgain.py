@@ -8,11 +8,10 @@ from scipy.optimize import curve_fit
 from corgidrp import check
 import corgidrp.data as data
 from corgidrp.data import Image
-from corgidrp.mocks import create_default_headers
 from corgidrp.detector import slice_section, detector_areas
 
 # Dictionary with constant kgain calibration parameters
-kgain_params= {
+kgain_params_default= {
 # ROI constants
 'rowroi1': 9,
 'rowroi2': 1000,
@@ -30,34 +29,30 @@ kgain_params= {
 'signal_bins_N': 400,
 }
 
-def check_kgain_params(
-    ):
-    """ Checks integrity of kgain parameters in the dictionary kgain_params. """
-    if 'offset_colroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
-    if 'offset_colroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+def check_kgain_params(kgain_params):
+    """ Checks integrity of kgain parameters in the dictionary kgain_params. 
+    
+    Args:
+        kgain_params (dict):  Dictionary of parameters used for calibrating the k gain.
+    """
+    
     if 'rowroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi1.')
     if 'rowroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rowroi2.')
     if 'colroi1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi1.')
     if 'colroi2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  colroi2.')
     if 'rn_bins1' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rn_bins1.')
     if 'rn_bins2' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  rn_bins2.')
     if 'max_DN_val' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  max_DN_val.')
     if 'signal_bins_N' not in kgain_params:
-        raise ValueError('Missing parameter in directory pointer YAML file.')
+        raise ValueError('Missing parameter:  signal_bins_N.')
 
-    if not isinstance(kgain_params['offset_colroi1'], (float, int)):
-        raise TypeError('offset_colroi1 is not a number')
-    if not isinstance(kgain_params['offset_colroi2'], (float, int)):
-        raise TypeError('offset_colroi2 is not a number')
     if not isinstance(kgain_params['rowroi1'], (float, int)):
         raise TypeError('rowroi1 is not a number')
     if not isinstance(kgain_params['rowroi2'], (float, int)):
@@ -279,40 +274,41 @@ def sigma_clip(data, sigma=2.5, max_iters=6):
 
 def calibrate_kgain(dataset_kgain, 
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
-                    make_plot=True,plot_outdir='figures', show_plot=False,
+                    make_plot=False,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
-                    verbose=False, detector_regions=None):
+                    verbose=False, detector_regions=None, kgain_params=None):
     """
-    Given an array of frame stacks for various exposure times, each sub-stack
-    having at least 5 illuminated pupil L1 SCI-size frames having the same 
-    exposure time. The frames are bias-subtracted, and in addition, if EM gain
-    is >1 for the input data for calibrate_kgain, EM gain division is also needed.
-    It also creates a mean pupil array from a separate stack of
-    frames of uniform exposure time. The mean pupil array is scaled to the mean
-    of each stack and statistics (mean and std dev) are calculated for bins from
-    the frames in it. kgain (e-/DN) is calculated from the means and variances
+    kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
     is plotted from the std dev and mean values from the bins. 
-    
+
     Args:
-      dataset_kgain (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
-        pupil L1 SCI frames (counts in DN) having a range of exp times.
-        datset_cal contains a set of subset of frames, and all subsets must have
-        the same number of frames, which is a minimum of 5. The frames in a subset
-        must all have the same exposure time. There must be at least 10 subsets 
-        (More than 20 sub-stacks recommended. The mean signal in the pupil region should 
-        span from about 100 to about 10000 DN.
-        In addition, dataset_kgain contains a set of at least 30 frames used to
-        build a mean frame. All the frames must have the same exposure time,
-        such that the net mean counts in the pupil region is a few thousand DN
-        (2000 to 4000 DN recommended;
-        notice that unity EM gain is recommended when k-gain is the primary desired
-        product, since it is known more accurately than non-unity values. This
-        mean frame is used to select pixels with similar illumination for
-        calculating variances (since the pupil illumination is not perfectly uniform).
-        All data must be obtained under the same positioning of the pupil
-        relative to the detector. These frames are identified with the kewyord
-        'OBSTYPE'='MNFRAME' (TBD). 
+      dataset_kgain (corgidrp.Dataset): The frames in the dataset are
+        bias-subtracted. The dataset contains frames belonging to two different
+        sets -- Mean frame and a large array of unity gain frames.
+        Mean frame: Unity gain frames with constant exposure time. These frames
+        are used to create a mean pupil image. The mean frame is used to select
+        pixels in each frame of the large array of unity gain frames (see next)
+        to calculate its mean signal. In general, it is expected that at least
+        30 frames or more will be taken for this set. In TVAC, 30 frames, each
+        with an exposure time of 5.0 sec were taken.
+        Large array of unity gain frames: Set of unity gain frames with subsets
+        of equal exposure times. Data for each subset should be taken sequentially:
+        Each subset must have at least 5 frames. All frames for a subset are taken
+        before moving to the next subset. Two of the subsets have the same (repeated)
+        exposure time. These two subsets are not contiguous: The first subset is
+        taken near the start of the data collection and the second one is taken
+        at the end of the data collection (see TVAC example below). The mean
+        signal of these two subsets is used to correct for illumination
+        brightness/sensor sensitivity drifts for all the frames in the whole set,
+        depending on when the frames were taken. There should be no other repeated
+        exposure time among the subsets. In TVAC, a total of 110 frames were taken
+        within this category. The 110 frames consisted of 22 subsets, each with
+        5 frames. All 5 frames had the same exposure time. The exposure times in
+        TVAC in seconds were, each repeated 5 times to collect 5 frames in each
+        subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
+        6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
+        13.846, 14.615, 15.385, and 1.538 (again).
       n_cal (int):
         Minimum number of sub-stacks used to calibrate K-Gain. The default value
         is 10.
@@ -343,12 +339,29 @@ def calibrate_kgain(dataset_kgain,
       detector_regions (dict): a dictionary of detector geometry properties.
         Keys should be as found in detector_areas in detector.py.  Defaults to
         that dictionary.
+      kgain_params (dict): (Optional) Dictionary containing row and col specifications
+        for the region of interest (indicated by 'rowroi1','rowroi2','colroi1',and 'colroi2').
+        The 'roi' needs one square region specified, and 'back' needs two square regions, 
+        where a '1' ending indicates the smaller of two values, and a '2' ending indicates the larger 
+        of two values.  The coordinates of the square region are specified by matching 
+        up as follows: (rowroi1, colroi1), (rowroi2, colroi1), etc. 
+        Also must contain:
+        'rn_bins1': lower bound of counts histogram for fitting or read noise
+        'rn_bins2': upper bound of counts histogram for fitting or read noise 
+        'max_DN_val': maximum DN value to be included in photon transfer curve (PTC)
+        'signal_bins_N': number of bins in the signal variables of PTC curve
+        Defaults to kgain_params_default included in this file.
     
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
         transfer curve (in e-/DN). The expected value of kgain for EXCAM with
         flight readout sequence should be between 8 and 9 e-/DN
     """
+    if kgain_params is None:
+        kgain_params = kgain_params_default
+        
+    check_kgain_params(kgain_params)
+
     if detector_regions is None:
         detector_regions = detector_areas
 
@@ -770,6 +783,7 @@ def calibrate_kgain(dataset_kgain,
     rn_err_DN = np.std(rn_gauss)
     rn_err_e = np.sqrt((kgain*rn_err_DN)**2 + (mean_rn_gauss_DN*kgain_err)**2)
     exthd['RN_ERR'] = rn_err_e
+    exthd['RN_UNIT'] = 'detected electrons'
     
     # Update history
     exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
@@ -784,7 +798,7 @@ def kgain_dataset_2_list(dataset):
     Casts the CORGIDRP Dataset object for K-gain calibration into a list of
     numpy arrays sharing the same exposure time. It also returns the list of
     unique EM values and set of exposure times used with each EM. Note: EM gain
-    is the commanded values: CMDGAIN.
+    is the commanded values: EMGAIN_C.
 
     This function also performs a set of tests about the data type and values in
     dataset.
@@ -831,8 +845,8 @@ def kgain_dataset_2_list(dataset):
             if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
                 raise Exception('Frames in the same data set must have the same exposure time')
 
-            if frame.pri_hdr['OBSTYPE'] == 'MNFRAME':
-                if frame.ext_hdr['CMDGAIN'] != 1:
+            if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
+                if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
             else:
@@ -850,7 +864,7 @@ def kgain_dataset_2_list(dataset):
                 if isinstance(datetime, str) is False:
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
-                em_gain = frame.ext_hdr['CMDGAIN']
+                em_gain = frame.ext_hdr['EMGAIN_C']
                 if em_gain < 1:
                     raise Exception('Commanded EM gain must be >= 1')
                 em_gains.append(em_gain)
@@ -858,11 +872,11 @@ def kgain_dataset_2_list(dataset):
                     try: # if EM gain measured directly from frame TODO change hdr name if necessary
                         gains.append(frame.ext_hdr['EMGAIN_M'])
                     except:
-                        try: # use applied EM gain if available
+                        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
                             gains.append(frame.ext_hdr['EMGAIN_A'])
-                        except: # use commanded gain otherwise
-                            gains.append(frame.ext_hdr['CMDGAIN'])
-                    record_gain = False
+                        else: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['EMGAIN_C'])
+                        record_gain = False
                 
         # Calibration data may have different subsets
         if len(sub_stack) != 0:

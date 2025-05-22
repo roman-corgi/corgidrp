@@ -1,10 +1,12 @@
+import re
 import os
 import glob
+import pickle
 import numpy as np
 # from corgidrp.mocks import generate_mock_pump_trap_data
 import corgidrp.mocks as mocks
 from corgidrp.detector import imaging_area_geom
-from corgidrp.data import Dataset
+from corgidrp.data import Dataset, TrapCalibration
 from corgidrp.l1_to_l2a import prescan_biassub
 from corgidrp.l2a_to_l2b import em_gain_division
 from corgidrp.pump_trap_calibration import tpump_analysis, tau_temp, rebuild_dict
@@ -29,6 +31,7 @@ def test_tpump_analysis():
     #Generate the mock data:
     test_data_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "pump_trap_data_test")
     metadata_file = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data', "metadata_test.yaml")
+    output_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'test_data')
     print("Generating mock data")
     mocks.generate_mock_pump_trap_data(test_data_dir, metadata_file)
     print("Done generating mock data")
@@ -105,6 +108,10 @@ def test_tpump_analysis():
                         cs_fit_thresh = cs_fit_thresh, 
                         input_T=input_T,
                         bins_E=bins_E, bins_cs=bins_cs)
+    # filename check
+    test_filename = emgain_divided_dataset.frames[-1].filename.split('.fits')[0] + '_TPU_CAL.fits'
+    test_filename = re.sub('_L[0-9].', '', test_filename)
+    assert tpump_calibration.filename == test_filename
 
     #Extract the extra info. 
     unused_fit_data = tpump_calibration.ext_hdr['unfitdat']
@@ -193,7 +200,19 @@ def test_tpump_analysis():
             assert(np.isclose(tr[1], 0.28, atol=0.05))
             assert(np.isclose(tr[2], 12e-15, rtol=0.1))
         
-    
+
+    # check they can be pickled (for CTC operations)
+    pickled = pickle.dumps(tpump_calibration)
+    pickled_trap = pickle.loads(pickled)
+    assert np.all((tpump_calibration.data == pickled_trap.data) | np.isnan(tpump_calibration.data)) 
+
+    # save to disk and reload and try to pickle again
+    tpump_calibration.save(filedir=output_dir, filename="trap_cal.fits")
+    tpump_calibration_2 = TrapCalibration(os.path.join(output_dir, "trap_cal.fits"))
+    pickled = pickle.dumps(tpump_calibration_2)
+    pickled_trap = pickle.loads(pickled)
+    assert np.all((tpump_calibration.data == pickled_trap.data) | np.isnan(tpump_calibration.data)) # check against the original
+
     
 if __name__ == "__main__":
     test_tpump_analysis()

@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import pytest
 import corgidrp
 import corgidrp.caldb as caldb
@@ -16,10 +17,18 @@ if not os.path.exists(calibdir):
 testcaldb_filepath = os.path.join(calibdir, "test_caldb.csv")
 
 # make some fake test data to use
+np.random.seed(456)
 dark_dataset = mocks.create_dark_calib_files()
 master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
 # save master dark to disk to be loaded later
 master_dark.save(filedir=calibdir, filename="mockdark.fits")
+
+def test_caldb_init():
+    """
+    Tests that caldb has been initialized. It has to be if it's being imported.
+    """
+    assert caldb.initialized
+
 
 def test_caldb_create_default():
     """
@@ -163,4 +172,9 @@ def test_caldb_scan():
     os.remove(testcaldb_filepath)
 
 if __name__ == "__main__":
+    test_caldb_init()
     test_get_calib()
+    test_caldb_create_default()
+    test_caldb_custom_filepath()
+    test_caldb_insert_and_remove()
+    test_caldb_scan()

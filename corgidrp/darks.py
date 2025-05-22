@@ -1,4 +1,5 @@
 import numpy as np
+import re
 import warnings
 from astropy.io import fits
 
@@ -105,14 +106,14 @@ def mean_combine(image_list, bpmap_list, err=False):
             sum_im += masked
         map_im += (im_m.mask == False).astype(int)
 
-    if err: # sqrt of sum of sigma**2 terms
-        sum_im = np.sqrt(sum_im)
-
     # Divide sum_im by map_im only where map_im is not equal to 0 (i.e.,
     # not masked).
     # Where map_im is equal to 0, set combined_im to zero
     comb_image = np.divide(sum_im, map_im, out=np.zeros_like(sum_im),
                             where=map_im != 0)
+   
+    if err: # (sqrt of sum of sigma**2 terms)/sqrt(n)
+        comb_image = np.sqrt(comb_image)
 
     # Mask any value that was never mapped (aka masked in every frame)
     comb_bpmap = (map_im == 0).astype(int)
@@ -133,13 +134,14 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have been desmeared if desmearing is appropriate.  Under normal
-    circumstances, darks should not be desmeared.  The only time desmearing
-    would be useful is in the unexpected case that, for example,
-    dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge, 
-    fixed-pattern noise, and read noise.
-    - have been divided by EM gain.
+    - have been divided by EM gain
+    - have NOT been desmeared. Darks should not be desmeared.  The only component 
+    of dark frames that would be subject to a smearing effect is dark current 
+    since it linearly increases with time, so the extra row read time affects 
+    the dark current per pixel.  However, illuminated images
+    would also contain this smeared dark current, so dark subtraction should 
+    remove this smeared dark current (and then desmearing may be applied to the 
+    processed image if appropriate).  
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -187,12 +189,12 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     if detector_regions is None:
             detector_regions = detector_areas
 
-    _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
     # getting telemetry rows to ignore in fit
-    telem_rows_start = detector_params.params['telem_rows_start']
-    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows_start = detector_params.params['TELRSTRT']
+    telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
 
     frames = []
@@ -246,12 +248,14 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     prihdr = dataset.frames[0].pri_hdr
     exthdr = dataset.frames[0].ext_hdr
     errhdr = dataset.frames[0].err_hdr
-    exthdr['NAXIS1'] = data.shape[0]
-    exthdr['NAXIS2'] = data.shape[1]
+    exthdr['NAXIS1'] = data.shape[1]
+    exthdr['NAXIS2'] = data.shape[0]
     exthdr['DATATYPE'] = 'Dark'
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
-
+    master_dark.ext_hdr['BUNIT'] = 'Detected Electrons'
+    master_dark.err_hdr['BUNIT'] = 'Detected Electrons'
+    master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps)'
     return master_dark
 
 
@@ -269,13 +273,13 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     - have had masks made for cosmic rays
     - have been corrected for nonlinearity
     - have been converted from DN to e-
-    - have been desmeared if desmearing is appropriate.  Under normal
-    circumstances, darks should not be desmeared.  The only time desmearing
-    would be useful is in the unexpected case that, for example,
-    dark current is so high that it stands far above other noise that is
-    not smeared upon readout, such as clock-induced charge, 
-    fixed-pattern noise, and read noise.
-    - have been divided by EM gain.
+    - have NOT been desmeared. Darks should not be desmeared.  The only component 
+    of dark frames that would be subject to a smearing effect is dark current 
+    since it linearly increases with time, so the extra row read time affects 
+    the dark current per pixel.  However, illuminated images
+    would also contain this smeared dark current, so dark subtraction should 
+    remove this smeared dark current (and then desmearing may be applied to the 
+    processed image if appropriate).  
 
     Also, add_photon_noise() should NOT have been applied to the frames in
     dataset.  And note that creation of the
@@ -316,14 +320,43 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         Defaults to None, in which case detector_areas from detector.py is used.
 
     Returns:
+    noise_maps : corgidrp.data.DetectorNoiseMaps instance
+        Includes a 3-D stack of frames for the data, err, and the dq.
+        input data: np.stack([FPN_map, CIC_map, DC_map])
+        input err:  np.stack([FPN_std_map, C_std_map_combo, DC_std_map])
+        FPN_std_map, C_std_map_combo, and DC_std_map contain the fitting error, but C_std_map_combo includes
+        also the statistical error across the frames and accounts for any err
+        content of the individual input frames.  We include it in the CIC part
+        since it will not be scaled by EM gain or exposure time when the master
+        dark is created.  In all the err, masked pixels are accounted for in
+        the calculations.
+        input dq:   np.stack([output_dq, output_dq, output_dq])
+        unreliable_pix_map is used for the
+        output Dark's dq after assigning these pixels a flag value of 256.
+        They should have large err values.
+        The pixels that are masked for EVERY frame in all sub-stacks
+        but 3 (or less) are assigned a flag value of
+        1, which falls under the category of "Bad pixel - unspecified reason".
+        These pixels would have no reliability for dark subtraction.
+
+        The header info is taken from that of
+        one of the frames from the input datasets and can be changed via a call
+        to the DetectorNoiseMaps class if necessary.  The bias offset info is
+        found in the exthdr under these keys:
+        'B_O': bias offset
+        'B_O_ERR': bias offset error
+        'B_O_UNIT': DN
+
+
+    Info on intermediate products in this function:
     FPN_map : array-like (full frame)
-        A per-pixel map of fixed-pattern noise (in deteceted EM electrons).  Any negative values
+        A per-pixel map of fixed-pattern noise (in deteceted electrons).  Any negative values
         from the fit are made positive in the end.
     CIC_map : array-like (full frame)
-        A per-pixel map of EXCAM clock-induced charge (in deteceted EM electrons). Any negative
+        A per-pixel map of EXCAM clock-induced charge (in deteceted electrons). Any negative
         values from the fit are made positive in the end.
     DC_map : array-like (full frame)
-        A per-pixel map of dark current (in deteceted EM electrons/s). Any negative values
+        A per-pixel map of dark current (in deteceted electrons/s). Any negative values
         from the fit are made positive in the end.
     bias_offset : float
         The median for the residual FPN+CIC in the region where bias was
@@ -335,22 +368,22 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         The lower bound of bias offset, accounting for error in input datasets
         and the fit.
     FPN_image_map : array-like (image area)
-        A per-pixel map of fixed-pattern noise in the image area (in deteceted EM electrons).
+        A per-pixel map of fixed-pattern noise in the image area (in deteceted electrons).
         Any negative values from the fit are made positive in the end.
     CIC_image_map : array-like (image area)
         A per-pixel map of EXCAM clock-induced charge in the image area
-        (in deteceted EM electrons). Any negative values from the fit are made positive in the end.
+        (in deteceted electrons). Any negative values from the fit are made positive in the end.
     DC_image_map : array-like (image area)
-        A per-pixel map of dark current in the image area (in deteceted EM electrons/s).
+        A per-pixel map of dark current in the image area (in deteceted electrons/s).
         Any negative values from the fit are made positive in the end.
     FPNvar : float
-        Variance of fixed-pattern noise map (in deteceted EM electrons).
+        Variance of fixed-pattern noise map (in deteceted electrons).
     CICvar : float
-        Variance of clock-induced charge map (in deteceted EM electrons).
+        Variance of clock-induced charge map (in deteceted electrons).
     DCvar : float
-        Variance of dark current map (in deteceted EM electrons).
+        Variance of dark current map (in deteceted electrons).
     read_noise : float
-        Read noise estimate from the noise profile of a mean frame (in deteceted EM electrons).
+        Read noise estimate from the noise profile of a mean frame (in deteceted electrons).
         It's read off from the sub-stack with the lowest product of EM gain and
         frame time so that the gained variance of C and D is comparable to or
         lower than read noise variance, thus making reading it off doable.
@@ -388,7 +421,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         output Dark's dq after assigning these pixels a flag value of 256.
         They should have large err values.
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 4 (or less) are assigned a flag value of
+        but 3 (or less) are assigned a flag value of
         1, which falls under the category of "Bad pixel - unspecified reason".
         These pixels would have no reliability for dark subtraction.
     FPN_std_map : array-like (full frame)
@@ -400,36 +433,17 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     stacks_err : array-like (full frame)
         Standard error per pixel coming from the frames in datasets used to
         calibrate the noise maps.
-    noise_maps : corgidrp.data.DetectorNoiseMaps instance
-        Includes a 3-D stack of frames for the data, err, and the dq.
-        input data: np.stack([FPN_map, CIC_map, DC_map])
-        input err:  np.stack([FPN_std_map, C_std_map_combo, DC_std_map])
-        All 3 of these include the fitting error, but C_std_map_combo includes
-        also the statistical error across the frames and accounts for any err
-        content of the individual input frames.  We include it in the CIC part
-        since it will not be scaled by EM gain or exposure time when the master
-        dark is created.  In all the err, masked pixels are accounted for in
-        the calculations.
-        input dq:   np.stack([output_dq, output_dq, output_dq])
-
-        The header info is taken from that of
-        one of the frames from the input datasets and can be changed via a call
-        to the DetectorNoiseMaps class if necessary.  The bias offset info is
-        found in the exthdr under these keys:
-        'B_O': bias offset
-        'B_O_ERR': bias offset error
-        'B_O_UNIT': DN
     """
     if detector_regions is None:
             detector_regions = detector_areas
 
-    datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    datasets, _ = dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(datasets) <= 3:
         raise CalDarksLSQException('Number of sub-stacks in datasets must '
                 'be more than 3 for proper curve fit.')
     # getting telemetry rows to ignore in fit
-    telem_rows_start = detector_params.params['telem_rows_start']
-    telem_rows_end = detector_params.params['telem_rows_end']
+    telem_rows_start = detector_params.params['TELRSTRT']
+    telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
 
     EMgain_arr = np.array([])
@@ -458,13 +472,13 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         try: # if EM gain measured directly from frame TODO change hdr name if necessary
             EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
         except:
-            try: # use applied EM gain if available
+            if datasets[i].frames[0].ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
                 EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_A'])
-            except: # use commanded gain otherwise
-                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['CMDGAIN'])
+            else: # use commanded gain otherwise
+                EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_C'])
         exptime = datasets[i].frames[0].ext_hdr['EXPTIME']
-        cmdgain = datasets[i].frames[0].ext_hdr['CMDGAIN']
-        kgain = datasets[i].frames[0].ext_hdr['KGAIN']
+        cmdgain = datasets[i].frames[0].ext_hdr['EMGAIN_C']
+        kgain = datasets[i].frames[0].ext_hdr['KGAINPAR']
         exptime_arr = np.append(exptime_arr, exptime)
         kgain_arr = np.append(kgain_arr, kgain)
 
@@ -514,7 +528,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # flag value of 256; unreliable pixels, large err
     output_dq = (unreliable_pix_map >= len(datasets)-3).astype(int)*256
     # flag value of 1 for those that are masked all the way through for all
-    # but 4 (or less) stacks; this overwrites the flag value of 256 that was assigned to
+    # but 3 (or less) stacks; this overwrites the flag value of 256 that was assigned to
     # these pixels in previous line
     unfittable_ind = np.where(unfittable_pix_map >= len(datasets)-3)
     output_dq[unfittable_ind] = 1
@@ -569,7 +583,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # input data error comes from .err arrays; could use this for error bars
     # in input data for weighted least squares, but we'll just simply get the
     # std error and add it in quadrature to least squares fit standard dev
-    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0))/len(mean_err_stack)
+    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0)/np.sqrt(len(mean_err_stack)))
 
     # matrix to be used for least squares and covariance matrix
     X = np.array([np.ones([len(EMgain_arr)]), EMgain_arr, EMgain_arr*exptime_arr]).T
@@ -712,13 +726,12 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     exthdr['EXPTIME'] = None
     if 'EMGAIN_M' in exthdr.keys():
         exthdr['EMGAIN_M'] = None
-    exthdr['CMDGAIN'] = None
-    exthdr['KGAIN'] = None
-    exthdr['BUNIT'] = 'detected EM electrons'
-    exthdr['HIERARCH DATA_LEVEL'] = None
+    exthdr['EMGAIN_C'] = None
+    exthdr['KGAINPAR'] = None
+    exthdr['BUNIT'] = 'Detected Electrons'
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'Detected Electrons'
 
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
 
@@ -736,8 +749,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
                            input_err, input_dq, err_hdr=err_hdr)
     
-    l2a_data_filename = dataset.copy()[0].filename
-    noise_maps.filename =  l2a_data_filename[:24] + '_DetectorNoiseMaps.fits'
+    l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
+    noise_maps.filename =  l2a_data_filename + '_DNM_CAL.fits'
+    noise_maps.filename = re.sub('_L[0-9].', '', noise_maps.filename)
 
     return noise_maps
 
@@ -752,7 +766,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         in the course of acquisition, alignment, and HOWFSC.  Better to take data
         sets that don't vary.
 
-        Output is a bias-subtracted, gain-divided master dark in electrons.
+        Output is a bias-subtracted, gain-divided master dark in detected electrons.
         (Bias is inherently subtracted as we don't use it as
         one of the building blocks to assemble the dark frame.)
 
@@ -789,16 +803,17 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         Fd = noise_maps.FPN_map
         Dd = noise_maps.DC_map
         Cd = noise_maps.CIC_map
-        _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+        _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
         try: # use measured EM gain if available TODO change hdr name if necessary
             g = dataset.frames[0].ext_hdr['EMGAIN_M']
         except:
-            try: # use applied EM gain if available
+            g = dataset.frames[0].ext_hdr['EMGAIN_A']
+            if g > 0: # use applied EM gain if available
                 g = dataset.frames[0].ext_hdr['EMGAIN_A']
-            except: # otherwise, use commanded EM gain
-                g = dataset.frames[0].ext_hdr['CMDGAIN']
+            else: # otherwise, use commanded EM gain
+                g = dataset.frames[0].ext_hdr['EMGAIN_C']
         t = dataset.frames[0].ext_hdr['EXPTIME']
 
         rows = detector_regions['SCI']['frame_rows']
@@ -838,16 +853,12 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         prihdr = noise_maps.pri_hdr
         exthdr = noise_maps.ext_hdr
         errhdr = noise_maps.err_hdr
-        exthdr['NAXIS1'] = Fd.shape[0]
-        exthdr['NAXIS2'] = Fd.shape[1]
+        exthdr['NAXIS1'] = Fd.shape[1]
+        exthdr['NAXIS2'] = Fd.shape[0]
         exthdr['DATATYPE'] = 'Dark'
-        exthdr['CMDGAIN'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
+        exthdr['EMGAIN_C'] = g # reconciling measured vs applied vs commanded not important for synthesized product; this is simply the user-specified gain
         exthdr['EXPTIME'] = t
-        # wipe clean so that the proper documenting occurs for dark
-        exthdr.pop('DRPNFILE')
-        exthdr.pop('HISTORY')
-        # this makes the filename of the dark have "_DetectorNoiseMaps_Dark" in
-        # the name so that it is known that this Dark came from noise maps
+        # one can check HISTORY to see that this Dark was synthesized from noise maps
         input_data = [noise_maps]
         md_data = Fd/g + t*Dd + Cd
         md_noise = np.sqrt(Ferr**2/g**2 + t**2*Derr**2 + Cerr**2)
@@ -857,5 +868,5 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
 
         master_dark = Dark(md_data, prihdr, exthdr, input_data, md_noise, FDCdq,
                         errhdr)
-
+        
         return master_dark

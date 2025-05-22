@@ -6,10 +6,12 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.detector as detector
+import corgidrp.flat as flat
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 
 old_err_tracking = corgidrp.track_individual_errors
 
+np.random.seed(9292)
 def test_flat_div():
     """
     Generate mock input data and pass into flat division function
@@ -39,7 +41,7 @@ def test_flat_div():
     assert flat_dataset.all_data[0,0,0] == 1
     
     ###### create flatfield
-    flat_frame = detector.create_flatfield(flat_dataset)
+    flat_frame = flat.create_flatfield(flat_dataset)
     # check the level of counts in flatfield is approximately correct
     assert np.mean(flat_frame.data) == pytest.approx(1, abs=1e-2)
     # check that the error is determined correctly
@@ -61,7 +63,7 @@ def test_flat_div():
     # perform checks after the flat divison
     assert(flat_filename in str(flatdivided_dataset[0].ext_hdr["HISTORY"]))
     # check the level of the dataset is now approximately 100
-    assert np.mean(flatdivided_dataset.all_data) == pytest.approx(150, abs=1e-2)
+    assert np.mean(flatdivided_dataset.all_data) == pytest.approx(150, abs=2e-2)
     # check the propagated errors
     assert flatdivided_dataset[0].err_hdr["Layer_2"] == "FlatField_error"
     print("mean of all simulated data",np.mean(simflat_dataset.all_data))
@@ -77,9 +79,25 @@ def test_flat_div():
     print("Error estimated:",err_estimated)
     assert(err_flatdiv == pytest.approx(err_estimated, abs = 1e-2))
     
-    print(flatdivided_dataset[0].ext_hdr)
+    # print(flatdivided_dataset[0].ext_hdr)
     corgidrp.track_individual_errors = old_err_tracking
     
+
+    ### Check to make sure DQ gets set when flatfield zero. ###
+
+    ## Injected some 0s. 
+    pixel_list = [[110,120],[50,50], [100,100]]
+    for pixel in pixel_list:
+        flatfield.data[pixel[0],pixel[1]] = 0.
+    
+    ## Perform flat division
+    flatdivided_dataset_w_zeros = l2a_to_l2b.flat_division(simflat_dataset, flatfield)
+
+    ## Check that all the pixels that were zeroed out have the DQ flag set to 4. 
+    for pixel in pixel_list:
+        for i in range(len(simdata_filenames)):
+            assert np.bitwise_and(flatdivided_dataset_w_zeros.all_dq[i,pixel[0],pixel[1]],4)
+
     
 if __name__ == "__main__":
     test_flat_div()

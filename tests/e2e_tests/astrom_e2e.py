@@ -1,10 +1,10 @@
 import argparse
 import os
+import glob
 import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
-import astropy.io.ascii as ascii
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -14,12 +14,40 @@ import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+def fix_headers_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Fixes TVAC headers to be consistent with flight headers. 
+    Writes headers back to disk
+
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Fixing TVAC headers")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        exthdr = fits_file[1].header
+        # Adjust VISTYPE
+        prihdr['OBSNUM'] = prihdr['OBSID']
+        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        exthdr['ISPC'] = False
+    # exthdr['KGAINPAR'] = exthdr['KGAIN']
+        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        prihdr['PHTCNT'] = False
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
+
 @pytest.mark.e2e
-def test_astrom_e2e(tvacdata_path, e2eoutput_path):
+def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location
-    l1_datadir = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "L1")
-    processed_cal_path = os.path.join(tvacdata_path, "TV-36_Coronagraphic_Data", "Cals")
-    noise_characterization_path = os.path.join(tvacdata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
+    l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
+    processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
+    noise_characterization_path = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
 
     # make output directory if needed
     astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_output")
@@ -55,7 +83,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     for dark in os.listdir(noise_characterization_path):
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
-            hdulist[0].header['OBSTYPE'] = "ASTROM"
+            hdulist[0].header['VISTYPE'] = "BORESITE"
             # setting SNR to ~250 (arbitrary SNR)
             scaled_image = ((250 * noise_rms) / np.max(image_sources[0].data)) * image_sources[0].data
             scaled_image = scaled_image.astype(type(dark_dat[0][0]))
@@ -66,23 +94,29 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
                     hdulist[0].header[key] = image_sources[0].pri_hdr[key]
 
             for ext_key in image_sources[0].ext_hdr:
-                if ext_key not in hdulist[1].header:
+                if ext_key == "HISTORY":
+                    for item in image_sources[0].ext_hdr[ext_key]:
+                        hdulist[1].header.add_history(item)
+                elif ext_key not in hdulist[1].header:
                     hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
 
             # save to the data dir in the output directory
-            hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'_astrom.fits'), overwrite=True)
+            hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'.fits'), overwrite=True)
 
     # define the raw science data to process
     ## replace w my raw data sets
     sim_data_filelist = [os.path.join(rawdata_dir, f) for f in os.listdir(rawdata_dir)] # full paths to simulated data
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
 
+    # update headers of TVAC data
+    fix_headers_for_tvac(sim_data_filelist)
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_headers()
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -117,7 +151,7 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected EM electrons'
+    err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -164,11 +198,16 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     expected_northangle = 45
     target = (80.553428801, -69.514096821)
 
-    astrom_cal = data.AstrometricCalibration(os.path.join(astrom_cal_outputdir, 'AstrometricCalibration.fits'))
+    astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_AST_CAL.fits'))[0])
+
+    # check that the astrometric calibration filename is based on the last file in the input file list
+    expected_last_filename = sim_data_filelist[-1].split('L1_')[-1].split('.fits')[0]
+    assert astrom_cal.filename.split('L2b')[-1] == expected_last_filename + '_AST_CAL.fits'
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
     assert astrom_cal.platescale == pytest.approx(expected_platescale, abs=0.5)
+
     assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=0.05)
 
     # check that the center is correct within 3 [mas]
@@ -177,16 +216,18 @@ def test_astrom_e2e(tvacdata_path, e2eoutput_path):
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
 
+    this_caldb.remove_entry(astrom_cal)
+
 if __name__ == "__main__":
-    tvacdata_dir = "/Users/macuser/Roman/corgi_contributions/Callibration_Notebooks/TVAC"
+    e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")
-    ap.add_argument("-tvac", "--tvacdata_dir", default=tvacdata_dir,
+    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
-    tvacdata_dir = args.tvacdata_dir
+    e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_astrom_e2e(tvacdata_dir, outputdir)
+    test_astrom_e2e(e2edata_dir, outputdir)

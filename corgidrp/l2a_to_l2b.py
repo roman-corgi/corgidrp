@@ -1,5 +1,6 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
+import copy
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas
@@ -21,10 +22,11 @@ def add_photon_noise(input_dataset):
         try: # use measured gain if available TODO change hdr name if necessary
             em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
         except:
-            try: # use EM applied EM gain if available
-                em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_A"]
-            except: # otherwise use commanded EM gain
-                em_gain = phot_noise_dataset[i].ext_hdr["CMDGAIN"]
+            em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
+            if em_gain > 0: # use EM applied EM gain if available
+                em_gain = em_gain
+            else: # otherwise use commanded EM gain
+                em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
         phot_err = np.sqrt(frame.data)
         #add excess noise in case of em_gain
         if em_gain > 1:
@@ -56,7 +58,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     Returns:
         corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
-    _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'CMDGAIN', 'KGAIN'])
+    _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
 
@@ -81,10 +83,14 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
             outputdir = '.' #current directory
         dark.save(filedir=outputdir)
     elif type(dark) is data.Dark:
-       # In this case, the Dark loaded in should already match the arry dimensions
-       # of input_dataset, specified by full_frame argument of build_trad_dark
-       # when this Dark was built
-       pass
+        if 'PC_STAT' in dark.ext_hdr:
+            if dark.ext_hdr['PC_STAT'] != 'analog master dark':
+                raise Exception('The input \'dark\' is a photon-counted dark and cannot be used in the dark_subtraction step function, which is intended for analog frames.')
+        # In this case, the Dark loaded in should already match the arry dimensions
+        # of input_dataset, specified by full_frame argument of build_trad_dark
+        # when this Dark was built
+        if (dark.ext_hdr['EXPTIME'], dark.ext_hdr['EMGAIN_C'], dark.ext_hdr['KGAINPAR']) != unique_vals[0]:
+            raise Exception('Dark should have the same EXPTIME, EMGAIN_C, and KGAINPAR as input_dataset.')
     else:
         raise Exception('dark type should be either corgidrp.data.Dark or corgidrp.data.DetectorNoiseMaps.')
 
@@ -105,7 +111,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     history_msg = "Dark subtracted using dark {0}.  Units changed from detected electrons to photoelectrons.".format(dark.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"photoelectrons"})
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"Photoelectrons"})
 
     return darksub_dataset
 
@@ -128,6 +134,12 @@ def flat_division(input_dataset, flat_field):
     #Divide by the master flat
     flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
 
+    #Find where the flat_field is 0 and set a DQ flag: 
+    where_zero = np.where(flat_field.data == 0)
+    flatdiv_dq = copy.deepcopy(flatdiv_dataset.all_dq)
+    for i in range(len(flatdiv_dataset)):
+       flatdiv_dq[i][where_zero] = np.bitwise_or(flatdiv_dataset[i].dq[where_zero], 4)
+
     # propagate the error of the master flat frame
     if hasattr(flat_field, "err"):
         flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
@@ -138,7 +150,7 @@ def flat_division(input_dataset, flat_field):
     history_msg = "Flat calibration done using Flat field {0}".format(flat_field.filename)
 
     # update the output dataset with this new flat calibrated data and update the history
-    flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube)
+    flatdiv_dataset.update_after_processing_step(history_msg,new_all_data=flatdiv_cube, new_all_dq = flatdiv_dq)
 
     return flatdiv_dataset
 
@@ -178,28 +190,37 @@ def frame_select(input_dataset, bpix_frac=1., allowed_bpix=0, overexp=False, tt_
                 reject_flags[i] += 1
                 reject_reasons[i].append("bad pix frac {0:.5f} > {1:.5f}"
                                          .format(frame_badpix_frac, bpix_frac))
+        frame.ext_hdr['FRMSEL01'] = (bpix_frac, "Bad Pixel Fraction < This Value. Doesn't include DQflags summed to {0}".format(allowed_bpix)) # record selection criteria
+
         if overexp:
             if frame.ext_hdr['OVEREXP']:
                 reject_flags[i] += 2 # use distinct bits in case it's useful
                 reject_reasons[i].append("OVEREXP = T")
+        frame.ext_hdr['FRMSEL02'] = (overexp, "Are we selecting on the OVEREXP flag?") # record selection criteria
+
         if tt_rms_thres is not None:
-            if frame.ext_hdr['RESZ2RMS'] > tt_rms_thres:
+            if frame.ext_hdr['Z2VAR'] > tt_rms_thres:
                 reject_flags[i] += 4 # use distinct bits in case it's useful
-                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
-                                         .format(frame.ext_hdr['RESZ2RMS'], tt_rms_thres))
-            if frame.ext_hdr['RESZ3RMS'] > tt_rms_thres:
+                reject_reasons[i].append("tip rms (Z2VAR) {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['Z2VAR'], tt_rms_thres))
+            if frame.ext_hdr['Z3VAR'] > tt_rms_thres:
                 reject_flags[i] += 8 # use distinct bits in case it's useful
-                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
-                                         .format(frame.ext_hdr['RESZ3RMS'], tt_rms_thres))
+                reject_reasons[i].append("tilt rms (Z3VAR) {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['Z3VAR'], tt_rms_thres))
+        frame.ext_hdr['FRMSEL03'] = (tt_rms_thres, "tip rms (Z2VAR) threshold") # record selection criteria
+        frame.ext_hdr['FRMSEL04'] = (tt_rms_thres, "tilt rms (Z3VAR) threshold") # record selection criteria
+        
         if tt_bias_thres is not None:
-            if frame.ext_hdr['RESZ2'] > tt_bias_thres:
+            if frame.ext_hdr['Z2RES'] > tt_bias_thres:
                 reject_flags[i] += 16 # use distinct bits in case it's useful
-                reject_reasons[i].append("tip rms {0:.1f} > {1:.1f}"
-                                         .format(frame.ext_hdr['RESZ2'], tt_bias_thres))
-            if frame.ext_hdr['RESZ3'] > tt_bias_thres:
+                reject_reasons[i].append("tip bias (Z2RES) {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['Z2RES'], tt_bias_thres))
+            if frame.ext_hdr['Z3RES'] > tt_bias_thres:
                 reject_flags[i] += 32 # use distinct bits in case it's useful
-                reject_reasons[i].append("tilt rms {0:.1f} > {1:.1f}"
-                                         .format(frame.ext_hdr['RESZ3'], tt_bias_thres))
+                reject_reasons[i].append("tilt bias (Z3RES) {0:.1f} > {1:.1f}"
+                                         .format(frame.ext_hdr['Z3RES'], tt_bias_thres))
+        frame.ext_hdr['FRMSEL05'] = (tt_bias_thres, "tip bias (Z2RES) threshold") # record selection criteria
+        frame.ext_hdr['FRMSEL06'] = (tt_bias_thres, "tilt bias (Z3RES) threshold") # record selection criteria
                 
         # if rejected, mark as bad in the header
         if reject_flags[i] > 0:
@@ -248,16 +269,20 @@ def convert_to_electrons(input_dataset, k_gain):
    # you should make a copy the dataset to start
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
-    kgain_error = kgain_dataset.all_err
 
     kgain = k_gain.value #extract from caldb
+    kgainerr = k_gain.error[0]
+    # x = c*kgain, where c (counts beforehand) and kgain both have error, so do propogation of error due to the product of 2 independent sources
+    kgain_error = np.zeros_like(input_dataset.all_err)
+    kgain_tot_err = (np.sqrt((kgain*kgain_dataset.all_err[:,0,:,:])**2 + (kgain_cube*kgainerr)**2))
+    kgain_error[:,0,:,:] = kgain_tot_err
     kgain_cube *= kgain
-    kgain_error *= kgain
-
+    
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
-    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAIN":kgain})
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAINPAR":kgain, 
+                                                                                    "KGAIN_ER": k_gain.error[0], "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
     return kgain_dataset
 
 def em_gain_division(input_dataset):
@@ -282,14 +307,15 @@ def em_gain_division(input_dataset):
         try: # use measured gain if available TODO change hdr name if necessary
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_M"]
         except:
-            try: # use EM applied EM gain if available
+            emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
+            if emgain > 0: # use EM applied EM gain if available
                 emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
-            except: # otherwise use commanded EM gain
-                emgain = emgain_dataset[i].ext_hdr["CMDGAIN"]
+            else: # otherwise use commanded EM gain
+                emgain = emgain_dataset[i].ext_hdr["EMGAIN_C"]
         emgain_cube[i] /= emgain
         emgain_error[i] /= emgain
 
-    dataset_list, _ = emgain_dataset.split_dataset(exthdr_keywords=['CMDGAIN'])
+    dataset_list, _ = emgain_dataset.split_dataset(exthdr_keywords=['EMGAIN_C'])
     if len(dataset_list) > 1:
         history_msg = "data divided by EM gain for dataset with frames with different commanded EM gains"
     else:
@@ -378,7 +404,7 @@ def desmear(input_dataset, detector_params):
     data = input_dataset.copy()
     data_cube = data.all_data
 
-    rowreadtime_sec = detector_params.params['rowreadtime']
+    rowreadtime_sec = detector_params.params['ROWREADT']
 
     for i in range(data_cube.shape[0]):
         exptime_sec = float(data[i].ext_hdr['EXPTIME'])
@@ -412,8 +438,8 @@ def update_to_l2b(input_dataset):
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATA_LEVEL'] != "L2a":
-            err_msg = "{0} needs to be L2a data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+        if orig_frame.ext_hdr['DATALVL'] != "L2a":
+            err_msg = "{0} needs to be L2a data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -421,10 +447,10 @@ def update_to_l2b(input_dataset):
 
     for frame in updated_dataset:
         # update header
-        frame.ext_hdr['DATA_LEVEL'] = "L2b"
+        frame.ext_hdr['DATALVL'] = "L2b"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L2a_", "_L2b_", 1)
+        frame.filename = frame.filename.replace("_L2a", "_L2b", 1)
 
     history_msg = "Updated Data Level to L2b"
     updated_dataset.update_after_processing_step(history_msg)

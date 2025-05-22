@@ -1,5 +1,6 @@
 import os
 import glob
+import pickle
 import pytest
 import numpy as np
 import corgidrp
@@ -8,6 +9,8 @@ import corgidrp.mocks as mocks
 import corgidrp.detector as detector
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 from corgidrp.darks import build_trad_dark
+
+np.random.seed(456)
 
 old_err_tracking = corgidrp.track_individual_errors
 # use default parameters
@@ -80,9 +83,21 @@ def test_dark_sub():
     # load in the dark
     dark_filepath = os.path.join(calibdir, dark_filename)
     new_dark = data.Dark(dark_filepath)
+    assert new_dark.ext_hdr['PC_STAT'] == 'analog master dark'
+
+    # check the dark can be pickled (for CTC operations)
+    pickled = pickle.dumps(new_dark)
+    pickled_dark = pickle.loads(pickled)
+    assert np.all(new_dark.data == pickled_dark.data)
+
     # subtract darks from itself; also saves to testcalib folder
     darkest_dataset = l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
     assert(dark_filename in str(darkest_dataset[0].ext_hdr["HISTORY"]))
+
+    # PC dark cannot be used for this step function
+    new_dark.ext_hdr['PC_STAT'] = 'photon-counted master dark'
+    with pytest.raises(Exception):
+        l2a_to_l2b.dark_subtraction(dark_dataset, new_dark, outputdir=calibdir)
 
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(darkest_dataset.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
@@ -104,8 +119,8 @@ def test_dark_sub():
     assert(np.mean(darkest_dataset.all_err) == pytest.approx(np.mean(dark_frame.err), abs = 1e-2))
     #print("mean of all data:", np.mean(darkest_dataset.all_data))
     #print("mean of all errors:", np.mean(darkest_dataset.all_err))
-    assert darkest_dataset[0].ext_hdr["BUNIT"] == "photoelectrons"
-    assert darkest_dataset[0].err_hdr["BUNIT"] == "photoelectrons"
+    assert darkest_dataset[0].ext_hdr["BUNIT"] == "Photoelectrons"
+    assert darkest_dataset[0].err_hdr["BUNIT"] == "Photoelectrons"
     #print(darkest_dataset[0].ext_hdr)
 
     # If too many masked in a stack for a given pixel, warning raised. Checks
@@ -126,15 +141,20 @@ def test_dark_sub():
     EMgain = 10
     exptime = 4
     frame = (noise_maps.FPN_map + noise_maps.CIC_map*EMgain + noise_maps.DC_map*exptime*EMgain)/EMgain
-    prihdr, exthdr = mocks.create_default_headers()
+    prihdr, exthdr = mocks.create_default_calibration_product_headers()
     image_frame = data.Image(frame, prihdr, exthdr)
-    image_frame.ext_hdr['CMDGAIN'] = EMgain
+    image_frame.ext_hdr['EMGAIN_C'] = EMgain
     image_frame.ext_hdr['EXPTIME'] = exptime
-    image_frame.ext_hdr['KGAIN'] = 7
+    image_frame.ext_hdr['KGAINPAR'] = 7
     dataset_from_noisemap = data.Dataset([image_frame])
     nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
     # check the level of the dataset is now approximately 0, leaving off telemetry row
     assert np.mean(nm_dataset0.all_data[:,:-1,:]) == pytest.approx(0, abs=1e-2)
+
+    # check the dark can be pickled (for CTC operations)
+    pickled = pickle.dumps(master_dark)
+    pickled_dark = pickle.loads(pickled)
+    assert np.all(master_dark.data == pickled_dark.data)
 
     corgidrp.track_individual_errors = old_err_tracking
 

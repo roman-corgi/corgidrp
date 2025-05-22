@@ -1,7 +1,8 @@
 #A file to test the kgain conversion
 import os
+import pickle
 import numpy as np
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L1_headers
 import corgidrp.data as data
 import corgidrp.l2a_to_l2b as l2a_to_l2b
 import pytest
@@ -12,20 +13,23 @@ def test_kgain():
     test the KGain class and the calibration file and the unit conversion
     """
     #test KGain class and cal file
-    prhd, exthd = create_default_headers()
+    prhd, exthd = create_default_L1_headers()
     dat = np.ones([1024,1024]) * 2
     err = np.ones([1,1024,1024]) * 0.5
     ptc = np.ones([2,1024])
+    exthd["RN"] = 100
+    exthd["RN_ERR"] = 2
     ptc_hdr = fits.Header()
     image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
     image2 = image1.copy()
-    image1.filename = "test1"
-    image2.filename = "test2"
+    image1.filename = "test1_L1_.fits"
+    image2.filename = "test2_L1_.fits"
     dataset= data.Dataset([image1, image2])
 
     gain_value = np.array([[9.55]])
     gain_err = np.array([[[1.]]])
     kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    assert kgain.filename.split(".")[0] == "test2_KRN_CAL"
     assert kgain.value == gain_value[0,0]
     assert kgain.data[0,0] == gain_value[0,0]
     
@@ -35,6 +39,11 @@ def test_kgain():
     assert kgain_ptc.ptc[0,0] == 1.
     assert kgain_ptc.ptc_hdr is not None
     
+    # check the kgain can be pickled (for CTC operations)
+    pickled = pickle.dumps(kgain_ptc)
+    pickled_kgain = pickle.loads(pickled)
+    assert np.all((kgain_ptc.data == pickled_kgain.data))
+
     #test copy and save
     kgain_ptc_copy = kgain_ptc.copy(copy_data = False)
     assert kgain_ptc_copy.value == gain_value[0,0]
@@ -61,6 +70,11 @@ def test_kgain():
     assert kgain_open.ptc_hdr["EXTNAME"] == "PTC"
     assert kgain_open.err_hdr is not None
     
+    # check the kgain can be pickled (for CTC operations)
+    pickled = pickle.dumps(kgain_open)
+    pickled_kgain = pickle.loads(pickled)
+    assert np.all((kgain_open.data == pickled_kgain.data))
+
     # test convert_to_electrons
     k_gain = kgain.value
 
@@ -72,8 +86,10 @@ def test_kgain():
     #test header updates
     assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
     assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
-    assert gain_dataset[0].ext_hdr["KGAIN"] == k_gain
-    assert gain_dataset[0].err_hdr["KGAIN"] == k_gain
+    assert gain_dataset[0].ext_hdr["KGAINPAR"] == k_gain
+    assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error[0]
+    assert gain_dataset[0].ext_hdr["RN"] > 0
+    assert gain_dataset[0].ext_hdr["RN_ERR"] > 0
     assert("converted" in str(gain_dataset[0].ext_hdr["HISTORY"]))
 
 if __name__ == "__main__":

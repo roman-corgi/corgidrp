@@ -23,8 +23,6 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-    # Make a copy of the input dataset to operate on
-    output_dataset = input_dataset.copy()
 
     if detector_regions is None:
         detector_regions = detector_areas
@@ -39,52 +37,52 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     new_err_list = []
 
     # Iterate over frames
-    for i, frame in enumerate(output_dataset):
+    for i, frame in enumerate(input_dataset):
 
-        frame_data = frame.data
-        frame_err = frame.err
-        frame_dq = frame.dq
+        frame_data = np.copy(frame.data)
+        frame_err = np.copy(frame.err)
+        frame_dq = np.copy(frame.dq)
 
         # Determine what type of file it is (engineering or science), then choose detector area dict
-        obstype = frame.ext_hdr['ARRTYPE']
-        if not obstype in ['SCI','ENG','ENG_EM','ENG_CONV'] :
+        arrtype = frame.ext_hdr['ARRTYPE']
+        if not arrtype in ['SCI','ENG','ENG_EM','ENG_CONV'] :
                 raise Exception(f"Observation type of frame {i} is not 'SCI' or 'ENG' or 'ENG_EM' or 'EMG_CONV'")
 
-        if detector_regions[obstype]['frame_rows'] != frame_data.shape[0] or detector_regions[obstype]['frame_cols'] != frame_data.shape[1]:
+        if detector_regions[arrtype]['frame_rows'] != frame_data.shape[0] or detector_regions[arrtype]['frame_cols'] != frame_data.shape[1]:
             raise Exception('Frame size incompatible with specified detector_regions.')
         # Get the reliable prescan area
-        prescan = slice_section(frame_data, obstype, 'prescan', detector_regions=detector_regions)
+        prescan = slice_section(frame_data, arrtype, 'prescan', detector_regions=detector_regions)
 
         if not return_full_frame:
             # Get the image area
             if use_imaging_area: 
-                image_data = imaging_slice(obstype, frame_data, detector_regions=detector_regions)
-                image_dq = imaging_slice(obstype, frame_dq, detector_regions=detector_regions)
+                image_data = imaging_slice(arrtype, frame_data, detector_regions=detector_regions)
+                image_dq = imaging_slice(arrtype, frame_dq, detector_regions=detector_regions)
 
                 image_err = []
                 for err_slice in frame_err:
-                    image_err.append(imaging_slice(obstype, err_slice, detector_regions=detector_regions))
+                    image_err.append(imaging_slice(arrtype, err_slice, detector_regions=detector_regions))
                 image_err = np.array(image_err)
 
-                prows, _, r0c0 = imaging_area_geom(obstype,detector_regions=detector_regions)
+                prows, _, r0c0 = imaging_area_geom(arrtype,detector_regions=detector_regions)
                 i_r0 = r0c0[0]
-                p_r0 = detector_regions[obstype]['prescan']['r0c0'][0]
+                p_r0 = detector_regions[arrtype]['prescan']['r0c0'][0]
                 al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+prows), :]
 
             else: 
-                image_data = slice_section(frame_data, obstype, 'image', detector_regions)
-                image_dq = slice_section(frame_dq, obstype, 'image', detector_regions)
+                image_data = slice_section(frame_data, arrtype, 'image', detector_regions)
+                image_dq = slice_section(frame_dq, arrtype, 'image', detector_regions)
 
                 # Special treatment for 3D error array
                 image_err = []
                 for err_slice in frame_err:
-                    image_err.append(slice_section(err_slice, obstype, 'image', detector_regions))
+                    image_err.append(slice_section(err_slice, arrtype, 'image', detector_regions))
                 image_err = np.array(image_err)
 
                 # Get the part of the prescan that lines up with the image
-                i_r0 = detector_areas[obstype]['image']['r0c0'][0]
-                p_r0 = detector_areas[obstype]['prescan']['r0c0'][0]
-                i_nrow = detector_areas[obstype]['image']['rows']
+                i_r0 = detector_areas[arrtype]['image']['r0c0'][0]
+                p_r0 = detector_areas[arrtype]['prescan']['r0c0'][0]
+                i_nrow = detector_areas[arrtype]['image']['rows']
                 al_prescan = prescan[(i_r0-p_r0):(i_r0-p_r0+i_nrow), :]
 
         else:
@@ -100,8 +98,8 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
             al_prescan = prescan
 
-        st = detector_regions[obstype]['prescan']['col_start']
-        end = detector_regions[obstype]['prescan']['col_end']
+        st = detector_regions[arrtype]['prescan']['col_start']
+        end = detector_regions[arrtype]['prescan']['col_end']
 
         # Measure bias and error (standard error of the median for each row, add this to 3D image array)
         medbyrow = np.median(al_prescan[:,st:end], axis=1)[:, np.newaxis]
@@ -123,15 +121,16 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         out_frames_dq.append(image_dq)
         out_frames_bias.append(bias[:,0]) # save 1D version of array
 
-        # Update header with new frame dimensions
-        frame.ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
-        frame.ext_hdr['NAXIS2'] = image_bias_corrected.shape[0]
-
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data)
     out_frames_err_arr = np.array(out_frames_err)
     out_frames_dq_arr = np.array(out_frames_dq)
     out_frames_bias_arr = np.array(out_frames_bias, dtype=np.float32)
+    # try to free some memory
+    del out_frames_data, out_frames_err, out_frames_dq, out_frames_bias
+
+    # Make a copy of the input dataset to operate on
+    output_dataset = input_dataset.copy(copy_data=False)
 
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
@@ -144,6 +143,10 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         # frame.bias = out_frames_bias_arr[i]
         frame.add_extension_hdu("BIAS",data=out_frames_bias_arr[i])
 
+        # Update header with new frame dimensions
+        frame.ext_hdr['NAXIS1'] = out_frames_data_arr[i].shape[1]
+        frame.ext_hdr['NAXIS2'] = out_frames_data_arr[i].shape[0]
+
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")
 
@@ -154,9 +157,9 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
     return output_dataset
 
-def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
+def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image'):
+                       mode='image', detector_regions=None):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -166,6 +169,7 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images that need cosmic ray identification (L1-level)
         detector_params (corgidrp.data.DetectorParams): a calibration file storing detector calibration values
+        k_gain (corgidrp.data.KGain): KGain calibration file
         sat_thresh (float):
             Multiplication factor for the pixel full-well capacity (fwc) that determines saturated cosmic
             pixels. Interval 0 to 1, defaults to 0.7. Lower numbers are more aggressive in flagging saturation.
@@ -192,6 +196,9 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
             If 'full', a full-frame input is assumed, and if the input tail length
             is longer than the length to the end of the full-frame row, the masking
             continues onto the next row.  Defaults to 'image'.
+        detector_regions: (dict):  
+            A dictionary of detector geometry properties.  Keys should be as 
+            found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
 
     Returns:
         corgidrp.data.Dataset:
@@ -200,27 +207,33 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
     sat_dqval = 32 # DQ value corresponding to full well saturation
     cr_dqval = 128 # DQ value corresponding to CR hit
 
+    if detector_regions is None:
+        detector_regions = detector_areas
+
     # you should make a copy the dataset to start
     crmasked_dataset = input_dataset.copy()
 
     crmasked_cube = crmasked_dataset.all_data
 
-
     # Calculate the full well capacity for every frame in the dataset
-    kgain = np.array([detector_params.params['kgain'] for frame in crmasked_dataset])
+    if k_gain is None:
+        kgain = detector_params.params['KGAINPAR']
+    else:
+        #get the kgain value from the k_gain calibration file
+        kgain = k_gain.value
     emgain_list = []
     for frame in crmasked_dataset:
         try: # use measured gain if available TODO change hdr name if necessary
             emgain = frame.ext_hdr['EMGAIN_M']
         except:
-            try: # use applied EM gain if available
+            if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
                 emgain = frame.ext_hdr['EMGAIN_A']
-            except: # otherwise use commanded EM gain
-                emgain = frame.ext_hdr['CMDGAIN']
-        emgain_list.append(emgain)
+            else: # otherwise use commanded EM gain
+                emgain = frame.ext_hdr['EMGAIN_C']
+            emgain_list.append(emgain)
     emgain_arr = np.array(emgain_list)
-    fwcpp_e_arr = np.array([detector_params.params['fwc_pp'] for frame in crmasked_dataset])
-    fwcem_e_arr = np.array([detector_params.params['fwc_em'] for frame in crmasked_dataset])
+    fwcpp_e_arr = np.array([detector_params.params['FWC_PP_E'] for frame in crmasked_dataset])
+    fwcem_e_arr = np.array([detector_params.params['FWC_EM_E'] for frame in crmasked_dataset])
 
     fwcpp_dn_arr = fwcpp_e_arr / kgain
     fwcem_dn_arr = fwcem_e_arr / kgain
@@ -246,6 +259,7 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
     m2 = np.zeros_like(crmasked_cube)
 
     for i in range(len(crmasked_cube)):
+        arrtype = crmasked_dataset.frames[i].ext_hdr['ARRTYPE']
         m2[i,:,:] = flag_cosmics(cube=crmasked_cube[i:i+1,:,:],
                         fwc=fwcem_dn_arr[i],
                         sat_thresh=sat_thresh,
@@ -253,7 +267,9 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
                         cosm_filter=cosm_filter,
                         cosm_box=cosm_box,
                         cosm_tail=cosm_tail,
-                        mode=mode
+                        mode=mode,
+                        detector_regions=detector_regions,
+                        arrtype=arrtype
                         ) * cr_dqval
 
     # add the two masks to the all_dq mask
@@ -269,34 +285,42 @@ def detect_cosmic_rays(input_dataset, detector_params, sat_thresh=0.7,
 
     return crmasked_dataset
 
-def correct_nonlinearity(input_dataset, non_lin_correction):
+def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
     """
-    Perform non-linearity correction of a dataset using the corresponding non-linearity correction
+    Perform non-linearity correction of a dataset using the corresponding non-linearity correction. We check for non-linear pixel and flag them in the DQ. 
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level)
-        non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity
-
+        input_dataset (corgidrp.data.Dataset): a dataset of Images that need non-linearity correction (L2a-level).
+        non_lin_correction (corgidrp.data.NonLinearityCorrection): a NonLinearityCorrection calibration file to model the non-linearity.
+        threshold (float): threshold for flagging pixels in the DQ array, value above this threshold will be flagged in the DQ map as too nonlinear. By default it is set to infinity, user can change it to a different value.
+    
     Returns:
-        corgidrp.data.Dataset: a non-linearity corrected version of the input dataset
+        (corgidrp.data.Dataset): A non-linearity corrected version of the input dataset
     """
     #Copy the dataset to start
     linearized_dataset = input_dataset.copy()
 
     #Apply the non-linearity correction to the data
     linearized_cube = linearized_dataset.all_data
+
     #Check to see if EM gain is in the header, if not, raise an error
-    if "CMDGAIN" not in linearized_dataset[0].ext_hdr.keys():
+    if "EMGAIN_C" not in linearized_dataset[0].ext_hdr.keys():
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
     for i in range(linearized_cube.shape[0]):
         try: # use measured gain if available TODO change hdr name if necessary
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
         except:
-            try: # use applied EM gain if available
+            em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
+            if em_gain > 0: # use applied EM gain if available
                 em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
-            except: # otherwise use commanded EM gain
-                em_gain = linearized_dataset[i].ext_hdr["CMDGAIN"]
+            else: # otherwise use commanded EM gain
+                em_gain = linearized_dataset[i].ext_hdr["EMGAIN_C"]
+
+        # Flag pixels in the DQ array if they exceed the threshold
+        non_linear_flag = 64
+        current_value = linearized_dataset[i].dq[linearized_cube[i] > threshold]
+        linearized_dataset[i].dq[linearized_cube[i] > threshold] = np.bitwise_or(current_value, non_linear_flag)
         linearized_cube[i] *= get_relgains(linearized_cube[i], em_gain, non_lin_correction)
     
     if non_lin_correction is not None:
@@ -320,8 +344,8 @@ def update_to_l2a(input_dataset):
     """
     # check that we are running this on L1 data
     for orig_frame in input_dataset:
-        if orig_frame.ext_hdr['DATA_LEVEL'] != "L1":
-            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATA_LEVEL'])
+        if orig_frame.ext_hdr['DATALVL'] != "L1":
+            err_msg = "{0} needs to be L1 data, but it is {1} data instead".format(orig_frame.filename, orig_frame.ext_hdr['DATALVL'])
             raise ValueError(err_msg)
 
     # we aren't altering the data
@@ -329,10 +353,10 @@ def update_to_l2a(input_dataset):
 
     for frame in updated_dataset:
         # update header
-        frame.ext_hdr['DATA_LEVEL'] = "L2a"
+        frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L1_", "_L2a_", 1)
+        frame.filename = frame.filename.replace("_L1_", "_L2a", 1)
 
     history_msg = "Updated Data Level to L2a"
     updated_dataset.update_after_processing_step(history_msg)
