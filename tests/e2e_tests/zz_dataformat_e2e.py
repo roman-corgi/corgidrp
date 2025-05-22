@@ -187,7 +187,7 @@ def generate_header_table(hdu):
 
 
 @pytest.mark.e2e
-def l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2a_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2a")
     l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
@@ -211,14 +211,14 @@ def l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2b")
     l2b_data_file = os.path.join(l2b_data_dir, "90499.fits")
@@ -242,14 +242,14 @@ def l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l2b_data_dir = os.path.join(thisfile_dir, "pc_sim_test_data")
     l2b_data_file = os.path.join(l2b_data_dir, "pc_frame_ill_115.fits")
@@ -273,7 +273,7 @@ def l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -281,7 +281,7 @@ def l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def l3_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l3_data_dir = os.path.join(thisfile_dir, "l2b_to_l3_output")
     l3_data_file = os.path.join(l3_data_dir, "CGI_0200001999001000000_20250415T0305102_L3_.fits")
@@ -305,7 +305,7 @@ def l3_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -313,7 +313,7 @@ def l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     l4_data_dir = os.path.join(thisfile_dir, "l3_to_l4_output")
     l4_data_file = os.path.join(l4_data_dir, "CGI_0200001999001000020_20250415T0305102_L4_.fits")
@@ -337,14 +337,14 @@ def l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     kgain_data_file = os.path.join(thisfile_dir, "l3_to_l4_noncoron_output", "CGI_0200001999001000001_20250415T030504_L4_.fits")
 
@@ -367,14 +367,14 @@ def l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     astrom_data_file = os.path.join(thisfile_dir, "astrom_cal_output", "CGI_EXCAM_L2b0000064236_AST_CAL.fits")
 
@@ -397,14 +397,14 @@ def astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     bpmap_data_file = os.path.join(thisfile_dir, "flat_neptune_output", "CGI_EXCAM_BPM_CAL0000052292.fits")
 
@@ -427,7 +427,7 @@ def bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -435,7 +435,7 @@ def bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def flat_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     flat_data_file = os.path.join(thisfile_dir, "flat_neptune_output", "CGI_EXCAM_FLT_CAL0000052292.fits")
 
@@ -458,7 +458,7 @@ def flat_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -466,7 +466,7 @@ def flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def ct_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     ct_data_file = os.path.join(thisfile_dir, "l2b_to_corethroughput_output", "corethroughput_e2e_10_CTP_CAL.fits")
 
@@ -489,14 +489,14 @@ def ct_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     ctmap_data_file = os.path.join(thisfile_dir, "l2a_to_ct_map", "corethroughput_map.fits")
 
@@ -519,14 +519,14 @@ def ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     fluxcal_data_file = os.path.join(thisfile_dir, "l2b_to_fluxcal_factor_output", "flux_e2e_0_ABF_CAL.fits")
 
@@ -549,14 +549,14 @@ def fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     kgain_data_file = os.path.join(thisfile_dir, "nonlin_and_kgain_output", "CGI_EXCAM_KRN_CAL0000051840.fits")
 
@@ -579,7 +579,7 @@ def kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -587,7 +587,7 @@ def kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     nonlin_data_file = os.path.join(thisfile_dir, "nonlin_and_kgain_output", "CGI_EXCAM_NLN_CAL0000051840.fits")
 
@@ -610,14 +610,14 @@ def ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     nonlin_data_file = os.path.join(thisfile_dir, "nd_filter_e2e_output", "CGI_0000000000000000000_20250520T00421886_NDF_CAL.fits")
 
@@ -640,14 +640,14 @@ def ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
         assert len(diff) == 0
 
 @pytest.mark.e2e
-def noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     noisemaps_data_file = os.path.join(thisfile_dir, "noisemap_output", "CGI_EXCAM_0000064232_DNM_CAL.fits")
 
@@ -670,7 +670,7 @@ def noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -678,7 +678,7 @@ def noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def dark_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     dark_data_file = os.path.join(thisfile_dir, "build_trad_dark_output", "CGI_EXCAM0000064236_DRK_CAL.fits")
 
@@ -701,7 +701,7 @@ def dark_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -709,7 +709,7 @@ def dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 
 
 @pytest.mark.e2e
-def tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 
     tpump_data_file = os.path.join(thisfile_dir, "trap_pump_cal_output", "180KScheme_1TPUMP_Npumps50000_gain1.5_phasetime166.81005372000593_TPU_CAL.fits")
 
@@ -732,7 +732,7 @@ def tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
             ref_doc_contents = f2.read()
         # diff the two outputs
         # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff(doc_contents.strip().splitlines(), ref_doc_contents.strip().splitlines())
+        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
         diff = list(diff)
         diff_output = "\n".join(diff)
         print(diff_output)
@@ -756,20 +756,21 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    l2a_dataformat_e2e(e2edata_dir, outputdir)
-    l2banalog_dataformat_e2e(e2edata_dir, outputdir)
-    l2bpc_dataformat_e2e(e2edata_dir, outputdir)
-    l3_dataformat_e2e(e2edata_dir, outputdir)
-    l4coron_dataformat_e2e(e2edata_dir, outputdir)
-    l4noncoron_dataformat_e2e(e2edata_dir, outputdir)
-    astrom_dataformat_e2e(e2edata_dir, outputdir)
-    bpmap_dataformat_e2e(e2edata_dir, outputdir)
-    flat_dataformat_e2e(e2edata_dir, outputdir)
-    ct_dataformat_e2e(e2edata_dir, outputdir)
-    ctmap_dataformat_e2e(e2edata_dir, outputdir)
-    fluxcal_dataformat_e2e(e2edata_dir, outputdir)
-    kgain_dataformat_e2e(e2edata_dir, outputdir)
-    ndfilter_dataformat_e2e(e2edata_dir, outputdir)
-    noisemaps_dataformat_e2e(e2edata_dir, outputdir)
-    dark_dataformat_e2e(e2edata_dir, outputdir)
-    tpump_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2a_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2banalog_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2bpc_dataformat_e2e(e2edata_dir, outputdir)
+    test_l3_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4coron_dataformat_e2e(e2edata_dir, outputdir)
+    test_l4noncoron_dataformat_e2e(e2edata_dir, outputdir)
+    test_astrom_dataformat_e2e(e2edata_dir, outputdir)
+    test_bpmap_dataformat_e2e(e2edata_dir, outputdir)
+    test_flat_dataformat_e2e(e2edata_dir, outputdir)
+    test_ct_dataformat_e2e(e2edata_dir, outputdir)
+    test_ctmap_dataformat_e2e(e2edata_dir, outputdir)
+    test_fluxcal_dataformat_e2e(e2edata_dir, outputdir)
+    test_kgain_dataformat_e2e(e2edata_dir, outputdir)
+    test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
+    test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
+    test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
+    test_dark_dataformat_e2e(e2edata_dir, outputdir)
+    test_tpump_dataformat_e2e(e2edata_dir, outputdir)
