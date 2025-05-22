@@ -63,9 +63,8 @@ def test_expected_flux_ratio_noise():
     
     psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi,ctcal,
                                 reference_star_dataset=mock_ref_rdi,
-                                numbasis=numbasis,
+                                klip_kwargs={'numbasis' : numbasis},
                                 fileprefix='test_KL_THRU',
-                                mode=None,
                                 do_crop=False,
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True)
