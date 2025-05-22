@@ -788,7 +788,7 @@ def calibrate_kgain(dataset_kgain,
     # Update history
     exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
 
-    k_gain = data.KGain(kgain, err = np.std(kgain_clipped), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
+    k_gain = data.KGain(kgain, err = kgain_err, ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
     
     return k_gain
 
