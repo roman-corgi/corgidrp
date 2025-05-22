@@ -88,19 +88,21 @@ def test_dispersion_model():
                 'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
     
     disp_model = DispersionModel(disp_dict, pri_hdr = prhdr, ext_hdr = exthdr)
-    print(disp_model.data)
     assert disp_model.clocking_angle == disp_dict.get('clocking_angle')
     assert disp_model.clocking_angle_uncertainty == disp_dict.get('clocking_angle_uncertainty')
     assert np.array_equal(disp_model.pos_vs_wavlen_polycoeff, disp_dict.get('pos_vs_wavlen_polycoeff'))
     assert np.array_equal(disp_model.pos_vs_wavlen_cov, disp_dict.get('pos_vs_wavlen_cov'))
     assert np.array_equal(disp_model.wavlen_vs_pos_polycoeff, disp_dict.get('wavlen_vs_pos_polycoeff'))
     assert np.array_equal(disp_model.wavlen_vs_pos_cov, disp_dict.get('wavlen_vs_pos_cov'))
-    #disp_model_copy = disp_model.copy()
-    #assert disp_model.clocking_angle == disp_model_copy.clocking_angle
-    #disp_model_copy = disp_model.copy(copy_data = False)
-    #assert disp_model.clocking_angle == disp_model_copy.clocking_angle
-    #disp_model.save(datadir, disp_model.filename)
     
+    disp_model.save(datadir, disp_model.filename)
+    load_disp = DispersionModel(os.path.join(datadir, disp_model.filename))
+    assert load_disp.clocking_angle == disp_dict.get('clocking_angle')
+    assert load_disp.clocking_angle_uncertainty == disp_dict.get('clocking_angle_uncertainty')
+    assert np.array_equal(load_disp.pos_vs_wavlen_polycoeff, disp_dict.get('pos_vs_wavlen_polycoeff'))
+    assert np.array_equal(load_disp.pos_vs_wavlen_cov, disp_dict.get('pos_vs_wavlen_cov'))
+    assert np.array_equal(load_disp.wavlen_vs_pos_polycoeff, disp_dict.get('wavlen_vs_pos_polycoeff'))
+    assert np.array_equal(load_disp.wavlen_vs_pos_cov, disp_dict.get('wavlen_vs_pos_cov'))
 
 if __name__ == "__main__":
     test_psf_centroid()

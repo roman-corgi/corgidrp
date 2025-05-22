@@ -4,8 +4,9 @@ import numpy.ma as ma
 import astropy.io.fits as fits
 import astropy.time as time
 import pandas as pd
-
+from astropy.table import Table
 import corgidrp
+
 
 class Dataset():
     """
@@ -779,7 +780,7 @@ class DispersionModel(Image):
         ext_hdr (fits.Header): Extension header.
         input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
     Attributes:
-        data (dict): dictionary containing the dispersion data
+        data (dict): table containing the dispersion data
         clocking_angle (float): Clocking angle of the dispersion axis, theta,
         oriented in the direction of increasing wavelength, measured in degrees
         counterclockwise from the positive x-axis on the EXCAM data array
@@ -806,7 +807,6 @@ class DispersionModel(Image):
         if isinstance(data_or_filepath, str):
             # run the image class contructor
             super().__init__(data_or_filepath)
-
             # double check that this is actually a DispersionModel file that got read in
             # since if only a filepath was passed in, any file could have been read in
             if 'DATATYPE' not in self.ext_hdr:
@@ -826,21 +826,23 @@ class DispersionModel(Image):
             self.ext_hdr['DATATYPE'] = 'DispersionModel' # corgidrp specific keyword for saving to disk
             # add to history
             self.ext_hdr['HISTORY'] = "DispersionModel file created"
-            self.data = data_or_filepath
+            
+            #check that all parameters are available in the input dict
+            for key in self.params_key:
+                if key not in data_or_filepath:
+                    raise ValueError("parameter {0} is missing in the data".format(key))
+            data_list = Table(rows = [data_or_filepath])
+            self.data = data_list
             # use the start date for the filename by default
             self.filedir = "."
             self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['SCTSRT'])
-        #check which keys are available
-        for key in self.params_key:
-            if key not in self.data:
-                raise ValueError("parameter {0} is missing in the data").format(key)
         # initialization data passed in
-        self.clocking_angle = self.data.get('clocking_angle')
-        self.clocking_angle_uncertainty = self.data.get('clocking_angle_uncertainty')
-        self.pos_vs_wavlen_polycoeff = np.array(self.data.get('pos_vs_wavlen_polycoeff'))
-        self.pos_vs_wavlen_cov = np.array(self.data.get('pos_vs_wavlen_cov'))
-        self.wavlen_vs_pos_polycoeff = np.array(self.data.get('wavlen_vs_pos_polycoeff'))
-        self.wavlen_vs_pos_cov = np.array(self.data.get('wavlen_vs_pos_cov'))
+        self.clocking_angle = self.data["clocking_angle"][0]
+        self.clocking_angle_uncertainty = self.data["clocking_angle_uncertainty"][0]
+        self.pos_vs_wavlen_polycoeff = np.array(self.data["pos_vs_wavlen_polycoeff"][0])
+        self.pos_vs_wavlen_cov = np.array(self.data["pos_vs_wavlen_cov"][0])
+        self.wavlen_vs_pos_polycoeff = np.array(self.data["wavlen_vs_pos_polycoeff"][0])
+        self.wavlen_vs_pos_cov = np.array(self.data["wavlen_vs_pos_cov"][0])
 
 
     def save(self, filedir=None, filename=None):
@@ -860,11 +862,12 @@ class DispersionModel(Image):
             raise ValueError("Output filename is not defined. Please specify!")
 
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
-        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        exthdu = fits.BinTableHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
 
         hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
+
        
 class NonLinearityCalibration(Image):
     """
@@ -1541,7 +1544,8 @@ datatypes = { "Image" : Image,
               "DetectorParams" : DetectorParams,
               "AstrometricCalibration" : AstrometricCalibration,
               "TrapCalibration": TrapCalibration,
-              "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF
+              "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
+              "DispersionModel": DispersionModel
             }
 
 def autoload(filepath):
