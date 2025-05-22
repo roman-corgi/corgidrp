@@ -180,7 +180,62 @@ def generate_header_table(hdu):
 
     return header_table
 
+custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE']
+def compare_docs(ref_doc, new_doc):
+    """
+    Compare reference doc to new doc
 
+    Args:
+        ref_doc (str): full content of reference doc
+        new_doc (str): full content of new document
+    """
+    # ignore beginning and ending whitespace
+    # split lines
+    ref_lines = ref_doc.strip().splitlines()
+    new_lines = new_doc.strip().splitlines()
+
+    # certain rows need custom checking
+    ref_custom_header_checks = []
+    new_custom_header_checks = []
+
+    # grab all the rows that need special checking out of the way
+    for line in ref_lines:
+        if '|' in line: # check if sphinx table
+            line_args = line.split("|")
+            name = line_args[1].strip()
+            if name.upper() in custom_header_keys:
+                # remove the value of the entry from the line
+                line_args.remove(line_args[3])
+                mod_line = "|".join(line_args)
+                # move into the custom checking section
+                ref_custom_header_checks.append(mod_line)
+                ref_lines.remove(line)
+    for line in new_lines:
+        if '|' in line: # check if sphinx table
+            line_args = line.split("|")
+            name = line_args[1].strip()
+            if name.upper() in custom_header_keys:
+                # remove the value of the entry from the line
+                line_args.remove(line_args[3])
+                mod_line = "|".join(line_args)
+                # move into the custom checking section
+                new_custom_header_checks.append(mod_line)
+                new_lines.remove(line)
+
+    # diff the regular part of the doc
+    diff = difflib.unified_diff(ref_lines, new_lines)
+    diff = list(diff)
+    diff_output = "\n".join(diff)
+    print(diff_output)
+    assert len(diff) == 0
+
+    # diff the custom header keywords that needed special processing
+    diff2 = difflib.unified_diff(ref_custom_header_checks, new_custom_header_checks)
+    diff2 = list(diff2)
+    diff2_output = "\n".join(diff2)
+    print(diff2_output)
+    assert len(diff2) == 0
+ 
 ###########################
 ### Begin Tests ###########
 ###########################
@@ -210,12 +265,7 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -241,12 +291,7 @@ def test_l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -272,12 +317,7 @@ def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 @pytest.mark.e2e
@@ -304,12 +344,7 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 @pytest.mark.e2e
@@ -336,12 +371,7 @@ def test_l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -366,12 +396,7 @@ def test_l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -396,12 +421,7 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -426,12 +446,7 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 @pytest.mark.e2e
@@ -457,12 +472,7 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 @pytest.mark.e2e
@@ -488,12 +498,7 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -518,12 +523,7 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -548,12 +548,7 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -578,12 +573,7 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 @pytest.mark.e2e
@@ -609,12 +599,7 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -639,12 +624,7 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
@@ -669,12 +649,7 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 @pytest.mark.e2e
@@ -700,12 +675,7 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 @pytest.mark.e2e
@@ -731,12 +701,7 @@ def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
         with open(ref_doc, "r") as f2:
             ref_doc_contents = f2.read()
         # diff the two outputs
-        # don't worry about leading and trailing whitespace
-        diff = difflib.unified_diff( ref_doc_contents.strip().splitlines(), doc_contents.strip().splitlines())
-        diff = list(diff)
-        diff_output = "\n".join(diff)
-        print(diff_output)
-        assert len(diff) == 0
+        compare_docs(ref_doc_contents, doc_contents)
 
 
 if __name__ == "__main__":
