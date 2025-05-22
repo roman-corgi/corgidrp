@@ -403,13 +403,13 @@ def crop(input_dataset, sizexy=None, centerxy=None):
 def do_psf_subtraction(input_dataset, 
                        ct_calibration=None,
                        reference_star_dataset=None,
-                       klip_kwargs={},
+                       klip_kwargs=None,
                        outdir=None,fileprefix="",
                        do_crop=True,
                        crop_sizexy=None,
                        measure_klip_thrupt=True,
                        measure_1d_core_thrupt=True,
-                       cand_locs=[],
+                       cand_locs=None,
                        kt_seps=None,
                        kt_pas=None,
                        kt_snr=20.,
@@ -423,7 +423,7 @@ def do_psf_subtraction(input_dataset,
         Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
-        Do we want pyklip output to be centered on 1 pixel or 4 pixels? can use aligned_center kw to do this.
+        Require pyklip output to be centered on 1 pixel. can use the aligned_center kw to do this.
         Make sure psfsub test output data gets saved in a reasonable place
         Update output filename to: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
         other pyklip_parallelized kwargs to consider using:
@@ -437,7 +437,7 @@ def do_psf_subtraction(input_dataset,
             if measuring KLIP throughput or 1D core throughput. Defaults to None.
         reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
             star. If not provided, references will be searched for in the input dataset.
-        klip_kwargs (dict, optional): keyword arguments to be passed to pyklip.parallelized.klip_parallelized(). Available 
+        klip_kwargs (dict, optional): keyword arguments to be passed to pyklip.parallelized.klip_dataset(). Available 
             parameters and their defaults are described in the KLIP Kwargs section below.
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
@@ -503,6 +503,9 @@ def do_psf_subtraction(input_dataset,
     assert len(sci_dataset) > 0, "Science dataset has no data."
 
     # Set up klip_kwargs
+    if klip_kwargs is None:
+        klip_kwargs = dict()
+
     if 'mode' not in klip_kwargs.keys():
         # Choose PSF subtraction mode if unspecified
         if not ref_dataset is None and len(sci_dataset)==1:
@@ -611,6 +614,9 @@ def do_psf_subtraction(input_dataset,
         klip_params['outdir'] = outdir
         klip_params['fileprefix'] = fileprefix,
         
+        if cand_locs is None:
+            cand_locs = []
+
         klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,
                             ct_calibration,
