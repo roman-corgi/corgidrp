@@ -180,7 +180,7 @@ def generate_header_table(hdu):
 
     return header_table
 
-custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE']
+custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'FILE0', 'DATETIME', 'FTIMEUTC']
 def compare_docs(ref_doc, new_doc):
     """
     Compare reference doc to new doc
@@ -604,7 +604,7 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    nonlin_data_file = os.path.join(thisfile_dir, "nd_filter_e2e_output", "CGI_0000000000000000000_20250520T00421886_NDF_CAL.fits")
+    nonlin_data_file = os.path.join(thisfile_dir, "nd_filter_e2e_output", "CGI_0000000000000000000_20250522T2249242_NDF_CAL.fits")
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
