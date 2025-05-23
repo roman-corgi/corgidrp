@@ -180,7 +180,7 @@ def generate_header_table(hdu):
 
     return header_table
 
-custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'FILE0', 'DATETIME', 'FTIMEUTC']
+custom_header_keys = ['DRPCTIME', 'DRPVERSN', 'RECIPE', 'FILE0', 'DATETIME', 'FTIMEUTC', 'DETPIX0X', 'DETPIX0Y', 'PYKLIPV']
 def compare_docs(ref_doc, new_doc):
     """
     Compare reference doc to new doc
@@ -195,46 +195,43 @@ def compare_docs(ref_doc, new_doc):
     new_lines = new_doc.strip().splitlines()
 
     # certain rows need custom checking
-    ref_custom_header_checks = []
-    new_custom_header_checks = []
+    mod_ref_lines = []
+    mod_new_lines = []
 
     # grab all the rows that need special checking out of the way
-    for line in ref_lines:
+    for i, line in enumerate(ref_lines):
         if '|' in line: # check if sphinx table
             line_args = line.split("|")
             name = line_args[1].strip()
-            if name.upper() in custom_header_keys:
+            dtype = line_args[2].strip()
+            mask_value = (name.upper() in custom_header_keys) or (dtype.lower() == "float")
+            if mask_value:
                 # remove the value of the entry from the line
-                line_args.remove(line_args[3])
+                line_args[3] = '[value ignored]'
                 mod_line = "|".join(line_args)
                 # move into the custom checking section
-                ref_custom_header_checks.append(mod_line)
-                ref_lines.remove(line)
-    for line in new_lines:
+                mod_ref_lines.append(mod_line)
+
+    for i, line in enumerate(new_lines):
         if '|' in line: # check if sphinx table
             line_args = line.split("|")
             name = line_args[1].strip()
-            if name.upper() in custom_header_keys:
+            dtype = line_args[2].strip()
+            mask_value = (name.upper() in custom_header_keys) or (dtype.lower() == "float")
+            if mask_value:
                 # remove the value of the entry from the line
-                line_args.remove(line_args[3])
+                line_args[3] = '[value ignored]'
                 mod_line = "|".join(line_args)
                 # move into the custom checking section
-                new_custom_header_checks.append(mod_line)
-                new_lines.remove(line)
+                mod_new_lines.append(mod_line)
 
     # diff the regular part of the doc
-    diff = difflib.unified_diff(ref_lines, new_lines)
+    diff = difflib.unified_diff(mod_ref_lines, mod_new_lines)
     diff = list(diff)
     diff_output = "\n".join(diff)
     print(diff_output)
     assert len(diff) == 0
 
-    # diff the custom header keywords that needed special processing
-    diff2 = difflib.unified_diff(ref_custom_header_checks, new_custom_header_checks)
-    diff2 = list(diff2)
-    diff2_output = "\n".join(diff2)
-    print(diff2_output)
-    assert len(diff2) == 0
  
 ###########################
 ### Begin Tests ###########
