@@ -209,6 +209,8 @@ def compare_docs(ref_doc, new_doc):
             if mask_value:
                 # remove the value of the entry from the line
                 line_args[3] = '[value ignored]'
+                # remove the comment value from the line as well
+                line_args[4] = '[comment ignored]'
                 mod_line = "|".join(line_args)
                 # move into the custom checking section
                 mod_ref_lines.append(mod_line)
@@ -222,6 +224,8 @@ def compare_docs(ref_doc, new_doc):
             if mask_value:
                 # remove the value of the entry from the line
                 line_args[3] = '[value ignored]'
+                # remove the comment value from the line as well
+                line_args[4] = '[comment ignored]'
                 mod_line = "|".join(line_args)
                 # move into the custom checking section
                 mod_new_lines.append(mod_line)
