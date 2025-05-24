@@ -107,13 +107,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(ct_cal_drp)
 
-    # Delete mock data files
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    # Delete e2e CT cal file
-    if os.path.exists(corethroughput_outputdir):
-        shutil.rmtree(corethroughput_outputdir)
-
     # Print success message
     print('e2e test for corethroughput calibration passed')
     

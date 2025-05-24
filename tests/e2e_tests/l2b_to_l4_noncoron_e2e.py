@@ -286,8 +286,8 @@ def test_l3_to_l4(e2eoutput_path):
     #Clean up
     this_caldb.remove_entry(astrom_cal)
     this_caldb.remove_entry(fluxcal_fac)
-    shutil.rmtree(e2eoutput_path_l4)
-    shutil.rmtree(e2eintput_path)
+    # shutil.rmtree(e2eoutput_path_l4)
+    # shutil.rmtree(e2eintput_path)
 
 
 

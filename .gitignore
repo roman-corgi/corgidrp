@@ -88,3 +88,4 @@ tests/figures/
 tests/e2e_tests/*/*.png
 tests/e2e_tests/*_output
 tests/test_data/simastrom/guesses.csv
+tests/e2e_tests/data_format_docs/*.rst
