@@ -276,7 +276,7 @@ def calibrate_kgain(dataset_kgain,
                     n_cal=10, n_mean=30, min_val=800, max_val=3000, binwidth=68,
                     make_plot=False,plot_outdir='figures', show_plot=False,
                     logspace_start=-1, logspace_stop=4, logspace_num=200,
-                    verbose=False, detector_regions=None, kgain_params=None):
+                    verbose=False, detector_regions=None, kgain_params=None, apply_dq = True):
     """
     kgain (e-/DN) is calculated from the means and variances
     within the defined minimum and maximum mean values. A photon transfer curve
@@ -351,6 +351,7 @@ def calibrate_kgain(dataset_kgain,
         'max_DN_val': maximum DN value to be included in photon transfer curve (PTC)
         'signal_bins_N': number of bins in the signal variables of PTC curve
         Defaults to kgain_params_default included in this file.
+      apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
     
     Returns:
       corgidrp.data.KGain: kgain estimate from the least-squares fit to the photon
@@ -366,7 +367,7 @@ def calibrate_kgain(dataset_kgain,
         detector_regions = detector_areas
 
     # cast dataset objects into np arrays for convenience
-    cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain)
+    cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain, apply_dq = apply_dq)
 
     # check number of frames, unique EM value, exposure times and datetimes
     tmp = cal_list[0]
@@ -793,7 +794,7 @@ def calibrate_kgain(dataset_kgain,
     
     return kgain
 
-def kgain_dataset_2_list(dataset):
+def kgain_dataset_2_list(dataset, apply_dq = True):
     """
     Casts the CORGIDRP Dataset object for K-gain calibration into a list of
     numpy arrays sharing the same exposure time. It also returns the list of
@@ -806,6 +807,7 @@ def kgain_dataset_2_list(dataset):
     Args:
         dataset (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
         pupil L1 SCI frames (counts in DN)
+        apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
 
     Returns:
         list with stack of stacks of data array associated with each frame
@@ -838,8 +840,9 @@ def kgain_dataset_2_list(dataset):
         record_len = True
         record_gain = True
         for frame in data_set.frames:
-            bad = np.where(frame.dq > 0)
-            frame.data[bad] = np.nan
+            if apply_dq:
+                bad = np.where(frame.dq > 0)
+                frame.data[bad] = np.nan
             if record_exp_time:
                 exp_time_mean_frame = frame.ext_hdr['EXPTIME']
                 record_exp_time = False
