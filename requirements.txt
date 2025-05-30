@@ -9,3 +9,4 @@ statsmodels
 pyklip
 emccd-detect
 tqdm
+termcolor
