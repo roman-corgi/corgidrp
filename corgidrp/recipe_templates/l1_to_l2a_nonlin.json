@@ -44,10 +44,7 @@
             }
         },
         {
-            "name" : "calibrate_nonlin",
-            "keywords": {
-                "apply_dq": false
-            }
+            "name" : "calibrate_nonlin"
         },
         {
             "name" : "save"

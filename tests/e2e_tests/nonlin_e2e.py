@@ -111,8 +111,15 @@ def test_nonlin_cal_e2e(
 
     # Run the walker on some test_data
     print('Running walker')
-    walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")
-
+    #walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")
+    recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
+     ### Modify they keywords of some of the steps
+    for step in recipe['steps']:
+        # if step['name'] in ["desmear", "cti_correction"]:
+        #     step['skip'] = True
+        if step['name'] == "calibrate_nonlin":
+            step['keywords']['apply_dq'] = False # full shaped pupil FOV
+    walker.run_recipe(recipe, save_recipe_file=True)
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
