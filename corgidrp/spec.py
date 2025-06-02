@@ -1,8 +1,10 @@
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image
-
+import corgidrp
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
+import os
+from astropy.io import ascii, fits
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
@@ -229,6 +231,26 @@ def get_center_of_mass(frame):
     
     return xcen, ycen
 
+def rotate_points(points, angle_rad, pivot_point):
+    """ 
+    Rotate an array of (x,y) coordinates by an angle about a pivot point.
+
+    Args:
+        points (tuple): Two-element tuple of (x,y) coordinates. 
+                The first element is an array of x values; 
+                the second element is an array of y values. 
+        angle_rad (float): Rotation angle in radians
+        pivot_point (tuple): Tuple of (x,y) coordinates of the pivot point.
+
+    Returns:
+        Two-element tuple of rotated (x,y) coordinates.
+    """
+    rotated_points = (points[0] - pivot_point[0], points[1] - pivot_point[1]) 
+    rotated_points = (rotated_points[0] * np.cos(angle_rad) - rotated_points[1] * np.sin(angle_rad),
+                      rotated_points[0] * np.sin(angle_rad) + rotated_points[1] * np.cos(angle_rad))
+    rotated_points = (rotated_points[0] + pivot_point[0], rotated_points[1] + pivot_point[1])
+    return rotated_points
+
 def fit_psf_centroid(psf_data, psf_template,
                      xcent_template = None, ycent_template = None,
                      xcent_guess = None, ycent_guess = None,
@@ -356,6 +378,7 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
         raise ValueError("Mismatch between dataset length and centroid guess arrays.")
 
     centroids = np.zeros((len(dataset), 2))
+    centroids_err = np.zeros((len(dataset), 2))
 
     pri_hdr = dataset[0].pri_hdr.copy()
     ext_hdr = dataset[0].ext_hdr.copy()
@@ -365,7 +388,7 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
         xguess = xcent[idx]
         yguess = ycent[idx]
 
-        xfit, yfit, *_ = fit_psf_centroid(
+        xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis = fit_psf_centroid(
             psf_data, psf_data,
             xcent_template=xguess,
             ycent_template=yguess,
@@ -376,6 +399,7 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
         )
 
         centroids[idx] = [xfit, yfit]
+        centroids_err[idx] = [x_precis, y_precis]
 
         if verbose:
             print(f"Slice {idx}: x = {xfit:.3f}, y = {yfit:.3f}")
@@ -384,7 +408,180 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
         centroids,
         pri_hdr=pri_hdr,
         ext_hdr=ext_hdr,
+        err_hdr = fits.Header(),
+        err = centroids_err,
         input_dataset=dataset
     )
         
     return calibration
+
+def read_cent_wave(filter_file, band):
+    """
+    read the csv filter file containing the band names and the central wavelength
+    Args:
+       filter_file (str): file name of the filter file
+       band (str): name of the filter band
+    Returns:
+       float: central wavelength of the filter band
+    """
+    data = ascii.read(filter_file, format = 'csv', data_start = 1)
+    filter_names = data.columns[0]
+    if band not in filter_names:
+        raise ValueError("{0} is not in table band names {1}".format(band, filter_names))
+    cen_wave = data.columns[1][filter_names == band][0]
+    
+    return cen_wave
+
+def estimate_dispersion_clocking_angle(xpts, ypts, weights):
+    """ 
+    Estimate the clocking angle of the dispersion axis based on the centroids of
+    the sub-band filter PSFs.
+
+    Args:
+        xpts (numpy.ndarray): Array of x coordinates in EXCAM pixels
+        ypts (numpy.ndarray): Array of y coordinates in EXCAM pixels
+        weights (numpy.ndarray): Array of weights for line fit
+
+    Returns:
+        clocking_angle, clocking_angle_uncertainty
+    """
+    linear_fit, V = np.polyfit(ypts, xpts, deg=1, w=weights, cov=True)
+    
+    theta = np.arctan(1/linear_fit[0])
+    if theta > 0:
+        clocking_angle = np.rad2deg(theta - np.pi)
+    else:
+        clocking_angle = np.rad2deg(theta)
+    clocking_angle_uncertainty = np.abs(np.rad2deg(np.arctan(linear_fit[0] + np.sqrt(V[0,0]))) - 
+                                        np.rad2deg(np.arctan(linear_fit[0] - np.sqrt(V[0,0])))) / 2
+
+    return clocking_angle, clocking_angle_uncertainty 
+
+def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wavlen, pixel_pitch_um=13.0):
+    """ 
+    Given arrays of wavlengths and positions, fit two polynomials:  
+    1. Displacement from a reference wavelength along the dispersion axis, 
+       in millimeters as a function of wavelength  
+    2. Wavelength as a function of displacement along the dispersion axis
+
+    Args:
+        wavlens (numpy.ndarray): Array of wavelengths corresponding to the
+        centroid data points
+        xpts (numpy.ndarray): Array of x coordinates in EXCAM pixels
+        ypts (numpy.ndarray): Array of y coordinates in EXCAM pixels
+        cent_errs (numpy.ndarray): Array of centroid uncertainties in EXCAM pixels
+        clock_ang (float): Clocking angle of the dispersion axis in degrees
+        ref_wavlen (float): Reference wavelength of the bandpass, in nanometers
+        pixel_pitch_um (float): EXCAM pixel pitch in microns
+
+    Returns:
+        pfit_pos_vs_wavlen (numpy.ndarray): polynomial coefficients for the
+        position vs wavelength fit
+        cov_pos_vs_wavlen (numpy.ndarray): covariance matrix of the polynomial
+        coefficients for the position vs wavelength fit
+        pfit_wavlen_vs_pos (numpy.ndarray): polynomial coefficients for the
+        wavelength vs position fit
+        cov_wavlen_vs_pos (numpy.ndarray): covariance matrix of the polynomial
+        coefficients for the wavelength vs position fit
+    """
+    pixel_pitch_mm = pixel_pitch_um * 1E-3
+
+    # Rotate the centroid coordinates so the dispersion axis is horizontal
+    # to define a rotation pivot point, select the filter closest to the nominal 
+    # zero deviation wavelength
+    refidx = np.argmin(np.abs(wavlens - ref_wavlen))
+    (x_rot, y_rot) = rotate_points((xpts, ypts), -np.deg2rad(clock_ang), 
+                                    pivot_point = (xpts[refidx], ypts[refidx]))
+    
+    # Fit an intermediate polynomial to wavelength versus position
+    delta_x = (x_rot - x_rot[refidx]) * pixel_pitch_mm
+    pos_err = cent_errs * pixel_pitch_mm
+    weights = 1 / pos_err
+    lambda_func_x = np.poly1d(np.polyfit(x = delta_x, y = wavlens, deg = 2, w = weights))
+    # Determine the position at the reference wavelength
+    poly_roots = (np.poly1d(lambda_func_x) - ref_wavlen).roots
+    real_roots = poly_roots[np.isreal(poly_roots)]
+    root_select_ind = np.argmin(np.abs(poly_roots[np.isreal(poly_roots)]))
+    pos_ref = np.real(real_roots[root_select_ind])
+    np.testing.assert_almost_equal(lambda_func_x(pos_ref), ref_wavlen)
+    displacements_mm = delta_x - pos_ref
+
+    # Fit two polynomials:  
+    # 1. Displacement from the band center along the dispersion axis as a 
+    #    function of wavelength  
+    # 2. Wavelength as a function of displacement along the dispersion axis
+    (pfit_pos_vs_wavlen,
+     cov_pos_vs_wavlen) = np.polyfit(x = (wavlens - ref_wavlen) / ref_wavlen,
+                                      y = displacements_mm, deg = 3, w = weights, cov=True)
+    
+    (pfit_wavlen_vs_pos,
+     cov_wavlen_vs_pos) = np.polyfit(x = displacements_mm, y = wavlens, deg = 3, 
+                                      w = weights, cov=True)
+
+    return pfit_pos_vs_wavlen, cov_pos_vs_wavlen, pfit_wavlen_vs_pos, cov_wavlen_vs_pos
+
+
+def calibrate_dispersion_model(centroid_psf, band_center_file, prism = 'PRISM3', pixel_pitch_um = 13.0):
+    """ 
+    Generate a DispersionModel of the spectral dispersion profile of the CGI ZOD prism.
+
+    Args:
+    centroid_psf (SpectroscopyCentroidPsf): instance of SpectroscopyCentroidPsf calibration class
+    band_center_file (str): file name of the band centers
+    prism (str): Label for the selected DPAM zero-deviation prism; must be
+    either 'PRISM3' or 'PRISM2'
+    pixel_pitch_um (float): EXCAM pixel pitch in micron, default 13 micron
+    """
+    #if not isinstance(dataset, Dataset):
+    #    raise TypeError("Input must be a corgidrp.data.Dataset object.")
+    if prism not in ['PRISM2', 'PRISM3']:
+        raise ValueError("prism must be PRISM2 or PRISM3")
+    
+    if prism == 'PRISM2':
+        subband_list = ['2A', '2B', '2C']
+        ref_wavlen = 660.0
+        ref_cfam = '2'
+        #bandpass = [610, 710]
+        #halfheight = 10
+    else:
+        subband_list = ['3A', '3B', '3C', '3D', '3E', '3G']
+        ref_wavlen = 730.0
+        ref_cfam = '3'
+        #bandpass = [675, 785]
+        #halfheight = 30
+        
+    subband_list.append(ref_cfam)
+    filters = centroid_psf.pri_hdr['FILTERS'].upper().split(",")
+    if len(filters) < 4:
+        raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(filters)))
+    center_wavel = []
+    for band in filters:
+        band_str = band.strip()
+        if band_str not in subband_list:
+            raise ValueError("measured band {0} is not in the sub band list {1} of the used prism".format(band_str, subband_list))
+        center_wavel.append(read_cent_wave(band_center_file,band_str))
+    center_wavel = np.array(center_wavel)
+    (clocking_angle,
+     clocking_angle_uncertainty) = estimate_dispersion_clocking_angle(
+            centroid_psf.xfit, centroid_psf.yfit, weights = 1. / centroid_psf.yfit_err
+     )
+
+    (pfit_pos_vs_wavlen, cov_pos_vs_wavlen,
+     pfit_wavlen_vs_pos, cov_wavlen_vs_pos) = fit_dispersion_polynomials(
+            center_wavel, centroid_psf.xfit, centroid_psf.yfit, 
+            centroid_psf.yfit_err, clocking_angle, ref_wavlen, pixel_pitch_um = pixel_pitch_um
+     )
+
+    disp_dict = {"clocking_angle": clocking_angle,
+        "clocking_angle_uncertainty": clocking_angle_uncertainty,
+        "pos_vs_wavlen_polycoeff": pfit_pos_vs_wavlen,
+        "pos_vs_wavlen_cov": cov_pos_vs_wavlen,
+        "wavlen_vs_pos_polycoeff": pfit_wavlen_vs_pos,
+        "wavlen_vs_pos_cov": cov_wavlen_vs_pos}
+    pri_hdr = centroid_psf.pri_hdr.copy()
+    ext_hdr = centroid_psf.ext_hdr.copy()
+    corgi_dispersion_profile = DispersionModel(
+        disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr
+    )
+
+    return corgi_dispersion_profile

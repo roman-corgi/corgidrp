@@ -727,12 +727,14 @@ class SpectroscopyCentroidPSF(Image):
     Args:
         data_or_filepath (str or np.ndarray): 2D array of (x, y) centroid positions 
                                               with shape (N, 2), where N is the number of PSFs.
+        err (np.ndarray): 2D array of (x,y) errors of centroid positions with shape (N,2)
         pri_hdr (fits.Header): Primary header.
         ext_hdr (fits.Header): Extension header.
+        err_hdr (fits.Header): error extension header
         input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
     """
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
-        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err_hdr = None, err = None, input_dataset=None):
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr = err_hdr, err = err)
 
 
         # if this is a new SpectroscopyCentroidPSF, we need to bookkeep it in the header
@@ -750,12 +752,17 @@ class SpectroscopyCentroidPSF(Image):
             # Generate default output filename
             base = input_dataset[0].filename.split(".fits")[0]
             self.filename = f"{base}_psf_centroid.fits"
+            if err is None:
+                self.err = np.zeros(self.data.shape)
+                self.err_hdr = fits.Header
 
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'PSFCentroidCalibration':
             raise ValueError("This file is not a valid PSFCentroidCalibration.")
 
         self.xfit = self.data[:, 0]
         self.yfit = self.data[:, 1]
+        self.xfit_err = self.err[0][:, 0]
+        self.yfit_err = self.err[0][:, 1]
 
 
 class DispersionModel(Image):
@@ -808,6 +815,7 @@ class DispersionModel(Image):
                 pri_hdr = fits.Header()
             if ext_hdr == None:
                 ext_hdr = fits.Header()
+            ext_hdr['DRPCTIME'] =  time.Time.now().isot
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             self.pri_hdr = pri_hdr
             self.ext_hdr = ext_hdr
@@ -823,7 +831,7 @@ class DispersionModel(Image):
             self.data = data_list
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['DRPCTIME'])
         # initialization data passed in
         self.clocking_angle = self.data["clocking_angle"][0]
         self.clocking_angle_uncertainty = self.data["clocking_angle_uncertainty"][0]
