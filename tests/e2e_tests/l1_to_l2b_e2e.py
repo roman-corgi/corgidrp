@@ -42,6 +42,7 @@ def fix_headers_for_tvac(
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
+        exthdr['BUNIT'] = 'DN'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
