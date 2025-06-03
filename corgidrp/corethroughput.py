@@ -453,8 +453,7 @@ def get_1d_ct(ct_cal,frame,seps,
     else:
         raise NotImplementedError
 
-
-def CreateCTMap(
+def create_ct_map(
     corDataset,
     fpamfsamcal,
     ct_cal,
@@ -527,15 +526,11 @@ def CreateCTMap(
     ct_interp = ct_cal.InterpolateCT(
             target_pix[0], target_pix[1], corDataset, fpamfsamcal, logr=logr)
 
+    # Generate the core throughput map object
     # Re-order output to match the required order: (x,y,ct)
-    ct_map = ct_interp[[1,2,0]]
-    
-    # Optionally, store it
-    if save:
-        if filepath == None:
-            # Choose a default location and filename
-            filepath = os.path.join(corgidrp.default_cal_dir, 'ct_map.csv')
-            np.savetxt(filepath, ct_map, delimiter=',', header='x, y, ct')
-            print(f'CT map saved in {filepath:s}')
-    
+    ct_map = data.CoreThroughputMap(ct_interp[[1,2,0]],
+        pri_hdr=corDataset[0].pri_hdr,
+        ext_hdr=corDataset[0].ext_hdr,
+        input_dataset=corDataset)
+
     return ct_map

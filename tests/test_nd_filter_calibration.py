@@ -1,11 +1,13 @@
 import os
 import glob
 from pathlib import Path
+import numbers
 import numpy as np
 from astropy.io import fits
 import pytest
 import re
 import copy
+from termcolor import cprint
 
 from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
@@ -16,6 +18,15 @@ from corgidrp.data import Dataset
 from corgidrp.data import Image
 import corgidrp.mocks as mocks
 from corgidrp.data import Image, NDFilterSweetSpotDataset
+
+
+def print_fail():
+    cprint(' FAIL ', "black", "on_red")
+
+
+def print_pass():
+    cprint(' PASS ', "black", "on_green")
+
 
 # ---------------------------------------------------------------------------
 # Global variables and constants
@@ -66,6 +77,29 @@ elif PHOT_METHOD == "Gaussian":
         "centering_method": 'xy',
         "centroid_roi_radius": 5
     }
+
+
+def is_real_positive_scalar(var):
+    """
+    Checks whether an object is a real positive scalar.
+
+    Parameters:
+        var (float): variable to check
+
+    Returns:
+        result (bool): Whether the check passes or not.
+
+    """
+    result = True
+    if not isinstance(var, numbers.Number):
+        result = False
+    if not np.isrealobj(var):
+        result = False
+    if var <= 0:
+        result = False
+
+    return result
+
 
 # ---------------------------------------------------------------------------
 # Functions to generate mocks
@@ -196,6 +230,14 @@ def stars_dataset_cached(bright_files_cached, dim_files_cached):
     return Dataset(combined_files)
 
 @pytest.fixture(scope="module")
+def stars_dataset_cached_bright_count(bright_files_cached, dim_files_cached):
+    combined_files = bright_files_cached + dim_files_cached
+    n_bright = len(bright_files_cached)
+    # TO DO: May eventually need to add other processing steps to get the mocks
+    # to a representative input state
+    return l2b_tol3.divide_by_exptime(Dataset(combined_files)), n_bright
+
+@pytest.fixture(scope="module")
 def dim_dir(tmp_path_factory):
     """
     Creates a temporary directory, populates it with the mock dim FITS files,
@@ -268,9 +310,9 @@ def test_output_filename_convention(stars_dataset_cached):
     print("The nd_filter_calibration product file exists and meets the expected naming convention.")
 
 
-def test_average_od_within_tolerance(stars_dataset_cached):
+def test_average_od_within_tolerance(stars_dataset_cached_bright_count):
     print("**Testing computed OD within tolerance**")
-    ds_copy = copy.deepcopy(stars_dataset_cached)
+    ds_copy, n_bright = copy.deepcopy(stars_dataset_cached_bright_count)
     results = nd_filter_calibration.create_nd_filter_cal(
         ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
         fluxcal_factor = None)
@@ -288,6 +330,38 @@ def test_average_od_within_tolerance(stars_dataset_cached):
 
     else:
         assert od_flag, f"High OD variation but flag is not set"
+
+    output_vec = ods[:, 0]
+    input_vec = INPUT_OD * np.ones_like(output_vec)
+    test_result = np.all(np.isclose(input_vec, output_vec, atol=OD_RASTER_THRESHOLD))
+
+    test_result = ((n_bright, 3) == ods.shape)
+    print(f'Shape test: has dimensions Mx3, where number of bright frames = M = {n_bright}: ', end='')
+    print_pass() if test_result else print_fail()
+
+    # Print out the results
+    print('OD values are correct: %.2f +/- %.2f: ' % (INPUT_OD, OD_RASTER_THRESHOLD), end='')
+    print_pass() if test_result else print_fail()
+
+    test_result_x = np.all(is_real_positive_scalar(val) for val in ods[:, 1])
+    test_result_y = np.all(is_real_positive_scalar(val) for val in ods[:, 2])
+
+    print('All PSF x values are real positive scalars: ', end='')
+    print_pass() if test_result_x else print_fail()
+
+    print('All PSF y values are real positive scalars: ', end='')
+    print_pass() if test_result_y else print_fail()
+
+    avg_x_expected = 512.00
+    avg_y_expected = 512.00
+    avg_x = np.mean(ods[:, 1])
+    avg_y = np.mean(ods[:, 2])
+    test_result_x = np.isclose(avg_x_expected, avg_x, atol=0.01)
+    test_result_y = np.isclose(avg_y_expected, avg_y, atol=0.01)
+    print('Mean x value is %.2f pixel: ' % avg_x_expected, end='')
+    print_pass() if test_result_x else print_fail()
+    print('Mean y value is %.2f pixels: ' % avg_x_expected, end='')
+    print_pass() if test_result_y else print_fail()
 
 
 @pytest.mark.parametrize("phot_method", ["Aperture", "Gaussian"])
@@ -557,12 +631,18 @@ def test_calculate_od_at_new_location(output_dir):
     # Expect the final location = (2+3, 2+3) = (5,5).
     # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
     expected_value = 3.5
-    assert abs(interpolated_od - expected_value) < 1e-6, (
+    atol_nd = 1e-6
+    test_result_od_accuracy = abs(interpolated_od - expected_value) < atol_nd
+    print(f'calculate_od_at_new_location() estimates OD as {expected_value} +/- {atol_nd}: ', end='')
+    print_pass() if test_result_od_accuracy else print_fail()
+
+    assert test_result_od_accuracy, (
         f"Expected OD={expected_value}, got {interpolated_od}"
     )
+    print('')
     print(
-        f"test_calculate_od_at_new_location_nd_sweetspot_real_class PASSED: "
-        f"interpolated OD={interpolated_od}"
+        f"test_calculate_od_at_new_location PASSED: "
+        f"estimated OD = {interpolated_od}, expected OD = {expected_value}"
     )
 
 

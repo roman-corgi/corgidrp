@@ -73,6 +73,10 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     if not os.path.exists(build_trad_dark_outputdir):
         os.mkdir(build_trad_dark_outputdir)
 
+    # remove any files in the output directory that may have been there previously
+    for f in os.listdir(build_trad_dark_outputdir):
+        os.remove(os.path.join(build_trad_dark_outputdir, f))
+
     this_caldb = caldb.CalDB() # connection to cal DB
     # remove other KGain calibrations that may exist in case they don't have the added header keywords
     for i in range(len(this_caldb._db['Type'])):
@@ -267,6 +271,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
     if not os.path.exists(build_trad_dark_outputdir):
         os.mkdir(build_trad_dark_outputdir)
+    # remove any files in the output directory that may have been there previously
+    for f in os.listdir(build_trad_dark_outputdir):
+        os.remove(os.path.join(build_trad_dark_outputdir, f))
 
     this_caldb = caldb.CalDB() # connection to cal DB
     # remove other KGain calibrations that may exist in case they don't have the added header keywords
@@ -439,6 +446,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
 
     # remove from caldb
     this_caldb.remove_entry(trad_dark)
+
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

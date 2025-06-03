@@ -2881,7 +2881,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # Save file
     if filedir is not None and file_save:
         ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
-        filename = f'CGI_{prihdr['VISITID']}_{ftimeutc}_L2b.fits'
+        filename = f'CGI_{prihdr["VISITID"]}_{ftimeutc}_L2b.fits'
         frame.save(filedir=filedir, filename=filename)
 
     return frame
@@ -2999,7 +2999,7 @@ def generate_reference_star_dataset_with_flux(
 
     return Dataset(frames)
 
-def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
+def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     """
     Create simulated data for core throughput calibration. This is a set of
     individual, noiseless 2D Gaussians, one per image.  
@@ -3008,6 +3008,8 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
         fwhm_mas (float): PSF's FWHM in mas
         cfam_name (str) (optional): CFAM filter name.
         n_psfs (int) (optional): Number of simulated PSFs.
+        e2e (bool) (optional): Whether these simulated data are for the CT e2e
+          test or not. If they are, the files are L2b. Otherwise, they are L3. 
 
     Returns:
         corgidrp.data.Image: The simulated PSF Images
@@ -3015,7 +3017,12 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
         np.array: PSF CT values
     """
     # Default headers
-    prhd, exthd = create_default_L3_headers()
+    if e2e:
+        prhd, exthd = create_default_L2b_headers()
+    else:
+        prhd, exthd = create_default_L3_headers()
+    # These data are for CT calibration
+    prhd['VISTYPE'] = 'CORETPUT'
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
     # Mock ERR
@@ -3071,7 +3078,6 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10):
         data_psf[-1].filename = 'CGI_0200001001001001001_20250415T0305102_L2b.fits'
         
     return data_psf, np.array(psf_loc), np.array(half_psf)
-
 
 def create_ct_psfs_with_mask(fwhm_mas, cfam_name='1F', n_psfs=10, image_shape=(1024,1024),
                    apply_mask=True, total_counts=1e4):
