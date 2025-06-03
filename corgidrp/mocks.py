@@ -1708,7 +1708,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         # image_frames.append(sim_data)
 
         # TO DO: Determine what level this image should be
-        prihdr, exthdr = create_default_L3_headers()
+        prihdr, exthdr = create_default_L1_headers()
         prihdr['VISTYPE'] = 'BORESITE'
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]

@@ -235,7 +235,7 @@ def stars_dataset_cached_bright_count(bright_files_cached, dim_files_cached):
     n_bright = len(bright_files_cached)
     # TO DO: May eventually need to add other processing steps to get the mocks
     # to a representative input state
-    return l2b_tol3.divide_by_exptime(Dataset(combined_files)), n_bright
+    return Dataset(combined_files), n_bright
 
 @pytest.fixture(scope="module")
 def dim_dir(tmp_path_factory):
