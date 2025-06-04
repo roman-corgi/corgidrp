@@ -76,6 +76,7 @@ html_sidebars = {
     "index": [],
     "pages/install": ["page-toc"],
     "pages/tutorials": [],
+    "pages/data_formats/index": [],
     "tutorials/**": ["page-toc", "sidebar-nav-bs.html"],
     "case_studies/**": ["page-toc", "sidebar-nav-bs.html"]
 }
