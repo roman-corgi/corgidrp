@@ -9,7 +9,7 @@ from corgidrp import caldb
 
 # ----------------------------------------------------------------------
 @pytest.mark.e2e
-def test_nd_filter_e2e(e2edata_path):
+def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     # 1. Synthetic “dim star” frames (no ND)
     fwhm = 3  # pix PSF width
     true_flux_dim = nd_filter_calibration.compute_expected_band_irradiance('TYC 4424-1286-1', '3C')
@@ -36,7 +36,7 @@ def test_nd_filter_e2e(e2edata_path):
         bright_frames.append(frame)
 
     # 3. Save raw files for the walker
-    simdata_dir = os.path.join(os.path.dirname(e2edata_path), "nd_filter_e2e_output")
+    simdata_dir = os.path.join(os.path.dirname(e2eoutput_path), "nd_filter_e2e_output")
     shutil.rmtree(simdata_dir, ignore_errors=True)
     os.makedirs(simdata_dir)
 
@@ -74,4 +74,4 @@ if __name__ == "__main__":
     parser.add_argument("-tvac", "--e2edata_dir", default=here)
     parser.add_argument("-o",    "--outputdir",   default=here)
     args = parser.parse_args()
-    test_nd_filter_e2e(args.e2edata_dir)
+    test_nd_filter_e2e(args.e2edata_dir, args.outputdir)
