@@ -140,12 +140,10 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     print('Running walker')
     #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
     recipe = walker.autogen_recipe(ordered_filelist, kgain_outputdir)
-     ### Modify they keywords of some of the steps
-    for step in recipe['steps']:
-        # if step['name'] in ["desmear", "cti_correction"]:
-        #     step['skip'] = True
+    ### Modify they keywords of some of the steps
+    for step in recipe[1]['steps']:
         if step['name'] == "calibrate_kgain":
-            step['keywords']['apply_dq'] = False # full shaped pupil FOV
+            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
     walker.run_recipe(recipe, save_recipe_file=True)
 
     ####### Load in the output data. It should be the latest kgain file produced.
