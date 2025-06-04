@@ -93,7 +93,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     """
 
     # figure out paths for both II&T and DRP runs, assuming everything is located in the same relative location as in the TVAC Box drive
-    l1_datadir = os.path.join(e2edata_path, 'untitled folder', "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
+    l1_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
 
     # define the raw science data to process
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
@@ -282,7 +282,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     """
 
     # figure out paths for both II&T and DRP runs, assuming everything is located in the same relative location as in the TVAC Box drive
-    l1_datadir = os.path.join(e2edata_path, 'untitled folder', "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
+    l1_datadir = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "noisemap_test_data", "test_l1_data")
 
     # define the raw science data to process
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
