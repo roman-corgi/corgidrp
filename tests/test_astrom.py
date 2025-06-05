@@ -50,21 +50,17 @@ def test_astrom():
     expected_platescale = 21.8
     atol_platescale = 0.5
 
-    expected_northangle = 20
-    atol_northangle = 0.05
-
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
-    test_result_platescale_x = astrom_cal.platescale[0] == pytest.approx(expected_platescale, abs=atol_platescale)
-    assert test_result_platescale_x
-    test_result_platescale_y = astrom_cal.platescale[1] == pytest.approx(expected_platescale, abs=atol_platescale)
-    assert test_result_platescale_y
-
-    test_result_platescale = test_result_platescale_x and test_result_platescale_y
-    print(f'\nPlate scale estimates from boresight_calibration() are accurate: {expected_platescale} +/- {atol_platescale}: ', end='')
+    expected_northangle = 20
+    atol_northangle = 0.05
+    test_result_platescale = (astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle))
+    print(f'\nPlate scale estimate from boresight_calibration() is accurate: {expected_platescale} +/- {atol_platescale}: ', end='')
     print_pass() if test_result_platescale else print_fail()
+    assert test_result_platescale
 
-    assert astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle)
+    test_result_northangle = (astrom_cal.northangle == pytest.approx(expected_northangle, abs=atol_northangle))
+    assert test_result_northangle
 
     # check that the center is correct within 3 [mas]
     # the simulated image should have zero offset
@@ -105,13 +101,6 @@ def test_distortion():
     # create dithered dataset 
     # mocks.create_astrom_data(field_path=field_path, filedir=datadir, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
     dataset = mocks.create_astrom_data(field_path=field_path, rotation=20, distortion_coeffs_path=distortion_coeffs_path, dither_pointings=4)
-
-    # image_path = os.path.join(datadir, 'simcal_astrom.fits')
-    # source_match_path = os.path.join(datadir, 'guesses.csv')
-    # matches = ascii.read(source_match_path)
-
-    # open the image
-    # dataset = data.Dataset([image_path])
 
     # perform the astrometric calibration
     astrom_cal = astrom.boresight_calibration(input_dataset=dataset, field_path=field_path, find_threshold=400, find_distortion=True, fitorder=3, position_error=0.5)
@@ -175,8 +164,9 @@ def test_distortion():
     # has distortion error < 4 [mas] (~0.1835 [pixel])
     atol_dist_mas = 4
     mas_per_pix = 21.8
+    mas_across = 1000
     atol_dist_pix = atol_dist_mas/mas_per_pix
-    lower_lim, upper_lim = int((1024//2) - ((1000/21.8)//2)), int((1024//2) + ((1000/21.8)//2))
+    lower_lim, upper_lim = int((1024//2) - ((mas_across/mas_per_pix)//2)), int((1024//2) + ((mas_across/mas_per_pix)//2))
 
     central_1arcsec_x = x_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
     central_1arcsec_y = y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
@@ -185,12 +175,12 @@ def test_distortion():
     true_1arcsec_y = true_y_diff[lower_lim: upper_lim+1,lower_lim: upper_lim+1]
 
     test_result_distortion_x = np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < atol_dist_pix)
-    print(f'\nDistortion map in x is accurate within {atol_dist_mas} mas in central square arcsecond: ', end='')
+    print(f'\nDistortion map in x is accurate within {atol_dist_mas} mas in central {mas_across} mas x {mas_across} mas: ', end='')
     print_pass() if test_result_distortion_x else print_fail()
     assert test_result_distortion_x
 
     test_result_distortion_y = np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < atol_dist_pix)
-    print(f'\nDistortion map in y is accurate within {atol_dist_mas} mas in central square arcsecond: ', end='')
+    print(f'\nDistortion map in y is accurate within {atol_dist_mas} mas in central {mas_across} mas x {mas_across} mas: ', end='')
     print_pass() if test_result_distortion_y else print_fail()
     assert test_result_distortion_y
 
@@ -288,6 +278,24 @@ def test_get_polar_dist():
 
     pass
 
+def test_transform_coeff_to_distortion_map():
+    """Test that astrom.transform_coeff_to_map() produces the correct distortion map from given
+    legendre coefficients."""
+
+    im_shape = np.array([1024, 1024])
+    fit_order = 3
+
+    # Test coeffs corresponding to no distortion
+    zero_coeffs = np.array([  0,   0,   0,   0, 500,   0,   0,   0,   0,   0,   0,   0,   0,
+         0,   0,   0,   0, 500,   0,   0,   0,   0,   0,   0,   0,   0,
+         0,   0,   0,   0,   0,   0])
+
+    z_xdiff, z_ydiff = astrom.transform_coeff_to_map(zero_coeffs, fit_order, im_shape)
+
+    # Check that the computed distortion map is zero everywhere
+    assert np.all(z_xdiff == 0)
+    assert np.all(z_ydiff == 0)
+
 if __name__ == "__main__":
     test_astrom()
     test_distortion()
@@ -295,3 +303,4 @@ if __name__ == "__main__":
     test_seppa2xy()
     test_create_circular_mask()
     test_get_polar_dist()
+    test_transform_coeff_to_distortion_map()

@@ -2982,7 +2982,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # Save file
     if filedir is not None and file_save:
         ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
-        filename = f'CGI_{prihdr['VISITID']}_{ftimeutc}_L2b.fits'
+        filename = f'CGI_{prihdr["VISITID"]}_{ftimeutc}_L2b.fits'
         frame.save(filedir=filedir, filename=filename)
 
     return frame

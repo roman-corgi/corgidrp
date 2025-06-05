@@ -205,6 +205,12 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
+
+**v2.2**
+ * Specific print statements in unit tests for AAC testing
+ * E2E test for ND filter calibration
+ * Revert to using only 1 platescale, instead of separate x and y axis platescales
+
 **v2.1**
  * E2E Test bug fixes
    * Fix bug that tradiational dark requires a clean output directory to pass
