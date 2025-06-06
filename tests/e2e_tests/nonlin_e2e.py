@@ -117,7 +117,7 @@ def test_nonlin_cal_e2e(
     for step in recipe[0]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
-    walker.run_recipe(recipe, save_recipe_file=True)
+    walker.run_recipe(recipe[0], save_recipe_file=True)
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
