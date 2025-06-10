@@ -98,11 +98,11 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     else:
         # figure out paths, assuming everything is located in the same relative location
         if not e2e: # if you want to test older simulated data
-            trap_pump_datadir = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
+            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
+            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
         if e2e:
-            trap_pump_datadir = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
+            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
+            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
         # this is a .npy file; read it in as a dictionary
         td = np.load(sim_traps, allow_pickle=True)
         TVAC_trap_dict = dict(td[()])

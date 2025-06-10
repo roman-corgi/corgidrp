@@ -236,25 +236,22 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
     trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
-    trad_dark = trad_dark_fits[1].data
-    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
-    trad_dark_prihdr = trad_dark_fits[0].header
-    trad_dark_exthdr = trad_dark_fits[1].header
-    trad_dark_prihdr.remove('BUILD')
-    trad_dark_exthdr.remove('DATA_LEVEL')
-    trad_dark_prihdr.remove('OBSTYPE')
-    trad_dark_exthdr.remove('CMDGAIN')
-    trad_dark_prihdr.remove('OBSID')
+    trad_dark_data = trad_dark_fits[1].data
     ###################
     
     ##### Check against TVAC traditional dark result
 
     TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
 
-    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
+    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     pass
-
-    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1), pri_hdr=trad_dark_prihdr, ext_hdr=trad_dark_exthdr)
+    trad_dark = data.Dark(generated_trad_dark_file)
+    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
+    trad_dark.pri_hdr.remove('BUILD')
+    trad_dark.ext_hdr.remove('DATA_LEVEL')
+    trad_dark.pri_hdr.remove('OBSTYPE')
+    trad_dark.ext_hdr.remove('CMDGAIN')
+    trad_dark.pri_hdr.remove('OBSID')
     trad_dark.save(filedir=build_trad_dark_outputdir, filename=trad_dark.filename) #to have example cal file with all the right headers with no extras
     # remove from caldb
     this_caldb.remove_entry(trad_dark)
@@ -444,22 +441,14 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
     trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
-    trad_dark = trad_dark_fits[1].data
-    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
-    trad_dark_prihdr = trad_dark_fits[0].header
-    trad_dark_exthdr = trad_dark_fits[1].header
-    trad_dark_prihdr.remove('BUILD')
-    trad_dark_exthdr.remove('DATA_LEVEL')
-    trad_dark_prihdr.remove('OBSTYPE')
-    trad_dark_exthdr.remove('CMDGAIN')
-    trad_dark_prihdr.remove('OBSID')
+    trad_dark_data = trad_dark_fits[1].data
     ###################
     
     ##### Check against TVAC traditional dark result
 
     TVAC_trad_dark = detector.slice_section(mean_frame, 'SCI', 'image')
 
-    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
+    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     trad_dark = data.Dark(generated_trad_dark_file)
     assert trad_dark.ext_hdr['BUNIT'] == 'Detected Electrons'
     assert trad_dark.err_hdr['BUNIT'] == 'Detected Electrons'
@@ -469,7 +458,12 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert(trad_dark.filename == test_filename)
     pass
 
-    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1), pri_hdr=trad_dark_prihdr, ext_hdr=trad_dark_exthdr)
+    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
+    trad_dark.pri_hdr.remove('BUILD')
+    trad_dark.ext_hdr.remove('DATA_LEVEL')
+    trad_dark.pri_hdr.remove('OBSTYPE')
+    trad_dark.ext_hdr.remove('CMDGAIN')
+    trad_dark.pri_hdr.remove('OBSID')
     trad_dark.save(filedir=build_trad_dark_outputdir, filename=trad_dark.filename) #to have example cal file with all the right headers with no extras
     # remove from caldb
     this_caldb.remove_entry(trad_dark)
