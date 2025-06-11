@@ -305,7 +305,7 @@ class Image():
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
-                    if self.err.ndim == self.data.ndim:
+                    if self.err.ndim != 1 and self.err.ndim == self.data.ndim:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
