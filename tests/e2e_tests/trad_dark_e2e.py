@@ -34,11 +34,18 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        if 'OBSID' in prihdr:
+            prihdr['OBSNUM'] = prihdr['OBSID']
+            prihdr.remove('OBSID')
+        if 'CMDGAIN' in exthdr:
+            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+            exthdr.remove('CMDGAIN')
         exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        if 'DATA_LEVEL' in exthdr:
+            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        # exthdr['KGAINPAR'] = exthdr['KGAIN']
+        if 'OBSTYPE' in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
         prihdr1, exthdr1 = mocks.create_default_L1_headers()
@@ -246,13 +253,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     pass
     trad_dark = data.Dark(generated_trad_dark_file)
-    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
-    trad_dark.pri_hdr.remove('BUILD')
-    trad_dark.ext_hdr.remove('DATA_LEVEL')
-    trad_dark.pri_hdr.remove('OBSTYPE')
-    trad_dark.ext_hdr.remove('CMDGAIN')
-    trad_dark.pri_hdr.remove('OBSID')
-    trad_dark.save(filedir=build_trad_dark_outputdir, filename=trad_dark.filename) #to have example cal file with all the right headers with no extras
+    
     # remove from caldb
     this_caldb.remove_entry(trad_dark)
 
@@ -458,13 +459,6 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert(trad_dark.filename == test_filename)
     pass
 
-    # remove old TVAC headers from output DRP calibration product so that it exactly matches DRP-only headers
-    trad_dark.pri_hdr.remove('BUILD')
-    trad_dark.ext_hdr.remove('DATA_LEVEL')
-    trad_dark.pri_hdr.remove('OBSTYPE')
-    trad_dark.ext_hdr.remove('CMDGAIN')
-    trad_dark.pri_hdr.remove('OBSID')
-    trad_dark.save(filedir=build_trad_dark_outputdir, filename=trad_dark.filename) #to have example cal file with all the right headers with no extras
     # remove from caldb
     this_caldb.remove_entry(trad_dark)
 
@@ -489,5 +483,5 @@ if __name__ == "__main__":
     # args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark_im(e2edata_dir, outputdir)
     test_trad_dark(e2edata_dir, outputdir)
+    test_trad_dark_im(e2edata_dir, outputdir)
