@@ -44,7 +44,8 @@
             }
         },
         {
-            "name" : "calibrate_nonlin"
+            "name" : "calibrate_nonlin",
+              "keywords": {"n_cal":20}
         },
         {
             "name" : "save"
