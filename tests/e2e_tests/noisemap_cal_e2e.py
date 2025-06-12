@@ -125,10 +125,11 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         exptime_arr.append(splitl1_params[i][0])
         gain_arr.append(splitl1_params[i][1])
     stackl1_arr = np.stack(stackl1_arr)
-    kgain_arr = 8.7*len(exptime_arr)
+    kgain_arr = [8.7]*len(exptime_arr)
     
     exptime_arr = np.array(exptime_arr)
     gain_arr = np.array(gain_arr)
+    kgain_arr = np.array(kgain_arr)
 
     ####### call II&T code
     (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
@@ -378,7 +379,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     this_caldb.save()
     # KGain calibration
     kgain_val = 8.7 # From TVAC-20 noise characterization measurements
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
