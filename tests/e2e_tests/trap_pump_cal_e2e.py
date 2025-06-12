@@ -82,7 +82,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
             np.random.seed(39)
             mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
             for i in os.listdir(trap_pump_outputdir):
-                if 'Scheme_' not in i:
+                # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
+                if ('Scheme_' not in i) or ('TPU_CAL' in i): 
                     continue
                 temperature = i[0:4]
                 sch = i[4:12]
@@ -155,7 +156,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     trap_cal_filename = None
     for root, _, files in os.walk(trap_pump_datadir):
         for name in files:
-            if 'TPUMP_Npumps' not in name:
+            if ('TPUMP_Npumps' not in name) or ('TPU_CAL' in name): # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
                 continue
             if trap_cal_filename is None:
                 trap_cal_filename = name # get first filename fed to walk_corgidrp for finding cal file later
