@@ -436,8 +436,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
     trad_dark = data.Dark(generated_trad_dark_file)
-    assert trad_dark.ext_hdr['BUNIT'] == 'Detected Electrons'
-    assert trad_dark.err_hdr['BUNIT'] == 'Detected Electrons'
+    assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
+    assert trad_dark.err_hdr['BUNIT'] == 'detected electron'
     test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_DRK_CAL.fits'
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_L[0-9].', '', test_filename)
