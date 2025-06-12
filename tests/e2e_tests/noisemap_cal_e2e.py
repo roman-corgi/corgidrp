@@ -125,10 +125,11 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         exptime_arr.append(splitl1_params[i][0])
         gain_arr.append(splitl1_params[i][1])
     stackl1_arr = np.stack(stackl1_arr)
-    kgain_arr = 8.7*len(exptime_arr)
+    kgain_arr = [8.7]*len(exptime_arr)
     
     exptime_arr = np.array(exptime_arr)
     gain_arr = np.array(gain_arr)
+    kgain_arr = np.array(kgain_arr)
 
     ####### call II&T code
     (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
