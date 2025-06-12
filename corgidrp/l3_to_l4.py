@@ -426,10 +426,6 @@ def do_psf_subtraction(input_dataset,
         Require pyklip output to be centered on 1 pixel. can use the aligned_center kw to do this.
         Make sure psfsub test output data gets saved in a reasonable place
         Update output filename to: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
-        other pyklip_parallelized kwargs to consider using:
-            minrot: minimum PA rotation (in degrees) to be considered for use as a reference PSF (good for disks)
-            maxrot: maximum PA rotation (in degrees) to be considered for use as a reference PSF (temporal variability)
-            save_aligned:	Save the aligned and scaled images (as well as various wcs information), True/False
         
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
@@ -457,15 +453,10 @@ def do_psf_subtraction(input_dataset,
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
         kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
         num_processes (int): number of processes for parallelizing the PSF subtraction
-        klip_kwargs:
-            mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously if not specified.
-            annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
-            annuli_spacing: how to distribute the annuli radially. Currently three options. 'constant' (equally spaced), 
-                'log' (logarithmical expansion with r), and 'linear' (linearly expansion with r). Defaults to constant.
-            subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
-            movement (int): minimum amount of movement (in pixels) of an astrophysical source to consider using that 
-                image for a refernece PSF. Defaults to 1.
-            numbasis (int or list of int): number of KLIP modes to retain. Defaults to [1,4,8,16].
+        klip_kwargs: Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined here: 
+            https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset. 
+            'mode', e.g. ADI/RDI/ADI+RDI, is chosen autonomously if not specified. 'annuli' defaults to 1. 'annuli_spacing' 
+            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. numbasis defaults to [1,4,8,16].
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
