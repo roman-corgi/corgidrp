@@ -403,7 +403,6 @@ def crop(input_dataset, sizexy=None, centerxy=None):
 def do_psf_subtraction(input_dataset, 
                        ct_calibration=None,
                        reference_star_dataset=None,
-                       klip_kwargs=None,
                        outdir=None,fileprefix="",
                        do_crop=True,
                        crop_sizexy=None,
@@ -413,7 +412,8 @@ def do_psf_subtraction(input_dataset,
                        kt_seps=None,
                        kt_pas=None,
                        kt_snr=20.,
-                       num_processes=None
+                       num_processes=None,
+                       **klip_kwargs
                        ):
     
     """
@@ -437,16 +437,6 @@ def do_psf_subtraction(input_dataset,
             if measuring KLIP throughput or 1D core throughput. Defaults to None.
         reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
             star. If not provided, references will be searched for in the input dataset.
-        klip_kwargs (dict, optional): keyword arguments to be passed to pyklip.parallelized.klip_dataset(). Available 
-            parameters and their defaults are described in the KLIP Kwargs section below:
-            mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously if not specified.
-            annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
-            annuli_spacing: how to distribute the annuli radially. Currently three options. 'constant' (equally spaced), 
-            'log' (logarithmical expansion with r), and 'linear' (linearly expansion with r). Defaults to constant.
-            subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
-            movement (int): minimum amount of movement (in pixels) of an astrophysical source to consider using that 
-            image for a refernece PSF. Defaults to 1.
-            numbasis (int or list of int): number of KLIP modes to retain. Defaults to [1,4,8,16].
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
         do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
@@ -467,12 +457,19 @@ def do_psf_subtraction(input_dataset,
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
         kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
         num_processes (int): number of processes for parallelizing the PSF subtraction
+        klip_kwargs:
+            mode (str): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously if not specified.
+            annuli (int): number of concentric annuli to run separate subtractions on. Defaults to 1.
+            annuli_spacing: how to distribute the annuli radially. Currently three options. 'constant' (equally spaced), 
+                'log' (logarithmical expansion with r), and 'linear' (linearly expansion with r). Defaults to constant.
+            subsections (int): number of angular subsections to run separate subtractions on. Defaults to 1.
+            movement (int): minimum amount of movement (in pixels) of an astrophysical source to consider using that 
+                image for a refernece PSF. Defaults to 1.
+            numbasis (int or list of int): number of KLIP modes to retain. Defaults to [1,4,8,16].
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
-    KLIP Kwargs:
-        
     """
 
     sci_dataset = input_dataset.copy()
@@ -501,10 +498,6 @@ def do_psf_subtraction(input_dataset,
             ref_dataset = None
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
-
-    # Set up klip_kwargs
-    if klip_kwargs is None:
-        klip_kwargs = dict()
 
     if 'mode' not in klip_kwargs.keys():
         # Choose PSF subtraction mode if unspecified
