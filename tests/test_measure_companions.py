@@ -233,17 +233,19 @@ def generate_test_data(out_dir):
     for i, comp in enumerate(COMPANION_PARAMS):
         cand_locs.append((comp['sep_pix'], comp['pa']))
     
+    klip_kwargs={'numbasis' : NUMBASIS,
+                     'mode' : 'RDI'}
+        
     # RDI
     psf_sub_dataset = l3_to_l4.do_psf_subtraction(
         coron_data, reference_star_dataset=ref_data,
         ct_calibration=ct_cal,
-        klip_kwargs={'numbasis' : NUMBASIS,
-                     'mode' : 'RDI'},
         do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE,
         cand_locs=cand_locs,
         num_processes=1,
         kt_seps=[9,17],
-        kt_pas=[150, 210, 270, 330]
+        kt_pas=[150, 210, 270, 330],
+        **klip_kwargs
     )
 
 

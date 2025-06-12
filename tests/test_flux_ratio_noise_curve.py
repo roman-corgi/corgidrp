@@ -60,14 +60,14 @@ def test_expected_flux_ratio_noise():
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
-    
+    klip_kwargs={'numbasis' : numbasis}
     psfsub_dataset_rdi = do_psf_subtraction(mock_sci_rdi,ctcal,
                                 reference_star_dataset=mock_ref_rdi,
-                                klip_kwargs={'numbasis' : numbasis},
                                 fileprefix='test_KL_THRU',
                                 do_crop=False,
                                 measure_klip_thrupt=True,
-                                measure_1d_core_thrupt=True)
+                                measure_1d_core_thrupt=True,
+                                **klip_kwargs)
     
     # make unocculted star 
     x = np.arange(psfsub_dataset_rdi[0].data.shape[-1])
