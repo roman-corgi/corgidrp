@@ -453,10 +453,9 @@ def do_psf_subtraction(input_dataset,
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
         kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
         num_processes (int): number of processes for parallelizing the PSF subtraction
-        klip_kwargs: Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined here: 
-            `https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset`. 
+        klip_kwargs: Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined `here <https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset>`. 
             'mode', e.g. ADI/RDI/ADI+RDI, is chosen autonomously if not specified. 'annuli' defaults to 1. 'annuli_spacing' 
-            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. numbasis defaults to [1,4,8,16].
+            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1,4,8,16].
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
