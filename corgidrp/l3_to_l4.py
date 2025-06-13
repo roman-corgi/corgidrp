@@ -399,29 +399,33 @@ def crop(input_dataset, sizexy=None, centerxy=None):
     
     return output_dataset
 
+
 def do_psf_subtraction(input_dataset, 
                        ct_calibration=None,
                        reference_star_dataset=None,
-                       mode=None, annuli=1,subsections=1,movement=1,
-                       numbasis=[1,4,8,16],outdir=None,fileprefix="",
+                       outdir=None,fileprefix="",
                        do_crop=True,
                        crop_sizexy=None,
                        measure_klip_thrupt=True,
                        measure_1d_core_thrupt=True,
-                       cand_locs=[],
+                       cand_locs=None,
                        kt_seps=None,
                        kt_pas=None,
                        kt_snr=20.,
-                       num_processes=None
+                       num_processes=None,
+                       **klip_kwargs
                        ):
-    """
     
+    """
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
         Handle propagate DQ array
         Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
+        Require pyklip output to be centered on 1 pixel. can use the aligned_center kw to do this.
+        Make sure psfsub test output data gets saved in a reasonable place
+        Update output filename to: CGI_<Last science target VisitID>_<Last science target TimeUTC>_L<>.fits
         
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
@@ -429,12 +433,6 @@ def do_psf_subtraction(input_dataset,
             if measuring KLIP throughput or 1D core throughput. Defaults to None.
         reference_star_dataset (corgidrp.data.Dataset, optional): a dataset of Images of the reference 
             star. If not provided, references will be searched for in the input dataset.
-        mode (str, optional): pyKLIP PSF subraction mode, e.g. ADI/RDI/ADI+RDI. Mode will be chosen autonomously 
-            if not specified.
-        annuli (int, optional): number of concentric annuli to run separate subtractions on. Defaults to 1.
-        subsections (int, optional): number of angular subsections to run separate subtractions on. Defaults to 1.
-        movement (int, optional): KLIP movement parameter. Defaults to 1.
-        numbasis (int or list of int, optional): number of KLIP modes to retain. Defaults to [1,4,8,16].
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
         do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
@@ -455,7 +453,10 @@ def do_psf_subtraction(input_dataset,
             PSFs at each separation for KLIP throughput calibration. Defaults to [0.,90.,180.,270.].
         kt_snr (float, optional): SNR of fake signals to inject during KLIP throughput calibration. Defaults to 20.
         num_processes (int): number of processes for parallelizing the PSF subtraction
-        
+        klip_kwargs: Additional keyword arguments to be passed to pyKLIP fm.klip_dataset, as defined `here <https://pyklip.readthedocs.io/en/latest/pyklip.html#pyklip.fm.klip_dataset>`. 
+            'mode', e.g. ADI/RDI/ADI+RDI, is chosen autonomously if not specified. 'annuli' defaults to 1. 'annuli_spacing' 
+            defaults to 'constant'. 'subsections' defaults to 1. 'movement' defaults to 1. 'numbasis' defaults to [1,4,8,16].
+
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the PSF subtraction applied (L4-level)
 
@@ -488,27 +489,38 @@ def do_psf_subtraction(input_dataset,
 
     assert len(sci_dataset) > 0, "Science dataset has no data."
 
-    # Choose PSF subtraction mode if unspecified
-    if mode is None:
-        
+    if 'mode' not in klip_kwargs.keys():
+        # Choose PSF subtraction mode if unspecified
         if not ref_dataset is None and len(sci_dataset)==1:
-            mode = 'RDI' 
+            klip_kwargs['mode'] = 'RDI' 
         elif not ref_dataset is None:
-            mode = 'ADI+RDI'
+            klip_kwargs['mode'] = 'ADI+RDI'
         else:
-            mode = 'ADI' 
+            klip_kwargs['mode'] = 'ADI' 
+    else: assert klip_kwargs['mode'] in ['RDI','ADI+RDI','ADI'], f"Mode {klip_kwargs['mode']} is not configured."
 
-    else: assert mode in ['RDI','ADI+RDI','ADI'], f"Mode {mode} is not configured."
+    if 'numbasis' not in klip_kwargs.keys():
+        klip_kwargs['numbasis'] = [1,4,8,16]
+    elif isinstance(klip_kwargs['numbasis'],int):
+        klip_kwargs['numbasis'] = [klip_kwargs['numbasis']]
 
-    # Format numbases
-    if isinstance(numbasis,int):
-        numbasis = [numbasis]
+    if 'annuli' not in klip_kwargs.keys():
+        klip_kwargs['annuli'] = 1
 
+    if 'annuli_spacing' not in klip_kwargs.keys():
+        klip_kwargs['annuli_spacing'] = 'constant'
+
+    if 'subsections' not in klip_kwargs.keys():
+        klip_kwargs['subsections'] = 1
+
+    if 'movement' not in klip_kwargs.keys():
+        klip_kwargs['movement'] = 1
+    
     # Set up outdir
     if outdir is None: 
         outdir = os.path.join(corgidrp.config_folder, 'KLIP_SUB')
     
-    outdir = os.path.join(outdir,mode)
+    outdir = os.path.join(outdir,klip_kwargs['mode'])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -526,16 +538,15 @@ def do_psf_subtraction(input_dataset,
     
     # Run pyklip
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
-                              annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
-                              calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
-                              fileprefix=fileprefix, numthreads=num_processes)
+                            **klip_kwargs,
+                            calibrate_flux=False,psf_library=pyklip_dataset._psflib,
+                            fileprefix=fileprefix, numthreads=num_processes)
     
     # Construct corgiDRP dataset from pyKLIP result
     result_fpath = os.path.join(outdir,f'{fileprefix}-KLmodes-all.fits')   
     pyklip_data = fits.getdata(result_fpath)
     pyklip_hdr = fits.getheader(result_fpath)
 
-    # TODO: Handle errors correctly
     err = np.zeros([1,*pyklip_data.shape])
     dq = np.zeros_like(pyklip_data) # This will get filled out later
 
@@ -550,7 +561,7 @@ def do_psf_subtraction(input_dataset,
             ext_hdr.set(kw,val,comment)
 
     # Record KLIP algorithm explicitly
-    pri_hdr.set('KLIP_ALG',mode)
+    pri_hdr.set('KLIP_ALG',klip_kwargs['mode'])
     
     # Add info from pyklip to ext_hdr
     ext_hdr['STARLOCX'] = pyklip_hdr['PSFCENTX']
@@ -574,7 +585,7 @@ def do_psf_subtraction(input_dataset,
     dataset_out = flag_nans(dataset_out,flag_val=1)
     dataset_out = nan_flags(dataset_out,threshold=1)
     
-    history_msg = f'PSF subtracted via pyKLIP {mode}.'
+    history_msg = f'PSF subtracted via pyKLIP {klip_kwargs["mode"]}.'
     dataset_out.update_after_processing_step(history_msg)
     
     if measure_klip_thrupt:
@@ -582,12 +593,13 @@ def do_psf_subtraction(input_dataset,
         # Determine flux of objects to inject (units?)
 
         # Use same KLIP parameters
-        klip_params = {
-            'outdir':outdir,'fileprefix':fileprefix,
-            'annuli':annuli, 'subsections':subsections, 
-            'movement':movement, 'numbasis':numbasis,
-            'mode':mode}
+        klip_params = klip_kwargs.copy()
+        klip_params['outdir'] = outdir
+        klip_params['fileprefix'] = fileprefix,
         
+        if cand_locs is None:
+            cand_locs = []
+
         klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,
                             ct_calibration,
@@ -641,6 +653,7 @@ def do_psf_subtraction(input_dataset,
         dataset_out.update_after_processing_step(history_msg)
             
     return dataset_out
+
 
 def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     """
@@ -747,6 +760,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
                                                    new_all_dq=np.array(new_all_dq))
 
     return processed_dataset 
+
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """

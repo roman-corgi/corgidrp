@@ -523,15 +523,16 @@ def test_meas_klip_ADI():
     #     n_frame = f if f < len(mock_sci) else f-len(mock_sci)
     #     axes[f].set_title(f'{name} Input Frame {n_frame}')
     # plt.show()
-
+    klip_kwargs={
+                'numbasis' : numbasis,
+                'mode' : mode}
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
-                                mode=mode,
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
     
     # # Plot Psf subtraction result
     # if psfsub_dataset[0].pri_hdr['KLIP_ALG'] == 'RDI':
@@ -627,15 +628,16 @@ def test_meas_klip_RDI():
     #     n_frame = f if f < len(mock_sci) else f-len(mock_sci)
     #     axes[f].set_title(f'{name} Input Frame {n_frame}')
     # plt.show()
-
+    klip_kwargs={
+                'numbasis' : numbasis,
+                'mode' : mode}
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
-                                mode=mode,
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
 
     klip_params['mode'] = mode
     kt_rdi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
@@ -684,14 +686,16 @@ def test_meas_klip_ADIRDI():
                                             noise_amp=noise_amp,
                                             pl_contrast=pl_contrast)
 
+    klip_kwargs={
+        'numbasis' : numbasis,
+        'mode' : mode}
     psfsub_dataset = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
-                                mode=mode,
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
 
     kt_adirdi = meas_klip_thrupt(mock_sci, mock_ref, # pre-psf-subtracted dataset
                      psfsub_dataset, # post-subtraction dataset
@@ -758,17 +762,18 @@ def test_psfsub_withklipandctmeas_adi():
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
-    
+    klip_kwargs={
+                'numbasis' : numbasis}
+                                
     psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
-                                mode=None,
                                 do_crop=False,
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
                                 cand_locs= [pl_loc],
-                                kt_seps=[pl_loc[0]])
+                                kt_seps=[pl_loc[0]],
+                                **klip_kwargs)
     
 
     # Plot Psf subtraction result
@@ -937,17 +942,18 @@ def test_psfsub_withklipandctmeas_rdi():
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
-    
+    klip_kwargs={
+                'numbasis' : numbasis}
+                                
     psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_KL_THRU',
-                                mode=None,
                                 do_crop=False,
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
                                 cand_locs= [pl_loc],
-                                kt_seps=[pl_loc[0]])
+                                kt_seps=[pl_loc[0]],
+                                **klip_kwargs)
     
 
     # Plot Psf subtraction result
@@ -1126,17 +1132,16 @@ def test_psfsub_withKTandCTandCrop_adi():
                   cenx=cenx,ceny=ceny,
                   nx=nx,ny=ny)
     
-    
+    klip_kwargs={'numbasis' : numbasis}
     psfsub_dataset = do_psf_subtraction(mock_sci,ctcal,
-                                reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
+                                reference_star_dataset=mock_ref,                                
                                 fileprefix='test_KL_THRU',
-                                mode=None,
                                 do_crop=True,
                                 measure_klip_thrupt=True,
                                 measure_1d_core_thrupt=True,
                                 cand_locs= [pl_loc],
-                                kt_seps=[pl_loc[0]])
+                                kt_seps=[pl_loc[0]],
+                                **klip_kwargs)
 
     # # Plot Psf subtraction result
     # import matplotlib.pyplot as plt
@@ -1295,7 +1300,7 @@ if __name__ == '__main__':
     test_meas_klip_ADIRDI()
     test_compare_RDI_ADI()
 
-    # test_psfsub_withklipandctmeas_adi()
-    # test_psfsub_withklipandctmeas_rdi()
-    # test_psfsub_withKTandCTandCrop_adi()
+    test_psfsub_withklipandctmeas_adi()
+    test_psfsub_withklipandctmeas_rdi()
+    test_psfsub_withKTandCTandCrop_adi()
     
