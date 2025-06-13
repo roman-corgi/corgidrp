@@ -38,6 +38,7 @@ def fix_headers_for_tvac(
         prihdr['OBSNUM'] = prihdr['OBSID']
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
