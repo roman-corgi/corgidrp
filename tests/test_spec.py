@@ -50,8 +50,7 @@ def test_psf_centroid():
 
     calibration = steps.compute_psf_centroid(
         dataset=dataset,
-        initial_cent=initial_cent,
-        verbose=False
+        initial_cent=initial_cent
     )
     
     assert calibration.xfit.ndim == 1
@@ -82,6 +81,15 @@ def test_psf_centroid():
         assert centroid_error.shape[2] == 2, "Centroid error should be shape (N, 2)"
 
         print(f"Centroid FITS file validated: {centroid_data.shape[0]} rows")
+        
+    calibration_2 = steps.compute_psf_centroid(
+        dataset=dataset
+    )
+    
+    print(calibration_2.xfit)
+    print(calibration_2.yfit)
+    print(calibration_2.xfit_err)
+    print(calibration_2.yfit_err)
 
 def test_dispersion_model():
     global disp_dict

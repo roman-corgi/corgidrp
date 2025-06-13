@@ -351,7 +351,7 @@ def fit_psf_centroid(psf_data, psf_template,
 
     return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
 
-def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, halfheight=10):
+def compute_psf_centroid(dataset, template_file = None, initial_cent = None, verbose=False, halfwidth=10, halfheight=10):
     """
     Compute PSF centroids for a grid of PSFs and return them as a calibration object.
 
@@ -359,6 +359,7 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
         dataset (Dataset): Dataset containing 2D PSF images. Each image must include pri_hdr and ext_hdr.
         initial_cent (dict): Dictionary with initial guesses for PSF centroids.
                              Must include keys 'xcent' and 'ycent', each mapping to an array of shape (N,).
+        template_file (str): filepath of the template PSF, if None, a simulated PSF from the test_data is taken
         verbose (bool): If True, prints fitted centroid values for each frame.
         halfwidth (int): Half-width of the PSF fitting box.
         halfheight (int): Half-height of the PSF fitting box.
@@ -368,15 +369,34 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
     """
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
-
-    xcent = np.asarray(initial_cent.get("xcent"))
-    ycent = np.asarray(initial_cent.get("ycent"))
-
-    if xcent is None or ycent is None:
-        raise ValueError("initial_cent dictionary must contain 'xcent' and 'ycent' arrays.")
-    if len(dataset) != len(xcent) or len(dataset) != len(ycent):
-        raise ValueError("Mismatch between dataset length and centroid guess arrays.")
-
+    
+    
+    if initial_cent == None:
+        xcent, ycent = None, None
+    else:
+        xcent = np.asarray(initial_cent.get("xcent"))
+        ycent = np.asarray(initial_cent.get("ycent"))
+        if xcent is None or ycent is None:
+            raise ValueError("initial_cent dictionary must contain 'xcent' and 'ycent' arrays.")
+        if len(dataset) != len(xcent) or len(dataset) != len(ycent):
+            raise ValueError("Mismatch between dataset length and centroid guess arrays.")
+    
+    if template_file == None:
+        test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), "tests", "test_data", "spectroscopy")
+        template_file = os.path.join(test_data_path, 
+            'g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits')
+    temp_psf_array = fits.getdata(template_file, ext=0)
+    if len(dataset) != np.shape(temp_psf_array)[0]:
+        raise ValueError("Mismatch between dataset length and template arrays.")
+    try:
+        temp_psf_table = fits.getdata(template_file , ext=1)
+        (xcent_template, ycent_template) = (temp_psf_table['xcent'], temp_psf_table['ycent'])
+        if len(dataset) != len(xcent_template) or len(dataset) != len(ycent_template):
+            raise ValueError("Mismatch between dataset length and template centroid arrays.")
+    except:
+        raise Warning("template PSF fits file does not seem to have an extension with the fit results")
+        (xcent_template, ycent_template) = (None, None)
+    
     centroids = np.zeros((len(dataset), 2))
     centroids_err = np.zeros((len(dataset), 2))
 
@@ -385,13 +405,23 @@ def compute_psf_centroid(dataset, initial_cent, verbose=False, halfwidth=10, hal
 
     for idx, frame in enumerate(dataset):
         psf_data = frame.data
-        xguess = xcent[idx]
-        yguess = ycent[idx]
+        if xcent is None:
+            xguess, yguess = None, None
+        else:
+            xguess = xcent[idx]
+            yguess = ycent[idx]
+        
+        temp_psf_data = temp_psf_array[idx]
+        if xcent_template is None:
+            temp_x, temp_y = None, None
+        else: 
+            temp_x = xcent_template[idx]
+            temp_y = ycent_template[idx]
 
         xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis = fit_psf_centroid(
-            psf_data, psf_data,
-            xcent_template=xguess,
-            ycent_template=yguess,
+            psf_data, temp_psf_data,
+            xcent_template=temp_x,
+            ycent_template=temp_y,
             xcent_guess=xguess,
             ycent_guess=yguess,
             halfwidth=halfwidth,
