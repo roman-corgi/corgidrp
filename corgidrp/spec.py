@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
@@ -5,6 +6,13 @@ import corgidrp
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
 import os
 from astropy.io import ascii, fits
+
+default_psf_files = {
+"3d_noslit": "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits",
+"3d_slit":  "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits",
+"filtersweep": "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits"
+}
+
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
     """
@@ -370,7 +378,6 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
     
-    
     if initial_cent == None:
         xcent, ycent = None, None
     else:
@@ -382,9 +389,17 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
             raise ValueError("Mismatch between dataset length and centroid guess arrays.")
     
     if template_file == None:
+        if 'FILTERS' in dataset[0].pri_hdr:
+            default_file = default_psf_files.get('filtersweep')
+        elif dataset[0].pri_hdr['SLIT'] == 'N':
+            default_file = default_psf_files.get('3d_noslit')
+        else:
+            default_file = default_psf_files.get('3d_slit')
         test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), "tests", "test_data", "spectroscopy")
         template_file = os.path.join(test_data_path, 
-            'g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits')
+            default_file)
+        if verbose:
+            print("no template file given, take simulated file: " + default_file)
     temp_psf_array = fits.getdata(template_file, ext=0)
     if len(dataset) != np.shape(temp_psf_array)[0]:
         raise ValueError("Mismatch between dataset length and template arrays.")

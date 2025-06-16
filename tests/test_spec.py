@@ -15,9 +15,10 @@ def test_psf_centroid():
     """
     Test PSF centroid computation with mock data and assert correctness of output FITS structure.
     """
+    errortol_pix = 0.01
     file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
-
+    
     with fits.open(file_path) as hdul:
         psf_array = hdul[0].data
         psf_table = Table(hdul[1].data)
@@ -50,7 +51,7 @@ def test_psf_centroid():
 
     calibration = steps.compute_psf_centroid(
         dataset=dataset,
-        initial_cent=initial_cent
+        initial_cent=initial_cent, verbose = True
     )
     
     assert calibration.xfit.ndim == 1
@@ -83,14 +84,19 @@ def test_psf_centroid():
         print(f"Centroid FITS file validated: {centroid_data.shape[0]} rows")
         
     calibration_2 = steps.compute_psf_centroid(
-        dataset=dataset
+        dataset=dataset, verbose = True
     )
     
-    print(calibration_2.xfit)
-    print(calibration_2.yfit)
-    print(calibration_2.xfit_err)
-    print(calibration_2.yfit_err)
-
+    assert np.all(np.abs(calibration.xfit - initial_cent["xcent"]) < errortol_pix)
+    assert np.all(np.abs(calibration.yfit - initial_cent["ycent"]) < errortol_pix)
+    assert np.all(calibration.xfit_err < errortol_pix)
+    assert np.all(calibration.yfit_err < errortol_pix)
+    assert np.all(calibration_2.xfit_err < errortol_pix)
+    assert np.all(calibration_2.yfit_err < errortol_pix)
+    #accuracy lower without initial guess
+    assert np.all(np.abs(calibration_2.xfit - initial_cent["xcent"]) < 1)
+    assert np.all(np.abs(calibration_2.yfit - initial_cent["ycent"]) < 3)
+    
 def test_dispersion_model():
     global disp_dict
     prhdr, exthdr = create_default_headers()
@@ -169,8 +175,7 @@ def test_calibrate_dispersion_model():
     psf_centroid = steps.compute_psf_centroid(
         dataset=dataset,
         initial_cent=initial_cent,
-        verbose=False, 
-        halfheight = 30
+        verbose=True
     )
     disp_model = steps.calibrate_dispersion_model(psf_centroid, band_center_file, prism = 'PRISM3')
     disp_model.save(output_dir, disp_model.filename)
