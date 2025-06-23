@@ -104,7 +104,7 @@ def compute_expected_band_irradiance(star_name, filter_name):
     Compute the expected band-integrated irradiance (erg/(s*cm^2)) for a given star.
 
     Parameters:
-        star_name (str): The name of the star for which to compute the irradiance.
+        star_name (str): The name of the star or file path to the (calspec) SED fits file for which to compute the irradiance.
         filter_name (str): The name of the filter used to determine the transmission curve.
 
     Returns:
@@ -113,7 +113,10 @@ def compute_expected_band_irradiance(star_name, filter_name):
     Raises:
         ValueError: If no matching filter curve file is found.
     """
-    calspec_filepath = fluxcal.get_calspec_file(star_name)[0]
+    if star_name.split(".")[-1] == "fits":
+        calspec_filepath = star_name
+    else:
+        calspec_filepath = fluxcal.get_calspec_file(star_name)[0]
     datadir = os.path.join(os.path.dirname(fluxcal.__file__), "data", "filter_curves")
     filter_files = [f for f in os.listdir(datadir) if filter_name in f and f.endswith('.csv')]
     if not filter_files:
@@ -125,13 +128,14 @@ def compute_expected_band_irradiance(star_name, filter_name):
     return fluxcal.calculate_band_irradiance(transmission, calspec_flux, wave)
 
 
-def compute_avg_calibration_factor(dim_stars_dataset, phot_method, flux_or_irr="irr", phot_kwargs=None):
+def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_file = None, flux_or_irr="irr", phot_kwargs=None):
     """
     Compute the average flux calibration factor using dim stars (no ND filter).
 
     Parameters:
         dim_stars_dataset (iterable): Dataset containing dim star entries.
         phot_method (str): Photometry method to use ("Aperture" or "Gaussian").
+        calspec_file (str, optional): file path to the calspec fits file of the observed star.
         flux_or_irr (str): Whether flux ('flux') or in-band irradiance ('irr') should be used.
         phot_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
 
@@ -143,12 +147,12 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, flux_or_irr="
 
     if phot_method == "Aperture":
         cal_values = [
-            fluxcal.calibrate_fluxcal_aper(entry, flux_or_irr, phot_kwargs).fluxcal_fac
+            fluxcal.calibrate_fluxcal_aper(entry, calspec_file = calspec_file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac
             for entry in dim_stars_dataset
         ]
     elif phot_method == "Gaussian":
         cal_values = [
-            fluxcal.calibrate_fluxcal_gauss2d(entry, flux_or_irr, phot_kwargs).fluxcal_fac
+            fluxcal.calibrate_fluxcal_gauss2d(entry, calspec_file = calspec_file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac
             for entry in dim_stars_dataset
         ]
     else:
@@ -233,7 +237,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
     This allows users to override default settings for functions like aper_phot.
     
     Parameters:
-        target (str): The target star name.
+        target (str): The target star name or the file path to the corresponding (calspec) SED fits file.
         files (corgidrp.data.Dataset): Dataset of bright star images
         cal_factor (float or corgidrp.data.FluxcalFactor): Calibration factor.
         od_raster_threshold (float): Threshold for flagging OD variations.
@@ -434,8 +438,6 @@ def create_nd_filter_cal(stars_dataset,
         phot_kwargs = {}
 
     # 1. Split the stars dataset into dim and bright stars based on FPAMNAME or FSAMNAME
-    dim_stars_dataset = []
-    bright_stars_dataset = []
     try:
         grouped_nd_files = group_by_keyword(stars_dataset, prihdr_keyword=None, exthdr_keyword='FPAMNAME')
     except:
@@ -463,8 +465,8 @@ def create_nd_filter_cal(stars_dataset,
         # star frames
         cal_factor = compute_avg_calibration_factor(dim_stars_dataset,
                                                     phot_method,
-                                                    flux_or_irr,
-                                                    phot_kwargs)
+                                                    flux_or_irr = flux_or_irr,
+                                                    phot_kwargs = phot_kwargs)
 
     # 3. Process bright star frames
     grouped_files = group_by_keyword(bright_stars_dataset, prihdr_keyword='TARGET', exthdr_keyword=None)

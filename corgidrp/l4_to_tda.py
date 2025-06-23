@@ -61,7 +61,7 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
     
     if source_star.split(".")[-1] == "fits":
         source_filepath = source_star
-        source_filename = source_star
+        source_filename = source_star.split('/')[-1]
     else:
         source_filepath, source_filename = fluxcal.get_calspec_file(source_star)
     
@@ -112,12 +112,12 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     # ref_star/source_star is either the star name or the file path to fits file
     if ref_star.split(".")[-1] == "fits":
         calspec_filepath = ref_star
-        calspec_ref_name = ref_star
+        calspec_ref_name = ref_star.split('/')[-1]
     else:
         calspec_filepath, calspec_ref_name = fluxcal.get_calspec_file(ref_star)
     if source_star.split(".")[-1] == "fits":
         source_filepath = source_star
-        source_filename = source_star
+        source_filename = source_star.split('/')[-1]
     else:
         source_filepath, source_filename = fluxcal.get_calspec_file(source_star)
     
