@@ -128,33 +128,42 @@ def compute_expected_band_irradiance(star_name, filter_name):
     return fluxcal.calculate_band_irradiance(transmission, calspec_flux, wave)
 
 
-def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_file = None, flux_or_irr="irr", phot_kwargs=None):
+def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_files = None, flux_or_irr="irr", phot_kwargs=None):
     """
     Compute the average flux calibration factor using dim stars (no ND filter).
 
     Parameters:
         dim_stars_dataset (iterable): Dataset containing dim star entries.
         phot_method (str): Photometry method to use ("Aperture" or "Gaussian").
-        calspec_file (str, optional): file path to the calspec fits file of the observed star.
+        calspec_files(list, optional): list of calspec filepaths
         flux_or_irr (str): Whether flux ('flux') or in-band irradiance ('irr') should be used.
         phot_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
 
     Returns:
         float: The average calibration factor.
     """
+    if calspec_files is not None:
+        if len(calspec_files) != len(dim_stars_dataset):
+            raise ValueError("wrong number of calspec filepaths")
     if phot_kwargs is None:
         phot_kwargs = {}
 
+    cal_values = []
     if phot_method == "Aperture":
-        cal_values = [
-            fluxcal.calibrate_fluxcal_aper(entry, calspec_file = calspec_file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac
-            for entry in dim_stars_dataset
-        ]
+        for i, entry in enumerate(dim_stars_dataset):
+            if calspec_files is None:
+                file = None
+            else:
+                file = calspec_files[i]
+            cal_values.append(fluxcal.calibrate_fluxcal_aper(entry, calspec_file = file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac)
     elif phot_method == "Gaussian":
-        cal_values = [
-            fluxcal.calibrate_fluxcal_gauss2d(entry, calspec_file = calspec_file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac
-            for entry in dim_stars_dataset
-        ]
+        for i, entry in enumerate(dim_stars_dataset):
+            if calspec_files is None:
+                file = None
+            else:
+                file = calspec_files[i]
+            cal_values.append(
+            fluxcal.calibrate_fluxcal_gauss2d(entry, calspec_file = file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac)
     else:
         raise ValueError("Photometry method must be either Aperture or Gaussian.")
 
@@ -410,7 +419,8 @@ def create_nd_filter_cal(stars_dataset,
                          phot_method="Aperture",
                          flux_or_irr="irr",
                          phot_kwargs=None,
-                         fluxcal_factor=None):
+                         fluxcal_factor=None,
+                         calspec_files = None):
     """
     Main ND Filter calibration workflow:
       1. Split dataset into dim and bright stars based on FPAMNAME keyword (or use cal factor input for dim)
@@ -430,6 +440,7 @@ def create_nd_filter_cal(stars_dataset,
             (e.g., aper_phot).
         fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): A pre-computed flux factor calibration product to use
             if dim stars are not included as part of the input dataset
+        calspec_files(iterable): list of calspec filepaths
 
     Returns:
         sweet_spot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter calibration product for the dataset given
@@ -465,6 +476,7 @@ def create_nd_filter_cal(stars_dataset,
         # star frames
         cal_factor = compute_avg_calibration_factor(dim_stars_dataset,
                                                     phot_method,
+                                                    calspec_files = calspec_files,
                                                     flux_or_irr = flux_or_irr,
                                                     phot_kwargs = phot_kwargs)
 
