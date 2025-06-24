@@ -135,7 +135,7 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_files
     Parameters:
         dim_stars_dataset (iterable): Dataset containing dim star entries.
         phot_method (str): Photometry method to use ("Aperture" or "Gaussian").
-        calspec_files(list, optional): list of calspec filepaths
+        calspec_files (list, optional): list of calspec filepaths
         flux_or_irr (str): Whether flux ('flux') or in-band irradiance ('irr') should be used.
         phot_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
 
@@ -440,7 +440,7 @@ def create_nd_filter_cal(stars_dataset,
             (e.g., aper_phot).
         fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): A pre-computed flux factor calibration product to use
             if dim stars are not included as part of the input dataset
-        calspec_files(iterable): list of calspec filepaths
+        calspec_files (list, optional): list of calspec filepaths
 
     Returns:
         sweet_spot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter calibration product for the dataset given
