@@ -6,8 +6,6 @@ import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
 from astropy.io.fits.card import VerifyWarning
-# with warnings.catch_warnings():
-#     warnings.filterwarnings("ignore", category=VerifyWarning) # test distortion fits save card length truncated
 import astropy.time as time
 import pandas as pd
 import pyklip
