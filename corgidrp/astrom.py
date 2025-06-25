@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import warnings
 
 import corgidrp.data
 
@@ -11,6 +12,7 @@ import pyklip.fakes as fakes
 
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
+from scipy.optimize import OptimizeWarning
 
 def centroid(frame):
     """
@@ -169,7 +171,9 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
     data = ndi.map_coordinates(frame, [ydata, xdata])
     
     ### Fit the PSF to the data ###
-    popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux), maxfev=2000)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=OptimizeWarning) 
+        popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux), maxfev=2000)
     tinyoffsets = popt[0:2]
     fit_errs = np.sqrt([pcov[0,0], pcov[1,1], pcov[2,2]])
 
@@ -399,7 +403,9 @@ def find_source_locations(image_data, threshold=10, fwhm=7, mask_rad=1):
     fit_gauss_image = np.copy(full_frame)
 
     for i, (gx, gy) in enumerate(zip(xs[~np.isnan(xs)], ys[~np.isnan(ys)])):
-        pf, fw, x, y = fakes.gaussfit2d(frame= fit_gauss_image, xguess= gx+pad, yguess=gy+pad)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            pf, fw, x, y = fakes.gaussfit2d(frame= fit_gauss_image, xguess= gx+pad, yguess=gy+pad)
         fit_xs[i] = x - pad
         fit_ys[i] = y - pad
 
@@ -448,7 +454,9 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
     ymid, xmid = image.data.shape   # fit gaussian to find target x,y location (assuming near center)
-    pf, fw, targetx, targety = fakes.gaussfit2d(frame= image.data, xguess= (xmid-1)//2, yguess= (ymid-1)//2)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        pf, fw, targetx, targety = fakes.gaussfit2d(frame= image.data, xguess= (xmid-1)//2, yguess= (ymid-1)//2)
 
     target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
@@ -650,7 +658,9 @@ def fit_distortion_solution(params, fitorder, platescale, rotangle, pos1, meas_o
 
     # pa_err = np.arctan2(-meas_errs[0],  meas_errs[1]) # this is in radians
     # pa_err = np.arctan2(meas_errs[1],  meas_errs[0]) # this is in radians
-    pa_err = sep_err / true_offset_sep
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        pa_err = sep_err / true_offset_sep
     # should be avg of errors divided by sep --> pa err is delta arclength ~~ np.avg(m[1], m[0]) /sep
     # or fit x y res instead of sep pa
 
@@ -750,7 +760,9 @@ def compute_platescale_and_northangle(image, source_info, center_coord, center_r
     xs = np.empty(len(sub_guesses))
     ys = np.empty(len(sub_guesses))
     for i, (gx, gy) in enumerate(zip(sub_guesses['x'], sub_guesses['y'])):
-        pf, fw, x, y = fakes.gaussfit2d(frame= image, xguess= gx, yguess=gy)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            pf, fw, x, y = fakes.gaussfit2d(frame= image, xguess= gx, yguess=gy)
         xs[i] = x
         ys[i] = y
 
@@ -866,7 +878,9 @@ def compute_boresight(image, source_info, target_coordinate, cal_properties):
     boresights = np.zeros((len(quad_guesses), 2))
     searchrad = 5
     for i, (xg, yg) in enumerate(zip(quad_guesses['x'], quad_guesses['y'])):
-        p, f, xi_center, yi_center = fakes.gaussfit2d(frame= image, xguess= xg, yguess= yg, searchrad=searchrad)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning)
+            p, f, xi_center, yi_center = fakes.gaussfit2d(frame= image, xguess= xg, yguess= yg, searchrad=searchrad)
         x_off = xi_center - x_predict[i]
         y_off = yi_center - y_predict[i]
         boresights[i,:] = [x_off, y_off]
