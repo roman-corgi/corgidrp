@@ -579,7 +579,9 @@ class Image():
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
 
         #first layer is always the updated combined error
-        self.err = self.err*input_error
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
+            self.err = self.err*input_error
         self.err_hdr["Layer_1"] = "combined_error"
 
         # record history since 2-D error map doesn't track individual terms
