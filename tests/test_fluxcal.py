@@ -1,4 +1,5 @@
 import pytest
+import warnings
 import os
 import numpy as np
 import corgidrp
@@ -247,7 +248,9 @@ def test_abs_fluxcal():
     old_ind = corgidrp.track_individual_errors
     corgidrp.track_individual_errors = True
     flux_dataset = Dataset([flux_image, flux_image])
-    output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
     assert len(output_dataset) == 2
     assert output_dataset[0].ext_hdr['BUNIT'] == "erg/(s*cm^2*AA)"
     assert output_dataset[0].ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
@@ -320,13 +323,17 @@ def test_abs_fluxcal():
 
     # test l4_to_tda.determine_flux
     input_dataset = Dataset([flux_image_back, flux_image_back])
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back,  photo = "aperture", phot_kwargs = aper_kwargs)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back,  photo = "aperture", phot_kwargs = aper_kwargs)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["LOCBACK"] == pytest.approx(3, abs = 0.03)
     #sanity check: vega is input source, so app mag 0
     assert output_dataset[0].ext_hdr["APP_MAG"] == pytest.approx(0.0)
     
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back_gauss,  photo = "2dgauss", phot_kwargs = gauss_kwargs)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back_gauss,  photo = "2dgauss", phot_kwargs = gauss_kwargs)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["LOCBACK"] == pytest.approx(3, abs = 0.03)
     #sanity check: Vega is input source, so app mag 0
@@ -337,7 +344,9 @@ def test_abs_fluxcal():
     flux_err_gauss = np.sqrt(error_gauss**2 * fluxcal_factor_gauss.fluxcal_fac**2 + fluxcal_factor_gauss.fluxcal_err**2 * 200**2)
     
     input_dataset = Dataset([flux_image, flux_image])
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_ap, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0
@@ -345,7 +354,9 @@ def test_abs_fluxcal():
     
     assert output_dataset[0].ext_hdr["MAGERR"] == pytest.approx(mag_err_ap, rel = 0.1)
     
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_gauss,  photo = "2dgauss", phot_kwargs = None)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_gauss,  photo = "2dgauss", phot_kwargs = None)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_gauss, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0
