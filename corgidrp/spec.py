@@ -334,11 +334,14 @@ def fit_psf_centroid(psf_data, psf_template,
         print(f"Warning: Registration optimization did not converge: {registration_result.message}")
     
     # Don't round the template positions
-    xcom_template, ycom_template = xcent_template, ycent_template
-    xcom_data, ycom_data = xcent_guess, ycent_guess
+    #xcom_template, ycom_template = xcent_template, ycent_template
+    #xcom_data, ycom_data = xcent_guess, ycent_guess
     
-    xfit = xcom_template + registration_result.x[0]
-    yfit = ycom_template + registration_result.x[1]
+    #xfit = xcom_template + registration_result.x[0]
+    #yfit = ycom_template + registration_result.x[1]
+    
+    xfit = xcent_template + (xcom_data - xcom_template) + registration_result.x[0]
+    yfit = ycent_template + (ycom_data - ycom_template) + registration_result.x[1]
 
     psf_data_bkg = psf_data.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
@@ -409,7 +412,7 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
         if len(dataset) != len(xcent_template) or len(dataset) != len(ycent_template):
             raise ValueError("Mismatch between dataset length and template centroid arrays.")
     except:
-        raise Warning("template PSF fits file does not seem to have an extension with the fit results")
+        warnings.warn("template PSF fits file does not seem to have an extension with the fit results")
         (xcent_template, ycent_template) = (None, None)
     
     centroids = np.zeros((len(dataset), 2))
@@ -419,6 +422,7 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
     ext_hdr = dataset[0].ext_hdr.copy()
 
     for idx, frame in enumerate(dataset):
+        cfam = frame.ext_hdr['CFAMNAME']
         psf_data = frame.data
         if xcent is None:
             xguess, yguess = None, None
@@ -432,7 +436,9 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
         else: 
             temp_x = xcent_template[idx]
             temp_y = ycent_template[idx]
-
+        # larger fitting stamp needed for broadband filter 
+        if cfam == '2' or cfam == '3':
+            halfheight = 30
         xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis = fit_psf_centroid(
             psf_data, temp_psf_data,
             xcent_template=temp_x,
@@ -473,7 +479,10 @@ def read_cent_wave(filter_file, band):
     filter_names = data.columns[0]
     if band not in filter_names:
         raise ValueError("{0} is not in table band names {1}".format(band, filter_names))
-    cen_wave = data.columns[1][filter_names == band][0]
+    if data.columns[2][filter_names == band]:
+        cen_wave = data.columns[2][filter_names == band][0]
+    else:
+        cen_wave = data.columns[1][filter_names == band][0]
     
     return cen_wave
 
@@ -595,16 +604,18 @@ def calibrate_dispersion_model(centroid_psf, band_center_file, prism = 'PRISM3',
         #bandpass = [675, 785]
         #halfheight = 30
         
-    subband_list.append(ref_cfam)
     filters = centroid_psf.pri_hdr['FILTERS'].upper().split(",")
-    if len(filters) < 4:
-        raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(filters)))
     center_wavel = []
     for band in filters:
         band_str = band.strip()
-        if band_str not in subband_list:
-            raise ValueError("measured band {0} is not in the sub band list {1} of the used prism".format(band_str, subband_list))
-        center_wavel.append(read_cent_wave(band_center_file,band_str))
+        if band_str == ref_cfam:
+            pass
+        elif band_str not in subband_list:
+            warnings.warn("measured band {0} is not in the sub band list {1} of the used prism".format(band_str, subband_list))
+        else:
+            center_wavel.append(read_cent_wave(band_center_file,band_str))
+    if len(center_wavel) < 4:
+        raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
     center_wavel = np.array(center_wavel)
     (clocking_angle,
      clocking_angle_uncertainty) = estimate_dispersion_clocking_angle(
