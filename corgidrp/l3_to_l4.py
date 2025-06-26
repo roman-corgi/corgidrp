@@ -477,7 +477,7 @@ def do_psf_subtraction(input_dataset,
         unique_vals = np.array(unique_vals)
 
         if 0. in unique_vals:
-            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0])]
+            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0].item())]
         else:
             raise UserWarning('No science files found in input dataset.')
 
