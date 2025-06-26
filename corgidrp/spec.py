@@ -469,9 +469,11 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
 def read_cent_wave(filter_file, band):
     """
     read the csv filter file containing the band names and the central wavelength
+    
     Args:
        filter_file (str): file name of the filter file
        band (str): name of the filter band
+       
     Returns:
        float: central wavelength of the filter band
     """
@@ -580,11 +582,14 @@ def calibrate_dispersion_model(centroid_psf, band_center_file, prism = 'PRISM3',
     Generate a DispersionModel of the spectral dispersion profile of the CGI ZOD prism.
 
     Args:
-    centroid_psf (SpectroscopyCentroidPsf): instance of SpectroscopyCentroidPsf calibration class
-    band_center_file (str): file name of the band centers
-    prism (str): Label for the selected DPAM zero-deviation prism; must be
-    either 'PRISM3' or 'PRISM2'
-    pixel_pitch_um (float): EXCAM pixel pitch in micron, default 13 micron
+       centroid_psf (SpectroscopyCentroidPsf): instance of SpectroscopyCentroidPsf calibration class
+       band_center_file (str): file name of the band centers
+       prism (str): Label for the selected DPAM zero-deviation prism; must be
+                    either 'PRISM3' or 'PRISM2'
+       pixel_pitch_um (float): EXCAM pixel pitch in micron, default 13 micron
+    
+    Returns:
+       data.DispersionModel: DispersionModel calfile object with the fit results including errors of the spectral trace and the dispersion
     """
     #if not isinstance(dataset, Dataset):
     #    raise TypeError("Input must be a corgidrp.data.Dataset object.")

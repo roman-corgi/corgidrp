@@ -774,6 +774,7 @@ class DispersionModel(Image):
         pri_hdr (fits.Header): Primary header.
         ext_hdr (fits.Header): Extension header.
         input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
+        
     Attributes:
         data (dict): table containing the dispersion data
         clocking_angle (float): Clocking angle of the dispersion axis, theta,
