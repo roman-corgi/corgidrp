@@ -305,7 +305,9 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         psfmodel_peaks = np.max(psfmodels_arr,axis=(2,3))
 
         # Init pyklip dataset
-        pyklip_dataset = PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset_in)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=DeprecationWarning)# catch DeprecationWarning: Bitwise inversion '~' and DeprecationWarning: `in1d` in pyklip
+            pyklip_dataset = PyKLIPDataset(sci_dataset,psflib_dataset=ref_dataset_in)
         
         # Run pyklip
         klip_dataset(pyklip_dataset, outputdir=klip_params['outdir'],

@@ -2484,7 +2484,7 @@ class PyKLIPDataset(pyKLIP_Data):
         try:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
-                hdul.writeto(self.filepath, overwrite=True)
+                hdul.writeto(filepath, overwrite=True)
         except TypeError:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning

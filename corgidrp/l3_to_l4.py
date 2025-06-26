@@ -522,13 +522,15 @@ def do_psf_subtraction(input_dataset,
     ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
 
     # Initialize pyklip dataset class
-    pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)# catch DeprecationWarning: Bitwise inversion '~' and DeprecationWarning: `in1d` in pyklip
+        pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
     
     # Run pyklip
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
-                              annuli=annuli, subsections=subsections, movement=movement, numbasis=numbasis,
-                              calibrate_flux=False, mode=mode,psf_library=pyklip_dataset._psflib,
-                              fileprefix=fileprefix, numthreads=num_processes)
+                                     annuli=annuli, subsections=subsections,  movement=movement, numbasis=numbasis,
+                                     calibrate_flux=False, mode=mode, psf_library=pyklip_dataset._psflib,
+                                     fileprefix=fileprefix, numthreads=num_processes)
     
     # Construct corgiDRP dataset from pyKLIP result
     result_fpath = os.path.join(outdir,f'{fileprefix}-KLmodes-all.fits')   
