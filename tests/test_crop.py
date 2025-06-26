@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import warnings
 from corgidrp.data import Dataset, Image
 from corgidrp.l3_to_l4 import crop
 from corgidrp.mocks import create_default_L3_headers
@@ -131,7 +132,10 @@ def test_nonhalfinteger_centxy():
     of 4 pixels results in centering on the nearest pixel intersection.
     """
     test_dataset = make_test_dataset(shape=[100,100],centxy=[49.5,49.5])
-    cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[49.7,49.7])
+    with warnings.catch_warnings():
+        # we expect this operation to throw the UserWarning: Desired center [x,y] is not at the intersection of 4 pixels. Centering on the nearest intersection [x_0, y_0] from l3_to_l4.py, so catch it here.
+        warnings.filterwarnings("ignore", category=UserWarning)
+        cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[49.7,49.7])
 
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
         raise Exception("Unexpected result for non half-integer crop test.")
