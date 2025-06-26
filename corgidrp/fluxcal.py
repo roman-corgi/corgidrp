@@ -40,6 +40,8 @@ calspec_url = 'https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_ca
 
 def get_calspec_file(star_name):
     """
+    look up the calspec fits file name in the names dict and look for 
+    the corresponding file in the .corgidrp/  calspec_data. If not available 
     download the corresponding CALSPEC fits file and return the file path
     
     Args:
@@ -125,19 +127,19 @@ def read_filter_curve(filter_filename):
     transmission = tab['%T'].data
     return lambda_nm * 10 , transmission/100.
 
-def read_cal_spec(calspec_filename, filter_wavelength):
+def read_cal_spec(calspec_file, filter_wavelength):
     """
     read the calspec flux density data interpolated on the wavelength grid of the transmission curve
     
     Args:
-        calspec_filename (str): file name of the CALSPEC fits file
+        calspec_file (str): file path to the CALSPEC fits file
         filter_wavelength (np.array): wavelength grid of the transmission curve in unit Angstroem
     
     Returns:
         np.array: flux density in Jy interpolated on the wavelength grid of the transmission curve 
         in CALSPEC units erg/(s * cm^2 * AA)
     """
-    hdulist = fits.open(calspec_filename)
+    hdulist = fits.open(calspec_file)
     data = hdulist[1].data
     hdulist.close()
     w = data['WAVELENGTH'] #wavelength in Angstroem
@@ -504,7 +506,7 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
     
     if calspec_file is not None:
         calspec_filepath = calspec_file
-        calspec_filename = calspec_file.split('/')[-1]
+        calspec_filename = os.path.basename(calspec_file)
     else:
         star_name = image.pri_hdr["TARGET"]
         calspec_filepath, calspec_filename = get_calspec_file(star_name)
@@ -608,7 +610,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
     
     if calspec_file is not None:
         calspec_filepath = calspec_file
-        calspec_filename = calspec_file.split('/')[-1]
+        calspec_filename = os.path.basename(calspec_file)
     else:
         star_name = image.pri_hdr["TARGET"]
         calspec_filepath, calspec_filename = get_calspec_file(star_name)

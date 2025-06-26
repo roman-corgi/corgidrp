@@ -1,4 +1,5 @@
 # A file that holds the functions that transmogrify l4 data to TDA (Technical Demo Analysis) data 
+import os
 import numpy as np
 from astropy.io import fits
 from scipy.interpolate import interp1d
@@ -61,7 +62,7 @@ def determine_app_mag(input_data, source_star, scale_factor = 1.):
     
     if source_star.split(".")[-1] == "fits":
         source_filepath = source_star
-        source_filename = source_star.split('/')[-1]
+        source_filename = os.path.basename(source_star)
     else:
         source_filepath, source_filename = fluxcal.get_calspec_file(source_star)
     
@@ -112,12 +113,12 @@ def determine_color_cor(input_dataset, ref_star, source_star):
     # ref_star/source_star is either the star name or the file path to fits file
     if ref_star.split(".")[-1] == "fits":
         calspec_filepath = ref_star
-        calspec_ref_name = ref_star.split('/')[-1]
+        calspec_ref_name = os.path.basename(ref_star)
     else:
         calspec_filepath, calspec_ref_name = fluxcal.get_calspec_file(ref_star)
     if source_star.split(".")[-1] == "fits":
         source_filepath = source_star
-        source_filename = source_star.split('/')[-1]
+        source_filename = os.path.basename(source_star)
     else:
         source_filepath, source_filename = fluxcal.get_calspec_file(source_star)
     

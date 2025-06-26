@@ -1,10 +1,8 @@
 import os
-import re
 import math
 import numpy as np
 from astropy.io import fits
 import corgidrp.fluxcal as fluxcal
-import corgidrp.astrom as astrom
 from corgidrp.data import Dataset, FluxcalFactor, NDFilterSweetSpotDataset
 from corgidrp.astrom import centroid_with_roi
 from scipy.interpolate import griddata
@@ -135,7 +133,7 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_files
     Parameters:
         dim_stars_dataset (iterable): Dataset containing dim star entries.
         phot_method (str): Photometry method to use ("Aperture" or "Gaussian").
-        calspec_files (list, optional): list of calspec filepaths
+        calspec_files (str, optional): str of one calspec file path or list of calspec filepaths
         flux_or_irr (str): Whether flux ('flux') or in-band irradiance ('irr') should be used.
         phot_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
 
@@ -143,8 +141,12 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_files
         float: The average calibration factor.
     """
     if calspec_files is not None:
-        if len(calspec_files) != len(dim_stars_dataset):
-            raise ValueError("wrong number of calspec filepaths")
+        one_calspec = False
+        if isinstance(calspec_files, list):
+            if len(calspec_files) != len(dim_stars_dataset):
+                raise ValueError("wrong number of calspec filepaths")
+        else:
+            one_calspec = True
     if phot_kwargs is None:
         phot_kwargs = {}
 
@@ -154,14 +156,20 @@ def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_files
             if calspec_files is None:
                 file = None
             else:
-                file = calspec_files[i]
+                if one_calspec:
+                    file = calspec_files
+                else:
+                    file = calspec_files[i]
             cal_values.append(fluxcal.calibrate_fluxcal_aper(entry, calspec_file = file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac)
     elif phot_method == "Gaussian":
         for i, entry in enumerate(dim_stars_dataset):
             if calspec_files is None:
                 file = None
             else:
-                file = calspec_files[i]
+                if one_calspec:
+                    file = calspec_files
+                else:
+                    file = calspec_files[i]
             cal_values.append(
             fluxcal.calibrate_fluxcal_gauss2d(entry, calspec_file = file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac)
     else:
