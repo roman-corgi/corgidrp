@@ -51,7 +51,6 @@ def test_get_filter_name():
     #test a wrong filter name
     image3 = image1.copy()
     image3.ext_hdr["CFAMNAME"] = '5C'
-    dataset2 = Dataset([image3, image3])
     with pytest.raises(ValueError):
         filepath = fluxcal.get_filter_name(image3)
         pass
@@ -108,14 +107,36 @@ def test_calspec_download():
     """
     test the download of a calspec fits file
     """
-    filepath, filename = fluxcal.get_calspec_file('Vega')
-    assert os.path.exists(filepath)
-    assert filename == 'alpha_lyr_stis_011.fits'
-    os.remove(filepath)
+    
     filepath, filename = fluxcal.get_calspec_file('TYC 4424-1286-1')
     assert os.path.exists(filepath)
     assert filename == '1732526_stisnic_009.fits'
     os.remove(filepath)
+    
+    filepath, filename = fluxcal.get_calspec_file('Vega')
+    assert os.path.exists(filepath)
+    assert filename == 'alpha_lyr_stis_011.fits'
+    
+    calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
+    names_file = os.path.join(calspec_dir, "calspec_names.json")
+    fits_file = os.path.join(calspec_dir, 'alpha_lyr_stis_011.fits')
+    assert os.path.exists(names_file)
+    assert os.path.exists(fits_file)
+    assert fits_file == filepath
+    
+    # test the priority of the fits file path to .corgidrp
+    test_calspec_url = fluxcal.calspec_url
+    fluxcal.calspec_url = "wrong"
+    
+    filepath, filename = fluxcal.get_calspec_file('Vega')
+    assert os.path.exists(filepath)
+    assert filename == 'alpha_lyr_stis_011.fits'
+    os.remove(filepath)
+    
+    with pytest.raises(ValueError):
+        filepath, filename = fluxcal.get_calspec_file('TYC 4424-1286-1')
+    
+    fluxcal.calspec_url = test_calspec_url
     
     with pytest.raises(ValueError):
         filepath, filename = fluxcal.get_calspec_file('Todesstern')
@@ -323,6 +344,14 @@ def test_abs_fluxcal():
     fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, flux_or_irr = 'flux', phot_kwargs=gauss_kwargs)
     assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
     assert fluxcal_factor_back_gauss.ext_hdr["LOCBACK"] == back
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
+    
+    #test the direct input of the calspec fits file
+    fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    assert fluxcal_factor_back.fluxcal_fac == pytest.approx(fluxcal_factor.fluxcal_fac)
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back.ext_hdr['HISTORY'])
+    fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=gauss_kwargs)
+    assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
     
     # test l4_to_tda.determine_flux
