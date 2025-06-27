@@ -332,7 +332,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         if not np.all((centerxy-0.5)%1 == 0):
             old_centerxy = centerxy.copy()
             centerxy = np.round(old_centerxy-0.5)+0.5
-            warnings.warn(f'Desired center {old_centerxy} is not at the intersection of 4 pixels. Centering on the nearest intersection {centerxy}')
+            print(f'Desired center {old_centerxy} is not at the intersection of 4 pixels. Centering on the nearest intersection {centerxy}')
             
         # Crop the data
         start_ind = (centerxy + 0.5 - np.array(sizexy)/2).astype(int)
