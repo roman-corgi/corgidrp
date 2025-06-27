@@ -94,6 +94,13 @@ def test_nonlin_and_kgain_e2e(
     if not os.path.exists(e2eoutput_path):
         os.mkdir(e2eoutput_path)
 
+    # create a DetectorParams object and save it
+    detector_params = data.DetectorParams({})
+    detector_params.save(filedir=e2eoutput_path, filename="detector_params.fits")
+
+    this_caldb = caldb.CalDB()
+    this_caldb.create_entry(detector_params)
+
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
     nonlin_l1_list.sort()
@@ -114,7 +121,7 @@ def test_nonlin_and_kgain_e2e(
 
     # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
-    fix_headers_for_tvac(pupilimg_l1_list)
+    #fix_headers_for_tvac(pupilimg_l1_list)
 
    
     # Run the walker on some test_data
@@ -148,7 +155,8 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")

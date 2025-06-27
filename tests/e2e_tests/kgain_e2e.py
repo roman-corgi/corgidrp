@@ -9,6 +9,7 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+from corgidrp.sorting import sort_pupilimg_frames
 
 try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
@@ -57,46 +58,59 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     default_config_file = os.path.join(cal.lib_dir, 'kgain', 'config_files', 'kgain_parms.yaml')
     stack_arr2_f = []
     stack_arr_f = []
-    box_data = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'kgain') 
+    box_data = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain') 
+    # for f in os.listdir(box_data):
+    #     file = os.path.join(box_data, f)
+    #     if not file.endswith('.fits'):
+    #         continue
+    #     for i in range(51841, 51871):
+    #         if str(i) in file:
+    #             stack_arr2_f.append(file)
+    #             with fits.open(file, mode='update') as hdus:
+    #                 try:
+    #                     hdus[0].header['VISTYPE'] = 'PUPILIMG'
+    #                     hdus[0].header['OBSTYPE'] = 'MNFRAME'
+    #                 except:
+    #                     pass
+    #                 try:
+    #                     hdus[1].header['OBSTYPE'] = 'MNFRAME'
+    #                 except:
+    #                     pass
+    #             exit
+    #     for i in range(51731, 51841):
+    #         if str(i) in file:
+    #             stack_arr_f.append(file)
+    #             with fits.open(file, mode='update') as hdus:
+    #                 try:
+    #                     hdus[0].header['VISTYPE'] = 'PUPILIMG'
+    #                     hdus[0].header['OBSTYPE'] = 'KGAIN'
+    #                 except:
+    #                     pass
+    #                 try:
+    #                     hdus[1].header['OBSTYPE'] = 'KGAIN'
+    #                 except:
+    #                     pass
+    #             exit
+    file_list = []
     for f in os.listdir(box_data):
         file = os.path.join(box_data, f)
         if not file.endswith('.fits'):
             continue
-        for i in range(51841, 51871):
-            if str(i) in file:
-                stack_arr2_f.append(file)
-                with fits.open(file, mode='update') as hdus:
-                    try:
-                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
-                        hdus[0].header['OBSTYPE'] = 'MNFRAME'
-                    except:
-                        pass
-                    try:
-                        hdus[1].header['OBSTYPE'] = 'MNFRAME'
-                    except:
-                        pass
-                exit
-        for i in range(51731, 51841):
-            if str(i) in file:
-                stack_arr_f.append(file)
-                with fits.open(file, mode='update') as hdus:
-                    try:
-                        hdus[0].header['VISTYPE'] = 'PUPILIMG'
-                        hdus[0].header['OBSTYPE'] = 'KGAIN'
-                    except:
-                        pass
-                    try:
-                        hdus[1].header['OBSTYPE'] = 'KGAIN'
-                    except:
-                        pass
-                exit
+        file_list.append(file)
+    file_dataset = data.Dataset(file_list)
+    labelled_dataset = sort_pupilimg_frames(file_dataset, cal_type='k-gain')
+    split_datasets, unique_vals = labelled_dataset.split_dataset(prihdr_keywords=['OBSNAME'])
+    stack_dat = split_datasets[0] #KGAIN
+    stack2_dat = split_datasets[1] #MNFRAME
+    stack_arr2 = stack2_dat.all_data
     #stack_arr2 = np.stack(stack_arr2)
     # fileorder_filepath = os.path.join(os.path.split(box_data)[0], 'results', 'TVAC_kgain_file_order.npy')
     #np.save(fileorder_filepath, stack_arr_f+stack_arr2_f)
-    stack_arr_f = sorted(stack_arr_f)
-    stack_dat = data.Dataset(stack_arr_f)
-    stack2_dat = data.Dataset(stack_arr2_f)
-    stack_arr2 = stack2_dat.all_data
+    
+    # stack_arr_f = sorted(stack_arr_f)
+    # stack_dat = data.Dataset(stack_arr_f)
+    # stack2_dat = data.Dataset(stack_arr2_f)
+    
 
     split, _ = stack_dat.split_dataset(exthdr_keywords=['EXPTIME'])
     stack_arr = []
@@ -121,7 +135,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     ordered_filelist = stack_arr_f+stack_arr2_f
 
     ##### Fix TVAC headers
-    fix_headers_for_tvac(ordered_filelist)
+    #fix_headers_for_tvac(ordered_filelist)
 
     ########## Calling II&T code
     (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
@@ -178,7 +192,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/''/home/jwang/Desktop/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

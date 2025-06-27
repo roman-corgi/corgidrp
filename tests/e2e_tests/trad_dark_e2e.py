@@ -105,7 +105,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
     # modify headers from TVAC to in-flight headers
-    fix_headers_for_tvac(trad_dark_data_filelist)
+    #fix_headers_for_tvac(trad_dark_data_filelist)
 
 
     ###### Setup necessary calibration files
@@ -116,7 +116,8 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
+    #mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
+    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] # use first two files in L1 directory
     pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -163,7 +164,8 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
+    kgain_dat = np.array([[kgain_val]]) # KGain value from TVAC files
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -193,10 +195,12 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     
     ###################### run II&T code on data
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
-    eperdn = 8.7 # what is used in DRP
+    eperdn = kgain_val # what is used in DRP above
     bias_offset = 0 # what is used in DRP
-    em_gain = 1.340000033378601 # read off header from TVAC files
-    exptime = 100.0 # read off header from TVAC files
+    emgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['EMGAIN_A']
+    em_gain = emgain_val # read off header from TVAC files
+    exptime_val = fits.getheader(os.path.join(trad_dark_raw_datadir,os.listdir(trad_dark_raw_datadir)[0]), 1)['EXPTIME']
+    exptime = exptime_val # read off header from TVAC files
     fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
     fwc_em_e = 100000  # same as what is in DRP's DetectorParams
     telem_rows_start = detector_params.params['TELRSTRT']
@@ -284,7 +288,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
         elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
             this_caldb._db = this_caldb._db.drop(i)
         elif this_caldb._db['Type'][i] == 'DetectorNoiseMaps':
-            this_caldb._db = this_caldb._db.drop(i)        
+            this_caldb._db = this_caldb._db.drop(i)     
+        elif this_caldb._db['Type'][i] == 'DetectorParams':
+            this_caldb._db = this_caldb._db.drop(i)     
     this_caldb.save()
 
     # define the raw science data to process
@@ -303,7 +309,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
     # modify headers from TVAC to in-flight headers
-    fix_headers_for_tvac(trad_dark_data_filelist)
+    #fix_headers_for_tvac(trad_dark_data_filelist)
 
 
     ###### Setup necessary calibration files
@@ -314,7 +320,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
+    #mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
+    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] # use first two files in L1 directory
     pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -357,11 +364,12 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
     
     # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
+    detector_params = data.DetectorParams({'KGAINPAR': 6.0})
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
+    kgain_dat = np.array([[kgain_val]]) # KGain value from TVAC files
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -390,11 +398,13 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, trad_dark_filename) 
     
     ###################### run II&T code on data
-    bad_pix = np.zeros((1200,2200)) # what is used in DRP
-    eperdn = 8.7 # what is used in DRP
+    bad_pix = np.zeros((1200,2200)) # what is used in DRP, full SCI frame
+    eperdn = kgain_val # what is used in DRP above
     bias_offset = 0 # what is used in DRP
-    em_gain = 1.340000033378601 # read off header from TVAC files
-    exptime = 100.0 # read off header from TVAC files
+    emgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['EMGAIN_C']
+    em_gain = emgain_val # read off header from TVAC files
+    exptime_val = fits.getheader(os.path.join(trad_dark_raw_datadir,os.listdir(trad_dark_raw_datadir)[0]), 1)['EXPTIME']
+    exptime = exptime_val # read off header from TVAC files
     fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
     fwc_em_e = 100000  # same as what is in DRP's DetectorParams
     telem_rows_start = detector_params.params['TELRSTRT']
@@ -454,7 +464,8 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
     outputdir = thisfile_dir
 

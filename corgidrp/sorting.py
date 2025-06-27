@@ -1,23 +1,24 @@
 import copy
 import numpy as np
+import time
+from datetime import datetime
 
 import corgidrp.data as data
 
-def extract_frame_id(filename):
+def extract_datetime(datetime_str):
     """
-    Extract frame ID from an L1 filename. Structure is assumed to be ending
-    like '..._frame_id.fits' where frame_id is a series of digits
+    Convert the value for ext_hdr's 'DATETIME' to a numerical time stamp.
 
     Args:
-      filename: L1 filename
+      datetime_str: time string in the format 'YYYY-MM-DDTHH:MM:SS.ssssss'
 
     Returns:
-      Frame id as a string of length 10
+      numerical time stamp in seconds since the epoch (1970-01-01T00:00:00Z)
     """
-    idx_0 = len(filename) - filename[::-1].find('_')
-    idx_1 = len(filename) - filename[::-1].find('.') - 1
+    dt_obj = datetime.strptime(datetime_str, "%Y-%m-%dT%H:%M:%S.%f")
+    output = time.mktime(dt_obj.timetuple()) + dt_obj.microsecond / 1e6
 
-    return int(filename[idx_0:idx_1])
+    return output
 
 def sort_pupilimg_frames(
     dataset_in,
@@ -48,7 +49,11 @@ def sort_pupilimg_frames(
     """
     # Copy dataset
     dataset_cp = dataset_in.copy()
-    # Split by CMDGAIN
+    split_datetime_ds, _ = dataset_cp.split_dataset(exthdr_keywords=['DATETIME'])
+    for ds in split_datetime_ds:
+        if len(ds) > 1:
+            raise Exception('Dataset contains more than one frame with the same DATETIME value.')
+    # Split by EMGAIN_C
     split_cmdgain = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
     # Mean frame: split by EXPTIME
     idx_unity = np.where(np.array(split_cmdgain[1])==1)[0][0]
@@ -59,16 +64,22 @@ def sort_pupilimg_frames(
         n_frames_list[i_sub] = len(split_exptime[0][i_sub])
     # Choice: choose the subset with the maximum number of frames
     idx_mean_frame = np.argmax(n_frames_list)
-    frame_id_list = []
+    frame_time_list = []
+    for dataset in split_exptime[0]:
+        for frame in dataset:
+            frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
+    frame_time_sort = sorted(frame_time_list)
+    mean_frame_time_list = []
     for frame in split_exptime[0][idx_mean_frame]:
-        frame_id_list += [extract_frame_id(frame.filename)]
-    # Choose the frames with consecutive ID numbers (same row in AUX file)
-    frame_id_sort = np.array(frame_id_list)
-    frame_id_sort.sort()
+        mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
+    # Choose the frames with consecutive time stamp values 
+    mean_frame_time_sort = np.array(mean_frame_time_list)
+    mean_frame_time_sort.sort()
     count_cons = [1]
     idx_cons = 0
-    for idx in range(len(frame_id_sort)-1):
-        if frame_id_sort[idx+1] - frame_id_sort[idx] == 1:
+    for idx in range(len(mean_frame_time_sort)-1):
+        overall_idx = frame_time_sort.index(mean_frame_time_list[idx])
+        if mean_frame_time_sort[idx+1] == frame_time_sort[overall_idx+1]:
             count_cons[idx_cons] += 1
         else:
             idx_cons += 1
@@ -77,12 +88,12 @@ def sort_pupilimg_frames(
     idx_mean_frame_cons = np.argmax(count_cons)
     idx_mean_frame_last = np.sum(count_cons[0:idx_mean_frame_cons+1]).astype(int)
     idx_mean_frame_first = idx_mean_frame_last - count_cons[idx_mean_frame_cons]
-    frame_id_mean_frame = frame_id_sort[idx_mean_frame_first:idx_mean_frame_last]
+    frame_id_mean_frame = mean_frame_time_sort[idx_mean_frame_first:idx_mean_frame_last]
     mean_frame_list = []
 
     n_mean_frame = 0
     for frame in split_exptime[0][idx_mean_frame]:
-        if int(extract_frame_id(frame.filename)) in frame_id_mean_frame:
+        if extract_datetime(frame.ext_hdr['DATETIME']) in frame_id_mean_frame:
             exptime_mean_frame = frame.ext_hdr['EXPTIME']
             # Update keyword OBSNAME
             frame.pri_hdr['OBSNAME'] = 'MNFRAME'
@@ -105,15 +116,15 @@ def sort_pupilimg_frames(
     split_exptime[0].remove(split_exptime[0][idx_mean_frame])
     split_exptime[1].remove(split_exptime[1][idx_mean_frame])
     # Frames must be taken consecutively
-    frame_id_list = []
+    mean_frame_time_list = []
     exptime_list = []
     unity_gain_filepath_list = []
     for subset in split_exptime[0]:
         for frame in subset:
-            frame_id_list += [extract_frame_id(frame.filename)]
+            mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
             exptime_list += [frame.ext_hdr['EXPTIME']]
             unity_gain_filepath_list += [frame.filepath]
-    idx_id_sort = np.argsort(frame_id_list)
+    idx_id_sort = np.argsort(mean_frame_time_list)
     exptime_arr = np.array(exptime_list)[idx_id_sort]
     # Count repeated, consecutive elements
     count_cons = [1]
@@ -137,7 +148,13 @@ def sort_pupilimg_frames(
         # Indices to cover two consecutive sets
         idx_id_first = np.sum(count_cons[0:idx_count]).astype(int)
         idx_id_last  = np.sum(count_cons[0:idx_count+2]).astype(int)
-        diff_id = np.diff(np.array(frame_id_list)[idx_id_sort[idx_id_first:idx_id_last]])
+        mean_frame_list_range = np.array(mean_frame_time_list)[idx_id_sort[idx_id_first:idx_id_last]]
+        overall_time_inds = []
+        # Get the indices of the mean frame time list in the sorted total frame time list
+        for el in mean_frame_list_range:
+            overall_time_inds.append(np.where(frame_time_sort == el)[0][0])
+        overall_time_inds = np.array(overall_time_inds)
+        diff_id = np.diff(overall_time_inds)
         diff_exp = np.diff(exptime_cons)
         # Both subsets must have all Ids consecutive because they are in
         # time order
@@ -192,17 +209,17 @@ def sort_pupilimg_frames(
         nonlin_emgain = []
         for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
             # Frames must be taken consecutively
-            frame_id_list = []
+            mean_frame_time_list = []
             exptime_list = []
             gain_filepath_list = []
             for frame in gain_set:
-                frame_id_list += [extract_frame_id(frame.filename)]
+                mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
                 exptime_list += [frame.ext_hdr['EXPTIME']]
                 gain_filepath_list += [frame.filepath]
             # One can set a stronger condition, though in the end the max set
-            if len(frame_id_list) < 3:
+            if len(mean_frame_time_list) < 3:
                 continue
-            idx_id_sort = np.argsort(frame_id_list)
+            idx_id_sort = np.argsort(mean_frame_time_list)
             exptime_arr = np.array(exptime_list)[idx_id_sort]
             # We need an increasing series of exposure times with the last one
             # the only repeated value in the series

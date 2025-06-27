@@ -39,6 +39,7 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -176,7 +177,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
