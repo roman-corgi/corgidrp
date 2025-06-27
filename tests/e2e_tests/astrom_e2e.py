@@ -90,7 +90,10 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
             # update headers
             for key in image_sources[0].pri_hdr:
-                if key not in hdulist[0].header:
+                if key in ["RA", "DEC"]:
+                    # must overwrite!
+                    hdulist[0].header[key] = image_sources[0].pri_hdr[key]
+                elif key not in hdulist[0].header:
                     hdulist[0].header[key] = image_sources[0].pri_hdr[key]
 
             for ext_key in image_sources[0].ext_hdr:

@@ -2719,7 +2719,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                     hdul.writeto(filename, overwrite = True)
 
 
-def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1):
+def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0):
     '''This creates mock L1 Dataset containing frames with large gain and short exposure time, illuminated and dark frames.
     Used for unit tests for photon counting.  
     
@@ -2733,6 +2733,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         full_frame: (bool) If True, simulated frames are SCI full frames.  If False, 50x50 images are simulated.  Defaults to True.
         smear: (bool) If True, smear is simulated.  Defaults to True.
         flux: (float) Number of photons/s per pixel desired.  Defaults to 1.
+        bad_frames (int): Number of simulated bad frames (with primary header keyword 'OVEREXP' set to True) to include in output datasets that frame_select would catch by default. Defaults to 0.
     
     Returns:
         ill_dataset (corgidrp.data.Dataset): Dataset containing the illuminated frames
@@ -2809,7 +2810,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.pri_hdr['PHTCNT'] = True
         frame.ext_hdr['ISPC'] = True
         frame.pri_hdr["VISTYPE"] = "TDEMO"
-        frame.filename = 'L1_for_pc_ill_{0}.fits'.format(i)
+        frame.filename = '_L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
 
     for i in range(Ndarks):
@@ -2826,8 +2827,18 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark.pri_hdr['PHTCNT'] = True
         frame_dark.ext_hdr['ISPC'] = True
         frame_dark.pri_hdr["VISTYPE"] = "DARK"
-        frame.filename = 'L1_for_pc_dark_{0}.fits'.format(i)
+        frame_dark.filename = '_L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)
+
+    for i in range(bad_frames):
+        bad_frame = frame.copy()
+        bad_frame.ext_hdr['OVEREXP'] = True
+        bad_frame.filename = '_L1_for_pc_ill_{0}.fits'.format(Nbrights+i)
+        frame_e_list.append(bad_frame)
+        bad_dark_frame = frame_dark.copy()
+        bad_dark_frame.ext_hdr['OVEREXP'] = True
+        bad_dark_frame.filename = '_L1_for_pc_dark_{0}.fits'.format(Ndarks+i)
+        frame_e_dark_list.append(bad_dark_frame)
 
     ill_dataset = data.Dataset(frame_e_list)
     dark_dataset = data.Dataset(frame_e_dark_list)

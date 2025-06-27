@@ -14,7 +14,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-import corgidrp.detector as detector
+from corgidrp.darks import build_synthesized_dark
 
 try:
     from cal.calibrate_darks.calibrate_darks_lsq import calibrate_darks_lsq 
@@ -70,6 +70,16 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        prihdr['PHTCNT'] = False
+        exthdr['ISPC'] = False
+        prihdr1, exthdr1 = mocks.create_default_L1_headers()
+        for key in prihdr1:
+            if key not in prihdr:
+                prihdr[key] = prihdr1[key]
+        for key in exthdr1:
+            if key not in exthdr:
+                exthdr[key] = exthdr1[key]
+        prihdr['VISTYPE'] = 'DARK'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -415,6 +425,12 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
     assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
     pass
+
+    # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)
+    mock_dataset = mocks.create_prescan_files() # dummy dataset with an EM gain and exposure time for creating synthesized dark
+    master_dark = build_synthesized_dark(mock_dataset, corgidrp_noisemap)
+    master_dark.save(filedir=noisemap_outputdir)
+
     # remove from caldb
     this_caldb.remove_entry(corgidrp_noisemap)
     
@@ -467,7 +483,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")
