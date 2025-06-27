@@ -90,7 +90,7 @@ def test_expected_flux_ratio_noise():
     # add some noise to the star 
     np.random.seed(987)
     star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
-    prihdr, exthdr = create_default_L4_headers()
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
     star_image = data.Image(star_PSF, prihdr, exthdr)
     star_dataset = data.Dataset([star_image for i in range(len(psfsub_dataset_rdi))])
     # fake an ND calibration:
@@ -98,7 +98,7 @@ def test_expected_flux_ratio_noise():
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
     nd_od = np.ones(nd_y.shape) * 1e-2
-    pri_hdr, ext_hdr = mocks.create_default_L2b_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
     
