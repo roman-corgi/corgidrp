@@ -523,12 +523,16 @@ def calibrate_nonlin(dataset_nl,
                 group_mean_time.append(np.mean(del_s))
             elif t0 == repeat_exp and not first_flag:
                 idx_2 = len(idx) // 2
-                del_s = (ctime_datetime[idx[:idx_2]] - ctime_datetime[0]).total_seconds()
-                group_mean_time.append(np.mean(del_s))
+                start_time_repeated = ctime_datetime[idx[0]]
+                end_time_repeated = ctime_datetime[idx[idx_2]]
+                del_s2 = (ctime_datetime[idx[:idx_2]] - ctime_datetime[0]).total_seconds()
+                group_mean_time.append(np.mean(del_s2))
                 first_flag = True
         
         if verbose is True:
             print(group_mean_time)
+            print('Time between repeated exposure frames for EM gain = ', actual_gain_arr[gain_index],': ',
+                  (end_time_repeated - start_time_repeated).total_seconds(), 'seconds')
         
         # Additional setup
         mean_signal = []

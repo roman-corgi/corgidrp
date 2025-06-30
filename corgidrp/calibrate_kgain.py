@@ -298,9 +298,14 @@ def calibrate_kgain(dataset_kgain,
         before moving to the next subset. Two of the subsets have the same (repeated)
         exposure time. These two subsets are not contiguous: The first subset is
         taken near the start of the data collection and the second one is taken
-        at the end of the data collection (see TVAC example below). The mean
+        at the end of the data collection (see TVAC example below). Two subsets with 
+        the same exposure time is not strictly needed for k gain calibration, but it is needed 
+        for nonlinearity calibration, and the same visit will be used to cover both 
+        k gain and nonlinearity calibrations, so there should be two unity gain frame subsets
+        with the same exposure time. The mean
         signal of these two subsets is used to correct for illumination
-        brightness/sensor sensitivity drifts for all the frames in the whole set,
+        brightness/sensor sensitivity drifts in nonlinearity calibration 
+        for all the frames in the whole set,
         depending on when the frames were taken. There should be no other repeated
         exposure time among the subsets. In TVAC, a total of 110 frames were taken
         within this category. The 110 frames consisted of 22 subsets, each with
@@ -900,7 +905,8 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
         else:
             # Add extra care confirming all collected substacks have same # frames
             if len(sub)/len_sub != len(sub)//len_sub:
-                raise Exception('All substacks must have the same number of frames')
+                # truncate substack to the nearest multiple of len_sub
+                sub = sub[:len(sub)//len_sub*len_sub]
             idx_0 = 0
             for rep in range(len(sub)//len_sub):
                 stack_cp.append(sub[idx_0:idx_0+len_sub])

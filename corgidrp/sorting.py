@@ -112,7 +112,7 @@ def sort_pupilimg_frames(
     else:
         raise Exception('Unrecognized calibration type (expected k-gain, non-lin)')
 
-    # Remove main frame frames from unity gain frames
+    # Remove MNFRAME frames from unity gain frames
     split_exptime[0].remove(split_exptime[0][idx_mean_frame])
     split_exptime[1].remove(split_exptime[1][idx_mean_frame])
     # Frames must be taken consecutively
@@ -140,9 +140,10 @@ def sort_pupilimg_frames(
     # First index always has a repetition in the previous loop (id=id)
     count_cons[0] -= 1
 
-    idx_cons2 = [0]
-    exptime_cons2 = [exptime_cons[idx_cons2[0]]]
-    kgain_subset = []
+    #idx_cons2 = [0]
+    #exptime_cons2 = [exptime_cons[idx_cons2[0]]]
+    #kgain_subset = []
+    cons_time_diff = 0
     # Iterate over unique counts that are consecutive
     for idx_count in range(len(count_cons) - 1):
         # Indices to cover two consecutive sets
@@ -154,21 +155,27 @@ def sort_pupilimg_frames(
         for el in mean_frame_list_range:
             overall_time_inds.append(np.where(frame_time_sort == el)[0][0])
         overall_time_inds = np.array(overall_time_inds)
-        diff_id = np.diff(overall_time_inds)
+        #diff_id = np.diff(overall_time_inds)
         diff_exp = np.diff(exptime_cons)
-        # Both subsets must have all Ids consecutive because they are in
+        # Both subsets must have all time stamps consecutive because they are in
         # time order
-        if (count_cons[idx_count+1] == count_cons[idx_count] and
-            np.all(diff_id == 1) and diff_exp[idx_count] > 0):
-            exptime_cons2 += [exptime_cons[idx_count+1]]
-            idx_cons2 += [idx_count+1]
+        # if (np.all(diff_id == 1) and diff_exp[idx_count] != 0):
+        #     exptime_cons2 += [exptime_cons[idx_count+1]]
+            #idx_cons2 += [idx_count+1]
         # Last exposure time must be repeated and only once
-        elif (diff_exp[idx_count] < 0  and
-            exptime_cons[idx_count+1] in exptime_cons[0:idx_count+1] and
-            len(exptime_cons2) == len(set(exptime_cons2))):
-            kgain_subset += [idx_cons2[0], idx_count+1]
-            idx_cons2 = [idx_count+1]
-            exptime_cons2 = [exptime_cons]
+        if (diff_exp[idx_count] != 0  and
+            exptime_cons[idx_count+1] in exptime_cons[0:idx_count+1]): #XXX need to find matching sets with widest time sep
+            # finding the repeated exposure time, the one earliest in time
+            exptime_idx_same = exptime_cons[0:idx_count+1].index(exptime_cons[idx_count+1])
+            idx_time_same = np.sum(count_cons[0:exptime_idx_same]).astype(int)
+            idx_time_current = np.sum(count_cons[0:idx_count+1]).astype(int)
+            if frame_time_sort[idx_time_current] - frame_time_sort[idx_time_same] > cons_time_diff:
+                # If the time difference is larger than the previous one, update
+                cons_time_diff = (frame_time_sort[idx_time_current] -
+                                  frame_time_sort[idx_time_same])
+                kgain_subset = [exptime_idx_same, idx_count+1] 
+            #idx_cons2 = [idx_count+1]
+            #exptime_cons2 = exptime_cons #XXX [exptime_cons]
         else:
         # It is not a subset for kgain
            continue
@@ -209,17 +216,17 @@ def sort_pupilimg_frames(
         nonlin_emgain = []
         for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
             # Frames must be taken consecutively
-            mean_frame_time_list = []
+            frame_time_list = []
             exptime_list = []
             gain_filepath_list = []
             for frame in gain_set:
-                mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
+                frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
                 exptime_list += [frame.ext_hdr['EXPTIME']]
                 gain_filepath_list += [frame.filepath]
             # One can set a stronger condition, though in the end the max set
-            if len(mean_frame_time_list) < 3:
+            if len(frame_time_list) < 3:
                 continue
-            idx_id_sort = np.argsort(mean_frame_time_list)
+            idx_id_sort = np.argsort(frame_time_list)
             exptime_arr = np.array(exptime_list)[idx_id_sort]
             # We need an increasing series of exposure times with the last one
             # the only repeated value in the series

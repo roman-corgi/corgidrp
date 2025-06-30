@@ -80,7 +80,7 @@ def test_nonlin_and_kgain_e2e(
     nonlin_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
     kgain_l1_datadir = os.path.join(e2edata_path,
-        'TV-20_EXCAM_noise_characterization', 'kgain')
+        'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
 
     e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_and_kgain_output')
 
@@ -156,7 +156,7 @@ if __name__ == "__main__":
     # workflow.
 
     e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
+    #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
