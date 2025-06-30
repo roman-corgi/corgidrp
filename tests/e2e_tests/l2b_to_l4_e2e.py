@@ -136,7 +136,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         bias_hdu.header['EXTNAME'] = 'BIAS'
 
         #Create the new Image object
-        mock_pri_header, mock_ext_header = create_default_L2b_headers()
+        mock_pri_header, mock_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
         new_image = Image(big_array, mock_pri_header, mock_ext_header, input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
@@ -187,7 +187,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     # Insert the small array into the middle of the big array
     big_array[row_start:row_start + small_rows, col_start:col_start + small_cols] = satellite_spot_image
 
-    mock_satspot_pri_header, mock_satspot_ext_header = create_default_L2b_headers()
+    mock_satspot_pri_header, mock_satspot_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
     mock_satspot_pri_header['SATSPOTS'] = 1
     mock_satspot_ext_header['FSMPRFL']='NFOV'
 
@@ -290,7 +290,7 @@ def test_l3_to_l4(e2eoutput_path):
     pupil_image = np.zeros([1024, 1024])
     # Set it to some known value for a selected range of pixels
     pupil_image[510:530, 510:530]=1
-    prhd, exthd_pupil = create_default_L3_headers()
+    prhd, exthd_pupil, errhdr, dqhdr = create_default_L3_headers()
     # DRP
     # cfam filter
     exthd_pupil['CFAMNAME'] = '1F'

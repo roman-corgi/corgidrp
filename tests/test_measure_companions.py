@@ -160,7 +160,7 @@ def generate_test_data(out_dir):
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
     nd_od = np.ones(nd_y.shape) * 1e-2
-    pri_hdr, ext_hdr = mocks.create_default_L2b_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
     host_star_image.data *= nd_cal.interpolate_od(512, 512)
@@ -233,17 +233,19 @@ def generate_test_data(out_dir):
     for i, comp in enumerate(COMPANION_PARAMS):
         cand_locs.append((comp['sep_pix'], comp['pa']))
     
+    klip_kwargs={'numbasis' : NUMBASIS,
+                     'mode' : 'RDI'}
+        
     # RDI
     psf_sub_dataset = l3_to_l4.do_psf_subtraction(
         coron_data, reference_star_dataset=ref_data,
         ct_calibration=ct_cal,
-        mode="RDI",
-        numbasis=NUMBASIS,
         do_crop=True, crop_sizexy=CROPPED_IMAGE_SIZE,
         cand_locs=cand_locs,
         num_processes=1,
         kt_seps=[9,17],
-        kt_pas=[150, 210, 270, 330]
+        kt_pas=[150, 210, 270, 330],
+        **klip_kwargs
     )
 
 

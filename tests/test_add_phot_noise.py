@@ -12,7 +12,7 @@ data = np.ones([1024,1024])*2.
 err = np.ones([1024,1024]) *0.5
 dq = np.zeros([1024,1024], dtype = np.uint16)
 # TO DO: Check to confirm this is correct data level
-prhd, exthd = create_default_L2b_headers()
+prhd, exthd, errhdr, dqhdr, biashdr = create_default_L2b_headers()
 
 def test_add_phot_noise():
     corgidrp.track_individual_errors = True

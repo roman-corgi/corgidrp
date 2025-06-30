@@ -40,6 +40,7 @@ DIM_STARS = ['TYC 4424-1286-1',
 #DIM_STARS = ['TYC 4433-1800-1', 'TYC 4205-1677-1', 'TYC 4212-455-1', 'TYC 4209-1396-1',
 #            'TYC 4413-304-1', 'UCAC3 313-62260', 'BPS BS 17447-0067', 'TYC 4424-1286-1',
 #             'GSC 02581-02323', 'TYC 4207-219-1']
+calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
 
 DIM_EXPTIME = 10.0
 BRIGHT_EXPTIME = 5.0
@@ -167,11 +168,10 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
     ND_transmission = 10 ** (-OD)
     bright_star_images = []
     for star_name in BRIGHT_STARS:
+        bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
+        attenuated_flux = bright_star_flux * ND_transmission
         for dy in [-10, 0, 10]:
             for dx in [-10, 0, 10]:
-                bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, 
-                                                                                          filter_used)
-                attenuated_flux = bright_star_flux * ND_transmission
                 flux_image = mocks.create_flux_image(
                     attenuated_flux, FWHM, cal_factor, filter=filter_used, fpamname="ND225", target_name=star_name,
                     fsm_x=dx, fsm_y=dy, exptime=bright_exptime, filedir=output_path,
@@ -265,6 +265,34 @@ def output_dir(tmp_path):
 # ---------------------------------------------------------------------------
 # Test functions using pytest
 # ---------------------------------------------------------------------------
+def test_compute_exp_irrad():
+    print("**Testing calculation of same irradiance with star name and calspec file**")
+    name_irr = nd_filter_calibration.compute_expected_band_irradiance('Vega', '3C')
+    file_irr = nd_filter_calibration.compute_expected_band_irradiance(calspec_filepath, '3C')
+    assert file_irr == name_irr
+
+def test_nd_filter_calibration_object_with_calspec(bright_files_cached):
+    print("**Testing ND filter calibration object generation and expected headers with calspec file input**")
+    # don't want the datasets to get overwritten for subsequent tests
+    ds_copy = copy.deepcopy(Dataset([bright_files_cached[0], bright_files_cached[1]]))
+    ds_copy[1].ext_hdr["FPAMNAME"] = 'OPEN_12'
+    results = nd_filter_calibration.create_nd_filter_cal(
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        fluxcal_factor = None, calspec_files = [calspec_filepath])
+    
+    results.save(filedir=default_cal_dir)
+
+    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_NDF_CAL.fits')]
+    assert nd_files, "No NDFilterOD files were generated."
+    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
+        primary_hdr = hdul[0].header
+        ext_hdr = hdul[1].header
+        assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
+        assert ext_hdr.get('FPAMNAME') is not None, "Missing FPAMNAME keyword."
+        assert ext_hdr.get('FPAM_H') is not None, "Missing FPAM_H keyword."
+        assert ext_hdr.get('FPAM_V') is not None, "Missing FPAM_V keyword."
+        assert ext_hdr.get('CFAMNAME') is not None, "Missing CFAMNAME keyword."
+
 def test_nd_filter_calibration_object(stars_dataset_cached):
     print("**Testing ND filter calibration object generation and expected headers**")
     # don't want the datasets to get overwritten for subsequent tests
@@ -596,13 +624,13 @@ def test_calculate_od_at_new_location(output_dir):
     ], dtype=float)
 
     # Create a fake input dataset to set the filename
-    input_prihdr, input_exthdr = mocks.create_default_L2b_headers()
+    input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
     fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
     # Build the NDFilterSweetSpotDataset
-    ndcal_prihdr, ndcal_exthdr = mocks.create_default_calibration_product_headers()
+    ndcal_prihdr, ndcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ndcal_exthdr["FPAM_H"] = 0.0
     ndcal_exthdr["FPAM_V"] = 0.0
     nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
@@ -615,7 +643,7 @@ def test_calculate_od_at_new_location(output_dir):
     # Shift it by (3,3) => final location (5,5).
     clean_image_data = np.zeros((5, 5), dtype=float)
     clean_image_data[2, 2] = 100.0  # star pixel
-    cframe_prihdr, cframe_exthdr = mocks.create_default_L2b_headers()
+    cframe_prihdr, cframe_exthdr, errhdr, dqhdr, biashdr= mocks.create_default_L2b_headers()
     cframe_exthdr["FPAM_H"] = 3.0
     cframe_exthdr["FPAM_V"] = 3.0
     clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
@@ -645,7 +673,7 @@ def test_calculate_od_at_new_location(output_dir):
         f"estimated OD = {interpolated_od}, expected OD = {expected_value}"
     )
 
-
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -709,6 +737,8 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
+    run_test(test_compute_exp_irrad)
+    run_test(test_nd_filter_calibration_object_with_calspec, bright_files_cached)
     run_test(test_nd_filter_calibration_object, stars_dataset_cached)
     run_test(test_output_filename_convention, stars_dataset_cached)
     run_test(test_average_od_within_tolerance, stars_dataset_cached)
@@ -733,3 +763,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''
