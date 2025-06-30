@@ -170,7 +170,10 @@ def teardown_module():
 
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch UserWarning: norm_val is not between the minimum and maximum values from calibrate_nonlin:777
+        nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
         max_write)
 
     # Test its DATALVL is CAL
@@ -253,7 +256,9 @@ def test_expected_results_time_sub():
             dataset_nl[idx_frame].ext_hdr['DATETIME'] = time_stack_test[idx_t]
             idx_frame += 1
 
-    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch UserWarning: norm_val is not between the minimum and maximum values from calibrate_nonlin:777
+        nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
      
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
