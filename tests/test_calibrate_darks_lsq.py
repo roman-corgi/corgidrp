@@ -46,6 +46,7 @@ def setup_module():
     Sets up testing module
     """
     global dataset
+    np.random.seed(4567)  # make test reproducible
     dataset = create_synthesized_master_dark_calib(dat)
 
 def teardown_module():
@@ -212,7 +213,7 @@ def test_mean_num():
     ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     # tag 48 of the 49 sub-stacks as bad pixel all the
     # way through for one pixel (7,8)
-    # And mask (10,12) to get flag value of 256
+    # And mask (10,12) to get high statistical error for that pixel
     for i in range(48):
         ds[i].all_dq[:,7,8] = 4
         ds[i].all_dq[:int(1+len(ds[i])/2),10,12] = 2
@@ -221,8 +222,12 @@ def test_mean_num():
         nm_out = calibrate_darks_lsq(data_set, detector_params, dat)
     # last of out is the DetectorNoiseMaps instance
     # And dq is really a 3-frame stack, and all 3 are the same.  So pick one of them.
-    assert nm_out.dq[0,7,8] == 1
-    assert nm_out.dq[0,10,12] == 256
+    assert nm_out.dq[0,7,8] == 4
+    # max error should be found in the (10,12) pixel of the CIC err map (i.e., [0,1,...] below), 
+    # which is the CIC error combined with the input frames' error
+    assert nm_out.err[0,1,10,12] == np.nanmax(nm_out.err)
+    # error for dark current at pixel (10,12) should be 0 since dark current only in the image area
+    assert nm_out.err[0,2,10,12] == 0
 
 
 if __name__ == '__main__':

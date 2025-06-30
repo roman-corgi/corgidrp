@@ -56,11 +56,15 @@ def test_dark_sub():
     assert len(dark_dataset) == 10
 
     # check that data is consistently modified
+    temp_store = dark_dataset.all_data[0,0,0]
     dark_dataset.all_data[0,0,0] = 0
     assert dark_dataset[0].data[0,0] == 0
+    dark_dataset.all_data[0,0,0] = temp_store #reset to original value
 
+    temp_store = dark_dataset[0].data[0,0]
     dark_dataset[0].data[0,0] = 1
     assert dark_dataset.all_data[0,0,0] == 1
+    dark_dataset[0].data[0,0] = temp_store #reset to original value
 
     ###### create dark
     dark_frame = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
@@ -128,14 +132,16 @@ def test_dark_sub():
     ds = dark_dataset.copy()
     # tag as bad pixel all the
     # way through for one pixel (7,8)
-    # And mask (10,12) to get flag value of 256
+    # And mask (10,12) to get big high statistical error value
     ds.all_dq[:,7,8] = 4
-    ds.all_dq[:int(1+len(ds)/2),10,12] = 2
+    #ds.all_dq[:int(1+len(ds)/2),10,12] = 2
+    ds.all_dq[:int(len(ds)-1),10,12] = 2
 
-    with pytest.warns(UserWarning):
-        master_dark = build_trad_dark(ds, detector_params, full_frame=True)
-    assert master_dark.dq[7,8] == 1
-    assert master_dark.dq[10,12] == 256
+    master_dark = build_trad_dark(ds, detector_params, full_frame=True)
+    assert master_dark.dq[7,8] == 4
+    # max error should be found in the (10,12) pixel
+    assert master_dark.err[0,10,12] == np.nanmax(master_dark.err)
+
 
     # now input a DetectorNoiseMaps instance and subtract dark from itself; here outputdir will do nothing since this is not a Dark instance
     EMgain = 10

@@ -218,15 +218,20 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # the frames due to statistical variance
     masked_frames = np.ma.masked_array(frames, bpmaps)
     stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
+    # where the number of unmasked frames is 1, the std is 0, but we want error to increase as the number of usuable frames decreases, so fudge it a little:
+    rows_one, cols_one = np.where(unmasked_num==1)
+    rows_normal, cols_normal = np.where(unmasked_num == len(dataset))
+    # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
+    stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(len(dataset))/1
     total_err = np.sqrt(mean_err**2 + stat_std**2)
     # There are no masked pixels in total_err, and FITS can't save masked arrays,
     # so turn it into a regular array
     total_err = np.ma.getdata(total_err)
     # bitwise_or flag value for those that are masked all the way through for all
     # frames
-    unfittable_ind = np.where(combined_bpmap == 1)
+    fittable_inds = np.where(combined_bpmap != 1)
     output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
-    output_dq[~unfittable_ind] = 0 
+    output_dq[fittable_inds] = 0 
     if not full_frame:
         dq = slice_section(output_dq, 'SCI', 'image', detector_regions)
         err = slice_section(total_err, 'SCI', 'image', detector_regions)
@@ -489,6 +494,11 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         # the frames due to statistical variance
         masked_frames = np.ma.masked_array(frames, bpmaps)
         stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
+        # where the number of unmasked frames is 1, the std is 0, but we want error to increase as the number of usuable frames decreases, so fudge it a little:
+        rows_one, cols_one = np.where(unmasked_num==1)
+        rows_normal, cols_normal = np.where(unmasked_num == len(datasets[i]))
+        # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
+        stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(len(datasets[i]))/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
         # There are no masked pixels in total_err, and FITS can't save masked arrays,
         # so turn it into a regular array
@@ -503,9 +513,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         unfittable_pix_map += combined_bpmap
         # bitwise_or flag value for those that are masked all the way through for all
         # frames
-        unfittable_ind = np.where(combined_bpmap == 1)
+        fittable_inds = np.where(combined_bpmap != 1)
         output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
-        output_dq[~unfittable_ind] = 0 
+        output_dq[fittable_inds] = 0 
         output_dqs.append(output_dq)
     output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
@@ -515,8 +525,8 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     # flag value for those that are masked all the way through for all
     # but 3 (or fewer) stacks
     output_dq = np.bitwise_or.reduce(output_dqs, axis=0)
-    unfittable_ind = np.where(unfittable_pix_map >= len(datasets)-3)
-    output_dq[~unfittable_ind] = 0
+    fittable_ind = np.where(unfittable_pix_map < len(datasets)-3)
+    output_dq[fittable_ind] = 0
 
     if len(np.unique(EMgain_arr)) < 2:
         raise CalDarksLSQException("Must have at least 2 unique EM gains "
