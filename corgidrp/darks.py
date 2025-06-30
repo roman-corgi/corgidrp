@@ -180,11 +180,8 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         master_dark.err includes the statistical error across all the frames as
         well as any individual err from each frame (and accounts for masked
         pixels in the calculations).
-        master_dark.dq: pixels that are masked for all frames are assigned a
-        flag value of 1 ("Bad pixel - unspecified reason"),
-        and a flag value of 256 is assigned to pixels that are
-        masked for half or more of the frames, making them unreliable, with
-        large err values, but possibly still usable.
+        master_dark.dq: pixels that are masked for all frames have non-zero 
+        values.
     """
     if detector_regions is None:
             detector_regions = detector_areas
@@ -225,16 +222,11 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # There are no masked pixels in total_err, and FITS can't save masked arrays,
     # so turn it into a regular array
     total_err = np.ma.getdata(total_err)
-    # flag value of 256; unreliable pixels, large err
-    output_dq = (unmasked_num < len(dataset)/2).astype(int)*256
-    if (output_dq == 256).any():
-        warnings.warn('At least one pixel was masked for half or more of the '
-                      'frames.')
-    # flag value of 1 for those that are masked all the way through for all
-    # frames; this overwrites the flag value of 256 that was assigned to
-    # these pixels in previous line
+    # bitwise_or flag value for those that are masked all the way through for all
+    # frames
     unfittable_ind = np.where(combined_bpmap == 1)
-    output_dq[unfittable_ind] = 1
+    output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
+    output_dq[~unfittable_ind] = 0 
     if not full_frame:
         dq = slice_section(output_dq, 'SCI', 'image', detector_regions)
         err = slice_section(total_err, 'SCI', 'image', detector_regions)
@@ -331,12 +323,8 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         dark is created.  In all the err, masked pixels are accounted for in
         the calculations.
         input dq:   np.stack([output_dq, output_dq, output_dq])
-        unreliable_pix_map is used for the
-        output Dark's dq after assigning these pixels a flag value of 256.
-        They should have large err values.
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 3 (or less) are assigned a flag value of
-        1, which falls under the category of "Bad pixel - unspecified reason".
+        but 3 (or less) are assigned a flag value from the combination of the frames.
         These pixels would have no reliability for dark subtraction.
 
         The header info is taken from that of
@@ -417,12 +405,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         in unreliable_pix_map.  Since the least-squares fit function has 3
         parameters, at least 4 sub-stacks are needed for a given pixel in order
         to perform a fit for that pixel.  The pixels in unreliable_pix_map that
-        are >= len(stack_arr)-3 cannot be fit.  NOTE:  This is used for the
-        output Dark's dq after assigning these pixels a flag value of 256.
-        They should have large err values.
+        are >= len(stack_arr)-3 cannot be fit.  
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 3 (or less) are assigned a flag value of
-        1, which falls under the category of "Bad pixel - unspecified reason".
+        but 3 (or less) are assigned a flag value from the combination of the frames.
         These pixels would have no reliability for dark subtraction.
     FPN_std_map : array-like (full frame)
         The standard deviation per pixel for the calibrated FPN.
@@ -452,6 +437,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     mean_frames = []
     total_errs = []
     mean_num_good_fr = []
+    output_dqs = []
     unreliable_pix_map = np.zeros((detector_regions['SCI']['frame_rows'],
                                    detector_regions['SCI']['frame_cols'])).astype(int)
     unfittable_pix_map = unreliable_pix_map.copy()
@@ -515,23 +501,22 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
         unfittable_pix_map += combined_bpmap
+        # bitwise_or flag value for those that are masked all the way through for all
+        # frames
+        unfittable_ind = np.where(combined_bpmap == 1)
+        output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
+        output_dq[~unfittable_ind] = 0 
+        output_dqs.append(output_dq)
+    output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
-    if (unreliable_pix_map >= len(datasets)-3).any(): # this condition catches the "unfittable" pixels too
-        warnings.warn('At least one pixel was masked for more than half of '
-                      'the frames in some sub-stacks, leaving 3 or fewer '
-                      'sub-stacks that did not suffer this masking for these '
-                      'pixels, which means the fit was unreliable for '
-                      'these pixels.  These are the pixels in the output '
-                      'unreliable_pixel_map that are >= len(datasets)-3.')
-    # flag value of 256; unreliable pixels, large err
-    output_dq = (unreliable_pix_map >= len(datasets)-3).astype(int)*256
-    # flag value of 1 for those that are masked all the way through for all
-    # but 3 (or less) stacks; this overwrites the flag value of 256 that was assigned to
-    # these pixels in previous line
+
+    # flag value for those that are masked all the way through for all
+    # but 3 (or fewer) stacks
+    output_dq = np.bitwise_or.reduce(output_dqs, axis=0)
     unfittable_ind = np.where(unfittable_pix_map >= len(datasets)-3)
-    output_dq[unfittable_ind] = 1
+    output_dq[~unfittable_ind] = 0
 
     if len(np.unique(EMgain_arr)) < 2:
         raise CalDarksLSQException("Must have at least 2 unique EM gains "

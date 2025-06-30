@@ -266,7 +266,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         up = mean_expected_up +  pc_variance
         low = mean_expected_low -  pc_variance
         errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
-        dq = (nframes == 0).astype(int) 
+        good_inds = np.where(nframes != 0)
+        dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
+        dq[good_inds] = 0 
         pc_means.append(mean_expected)
         dqs.append(dq)
         
@@ -297,10 +299,10 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             dark_sub = "no"
 
         # now subtract the dark PC mean
+        combined_dq = np.bitwise_or(dqs[0], dqs[1])
         combined_pc_mean = pc_means[0] - pc_means[1]
         combined_pc_mean[combined_pc_mean<0] = 0
         combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
-        combined_dq = np.bitwise_or(dqs[0], dqs[1])
         pri_hdr = dataset[-1].pri_hdr.copy()
         ext_hdr = dataset[-1].ext_hdr.copy()
         err_hdr = dataset[-1].err_hdr.copy()
