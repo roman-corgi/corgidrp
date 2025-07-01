@@ -651,7 +651,7 @@ class Dark(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['EMGAIN_C'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
+            # give it a default filename using the last input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
@@ -660,8 +660,10 @@ class Dark(Image):
                 # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
                 self.filename = self.filename.replace("_DNM_CAL", "")
             else:
-                self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
-
+                if self.filename == '':
+                    self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
+                else:
+                    self.filename = self.filename.replace("_DNM_CAL", "")
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
@@ -1040,7 +1042,7 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected electron'
             # bias offset
-            self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
+            self.ext_hdr['B_O_UNIT'] = 'DN' # err unit is also in DN
 
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys():

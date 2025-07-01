@@ -90,7 +90,10 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
             hdulist[1].data[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols] += scaled_image
             # update headers
             for key in image_sources[0].pri_hdr:
-                if key not in hdulist[0].header:
+                if key in ["RA", "DEC"]:
+                    # must overwrite!
+                    hdulist[0].header[key] = image_sources[0].pri_hdr[key]
+                elif key not in hdulist[0].header:
                     hdulist[0].header[key] = image_sources[0].pri_hdr[key]
 
             for ext_key in image_sources[0].ext_hdr:
@@ -116,7 +119,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)

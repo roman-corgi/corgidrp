@@ -64,7 +64,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # KGain
     kgain_val = 7 # default value used in mocks.create_photon_countable_frames()
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(l1_data_ill_filelist)
@@ -103,12 +103,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     nonlin_fits_filepath = os.path.join(tests_dir, "test_data", test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     new_nonlinearity.pri_hdr = pri_hdr
     new_nonlinearity.ext_hdr = ext_hdr
-    new_nonlinearity.save(filedir=output_dir, filename=test_non_linearity_filename)
     this_caldb.create_entry(new_nonlinearity)
 
     ## Flat field

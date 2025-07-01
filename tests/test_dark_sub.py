@@ -145,7 +145,7 @@ def test_dark_sub():
     image_frame = data.Image(frame, prihdr, exthdr)
     image_frame.ext_hdr['EMGAIN_C'] = EMgain
     image_frame.ext_hdr['EXPTIME'] = exptime
-    image_frame.ext_hdr['KGAINPAR'] = 7
+    image_frame.ext_hdr['KGAINPAR'] = 7.
     image_frame.ext_hdr['BUNIT'] = 'detected electron'
     dataset_from_noisemap = data.Dataset([image_frame])
     nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
