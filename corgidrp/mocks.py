@@ -1857,12 +1857,12 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     frames = []
     for i in range(numfiles):
         # TO DO: Determine what level this image should be
-        prihdr, exthdr = create_default_L2b_headers()
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
 
         sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024,1024)), dtype=float)
         sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024,1024)), dtype=float)
         sim_dq = np.asarray(np.zeros((1024,1024)), dtype=int)
-        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr, err=sim_err, dq=sim_dq)
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr, err=sim_err, dq=sim_dq, err_hdr = errhdr, dq_hdr = dqhdr)
         # frame = data.Image(sim_data, pri_hdr = prihdr, ext_hdr = exthdr, err = sim_err, dq = sim_dq)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))

@@ -141,8 +141,8 @@ def test_dark_sub():
     EMgain = 10
     exptime = 4
     frame = (noise_maps.FPN_map + noise_maps.CIC_map*EMgain + noise_maps.DC_map*exptime*EMgain)/EMgain
-    prihdr, exthdr = mocks.create_default_L2a_headers()
-    image_frame = data.Image(frame, prihdr, exthdr)
+    prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2a_headers()
+    image_frame = data.Image(frame, pri_hdr = prihdr, ext_hdr = exthdr, err_hdr = errhdr, dq_hdr = dqhdr)
     image_frame.ext_hdr['EMGAIN_C'] = EMgain
     image_frame.ext_hdr['EXPTIME'] = exptime
     image_frame.ext_hdr['KGAINPAR'] = 7.
