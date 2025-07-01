@@ -25,9 +25,17 @@ def test_kgain():
     image1.filename = "test1_L1_.fits"
     image2.filename = "test2_L1_.fits"
     dataset= data.Dataset([image1, image2])
-
+    
     gain_value = 9.55
     gain_err = 1.
+    #int input is not allowed
+    gain_value_int = 9
+    gain_err_int = 1
+    with pytest.raises(ValueError):
+        kgain_int = data.KGain(gain_value_int, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    with pytest.raises(ValueError):
+        kgain_int = data.KGain(gain_value, err = gain_err_int, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)   
+        
     kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
     assert kgain.filename.split(".")[0] == "test2_KRN_CAL"
     assert kgain.value == gain_value

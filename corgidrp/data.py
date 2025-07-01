@@ -346,11 +346,14 @@ class Image():
             # creation of a new file in DRP eyes
             if isinstance(data_or_filepath, float):
                 self.data = np.array([data_or_filepath])
-                if err is not None and isinstance(err, float):
-                    self.err = np.array([err])
+                if err is not None:
+                    if isinstance(err, float):
+                        self.err = np.array([err])
+                    else:
+                        raise ValueError("err value must be float")
                 else:
-                    self.err = np.array([0])
-            else:
+                    self.err = np.array([0.])
+            elif hasattr(data_or_filepath, "__len__"):
                 self.data = data_or_filepath
                 if err is not None:
                     if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
@@ -362,6 +365,9 @@ class Image():
                         self.err = err.reshape((1,)+err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
+            else:
+                raise ValueError("input must be an array or float")
+            
             if pri_hdr is None or ext_hdr is None:
                 raise ValueError("Missing primary and/or extension headers, because you passed in raw data")
             self.pri_hdr = pri_hdr
@@ -826,7 +832,8 @@ class KGain(Image):
     Class for KGain calibration file. Until further insights it is just one float value.
 
     Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        data_or_filepath (str or float): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        err (float): uncertainty value of kgain factor
         ptc (np.array): 2 column array with the photon transfer curve
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
@@ -854,7 +861,7 @@ class KGain(Image):
         # File format checks
         if self.data.shape != (1,):
             raise ValueError('The KGain calibration data should be just one float value')
-
+        
         self._kgain = self.data[0] 
         self._kgain_error = self.err[0]
         
@@ -1354,10 +1361,15 @@ class FluxcalFactor(Image):
     To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
     Args:
-        data_or_filepath (dict or str): either a filepath string corresponding to an 
-                                        existing FluxcalFactor file saved to disk or the data and error values of the
+        data_or_filepath (str or float): either a filepath string corresponding to an 
+                                        existing FluxcalFactor file saved to disk or the data and error float values of the
                                         flux cal factor of a certain filter defined in the header
-
+        err (float): uncertainty value of fluxcal factor
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the err extension header (required only if raw data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this FluxcalFactor file (required only if raw 2D data is passed in)
+    
     Attributes:
         filter (str): used filter name
         nd_filter (str): used neutral density filter or "No"
