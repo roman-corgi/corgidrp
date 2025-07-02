@@ -361,7 +361,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
