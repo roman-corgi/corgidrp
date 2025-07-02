@@ -322,8 +322,8 @@ def test_l3_to_l4(e2eoutput_path):
     #Create a mock flux calibration file
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
-    prhd, exthd = create_default_L3_headers()
-    fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    prhd, exthd, prihd, errhd, dqhd = create_default_L3_headers()
+    fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = dataset)
 
     fluxcal_fac.save(filedir=e2eoutput_path_l4, filename="mock_fluxcal.fits")
     this_caldb.create_entry(fluxcal_fac)
