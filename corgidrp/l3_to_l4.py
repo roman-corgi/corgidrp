@@ -482,7 +482,7 @@ def do_psf_subtraction(input_dataset,
             raise UserWarning('No science files found in input dataset.')
 
         if 1. in unique_vals:
-            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0])]
+            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0].item())]
         else:
             ref_dataset = None
 
@@ -522,9 +522,7 @@ def do_psf_subtraction(input_dataset,
     ref_dataset_masked = None if ref_dataset is None else nan_flags(ref_dataset)
 
     # Initialize pyklip dataset class
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=DeprecationWarning)# catch DeprecationWarning: Bitwise inversion '~' and DeprecationWarning: `in1d` in pyklip
-        pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
+    pyklip_dataset = data.PyKLIPDataset(sci_dataset_masked,psflib_dataset=ref_dataset_masked)
     
     # Run pyklip
     pyklip.parallelized.klip_dataset(pyklip_dataset, outputdir=outdir,
