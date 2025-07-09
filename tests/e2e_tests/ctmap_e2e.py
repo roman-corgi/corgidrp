@@ -28,7 +28,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT = 6854, 22524, 29471, 12120
     # Choose a band
     cfam_name = '1F'
-    prhd, exthd = mocks.create_default_L2b_headers()
+    prhd, exthd, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     # Mock error
     err = np.ones([1024,1024])
     # Add pupil image(s) of the unocculted source's observation to test that
@@ -153,17 +153,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(ct_cal_drp)
-
-    # Delete mock data files
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    # Delete e2e CT cal file
-    if os.path.exists(ctmap_outputdir):
-        shutil.rmtree(ctmap_outputdir)
-
-    # Delete CT map file
-    if os.path.exists(ct_map_filepath):
-        os.remove(ct_map_filepath)
 
     # Print success message
     print('e2e test for corethroughput map passed')

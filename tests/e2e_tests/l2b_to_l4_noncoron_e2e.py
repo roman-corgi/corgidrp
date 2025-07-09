@@ -128,7 +128,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         bias_hdu.header['EXTNAME'] = 'BIAS'
 
         #Create the new Image object
-        mock_pri_header, mock_ext_header = create_default_L2b_headers()
+        mock_pri_header, mock_ext_header, errhdr, dqhdr, biashdr = create_default_L2b_headers()
         new_image = Image(big_array, mock_pri_header, mock_ext_header, err=big_err, input_hdulist=[bias_hdu])
         # new_image.ext_hdr.set('PSF_CEN_X', new_psf_center_x)
         # new_image.ext_hdr.set('PSF_CEN_Y', new_psf_center_y)
@@ -237,7 +237,7 @@ def test_l3_to_l4(e2eoutput_path):
     #Create a mock flux calibration file
     fluxcal_factor = np.array([[2e-12]])
     fluxcal_factor_error = np.array([[[1e-14]]])
-    prhd, exthd = create_default_L3_headers()
+    prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
     fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
 
     fluxcal_fac.save(filedir=e2eoutput_path_l4, filename="mock_fluxcal.fits")
@@ -286,8 +286,8 @@ def test_l3_to_l4(e2eoutput_path):
     #Clean up
     this_caldb.remove_entry(astrom_cal)
     this_caldb.remove_entry(fluxcal_fac)
-    shutil.rmtree(e2eoutput_path_l4)
-    shutil.rmtree(e2eintput_path)
+    # shutil.rmtree(e2eoutput_path_l4)
+    # shutil.rmtree(e2eintput_path)
 
 
 
