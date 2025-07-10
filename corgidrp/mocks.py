@@ -160,8 +160,8 @@ def create_default_L1_headers(arrtype="SCI"):
     prihdr['YAW']       = 0.0          # S/C yaw (deg)
     prihdr['PSFREF']    = 0            # 0: Not a PSF reference observation; 1: PSF reference observation
     prihdr['OPGAIN']    = 'AUTO'       # Planned gain (value or "AUTO")
-    prihdr['PHTCNT']    = 0            # 0: Photon counting mode planned; 1: Not planned
-    prihdr['FRAMET']    = 0.0          # Expected exposure time per frame (sec)
+    prihdr['PHTCNT']    = 'AUTO'       # 0: Photon counting mode planned; 1: Not planned; (value or "AUTO")
+    prihdr['FRAMET']    = 'AUTO'       # Expected exposure time per frame (sec) (value or "AUTO")
     prihdr['SATSPOTS']  = 0            # 0: No satellite spots; 1: Satellite spots present
     prihdr['ISHOWFSC']  = 0            # 0: Images taken as part of HOWFSC; 1: Not part of HOWFSC
     prihdr['HOWFSLNK']  = 0            # 0: Campaign does not include HOWFSC activity; 1: Includes HOWFSC activity
@@ -201,6 +201,7 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['EXPCYC']      = 0               # Exposing stage duration (cycles)
     exthdr['OVEREXP']     = 0               # EXCAM over-illumination flag: 0=Not over-exposed, 1=Over-exposed
     exthdr['NOVEREXP']    = 0.0             # Number of pixels overexposed divided by 100
+    exthdr['ISPC']        = 0.0             # Designated photon counting: 0=analog, 1=photon counting
     exthdr['PROXET']      = 0.0             # EXCAM ProxE heater value (°C)
     exthdr['FCMLOOP']     = 0               # FCM control loop state: 0=open, 1=closed
     exthdr['FCMPOS']      = 0.0             # Coarse FCM position (counts)
@@ -213,6 +214,10 @@ def create_default_L1_headers(arrtype="SCI"):
     exthdr['FSMSG3']      = 0.0             # Average measurement (volts) for strain gauge 3
     exthdr['FSMX']        = 0.0             # Derived FSM X position relative to home (mas)
     exthdr['FSMY']        = 0.0             # Derived FSM Y position relative to home (mas)
+    exthdr['SB_FP_DX']    = 0.0             # X pixel offset from EXCAM center from FPAM speckle balance alignment (pixel)
+    exthdr['SB_FP_DY']    = 0.0             # Y pixel offset from EXCAM center from FPAM speckle balance alignment (pixel)
+    exthdr['SB_FS_DX']    = 0.0             # X pixel offset from EXCAM center from FSAM speckle balance alignment (pixel)
+    exthdr['SB_FS_DY']    = 0.0             # Y pixel offset from EXCAM center from FSAM speckle balance alignment (pixel)
     exthdr['DMZLOOP']     = 0               # DM Zernike loop control state: 0=Open, 1=Closed
     exthdr['1SVALID']     = 0               # LOWFSC 1s derived stats validity: 0=not valid, 1=valid
     exthdr['Z2AVG']       = 0.0             # Average Z2 value (nm)
@@ -341,8 +346,8 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     prihdr['YAW']       = 0.0          # S/C yaw (deg)
     prihdr['PSFREF']    = 0            # 0: Not a PSF reference observation; 1: PSF reference observation
     prihdr['OPGAIN']    = 'AUTO'       # Planned gain (value or "AUTO")
-    prihdr['PHTCNT']    = 0            # 0: Photon counting mode planned; 1: Not planned
-    prihdr['FRAMET']    = 0.0          # Expected exposure time per frame (sec)
+    prihdr['PHTCNT']    = 'AUTO'       # 0: Photon counting mode planned; 1: Not planned; (value or "AUTO")
+    prihdr['FRAMET']    = 'AUTO'       # Expected exposure time per frame (sec) (value or "AUTO")
     prihdr['SATSPOTS']  = 0            # 0: No satellite spots; 1: Satellite spots present
     prihdr['ISHOWFSC']  = 0            # 0: Images taken as part of HOWFSC; 1: Not part of HOWFSC
     prihdr['HOWFSLNK']  = 0            # 0: Campaign does not include HOWFSC activity; 1: Includes HOWFSC activity
@@ -382,6 +387,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['EXPCYC']      = 0               # Exposing stage duration (cycles)
     exthdr['OVEREXP']     = 0               # EXCAM over-illumination flag: 0=Not over-exposed, 1=Over-exposed
     exthdr['NOVEREXP']    = 0.0             # Number of pixels overexposed divided by 100
+    exthdr['ISPC']        = 0.0             # Designated photon counting: 0=analog, 1=photon counting
     exthdr['PROXET']      = 0.0             # EXCAM ProxE heater value (°C)
     exthdr['FCMLOOP']     = 0               # FCM control loop state: 0=open, 1=closed
     exthdr['FCMPOS']      = 0.0             # Coarse FCM position (counts)
@@ -394,6 +400,10 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['FSMSG3']      = 0.0             # Average measurement (volts) for strain gauge 3
     exthdr['FSMX']        = 0.0             # Derived FSM X position relative to home (mas)
     exthdr['FSMY']        = 0.0             # Derived FSM Y position relative to home (mas)
+    exthdr['SB_FP_DX']    = 0.0             # X pixel offset from EXCAM center from FPAM speckle balance alignment (pixel)
+    exthdr['SB_FP_DY']    = 0.0             # Y pixel offset from EXCAM center from FPAM speckle balance alignment (pixel)
+    exthdr['SB_FS_DX']    = 0.0             # X pixel offset from EXCAM center from FSAM speckle balance alignment (pixel)
+    exthdr['SB_FS_DY']    = 0.0             # Y pixel offset from EXCAM center from FSAM speckle balance alignment (pixel)
     exthdr['DMZLOOP']     = 0               # DM Zernike loop control state: 0=Open, 1=Closed
     exthdr['1SVALID']     = 0               # LOWFSC 1s derived stats validity: 0=not valid, 1=valid
     exthdr['Z2AVG']       = 0.0             # Average Z2 value (nm)
