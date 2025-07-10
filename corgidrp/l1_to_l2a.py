@@ -223,7 +223,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         kgain = k_gain.value
     emgain_list = []
     for frame in crmasked_dataset:
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             emgain = frame.ext_hdr['EMGAIN_M']
         except:
             if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
@@ -308,7 +308,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
     for i in range(linearized_cube.shape[0]):
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
         except:
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]

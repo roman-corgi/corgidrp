@@ -199,7 +199,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if thresh < 0:
             raise PhotonCountException('thresh must be nonnegative')
         
-        if 'EMGAIN_M' in dataset.frames[0].ext_hdr: # if EM gain measured directly from frame TODO change hdr name if necessary
+        if 'EMGAIN_M' in dataset.frames[0].ext_hdr: # if EM gain measured directly from frame
             em_gain = dataset.frames[0].ext_hdr['EMGAIN_M']
         else:
             em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']

@@ -874,7 +874,7 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
                     raise Exception('Commanded EM gain must be >= 1')
                 em_gains.append(em_gain)
                 if record_gain:
-                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                    try: # if EM gain measured directly from frame
                         gains.append(frame.ext_hdr['EMGAIN_M'])
                     except:
                         if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available

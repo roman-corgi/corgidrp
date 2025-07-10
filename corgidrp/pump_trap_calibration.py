@@ -3291,6 +3291,7 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     #Great the header from the first file
     first_file_pri_hdr = input_dataset[0].pri_hdr
     first_file_ext_hdr = input_dataset[0].ext_hdr
+    first_file_ext_hdr['BUNIT'] = 'N/A'
 
     trapcal = TrapCalibration(trap_cal_array,pri_hdr = first_file_pri_hdr, 
                     ext_hdr = first_file_ext_hdr, 
