@@ -27,10 +27,15 @@ def varL23(g, L, T, N):
             2*g*L*(3 + L)*T + L**2*T**2))/(12*g**2))
     std_dev = np.sqrt(N * eThresh * (1-eThresh))
 
-    return (std_dev)**2*(((np.e**((T/g)))/N) +
-    2*((np.e**((2*T)/g)*(g - T))/(2*g*N**2))*(N*eThresh) +
-    3*(((np.e**(((3*T)/g)))*(4*g**2 - 8*g*T + 5*T**2))/(
-    12*g**2*N**3))*(N*eThresh)**2)**2
+    with warnings.catch_warnings():
+        # prevent RuntimeWarning: divide by zero and invalid value
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        var_after_corr = (std_dev)**2*(((np.e**((T/g)))/N) +
+        2*((np.e**((2*T)/g)*(g - T))/(2*g*N**2))*(N*eThresh) +
+        3*(((np.e**(((3*T)/g)))*(4*g**2 - 8*g*T + 5*T**2))/(
+        12*g**2*N**3))*(N*eThresh)**2)**2
+
+    return var_after_corr
 
 class PhotonCountException(Exception):
     """Exception class for photon_count module."""
@@ -376,18 +381,21 @@ def calc_lam_approx(nobs, nfr, t, g):
 
     """
     # First step of equation (before taking log)
-    init = 1 - (nobs/nfr) * np.exp(t/g)
-    # Mask out all values less than or equal to 0
-    lam_m = np.zeros_like(init).astype(bool)
-    lam_m[init > 0] = True
+    with warnings.catch_warnings():
+        # prevent RuntimeWarning: invalid value in both div statements
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        init = 1 - (nobs/nfr) * np.exp(t/g)
+        # Mask out all values less than or equal to 0
+        lam_m = np.zeros_like(init).astype(bool)
+        lam_m[init > 0] = True
 
-    # Use the first order approximation on all values greater than zero
-    lam1 = np.zeros_like(init)
-    lam1[lam_m] = -np.log(init[lam_m])
+        # Use the first order approximation on all values greater than zero
+        lam1 = np.zeros_like(init)
+        lam1[lam_m] = -np.log(init[lam_m])
 
-    # For any values less than zero, revert to the zeroth order approximation
-    lam0 = nobs / nfr
-    lam1[~lam_m] = lam0[~lam_m]
+        # For any values less than zero, revert to the zeroth order approximation
+        lam0 = nobs / nfr
+        lam1[~lam_m] = lam0[~lam_m]
 
     return lam1
 

@@ -5,6 +5,7 @@ import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
+from astropy.io.fits.card import VerifyWarning
 import astropy.time as time
 import pandas as pd
 import pyklip
@@ -462,7 +463,9 @@ class Image():
         for hdu in self.hdu_list:
             hdulist.append(hdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
     def _record_parent_filenames(self, input_dataset):
@@ -576,7 +579,9 @@ class Image():
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
 
         #first layer is always the updated combined error
-        self.err = self.err*input_error
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
+            self.err = self.err*input_error
         self.err_hdr["Layer_1"] = "combined_error"
 
         # record history since 2-D error map doesn't track individual terms
@@ -938,7 +943,9 @@ class KGain(Image):
         ptchdu = fits.ImageHDU(data=self.ptc, header = self.ptc_hdr)
         hdulist.append(ptchdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
 class BadPixelMap(Image):
@@ -2477,9 +2484,13 @@ class PyKLIPDataset(pyKLIP_Data):
         
         # Write FITS file.
         try:
-            hdul.writeto(filepath, overwrite=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+                hdul.writeto(filepath, overwrite=True)
         except TypeError:
-            hdul.writeto(filepath, clobber=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+                hdul.writeto(filepath, clobber=True)
         hdul.close()
         
         pass
