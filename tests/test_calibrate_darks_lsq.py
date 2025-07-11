@@ -56,19 +56,19 @@ def teardown_module():
     global dataset
     del dataset
 
-# filter out expected warnings
-warnings.filterwarnings('ignore', category=UserWarning,
-    module='corgidrp.darks')
 # filter out expected warning when unreliable_pix_map has a pixel
 # masked for all sub-stacks (which makes Rsq NaN from a division by 0)
-warnings.filterwarnings('ignore', category=RuntimeWarning,
-    module='corgidrp.darks')
+# warnings.filterwarnings('ignore', category=RuntimeWarning,
+    # module='corgidrp.darks')
 
 
 def test_expected_results_sub():
     """Outputs are as expected, for smaller-sized frames."""
     for weighting in [True, False]:
-        noise_maps = calibrate_darks_lsq(dataset, detector_params, weighting, dat)
+        # filter out expected warning from internal module
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
+            noise_maps = calibrate_darks_lsq(dataset, detector_params, weighting, dat)
         F_image_map = imaging_slice('SCI', noise_maps.FPN_map, dat)
         # F
         assert (np.isclose(np.mean(F_image_map), FPN//eperdn*eperdn,
@@ -167,7 +167,9 @@ def test_g_arr_unique():
         for d in ds[j].frames:
             d.ext_hdr['EMGAIN_C'] = 4
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
+            calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_g_gtr_1():
     '''EM gains must all be 1 or bigger.'''
@@ -176,7 +178,9 @@ def test_g_gtr_1():
     ds[0].frames[0].ext_hdr['EMGAIN_C'] = 0.9
     ds[0].frames[1].ext_hdr['EMGAIN_C'] = 0.9
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
+            calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_t_arr_unique():
     '''Exposure times must have at least 2 unique elements.'''
@@ -186,7 +190,9 @@ def test_t_arr_unique():
         for d in ds[j].frames:
             d.ext_hdr['EXPTIME'] = 4
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
+            calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_t_gtr_0():
     '''Exposure times must all be 0 or greater.'''
@@ -195,7 +201,9 @@ def test_t_gtr_0():
     ds[0].frames[0].ext_hdr['EXPTIME'] = -0.1
     ds[0].frames[1].ext_hdr['EXPTIME'] = -0.1
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
+            calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 
 def test_k_gtr_0():
@@ -205,7 +213,9 @@ def test_k_gtr_0():
     ds[0].frames[0].ext_hdr['KGAINPAR'] = 0
     ds[0].frames[1].ext_hdr['KGAINPAR'] = 0
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, module='corgidrp.darks')
+            calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_mean_num():
     '''If too many masked in a stack for a given pixel, warning raised. Checks

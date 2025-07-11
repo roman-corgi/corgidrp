@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import warnings
 from corgidrp.data import Dataset, Image
 from corgidrp.l3_to_l4 import crop
 from corgidrp.mocks import create_default_L3_headers
