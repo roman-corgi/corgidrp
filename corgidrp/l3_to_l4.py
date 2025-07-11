@@ -17,6 +17,7 @@ import numpy as np
 import pyklip.rdi
 import os
 from astropy.io import fits
+from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 
 def distortion_correction(input_dataset, astrom_calibration):
     """
@@ -35,11 +36,14 @@ def distortion_correction(input_dataset, astrom_calibration):
     distortion_order = int(astrom_calibration.distortion_coeffs[-1])
 
     undistorted_ims = []
+    undistorted_errs = []
 
     # apply the distortion correction to each image in the dataset
     for undistorted_data in undistorted_dataset:
 
         im_data = undistorted_data.data
+        im_err = undistorted_data.err
+        im_dq = undistorted_data.dq
         imgsizeX, imgsizeY = im_data.shape
 
         # set image size to the largest axis if not square imagea
@@ -81,13 +85,33 @@ def distortion_correction(input_dataset, astrom_calibration):
         gridx = gridx - distmapX
         gridy = gridy - distmapY
 
+        # interpolating bad pixels to not spillover during the interpolation while saving bpix
+        
+        im_bpixs = im_data[im_dq]
+        im_data[im_dq] = np.nan
+        
+        kernel = Gaussian2DKernel(4)
+        im_data = interpolate_replace_nans(im_data, kernel)
+    
         undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
-
+        
+        # interpolate the errors
+        if len(im_err.shape) == 2:
+            undistorted_errors = scipy.ndimage.map_coordinates(im_err, [gridy, gridx])
+        else:
+            undistorted_errors = []
+            for err in im_err:
+                undistorted_errors.append(scipy.ndimage.map_coordinates(err, [gridy, gridx]))
+        
+        # put the bad pixels back in
+        undistorted_image[im_dq] = im_bpixs
+        
         undistorted_ims.append(undistorted_image)
+        undistorted_errs.append(undistorted_errors)
 
     history_msg = 'Distortion correction completed'
 
-    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims))
+    undistorted_dataset.update_after_processing_step(history_msg, new_all_data=np.array(undistorted_ims), new_all_err=np.array(undistorted_errs))
 
     return undistorted_dataset
 

@@ -21,6 +21,7 @@ from astropy.modeling.models import Gaussian2D
 import photutils.centroids as centr
 import corgidrp.data as data
 from corgidrp.data import Image, Dataset, DetectorParams, FpamFsamCal
+from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 import corgidrp.detector as detector
 import corgidrp.flat as flat
 from corgidrp.detector import imaging_area_geom, unpack_geom
@@ -1545,7 +1546,7 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
-                       distortion_coeffs_path=None, dither_pointings=0):
+                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None):
     """
     Create simulated data for astrometric calibration.
 
@@ -1561,6 +1562,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         add_gauss_noise (boolean): Argument to determine if gaussian noise should be added to the data (default: True)
         distortion_coeffs_path (str): Full path to csv with the distortion coefficients and the order of polynomial used to describe distortion (default: None))
         dither_pointings (int): Number of dithers to include with the dataset. Dither offset is assumed to be half the FoV. (default: 0)
+        bpix_map (np.array): 2D bad pixel map to apply to simulated data (default: None)
 
     Returns:
         corgidrp.data.Dataset:
@@ -1745,7 +1747,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
             ref_flux = 10
             noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= image_shape)
             sim_data = sim_data + noise
-
+            
         # add distortion (optional)
         if distortion_coeffs_path is not None:
             # load in distortion coeffs and fitorder
@@ -1806,7 +1808,11 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
 
             frame_xpixels[i] = np.array(dist_xpix)
             frame_ypixels[i] = np.array(dist_ypix)
-
+            
+        # apply bad pixel map if provided (optional)
+        if bpix_map is not None:
+            sim_data[bpix_map] = np.nan 
+            
         # image_frames.append(sim_data)
 
         # TO DO: Determine what level this image should be
