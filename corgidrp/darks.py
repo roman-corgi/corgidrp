@@ -426,6 +426,8 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
     DC_std_map : array-like (full frame)
         The standard deviation per pixel for the calibrated dark current.
     """
+    if type(weighting) != bool:
+        raise ValueError('The input weighting should be either True or False.')
     if detector_regions is None:
             detector_regions = detector_areas
 
@@ -459,7 +461,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
             'which is the recommended number per sub-stack for an analog '
             'master dark')
         if i > 0:
-            if np.shape(datasets[i-1].all_data[1:]) != np.shape(datasets[i].all_data[1:]):
+            if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
                 raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
         try: # if EM gain measured directly from frame
             EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])

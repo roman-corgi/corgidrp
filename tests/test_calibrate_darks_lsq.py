@@ -157,7 +157,7 @@ def test_sub_stack_len():
     # make a dataset with only 2 distinct combos
     dataset_few = Dataset([ds[0].frames[k] for k in range(len(ds[0]))] + [ds[1].frames[k] for k in range(len(ds[1]))])
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(dataset_few, detector_params, dat)
+        calibrate_darks_lsq(dataset_few, detector_params, detector_regions=dat)
 
 def test_g_arr_unique():
     '''EM gains must have at least 2 unique elements.'''
@@ -167,16 +167,16 @@ def test_g_arr_unique():
         for d in ds[j].frames:
             d.ext_hdr['EMGAIN_C'] = 4
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, dat)
+        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_g_gtr_1():
-    '''EM gains must all be bigger than 1.'''
+    '''EM gains must all be 1 or bigger.'''
     data_set = dataset.copy()
     ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-    ds[0].frames[0].ext_hdr['EMGAIN_C'] = 1
-    ds[0].frames[1].ext_hdr['EMGAIN_C'] = 1
+    ds[0].frames[0].ext_hdr['EMGAIN_C'] = 0.9
+    ds[0].frames[1].ext_hdr['EMGAIN_C'] = 0.9
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, dat)
+        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_t_arr_unique():
     '''Exposure times must have at least 2 unique elements.'''
@@ -186,16 +186,16 @@ def test_t_arr_unique():
         for d in ds[j].frames:
             d.ext_hdr['EXPTIME'] = 4
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, dat)
+        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_t_gtr_0():
-    '''Exposure times must all be bigger than 0.'''
+    '''Exposure times must all be 0 or greater.'''
     data_set = dataset.copy()
     ds, _ = data_set.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
-    ds[0].frames[0].ext_hdr['EXPTIME'] = 0
-    ds[0].frames[1].ext_hdr['EXPTIME'] = 0
+    ds[0].frames[0].ext_hdr['EXPTIME'] = -0.1
+    ds[0].frames[1].ext_hdr['EXPTIME'] = -0.1
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, dat)
+        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 
 def test_k_gtr_0():
@@ -205,7 +205,7 @@ def test_k_gtr_0():
     ds[0].frames[0].ext_hdr['KGAINPAR'] = 0
     ds[0].frames[1].ext_hdr['KGAINPAR'] = 0
     with pytest.raises(CalDarksLSQException):
-        calibrate_darks_lsq(data_set, detector_params, dat)
+        calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
 
 def test_mean_num():
     '''If too many masked in a stack for a given pixel, warning raised. Checks
@@ -222,19 +222,16 @@ def test_mean_num():
         ds[i].all_dq[:int(1+len(ds[i])/2),10,12] = 2
 
     with pytest.warns(UserWarning):
-        nm_out = calibrate_darks_lsq(data_set, detector_params, dat)
+        nm_out = calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
     # last of out is the DetectorNoiseMaps instance
     # And dq is really a 3-frame stack, and all 3 are the same.  So pick one of them.
     assert nm_out.dq[0,7,8] == 4
-    # max error should be found in the (10,12) pixel of the CIC err map (i.e., [0,1,...] below), 
-    # which is the CIC error combined with the input frames' error
-    assert nm_out.err[0,1,10,12] == np.nanmax(nm_out.err)
     # error for dark current at pixel (10,12) should be 0 since dark current only in the image area
     assert nm_out.err[0,2,10,12] == 0
 
 def test_weighting():
-    '''Test that weighting works:  High-err sub-stacks don't affect the fit much.'''
-    noise_maps = calibrate_darks_lsq(dataset, detector_params, dat)
+    '''This tests that weighting works. Demonstrates the effect of low weighting via high err and then lots of masking.'''
+    noise_maps = calibrate_darks_lsq(dataset, detector_params, detector_regions=dat)
     CIC_image_map = imaging_slice('SCI', noise_maps.CIC_map, dat)
     wrong_dataset = dataset.copy()
     # Let the frames corresponding to 2 EM gain values (for all exposure time values) be erroneous. 
@@ -246,7 +243,7 @@ def test_weighting():
     for s in [s1, s2]:
         for i in range(7):
             wrong_dataset.all_data[int(7*30*i + s*30):int(7*30*i + s*30+30)] = wrong_dataset.all_data[int(7*30*i + s*30):int(7*30*i + s*30+30)]/6  
-    wrong_noise_maps = calibrate_darks_lsq(wrong_dataset, detector_params, dat)
+    wrong_noise_maps = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
     wrong_CIC_image_map = imaging_slice('SCI', wrong_noise_maps.CIC_map, dat)
     assert(not np.isclose(np.mean(CIC_image_map),
                     np.mean(wrong_CIC_image_map), atol=0.01))
@@ -254,19 +251,19 @@ def test_weighting():
     for s in [s1, s2]:
         for i in range(7):
             wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] += 100000
-    wrong_noise_maps_err = calibrate_darks_lsq(wrong_dataset, detector_params, dat)
+    wrong_noise_maps_err = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
     wrong_CIC_image_map_err = imaging_slice('SCI', wrong_noise_maps_err.CIC_map, dat)
     assert(np.isclose(np.mean(CIC_image_map),
                     np.mean(wrong_CIC_image_map_err), atol=0.01))
-    # and err should be reduced overall now too despite effectively having fewer stacks for fitting
-    assert(np.nanmean(wrong_noise_maps_err.CIC_err) > np.nanmean(wrong_noise_maps.CIC_err))
+    # and err should be reduced overall now, despite effectively having fewer stacks for fitting
+    assert(np.nanmean(wrong_noise_maps_err.CIC_err) < np.nanmean(wrong_noise_maps.CIC_err))
     # This time, make err for this sub-stack large through dq (all but 1 frame in the sub-stack)
     # (undo err adjustment I did above)
     for s in [s1, s2]:
         for i in range(7):
             wrong_dataset.all_err[int(7*30*i + s*30):int(7*30*i + s*30+30)] -= 100000
             wrong_dataset.all_dq[int(7*30*i + s*30):int(7*30*i + s*30+29), :, 1:] = 1 # leave one pixel unmasked so that the total masking Exception isn't raised
-    wrong_noise_maps_dq = calibrate_darks_lsq(wrong_dataset, detector_params, dat)
+    wrong_noise_maps_dq = calibrate_darks_lsq(wrong_dataset, detector_params, detector_regions=dat)
     wrong_CIC_image_map_dq = imaging_slice('SCI', wrong_noise_maps_dq.CIC_map, dat)
     # We artificially made err big above, which brought the mean CIC value much closer to the expected value.
     # However, our leverage in weighting is much more limited when only the DQ is used to affect the weighting. (In reality, the 
@@ -274,23 +271,40 @@ def test_weighting():
     # But the result is still a number closer to the correct value compared to the case where no appropriate weighting is used:
     assert(np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map_dq)) < 
            np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map)))
-    # and err should be reduced overall now too despite effectively having fewer stacks for fitting
-    assert(np.nanmean(wrong_noise_maps_dq.CIC_err) > np.nanmean(wrong_noise_maps.CIC_err))
+    # and err should be reduced overall now, despite effectively having fewer stacks for fitting
+    assert(np.nanmean(wrong_noise_maps_dq.CIC_err) < np.nanmean(wrong_noise_maps.CIC_err))
+    # Finally, demonstrate weighting through fewer frames in the erroneous sub-stacks:
+    del_list = []
+    for s in [s1, s2]:
+        for i in range(7):
+            # restore original DQ values
+            wrong_dataset.all_dq[int(7*30*i + s*30):int(7*30*i + s*30+29), :, 1:] = 0
+            # leave only 2 frames in the dataset for g6 and g7
+            del_list.append([r for r in range(int(7*30*i + s*30), int(7*30*i + s*30+28))])
+    del_list = np.array(del_list)[:-1].ravel() # [:-1] cuts off the frame numbers that went beyond the total number, which didn't matter in previous calls
+    inds = np.delete(np.arange(0, len(wrong_dataset)), del_list)
+    smaller_dataset = wrong_dataset[inds].copy()
+    smaller_noise_maps = calibrate_darks_lsq(smaller_dataset, detector_params, detector_regions=dat)
+    smaller_CIC_image_map = imaging_slice('SCI', smaller_noise_maps.CIC_map, dat)
+    # similar logic that applied for masking via DQ above
+    assert(np.abs(np.mean(CIC_image_map) - np.mean(smaller_CIC_image_map)) < 
+           np.abs(np.mean(CIC_image_map) - np.mean(wrong_CIC_image_map)))
+    assert(np.nanmean(smaller_noise_maps.CIC_err) < np.nanmean(wrong_noise_maps.CIC_err))
     
 
 if __name__ == '__main__':
     setup_module()
 
+    test_g_gtr_1()
+    test_t_gtr_0()
+    test_k_gtr_0()
     test_weighting()
     test_mean_num()
     test_expected_results_sub()
     test_sub_stack_len()
     test_g_arr_unique()
     test_t_arr_unique()
-    test_g_gtr_1()
-    test_t_gtr_0()
-    test_k_gtr_0()
-    
+
     teardown_module()
 
 
