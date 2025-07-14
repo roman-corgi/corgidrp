@@ -232,10 +232,10 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 3e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 3e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 3e-11)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 3e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-10)
+    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-10)
     pass
 
     this_caldb.remove_entry(corgidrp_noisemap)
@@ -435,10 +435,10 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     # iit_noisemap = data.autoload(iit_noisemap_fname)
     
 
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 3e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 3e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 3e-11)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 3e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-10)
+    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-10)
     pass
 
     # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)

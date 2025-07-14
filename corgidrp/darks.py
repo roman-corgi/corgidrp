@@ -228,7 +228,7 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     total_err = np.sqrt(mean_err**2 + stat_std**2)
     # bitwise_or flag value for those that are masked all the way through for all
     # frames
-    fittable_inds = np.where(combined_bpmap != 1)
+    fittable_inds = np.where(combined_bpmap ==0) 
     output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
     output_dq[fittable_inds] = 0 
     if not full_frame:
