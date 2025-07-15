@@ -6,6 +6,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 
 import pytest
+import warnings
 import numpy as np
 
 ## Helper functions/quantities
@@ -90,7 +91,7 @@ def test_expected_flux_ratio_noise():
     # add some noise to the star 
     np.random.seed(987)
     star_PSF += np.random.poisson(lam=star_PSF.mean(), size=star_PSF.shape)
-    prihdr, exthdr = create_default_L4_headers()
+    prihdr, exthdr, errhdr, dqhdr = create_default_L4_headers()
     star_image = data.Image(star_PSF, prihdr, exthdr)
     star_dataset = data.Dataset([star_image for i in range(len(psfsub_dataset_rdi))])
     # fake an ND calibration:
@@ -98,7 +99,7 @@ def test_expected_flux_ratio_noise():
     nd_x = nd_x.ravel()
     nd_y = nd_y.ravel()
     nd_od = np.ones(nd_y.shape) * 1e-2
-    pri_hdr, ext_hdr = mocks.create_default_L2b_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     nd_cal = data.NDFilterSweetSpotDataset(np.array([nd_od, nd_x, nd_y]).T, pri_hdr=pri_hdr,
                                       ext_hdr=ext_hdr)
     
@@ -129,8 +130,10 @@ def test_expected_flux_ratio_noise():
             assert frn_dataset[0].hdu_list['FRN_CRV'].header['BUNIT'] == "Fp/Fs"
 
     # last 2 separations below close to what they are in the KLIP extension, and increased the length from 2 separations in KLIP extension to 3 here to make sure that can be interpolated and handled
-    requested_separations = np.array([26.5, 6.4, 14.8]) 
-    frn_dataset_rseps = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, requested_separations=requested_separations, halfwidth=3)
+    requested_separations = np.array([26.5, 6.4, 14.8])
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch Not all requested_separations from l4_to_tda
+        frn_dataset_rseps = compute_flux_ratio_noise(psfsub_dataset_rdi, nd_cal, star_dataset, requested_separations=requested_separations, halfwidth=3)
     for frame in frn_dataset_rseps:
         flux_ratio_noise = frame.hdu_list['FRN_CRV'].data
         frn_seps = flux_ratio_noise[0]

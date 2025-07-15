@@ -1,4 +1,5 @@
 import pytest
+import warnings
 import os
 import numpy as np
 import corgidrp
@@ -14,7 +15,7 @@ from termcolor import cprint
 
 data = np.ones([1024,1024]) * 2 
 err = np.ones([1,1024,1024]) * 0.5
-prhd, exthd = create_default_L3_headers()
+prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
 exthd["CFAMNAME"] = '3C'
 exthd["FPAMNAME"] = 'ND475'
 prhd["TARGET"] = 'VEGA'
@@ -51,7 +52,6 @@ def test_get_filter_name():
     #test a wrong filter name
     image3 = image1.copy()
     image3.ext_hdr["CFAMNAME"] = '5C'
-    dataset2 = Dataset([image3, image3])
     with pytest.raises(ValueError):
         filepath = fluxcal.get_filter_name(image3)
         pass
@@ -108,14 +108,36 @@ def test_calspec_download():
     """
     test the download of a calspec fits file
     """
-    filepath, filename = fluxcal.get_calspec_file('Vega')
-    assert os.path.exists(filepath)
-    assert filename == 'alpha_lyr_stis_011.fits'
-    os.remove(filepath)
+    
     filepath, filename = fluxcal.get_calspec_file('TYC 4424-1286-1')
     assert os.path.exists(filepath)
     assert filename == '1732526_stisnic_009.fits'
     os.remove(filepath)
+    
+    filepath, filename = fluxcal.get_calspec_file('Vega')
+    assert os.path.exists(filepath)
+    assert filename == 'alpha_lyr_stis_011.fits'
+    
+    calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
+    names_file = os.path.join(calspec_dir, "calspec_names.json")
+    fits_file = os.path.join(calspec_dir, 'alpha_lyr_stis_011.fits')
+    assert os.path.exists(names_file)
+    assert os.path.exists(fits_file)
+    assert fits_file == filepath
+    
+    # test the priority of the fits file path to .corgidrp
+    test_calspec_url = fluxcal.calspec_url
+    fluxcal.calspec_url = "wrong"
+    
+    filepath, filename = fluxcal.get_calspec_file('Vega')
+    assert os.path.exists(filepath)
+    assert filename == 'alpha_lyr_stis_011.fits'
+    os.remove(filepath)
+    
+    with pytest.raises(ValueError):
+        filepath, filename = fluxcal.get_calspec_file('TYC 4424-1286-1')
+    
+    fluxcal.calspec_url = test_calspec_url
     
     with pytest.raises(ValueError):
         filepath, filename = fluxcal.get_calspec_file('Todesstern')
@@ -252,7 +274,9 @@ def test_abs_fluxcal():
     old_ind = corgidrp.track_individual_errors
     corgidrp.track_individual_errors = True
     flux_dataset = Dataset([flux_image, flux_image])
-    output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.convert_to_flux(flux_dataset, fluxcal_factor)
     assert len(output_dataset) == 2
     assert output_dataset[0].ext_hdr['BUNIT'] == "erg/(s*cm^2*AA)"
     assert output_dataset[0].ext_hdr['FLUXFAC'] == fluxcal_factor.fluxcal_fac
@@ -325,15 +349,27 @@ def test_abs_fluxcal():
     assert fluxcal_factor_back_gauss.ext_hdr["LOCBACK"] == back
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
     
+    #test the direct input of the calspec fits file
+    fluxcal_factor_back = fluxcal.calibrate_fluxcal_aper(flux_image_back, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    assert fluxcal_factor_back.fluxcal_fac == pytest.approx(fluxcal_factor.fluxcal_fac)
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back.ext_hdr['HISTORY'])
+    fluxcal_factor_back_gauss = fluxcal.calibrate_fluxcal_gauss2d(flux_image_back, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=gauss_kwargs)
+    assert fluxcal_factor_back_gauss.fluxcal_fac == pytest.approx(fluxcal_factor_gauss.fluxcal_fac)
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_gauss.ext_hdr['HISTORY'])
+    
     # test l4_to_tda.determine_flux
     input_dataset = Dataset([flux_image_back, flux_image_back])
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back,  photo = "aperture", phot_kwargs = aper_kwargs)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back,  photo = "aperture", phot_kwargs = aper_kwargs)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["LOCBACK"] == pytest.approx(3, abs = 0.03)
     #sanity check: vega is input source, so app mag 0
     assert output_dataset[0].ext_hdr["APP_MAG"] == pytest.approx(0.0)
     
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back_gauss,  photo = "2dgauss", phot_kwargs = gauss_kwargs)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_back_gauss,  photo = "2dgauss", phot_kwargs = gauss_kwargs)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["LOCBACK"] == pytest.approx(3, abs = 0.03)
     #sanity check: Vega is input source, so app mag 0
@@ -344,7 +380,9 @@ def test_abs_fluxcal():
     flux_err_gauss = np.sqrt(error_gauss**2 * fluxcal_factor_gauss.fluxcal_fac**2 + fluxcal_factor_gauss.fluxcal_err**2 * 200**2)
     
     input_dataset = Dataset([flux_image, flux_image])
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor,  photo = "aperture", phot_kwargs = None)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_ap, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0
@@ -352,7 +390,9 @@ def test_abs_fluxcal():
     
     assert output_dataset[0].ext_hdr["MAGERR"] == pytest.approx(mag_err_ap, rel = 0.1)
     
-    output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_gauss,  photo = "2dgauss", phot_kwargs = None)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch "there is no COL_COR keyword" from l4_to_tda
+        output_dataset = l4_to_tda.determine_flux(input_dataset, fluxcal_factor_gauss,  photo = "2dgauss", phot_kwargs = None)
     assert output_dataset[0].ext_hdr["FLUX"] == pytest.approx(band_flux)
     assert output_dataset[0].ext_hdr["FLUXERR"] == pytest.approx(flux_err_gauss, rel = 0.1)
     assert output_dataset[0].ext_hdr["LOCBACK"] == 0

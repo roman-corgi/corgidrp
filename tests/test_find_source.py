@@ -206,7 +206,7 @@ def test_find_source(fwhm=2.8, nsigma_threshold=5.0):
                        x_rand[i]-psf_window:x_rand[i]+psf_window+1] += psf * inputflux_rand[i]
         
         # Create input data with a simulated image and a sample header
-        pri_hdr, _ = create_default_L3_headers()
+        pri_hdr, _, errhdr, dqhdr = create_default_L3_headers()
         image_with_point_source = data.Image(image_copy,pri_hdr=pri_hdr,ext_hdr=input_dataset[0].ext_hdr)
         image_with_point_source.data = image_copy
 

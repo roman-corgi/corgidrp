@@ -3,6 +3,7 @@ import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
+from astropy.io.fits.card import VerifyWarning
 import astropy.time as time
 import pandas as pd
 from astropy.table import Table
@@ -461,7 +462,9 @@ class Image():
         for hdu in self.hdu_list:
             hdulist.append(hdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
     def _record_parent_filenames(self, input_dataset):
@@ -575,7 +578,9 @@ class Image():
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
 
         #first layer is always the updated combined error
-        self.err = self.err*input_error
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
+            self.err = self.err*input_error
         self.err_hdr["Layer_1"] = "combined_error"
 
         # record history since 2-D error map doesn't track individual terms
@@ -650,7 +655,7 @@ class Dark(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['EMGAIN_C'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
+            # give it a default filename using the last input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
@@ -659,8 +664,10 @@ class Dark(Image):
                 # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
                 self.filename = self.filename.replace("_DNM_CAL", "")
             else:
-                self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
-
+                if self.filename == '':
+                    self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
+                else:
+                    self.filename = self.filename.replace("_DNM_CAL", "")
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
@@ -1081,7 +1088,9 @@ class KGain(Image):
         ptchdu = fits.ImageHDU(data=self.ptc, header = self.ptc_hdr)
         hdulist.append(ptchdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
 class BadPixelMap(Image):
@@ -1184,7 +1193,7 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'Detected Electrons'
             # bias offset
-            self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
+            self.ext_hdr['B_O_UNIT'] = 'DN' # err unit is also in DN
 
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys():
@@ -2620,9 +2629,13 @@ class PyKLIPDataset(pyKLIP_Data):
         
         # Write FITS file.
         try:
-            hdul.writeto(filepath, overwrite=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+                hdul.writeto(filepath, overwrite=True)
         except TypeError:
-            hdul.writeto(filepath, clobber=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+                hdul.writeto(filepath, clobber=True)
         hdul.close()
         
         pass
