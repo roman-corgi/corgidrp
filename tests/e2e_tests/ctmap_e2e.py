@@ -71,7 +71,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # Create a mock coronagrahoc dataset with a different FPM's center than the
     # CT dataset
-    corDataset_image_list = mocks.create_ct_psfs(50)[0]
+    corDataset_image_list = mocks.create_ct_psfs(50, e2e=True)[0]
     # Make sure all dataframes share the same common header values
     for image in corDataset_image_list:
         image.ext_hdr['EXPTIME'] = exp_time_s

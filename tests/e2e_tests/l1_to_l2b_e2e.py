@@ -42,6 +42,7 @@ def fix_headers_for_tvac(
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
+        exthdr['BUNIT'] = 'DN'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -128,7 +129,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,

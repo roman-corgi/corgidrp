@@ -249,8 +249,8 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['DATATYPE'] = 'Dark'
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
-    master_dark.ext_hdr['BUNIT'] = 'Detected Electrons'
-    master_dark.err_hdr['BUNIT'] = 'Detected Electrons'
+    master_dark.ext_hdr['BUNIT'] = 'detected electron'
+    master_dark.err_hdr['BUNIT'] = 'detected electron'
     master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps)'
     return master_dark
 
@@ -737,10 +737,10 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         exthdr['EMGAIN_M'] = None
     exthdr['EMGAIN_C'] = None
     exthdr['KGAINPAR'] = None
-    exthdr['BUNIT'] = 'Detected Electrons'
+    exthdr['BUNIT'] = 'detected electron'
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'Detected Electrons'
+    err_hdr['BUNIT'] = 'detected electron'
 
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
 
