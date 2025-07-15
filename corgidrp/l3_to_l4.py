@@ -22,7 +22,11 @@ from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 def distortion_correction(input_dataset, astrom_calibration):
     """
     
-    Apply the distortion correction to the dataset.
+    Applies the distortion correction to the dataset. The function interpolates the bad pixels 
+    before applying the distortion correction to avoid creating more bad pixels. It then adds 
+    the bad pixels back in after the correction is applied, keeping the bad pixel maps the same. 
+    Furthermore it also applies the distortion correction to the error maps.
+    
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L3-level)
