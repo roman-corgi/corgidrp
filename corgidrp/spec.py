@@ -532,7 +532,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'P
         #halfheight = 30
         
     if band_center_file is None:
-        band_center_file = os.path.join(os.path.dirname(corgidrp.__path__[0]), "corgidrp", "data", "spectroscopy", "CGI_bandpass_centers.csv")
+        band_center_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
     filters = centroid_psf.pri_hdr['FILTERS'].upper().split(",")
     center_wavel = []
     for band in filters:
