@@ -118,86 +118,6 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
 
     return xfit, yfit, xfwhm, yfwhm, peakflux, fitbox, model, residual
 
-def gaussfit2d(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6, 
-               halfwidth=3, halfheight=5, guesspeak=1, refinefit=True):
-    """
-    Fits a 2-d Gaussian to the data at point (xguess, yguess)
-
-    Args:
-        frame: the data - Array of size (y,x)
-        xguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
-        yguess: location to fit the 2d guassian to (should be within +/-1 pixel of true peak)
-        xfwhm_guess: approximate x-axis fwhm to fit to
-        yfwhm_guess: approximate y-axis fwhm to fit to    
-        halfwidth: 1/2 the width of the box used for the fit
-        halfheight: 1/2 the height of the box used for the fit
-        guesspeak: approximate flux in peak pixel
-        refinefit: whether to refine the fit of the position of the guess
-
-    Returns:
-        xfit: x position (only chagned if refinefit is True)
-        yfit: y position (only chagned if refinefit is True)
-        xfwhm: x-axis fwhm of the PSF in pixels
-        yfwhm: y-axis fwhm of the PSF in pixels
-        peakflux: the peak value of the gaussian
-        fitbox: 2-d array of the fitted region from the data array  
-        model: 2-d array of the best-fit model
-        residual: 2-d array of residuals (data - model)
-
-    """
-    if not isinstance(halfwidth, int):
-        raise ValueError("halfwidth must be an integer")
-    if not isinstance(halfheight, int):
-        raise ValueError("halfheight must be an integer")
-    
-    x0 = np.rint(xguess).astype(int)
-    y0 = np.rint(yguess).astype(int)
-    #construct our searchbox
-    fitbox = np.copy(frame[y0 - halfheight:y0 + halfheight + 1,
-                           x0 - halfwidth:x0 + halfwidth + 1])
-
-    #mask bad pixels
-    fitbox[np.where(np.isnan(fitbox))] = 0
-
-    #fit a least squares gaussian to refine the fit on the source, otherwise just use the guess
-    if refinefit:
-        #construct the residual to the fit
-        errorfunction = lambda p: np.ravel(gauss2d(*p)(*np.indices(fitbox.shape)) - fitbox)
-   
-        #do a least squares fit. Note that we use searchrad for x and y centers since we're narrowed it to a box of size
-        #(2*halfwidth+1,2*halfheight+1)
-
-        guess = (halfwidth, halfheight, 
-                 xfwhm_guess/(2 * np.sqrt(2*np.log(2))),
-                 yfwhm_guess/(2 * np.sqrt(2*np.log(2))),
-                 guesspeak)
-
-        p, success = optimize.leastsq(errorfunction, guess)
-
-        xfit = p[0] + (x0 - halfwidth)
-        yfit = p[1] + (y0 - halfheight)
-        xfwhm = p[2] * (2 * np.sqrt(2*np.log(2)))
-        yfwhm = p[3] * (2 * np.sqrt(2*np.log(2)))
-        peakflux = p[4]
-
-        model = gauss2d(*p)(*np.indices(fitbox.shape))
-        residual = fitbox - model
-    else:
-        model = gauss2d(xguess - x0 + halfwidth, 
-                        yguess - y0 + halfheight, 
-                        xfwhm_guess/(2 * np.sqrt(2*np.log(2))),
-                        yfwhm_guess/(2 * np.sqrt(2*np.log(2))),
-                        guesspeak)
-        residual = fitbox - model
-
-        xfit = xfit
-        yfit = yfit
-        xfwhm = xfwhm_guess
-        yfwhm = yfwhm_guess
-        peakflux = guesspeak
-
-    return xfit, yfit, xfwhm, yfwhm, peakflux, fitbox, model, residual
-
 def psf_registration_costfunc(p, template, data):
     """
     Cost function for a least-squares fit to register a PSF with a fitting template.
@@ -398,7 +318,7 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
             default_file = default_psf_files.get('3d_noslit')
         else:
             default_file = default_psf_files.get('3d_slit')
-        data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), "corgidrp", "data", "spectroscopy")
+        data_path = os.path.join(os.path.dirname(__file__), "data", "spectroscopy")
         template_file = os.path.join(data_path, 
             default_file)
         if verbose:
