@@ -21,7 +21,6 @@ from astropy.modeling.models import Gaussian2D
 import photutils.centroids as centr
 import corgidrp.data as data
 from corgidrp.data import Image, Dataset, DetectorParams, FpamFsamCal
-from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 import corgidrp.detector as detector
 import corgidrp.flat as flat
 from corgidrp.detector import imaging_area_geom, unpack_geom
@@ -1546,7 +1545,7 @@ def make_fluxmap_image(f_map, bias, kgain, rn, emgain, time, coeffs, nonlin_flag
     return image
 
 def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), target=(80.553428801, -69.514096821), offset=(0,0), subfield_radius=0.03, platescale=21.8, rotation=45, add_gauss_noise=True, 
-                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None):
+                       distortion_coeffs_path=None, dither_pointings=0, bpix_map=None, sim_err_map=False):
     """
     Create simulated data for astrometric calibration.
 
@@ -1563,6 +1562,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         distortion_coeffs_path (str): Full path to csv with the distortion coefficients and the order of polynomial used to describe distortion (default: None))
         dither_pointings (int): Number of dithers to include with the dataset. Dither offset is assumed to be half the FoV. (default: 0)
         bpix_map (np.array): 2D bad pixel map to apply to simulated data (default: None)
+        sim_err_map (boolean): If True, simulates an error map (default: False) 
 
     Returns:
         corgidrp.data.Dataset:
@@ -1748,6 +1748,12 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
             noise = noise_rng.normal(scale= ref_flux/gain * 0.1, size= image_shape)
             sim_data = sim_data + noise
             
+        if sim_err_map:
+            
+            # Create an error map estimating the measurement noise to be about 5% of the flux. Rather arbitrary values, feel free to change.
+            err_rng = np.random.default_rng(10)
+            err_map = err_rng.normal(loc=sim_data*0.05, scale=1, size=sim_data.shape)
+      
         # add distortion (optional)
         if distortion_coeffs_path is not None:
             # load in distortion coeffs and fitorder
@@ -1796,6 +1802,11 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
             gridy = gridy + distmapy
 
             sim_data = scipy.ndimage.map_coordinates(sim_data, [gridy, gridx])
+            
+            if sim_err_map:
+                # transform the error map
+                err_map = scipy.ndimage.map_coordinates(err_map, [gridy, gridx])
+            
             # translated_pix = scipy.ndimage.map_coordinates()
             # transform the source coordinates
             dist_xpix, dist_ypix = [], []
@@ -1811,7 +1822,17 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
             
         # apply bad pixel map if provided (optional)
         if bpix_map is not None:
-            sim_data[bpix_map] = np.nan 
+            if bpix_map.shape[0] == 3:
+                frame_bpix = bpix_map[i]
+                sim_data[frame_bpix.astype(bool)] = np.nan 
+                if sim_err_map:
+                    err_map[frame_bpix.astype(bool)] = np.nan
+                dq_map = frame_bpix
+            else:
+                sim_data[bpix_map.astype(bool)] = np.nan
+                if sim_err_map:
+                    err_map[bpix_map.astype(bool)] = np.nan
+                dq_map = bpix_map
             
         # image_frames.append(sim_data)
 
@@ -1823,7 +1844,9 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
 
         ## save as an Image object
-        frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr)
+        err_map = None if not sim_err_map else err_map
+        dq_map = None if bpix_map is None else dq_map
+        frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr, err=err_map, dq=dq_map)
         filename = "simcal_astrom.fits"
         frame.filename = filename
         

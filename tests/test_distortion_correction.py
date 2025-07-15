@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 import os
-from astropy.io import fits
 from corgidrp import data, mocks, astrom
 from corgidrp.l3_to_l4 import distortion_correction
 
@@ -19,18 +18,14 @@ def test_distortion_correction():
 
     # create an undistorted dataset
     field_path = os.path.join(os.path.dirname(__file__), "test_data", "JWST_CALFIELD2020.csv")
-    no_distortion_dataset = mocks.create_astrom_data(field_path, bpix_map=bpixmap)
+
+    no_distortion_dataset = mocks.create_astrom_data(field_path, bpix_map=bpixmap, sim_err_map=True)
     
     # add distortion to the dataset
     distortion_coeffs_path = os.path.join(os.path.dirname(__file__), "test_data", "distortion_expected_coeffs.csv")
     distortion_coeffs = np.genfromtxt(distortion_coeffs_path)
-
    
-    distortion_dataset = mocks.create_astrom_data(field_path, distortion_coeffs_path=distortion_coeffs_path, bpix_map=bpixmap)
-    
-    # Create a list of bad pixel maps for each frame
-    bpixmap = np.array([bpixmap] * len(no_distortion_dataset))
-    distortion_dataset.update_after_processing_step("Adding bpix map to mock data", new_all_dq=bpixmap)
+    distortion_dataset = mocks.create_astrom_data(field_path, distortion_coeffs_path=distortion_coeffs_path, bpix_map=bpixmap, sim_err_map=True)
     
     # assume a ground truth AstrometricCalibration file for this dataset (zero offset from pointing, platescale=21.8, northangle=45)
     astromcal_data = np.concatenate((np.array([80.553428801, -69.514096821, 21.8, 45, 0, 0]), distortion_coeffs), axis=0)
@@ -41,7 +36,11 @@ def test_distortion_correction():
 
     # compare the undistorted data to the original dataset with no distortion
     for frame, ref_frame in zip(undistorted_dataset, no_distortion_dataset):
-        assert (np.nanmean(frame.data - ref_frame.data) == pytest.approx(0, abs=0.005))
+        assert np.nanmean(frame.data - ref_frame.data) == pytest.approx(0, abs=0.005)
+        assert np.sum(np.isnan(frame.data)) == np.sum(np.isnan(ref_frame.data)) # to ensure no new bad pixels
+        assert np.all(frame.dq == ref_frame.dq) # to ensure the bad pixel map didn't change
+        assert np.nanmean(frame.err - ref_frame.err) == pytest.approx(0, abs=0.00005) 
+
 
 
 if __name__ == "__main__":

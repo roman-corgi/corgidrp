@@ -86,26 +86,45 @@ def distortion_correction(input_dataset, astrom_calibration):
         gridy = gridy - distmapY
 
         # interpolating bad pixels to not spillover during the interpolation while saving bpix
+        im_bpixs = np.zeros_like(im_data)
+        im_bpixs[im_dq.astype(bool)] = im_data[im_dq.astype(bool)]
         
-        im_bpixs = im_data[im_dq]
-        im_data[im_dq] = np.nan
+        im_data[im_dq.astype(bool)] = np.nan
         
-        kernel = Gaussian2DKernel(4)
+        kernel = Gaussian2DKernel(3)
         im_data = interpolate_replace_nans(im_data, kernel)
     
         undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
         
         # interpolate the errors
         if len(im_err.shape) == 2:
+            
+            err_bpixs = np.zeros_like(im_err)
+            err_bpixs[im_dq.astype(bool)] = im_err[im_dq.astype(bool)]
+            
+            im_err[im_dq.astype(bool)] = np.nan
+            im_err = interpolate_replace_nans(im_err, kernel)
+            
             undistorted_errors = scipy.ndimage.map_coordinates(im_err, [gridy, gridx])
+            undistorted_errors[im_dq.astype(bool)] = err_bpixs[im_dq.astype(bool)]
         else:
             undistorted_errors = []
             for err in im_err:
-                undistorted_errors.append(scipy.ndimage.map_coordinates(err, [gridy, gridx]))
+                err_bpixs = np.zeros_like(err)
+                err_bpixs[im_dq.astype(bool)] = err[im_dq.astype(bool)]
+            
+                err[im_dq.astype(bool)] = np.nan
+                err = interpolate_replace_nans(err, kernel)
+                
+                und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
+                und_err[im_dq.astype(bool)] = err_bpixs[im_dq.astype(bool)]
+                
+                undistorted_errors.append(und_err)
         
         # put the bad pixels back in
-        undistorted_image[im_dq] = im_bpixs
         
+        undistorted_image[im_dq.astype(bool)] = im_bpixs[im_dq.astype(bool)]
+
         undistorted_ims.append(undistorted_image)
         undistorted_errs.append(undistorted_errors)
 
