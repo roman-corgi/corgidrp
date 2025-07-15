@@ -4,6 +4,7 @@ Test the walker infrastructure to read and execute recipes
 import os
 import glob
 import json
+import warnings
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -318,7 +319,9 @@ def test_skip_missing_calib():
     # use l1 to l2b recipe
     template_filepath = os.path.join(os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2b.json")
     template_recipe = json.load(open(template_filepath, "r"))
-    recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # because walker throws a UserWarning about skipping missing calibs, catch here in tests
+        recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
     assert recipe['name'] == 'l1_to_l2b'
     assert recipe['template'] == False
@@ -386,7 +389,9 @@ def test_skip_missing_optional_calib():
     template_filepath = os.path.join(os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2a_basic.json")
     template_recipe = json.load(open(template_filepath, "r"))
 
-    recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # because walker throws a UserWarning about skipping missing calibs, catch here in tests
+        recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
     # check prescan bias sub is not skipped and Detector Noise Maps is None
     assert 'skip' not in recipe['steps'][0] # prescan biassub

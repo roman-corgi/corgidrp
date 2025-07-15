@@ -332,7 +332,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         if not np.all((centerxy-0.5)%1 == 0):
             old_centerxy = centerxy.copy()
             centerxy = np.round(old_centerxy-0.5)+0.5
-            warnings.warn(f'Desired center {old_centerxy} is not at the intersection of 4 pixels. Centering on the nearest intersection {centerxy}')
+            print(f'Desired center {old_centerxy} is not at the intersection of 4 pixels. Centering on the nearest intersection {centerxy}')
             
         # Crop the data
         start_ind = (centerxy + 0.5 - np.array(sizexy)/2).astype(int)
@@ -478,12 +478,12 @@ def do_psf_subtraction(input_dataset,
         unique_vals = np.array(unique_vals)
 
         if 0. in unique_vals:
-            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0])]
+            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0].item())]
         else:
             raise UserWarning('No science files found in input dataset.')
 
         if 1. in unique_vals:
-            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0])]
+            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0].item())]
         else:
             ref_dataset = None
 

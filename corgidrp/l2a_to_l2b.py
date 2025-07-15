@@ -1,6 +1,7 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
 import copy
+import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas
@@ -132,7 +133,9 @@ def flat_division(input_dataset, flat_field):
     flatdiv_dataset = input_dataset.copy()
 
     #Divide by the master flat
-    flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+        flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
 
     #Find where the flat_field is 0 and set a DQ flag: 
     where_zero = np.where(flat_field.data == 0)
@@ -142,8 +145,10 @@ def flat_division(input_dataset, flat_field):
 
     # propagate the error of the master flat frame
     if hasattr(flat_field, "err"):
-        flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
-        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+            flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
+            flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
     else:
         raise Warning("no error attribute in the FlatField")
 
