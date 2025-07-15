@@ -478,13 +478,15 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
             flux calibration factor in (TO DO: what units should this be in)
     """
-    if isinstance(dataset_or_image, corgidrp.data.Dataset):
-        image = dataset_or_image[0]
-        dataset = dataset_or_image
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, corgidrp.data.Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
     else:
-        image = dataset_or_image
+        image = d_or_i
         dataset = corgidrp.data.Dataset([image])
-    
+    if image.ext_hdr['BUNIT'] != "photoelectron/s":
+        raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     if phot_kwargs is None:
         phot_kwargs = {
             'encircled_radius': 5,
@@ -514,12 +516,12 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
     elif flux_or_irr == 'irr':
         flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
@@ -587,13 +589,15 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
             flux calibration factor in (TO DO: what units should this be in)
     """
-    if isinstance(dataset_or_image, corgidrp.data.Dataset):
-        image = dataset_or_image[0]
-        dataset = dataset_or_image
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, corgidrp.data.Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
     else:
-        image = dataset_or_image
+        image = d_or_i
         dataset = corgidrp.data.Dataset([image])
-    
+    if image.ext_hdr['BUNIT'] != "photoelectron/s":
+        raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     if phot_kwargs is None:
         phot_kwargs = {
         'fwhm': 3,
@@ -618,12 +622,12 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
     elif flux_or_irr == 'irr':
         flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     

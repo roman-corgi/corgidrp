@@ -227,7 +227,7 @@ def stars_dataset_cached(bright_files_cached, dim_files_cached):
     combined_files = bright_files_cached + dim_files_cached
     # TO DO: May eventually need to add other processing steps to get the mocks
     # to a representative input state
-    return l2b_tol3.divide_by_exptime(Dataset(combined_files))
+    return Dataset(combined_files)
 
 @pytest.fixture(scope="module")
 def stars_dataset_cached_bright_count(bright_files_cached, dim_files_cached):
@@ -235,7 +235,7 @@ def stars_dataset_cached_bright_count(bright_files_cached, dim_files_cached):
     n_bright = len(bright_files_cached)
     # TO DO: May eventually need to add other processing steps to get the mocks
     # to a representative input state
-    return l2b_tol3.divide_by_exptime(Dataset(combined_files)), n_bright
+    return Dataset(combined_files), n_bright
 
 @pytest.fixture(scope="module")
 def dim_dir(tmp_path_factory):
@@ -439,7 +439,7 @@ def test_multiple_nd_levels(dim_dir, output_dir, test_od):
     dim_filepaths = glob.glob(os.path.join(dim_dir, "*")) # use cached dim images
     dim_images = [Image(path) for path in dim_filepaths]
     combined_files = bright_images + dim_images
-    combined_dataset = l2b_tol3.divide_by_exptime(Dataset(combined_files))
+    combined_dataset = Dataset(combined_files)
 
     results = nd_filter_calibration.create_nd_filter_cal(
         combined_dataset, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
@@ -466,7 +466,7 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
     dim_images = [Image(path) for path in dim_filepaths]
 
     # Convert list of Image objects into a Dataset
-    dim_dataset = l2b_tol3.divide_by_exptime(Dataset(dim_images))
+    dim_dataset = Dataset(dim_images)
 
     # 1) Generate a flux calibration object from the single image
     if phot_method == "Aperture":
@@ -577,8 +577,8 @@ def test_background_effect(tmp_path):
     
     combined_no = dim_files_no + bright_files_no
     combined_bg = dim_files_bg + bright_files_bg
-    ds_no = l2b_tol3.divide_by_exptime(Dataset(combined_no))
-    ds_bg = l2b_tol3.divide_by_exptime(Dataset(combined_bg))
+    ds_no = Dataset(combined_no)
+    ds_bg = Dataset(combined_bg)
     
     output_directory = str(tmp_path / "output")
     if not os.path.exists(output_directory):
@@ -717,7 +717,7 @@ def main():
 
     # 3) Combine them into stars_dataset_cached
     combined_files = bright_files + dim_files
-    stars_dataset_cached = l2b_tol3.divide_by_exptime(Dataset(combined_files))
+    stars_dataset_cached = Dataset(combined_files)
 
     # 4) Create an "output" subdirectory for storing calibration products, etc.
     output_dir = os.path.join(os.path.dirname(DIM_CACHE_DIR), "output")

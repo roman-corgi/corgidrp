@@ -365,7 +365,7 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['GCOUNT']      = 1               # Number of groups (FITS keyword)
     exthdr['BSCALE']      = 1               # Linear scaling factor
     exthdr['BZERO']       = 32768           # Offset for 16-bit unsigned data
-    exthdr['BUNIT']       = 'DN'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT']       = 'detected EM electron'   # Physical unit of the array (brightness unit)
     exthdr['ARRTYPE']     = arrtype         # Indicates frame type (SCI or ENG)
     exthdr['SCTSRT']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of first packet (TAI)
     exthdr['SCTEND']      = '2025-02-16T00:00:00'  # Spacecraft timestamp of last packet (TAI)
@@ -659,7 +659,7 @@ def create_default_L2b_headers(arrtype="SCI"):
 
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2a_headers(arrtype)
 
-    exthdr['BUNIT'] = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT'] = 'photoelectron'   # Physical unit of the array (brightness unit)
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
@@ -673,7 +673,7 @@ def create_default_L2b_headers(arrtype="SCI"):
     exthdr['FRMSEL06'] = (None, "tilt bias (Z3RES) threshold") # record selection criteria
     exthdr.add_history("Marked 0 frames as bad: ") # history message tracking bad frames
 
-    errhdr['BUNIT']         = 'Photoelectrons'   # Unit of error map
+    errhdr['BUNIT']         = 'photoelectron'   # Unit of error map
     errhdr['KGAINPAR']      = exthdr['KGAINPAR'] # Calculated kgain parameter (copied from exthdr)
     errhdr['KGAIN_ER']      = exthdr['KGAIN_ER'] # Kgain error (copied from exthdr)
     errhdr['RN']            = exthdr['RN']       # Kgain error (copied from exthdr)
@@ -702,7 +702,7 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
 
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2a_TrapPump_headers(arrtype)
 
-    exthdr['BUNIT'] = 'Photoelectrons'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT'] = 'photoelectron'   # Physical unit of the array (brightness unit)
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
     exthdr['KGAIN_ER']      = 0.0           # Kgain error
@@ -718,7 +718,7 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
     exthdr['PCTHRESH']      = 0.0           # Photon counting threshold applied
     exthdr['NUM_FR']        = 0             # Number of frames which were PC processed
 
-    errhdr['BUNIT']         = 'Photoelectrons'   # Unit of error map
+    errhdr['BUNIT']         = exthdr['BUNIT']   # Unit of error map
     errhdr['KGAINPAR']      = exthdr['KGAINPAR'] # Calculated kgain parameter (copied from exthdr)
     errhdr['KGAIN_ER']      = exthdr['KGAIN_ER'] # Kgain error (copied from exthdr)
     errhdr['RN']            = exthdr['RN']       # Kgain error (copied from exthdr)
@@ -746,7 +746,7 @@ def create_default_L3_headers(arrtype="SCI"):
     # TO DO: Update this once L3 headers have been finalized
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers(arrtype)
     
-    exthdr['BUNIT'] = 'Photoelectrons / s'   # Physical unit of the array (brightness unit)
+    exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
     exthdr['CD1_2'] = 0
     exthdr['CD2_1'] = 0
@@ -845,8 +845,6 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     prihdr, exthdr, errhdr, dqhdr = create_default_calibration_product_headers()
     # taken from end of calibrate_darks_lsq()
 
-    err_hdr = fits.Header()
-    err_hdr['BUNIT']        = 'Photoelectrons'
     exthdr['EMGAIN_A']    = 0.0             # "Actual" gain computed from coefficients and calibration temperature
     exthdr['EMGAIN_C']    = 1.0             # Commanded gain computed from coefficients and calibration temperature
     exthdr['DATALVL']      = 'CalibrationProduct'
@@ -859,7 +857,7 @@ def create_noise_maps(FPN_map, FPN_map_err, FPN_map_dq, CIC_map, CIC_map_err, CI
     exthdr['B_O_ERR'] = 0.001
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
     input_data = np.stack([FPN_map, CIC_map, DC_map])
     err = np.stack([[FPN_map_err, CIC_map_err, DC_map_err]])
@@ -974,6 +972,7 @@ def create_dark_calib_files(filedir=None, numfiles=10):
         prihdr, exthdr = create_default_L1_headers(arrtype="SCI")
         prihdr["OBSNUM"] = 000
         exthdr['KGAINPAR'] = 7
+        exthdr['BUNIT'] = "detected electron"
         #np.random.seed(456+i); 
         sim_data = np.random.poisson(lam=150., size=(1200, 2200)).astype(np.float64)
         frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr)
@@ -1858,12 +1857,12 @@ def create_not_normalized_dataset(filedir=None, numfiles=10):
     frames = []
     for i in range(numfiles):
         # TO DO: Determine what level this image should be
-        prihdr, exthdr = create_default_L1_headers()
+        prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
 
         sim_data = np.asarray(np.random.poisson(lam=150.0, size=(1024,1024)), dtype=float)
         sim_err = np.asarray(np.random.poisson(lam=1.0, size=(1024,1024)), dtype=float)
         sim_dq = np.asarray(np.zeros((1024,1024)), dtype=int)
-        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr, err=sim_err, dq=sim_dq)
+        frame = data.Image(sim_data, pri_hdr=prihdr, ext_hdr=exthdr, err=sim_err, dq=sim_dq, err_hdr = errhdr, dq_hdr = dqhdr)
         # frame = data.Image(sim_data, pri_hdr = prihdr, ext_hdr = exthdr, err = sim_err, dq = sim_dq)
         if filedir is not None:
             frame.save(filedir=filedir, filename=filepattern.format(i))
@@ -2914,8 +2913,8 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     xpos = center[0] + fsm_x_shift
     ypos = center[1] + fsm_y_shift
 
-    # Convert flux from calspec units to photo-electrons
-    flux = (star_flux * exptime) / cal_factor
+    # Convert flux from calspec units to photo-electrons/s
+    flux = star_flux / cal_factor
 
     # Inject Gaussian PSF star
     stampsize = int(np.ceil(3 * fwhm))
@@ -2988,6 +2987,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     exthdr['CDELT2']   = (platescale * 0.001) / 3600
     exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
     exthdr['CRVAL2']   = target_location[1]
+    exthdr['BUNIT'] = 'photoelectron/s'
     frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
    
     # Save file
@@ -3676,7 +3676,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         prihdr['YOFFSET'] = 0.0
         prihdr["ROLL"] = roll_angles[i]
         
-        exthdr['BUNIT'] = 'MJy/sr'
+        exthdr['BUNIT'] = 'photoelectron/s'
         exthdr['STARLOCX'] = psfcentx
         exthdr['STARLOCY'] = psfcenty
         exthdr['PLTSCALE'] = pixscale # This is in milliarcseconds!
