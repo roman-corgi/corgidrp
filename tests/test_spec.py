@@ -5,12 +5,12 @@ from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_headers
+from corgidrp.mocks import create_default_L1_headers
 
 datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
-band_center_file = os.path.join(datadir, "CGI_bandpass_centers.csv")
+
 def test_psf_centroid():
     """
     Test PSF centroid computation with mock data and assert correctness of output FITS structure.
@@ -109,7 +109,7 @@ def test_psf_centroid():
     
 def test_dispersion_model():
     global disp_dict
-    prhdr, exthdr = create_default_headers()
+    prhdr, exthdr = create_default_L1_headers()
     disp_file_path = os.path.join(datadir, "TVAC_PRISM3_dispersion_profile.npz")
     assert os.path.exists(disp_file_path), f"Test file not found: {disp_file_path}"
     disp_params = np.load(disp_file_path)
@@ -193,7 +193,7 @@ def test_calibrate_dispersion_model():
     psf_centroid.xfit_err = psf_centroid.xfit_err[:-1]
     psf_centroid.yfit_err = psf_centroid.yfit_err[:-1]
     
-    disp_model = steps.calibrate_dispersion_model(psf_centroid, band_center_file, prism = 'PRISM3')
+    disp_model = steps.calibrate_dispersion_model(psf_centroid, prism = 'PRISM3')
     disp_model.save(output_dir, disp_model.filename)
     assert disp_model.filename.startswith("DispersionModel")
     assert disp_model.clocking_angle == pytest.approx(psf_header["PRISMANG"], abs = 2 * disp_model.clocking_angle_uncertainty) 

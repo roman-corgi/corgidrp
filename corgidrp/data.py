@@ -3,6 +3,7 @@ import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
+import warnings
 from astropy.io.fits.card import VerifyWarning
 import astropy.time as time
 import pandas as pd

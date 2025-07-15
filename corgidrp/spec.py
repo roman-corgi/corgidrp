@@ -398,8 +398,8 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
             default_file = default_psf_files.get('3d_noslit')
         else:
             default_file = default_psf_files.get('3d_slit')
-        test_data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), "tests", "test_data", "spectroscopy")
-        template_file = os.path.join(test_data_path, 
+        data_path = os.path.join(os.path.dirname(corgidrp.__path__[0]), "corgidrp", "data", "spectroscopy")
+        template_file = os.path.join(data_path, 
             default_file)
         if verbose:
             print("no template file given, take simulated file: " + default_file)
@@ -410,7 +410,7 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
         temp_psf_table = fits.getdata(template_file , ext=1)
         (xcent_template, ycent_template) = (temp_psf_table['xcent'], temp_psf_table['ycent'])
         if len(dataset) != len(xcent_template) or len(dataset) != len(ycent_template):
-            raise ValueError("Mismatch between dataset length and template centroid arrays.")
+            warnings.warn("Mismatch between dataset length and template centroid arrays.")
     except:
         warnings.warn("template PSF fits file does not seem to have an extension with the fit results")
         (xcent_template, ycent_template) = (None, None)
@@ -468,7 +468,9 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
 
 def read_cent_wave(filter_file, band):
     """
-    read the csv filter file containing the band names and the central wavelength
+    read the csv filter file containing the band names and the central wavelength in nm.
+    There are 3 columns: the CFAM filter name, the (Phase C) center wavelength, the TVAC TV-40b measured center wavelength.
+    The TVAC wavelengths are not measured for all filters, but are the preferred value if available.
     
     Args:
        filter_file (str): file name of the filter file
@@ -577,13 +579,13 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     return pfit_pos_vs_wavlen, cov_pos_vs_wavlen, pfit_wavlen_vs_pos, cov_wavlen_vs_pos
 
 
-def calibrate_dispersion_model(centroid_psf, band_center_file, prism = 'PRISM3', pixel_pitch_um = 13.0):
+def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'PRISM3', pixel_pitch_um = 13.0):
     """ 
     Generate a DispersionModel of the spectral dispersion profile of the CGI ZOD prism.
 
     Args:
        centroid_psf (SpectroscopyCentroidPsf): instance of SpectroscopyCentroidPsf calibration class
-       band_center_file (str): file name of the band centers
+       band_center_file (str): file name of the band centers, optional, default is in data/spectroscopy
        prism (str): Label for the selected DPAM zero-deviation prism; must be
                     either 'PRISM3' or 'PRISM2'
        pixel_pitch_um (float): EXCAM pixel pitch in micron, default 13 micron
@@ -609,6 +611,8 @@ def calibrate_dispersion_model(centroid_psf, band_center_file, prism = 'PRISM3',
         #bandpass = [675, 785]
         #halfheight = 30
         
+    if band_center_file is None:
+        band_center_file = os.path.join(os.path.dirname(corgidrp.__path__[0]), "corgidrp", "data", "spectroscopy", "CGI_bandpass_centers.csv")
     filters = centroid_psf.pri_hdr['FILTERS'].upper().split(",")
     center_wavel = []
     for band in filters:
