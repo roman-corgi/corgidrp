@@ -81,8 +81,9 @@ tests/e2e_tests/pc_sim_test_data/*.json
 .DS_Store
 
 # data files
-*.fits
 *.FITS
+*.fits
+!nonlin_table_TVAC.fits 
 
 # Output figures
 figures/
