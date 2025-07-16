@@ -25,24 +25,27 @@ def test_kgain():
     image1.filename = "test1_L1_.fits"
     image2.filename = "test2_L1_.fits"
     dataset= data.Dataset([image1, image2])
-    
+
+    prhd_kgain = prhd.copy()
+    exthd_kgain = exthd.copy()
     gain_value = 9.55
     gain_err = 1.
     #int input is not allowed
     gain_value_int = 9
     gain_err_int = 1
     with pytest.raises(ValueError):
-        kgain_int = data.KGain(gain_value_int, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+        kgain_int = data.KGain(gain_value_int, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)
     with pytest.raises(ValueError):
-        kgain_int = data.KGain(gain_value, err = gain_err_int, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)   
+        kgain_int = data.KGain(gain_value, err = gain_err_int, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)   
         
-    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    kgain = data.KGain(gain_value, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)
+
     assert kgain.filename.split(".")[0] == "test2_KRN_CAL"
     assert kgain.value == gain_value
     assert kgain.data[0] == gain_value
     
     #test ptc and error extension
-    kgain_ptc = data.KGain(gain_value, err = gain_err, ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, ptc_hdr = ptc_hdr, input_dataset = dataset)
+    kgain_ptc = data.KGain(gain_value, err = gain_err, ptc = ptc, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, ptc_hdr = ptc_hdr, input_dataset = dataset)
     assert kgain_ptc.error == gain_err
     assert kgain_ptc.ptc[0,0] == 1.
     assert kgain_ptc.ptc_hdr is not None
@@ -92,8 +95,8 @@ def test_kgain():
     assert np.mean(gain_dataset[0].err) == pytest.approx(k_gain * np.mean(dataset[0].err), abs = 1e-4)
 
     #test header updates
-    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
-    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
+    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electron"
+    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electron"
     assert gain_dataset[0].ext_hdr["KGAINPAR"] == k_gain
     assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error
     assert gain_dataset[0].ext_hdr["RN"] > 0

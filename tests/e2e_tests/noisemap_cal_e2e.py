@@ -70,6 +70,7 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        exthdr['BUNIT'] = 'DN'
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
         prihdr1, exthdr1 = mocks.create_default_L1_headers()
