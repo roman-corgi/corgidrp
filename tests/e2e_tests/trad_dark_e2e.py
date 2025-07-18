@@ -48,6 +48,7 @@ def fix_headers_for_tvac(
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
+        exthdr['BUNIT'] = 'DN'
         prihdr1, exthdr1 = mocks.create_default_L1_headers()
         for key in prihdr1:
             if key not in prihdr:
@@ -161,7 +162,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
@@ -360,7 +361,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
@@ -451,8 +452,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     trad_dark = data.Dark(generated_trad_dark_file)
-    assert trad_dark.ext_hdr['BUNIT'] == 'Detected Electrons'
-    assert trad_dark.err_hdr['BUNIT'] == 'Detected Electrons'
+    assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
+    assert trad_dark.err_hdr['BUNIT'] == 'detected electron'
     test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_DRK_CAL.fits'
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_L[0-9].', '', test_filename)

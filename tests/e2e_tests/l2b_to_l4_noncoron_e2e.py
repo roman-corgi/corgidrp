@@ -170,7 +170,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     assert l3_image.ext_hdr['CTYPE2'] == 'DEC--TAN'
 
     #Check if the Bunit is correct
-    assert l3_image.ext_hdr['BUNIT'] == 'photoelectrons/s'
+    assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
     #Clean up
     this_caldb.remove_entry(astrom_cal)
