@@ -20,7 +20,7 @@ def add_photon_noise(input_dataset):
     phot_noise_dataset = input_dataset.copy() # necessary at all?
 
     for i, frame in enumerate(phot_noise_dataset.frames):
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
         except:
             em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
@@ -314,7 +314,7 @@ def em_gain_division(input_dataset):
     emgain_error = emgain_dataset.all_err
 
     for i in range(len(emgain_dataset)):
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_M"]
         except:
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]

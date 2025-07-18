@@ -904,7 +904,7 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
                 if record_gain:
-                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                    try: # if EM gain measured directly from frame
                         gains.append(frame.ext_hdr['EMGAIN_M'])
                     except:
                         if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available

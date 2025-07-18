@@ -34,6 +34,11 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         # Adjust VISTYPE
+        if 'BUILD' in prihdr:
+            prihdr.remove("BUILD")
+        if 'OBSTYPE' in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
+            prihdr.remove('OBSTYPE')
         if 'OBSID' in prihdr:
             prihdr['OBSNUM'] = prihdr['OBSID']
             prihdr.remove('OBSID')
@@ -43,6 +48,7 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_A'] = -1
         if 'DATA_LEVEL' in exthdr:
             exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+            exthdr.remove('DATA_LEVEL')
         # exthdr['KGAINPAR'] = exthdr['KGAIN']
         if 'OBSTYPE' in prihdr:
             prihdr["OBSNAME"] = prihdr['OBSTYPE']

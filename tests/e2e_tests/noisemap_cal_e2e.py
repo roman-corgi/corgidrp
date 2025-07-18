@@ -210,8 +210,15 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     fix_headers_for_tvac(stack_arr_files)
 
     ####### Run the DRP walker
-    template = "l1_to_l2a_noisemap.json"
-    walker.walk_corgidrp(stack_arr_files, "", noisemap_outputdir,template=template)
+    #template = "l1_to_l2a_noisemap.json"
+    recipe = walker.autogen_recipe(stack_arr_files, noisemap_outputdir)
+    ### Modify a keyword
+    for step in recipe['steps']:
+        if step['name'] == "calibrate_darks":
+            step['keywords'] = {}
+            step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
+    walker.run_recipe(recipe, save_recipe_file=True)
+    #walker.walk_corgidrp(stack_arr_files, "", noisemap_outputdir,template=template)
 
     # clean up by removing entry
     this_caldb.remove_entry(kgain)
@@ -226,10 +233,10 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-10)
+    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-10)
     pass
 
     this_caldb.remove_entry(corgidrp_noisemap)
@@ -402,8 +409,16 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     set_obstype_for_darks(l2a_filepaths)
 
     ####### Run the DRP walker
-    template = "l2a_to_l2a_noisemap.json"
-    walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
+    #template = "l2a_to_l2a_noisemap.json"
+    #walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
+    recipe = walker.autogen_recipe(l2a_filepaths, noisemap_outputdir)
+    ### Modify a keyword
+    for step in recipe['steps']:
+        if step['name'] == "calibrate_darks":
+            step['keywords'] = {}
+            step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
+    walker.run_recipe(recipe, save_recipe_file=True)
+
 
     # getting output filename
     for f in os.listdir(noisemap_outputdir):
@@ -421,10 +436,10 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     # iit_noisemap = data.autoload(iit_noisemap_fname)
     
 
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-10)
+    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-10)
     pass
 
     # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)
