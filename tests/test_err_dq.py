@@ -12,11 +12,13 @@ from corgidrp.darks import build_trad_dark
 
 np.random.seed(123)
 
-data = np.ones([1024,1024]) * 2
+float_data = 2.
+float_err = 0.5
+data = np.ones([1024,1024]) * float_data
 err = np.zeros([1024,1024])
 err1 = np.ones([1024,1024])
 err2 = err1.copy()
-err3 = np.ones([1,1024,1024]) * 0.5
+err3 = np.ones([1,1024,1024]) * float_err
 dq = np.zeros([1024,1024], dtype = int)
 dq1 = dq.copy()
 dq1[0,0] = 1
@@ -24,11 +26,11 @@ prhd, exthd, errhd, dqhd, biashdr = create_default_L2a_headers()
 errhd["CASE"] = "test"
 dqhd["CASE"] = "test"
 
-data_3d = np.ones([2,1024,1024]) * 2
+data_3d = np.ones([2,1024,1024]) * float_data
 err_3d = np.zeros([2,1024,1024])
 err1_3d = np.ones([2,1024,1024])
 err2_3d = err1_3d.copy()
-err3_3d = np.ones([2,1,1024,1024]) * 0.5
+err3_3d = np.ones([2,1,1024,1024]) * float_err
 dq_3d = np.zeros([2,1024,1024], dtype = int)
 dq1_3d = dq_3d.copy()
 dq1_3d[0,0,0] = 1
@@ -36,6 +38,36 @@ dq1_3d[0,0,0] = 1
 old_err_tracking = corgidrp.track_individual_errors
 # use default parameters
 detector_params = DetectorParams({})
+
+def test_single_float_data():
+    """
+    test the initialization of error of the Image class including saving and loading in case of single float data and err input
+
+    Test assuming track individual error terms is on
+    """
+    corgidrp.track_individual_errors = True
+
+    image1 = Image(float_data, err = float_err, pri_hdr = prhd, ext_hdr = exthd)
+    assert hasattr(image1, "err")
+    assert np.shape(image1.data) == (1,)
+    assert np.shape(image1.err) == (1,)
+    assert image1.data[0] == float_data
+    assert image1.err[0] == float_err
+    #test the initial error and dq headers
+    assert hasattr(image1, "err_hdr")
+    #test saving and copying
+    image1.save(filename='test_image3.fits')
+    image2 = Image('test_image3.fits')
+    assert image2.data[0] == float_data
+    assert image2.err[0] == float_err
+    image3 = image1.copy()
+    assert image3.data[0] == float_data
+    assert image3.err[0] == float_err
+    
+    image4 = Image('test_image3.fits', err = float_err/2.)
+    assert image4.data[0] == float_data
+    assert image4.err[0] == float_err/2.
+    
 
 def test_err_dq_creation():
     """
@@ -126,9 +158,9 @@ def test_add_error_term():
     image_3d.add_error_term(err2_3d, "error_nuts")
     assert image_3d.err.shape == (3,2,1024,1024)
     assert image_3d.err[0,0,0,0] == np.sqrt(err1_3d[0,0,0]**2 + err2_3d[0,0,0]**2)
-    image_3d.save(filename="test_image3d.fits")
+    image_3d.save(filename="test_image4.fits")
 
-    image_test_3d = Image('test_image3d.fits')
+    image_test_3d = Image('test_image4.fits')
     assert np.array_equal(image_test_3d.dq, dq_3d)
     assert np.array_equal(image_test_3d.err, image_3d.err)
     assert image_test_3d.err.shape == (3,2,1024,1024)
@@ -245,14 +277,14 @@ def teardown_module():
 
     Removes new FITS files and restores track individual error setting.
     """
-    for i in range(3):
+    for i in range(5):
         os.remove('test_image{0}.fits'.format(i))
 
     corgidrp.track_individual_errors = old_err_tracking
 
 # for debugging. does not run with pytest!!
 if __name__ == '__main__':
-    test_err_array_sizes()
+    test_single_float_data()
     test_err_dq_creation()
     test_err_dq_copy()
     test_add_error_term()
@@ -262,6 +294,6 @@ if __name__ == '__main__':
     test_read_many_errors_notrack()
     test_err_array_sizes()
 
-    for i in range(3):
+
+    for i in range(5):
         os.remove('test_image{0}.fits'.format(i))
-    os.remove('test_image3d.fits')

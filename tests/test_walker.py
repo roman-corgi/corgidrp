@@ -67,8 +67,8 @@ def test_autoreducing():
     mycaldb.create_entry(new_nonlinearity)
     
     #Make a KGain calibration file
-    kgain_arr = np.array([[8.8]])
-    new_kgain = data.KGain(kgain_arr,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
+    kgain = 8.8
+    new_kgain = data.KGain(kgain,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
     new_kgain.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
     new_kgain.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     new_kgain.save(filedir = os.path.join(os.path.dirname(__file__), "test_data"), filename = "kgain.fits")
@@ -156,7 +156,7 @@ def test_auto_template_identification():
 
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
@@ -454,8 +454,8 @@ def test_jit_calibs():
     mycaldb.create_entry(new_nonlinearity)
 
     #Make a KGain calibration file
-    kgain_arr = np.array([[8.8]])
-    new_kgain = data.KGain(kgain_arr,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
+    kgain_val = 8.8
+    new_kgain = data.KGain(kgain_val,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
     new_kgain.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
     new_kgain.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     new_kgain.save(filedir = os.path.join(os.path.dirname(__file__), "test_data"), filename = "kgain.fits")

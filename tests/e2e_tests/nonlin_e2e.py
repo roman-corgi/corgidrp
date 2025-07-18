@@ -38,6 +38,7 @@ def fix_headers_for_tvac(
         prihdr['OBSNUM'] = prihdr['OBSID']
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
@@ -103,7 +104,7 @@ def test_nonlin_cal_e2e(
     
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=e2eoutput_path, filename="mock_kgain.fits")
     this_caldb = caldb.CalDB()

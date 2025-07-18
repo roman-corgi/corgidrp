@@ -63,12 +63,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     this_caldb.save()
 
     # KGain
-    kgain_val = 7 # default value used in mocks.create_photon_countable_frames()
+    kgain_val = 7. # default value used in mocks.create_photon_countable_frames()
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(l1_data_ill_filelist)
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100

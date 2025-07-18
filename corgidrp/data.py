@@ -291,10 +291,14 @@ class Image():
 
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
-                    if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
+                    if isinstance(err, float):
+                        if np.size(self.data) != 1:
+                            raise ValueError("err can only be a float if data is a float value")
+                        self.err = np.array([err])
+                    elif np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
                     #we want to have an extra dimension in the error array
-                    if err.ndim == self.data.ndim+1:
+                    elif err.ndim == self.data.ndim+1:
                         self.err = err
                     else:
                         self.err = err.reshape((1,)+err.shape)
@@ -302,7 +306,7 @@ class Image():
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
-                    if self.err.ndim == self.data.ndim:
+                    if self.err.ndim != 1 and self.err.ndim == self.data.ndim:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
@@ -341,26 +345,36 @@ class Image():
         else:
             # data has been passed in directly
             # creation of a new file in DRP eyes
+            if isinstance(data_or_filepath, float):
+                self.data = np.array([data_or_filepath])
+                if err is not None:
+                    if isinstance(err, float):
+                        self.err = np.array([err])
+                    else:
+                        raise ValueError("err value must be float")
+                else:
+                    self.err = np.array([0.])
+            elif hasattr(data_or_filepath, "__len__"):
+                self.data = data_or_filepath
+                if err is not None:
+                    if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
+                    #we want to have a 3 dim error array
+                    if err.ndim == self.data.ndim + 1:
+                        self.err = err
+                    else:
+                        self.err = err.reshape((1,)+err.shape)
+                else:
+                    self.err = np.zeros((1,)+self.data.shape)
+            else:
+                raise ValueError("input must be an array or float")
+            
             if pri_hdr is None or ext_hdr is None:
                 raise ValueError("Missing primary and/or extension headers, because you passed in raw data")
             self.pri_hdr = pri_hdr
             self.ext_hdr = ext_hdr
-            self.data = data_or_filepath
             self.filedir = "."
             self.filename = ""
-
-            # self.hdu_names = [hdu.name for hdu in self.hdu_list]
-
-            if err is not None:
-                if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
-                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
-                #we want to have a 3 dim error array
-                if err.ndim == self.data.ndim + 1:
-                    self.err = err
-                else:
-                    self.err = err.reshape((1,)+err.shape)
-            else:
-                self.err = np.zeros((1,)+self.data.shape)
 
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
@@ -381,11 +395,6 @@ class Image():
                     self.hdu_names.append(hdu.name)
             else: 
                 self.hdu_list = fits.HDUList()
-
-            
-            
-            #A list of extensions
-            
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
@@ -828,7 +837,8 @@ class KGain(Image):
     Class for KGain calibration file. Until further insights it is just one float value.
 
     Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        data_or_filepath (str or float): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        err (float): uncertainty value of kgain factor
         ptc (np.array): 2 column array with the photon transfer curve
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
@@ -854,11 +864,11 @@ class KGain(Image):
         if 'RN_ERR' not in self.ext_hdr:
             self.ext_hdr['RN_ERR'] = ''
         # File format checks
-        if self.data.shape != (1,1):
+        if self.data.shape != (1,):
             raise ValueError('The KGain calibration data should be just one float value')
-
-        self._kgain = self.data[0,0] 
-        self._kgain_error = self.err[0,0]
+        
+        self._kgain = self.data[0] 
+        self._kgain_error = self.err[0]
         
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
@@ -1360,10 +1370,15 @@ class FluxcalFactor(Image):
     To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
     Args:
-        data_or_filepath (dict or str): either a filepath string corresponding to an 
-                                        existing FluxcalFactor file saved to disk or the data and error values of the
+        data_or_filepath (str or float): either a filepath string corresponding to an 
+                                        existing FluxcalFactor file saved to disk or the data and error float values of the
                                         flux cal factor of a certain filter defined in the header
-
+        err (float): uncertainty value of fluxcal factor
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the err extension header (required only if raw data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this FluxcalFactor file (required only if raw 2D data is passed in)
+    
     Attributes:
         filter (str): used filter name
         nd_filter (str): used neutral density filter or "No"
@@ -1375,7 +1390,7 @@ class FluxcalFactor(Image):
         super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
         # if filepath passed in, just load in from disk as usual
         # File format checks
-        if self.data.shape != (1,1):
+        if self.data.shape != (1,):
             raise ValueError('The FluxcalFactor calibration data should be just one float value')
         
         #TBC
@@ -1409,8 +1424,8 @@ class FluxcalFactor(Image):
             self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
             
         # make some attributes to be easier to use
-        self.fluxcal_fac = self.data[0,0]
-        self.fluxcal_err =  self.err[0,0,0]
+        self.fluxcal_fac = self.data[0]
+        self.fluxcal_err =  self.err[0]
 
         # if this is a new FluxcalFactors file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
