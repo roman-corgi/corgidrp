@@ -62,13 +62,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
             this_caldb._db = this_caldb._db.drop(i)
     this_caldb.save()
 
+    # create a DetectorParams object and save it
+    detector_params = data.DetectorParams({})
+    detector_params.save(filedir=output_dir, filename="detector_params.fits")
+    this_caldb.create_entry(detector_params)
+
     # KGain
-    kgain_val = 7 # default value used in mocks.create_photon_countable_frames()
+    kgain_val = 7. # default value used in mocks.create_photon_countable_frames()
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(l1_data_ill_filelist)
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
@@ -90,8 +95,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map.save(filedir=output_dir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
-    corgidrp_dir = os.path.split(corgidrp.__path__[0])[0]
-    tests_dir = os.path.join(corgidrp_dir, 'tests')
+    here = os.path.abspath(os.path.dirname(__file__))
+    tests_dir = os.path.join(here, os.pardir)
     # Nonlinearity calibration
     ### Create a dummy non-linearity file ####
     #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
@@ -188,6 +193,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     post_caldb.remove_entry(new_nonlinearity)
     post_caldb.remove_entry(flat)
     post_caldb.remove_entry(bp_map)
+    post_caldb.remove_entry(detector_params)
     for filepath in master_dark_filepath_list:
         pc_dark = data.Dark(filepath)
         post_caldb.remove_entry(pc_dark)

@@ -34,6 +34,11 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         # Adjust VISTYPE
+        if 'BUILD' in prihdr:
+            prihdr.remove("BUILD")
+        if 'OBSTYPE' in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
+            prihdr.remove('OBSTYPE')
         if 'OBSID' in prihdr:
             prihdr['OBSNUM'] = prihdr['OBSID']
             prihdr.remove('OBSID')
@@ -43,6 +48,7 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_A'] = -1
         if 'DATA_LEVEL' in exthdr:
             exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+            exthdr.remove('DATA_LEVEL')
         # exthdr['KGAINPAR'] = exthdr['KGAIN']
         if 'OBSTYPE' in prihdr:
             prihdr["OBSNAME"] = prihdr['OBSTYPE']
@@ -178,7 +184,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_dat = 8.7
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -377,7 +383,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_dat = 8.7
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,

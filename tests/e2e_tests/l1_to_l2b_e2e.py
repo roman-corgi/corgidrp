@@ -96,6 +96,11 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     this_caldb = caldb.CalDB() # connection to cal DB
 
+    # create a DetectorParams object and save it
+    detector_params = data.DetectorParams({})
+    detector_params.save(filedir=test_outputdir, filename="detector_params.fits")
+    this_caldb.create_entry(detector_params)
+
     # Nonlinearity calibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -105,7 +110,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=test_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
@@ -163,6 +168,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(noise_map)
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(bp_map)
+    this_caldb.remove_entry(detector_params)
 
     ##### Check against TVAC data
     # l2a data
@@ -218,7 +224,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  r"/Users/kevinludwick/Downloads/E2E_Test_Data/"#r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

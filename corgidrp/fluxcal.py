@@ -535,8 +535,8 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
     fluxcal_fac_err = flux / ap_sum**2 * ap_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
-        np.array([[fluxcal_fac]]),
-        err=np.array([[[fluxcal_fac_err]]]),
+        fluxcal_fac,
+        err=fluxcal_fac_err,
         pri_hdr=image.pri_hdr,
         ext_hdr=image.ext_hdr,
         input_dataset=dataset
@@ -640,8 +640,8 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr
     fluxcal_fac_err = flux / gauss_sum**2 * gauss_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
-        np.array([[fluxcal_fac]]),
-        err=np.array([[[fluxcal_fac_err]]]),
+        fluxcal_fac,
+        err=fluxcal_fac_err,
         pri_hdr=image.pri_hdr,
         ext_hdr=image.ext_hdr,
         input_dataset=dataset
