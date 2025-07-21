@@ -2,6 +2,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
 import copy
+import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas, ENF
@@ -31,17 +32,20 @@ def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     
     for i, frame in enumerate(phot_noise_dataset.frames):
         # use measured gain if available TODO change hdr name if necessary
-        if "EMGAIN_M" in frame.ext_hdr:
+        try:
             em_gain = frame.ext_hdr["EMGAIN_M"]
-        elif frame.ext_hdr["EMGAIN_A"] > 0:
+        except:
             # use EM applied EM gain if available
-            em_gain = frame.ext_hdr["EMGAIN_A"]
-        else : # otherwise use commanded EM gain
-            em_gain = frame.ext_hdr["EMGAIN_C"]
+            em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
+            if em_gain > 0:
+                em_gain = em_gain
+            else : # otherwise use commanded EM gain
+                em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
         #estimate of photon/poisson/shot noise by interpolation of the photon transfer curve
         interp_func = interp1d(ptc[:,0], ptc[:,1], kind='linear', fill_value='extrapolate')
 
         phot_err = interp_func(frame.data)
+        #add excess noise in case of em_gain > 1
         if em_gain > 1:
             phot_err *= ENF(em_gain, nem)           
         frame.add_error_term(phot_err, "shotnoise_error")
@@ -71,6 +75,8 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     Returns:
         corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
+    if input_dataset[0].ext_hdr['BUNIT'] != "detected electron":
+        raise ValueError ("input dataset must have unit 'detected electron' for dark subtraction, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
@@ -124,7 +130,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     history_msg = "Dark subtracted using dark {0}.  Units changed from detected electrons to photoelectrons.".format(dark.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"Photoelectrons"})
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"photoelectron"})
 
     return darksub_dataset
 
@@ -145,7 +151,9 @@ def flat_division(input_dataset, flat_field):
     flatdiv_dataset = input_dataset.copy()
 
     #Divide by the master flat
-    flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+        flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
 
     #Find where the flat_field is 0 and set a DQ flag: 
     where_zero = np.where(flat_field.data == 0)
@@ -155,8 +163,10 @@ def flat_division(input_dataset, flat_field):
 
     # propagate the error of the master flat frame
     if hasattr(flat_field, "err"):
-        flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
-        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+            flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
+            flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
     else:
         raise Warning("no error attribute in the FlatField")
 
@@ -279,7 +289,9 @@ def convert_to_electrons(input_dataset, k_gain):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in electrons
     """
-   # you should make a copy the dataset to start
+    if input_dataset[0].ext_hdr['BUNIT'] != "DN":
+        raise ValueError("input dataset must have unit DN for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
+    # you should make a copy the dataset to start
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
 
@@ -294,8 +306,8 @@ def convert_to_electrons(input_dataset, k_gain):
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
-    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, header_entries = {"BUNIT":"detected EM electrons", "KGAINPAR":kgain, 
-                                                                                    "KGAIN_ER": k_gain.error, "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, header_entries = {"BUNIT":"detected EM electron", "KGAINPAR":kgain, 
+                                               "KGAIN_ER": k_gain.error, "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
     return kgain_dataset
 
 def em_gain_division(input_dataset):
@@ -310,14 +322,15 @@ def em_gain_division(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in units "detected electrons"
     """
-
+    if input_dataset[0].ext_hdr['BUNIT'] != "detected EM electron":
+        raise ValueError("input dataset must have unit 'detected EM electron' for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     # you should make a copy the dataset to start
     emgain_dataset = input_dataset.copy()
     emgain_cube = emgain_dataset.all_data
     emgain_error = emgain_dataset.all_err
 
     for i in range(len(emgain_dataset)):
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_M"]
         except:
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
@@ -335,7 +348,7 @@ def em_gain_division(input_dataset):
         history_msg = "data divided by EM gain for dataset with frames with the same commanded EM gain"
 
     # update the output dataset with this EM gain divided data and update the history
-    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
+    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electron"})
 
     return emgain_dataset
 

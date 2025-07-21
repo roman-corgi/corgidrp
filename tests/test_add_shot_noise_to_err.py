@@ -13,7 +13,7 @@ data = np.ones([1024,1024])*2.
 err = np.ones([1024,1024]) *0.5
 dq = np.zeros([1024,1024], dtype = np.uint16)
 # TO DO: Check to confirm this is correct data level
-prhd, exthd = create_default_L2a_headers()
+prhd, exthd, errhdr, dqhdr, biashdr = create_default_L2a_headers()
 
 def test_add_shot_noise():
     corgidrp.track_individual_errors = True
@@ -25,7 +25,7 @@ def test_add_shot_noise():
     dataset = Dataset([image1, image2])
     
     detector_params = DetectorParams({})
-    gain_value = np.array([[8.7]])
+    gain_value = 8.7
     signal_array = np.linspace(0, 50)
     noise_array = np.sqrt(signal_array)
     ptc = np.column_stack([signal_array, noise_array])

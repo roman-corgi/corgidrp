@@ -180,11 +180,8 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
         master_dark.err includes the statistical error across all the frames as
         well as any individual err from each frame (and accounts for masked
         pixels in the calculations).
-        master_dark.dq: pixels that are masked for all frames are assigned a
-        flag value of 1 ("Bad pixel - unspecified reason"),
-        and a flag value of 256 is assigned to pixels that are
-        masked for half or more of the frames, making them unreliable, with
-        large err values, but possibly still usable.
+        master_dark.dq: pixels that are masked for all frames have non-zero 
+        values.
     """
     if detector_regions is None:
             detector_regions = detector_areas
@@ -221,20 +218,19 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     # the frames due to statistical variance
     masked_frames = np.ma.masked_array(frames, bpmaps)
     stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
+    stat_std = np.ma.getdata(stat_std)
+    rows_one, cols_one = np.where(unmasked_num==1)
+    rows_normal, cols_normal = np.where(unmasked_num == unmasked_num.max())
+    if unmasked_num.max() <= 1: # this would virtually never happen
+        raise Exception('No pixels found to have more than 1 acceptable frame in a sub-stack.')
+    # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
+    stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
     total_err = np.sqrt(mean_err**2 + stat_std**2)
-    # There are no masked pixels in total_err, and FITS can't save masked arrays,
-    # so turn it into a regular array
-    total_err = np.ma.getdata(total_err)
-    # flag value of 256; unreliable pixels, large err
-    output_dq = (unmasked_num < len(dataset)/2).astype(int)*256
-    if (output_dq == 256).any():
-        warnings.warn('At least one pixel was masked for half or more of the '
-                      'frames.')
-    # flag value of 1 for those that are masked all the way through for all
-    # frames; this overwrites the flag value of 256 that was assigned to
-    # these pixels in previous line
-    unfittable_ind = np.where(combined_bpmap == 1)
-    output_dq[unfittable_ind] = 1
+    # bitwise_or flag value for those that are masked all the way through for all
+    # frames
+    fittable_inds = np.where(combined_bpmap ==0) 
+    output_dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
+    output_dq[fittable_inds] = 0 
     if not full_frame:
         dq = slice_section(output_dq, 'SCI', 'image', detector_regions)
         err = slice_section(total_err, 'SCI', 'image', detector_regions)
@@ -253,8 +249,8 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
     exthdr['DATATYPE'] = 'Dark'
 
     master_dark = Dark(data, prihdr, exthdr, dataset, err, dq, errhdr)
-    master_dark.ext_hdr['BUNIT'] = 'Detected Electrons'
-    master_dark.err_hdr['BUNIT'] = 'Detected Electrons'
+    master_dark.ext_hdr['BUNIT'] = 'detected electron'
+    master_dark.err_hdr['BUNIT'] = 'detected electron'
     master_dark.ext_hdr['HISTORY'] = 'traditional master analog dark (not synthesized from detector noise maps)'
     return master_dark
 
@@ -263,11 +259,12 @@ def build_trad_dark(dataset, detector_params, detector_regions=None, full_frame=
 class CalDarksLSQException(Exception):
     """Exception class for calibrate_darks_lsq."""
 
-def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
+def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regions=None):
     """The input dataset represents a collection of frame stacks of the
-    same number of dark frames (in e- units), where the stacks are for various
-    EM gain values and exposure times.  The frames in each stack should be
-    SCI full frames that:
+    (in e- units), where the stacks are for various
+    EM gain values and exposure times.  Stacks with fewer frames than other 
+    stacks are accordingly weighed less in the fit.  
+    The frames in each stack should be SCI full frames that:
 
     - have had their bias subtracted (assuming full frame)
     - have had masks made for cosmic rays
@@ -314,6 +311,12 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         frames that will be used for photon counting.
     detector_params (corgidrp.data.DetectorParams):
         a calibration file storing detector calibration values
+    weighting (bool):
+        If True, weighting is used for the least squares fit, and the weighting
+        takes into account the err coming from the input frames, the statistical
+        variation among the supposedly identical frames in each sub-stack, and 
+        the effect of any DQ masking.  If False, all data is evenly weighted in 
+        the least squares fit.  Defaults to True.
     detector_regions (dict):
         a dictionary of detector geometry properties.  Keys should be as found
         in detector_areas in detector.py.
@@ -323,20 +326,15 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     noise_maps : corgidrp.data.DetectorNoiseMaps instance
         Includes a 3-D stack of frames for the data, err, and the dq.
         input data: np.stack([FPN_map, CIC_map, DC_map])
-        input err:  np.stack([FPN_std_map, C_std_map_combo, DC_std_map])
-        FPN_std_map, C_std_map_combo, and DC_std_map contain the fitting error, but C_std_map_combo includes
-        also the statistical error across the frames and accounts for any err
-        content of the individual input frames.  We include it in the CIC part
-        since it will not be scaled by EM gain or exposure time when the master
-        dark is created.  In all the err, masked pixels are accounted for in
-        the calculations.
+        input err:  np.stack([FPN_std_map, C_std_map, DC_std_map])
+        FPN_std_map, C_std_map, and DC_std_map contain the fitting error.
+        In all the err, masked pixels are accounted for in
+        the calculations, and the err from the input frames, along with statistical 
+        error due to having fewer frames available per sub-stack due to any masking,
+        is used for weighting the data in the least squares fit.
         input dq:   np.stack([output_dq, output_dq, output_dq])
-        unreliable_pix_map is used for the
-        output Dark's dq after assigning these pixels a flag value of 256.
-        They should have large err values.
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 3 (or less) are assigned a flag value of
-        1, which falls under the category of "Bad pixel - unspecified reason".
+        but 3 (or less) are assigned a flag value from the combination of the frames.
         These pixels would have no reliability for dark subtraction.
 
         The header info is taken from that of
@@ -417,12 +415,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         in unreliable_pix_map.  Since the least-squares fit function has 3
         parameters, at least 4 sub-stacks are needed for a given pixel in order
         to perform a fit for that pixel.  The pixels in unreliable_pix_map that
-        are >= len(stack_arr)-3 cannot be fit.  NOTE:  This is used for the
-        output Dark's dq after assigning these pixels a flag value of 256.
-        They should have large err values.
+        are >= len(stack_arr)-3 cannot be fit.  
         The pixels that are masked for EVERY frame in all sub-stacks
-        but 3 (or less) are assigned a flag value of
-        1, which falls under the category of "Bad pixel - unspecified reason".
+        but 3 (or less) are assigned a flag value from the combination of the frames.
         These pixels would have no reliability for dark subtraction.
     FPN_std_map : array-like (full frame)
         The standard deviation per pixel for the calibrated FPN.
@@ -430,10 +425,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         The standard deviation per pixel for the calibrated CIC.
     DC_std_map : array-like (full frame)
         The standard deviation per pixel for the calibrated dark current.
-    stacks_err : array-like (full frame)
-        Standard error per pixel coming from the frames in datasets used to
-        calibrate the noise maps.
     """
+    if type(weighting) != bool:
+        raise ValueError('The input weighting should be either True or False.')
     if detector_regions is None:
             detector_regions = detector_areas
 
@@ -452,6 +446,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     mean_frames = []
     total_errs = []
     mean_num_good_fr = []
+    output_dqs = []
     unreliable_pix_map = np.zeros((detector_regions['SCI']['frame_rows'],
                                    detector_regions['SCI']['frame_cols'])).astype(int)
     unfittable_pix_map = unreliable_pix_map.copy()
@@ -466,10 +461,9 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
             'which is the recommended number per sub-stack for an analog '
             'master dark')
         if i > 0:
-            if np.shape(datasets[i-1].all_data) != np.shape(datasets[i].all_data):
-                raise CalDarksLSQException('All sub-stacks must have the '
-                            'same number of frames and frame shape.')
-        try: # if EM gain measured directly from frame TODO change hdr name if necessary
+            if np.shape(datasets[i-1].all_data)[1:] != np.shape(datasets[i].all_data)[1:]:
+                raise CalDarksLSQException('All sub-stacks must have the same frame shape.')
+        try: # if EM gain measured directly from frame
             EMgain_arr = np.append(EMgain_arr, datasets[i].frames[0].ext_hdr['EMGAIN_M'])
         except:
             if datasets[i].frames[0].ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
@@ -503,10 +497,19 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         # the frames due to statistical variance
         masked_frames = np.ma.masked_array(frames, bpmaps)
         stat_std = np.ma.std(masked_frames, axis=0)/np.sqrt(unmasked_num)
+        stat_std = np.ma.getdata(stat_std)
+        stat_std[telem_rows] = 1 # something non-zero; masked in the DQ anyways, and this assignment here prevents np.inf issues/warnings later
+        # where the number of unmasked frames is 1, the std is 0, but we want error to increase as the number of usuable frames decreases, so fudge it a little:
+        rows_one, cols_one = np.where(unmasked_num==1)
+        zero_inds = np.where(unmasked_num==0)
+        if zero_inds[0].size != 0:
+            stat_std[zero_inds] = 1 # just assign as something non-zero; doesn't really matter b/c such pixels will be masked in the DQ; this will prevent warning outputs
+        rows_normal, cols_normal = np.where(unmasked_num == unmasked_num.max())
+        if unmasked_num.max() <= 1: # this would virtually never happen
+            raise Exception('No pixels found to have more than 1 acceptable frame in a sub-stack.')
+        # now pick a pixel from rows_normal and cols_normal to use as a reference for the approximated error for the pixels that have 1 unmasked frame, undo the division by sqrt(unmasked_num), and divide by 1
+        stat_std[rows_one, cols_one] = stat_std[rows_normal[0], cols_normal[0]] * np.sqrt(unmasked_num.max())/1
         total_err = np.sqrt(mean_err**2 + stat_std**2)
-        # There are no masked pixels in total_err, and FITS can't save masked arrays,
-        # so turn it into a regular array
-        total_err = np.ma.getdata(total_err)
         pixel_mask = (unmasked_num < len(datasets[i].frames)/2).astype(int)
         mean_num = np.mean(unmasked_num)
         mean_frame[telem_rows] = np.nan
@@ -515,23 +518,22 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         mean_num_good_fr.append(mean_num)
         unreliable_pix_map += pixel_mask
         unfittable_pix_map += combined_bpmap
+        # bitwise_or flag value for those that are masked all the way through for all
+        # frames
+        fittable_inds = np.where(combined_bpmap != 1)
+        output_dq = np.bitwise_or.reduce(datasets[i].all_dq, axis=0)
+        output_dq[fittable_inds] = 0 
+        output_dqs.append(output_dq)
+    output_dqs = np.stack(output_dqs)
     unreliable_pix_map = unreliable_pix_map.astype(int)
     mean_stack = np.stack(mean_frames)
     mean_err_stack = np.stack(total_errs)
-    if (unreliable_pix_map >= len(datasets)-3).any(): # this condition catches the "unfittable" pixels too
-        warnings.warn('At least one pixel was masked for more than half of '
-                      'the frames in some sub-stacks, leaving 3 or fewer '
-                      'sub-stacks that did not suffer this masking for these '
-                      'pixels, which means the fit was unreliable for '
-                      'these pixels.  These are the pixels in the output '
-                      'unreliable_pixel_map that are >= len(datasets)-3.')
-    # flag value of 256; unreliable pixels, large err
-    output_dq = (unreliable_pix_map >= len(datasets)-3).astype(int)*256
-    # flag value of 1 for those that are masked all the way through for all
-    # but 3 (or less) stacks; this overwrites the flag value of 256 that was assigned to
-    # these pixels in previous line
-    unfittable_ind = np.where(unfittable_pix_map >= len(datasets)-3)
-    output_dq[unfittable_ind] = 1
+
+    # flag value for those that are masked all the way through for all
+    # but 3 (or fewer) stacks
+    output_dq = np.bitwise_or.reduce(output_dqs, axis=0)
+    fittable_ind = np.where(unfittable_pix_map < len(datasets)-3)
+    output_dq[fittable_ind] = 0
 
     if len(np.unique(EMgain_arr)) < 2:
         raise CalDarksLSQException("Must have at least 2 unique EM gains "
@@ -580,26 +582,36 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     CIC_map = np.zeros_like(mean_stack[0])
     DC_map = np.zeros_like(mean_stack[0])
 
-    # input data error comes from .err arrays; could use this for error bars
-    # in input data for weighted least squares, but we'll just simply get the
-    # std error and add it in quadrature to least squares fit standard dev
-    stacks_err = np.sqrt(np.sum(mean_err_stack**2, axis=0)/np.sqrt(len(mean_err_stack)))
-
     # matrix to be used for least squares and covariance matrix
-    X = np.array([np.ones([len(EMgain_arr)]), EMgain_arr, EMgain_arr*exptime_arr]).T
-    mean_stack_Y = np.transpose(mean_stack, (2,0,1))
-    params_Y = np.linalg.pinv(X)@mean_stack_Y
+    # Create Xx with shape (M, 3, rows, cols), where M = len(EMgain_arr)
+    rows, cols = mean_stack.shape[1], mean_stack.shape[2]
+    X = np.array([np.ones([len(EMgain_arr)]).astype(float), EMgain_arr, EMgain_arr*exptime_arr]).T  # (M,3)
+    Xx = np.broadcast_to(X[:, :, None, None], (len(EMgain_arr), 3, rows, cols))
+    # weighting matrix; sub-stacks with few usable frames get a low weight
+    mean_err_stack[telem_rows] = 1 # instead of 0 to avoid inf weighting
+    if weighting:
+        W = 1/mean_err_stack
+    else:
+        W = np.ones_like(mean_err_stack) # all weighted the same
+    wY = W*mean_stack
+    wX = np.transpose(W*np.transpose(Xx, (1,0,2,3)), (1,0,2,3))
+    wXTwX = np.einsum('ji...,ik...',np.transpose(wX,(1,0,2,3)), wX)
+    wXTwXinv = np.linalg.inv(wXTwX)
+    pinv_wX = np.einsum('...ij,jk...', wXTwXinv, np.transpose(wX,(1,0,2,3)))
+    params_t = np.einsum('...ij,j...', pinv_wX, wY)
+    params = np.transpose(params_t,(2,0,1))
+    
     #next line: checked with KKT method for including bounds
     #actually, do this after determining everything else so that
     # bias_offset, etc is accurate
-    #params_Y[params_Y < 0] = 0
-    params = np.transpose(params_Y, (1,2,0))
+    #params_Y[params_Y < 0]= 0
     FPN_map = params[0]
     CIC_map = params[1]
     DC_map = params[2]
     # using chi squared for ordinary least squares (OLS) variance estiamate
     # This is OLS since the parameters to fit are linear in fit function
     # 3: number of fitted params
+    params_Y = np.transpose(params_t, (1,2,0))
     residual_stack = mean_stack - np.transpose(X@params_Y, (1,2,0))
     sigma2_frame = np.sum(residual_stack**2, axis=0)/(M - 3)
     # average sigma2 for image area and use that for all three vars since
@@ -650,10 +662,10 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         # NOTE assume no error in g_arr values (or t_arr or k_arr)
         res = mean_stack[i] - EMgain_arr[i]*CIC_map - FPN_map - EMgain_arr[i]*exptime_arr[i]*DC_map
         # upper and lower bounds
-        res_up = ((mean_stack[i]+np.abs(stacks_err)) -
+        res_up = ((mean_stack[i]) -
                   EMgain_arr[i]*(CIC_map-CIC_std_map) - (FPN_map-FPN_std_map)
                   - EMgain_arr[i]*exptime_arr[i]*(DC_map-DC_std_map))
-        res_low = ((mean_stack[i]-np.abs(stacks_err)) -
+        res_low = ((mean_stack[i]) -
                    EMgain_arr[i]*(CIC_map+CIC_std_map) - (FPN_map+FPN_std_map)
                   - EMgain_arr[i]*exptime_arr[i]*(DC_map+DC_std_map))
         res_prescan = slice_section(res, 'SCI', 'prescan', detector_regions)
@@ -717,9 +729,6 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     CIC_image_map[CIC_image_map < 0] = 0
     DC_image_map[DC_image_map < 0] = 0
 
-    # Since CIC will not be scaled by gain or exptime when master dark created
-    # using these noise maps, just bundle stacks_err in with C_std_map
-    C_std_map_combo = np.sqrt(CIC_std_map**2 + stacks_err**2)
     # assume headers from a dataset frame for headers of calibrated noise map
     prihdr = datasets[0].frames[0].pri_hdr
     exthdr = datasets[0].frames[0].ext_hdr
@@ -728,10 +737,10 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
         exthdr['EMGAIN_M'] = None
     exthdr['EMGAIN_C'] = None
     exthdr['KGAINPAR'] = None
-    exthdr['BUNIT'] = 'Detected Electrons'
+    exthdr['BUNIT'] = 'detected electron'
 
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'Detected Electrons'
+    err_hdr['BUNIT'] = 'detected electron'
 
     exthdr['DATATYPE'] = 'DetectorNoiseMaps'
 
@@ -743,7 +752,7 @@ def calibrate_darks_lsq(dataset, detector_params, detector_regions=None):
     exthdr['B_O_UNIT'] = 'DN'
 
     input_stack = np.stack([FPN_map, CIC_map, DC_map])
-    input_err = np.stack([[FPN_std_map, C_std_map_combo, DC_std_map]])
+    input_err = np.stack([[FPN_std_map, CIC_std_map, DC_std_map]])
     input_dq = np.stack([output_dq, output_dq, output_dq])
 
     noise_maps = DetectorNoiseMaps(input_stack, prihdr.copy(), exthdr.copy(), dataset,
@@ -806,7 +815,7 @@ def build_synthesized_dark(dataset, noisemaps, detector_regions=None, full_frame
         _, unique_vals = dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
         if len(unique_vals) > 1:
             raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
-        try: # use measured EM gain if available TODO change hdr name if necessary
+        try: # use measured EM gain if available
             g = dataset.frames[0].ext_hdr['EMGAIN_M']
         except:
             g = dataset.frames[0].ext_hdr['EMGAIN_A']
