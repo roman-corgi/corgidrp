@@ -6,10 +6,115 @@ from astropy.table import Table
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
+from corgidrp.spec import get_template_dataset
 
 datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
+spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy"))
+template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
+
+
+def convert_tvac_to_dataset():
+    """
+    for me to convert the tvac data once.
+    """
+    file_path = [os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits"), 
+                 os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")]
+    pri_hdr, ext_hdr = create_default_L1_headers()
+    for k, file in enumerate(file_path):
+        with fits.open(file) as hdul:
+            psf_array = hdul[0].data
+            psf_table = Table(hdul[1].data)
+
+        initial_cent = {
+            "xcent": np.array(psf_table["xcent"]),
+            "ycent": np.array(psf_table["ycent"]),
+            "xoffset": np.array(psf_table["xoffset"]),
+            "yoffset": np.array(psf_table["yoffset"])
+        }
+        assert len(initial_cent.get('xcent')) == psf_array.shape[0]
+        assert len(initial_cent.get('xoffset')) == psf_array.shape[0]
+    
+        psf_images = []
+        file_names = []
+        for i in range(psf_array.shape[0]):
+            data_2d = np.copy(psf_array[i])
+            err = np.zeros_like(data_2d)
+            dq = np.zeros_like(data_2d, dtype=int)
+            image = Image(
+                data_or_filepath=data_2d,
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                err=err,
+                dq=dq
+            )
+            image.ext_hdr['CFAMNAME'] = '3d'
+            image.ext_hdr['DPAMNAME'] = 'PRISM3'
+            if k == 0:
+                image.ext_hdr['FSAMNAME'] = 'OPEN'
+            else:
+                image.ext_hdr['FSAMNAME'] = 'R1C2'
+            image.ext_hdr['xcent']= initial_cent.get('xcent')[i]
+            image.ext_hdr['ycent']= initial_cent.get('ycent')[i]
+            image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
+            image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
+            psf_images.append(image)
+            if i > 0 and i <10:
+                num = "0"+str(i)
+            else:
+                num = str(i)
+            if k == 0:
+                file_names.append("spec_unocc_noslit_offset_prism3_3d_" +num+".fits")
+            else:
+                file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
+
+        dataset = Dataset(psf_images)
+        dataset.save(filedir=template_dir, filenames = file_names)
+    
+    file_path_filtersweep = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
+    psf_array = fits.getdata(file_path_filtersweep, ext = 0)
+    psf_table = Table(fits.getdata(file_path_filtersweep, ext = 1))
+    psf_header = fits.getheader(file_path_filtersweep, ext = 0)
+    psf_table_header = fits.getheader(file_path_filtersweep, ext = 1)
+    
+    initial_cent = {
+        "xcent": np.array(psf_table["xcent"]),
+        "ycent": np.array(psf_table["ycent"]),
+        "xoffset": np.array(psf_table["xoffset"]),
+        "yoffset": np.array(psf_table["yoffset"])
+    }
+    assert len(initial_cent.get('xcent')) == psf_array.shape[0]
+    assert len(initial_cent.get('xoffset')) == psf_array.shape[0]
+    
+    psf_images = []
+    file_names = []
+    for i in range(psf_array.shape[0]):
+        data_2d = np.copy(psf_array[i])
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image = Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq
+        )
+        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+        image.ext_hdr['DPAMNAME'] = 'PRISM3'
+        image.ext_hdr['FSAMNAME'] = 'OPEN'
+        image.ext_hdr['xcent']= initial_cent.get('xcent')[i]
+        image.ext_hdr['ycent']= initial_cent.get('ycent')[i]
+        image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
+        image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
+        psf_images.append(image)
+        if i>0 and i <10:
+            num = "0"+str(i)
+        else:
+            num = str(i)
+        file_names.append("spec_unocc_noslit_offset_prism3_filtersweep_" +num+".fits")
+    dataset = Dataset(psf_images)
+    dataset.save(filedir=template_dir, filenames = file_names)
 
 def test_psf_centroid():
     """
@@ -19,11 +124,13 @@ def test_psf_centroid():
     file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
+    pri_hdr, ext_hdr = create_default_L1_headers()
+    
     with fits.open(file_path) as hdul:
         psf_array = hdul[0].data
         psf_table = Table(hdul[1].data)
-        pri_hdr = hdul[0].header
-        ext_hdr = hdul[1].header
+        #pri_hdr = hdul[0].header
+        #ext_hdr = hdul[1].header
 
     assert psf_array.ndim == 3, "Expected 3D PSF array"
     assert "xcent" in psf_table.colnames and "ycent" in psf_table.colnames, "Missing centroid columns"
@@ -32,7 +139,8 @@ def test_psf_centroid():
         "xcent": np.array(psf_table["xcent"]),
         "ycent": np.array(psf_table["ycent"])
     }
-
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'OPEN'
     psf_images = []
     for i in range(psf_array.shape[0]):
         data_2d = np.copy(psf_array[i])
@@ -40,8 +148,8 @@ def test_psf_centroid():
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
             data_or_filepath=data_2d,
-            pri_hdr=pri_hdr.copy(),
-            ext_hdr=ext_hdr.copy(),
+            pri_hdr=pri_hdr,
+            ext_hdr=ext_hdr,
             err=err,
             dq=dq
         )
@@ -99,8 +207,9 @@ def test_psf_centroid():
     assert np.all(np.abs(calibration_2.yfit - initial_cent["ycent"]) < 3)
     
     #use the default template file as input
+    temp_dataset, filtersweep = get_template_dataset(dataset)
     calibration_3 = steps.compute_psf_centroid(
-        dataset=dataset, template_file = file_path
+        dataset=dataset, template_dataset = temp_dataset, filtersweep = filtersweep
     )
     assert np.all(calibration_2.xfit == calibration_3.xfit)
     assert np.all(calibration_2.yfit == calibration_3.yfit)
@@ -138,7 +247,7 @@ def test_dispersion_model():
     assert np.array_equal(load_disp.wavlen_vs_pos_cov, disp_dict.get('wavlen_vs_pos_cov'))
 
 def test_read_cent_wave():
-    band_file = os.path.join(datadir, 'CGI_bandpass_centers.csv')
+    band_file = os.path.join(spec_datadir, 'CGI_bandpass_centers.csv')
     cen_wave = steps.read_cent_wave(band_file, '3C')
     assert cen_wave == 726.0
     cen_wave = steps.read_cent_wave(band_file, '3G')
@@ -153,7 +262,10 @@ def test_calibrate_dispersion_model():
     
     file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
-
+    
+    prihdr, exthdr = create_default_L1_headers()
+    exthdr["DPAMNAME"] = 'PRISM3'
+    exthdr["FSAMNAME"] = 'OPEN'
     psf_array = fits.getdata(file_path, ext = 0)
     psf_table = Table(fits.getdata(file_path, ext = 1))
     psf_header = fits.getheader(file_path, ext = 0)
@@ -174,8 +286,8 @@ def test_calibrate_dispersion_model():
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
             data_or_filepath=data_2d,
-            pri_hdr=psf_header.copy(),
-            ext_hdr=psf_table_header.copy(),
+            pri_hdr=prihdr.copy(),
+            ext_hdr=exthdr.copy(),
             err=err,
             dq=dq
         )
@@ -223,6 +335,7 @@ def test_calibrate_dispersion_model():
     print("Dispersion profile fit test passed.")
     
 if __name__ == "__main__":
+    #convert_tvac_to_dataset()
     test_psf_centroid()
     test_dispersion_model()
     test_read_cent_wave()

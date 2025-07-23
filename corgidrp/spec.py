@@ -1,4 +1,5 @@
 import warnings
+import glob
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
@@ -6,12 +7,6 @@ import corgidrp
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
 import os
 from astropy.io import ascii, fits
-
-default_psf_files = {
-"3d_noslit": "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits",
-"3d_slit":  "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits",
-"filtersweep": "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits"
-}
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
@@ -221,12 +216,13 @@ def fit_psf_centroid(psf_data, psf_template,
     """
 
     # Use the center of mass as a starting point if positions were not provided.
-    if xcent_template == None or ycent_template == None: 
+    if xcent_template is None or ycent_template is None: 
         xcom_template, ycom_template = np.rint(get_center_of_mass(psf_template))
+        xcent_template, ycent_template = xcom_template, ycom_template
     else:
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
-    if xcent_guess == None or ycent_guess == None:
+    if xcent_guess is None or ycent_guess is None:
         median_filt_psf = ndi.median_filter(psf_data, size=2)
         xcom_data, ycom_data = np.rint(get_center_of_mass(median_filt_psf))
     else:
@@ -282,26 +278,70 @@ def fit_psf_centroid(psf_data, psf_template,
 
     return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
 
-def compute_psf_centroid(dataset, template_file = None, initial_cent = None, verbose=False, halfwidth=10, halfheight=10):
+def get_template_dataset(dataset):
+    """
+    return the default template dataset from the data/spectroscopy/templates files
+
+    Args:
+        dataset (Dataset): Dataset containing 2D PSF images. Each image must include pri_hdr and ext_hdr.
+
+    Returns:
+        Dataset: template dataset
+        boolean: filtersweep true or false
+    """
+    template_dir = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "templates")
+    filtersweep = False
+    cfamname = []
+    slits = []
+    for frames in dataset.frames:
+        dpamname = frames.ext_hdr['DPAMNAME']
+        fsamname = frames.ext_hdr['FSAMNAME']
+        if dpamname != "PRISM3":
+            raise AttributeError("currently we only have template files for PRISM3, not for "+ dpamname)
+          
+        cfamname.append (frames.ext_hdr['CFAMNAME'])
+        slits.append (fsamname)
+    if len(np.unique(slits)) != 1:
+        raise AttributeError("currently we only have template files for no slit or R1C2, not for "+ slits)
+    if len(np.unique(cfamname)) == 1:
+        band = cfamname[0]
+        if not band.startswith ("3"):
+            raise AttributeError("currently we only have template files for the filter band 3, not for "+ band)
+        slit = slits[0]
+        if slit == "R1C2":
+            filenames = sorted(glob.glob(os.path.join(template_dir,"spec_unocc_r1c2slit_offset_prism3_3d_*.fits")))
+        elif slit == "OPEN":
+            filenames = sorted(glob.glob(os.path.join(template_dir,"spec_unocc_noslit_offset_prism3_3d_*.fits")))
+        else:
+            raise AttributeError("we do not (yet) have template files for slit " + slit)
+    else:
+        #filtersweep
+        filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_offset_prism3_filtersweep_*.fits")))
+        filtersweep = True
+    return Dataset(filenames), filtersweep
+            
+
+def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False, halfwidth=10, halfheight=10, verbose = False):
     """
     Compute PSF centroids for a grid of PSFs and return them as a calibration object.
 
     Args:
         dataset (Dataset): Dataset containing 2D PSF images. Each image must include pri_hdr and ext_hdr.
+        template_dataset (dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template path is taken
         initial_cent (dict): Dictionary with initial guesses for PSF centroids.
                              Must include keys 'xcent' and 'ycent', each mapping to an array of shape (N,).
-        template_file (str): filepath of the template PSF, if None, a simulated PSF from the test_data is taken
-        verbose (bool): If True, prints fitted centroid values for each frame.
+        filtersweep (bool): If True, it uses a filter sweep/scan dataset.
         halfwidth (int): Half-width of the PSF fitting box.
         halfheight (int): Half-height of the PSF fitting box.
-
+        verbose (bool): If True, prints fitted centroid values for each frame.
+    
     Returns:
         SpectroscopyCentroidPSF: Calibration object with fitted (x, y) centroids.
     """
     if not isinstance(dataset, Dataset):
         raise TypeError("Input must be a corgidrp.data.Dataset object.")
     
-    if initial_cent == None:
+    if initial_cent is None:
         xcent, ycent = None, None
     else:
         xcent = np.asarray(initial_cent.get("xcent"))
@@ -311,36 +351,30 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
         if len(dataset) != len(xcent) or len(dataset) != len(ycent):
             raise ValueError("Mismatch between dataset length and centroid guess arrays.")
     
-    if template_file == None:
-        if 'FILTERS' in dataset[0].pri_hdr:
-            default_file = default_psf_files.get('filtersweep')
-        elif dataset[0].pri_hdr['SLIT'] == 'N':
-            default_file = default_psf_files.get('3d_noslit')
+    if template_dataset is None:
+        template_dataset, filtersweep = get_template_dataset(dataset)
+    
+    xcent_temp = []
+    ycent_temp = []
+    for frame in template_dataset:
+        if "XCENT" in frame.ext_hdr:
+            xcent_temp.append(frame.ext_hdr["XCENT"])
         else:
-            default_file = default_psf_files.get('3d_slit')
-        data_path = os.path.join(os.path.dirname(__file__), "data", "spectroscopy")
-        template_file = os.path.join(data_path, 
-            default_file)
-        if verbose:
-            print("no template file given, take simulated file: " + default_file)
-    temp_psf_array = fits.getdata(template_file, ext=0)
-    if len(dataset) != np.shape(temp_psf_array)[0]:
-        raise ValueError("Mismatch between dataset length and template arrays.")
-    try:
-        temp_psf_table = fits.getdata(template_file , ext=1)
-        (xcent_template, ycent_template) = (temp_psf_table['xcent'], temp_psf_table['ycent'])
-        if len(dataset) != len(xcent_template) or len(dataset) != len(ycent_template):
-            warnings.warn("Mismatch between dataset length and template centroid arrays.")
-    except:
-        warnings.warn("template PSF fits file does not seem to have an extension with the fit results")
-        (xcent_template, ycent_template) = (None, None)
+            xcent_temp.append(None)    
+        if "YCENT" in frame.ext_hdr:
+            ycent_temp.append(frame.ext_hdr["YCENT"])
+        else:
+            ycent_temp.append(None)    
+    xcent_temp = np.asarray(xcent_temp)
+    ycent_temp = np.asarray(ycent_temp)
     
     centroids = np.zeros((len(dataset), 2))
     centroids_err = np.zeros((len(dataset), 2))
 
-    pri_hdr = dataset[0].pri_hdr.copy()
-    ext_hdr = dataset[0].ext_hdr.copy()
-
+    pri_hdr_centroid = dataset[0].pri_hdr.copy()
+    ext_hdr_centroid = dataset[0].ext_hdr.copy()
+    
+    filters = []
     for idx, frame in enumerate(dataset):
         cfam = frame.ext_hdr['CFAMNAME']
         psf_data = frame.data
@@ -350,15 +384,32 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
             xguess = xcent[idx]
             yguess = ycent[idx]
         
-        temp_psf_data = temp_psf_array[idx]
-        if xcent_template is None:
-            temp_x, temp_y = None, None
-        else: 
-            temp_x = xcent_template[idx]
-            temp_y = ycent_template[idx]
+        if filtersweep:
+            filters.append(cfam)
+            found_cfam = False
+            for k, temp_frame in enumerate(template_dataset):
+                cfam_temp = temp_frame.ext_hdr['CFAMNAME']
+                if cfam == cfam_temp:
+                    temp_psf_data = temp_frame.data
+                    temp_x = xcent_temp[k]
+                    temp_y = ycent_temp[k]
+                    found_cfam = True
+                    break
+            if found_cfam == False:
+                raise AttributeError("no template image found for filter: "+cfam)
+        else:
+            if idx < len(template_dataset):
+                temp_psf_data = template_dataset[idx].data
+                temp_x = xcent_temp[idx]
+                temp_y = ycent_temp[idx]
+            else:
+                temp_psf_data = template_dataset[-1].data
+                temp_x = xcent_temp[-1]
+                temp_y = ycent_temp[-1]
         # larger fitting stamp needed for broadband filter 
         if cfam == '2' or cfam == '3':
             halfheight = 30
+            
         xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis = fit_psf_centroid(
             psf_data, temp_psf_data,
             xcent_template=temp_x,
@@ -374,11 +425,13 @@ def compute_psf_centroid(dataset, template_file = None, initial_cent = None, ver
 
         if verbose:
             print(f"Slice {idx}: x = {xfit:.3f}, y = {yfit:.3f}")
-
+    
+    if filtersweep:
+        ext_hdr_centroid['FILTERS'] = ",".join(filters)
     calibration = SpectroscopyCentroidPSF(
         centroids,
-        pri_hdr=pri_hdr,
-        ext_hdr=ext_hdr,
+        pri_hdr=pri_hdr_centroid,
+        ext_hdr=ext_hdr_centroid,
         err_hdr = fits.Header(),
         err = centroids_err,
         input_dataset=dataset
@@ -518,6 +571,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'P
     if prism not in ['PRISM2', 'PRISM3']:
         raise ValueError("prism must be PRISM2 or PRISM3")
     
+    #PRISM2 not yet available
     if prism == 'PRISM2':
         subband_list = ['2A', '2B', '2C']
         ref_wavlen = 660.0
@@ -533,7 +587,10 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'P
         
     if band_center_file is None:
         band_center_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
-    filters = centroid_psf.pri_hdr['FILTERS'].upper().split(",")
+    
+    if 'FILTERS' not in centroid_psf.ext_hdr:
+        raise AttributeError("there should be a FILTERS header keyword in the filtersweep SpectroscopyCentroidPsf")
+    filters = centroid_psf.ext_hdr['FILTERS'].upper().split(",")
     center_wavel = []
     for band in filters:
         band_str = band.strip()
