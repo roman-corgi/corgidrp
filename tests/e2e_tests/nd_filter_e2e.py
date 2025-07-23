@@ -9,7 +9,7 @@ from corgidrp import caldb
 
 # ----------------------------------------------------------------------
 @pytest.mark.e2e
-def test_nd_filter_e2e(e2edata_path):
+def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     # 1. Synthetic “dim star” frames (no ND)
     fwhm = 3  # pix PSF width
     true_flux_dim = nd_filter_calibration.compute_expected_band_irradiance('TYC 4424-1286-1', '3C')
@@ -18,6 +18,7 @@ def test_nd_filter_e2e(e2edata_path):
     dim_frames = mocks.create_flux_image(
         true_flux_dim, fwhm, cal_factor, target_name='TYC 4424-1286-1'
     )
+    dim_frames.ext_hdr['BUNIT'] = 'photoelectron'
     dim_frames = [dim_frames] if not isinstance(dim_frames, list) else dim_frames
 
     # 2. Synthetic “bright star” frames (with ND)
@@ -33,10 +34,11 @@ def test_nd_filter_e2e(e2edata_path):
     for fsm_x, fsm_y in fsm_positions:
         frame = mocks.create_flux_image(attenuated_flux, fwhm, cal_factor, fpamname='ND225',     
             target_name='Vega', fsm_x=fsm_x, fsm_y=fsm_y)
+        frame.ext_hdr['BUNIT'] = 'photoelectron'
         bright_frames.append(frame)
 
     # 3. Save raw files for the walker
-    simdata_dir = os.path.join(os.path.dirname(e2edata_path), "nd_filter_e2e_output")
+    simdata_dir = os.path.join(os.path.dirname(e2eoutput_path), "nd_filter_e2e_output")
     shutil.rmtree(simdata_dir, ignore_errors=True)
     os.makedirs(simdata_dir)
 
@@ -74,4 +76,4 @@ if __name__ == "__main__":
     parser.add_argument("-tvac", "--e2edata_dir", default=here)
     parser.add_argument("-o",    "--outputdir",   default=here)
     args = parser.parse_args()
-    test_nd_filter_e2e(args.e2edata_dir)
+    test_nd_filter_e2e(args.e2edata_dir, args.outputdir)

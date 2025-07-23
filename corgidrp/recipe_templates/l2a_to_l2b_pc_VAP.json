@@ -1,0 +1,59 @@
+{
+    "name" : "l2a_to_l2b_pc",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name" : "frame_select",
+            "keywords" : {
+                "overexp" : "True"
+            }
+        },
+        {
+            "name" : "convert_to_electrons",
+            "calibs" : {
+                "KGain" : "AUTOMATIC"
+            }
+        },
+        {
+            "name": "get_pc_mean",
+            "calibs" : {
+                "Dark" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "desmear",
+            "calibs" : {
+                "DetectorParams" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "cti_correction",
+            "calibs" : {
+                "TrapCalibration" : "AUTOMATIC,OPTIONAL"
+            }
+        },
+        {
+            "name" : "flat_division",
+            "calibs" : {
+                "FlatField" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "correct_bad_pixels",
+            "calibs" : {
+                "BadPixelMap" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "update_to_l2b"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}

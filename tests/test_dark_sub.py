@@ -56,11 +56,15 @@ def test_dark_sub():
     assert len(dark_dataset) == 10
 
     # check that data is consistently modified
+    temp_store = dark_dataset.all_data[0,0,0]
     dark_dataset.all_data[0,0,0] = 0
     assert dark_dataset[0].data[0,0] == 0
+    dark_dataset.all_data[0,0,0] = temp_store #reset to original value
 
+    temp_store = dark_dataset[0].data[0,0]
     dark_dataset[0].data[0,0] = 1
     assert dark_dataset.all_data[0,0,0] == 1
+    dark_dataset[0].data[0,0] = temp_store #reset to original value
 
     ###### create dark
     dark_frame = build_trad_dark(dark_dataset, detector_params, detector_regions=None, full_frame=True)
@@ -119,8 +123,8 @@ def test_dark_sub():
     assert(np.mean(darkest_dataset.all_err) == pytest.approx(np.mean(dark_frame.err), abs = 1e-2))
     #print("mean of all data:", np.mean(darkest_dataset.all_data))
     #print("mean of all errors:", np.mean(darkest_dataset.all_err))
-    assert darkest_dataset[0].ext_hdr["BUNIT"] == "Photoelectrons"
-    assert darkest_dataset[0].err_hdr["BUNIT"] == "Photoelectrons"
+    assert darkest_dataset[0].ext_hdr["BUNIT"] == "photoelectron"
+    assert darkest_dataset[0].err_hdr["BUNIT"] == "photoelectron"
     #print(darkest_dataset[0].ext_hdr)
 
     # If too many masked in a stack for a given pixel, warning raised. Checks
@@ -128,24 +132,27 @@ def test_dark_sub():
     ds = dark_dataset.copy()
     # tag as bad pixel all the
     # way through for one pixel (7,8)
-    # And mask (10,12) to get flag value of 256
+    # And mask (10,12) to get big high statistical error value
     ds.all_dq[:,7,8] = 4
-    ds.all_dq[:int(1+len(ds)/2),10,12] = 2
+    #ds.all_dq[:int(1+len(ds)/2),10,12] = 2
+    ds.all_dq[:int(len(ds)-1),10,12] = 2
 
-    with pytest.warns(UserWarning):
-        master_dark = build_trad_dark(ds, detector_params, full_frame=True)
-    assert master_dark.dq[7,8] == 1
-    assert master_dark.dq[10,12] == 256
+    master_dark = build_trad_dark(ds, detector_params, full_frame=True)
+    assert master_dark.dq[7,8] == 4
+    # max error should be found in the (10,12) pixel
+    assert master_dark.err[0,10,12] == np.nanmax(master_dark.err)
+
 
     # now input a DetectorNoiseMaps instance and subtract dark from itself; here outputdir will do nothing since this is not a Dark instance
     EMgain = 10
     exptime = 4
     frame = (noise_maps.FPN_map + noise_maps.CIC_map*EMgain + noise_maps.DC_map*exptime*EMgain)/EMgain
-    prihdr, exthdr = mocks.create_default_calibration_product_headers()
-    image_frame = data.Image(frame, prihdr, exthdr)
+    prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2a_headers()
+    image_frame = data.Image(frame, pri_hdr = prihdr, ext_hdr = exthdr, err_hdr = errhdr, dq_hdr = dqhdr)
     image_frame.ext_hdr['EMGAIN_C'] = EMgain
     image_frame.ext_hdr['EXPTIME'] = exptime
-    image_frame.ext_hdr['KGAINPAR'] = 7
+    image_frame.ext_hdr['KGAINPAR'] = 7.
+    image_frame.ext_hdr['BUNIT'] = 'detected electron'
     dataset_from_noisemap = data.Dataset([image_frame])
     nm_dataset0 = l2a_to_l2b.dark_subtraction(dataset_from_noisemap, noise_maps, outputdir=calibdir)
     # check the level of the dataset is now approximately 0, leaving off telemetry row

@@ -34,14 +34,36 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        if 'BUILD' in prihdr:
+            prihdr.remove("BUILD")
+        if 'OBSTYPE' in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
+            prihdr.remove('OBSTYPE')
+        if 'OBSID' in prihdr:
+            prihdr['OBSNUM'] = prihdr['OBSID']
+            prihdr.remove('OBSID')
+        if 'CMDGAIN' in exthdr:
+            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+            exthdr.remove('CMDGAIN')
         exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        if 'DATA_LEVEL' in exthdr:
+            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+            exthdr.remove('DATA_LEVEL')
+        # exthdr['KGAINPAR'] = exthdr['KGAIN']
+        if 'OBSTYPE' in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
-        # Update FITS file
+        exthdr['BUNIT'] = 'DN'
+        prihdr1, exthdr1 = mocks.create_default_L1_headers()
+        for key in prihdr1:
+            if key not in prihdr:
+                prihdr[key] = prihdr1[key]
+        for key in exthdr1:
+            if key not in exthdr:
+                exthdr[key] = exthdr1[key]
+        prihdr['VISTYPE'] = 'DARK'
+        # Update FITS file  
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
@@ -72,7 +94,6 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     if not os.path.exists(build_trad_dark_outputdir):
         os.mkdir(build_trad_dark_outputdir)
 
-    # remove any files in the output directory that may have been there previously
     for f in os.listdir(build_trad_dark_outputdir):
         os.remove(os.path.join(build_trad_dark_outputdir, f))
 
@@ -117,7 +138,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -147,7 +168,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
@@ -163,7 +184,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_dat = 8.7
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -228,18 +249,19 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_data = trad_dark_fits[1].data
     ###################
     
     ##### Check against TVAC traditional dark result
 
     TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
 
-    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
+    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     pass
-
+    trad_dark = data.Dark(generated_trad_dark_file)
+    
     # remove from caldb
-    trad_dark = data.Dark(generated_trad_dark_file.replace("_L1_", "_L2a_", 1))
     this_caldb.remove_entry(trad_dark)
 
 
@@ -315,7 +337,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -345,7 +367,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code
@@ -361,7 +383,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
-    kgain_dat = np.array([[8.7]])
+    kgain_dat = 8.7
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -426,17 +448,18 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark = fits.getdata(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_data = trad_dark_fits[1].data
     ###################
     
     ##### Check against TVAC traditional dark result
 
     TVAC_trad_dark = detector.slice_section(mean_frame, 'SCI', 'image')
 
-    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark)) < 1e-11)
+    assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     trad_dark = data.Dark(generated_trad_dark_file)
-    assert trad_dark.ext_hdr['BUNIT'] == 'Detected Electrons'
-    assert trad_dark.err_hdr['BUNIT'] == 'Detected Electrons'
+    assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
+    assert trad_dark.err_hdr['BUNIT'] == 'detected electron'
     test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_DRK_CAL.fits'
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_L[0-9].', '', test_filename)
@@ -467,5 +490,5 @@ if __name__ == "__main__":
     # args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    test_trad_dark_im(e2edata_dir, outputdir)
     test_trad_dark(e2edata_dir, outputdir)
+    test_trad_dark_im(e2edata_dir, outputdir)

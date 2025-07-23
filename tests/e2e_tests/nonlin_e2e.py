@@ -38,7 +38,9 @@ def fix_headers_for_tvac(
         prihdr['OBSNUM'] = prihdr['OBSID']
         exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
         exthdr['EMGAIN_A'] = -1
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -103,7 +105,7 @@ def test_nonlin_cal_e2e(
     
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=e2eoutput_path, filename="mock_kgain.fits")
     this_caldb = caldb.CalDB()
@@ -111,8 +113,13 @@ def test_nonlin_cal_e2e(
 
     # Run the walker on some test_data
     print('Running walker')
-    walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")
-
+    #walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")
+    recipe = walker.autogen_recipe(nonlin_l1_list, e2eoutput_path)
+    ### Modify they keywords of some of the steps
+    for step in recipe[0]['steps']:
+        if step['name'] == "calibrate_nonlin":
+            step['keywords']['apply_dq'] = False # full shaped pupil FOV
+    walker.run_recipe(recipe[0], save_recipe_file=True)
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP

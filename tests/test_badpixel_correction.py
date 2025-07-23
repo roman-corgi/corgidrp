@@ -13,7 +13,7 @@ old_err_tracking = corgidrp.track_individual_errors
 data = np.ones([1024,1024])*2.
 err = np.ones([1024,1024]) *0.5
 dq = np.zeros([1024,1024], dtype = np.uint16)
-prhd, exthd = create_default_calibration_product_headers()
+prhd, exthd, errhdr, dqhdr = create_default_calibration_product_headers()
 
 def test_bad_pixels():
 

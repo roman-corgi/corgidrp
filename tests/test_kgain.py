@@ -26,16 +26,27 @@ def test_kgain():
     image2.filename = "test2_L1_.fits"
     dataset= data.Dataset([image1, image2])
 
-    gain_value = np.array([[9.55]])
-    gain_err = np.array([[[1.]]])
-    kgain = data.KGain(gain_value, pri_hdr = prhd, ext_hdr = exthd, input_dataset = dataset)
+    prhd_kgain = prhd.copy()
+    exthd_kgain = exthd.copy()
+    gain_value = 9.55
+    gain_err = 1.
+    #int input is not allowed
+    gain_value_int = 9
+    gain_err_int = 1
+    with pytest.raises(ValueError):
+        kgain_int = data.KGain(gain_value_int, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)
+    with pytest.raises(ValueError):
+        kgain_int = data.KGain(gain_value, err = gain_err_int, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)   
+        
+    kgain = data.KGain(gain_value, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)
+
     assert kgain.filename.split(".")[0] == "test2_KRN_CAL"
-    assert kgain.value == gain_value[0,0]
-    assert kgain.data[0,0] == gain_value[0,0]
+    assert kgain.value == gain_value
+    assert kgain.data[0] == gain_value
     
     #test ptc and error extension
-    kgain_ptc = data.KGain(gain_value, err = gain_err, ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, ptc_hdr = ptc_hdr, input_dataset = dataset)
-    assert kgain_ptc.error == gain_err[0,0]
+    kgain_ptc = data.KGain(gain_value, err = gain_err, ptc = ptc, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, ptc_hdr = ptc_hdr, input_dataset = dataset)
+    assert kgain_ptc.error == gain_err
     assert kgain_ptc.ptc[0,0] == 1.
     assert kgain_ptc.ptc_hdr is not None
     
@@ -46,12 +57,12 @@ def test_kgain():
 
     #test copy and save
     kgain_ptc_copy = kgain_ptc.copy(copy_data = False)
-    assert kgain_ptc_copy.value == gain_value[0,0]
+    assert kgain_ptc_copy.value == gain_value
     kgain_ptc_copy = kgain_ptc.copy()
-    assert kgain_ptc_copy.value == gain_value[0,0]
+    assert kgain_ptc_copy.value == gain_value
     
     assert kgain_ptc_copy.ptc[0,0] == 1.
-    assert kgain_ptc_copy.error == gain_err[0,0]
+    assert kgain_ptc_copy.error == gain_err
     assert kgain_ptc_copy.ptc_hdr is not None
     assert kgain_ptc_copy.err_hdr is not None
     
@@ -64,8 +75,8 @@ def test_kgain():
         
     kgain_filepath = os.path.join(calibdir, kgain_filename)
     kgain_open = data.KGain(kgain_filepath)
-    assert kgain_open.value == gain_value[0,0]
-    assert kgain_open.error == gain_err[0,0]
+    assert kgain_open.value == gain_value
+    assert kgain_open.error == gain_err
     assert kgain_open.ptc[0,0] == 1.
     assert kgain_open.ptc_hdr["EXTNAME"] == "PTC"
     assert kgain_open.err_hdr is not None
@@ -84,10 +95,10 @@ def test_kgain():
     assert np.mean(gain_dataset[0].err) == pytest.approx(k_gain * np.mean(dataset[0].err), abs = 1e-4)
 
     #test header updates
-    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electrons"
-    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electrons"
+    assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electron"
+    assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electron"
     assert gain_dataset[0].ext_hdr["KGAINPAR"] == k_gain
-    assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error[0]
+    assert gain_dataset[0].ext_hdr["KGAIN_ER"] == kgain.error
     assert gain_dataset[0].ext_hdr["RN"] > 0
     assert gain_dataset[0].ext_hdr["RN_ERR"] > 0
     assert("converted" in str(gain_dataset[0].ext_hdr["HISTORY"]))
