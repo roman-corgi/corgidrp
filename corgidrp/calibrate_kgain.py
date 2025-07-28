@@ -393,7 +393,7 @@ def calibrate_kgain(dataset_kgain,
     for i in range(len(cal_list)):
         check.threeD_array(cal_list[i], 'cal_list['+str(i)+']', TypeError)
         if len(cal_list[i]) < 5:
-            raise CalKgainException('A sub-stack in cal_list was found with less than 5 '
+            raise CalKgainException(f'A sub-stack in cal_list was found with less than 5 '
             'frames, which is the required minimum number per sub-stack')
         if i > 0:
             if len(cal_list[i-1]) != len(cal_list[i]):

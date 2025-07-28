@@ -935,6 +935,8 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
         raise Exception('Each set of frames categorized by commanded EM gains must be have 1 or more frames')
     if np.any(np.array(gains) < 1):
         raise Exception('Actual EM gains must be greater than or equal to 1')
-
-    return (np.vstack(stack), np.stack(mean_frame_stack), np.array(exp_times),
-        np.array(datetimes), len_sstack, np.array(gains))
+    
+    # sort frames by time stamp for drift correction later
+    datetimes_sort_inds = np.argsort(datetimes)
+    return (np.vstack(stack)[datetimes_sort_inds], np.stack(mean_frame_stack), np.array(exp_times)[datetimes_sort_inds],
+        np.array(datetimes)[datetimes_sort_inds], len_sstack, np.array(gains))

@@ -15,10 +15,105 @@ def extract_datetime(datetime_str):
     Returns:
       numerical time stamp in seconds since the epoch (1970-01-01T00:00:00Z)
     """
-    dt_obj = datetime.strptime(datetime_str, "%Y-%m-%dT%H:%M:%S.%f")
+    dt_obj = datetime.strptime(datetime_str[:26], "%Y-%m-%dT%H:%M:%S.%f")
     output = time.mktime(dt_obj.timetuple()) + dt_obj.microsecond / 1e6
-
     return output
+
+def sort_remove_frames(dataset_in):
+    '''For a given EM gain, this function groups frames consecutive in time stamp into 
+    groups with the same exposure time.  Then it finds the two sets with the same 
+    exposure time that are the most separated in time.  It then examines any other sets 
+    with repeated exposure times, keeps the set of those with the most frames, and 
+    discards the rest.
+     
+    Args:
+      dataset_in (list of corgidrp.Dataset): list of datasets with all the frames to be sorted.
+        
+    Returns:
+      inds_leave_out (list): list of indices of frames to be left out of the final
+        dataset.
+      del_rep_inds_tot (list): list of indices of repeated exposure time sets to be
+        left out of the final dataset.
+      exptime_cons (list): list of exposure times for the sets, including the ones to be excluded.
+      count_cons (list): list of number of frames for each exposure time set, including the ones to be excluded.
+      filepath_list (list): list of file paths for the frames, including the ones to be excluded.    
+    '''
+    
+    
+    # Frames must be taken consecutively
+    cal_frame_time_list = []
+    exptime_list = []
+    filepath_list = []
+    for subset in dataset_in:
+        for frame in subset:
+            cal_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
+            exptime_list += [frame.ext_hdr['EXPTIME']]
+            filepath_list += [frame.filepath]
+    idx_id_sort = np.argsort(cal_frame_time_list)
+    cal_frame_time_list_sorted = np.array(cal_frame_time_list)[idx_id_sort]
+    exptime_arr = np.array(exptime_list)[idx_id_sort]
+    # Count repeated, consecutive elements
+    count_cons = [1]
+    exptime_cons = [exptime_arr[0]]
+    idx_cons = 0
+    for exptime in exptime_arr:
+        if exptime == exptime_cons[-1]:
+            count_cons[idx_cons] += 1
+        else:
+            idx_cons += 1
+            count_cons += [1]
+            exptime_cons += [exptime]
+    # First index always has a repetition in the previous loop (id=id)
+    count_cons[0] -= 1
+
+    count_cons = np.array(count_cons)
+    exptime_cons = np.array(exptime_cons)
+    # find exptime_cons entries that are the same, and then pick the pair that has widest time separation
+    widest_time_sep = 0 #initialize
+    for i in range(len(exptime_cons)):
+        arr = np.where(exptime_cons==exptime_cons[i])[0]
+        if len(arr) > 1:
+            time_ind1 = np.sum(count_cons[0:arr[0]+1]).astype(int)-1 # last of first exposure time set
+            time_ind2 = np.sum(count_cons[0:arr[-1]]).astype(int) # first of last exposure time set (exptime_cons sets already time-ordered, so pick the first and last for widest time check)
+            delta_time = cal_frame_time_list_sorted[time_ind2] - (cal_frame_time_list_sorted[time_ind1]+exptime_cons[arr[0]])
+            if delta_time > widest_time_sep:
+                widest_time_sep = delta_time
+                set1 = arr[0]
+                set2 = arr[-1]
+                time_ind1_f = time_ind1
+                time_ind2_f = time_ind2
+    # other repeat sets: keep the part of each set that has the most frames (making these repeated sets not repeated)
+    inds_leave_out = []
+    del_rep_inds_tot = []
+    for i in range(len(exptime_cons)):
+        arr = np.where(exptime_cons==exptime_cons[i])[0]
+        if len(arr) > 1:
+            # in case the repeated set containing the widest time has more than 2 members:
+            if set1 in arr and set2 in arr:
+                del_rep_inds = np.delete(arr, np.where(arr==set1))
+                del_rep_inds = np.delete(del_rep_inds, np.where(del_rep_inds==set2))
+            else:
+                del_rep_inds = np.where(count_cons[arr] != np.max(count_cons[arr]))[0]
+                if len(del_rep_inds) == 0: # then all within arr have the same number of frames
+                    # then just pick one 
+                    del_rep_inds = np.array([arr[0]]) 
+            del_rep_inds_tot = np.append(del_rep_inds_tot, del_rep_inds)
+            for i in del_rep_inds:
+                time_ind1 = np.sum(count_cons[0:i]).astype(int) # first of exposure time set
+                time_ind2 = time_ind1 + count_cons[i] -1 # last of exposure time set
+                for k in range(time_ind1, time_ind2+1):
+                    ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0] #[0][0] b/c should only be unique time stamps for all frames
+                    inds_leave_out.append(ind_remove)
+    # now leave out sets with just 1 frame 
+    for j in range(len(exptime_cons)):
+        if count_cons[j] <= 1:
+            time_ind1 = np.sum(count_cons[0:j]).astype(int) # first of exposure time set
+            time_ind2 = time_ind1 + count_cons[j] -1 # last of exposure time set
+            for k in range(time_ind1, time_ind2+1):
+                    ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0]
+                    inds_leave_out.append(ind_remove)
+
+    return inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, filepath_list
 
 def sort_pupilimg_frames(
     dataset_in,
@@ -78,7 +173,7 @@ def sort_pupilimg_frames(
     count_cons = [1]
     idx_cons = 0
     for idx in range(len(mean_frame_time_sort)-1):
-        overall_idx = frame_time_sort.index(mean_frame_time_list[idx])
+        overall_idx = frame_time_sort.index(mean_frame_time_sort[idx])
         if mean_frame_time_sort[idx+1] == frame_time_sort[overall_idx+1]:
             count_cons[idx_cons] += 1
         else:
@@ -115,169 +210,63 @@ def sort_pupilimg_frames(
     # Remove MNFRAME frames from unity gain frames
     split_exptime[0].remove(split_exptime[0][idx_mean_frame])
     split_exptime[1].remove(split_exptime[1][idx_mean_frame])
-    # Frames must be taken consecutively
-    mean_frame_time_list = []
-    exptime_list = []
-    unity_gain_filepath_list = []
-    for subset in split_exptime[0]:
-        for frame in subset:
-            mean_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
-            exptime_list += [frame.ext_hdr['EXPTIME']]
-            unity_gain_filepath_list += [frame.filepath]
-    idx_id_sort = np.argsort(mean_frame_time_list)
-    exptime_arr = np.array(exptime_list)[idx_id_sort]
-    # Count repeated, consecutive elements
-    count_cons = [1]
-    exptime_cons = [exptime_arr[0]]
-    idx_cons = 0
-    for exptime in exptime_arr:
-        if exptime == exptime_cons[-1]:
-            count_cons[idx_cons] += 1
-        else:
-            idx_cons += 1
-            count_cons += [1]
-            exptime_cons += [exptime]
-    # First index always has a repetition in the previous loop (id=id)
-    count_cons[0] -= 1
-
-    #idx_cons2 = [0]
-    #exptime_cons2 = [exptime_cons[idx_cons2[0]]]
-    #kgain_subset = []
-    cons_time_diff = 0
-    # Iterate over unique counts that are consecutive
-    for idx_count in range(len(count_cons) - 1):
-        # Indices to cover two consecutive sets
-        idx_id_first = np.sum(count_cons[0:idx_count]).astype(int)
-        idx_id_last  = np.sum(count_cons[0:idx_count+2]).astype(int)
-        mean_frame_list_range = np.array(mean_frame_time_list)[idx_id_sort[idx_id_first:idx_id_last]]
-        overall_time_inds = []
-        # Get the indices of the mean frame time list in the sorted total frame time list
-        for el in mean_frame_list_range:
-            overall_time_inds.append(np.where(frame_time_sort == el)[0][0])
-        overall_time_inds = np.array(overall_time_inds)
-        #diff_id = np.diff(overall_time_inds)
-        diff_exp = np.diff(exptime_cons)
-        # Both subsets must have all time stamps consecutive because they are in
-        # time order
-        # if (np.all(diff_id == 1) and diff_exp[idx_count] != 0):
-        #     exptime_cons2 += [exptime_cons[idx_count+1]]
-            #idx_cons2 += [idx_count+1]
-        # Last exposure time must be repeated and only once
-        if (diff_exp[idx_count] != 0  and
-            exptime_cons[idx_count+1] in exptime_cons[0:idx_count+1]): #XXX need to find matching sets with widest time sep
-            # finding the repeated exposure time, the one earliest in time
-            exptime_idx_same = exptime_cons[0:idx_count+1].index(exptime_cons[idx_count+1])
-            idx_time_same = np.sum(count_cons[0:exptime_idx_same]).astype(int)
-            idx_time_current = np.sum(count_cons[0:idx_count+1]).astype(int)
-            if frame_time_sort[idx_time_current] - frame_time_sort[idx_time_same] > cons_time_diff:
-                # If the time difference is larger than the previous one, update
-                cons_time_diff = (frame_time_sort[idx_time_current] -
-                                  frame_time_sort[idx_time_same])
-                kgain_subset = [exptime_idx_same, idx_count+1] 
-            #idx_cons2 = [idx_count+1]
-            #exptime_cons2 = exptime_cons #XXX [exptime_cons]
-        else:
-        # It is not a subset for kgain
-           continue
-    # Choose the largest subset
-    kgain_subset = np.array(kgain_subset)
-    idx_kgain = np.argmax(kgain_subset[1::2] - kgain_subset[0::2])
-    # Extract first/last index in the subset of consecutive frames
-    idx_kgain_0 = kgain_subset[2*idx_kgain]
-    idx_kgain_1 = kgain_subset[2*idx_kgain + 1]
-    # Count frames before and subset length
-    idx_kgain_first = np.sum(count_cons[0:idx_kgain_0]).astype(int)
-    idx_kgain_last = (idx_kgain_first +
-        np.sum(count_cons[idx_kgain_0:idx_kgain_1+1]).astype(int))
-
+    inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames(split_exptime[0])
+    
     # Sort unity gain filenames
-    unity_gain_filepath_arr = np.array(unity_gain_filepath_list)[idx_id_sort]
-    cal_list = unity_gain_filepath_arr[idx_kgain_first:idx_kgain_last]
     # Update OBSNAME and take profit to check files are in the list
     n_kgain = 0
     cal_frame_list = []
-    for frame in dataset_cp:
-        if frame.filepath in cal_list:
-            vistype = frame.pri_hdr['VISTYPE']
-            frame.pri_hdr['OBSNAME'] = 'KGAIN'
-            cal_frame_list += [frame]
-            n_kgain += 1
+    index = -1 #initiate
+    for subset in split_exptime[0]:
+        for i in range(len(subset)):
+            index += 1
+            frame = subset.frames[i]
+            if frame.filepath in unity_gain_filepath_list:
+                if index in inds_leave_out:
+                    continue
+                vistype = frame.pri_hdr['VISTYPE']
+                frame.pri_hdr['OBSNAME'] = 'KGAIN'
+                cal_frame_list += [frame]
+                n_kgain += 1
 
     sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
-        f'times {exptime_cons[idx_kgain_0:idx_kgain_1+1]} seconds with ' +
-        f'{count_cons[idx_kgain_0]} frames each. ')
+        f'times {list(np.delete(exptime_cons, del_rep_inds_tot.astype(int)))} seconds with ' +
+        f'{list(np.delete(count_cons, del_rep_inds_tot.astype(int)))} frames each. ')
 
     # Non-unity gain frames for Non-linearity
     if cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':
         # Non-unity gain frames
         split_cmdgain[0].remove(split_cmdgain[0][idx_unity])
         split_cmdgain[1].remove(split_cmdgain[1][idx_unity])
+        
         n_nonlin = 0
         nonlin_emgain = []
         for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
-            # Frames must be taken consecutively
-            frame_time_list = []
-            exptime_list = []
-            gain_filepath_list = []
-            for frame in gain_set:
-                frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
-                exptime_list += [frame.ext_hdr['EXPTIME']]
-                gain_filepath_list += [frame.filepath]
-            # One can set a stronger condition, though in the end the max set
-            if len(frame_time_list) < 3:
-                continue
-            idx_id_sort = np.argsort(frame_time_list)
-            exptime_arr = np.array(exptime_list)[idx_id_sort]
-            # We need an increasing series of exposure times with the last one
-            # the only repeated value in the series
-            idx_subsets = np.where(np.diff(exptime_arr) < 0)[0]
-            if len(idx_subsets) == 0:
-                continue
-            # length of candidate subsets
-            nonlin_len = []
-            for idx, idx_subset in enumerate(idx_subsets):
-                # Add 0th element plus the one lost in diff
-                if idx == 0:
-                    exptime_tmp = exptime_arr[0:idx_subset+2]
-                else:
-                    exptime_tmp = exptime_arr[idx_subsets[idx-1]+1:idx_subset+2]
-                # Check conditions
-                if (exptime_tmp[-1] in exptime_tmp[:-1] and
-                    len(exptime_tmp) - 1 == len(set(exptime_tmp))):
-                    nonlin_len += [len(exptime_tmp)]
-                else:
-                    nonlin_len += [-1]
-            # COntinue of there are no good candidates
-            if np.max(nonlin_len) <= 0:
-                continue
-            # Find maximum set among good candidates
-            if np.argmax(nonlin_len) == 0:
-                idx_nonlin_first = 0
-                idx_nonlin_last = idx_subsets[0] + 1
-            else:
-                idx_nonlin_first = idx_subsets[np.argmax(nonlin_len)-1] + 1
-                idx_nonlin_last = idx_subsets[np.argmax(nonlin_len)] + 1
-            # Sort unity gain filenames
-            gain_filepath_arr = np.array(gain_filepath_list)[idx_id_sort]
-            cal_list = gain_filepath_arr[idx_nonlin_first:idx_nonlin_last+1]
+            nonunity_split_exptime = gain_set.split_dataset(exthdr_keywords=['EXPTIME'])
+            inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, nonunity_gain_filepath_list = sort_remove_frames(nonunity_split_exptime[0])
             # Update OBSNAME and take profit to check files are in the list
-            for frame in dataset_cp:
-                if frame.filepath in cal_list:
-                    vistype = frame.pri_hdr['VISTYPE']
-                    frame.pri_hdr['OBSNAME'] = 'NONLIN'
-                    cal_frame_list += [frame]
-                    n_nonlin += 1
+            index = -1 #initiate
+            for subset in nonunity_split_exptime[0]:
+                for i in range(len(subset)):
+                    index += 1
+                    frame = subset.frames[i]
+                    if frame.filepath in nonunity_gain_filepath_list:
+                        if index in inds_leave_out:
+                            continue
+                        vistype = frame.pri_hdr['VISTYPE']
+                        frame.pri_hdr['OBSNAME'] = 'NONLIN'
+                        cal_frame_list += [frame]
+                        n_nonlin += 1
             nonlin_emgain += [split_cmdgain[1][idx_gain_set]]
 
-        sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
-            f'{nonlin_emgain}')
+            sorting_summary += (f'Non-linearity has {n_nonlin} frames with gains ' +
+                f'{nonlin_emgain}')
         
-    # TODO: Add a HISTORY entry
     history = (f'Dataset to calibrate {cal_type.upper()}. A sorting algorithm ' +
         'based on the constraints that NFRAMES, EXPTIME and CMDGAIN have when collecting ' +
         'calibration data for K-gain, Non-linearity and EM-gain vs DAC '
         f"was applied to an input dataset from {vistype} visit files." +
-        f'The result is that {sorting_summary}.')
+        f'The result: {sorting_summary}')
     print(history)
 
     dataset_sorted = data.Dataset(mean_frame_list + cal_frame_list)
