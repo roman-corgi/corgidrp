@@ -1408,6 +1408,7 @@ class WavelengthZeropoint(Image):
                                         dictionary of parameters 
 
     Attributes:
+        default_keys (list): list of the key names of the available parameters.
         params (dict): the values for various detector parameters specified here
         prism (str): used PRISM
         wavlen (float): wavelength of zero point
