@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel, WavelengthZeropoint, WaveCal
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
 from corgidrp.spec import get_template_dataset
@@ -260,6 +260,7 @@ def test_calibrate_dispersion_model():
     Test PSF dispersion computation with mock data and assert correctness of output FITS structure.
     """
     
+    global disp_model
     file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
@@ -334,9 +335,77 @@ def test_calibrate_dispersion_model():
     assert worst_case_wavlen_error == pytest.approx(0, abs=0.5)
     print("Dispersion profile fit test passed.")
     
+def test_wave_zeropoint():
+    """
+    test the WavelengthZeropoint calibration class
+    """
+    wave_0 = {"prism": "PRISM3",
+              "wavlen": 730.,
+              'x': 3.5,
+              'xerr': 0.1,
+              'y': 4.5,
+              'yerr': 0.1,
+              'shape0': 61,
+              'shape1': 21}
+    
+    w_zero = WavelengthZeropoint(wave_0)
+    
+    assert w_zero.prism == wave_0.get("prism")
+    assert w_zero.x == wave_0.get("x")
+    assert w_zero.xerr == wave_0.get("xerr")
+    assert w_zero.y == wave_0.get("y")
+    assert w_zero.yerr == wave_0.get("yerr")
+    assert w_zero.image_shape[0] == wave_0.get("shape0")
+    assert w_zero.image_shape[1] == wave_0.get("shape1")
+    
+    w_zero.save(filedir=output_dir, filename = "mock_wave_zeropoint.fits")
+    w_name = os.path.join(output_dir, "mock_wave_zeropoint.fits")
+    w_zero_load = WavelengthZeropoint(w_name)
+    
+    assert w_zero_load.prism == wave_0.get("prism")
+    assert w_zero_load.x == wave_0.get("x")
+    assert w_zero_load.xerr == wave_0.get("xerr")
+    assert w_zero_load.y == wave_0.get("y")
+    assert w_zero_load.yerr == wave_0.get("yerr")
+    assert w_zero_load.image_shape[0] == wave_0.get("shape0")
+    assert w_zero_load.image_shape[1] == wave_0.get("shape1")
+
+def test_wave_cal():
+    """
+    test the WaveCal calibration class.
+    """
+    wave_zero_name = os.path.join(output_dir, "mock_wave_zeropoint.fits")
+    wave_zero = WavelengthZeropoint(wave_zero_name)
+    ref_wavlen = wave_zero.wavlen
+    wavecal = steps.create_wave_cal(disp_model, wave_zero, ref_wavlen = ref_wavlen)
+    assert wavecal.data.shape == wave_zero.image_shape
+    # assert that the wavelengths are within bandpass 3
+    assert ref_wavlen > np.min(wavecal.data) and ref_wavlen < np.max(wavecal.data)
+    assert wavecal.err[0].shape == wave_zero.image_shape
+    assert hasattr(wavecal, 'pos_lookup')
+    assert len(wavecal.pos_lookup.colnames) == 5
+    assert np.allclose(wavecal.pos_lookup.columns[0].data, ref_wavlen, atol = 65)
+    
+    wavecal.save(filedir = output_dir, filename = "mock_wavecal.fits")
+    wc_name = os.path.join(output_dir, "mock_wavecal.fits")
+    wavecal_load = WaveCal(wc_name)
+    assert np.array_equal(wavecal_load.data, wavecal.data)
+    assert np.array_equal(wavecal_load.err, wavecal.err)
+    assert np.array_equal(wavecal.pos_lookup, wavecal_load.pos_lookup)
+    
+    #test the WaveCal without saving the position lookup table
+    wave_without = steps.create_wave_cal(disp_model, wave_zero, ref_wavlen = ref_wavlen, lookup_table = False)
+    assert not hasattr(wave_without, 'pos_lookup')
+    
+    wave_without.save(filedir = output_dir, filename = "mock_wavecal_without.fits")
+    wc_name_wo = os.path.join(output_dir, "mock_wavecal_without.fits")
+    wave_without_load = WaveCal(wc_name_wo)
+    
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_psf_centroid()
     test_dispersion_model()
     test_read_cent_wave()
     test_calibrate_dispersion_model()
+    test_wave_zeropoint()
+    test_wave_cal()

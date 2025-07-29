@@ -3,10 +3,12 @@ import glob
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
+from scipy.interpolate import interp1d
 import corgidrp
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, WaveCal
 import os
 from astropy.io import ascii, fits
+from astropy.table import Table
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
@@ -627,3 +629,116 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'P
     )
 
     return corgi_dispersion_profile
+
+
+def create_wave_cal(disp_model, wave_zeropoint, ref_wavlen, bandpass_frac = 0.17, pixel_pitch_um=13.0, lookup_table = True):
+    """
+    Create a wavelength calibration map and a wavelength-position lookup table,
+    given a dispersion model and a wavelength zero-point and store it in WaveCal calibration class
+
+    Args:
+        disp_model (data.DispersionModel): Dispersion model object
+        wave_zeropoint (data.WavelengthZeropoint): Wavelength zero-point data object
+        ref_wavlen (float): Reference wavelength of the bandpass, in nanometers
+        bandpass_frac (float): FWHM of bandpass/central_wavelength
+        pixel_pitch_um (float): EXCAM pixel pitch in microns
+        lookup_table (boolean): if true an position lookup table extension is appended
+    
+    Returns:
+        data.WaveCal: 
+        WaveCal object that contains:
+        wavlen_map (numpy.ndarray): 2-D wavelength calibration map. Each image
+        pixel value is a wavelength in units of nanometers, computed for the
+        dispersion profile, zero-point position, coordinates, and image shape
+        specified in the input wavelength zero-point object.
+        wavlen_uncertainty (numpy.ndarray): 2-D array of wavelength calibration map
+        uncertainty values in units of nanometers.
+        pos_lookup_table (astropy.table.table.Table): Wavelength-to-position
+        lookup table, computed for the dispersion profile, zero-point position,
+        coordinates, and image shape specified in the input wavelength
+        zero-point object. The table contains 5 columns: wavelength, x, x
+        uncertainty, y, y uncertainty.
+
+    """
+
+    pos_vs_wavlen_poly = np.poly1d(disp_model.pos_vs_wavlen_polycoeff)
+    wavlen_vs_pos_poly = np.poly1d(disp_model.wavlen_vs_pos_polycoeff)
+    wavlen_c = ref_wavlen
+    d_zp_mm = pos_vs_wavlen_poly((wave_zeropoint.wavlen - wavlen_c) / wavlen_c)
+
+    pixel_pitch_mm = pixel_pitch_um * 1E-3
+    theta = np.deg2rad(disp_model.clocking_angle)
+    x_c, y_c = (wave_zeropoint.x - d_zp_mm * np.cos(theta) / pixel_pitch_mm,
+                wave_zeropoint.y - d_zp_mm * np.sin(theta) / pixel_pitch_mm)
+
+    yy, xx = np.indices(wave_zeropoint.image_shape)
+    dd_mm = (xx - x_c) * np.cos(theta) + (yy - y_c) * np.sin(theta) * pixel_pitch_mm
+    wavlen_map = wavlen_vs_pos_poly(dd_mm)
+
+    delta_wav = 0.5
+    n_wav = int(ref_wavlen * bandpass_frac / delta_wav)
+    n_wav_odd = n_wav + (n_wav % 2 == 0) # force odd array length
+    wavlen_beg = ref_wavlen - n_wav_odd // 2 * delta_wav
+    wavlen_end = ref_wavlen + n_wav_odd // 2 * delta_wav
+    
+    wavlens = np.linspace(wavlen_beg, wavlen_end, n_wav_odd)
+    np.testing.assert_almost_equal(wavlens[n_wav_odd // 2], ref_wavlen)
+        
+    # Use a Monte Carlo error propagation to estimate the uncertainties of the
+    # values in the wavelength calibration map and the position lookup table. 
+    ntrials = 1000
+    polyfit_order = len(disp_model.pos_vs_wavlen_polycoeff) - 1
+    prand_wavlen_pos = np.zeros((ntrials, polyfit_order + 1))
+    prand_pos_wavlen = np.zeros((ntrials, polyfit_order + 1))
+    
+    # Add the wavelength zero-point position error to the dispersion profile uncertainty 
+    d_zp_err_mm = np.sqrt((wave_zeropoint.xerr * np.cos(theta))**2 + (wave_zeropoint.yerr * np.sin(theta))**2) * pixel_pitch_mm
+    # To translate the position uncertainty to wavelength uncertainty, use the second coefficient of the
+    # the wavelength(x) polynomial, which is the linear dispersion coefficient (units nm/mm).
+    d_zp_err_nm = disp_model.wavlen_vs_pos_polycoeff[2] * d_zp_err_mm 
+    disp_model.pos_vs_wavlen_cov[polyfit_order, polyfit_order] += d_zp_err_mm**2
+    disp_model.wavlen_vs_pos_cov[polyfit_order, polyfit_order] += d_zp_err_nm**2 
+
+    # Generate random polynomial coefficients consistent with the covariance
+    # matrix in the dispersion profile.
+    for ii in range(ntrials):
+        prand_wavlen_pos[ii] = np.random.multivariate_normal(disp_model.wavlen_vs_pos_polycoeff, cov=disp_model.wavlen_vs_pos_cov)
+        prand_pos_wavlen[ii] = np.random.multivariate_normal(disp_model.pos_vs_wavlen_polycoeff, cov=disp_model.pos_vs_wavlen_cov)
+
+    ws = (wavlens - wavlen_c) / wavlen_c
+    ds_mm = pos_vs_wavlen_poly(ws)
+    
+    ds_vander = np.vander(ds_mm, N=polyfit_order+1, increasing=False)
+    ws_vander = np.vander(ws, N=polyfit_order+1, increasing=False)
+    
+    wavlen_rand_eval = prand_wavlen_pos.dot(ds_vander.T)
+    pos_rand_eval = prand_pos_wavlen.dot(ws_vander.T)
+    pos_eval_std = np.std(pos_rand_eval, axis=0)
+    wavlen_eval_std = np.std(wavlen_rand_eval, axis=0)
+    
+    pos_vs_wavlen_err_func = interp1d(wavlens, pos_eval_std, fill_value="extrapolate")
+    wavlen_vs_pos_err_func = interp1d(ds_mm, wavlen_eval_std, fill_value="extrapolate")
+
+    # Wavelength uncertainty map
+    wavlen_uncertainty_map = wavlen_vs_pos_err_func(dd_mm)
+
+    if lookup_table:
+        # Build the position lookup table 
+        ds_eval = pos_vs_wavlen_poly((wavlens - wavlen_c) / wavlen_c) / pixel_pitch_mm
+        xs_eval, ys_eval = (x_c + ds_eval * np.cos(theta),
+                            y_c + ds_eval * np.sin(theta))
+        pos_lookup_1d = (wavlens, xs_eval, ys_eval)
+    
+        xs_uncertainty, ys_uncertainty = (np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.cos(theta)),
+                                          np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.sin(theta)))
+
+        pos_lookup_table = Table((wavlens, xs_eval, xs_uncertainty, ys_eval, ys_uncertainty),
+                                 names=('Wavelength (nm)', 'x (column)', 'x uncertainty', 'y (row)', 'y uncertainty'))
+    else:
+        pos_lookup_table = None
+    
+    wavecal = WaveCal(wavlen_map, err = wavlen_uncertainty_map, pri_hdr = disp_model.pri_hdr.copy(), ext_hdr = disp_model.ext_hdr.copy(),pos_lookup = pos_lookup_table)
+
+    return wavecal
+
+
