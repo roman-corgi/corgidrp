@@ -413,4 +413,4 @@ if __name__ == "__main__":
     test_read_cent_wave()
     test_calibrate_dispersion_model()
     test_wave_zeropoint()
-    test_wave_cal()
+    test_create_wave_cal()
