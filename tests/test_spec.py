@@ -370,9 +370,9 @@ def test_wave_zeropoint():
     assert w_zero_load.image_shape[0] == wave_0.get("shape0")
     assert w_zero_load.image_shape[1] == wave_0.get("shape1")
 
-def test_wave_cal():
+def test_create_wave_cal():
     """
-    test the WaveCal calibration class.
+    test the WaveCal calibration class and generation of wavelength map.
     """
     wave_zero_name = os.path.join(output_dir, "mock_wave_zeropoint.fits")
     wave_zero = WavelengthZeropoint(wave_zero_name)
@@ -386,6 +386,7 @@ def test_wave_cal():
     assert len(wavecal.pos_lookup.colnames) == 5
     assert np.allclose(wavecal.pos_lookup.columns[0].data, ref_wavlen, atol = 65)
     
+    #test the saving and loading of the cal file
     wavecal.save(filedir = output_dir, filename = "mock_wavecal.fits")
     wc_name = os.path.join(output_dir, "mock_wavecal.fits")
     wavecal_load = WaveCal(wc_name)
@@ -396,10 +397,14 @@ def test_wave_cal():
     #test the WaveCal without saving the position lookup table
     wave_without = steps.create_wave_cal(disp_model, wave_zero, ref_wavlen = ref_wavlen, lookup_table = False)
     assert not hasattr(wave_without, 'pos_lookup')
+    assert np.array_equal(wave_without.data, wavecal.data)
+    assert np.allclose(wave_without.err, wavecal.err, atol = 0.15)
     
     wave_without.save(filedir = output_dir, filename = "mock_wavecal_without.fits")
     wc_name_wo = os.path.join(output_dir, "mock_wavecal_without.fits")
     wave_without_load = WaveCal(wc_name_wo)
+    assert np.array_equal(wave_without_load.data, wave_without.data)
+    assert np.array_equal(wave_without_load.err, wave_without.err)
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
