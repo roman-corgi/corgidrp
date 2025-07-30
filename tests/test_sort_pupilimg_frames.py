@@ -192,6 +192,8 @@ def make_minimal_image(
     hdul[1].header['EXPTIME'] = exptime_sec
     # Add corresponding VISTYPE
     hdul[0].header['VISTYPE'] = 'PUPILIMG'
+    hdul[1].header['DPAMNAME'] = 'PUPIL,PUPIL_FFT' #from latest update of TVAC files from SSC
+    hdul[1].header['CFAMNAME'] = 'CLEAR' # would have actual filter names, but for now, just shouldn't be 'DARK'
     year=exthd['DATETIME'][:4]
     month=exthd['DATETIME'][5:7]
     day=exthd['DATETIME'][8:10]
@@ -420,16 +422,6 @@ def setup_module():
         exptimes += [fits.getheader(filename, 1)['EXPTIME']]
         filename_w_change_list += [filename]
         idx_frame += 1
-    
-    # Find indices of repeated values in filename_wo_change_list and filename_w_change_list
-    # def find_repeated_indices(lst):
-    #     value_indices = defaultdict(list)
-    #     for idx, val in enumerate(lst):
-    #         value_indices[val].append(idx)
-    #     return {val: idxs for val, idxs in value_indices.items() if len(idxs) > 1}
-
-    # repeated_indices_wo_change = find_repeated_indices(filename_wo_change_list)
-    # repeated_indices_w_change = find_repeated_indices(filename_w_change_list). XXX
 
     # Shuffle file order randomly
     random.shuffle(filename_wo_change_list)
@@ -457,7 +449,7 @@ def test_kgain_sorting():
     dataset is consistent with the input dataset. K-gain uses unity gain
     frames only. No need to test both non-linearity subsets of data.
     """
-    dataset_kgain = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='k-gain')
+    dataset_kgain = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='k-gain', actual_visit=True)
 
     # Checks
     n_mean_frame = 0
@@ -518,7 +510,7 @@ def test_nonlin_sorting_wo_change():
     identical exposure times among the different subsets of non-unity gain
     used to calibrate non-linearity
     """        
-    dataset_nonlin_wo_change = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='non-lin')
+    dataset_nonlin_wo_change = sorting.sort_pupilimg_frames(dataset_wo_change, cal_type='non-lin',actual_visit=True)
 
     # Checks
     n_mean_frame = 0
@@ -581,7 +573,7 @@ def test_nonlin_sorting_w_change():
     different exposure times among the different subsets of non-unity gain
     used to calibrate non-linearity
     """
-    dataset_nonlin_w_change = sorting.sort_pupilimg_frames(dataset_w_change, cal_type='non-lin')
+    dataset_nonlin_w_change = sorting.sort_pupilimg_frames(dataset_w_change, cal_type='non-lin',actual_visit=True)
 
     # Checks
     n_mean_frame = 0
