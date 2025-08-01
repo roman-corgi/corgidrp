@@ -218,7 +218,6 @@ def fit_psf_centroid(psf_data, psf_template,
     # Use the center of mass as a starting point if positions were not provided.
     if xcent_template is None or ycent_template is None: 
         xcom_template, ycom_template = np.rint(get_center_of_mass(psf_template))
-        xcent_template, ycent_template = xcom_template, ycom_template
     else:
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
@@ -240,21 +239,12 @@ def fit_psf_centroid(psf_data, psf_template,
     xoffset_guess, yoffset_guess = (0.0, 0.0)
     amp_guess = np.sum(psf_data) / np.sum(psf_template)
     guess_params = (xoffset_guess, yoffset_guess, amp_guess)
-
     registration_result = optimize.minimize(psf_registration_costfunc, guess_params, 
                                          args=(template_stamp, data_stamp), 
-                                         method='Nelder-Mead',  # Change to Nelder-Mead for better convergence
-                                         options={'maxiter': 5000})
-    
+                                         method='Powell')
+
     if not registration_result.success:
         print(f"Warning: Registration optimization did not converge: {registration_result.message}")
-    
-    # Don't round the template positions
-    #xcom_template, ycom_template = xcent_template, ycent_template
-    #xcom_data, ycom_data = xcent_guess, ycent_guess
-    
-    #xfit = xcom_template + registration_result.x[0]
-    #yfit = ycom_template + registration_result.x[1]
     
     xfit = xcent_template + (xcom_data - xcom_template) + registration_result.x[0]
     yfit = ycent_template + (ycom_data - ycom_template) + registration_result.x[1]
@@ -316,7 +306,7 @@ def get_template_dataset(dataset):
             raise AttributeError("we do not (yet) have template files for slit " + slit)
     else:
         #filtersweep
-        filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_offset_prism3_filtersweep_*.fits")))
+        filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_prism3_filtersweep_*.fits")))
         filtersweep = True
     return Dataset(filenames), filtersweep
             
@@ -327,10 +317,10 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
 
     Args:
         dataset (Dataset): Dataset containing 2D PSF images. Each image must include pri_hdr and ext_hdr.
-        template_dataset (dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template path is taken
+        template_dataset (Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template path is taken
         initial_cent (dict): Dictionary with initial guesses for PSF centroids.
                              Must include keys 'xcent' and 'ycent', each mapping to an array of shape (N,).
-        filtersweep (bool): If True, it uses a filter sweep/scan dataset.
+        filtersweep (bool): If True, it uses a filter sweep/scan dataset, this parameter is only relevant if template_dataset is not None.
         halfwidth (int): Half-width of the PSF fitting box.
         halfheight (int): Half-height of the PSF fitting box.
         verbose (bool): If True, prints fitted centroid values for each frame.
@@ -367,7 +357,6 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
             ycent_temp.append(None)    
     xcent_temp = np.asarray(xcent_temp)
     ycent_temp = np.asarray(ycent_temp)
-    
     centroids = np.zeros((len(dataset), 2))
     centroids_err = np.zeros((len(dataset), 2))
 
@@ -377,15 +366,15 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     filters = []
     for idx, frame in enumerate(dataset):
         cfam = frame.ext_hdr['CFAMNAME']
+        filters.append(cfam)
         psf_data = frame.data
         if xcent is None:
             xguess, yguess = None, None
         else:
             xguess = xcent[idx]
             yguess = ycent[idx]
-        
+            
         if filtersweep:
-            filters.append(cfam)
             found_cfam = False
             for k, temp_frame in enumerate(template_dataset):
                 cfam_temp = temp_frame.ext_hdr['CFAMNAME']
@@ -428,6 +417,8 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
     
     if filtersweep:
         ext_hdr_centroid['FILTERS'] = ",".join(filters)
+    else:
+        ext_hdr_centroid['FILTERS'] = filters[0]
     calibration = SpectroscopyCentroidPSF(
         centroids,
         pri_hdr=pri_hdr_centroid,

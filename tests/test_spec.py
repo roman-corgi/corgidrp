@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
+from corgidrp.data import Dataset, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
 from corgidrp.spec import get_template_dataset
@@ -68,11 +68,12 @@ def convert_tvac_to_dataset():
                 file_names.append("spec_unocc_noslit_offset_prism3_3d_" +num+".fits")
             else:
                 file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
-
-        dataset = Dataset(psf_images)
-        dataset.save(filedir=template_dir, filenames = file_names)
+        
+        #for now only one image needed as template
+        dataset = Dataset([psf_images[0]])
+        dataset.save(filedir=template_dir, filenames = [file_names[0]])
     
-    file_path_filtersweep = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
+    file_path_filtersweep = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits")
     psf_array = fits.getdata(file_path_filtersweep, ext = 0)
     psf_table = Table(fits.getdata(file_path_filtersweep, ext = 1))
     psf_header = fits.getheader(file_path_filtersweep, ext = 0)
@@ -112,7 +113,7 @@ def convert_tvac_to_dataset():
             num = "0"+str(i)
         else:
             num = str(i)
-        file_names.append("spec_unocc_noslit_offset_prism3_filtersweep_" +num+".fits")
+        file_names.append("spec_unocc_noslit_prism3_filtersweep_" +num+".fits")
     dataset = Dataset(psf_images)
     dataset.save(filedir=template_dir, filenames = file_names)
 
@@ -202,9 +203,9 @@ def test_psf_centroid():
     assert np.all(calibration.yfit_err < errortol_pix)
     assert np.all(calibration_2.xfit_err < errortol_pix)
     assert np.all(calibration_2.yfit_err < errortol_pix)
-    #accuracy lower without initial guess
-    assert np.all(np.abs(calibration_2.xfit - initial_cent["xcent"]) < 1)
-    assert np.all(np.abs(calibration_2.yfit - initial_cent["ycent"]) < 3)
+    #accuracy better without initial guess
+    assert np.all(np.abs(calibration_2.xfit - initial_cent["xcent"]) < errortol_pix)
+    assert np.all(np.abs(calibration_2.yfit - initial_cent["ycent"]) < errortol_pix)
     
     #use the default template file as input
     temp_dataset, filtersweep = get_template_dataset(dataset)
