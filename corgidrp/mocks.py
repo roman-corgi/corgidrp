@@ -102,38 +102,44 @@ detector_areas_test= {
 
 def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     """
-    Creates an empty primary header and an Image extension header with currently
-        defined keywords by reading from the RST documentation file.
-
+    Creates default L1 headers by reading values from the l1.rst documentation file.
+    
     Args:
-        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
-        vistype (str): Visit type. Defaults to "TDEMO"
-
+        arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
+        vistype (str): Visit type. Defaults to "TDEMO".
+    
     Returns:
         tuple:
-            prihdr (fits.Header): Primary FITS Header
-            exthdr (fits.Header): Extension FITS Header
-
+            prihdr (fits.Header): Primary FITS header with L1 keywords
+            exthdr (fits.Header): Extension FITS header with L1 keywords
+    
     """
-    import os
-    import re
-    
-    dt = datetime.datetime.now(datetime.timezone.utc)
-    dt_str = dt.isoformat() 
-    
+    # Create empty headers
     prihdr = fits.Header()
     exthdr = fits.Header()
-
-    if arrtype == "SCI":
-        NAXIS1 = 2200
-        NAXIS2 = 1200
-    else:
-        NAXIS1 = 2200
-        NAXIS2 = 2200
-
-    # Read header values from RST documentation
+    
+    # Set up dynamic values
+    dt_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    NAXIS1 = 2200 if arrtype == "ENG" else 1200
+    NAXIS2 = 2200 if arrtype == "ENG" else 1200
+    
     def parse_rst_table(rst_file_path, section_name, stop_at=None):
-        """Parse RST table and extract keyword-value pairs."""
+        """
+        Parse .rst file and extract keyword-value pairs from a specified section.
+        
+        Args:
+            rst_file_path (str): Path to the RST file to parse
+            section_name (str): Name of the section to find (e.g., "Primary Header (HDU 0)")
+            stop_at (str, optional): Section name to stop parsing at. If provided, 
+                                   parsing stops before this section. Defaults to None.
+        
+        Returns:
+            keyword_values (dict): Dictionary mapping keyword names to their parsed values. 
+                Values are converted to appropriate Python types (int, float, bool, str) based
+                on the datatype column in the RST table.
+        
+        """
+
         keyword_values = {}
         
         if not os.path.exists(rst_file_path):
@@ -239,37 +245,57 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
 
 def create_default_L1_TrapPump_headers(arrtype="SCI"):
     """
-    Creates an empty primary header and an Image extension header with currently
-        defined keywords by reading from the RST documentation file, plus trap pumping specific keywords.
-
-    Args:
-        arrtype (str): Array type (SCI or ENG). Defaults to "SCI". 
-
-    Returns:
-        tuple:
-            prihdr (fits.Header): Primary FITS Header
-            exthdr (fits.Header): Extension FITS Header
-
-    """
-    import os
-    import re
+    Creates default L1 trap pump headers by reading values from the l1.rst documentation file.
     
-    dt = datetime.datetime.now(datetime.timezone.utc)
-    dt_str = dt.isoformat() 
-
+    Args:
+        arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
+    
+    Returns:
+        tuple: 
+            prihdr (fits.Header): Primary FITS header with L1 trap pump keywords
+            exthdr (fits.Header): Extension FITS header with L1 trap pump keywords
+    
+    """
+    # Create empty headers
     prihdr = fits.Header()
     exthdr = fits.Header()
-
-    if arrtype == "SCI":
-        NAXIS1 = 2200
-        NAXIS2 = 1200
-    else:
-        NAXIS1 = 2200
-        NAXIS2 = 2200
-
-    # Read header values from RST documentation
+    
+    # Set up dynamic values
+    dt_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    NAXIS1 = 2200 if arrtype == "ENG" else 1200
+    NAXIS2 = 2200 if arrtype == "ENG" else 1200
+    
     def parse_rst_table(rst_file_path, section_name, stop_at=None):
-        """Parse RST table and extract keyword-value pairs."""
+        """
+        Parse a reStructuredText file and extract keyword-value pairs from a specified section.
+        
+        This function reads an RST file, finds a specific section containing a table,
+        and extracts keyword-value pairs from the table rows. It supports type conversion
+        based on the datatype column in the table.
+        
+        Args:
+            rst_file_path (str): Path to the RST file to parse
+            section_name (str): Name of the section to find (e.g., "Primary Header (HDU 0)")
+            stop_at (str, optional): Section name to stop parsing at. If provided, 
+                                   parsing stops before this section. Defaults to None.
+        
+        Returns:
+            dict: Dictionary mapping keyword names to their parsed values. Values are
+                  converted to appropriate Python types (int, float, bool, str) based
+                  on the datatype column in the RST table.
+        
+        Example:
+            >>> values = parse_rst_table("l1.rst", "Primary Header (HDU 0)")
+            >>> print(values)
+            {'SIMPLE': True, 'BITPIX': 16, 'NAXIS': 0, ...}
+        
+        Notes:
+            - The function expects RST tables with columns: | keyword | datatype | example_value | description |
+            - Supported datatypes: 'int', 'float', 'bool', 'str'
+            - Table header rows are automatically skipped
+            - If a section is not found, an empty dictionary is returned
+            - If the RST file doesn't exist, a warning is printed and an empty dict is returned
+        """
         keyword_values = {}
         
         if not os.path.exists(rst_file_path):
@@ -1314,9 +1340,9 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
 
 def nonlin_coefs(filename,EMgain,order):
     """
-    Reads TVAC nonlinearity table from location specified by ‘filename’.
-    The column in the table closest to the ‘EMgain’ value is selected and fits
-    a polynomial of order ‘order’. The coefficients of the fit are adjusted so
+    Reads TVAC nonlinearity table from location specified by 'filename'.
+    The column in the table closest to the 'EMgain' value is selected and fits
+    a polynomial of order 'order'. The coefficients of the fit are adjusted so
     that the polynomial function equals unity at 3000 DN. Outputs array polynomial
     coefficients, array of DN values from the TVAC table, and an array of the
     polynomial function values for all the DN values.
@@ -2418,7 +2444,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, 100, temp)
             # add in 'CENel1' trap for all phase times
         #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
-        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+    #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
             add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, 100, temp)
             add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, 100, temp)
             # add in 'RHSel1' trap for more than length limit (but diff lengths)
@@ -2501,7 +2527,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, phase_times, temp)
             # add in 'CENel1' trap for all phase times
         #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
-        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+    #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
             add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, phase_times, temp)
             add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, phase_times, temp)
             # add in 'RHSel1' trap for more than length limit (but diff lengths)
@@ -3142,7 +3168,7 @@ def create_ct_psfs_with_mask(fwhm_mas, cfam_name='1F', n_psfs=10, image_shape=(1
     Returns:
         data_psf (list): List of Image objects with the PSF stamp inserted.
         psf_loc (np.array): Array of PSF locations.
-        half_psf (np.array): Array of “half” throughput values (roughly total_counts/2 after mask).
+        half_psf (np.array): Array of "half" throughput values (roughly total_counts/2 after mask).
     """
     # Set up headers, error, and dq arrays.
     prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
@@ -4097,7 +4123,7 @@ def create_synthetic_satellite_spot_image(
             plus the `angle_offset`. Positive offsets rotate the Gaussians counterclockwise.
         amplitude_multiplier (float, optional):  
             Multiplier for the amplitude of the Gaussians relative to `bg_sigma`. By default, each 
-            Gaussian’s amplitude is 10 * `bg_sigma`.
+            Gaussian's amplitude is 10 * `bg_sigma`.
 
     Returns:
         numpy.ndarray:  
