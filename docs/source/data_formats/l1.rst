@@ -280,65 +280,65 @@ Image Header (HDU 1)
 +------------+------------+--------------------------------+----------------------------------------------------+
 | Z14AVG     | float      | 0.0                            | Avg Z14 value (shear Y) coefficient for 10000 samples |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAM_H     | float      | 1001.3                         | SPAM absolute position of the H-axis in microns    |
+| SPAM_H     | float      | 0.0                            | SPAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAM_V     | float      | 16627                          | SPAM absolute position of the V-axis in microns    |
+| SPAM_V     | float      | 0.0                            | SPAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | SPAMNAME   | str        | OPEN                           | Closest named SPAM position, calculated from SPAM_H/V keywords |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAMSP_H   | float      | 1001.3                         | SPAM set point H. The default H position corresponding to the closest SPAM named position |
+| SPAMSP_H   | float      | 0.0                            | SPAM set point H. The default H position corresponding to the closest SPAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| SPAMSP_V   | float      | 16627                          | SPAM set point V. The default V position corresponding to the closest SPAM named position |
+| SPAMSP_V   | float      | 0.0                            | SPAM set point V. The default V position corresponding to the closest SPAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAM_H     | float      | 6757.2                         | FPAM absolute position of the H-axis in microns    |
+| FPAM_H     | float      | 0.0                            | FPAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAM_V     | float      | 22424                          | FPAM absolute position of the V-axis in microns    |
+| FPAM_V     | float      | 0.0                            | FPAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FPAMNAME   | str        | HLC12_C2R1                     | Closest named FPAM position, calculated from FPAM_H/V and FPAM lookup table |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAMSP_H   | float      | 6757.2                         | FPAM set point H. The default H position corresponding to the closest FPAM named position |
+| FPAMSP_H   | float      | 0.0                            | FPAM set point H. The default H position corresponding to the closest FPAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FPAMSP_V   | float      | 22424                          | FPAM set point V. The default V position corresponding to the closest FPAM named position |
+| FPAMSP_V   | float      | 0.0                            | FPAM set point V. The default V position corresponding to the closest FPAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAM_H     | float      | 36898.7                        | LSAM absolute position of the H-axis in microns    |
+| LSAM_H     | float      | 0.0                            | LSAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAM_V     | float      | 4636.2                         | LSAM absolute position of the V-axis in microns    |
+| LSAM_V     | float      | 0.0                            | LSAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | LSAMNAME   | str        | NFOV                           | Closest named LSAM position, calculated from LSAM_H/V and LSAM lookup table |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAMSP_H   | float      | 36898.7                        | LSAM set point H. The default H position corresponding to the closest LSAM named position |
+| LSAMSP_H   | float      | 0.0                            | LSAM set point H. The default H position corresponding to the closest LSAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| LSAMSP_V   | float      | 4636.2                         | LSAM set point V. The default V position corresponding to the closest LSAM named position |
+| LSAMSP_V   | float      | 0.0                            | LSAM set point V. The default V position corresponding to the closest LSAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSAM_H     | float      | 29387                          | FSAM absolute position of the H-axis in microns    |
+| FSAM_H     | float      | 0.0                            | FSAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSAM_V     | float      | 12238                          | FSAM absolute position of the V-axis in microns    |
+| FSAM_V     | float      | 0.0                            | FSAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | FSAMNAME   | str        | R1C1                           | Closest named FSAM position, calculated from FSAM_H/V and FSAM lookup table |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSAMSP_H   | float      | 29387                          | FSAM set point H. The default H position corresponding to the closest FSAM named position |
+| FSAMSP_H   | float      | 0.0                            | FSAM set point H. The default H position corresponding to the closest FSAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| FSAMSP_V   | float      | 12238                          | FSAM set point V. The default V position corresponding to the closest FSAM named position |
+| FSAMSP_V   | float      | 0.0                            | FSAM set point V. The default V position corresponding to the closest FSAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAM_H     | float      | 55829.2                        | CFAM absolute position of the H-axis in microns    |
+| CFAM_H     | float      | 0.0                            | CFAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAM_V     | float      | 10002.7                        | CFAM absolute position of the V-axis in microns    |
+| CFAM_V     | float      | 0.0                            | CFAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | CFAMNAME   | str        | 1F                             | Closest named CFAM position, calculated from CFAM_H/V and CFAM lookup table |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAMSP_H   | float      | 55829.2                        | CFAM set point H. The default H position corresponding to the closest CFAM named position |
+| CFAMSP_H   | float      | 0.0                            | CFAM set point H. The default H position corresponding to the closest CFAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| CFAMSP_V   | float      | 10002.7                        | CFAM set point V. The default V position corresponding to the closest CFAM named position |
+| CFAMSP_V   | float      | 0.0                            | CFAM set point V. The default V position corresponding to the closest CFAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAM_H     | float      | 38917.1                        | DPAM absolute position of the H-axis in microns    |
+| DPAM_H     | float      | 0.0                            | DPAM absolute position of the H-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAM_V     | float      | 26016.9                        | DPAM absolute position of the V-axis in microns    |
+| DPAM_V     | float      | 0.0                            | DPAM absolute position of the V-axis in microns    |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | DPAMNAME   | str        | IMAGING                        | Closest named DPAM calculated from DPAM_H/V and DPAM lookup table |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAMSP_H   | float      | 38917.1                        | DPAM set point H. The default H position corresponding to the closest DPAM named position |
+| DPAMSP_H   | float      | 0.0                            | DPAM set point H. The default H position corresponding to the closest DPAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
-| DPAMSP_V   | float      | 26016.9                        | DPAM set point V. The default V position corresponding to the closest DPAM named position |
+| DPAMSP_V   | float      | 0.0                            | DPAM set point V. The default V position corresponding to the closest DPAM named position |
 +------------+------------+--------------------------------+----------------------------------------------------+
 | DATETIME   | str        | 2025-02-16T00:00:00            | Time of preceding 1Hz HK packet in TAI             |
 +------------+------------+--------------------------------+----------------------------------------------------+
