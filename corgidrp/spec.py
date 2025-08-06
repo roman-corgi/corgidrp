@@ -728,7 +728,16 @@ def create_wave_cal(disp_model, wave_zeropoint, ref_wavlen, bandpass_frac = 0.17
     else:
         pos_lookup_table = None
     
-    wavecal = WaveCal(wavlen_map, err = wavlen_uncertainty_map, pri_hdr = disp_model.pri_hdr.copy(), ext_hdr = disp_model.ext_hdr.copy(),pos_lookup = pos_lookup_table)
+    exthdr = disp_model.ext_hdr.copy()
+    exthdr['prism'] = wave_zeropoint.prism
+    exthdr['wavlen0'] = wave_zeropoint.wavlen
+    exthdr['x0'] = wave_zeropoint.x
+    exthdr['x0_err'] = wave_zeropoint.xerr
+    exthdr['y0'] = wave_zeropoint.y
+    exthdr['y0_err'] = wave_zeropoint.yerr
+    exthdr['shape0'] = wave_zeropoint.image_shape[0]
+    exthdr['shape1'] = wave_zeropoint.image_shape[1]
+    wavecal = WaveCal(wavlen_map, err = wavlen_uncertainty_map, pri_hdr = disp_model.pri_hdr.copy(), ext_hdr = exthdr, pos_lookup = pos_lookup_table)
 
     return wavecal
 

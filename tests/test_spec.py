@@ -70,8 +70,8 @@ def convert_tvac_to_dataset():
                 file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
         
         #for now only one image needed as template
-        dataset = Dataset([psf_images[0]])
-        dataset.save(filedir=template_dir, filenames = [file_names[0]])
+        dataset = Dataset([psf_images[12]])
+        dataset.save(filedir=template_dir, filenames = [file_names[12]])
     
     file_path_filtersweep = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits")
     psf_array = fits.getdata(file_path_filtersweep, ext = 0)
@@ -386,6 +386,8 @@ def test_create_wave_cal():
     assert hasattr(wavecal, 'pos_lookup')
     assert len(wavecal.pos_lookup.colnames) == 5
     assert np.allclose(wavecal.pos_lookup.columns[0].data, ref_wavlen, atol = 65)
+    assert wavecal.ext_hdr['x0'] == wave_zero.x
+    assert wavecal.ext_hdr['y0'] == wave_zero.y
     
     #test the saving and loading of the cal file
     wavecal.save(filedir = output_dir, filename = "mock_wavecal.fits")
