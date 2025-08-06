@@ -221,7 +221,11 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
                     step["skip"] = True # skip this step but continue
                     step["calibs"][calib] = None
                     warnings.warn("Skipping {0} because no {1} in caldb and skip_missing_cal_steps is True".format(step['name'], calib))
-                    continue # continue on the for loop
+                    # Don't continue - set all remaining calibrations to None and return
+                    for remaining_calib in step["calibs"]:
+                        if remaining_calib != calib:
+                            step["calibs"][remaining_calib] = None
+                    return step
                 else:
                     raise # reraise exception
 

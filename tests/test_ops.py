@@ -28,7 +28,7 @@ def test_ops_produces_expected_file():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)

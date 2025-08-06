@@ -106,7 +106,7 @@ def test_exact_case():
     assert(M.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
     assert(M.ext_hdr['NAXIS2'] == rows)
     assert(M.ext_hdr['DRPNFILE'] ==n_maps.ext_hdr['DRPNFILE']) 
-    assert(M.filename == 'Mock0_DRK_CAL.fits')
+    assert(M.filename == 'Mock0_drk_cal.fits')
     assert('EM gain = '+str(g) in str(M.ext_hdr['HISTORY']))
     assert('exptime = '+str(t) in str(M.ext_hdr['HISTORY']))
 
@@ -122,7 +122,7 @@ def test_exact_case():
     assert(M_copy.ext_hdr['NAXIS1'] == cols) # NAXIS1 should be cols
     assert(M_copy.ext_hdr['NAXIS2'] == rows)
     assert(M_copy.ext_hdr['DRPNFILE'] ==n_maps.ext_hdr['DRPNFILE']) 
-    assert(M_copy.filename == 'Mock0_DRK_CAL.fits')
+    assert(M_copy.filename == 'Mock0_drk_cal.fits')
     assert('commanded EM gain = '+str(g) in str(M_copy.ext_hdr['HISTORY']))
     assert('exptime = '+str(t) in str(M_copy.ext_hdr['HISTORY']))
     pass
