@@ -1409,7 +1409,7 @@ class WavelengthZeropoint(Image):
 
     Attributes:
         default_keys (list): list of the key names of the available parameters.
-        params (dict): the values for various detector parameters specified here
+        params (dict): the dictionary for the wavelength zeropoint parameters specified here
         prism (str): used PRISM
         wavlen (float): wavelength of zero point
         x (float): x (column) coordinate of zero point on EXCAM array

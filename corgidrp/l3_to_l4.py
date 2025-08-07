@@ -18,6 +18,8 @@ import pyklip.rdi
 import os
 from astropy.io import fits
 from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
+from corgidrp.spec import compute_wave_zeropoint, compute_psf_centroid, calibrate_dispersion_model, create_wave_cal
+
 
 def distortion_correction(input_dataset, astrom_calibration):
     """
@@ -808,6 +810,19 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
+def wave_cal(input_dataset, template_dataset = None, ref_wavlen = 730., halfwidth=10, halfheight=10, pixel_pitch_um = 13.0, bandpass_frac = 0.17):
+    dataset = input_dataset.copy()
+    wave_zero = compute_wave_zeropoint(dataset, template_dataset = template_dataset)
+    spec_centroids = compute_psf_centroid(dataset, template_dataset, halfwidth = halfwidth, halfheight = halfheight)
+    disp_model = calibrate_dispersion_model(spec_centroids, pixel_pitch_um = pixel_pitch_um)
+    wave_cal = create_wave_cal(disp_model, wave_zero, ref_wavlen = ref_wavlen, bandpass_frac = bandpass_frac, pixel_pitch_um = pixel_pitch_um)
+    
+    for frames in dataset:
+        frames.add_extension_hdu("WAVE", data = wave_cal.data, header = wave_cal.ext_hdr)
+        frames.add_extension_hdu("WAVE_ERR", data = wave_cal.err, header = wave_cal.err_hdr)
+    history_msg = "wavelength map extension added"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """

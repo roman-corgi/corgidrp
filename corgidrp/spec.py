@@ -5,7 +5,7 @@ import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d
 import corgidrp
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, WaveCal
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, WaveCal, WavelengthZeropoint
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
@@ -311,8 +311,48 @@ def get_template_dataset(dataset):
         filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_prism3_filtersweep_*.fits")))
         filtersweep = True
     return Dataset(filenames), filtersweep
-            
 
+def compute_wave_zeropoint(dataset, template_dataset = None):
+    """ 
+    A procedure for estimating the centroid of the zero-point image
+    (satellite spot or PSF) taken through the narrowband filter and slit.
+
+    Args:
+        dataset (Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        template_dataset (Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template path is taken
+    
+    Returns:
+        WavelengthZeropoint: object containing the values, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
+                                                   new_all_dq=np.array(new_all_dq) of the wavelength zero point 
+    """
+    slit = dataset.frames[0].ext_hdr['FSAMNAME']
+    if not slit.startswith("R"):
+        raise ValueError("not a slit observation")
+    filter = dataset.frames[0].ext_hdr['CFAMNAME']
+    prism = 'PRISM'+filter[0]
+    if filter[0] == 2:
+        ref_wavlen = 660.
+    elif filter[0] == 3:
+        ref_wavlen = 730.
+    else:
+        raise ValueError("band {0} not available".format(filter[0]))
+    
+    # Assumed that only sat spots frames are taken to fit the zeropoint
+    split_dataset, vals = dataset.split_dataset(pri_hdr = ["SATSPOTS"])
+    satspot_dataset = split_dataset[np.nonzero(np.array(vals))[0][0]]
+    
+    spot_centroids = compute_psf_centroid(dataset = satspot_dataset, template_dataset = template_dataset)
+    wave_zero_dict = {'prism' : prism, 
+                      'wavlen': ref_wavlen, 
+                      'x': np.mean(spot_centroids.xfit),
+                      'xerr': np.mean(spot_centroids.xfit_err), 
+                      'y': np.mean(spot_centroids.yfit), 
+                      'yerr': np.mean(spot_centroids.yfit_err), 
+                      'shape0': dataset.frames[0].ext_hdr['NAXIS1'], 
+                      'shape1': dataset.frames[0].ext_hdr['NAXIS2']}
+    wave_zero = WavelengthZeropoint(wave_zero_dict)
+    return wave_zero
+    
 def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False, halfwidth=10, halfheight=10, verbose = False):
     """
     Compute PSF centroids for a grid of PSFs and return them as a calibration object.
