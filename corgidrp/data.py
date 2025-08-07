@@ -1449,6 +1449,7 @@ class AstrometricCalibration(Image):
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
