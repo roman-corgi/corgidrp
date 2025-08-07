@@ -677,7 +677,7 @@ class Dark(Image):
                 if self.filename == '':
                     self.filename = "drk_cal.fits" # we shouldn't normally be here, but we default to something just in case. 
                 else:
-                    self.filename = self.filename.replace("_dnm_cal", "")
+                    self.filename = self.filename.replace("_dnm_cal", "_drk_cal")
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
