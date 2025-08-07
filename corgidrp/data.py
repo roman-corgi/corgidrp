@@ -34,7 +34,12 @@ class Dataset():
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
         """
         if len(frames_or_filepaths) == 0:
-            raise ValueError("Empty list passed in")
+            # Create an empty dataset instead of raising an error
+            self.frames = np.array([])
+            self.all_data = np.array([])
+            self.all_err = np.array([])
+            self.all_dq = np.array([])
+            return
 
         if isinstance(frames_or_filepaths[0], str):
             # list of filepaths
@@ -677,7 +682,7 @@ class Dark(Image):
                 if self.filename == '':
                     self.filename = "drk_cal.fits" # we shouldn't normally be here, but we default to something just in case. 
                 else:
-                    self.filename = self.filename.replace("_dnm_cal", "")
+                    self.filename = self.filename.replace("_dnm_cal", "_drk_cal")
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
@@ -1602,6 +1607,9 @@ class FluxcalFactor(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
+            # Remove data level suffix before appending calibration suffix
+            import re
+            orig_input_filename = re.sub('_l[0-9].', '', orig_input_filename)
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_L[0-9].', '', self.filename)
