@@ -628,7 +628,6 @@ def create_wave_cal(disp_model, wave_zeropoint, bandpass_frac = 0.17, pixel_pitc
     Args:
         disp_model (data.DispersionModel): Dispersion model calibration object
         wave_zeropoint (dict): Wavelength zero-point dictionary
-        ref_wavlen (float): Reference wavelength of the bandpass, in nanometers
         bandpass_frac (float): FWHM of bandpass/central_wavelength
         pixel_pitch_um (float): EXCAM pixel pitch in microns
     
@@ -639,7 +638,7 @@ def create_wave_cal(disp_model, wave_zeropoint, bandpass_frac = 0.17, pixel_pitc
         specified in the input wavelength zero-point object.
         wavlen_uncertainty (numpy.ndarray): 2-D array of wavelength calibration map
         uncertainty values in units of nanometers.
-        pos_lookup_table (astropy.table.table.Table): Wavelength-to-position
+        pos_lookup_table (astropy.table.Table): Wavelength-to-position
         lookup table, computed for the dispersion profile, zero-point position,
         coordinates, and image shape specified in the input wavelength
         zero-point object. The table contains 5 columns: wavelength, x, x
