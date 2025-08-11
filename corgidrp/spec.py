@@ -5,7 +5,7 @@ import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d
 import corgidrp
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, WaveCal
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table

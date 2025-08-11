@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel, WaveCal
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
 from corgidrp.spec import get_template_dataset
