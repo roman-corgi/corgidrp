@@ -432,10 +432,10 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         
     return calibration
 
-def read_cent_wave(filter_file, band):
+def read_cent_wave(band, filter_file = None):
     """
     read the csv filter file containing the band names and the central wavelength in nm.
-    There are 3 columns: the CFAM filter name, the (Phase C) center wavelength, the TVAC TV-40b measured center wavelength.
+    There are 4 columns: the CFAM filter name, the (Phase C) center wavelength, the TVAC TV-40b measured center wavelength and the FWHM for the 4 broad bands.
     The TVAC wavelengths are not measured for all filters, but are the preferred value if available.
     
     Args:
@@ -445,6 +445,8 @@ def read_cent_wave(filter_file, band):
     Returns:
        float: central wavelength of the filter band
     """
+    if filter_file is None:
+        filter_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
     data = ascii.read(filter_file, format = 'csv', data_start = 1)
     filter_names = data.columns[0]
     if band not in filter_names:
@@ -453,9 +455,12 @@ def read_cent_wave(filter_file, band):
         cen_wave = data.columns[2][filter_names == band][0]
     else:
         cen_wave = data.columns[1][filter_names == band][0]
+    if data.columns[3][filter_names == band]:
+        fwhm = data.columns[3][filter_names == band][0]
+        return cen_wave, fwhm
+    else:
+        return cen_wave
     
-    return cen_wave
-
 def estimate_dispersion_clocking_angle(xpts, ypts, weights):
     """ 
     Estimate the clocking angle of the dispersion axis based on the centroids of
@@ -564,20 +569,16 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     #PRISM2 not yet available
     if prism == 'PRISM2':
         subband_list = ['2A', '2B', '2C']
-        ref_wavlen = 660.0
         ref_cfam = '2'
-        #bandpass = [610, 710]
-        #halfheight = 10
+        ref_wavlen = 660.
     else:
         subband_list = ['3A', '3B', '3C', '3D', '3E', '3G']
-        ref_wavlen = 730.0
         ref_cfam = '3'
-        #bandpass = [675, 785]
-        #halfheight = 30
-        
-    if band_center_file is None:
-        band_center_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
+        ref_wavlen = 730.
     
+    ##bandpass_frac = fwhm/cen_wave, needed for the wavelength calibration
+    band_center, fwhm = read_cent_wave(ref_cfam, filter_file = band_center_file)
+    bandpass_frac = fwhm/band_center
     if 'FILTERS' not in centroid_psf.ext_hdr:
         raise AttributeError("there should be a FILTERS header keyword in the filtersweep SpectroscopyCentroidPsf")
     filters = centroid_psf.ext_hdr['FILTERS'].upper().split(",")
@@ -589,7 +590,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
         elif band_str not in subband_list:
             warnings.warn("measured band {0} is not in the sub band list {1} of the used prism".format(band_str, subband_list))
         else:
-            center_wavel.append(read_cent_wave(band_center_file,band_str))
+            center_wavel.append(read_cent_wave(band_str, filter_file = band_center_file))
     if len(center_wavel) < 4:
         raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
     center_wavel = np.array(center_wavel)
@@ -613,6 +614,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     pri_hdr = centroid_psf.pri_hdr.copy()
     ext_hdr = centroid_psf.ext_hdr.copy()
     ext_hdr["REFWAVE"] = ref_wavlen
+    ext_hdr["BANDFRAC"] = bandpass_frac
     corgi_dispersion_profile = DispersionModel(
         disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr
     )
@@ -620,7 +622,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     return corgi_dispersion_profile
 
 
-def create_wave_cal(disp_model, wave_zeropoint, bandpass_frac = 0.17, pixel_pitch_um=13.0):
+def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0):
     """
     Create a wavelength calibration map and a wavelength-position lookup table,
     given a dispersion model and a wavelength zero-point
@@ -628,7 +630,6 @@ def create_wave_cal(disp_model, wave_zeropoint, bandpass_frac = 0.17, pixel_pitc
     Args:
         disp_model (data.DispersionModel): Dispersion model calibration object
         wave_zeropoint (dict): Wavelength zero-point dictionary
-        bandpass_frac (float): FWHM of bandpass/central_wavelength
         pixel_pitch_um (float): EXCAM pixel pitch in microns
     
     Returns:
@@ -645,8 +646,9 @@ def create_wave_cal(disp_model, wave_zeropoint, bandpass_frac = 0.17, pixel_pitc
         uncertainty, y, y uncertainty.
 
     """
-    
     ref_wavlen = disp_model.ext_hdr["REFWAVE"]
+    #bandpass_frac = fwhm/cen_wave
+    bandpass_frac = disp_model.ext_hdr["BANDFRAC"]
     pos_vs_wavlen_poly = np.poly1d(disp_model.pos_vs_wavlen_polycoeff)
     wavlen_vs_pos_poly = np.poly1d(disp_model.wavlen_vs_pos_polycoeff)
     wavlen_c = ref_wavlen

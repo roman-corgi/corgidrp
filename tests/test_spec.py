@@ -14,7 +14,6 @@ spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "co
 template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
-band_file = os.path.join(spec_datadir, 'CGI_bandpass_centers.csv')
 
 def convert_tvac_to_dataset():
     """
@@ -249,12 +248,16 @@ def test_dispersion_model():
     assert np.array_equal(load_disp.wavlen_vs_pos_cov, disp_dict.get('wavlen_vs_pos_cov'))
 
 def test_read_cent_wave():
-    cen_wave = steps.read_cent_wave(band_file, '3C')
+    cen_wave = steps.read_cent_wave('3C')
     assert cen_wave == 726.0
-    cen_wave = steps.read_cent_wave(band_file, '3G')
+    cen_wave = steps.read_cent_wave('3G')
     assert cen_wave == 752.5
     with pytest.raises(ValueError):
-        cen_wave = steps.read_cent_wave(band_file, 'X')
+        cen_wave = steps.read_cent_wave('X')
+    
+    cen_wave, fwhm = steps.read_cent_wave('3')
+    assert cen_wave == 729.3
+    assert fwhm == 122.3
     
 def test_calibrate_dispersion_model():    
     """
@@ -316,7 +319,7 @@ def test_calibrate_dispersion_model():
     wavlen_func_pos = np.poly1d(disp_model.wavlen_vs_pos_polycoeff)
     
     #read the TVAC result of PRISM3 and compare
-    ref_wavlen = 730.0
+    ref_wavlen = 730.
     bandpass = [675, 785]  
     tvac_pos_vs_wavlen_polycoeff = disp_dict.get('pos_vs_wavlen_polycoeff')
     tvac_pos_vs_wavlen_cov = disp_dict.get('pos_vs_wavlen_cov')

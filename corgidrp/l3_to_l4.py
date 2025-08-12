@@ -838,7 +838,7 @@ def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0, bandpass_frac = 0
         'shapey': head['shapey0']
         }
     
-        wave_map, wave_err, pos_lookup = create_wave_cal(disp_model, wave_zero, bandpass_frac = bandpass_frac, pixel_pitch_um = pixel_pitch_um)
+        wave_map, wave_err, pos_lookup = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um)
         wave_hdr = fits.Header()
         wave_hdr["BUNIT"] = "nm"
         wave_err_hdr = fits.Header()
