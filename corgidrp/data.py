@@ -34,12 +34,7 @@ class Dataset():
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
         """
         if len(frames_or_filepaths) == 0:
-            # Create an empty dataset instead of raising an error
-            self.frames = np.array([])
-            self.all_data = np.array([])
-            self.all_err = np.array([])
-            self.all_dq = np.array([])
-            return
+            raise ValueError("Empty list passed in")
 
         if isinstance(frames_or_filepaths[0], str):
             # list of filepaths
@@ -1454,6 +1449,7 @@ class AstrometricCalibration(Image):
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1607,9 +1603,6 @@ class FluxcalFactor(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            # Remove data level suffix before appending calibration suffix
-            import re
-            orig_input_filename = re.sub('_l[0-9].', '', orig_input_filename)
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_L[0-9].', '', self.filename)
@@ -2762,14 +2755,13 @@ class NDFilterSweetSpotDataset(Image):
 def format_ftimeutc(ftime_str):
     """
     Round the input FTIMEUTC time to the nearest 0.01 sec and reformat as:
-    yyyymmddThhmmssss.
+    yyyymmddthhmmsss.
 
     Args:
         ftime_str (str): Time string in ISO format, e.g. "2025-04-15T03:05:10.21".
 
     Returns:
-        formatted_time (str): Reformatted time string that complies with documentation
-            guidelines.
+        formatted_time (str): Reformatted time string in yyyymmddthhmmsss format.
     """
     # Parse the input using fromisoformat, which can handle timezone offsets.
     try:
@@ -2781,9 +2773,8 @@ def format_ftimeutc(ftime_str):
     if ftime.tzinfo is not None:
         ftime = ftime.astimezone(timezone.utc).replace(tzinfo=None)
     
-    # Define rounding interval: 0.01 sec = 10,000 microseconds.
+    # Round to nearest 0.01 seconds (10,000 microseconds)
     rounding_interval = 10000
-    # Round the microseconds to the nearest 0.1 sec.
     rounded_microsec = int((ftime.microsecond + rounding_interval / 2) // rounding_interval * rounding_interval)
     
     # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds increment the second
@@ -2792,12 +2783,23 @@ def format_ftimeutc(ftime_str):
     else:
         ftime = ftime.replace(microsecond=rounded_microsec)
     
-    # Extract seconds (two digits) and the hundredths of seconds
+    # Format seconds with exactly 3 digits total
+    # We want the seconds part to be exactly 3 digits
+    # Format: sss where sss = seconds (00-59) + first digit of hundredths (0-9)
+    # Example: 10.21 becomes 102, 5.05 becomes 505, 59.99 becomes 599
     sec_int = ftime.second
-    tenth = int(ftime.microsecond / 10000)  # (0-99)
+    hundredths = int(ftime.microsecond / 10000)  # (0-99)
     
-    # Format as YYYYMMDDTHHMM then append seconds and hundredths of seconds
-    formatted_time = ftime.strftime("%Y%m%dt%H%M") + f"{sec_int:02d}{tenth:d}"
+    # Take only the first digit of hundredths (0-9)
+    first_hundredth = hundredths // 10
+    
+    # Combine seconds and first hundredth: ss * 10 + h
+    # This gives us a 3-digit number where the first 2 digits are seconds and last digit is tenths
+    combined_seconds = sec_int * 10 + first_hundredth
+    
+    # Format as yyyymmddthhmmsss (17 characters total)
+    # Use :03d to ensure exactly 3 digits with leading zeros if needed
+    formatted_time = ftime.strftime("%Y%m%dt%H%M") + f"{combined_seconds:03d}"
     return formatted_time
 
 
@@ -2939,3 +2941,4 @@ def get_bit_to_flag_map():
         dict: A dictionary with bit positions (int) as keys and flag names as values.
     """
     return {bit: name for name, bit in get_flag_to_bit_map().items()}
+    

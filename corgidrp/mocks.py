@@ -1780,7 +1780,16 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         err_map = None if not sim_err_map else err_map
         dq_map = None if bpix_map is None else dq_map
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr, err=err_map, dq=dq_map)
-        filename = "simcal_astrom.fits"
+        
+        # Generate proper filename: cgi_{visitid}_{timestamp}_l1_.fits
+        # Use frame index for visitid and current time for timestamp
+        from datetime import datetime
+        base_time = datetime.now()
+        # Increment time for each frame to ensure uniqueness
+        frame_time = base_time.replace(second=(base_time.second + i) % 60, minute=(base_time.minute + ((base_time.second + i) // 60)))
+        time_str = data.format_ftimeutc(frame_time.isoformat())
+        visitid = prihdr['VISITID']
+        filename = f"cgi_{visitid}_{time_str}_l1_.fits"
         frame.filename = filename
         
         if filedir is not None:
