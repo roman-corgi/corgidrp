@@ -810,7 +810,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     return processed_dataset 
 
 
-def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0, bandpass_frac = 0.17):
+def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0):
     """
     wave_cal adds the wavelength map + error as extensions to the frames
     
@@ -818,7 +818,6 @@ def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0, bandpass_frac = 0
         input_dataset (corgidrp.data.Dataset): a dataset of spectroscopy Images (L3-level)
         disp_model (corgidrp.data.DispersionModel): dispersion model of the corresponding band
         pixel_pitch_um (float): EXCAM pixel pitch in microns, default: 13.0
-        bandpass_frac (float): FWHM of bandpass/central_wavelength, default: 0.17
         
     Returns:
         corgidrp.data.Dataset: dataset with appended wavelength map and error
