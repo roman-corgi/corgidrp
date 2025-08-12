@@ -824,6 +824,50 @@ def wave_cal(input_dataset, template_dataset = None, ref_wavlen = 730., halfwidt
     dataset.update_after_processing_step(history_msg)
     return dataset
 
+def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0, bandpass_frac = 0.17):
+    """
+    wave_cal adds the wavelength map + error as extensions to the frames
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of spectroscopy Images (L3-level)
+        disp_model (corgidrp.data.DispersionModel): dispersion model of the corresponding band
+        pixel_pitch_um (float): EXCAM pixel pitch in microns, default: 13.0
+        bandpass_frac (float): FWHM of bandpass/central_wavelength, default: 0.17
+        
+    Returns:
+        corgidrp.data.Dataset: dataset with appended wavelength map and error
+    """
+    dataset = input_dataset.copy()
+    
+    for frames in dataset:
+        #get the corgidrp.data.Dataset:wavelength zeropoint information from the input science frames header
+        head = frames.ext_hdr
+        wave_zero = {
+        'wavlen': head['wavlen0'],
+        'x' : head['x0'],
+        'xerr': head['x0err'],
+        'y': head['y0'],
+        'yerr': head['y0err'],
+        'shapex': head['shapex0'],
+        'shapey': head['shapey0']
+        }
+    
+        wave_map, wave_err, pos_lookup = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um)
+        wave_hdr = fits.Header()
+        wave_hdr["BUNIT"] = "nm"
+        wave_err_hdr = fits.Header()
+        wave_err_hdr["BUNIT"] = "nm"
+        frames.add_extension_hdu("WAVE" ,data = wave_map, header = wave_hdr)
+        frames.add_extension_hdu("WAVE_ERR", data = wave_err, header = wave_err_hdr)
+        pos_hdu = fits.BinTableHDU(data = pos_lookup, header = fits.Header(), name = "POSLOOKUP")
+        frames.hdu_list.append(pos_hdu.copy())
+        frames.hdu_names.append("POSLOOKUP")
+    
+    history_msg = "wavelength map and position lookup table extension added"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
+
+
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
     Updates the data level to L4. Only works on L3 data.

@@ -3,17 +3,17 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel, WavelengthZeropoint, WaveCal
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
 from corgidrp.spec import get_template_dataset
+import corgidrp.l3_to_l4 as l3_to_l4
 
 datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy"))
 template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
-
 
 def convert_tvac_to_dataset():
     """
@@ -248,13 +248,16 @@ def test_dispersion_model():
     assert np.array_equal(load_disp.wavlen_vs_pos_cov, disp_dict.get('wavlen_vs_pos_cov'))
 
 def test_read_cent_wave():
-    band_file = os.path.join(spec_datadir, 'CGI_bandpass_centers.csv')
-    cen_wave = steps.read_cent_wave(band_file, '3C')
+    cen_wave = steps.read_cent_wave('3C')
     assert cen_wave == 726.0
-    cen_wave = steps.read_cent_wave(band_file, '3G')
+    cen_wave = steps.read_cent_wave('3G')
     assert cen_wave == 752.5
     with pytest.raises(ValueError):
-        cen_wave = steps.read_cent_wave(band_file, 'X')
+        cen_wave = steps.read_cent_wave('X')
+    
+    cen_wave, fwhm = steps.read_cent_wave('3')
+    assert cen_wave == 729.3
+    assert fwhm == 122.3
     
 def test_calibrate_dispersion_model():    
     """
@@ -307,7 +310,7 @@ def test_calibrate_dispersion_model():
     psf_centroid.xfit_err = psf_centroid.xfit_err[:-1]
     psf_centroid.yfit_err = psf_centroid.yfit_err[:-1]
     
-    disp_model = steps.calibrate_dispersion_model(psf_centroid, prism = 'PRISM3')
+    disp_model = steps.calibrate_dispersion_model(psf_centroid)
     disp_model.save(output_dir, disp_model.filename)
     assert disp_model.filename.startswith("DispersionModel")
     assert disp_model.clocking_angle == pytest.approx(psf_header["PRISMANG"], abs = 2 * disp_model.clocking_angle_uncertainty) 
@@ -316,7 +319,7 @@ def test_calibrate_dispersion_model():
     wavlen_func_pos = np.poly1d(disp_model.wavlen_vs_pos_polycoeff)
     
     #read the TVAC result of PRISM3 and compare
-    ref_wavlen = 730.0
+    ref_wavlen = 730.
     bandpass = [675, 785]  
     tvac_pos_vs_wavlen_polycoeff = disp_dict.get('pos_vs_wavlen_polycoeff')
     tvac_pos_vs_wavlen_cov = disp_dict.get('pos_vs_wavlen_cov')
@@ -335,79 +338,50 @@ def test_calibrate_dispersion_model():
     print(f"Worst case wavelength disagreement from the test input model: {worst_case_wavlen_error:.2f} nm")
     assert worst_case_wavlen_error == pytest.approx(0, abs=0.5)
     print("Dispersion profile fit test passed.")
-    
-def test_wave_zeropoint():
+
+def test_wave_cal():
     """
-    test the WavelengthZeropoint calibration class
+    test l3_to_l4.wave_cal(), the generation of the wavelength map extensions
     """
-    wave_0 = {"prism": "PRISM3",
-              "wavlen": 730.,
+    # invented wavelength zero point
+    wave_0 = {"wavlen": 753.83,
               'x': 3.5,
               'xerr': 0.1,
               'y': 4.5,
               'yerr': 0.1,
-              'shape0': 61,
-              'shape1': 21}
+              'shapex': 61,
+              'shapey': 21}
     
-    w_zero = WavelengthZeropoint(wave_0)
+    ref_wavlen = disp_model.ext_hdr["REFWAVE"]
+    filepath = os.path.join(spec_datadir, "templates", "spec_unocc_noslit_offset_prism3_3d_12.fits")
+    image = Image(filepath)
+    image.ext_hdr['wavlen0'] = wave_0.get('wavlen')
+    image.ext_hdr['x0'] = wave_0.get('x')
+    image.ext_hdr['x0err'] = wave_0.get('xerr')
+    image.ext_hdr['y0'] = wave_0.get('y')
+    image.ext_hdr['y0err'] = wave_0.get('yerr')
+    image.ext_hdr['shapex0'] = wave_0.get('shapex')
+    image.ext_hdr['shapey0'] = wave_0.get('shapey')
+    dataset = Dataset([image])
     
-    assert w_zero.prism == wave_0.get("prism")
-    assert w_zero.x == wave_0.get("x")
-    assert w_zero.xerr == wave_0.get("xerr")
-    assert w_zero.y == wave_0.get("y")
-    assert w_zero.yerr == wave_0.get("yerr")
-    assert w_zero.image_shape[0] == wave_0.get("shape0")
-    assert w_zero.image_shape[1] == wave_0.get("shape1")
+    output_dataset = l3_to_l4.wave_cal(dataset, disp_model)
     
-    w_zero.save(filedir=output_dir, filename = "mock_wave_zeropoint.fits")
-    w_name = os.path.join(output_dir, "mock_wave_zeropoint.fits")
-    w_zero_load = WavelengthZeropoint(w_name)
+    out_im = output_dataset.frames[0]
     
-    assert w_zero_load.prism == wave_0.get("prism")
-    assert w_zero_load.x == wave_0.get("x")
-    assert w_zero_load.xerr == wave_0.get("xerr")
-    assert w_zero_load.y == wave_0.get("y")
-    assert w_zero_load.yerr == wave_0.get("yerr")
-    assert w_zero_load.image_shape[0] == wave_0.get("shape0")
-    assert w_zero_load.image_shape[1] == wave_0.get("shape1")
-
-def test_create_wave_cal():
-    """
-    test the WaveCal calibration class and generation of wavelength map.
-    """
-    wave_zero_name = os.path.join(output_dir, "mock_wave_zeropoint.fits")
-    wave_zero = WavelengthZeropoint(wave_zero_name)
-    ref_wavlen = wave_zero.wavlen
-    wavecal = steps.create_wave_cal(disp_model, wave_zero, ref_wavlen = ref_wavlen)
-    assert wavecal.data.shape == wave_zero.image_shape
+    wave = out_im.hdu_list["wave"].data
+    assert wave.shape == (wave_0.get('shapex'), wave_0.get('shapey'))
+    wave_err = out_im.hdu_list["wave_err"].data
+    assert wave_err.shape == (wave_0.get('shapex'), wave_0.get('shapey'))
     # assert that the wavelengths are within bandpass 3
-    assert ref_wavlen > np.min(wavecal.data) and ref_wavlen < np.max(wavecal.data)
-    assert wavecal.err[0].shape == wave_zero.image_shape
-    assert hasattr(wavecal, 'pos_lookup')
-    assert len(wavecal.pos_lookup.colnames) == 5
-    assert np.allclose(wavecal.pos_lookup.columns[0].data, ref_wavlen, atol = 65)
-    assert wavecal.ext_hdr['x0'] == wave_zero.x
-    assert wavecal.ext_hdr['y0'] == wave_zero.y
+    assert ref_wavlen > np.min(wave) and ref_wavlen < np.max(wave)
+    assert wave_err.shape[0] == wave_0.get("shapex")
+    assert wave_err.shape[1] == wave_0.get("shapey")
+    #Worst case wavelength uncertainty should be smaller than 1 nm
+    assert np.max(wave_err) == pytest.approx(0., abs = 1.)
+    pos_lookup = Table(out_im.hdu_list["poslookup"].data)
+    assert len(pos_lookup.colnames) == 5
+    assert np.allclose(pos_lookup.columns[0].data, ref_wavlen, atol = 65)
     
-    #test the saving and loading of the cal file
-    wavecal.save(filedir = output_dir, filename = "mock_wavecal.fits")
-    wc_name = os.path.join(output_dir, "mock_wavecal.fits")
-    wavecal_load = WaveCal(wc_name)
-    assert np.array_equal(wavecal_load.data, wavecal.data)
-    assert np.array_equal(wavecal_load.err, wavecal.err)
-    assert np.array_equal(wavecal.pos_lookup, wavecal_load.pos_lookup)
-    
-    #test the WaveCal without saving the position lookup table
-    wave_without = steps.create_wave_cal(disp_model, wave_zero, ref_wavlen = ref_wavlen, lookup_table = False)
-    assert not hasattr(wave_without, 'pos_lookup')
-    assert np.array_equal(wave_without.data, wavecal.data)
-    assert np.allclose(wave_without.err, wavecal.err, atol = 0.15)
-    
-    wave_without.save(filedir = output_dir, filename = "mock_wavecal_without.fits")
-    wc_name_wo = os.path.join(output_dir, "mock_wavecal_without.fits")
-    wave_without_load = WaveCal(wc_name_wo)
-    assert np.array_equal(wave_without_load.data, wave_without.data)
-    assert np.array_equal(wave_without_load.err, wave_without.err)
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
@@ -415,5 +389,4 @@ if __name__ == "__main__":
     test_dispersion_model()
     test_read_cent_wave()
     test_calibrate_dispersion_model()
-    test_wave_zeropoint()
-    test_create_wave_cal()
+    test_wave_cal()
