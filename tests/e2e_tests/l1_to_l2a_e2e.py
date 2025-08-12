@@ -1,9 +1,11 @@
 import argparse
 import os
+import glob
 import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -64,6 +66,51 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     # fix headers for TVAC
     fix_headers_for_tvac(l1_data_filelist)
 
+    ########### Prepare input files with proper L1 filenames
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(l2a_outputdir, 'input_data')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    
+    # Save input files with proper L1 filenames
+    # Get current time once outside the loop
+    base_time = datetime.now()
+    
+    input_filelist = []
+    for i, filepath in enumerate(l1_data_filelist):
+        # Extract frame number from original filename
+        original_filename = os.path.basename(filepath)
+        
+        # Extract frame number from filename (e.g., "90499" from "90499.fits")
+        frame_number = original_filename.split('.')[0]
+        
+        if frame_number.isdigit():
+            visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+        else:
+            visitid = f"{i:019d}"  # Fallback- use file index padded to 19 digits
+        
+        # Create unique timestamp by incrementing seconds for each file
+        # Handle second rollover properly
+        new_second = (base_time.second + i) % 60
+        new_minute = base_time.minute + ((base_time.second + i) // 60)
+        file_time = base_time.replace(minute=new_minute, second=new_second)
+        # Use the format_ftimeutc function from data.py to get consistent 3-digit seconds format
+        time_str = data.format_ftimeutc(file_time.isoformat())
+        
+        # Load the file
+        with fits.open(filepath) as hdulist:
+            # Create new filename: cgi_{visitid}_{time_str}_l1_.fits
+            new_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            new_filepath = os.path.join(input_data_dir, new_filename)
+            
+            # Save with new filename
+            hdulist.writeto(new_filepath, overwrite=True)
+            input_filelist.append(new_filepath)
+    
+    # Use the renamed input files for the DRP walker
+    l1_data_filelist = input_filelist
+
     ###### Setup necessary calibration files
     # Create necessary calibration files
     # we are going to make a new nonlinear calibration file using
@@ -78,7 +125,11 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=l2a_outputdir, filename="mock_nonlinearcal.fits" )
+    # Generate unique timestamp for nonlinear calibration
+    nln_time = base_time.replace(second=(base_time.second + 100) % 60, minute=(base_time.minute + (base_time.second + 100) // 60))
+    nln_time_str = data.format_ftimeutc(nln_time.isoformat())
+    nln_filename = f"cgi_0000000000000090526_{nln_time_str}_nln_cal.fits"
+    nonlinear_cal.save(filedir=l2a_outputdir, filename=nln_filename)
 
     # add calibration file to caldb
     this_caldb = caldb.CalDB()
@@ -105,14 +156,22 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=l2a_outputdir, filename="mock_detnoisemaps.fits")
+    # Generate unique timestamp for noise map calibration
+    dnm_time = base_time.replace(second=(base_time.second + 101) % 60, minute=(base_time.minute + (base_time.second + 101) // 60))
+    dnm_time_str = data.format_ftimeutc(dnm_time.isoformat())
+    dnm_filename = f"cgi_0000000000000090527_{dnm_time_str}_dnm_cal.fits"
+    noise_map.save(filedir=l2a_outputdir, filename=dnm_filename)
     this_caldb.create_entry(noise_map)
 
     # KGain
     kgain_val = 8.7
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=l2a_outputdir, filename="mock_kgain.fits")
+    # Generate unique timestamp for KGain calibration
+    kgain_time = base_time.replace(second=(base_time.second + 102) % 60, minute=(base_time.minute + (base_time.second + 102) // 60))
+    kgain_time_str = data.format_ftimeutc(kgain_time.isoformat())
+    kgain_filename = f"cgi_0000000000000090526_{kgain_time_str}_krn_cal.fits"
+    kgain.save(filedir=l2a_outputdir, filename=kgain_filename)
     this_caldb.create_entry(kgain)
 
     ####### Run the walker on some test_data
@@ -125,15 +184,24 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(kgain)
     
     ##### Check against TVAC data
-    new_l2a_filenames = [os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
-
+    # Find the actual output files generated by the DRP walker
+    new_l2a_filenames = glob.glob(os.path.join(l2a_outputdir, "*_l2a.fits"))
+    
+    # Sort by modification time to get the most recent files
+    new_l2a_filenames.sort(key=os.path.getmtime)
+    
+    # Take the first two files (should correspond to our input files)
+    new_l2a_filenames = new_l2a_filenames[:2]
+    
     for new_filename, tvac_filename in zip(new_l2a_filenames, tvac_l2a_filelist):
+        print(new_filename, tvac_filename)
         img = data.Image(new_filename)
 
         with fits.open(tvac_filename) as hdulist:
             tvac_dat = hdulist[1].data
         
         diff = img.data - tvac_dat
+        print(diff)
 
         assert np.all(np.abs(diff) < 1e-5)
 
@@ -166,7 +234,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/CGI_TVAC_Data/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
