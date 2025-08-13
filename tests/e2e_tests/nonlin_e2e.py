@@ -68,7 +68,7 @@ def test_nonlin_cal_e2e(
     nonlin_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
     tvac_caldir = os.path.join(e2edata_path, 'TV-36_Coronagraphic_Data', 'Cals')
-    e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_nonlin_output')
+    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_output')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',

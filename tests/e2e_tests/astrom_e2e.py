@@ -61,14 +61,31 @@ def fix_headers_for_tvac(
             os.mkdir(input_data_dir)
         new_filename = os.path.join(input_data_dir, f'cgi_{visitid}_{filetime}_l1_.fits')
         
-        # Adjust VISTYPE
-        prihdr['OBSNUM'] = prihdr['OBSID']
-        exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        # Adjust headers - only modify if keywords exist
+        if 'OBSID' in prihdr:
+            prihdr['OBSNUM'] = prihdr['OBSID']
+        else:
+            prihdr['OBSNUM'] = visitid  # Use the visitid as fallback
+            
+        if 'CMDGAIN' in exthdr:
+            exthdr['EMGAIN_C'] = exthdr['CMDGAIN']
+        else:
+            exthdr['EMGAIN_C'] = 1  # Default value
+            
         exthdr['EMGAIN_A'] = -1
-        exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        
+        if 'DATA_LEVEL' in exthdr:
+            exthdr['DATALVL'] = exthdr['DATA_LEVEL']
+        else:
+            exthdr['DATALVL'] = 'L1'  # Default value
+            
         exthdr['ISPC'] = False
-        # exthdr['KGAINPAR'] = exthdr['KGAIN']
-        prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        
+        if 'OBSTYPE' in prihdr:
+            prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        else:
+            prihdr["OBSNAME"] = "BORESITE"  # Default value
+            
         prihdr['PHTCNT'] = False
         
         # Update FITS file with new filename
@@ -88,7 +105,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_characterization_path = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
 
     # make output directory if needed
-    astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_output")
+    astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_output")
     if not os.path.exists(astrom_cal_outputdir):
         os.mkdir(astrom_cal_outputdir)
 
@@ -172,14 +189,21 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=astrom_cal_outputdir, filename="mock_nonlinearcal.fits" )
+    # Generate timestamp for nonlinear calibration
+    base_time = datetime.datetime.now()
+    nln_time_str = data.format_ftimeutc(base_time.isoformat())
+    nln_filename = f"cgi_0000000000000090526_{nln_time_str}_nln_cal.fits"
+    nonlinear_cal.save(filedir=astrom_cal_outputdir, filename=nln_filename)
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
     kgain_val = 8.7
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=astrom_cal_outputdir, filename="mock_kgain.fits")
+    # Generate timestamp for KGain calibration
+    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
+    kgain_filename = f"cgi_0000000000000090526_{kgain_time_str}_krn_cal.fits"
+    kgain.save(filedir=astrom_cal_outputdir, filename=kgain_filename)
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -202,21 +226,30 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=astrom_cal_outputdir, filename="mock_detnoisemaps.fits")
+    # Generate timestamp for DetectorNoiseMaps calibration
+    dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
+    dnm_filename = f"cgi_0000000000000090526_{dnm_time_str}_dnm_cal.fits"
+    noise_map.save(filedir=astrom_cal_outputdir, filename=dnm_filename)
     this_caldb.create_entry(noise_map)
 
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat.save(filedir=astrom_cal_outputdir, filename="mock_flat.fits")
+    # Generate timestamp for FlatField calibration
+    flat_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
+    flat_filename = f"cgi_0000000000000090526_{flat_time_str}_flt_cal.fits"
+    flat.save(filedir=astrom_cal_outputdir, filename=flat_filename)
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    bp_map.save(filedir=astrom_cal_outputdir, filename="mock_bpmap.fits")
+    # Generate timestamp for BadPixelMap calibration
+    bpm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 4) % 60)).isoformat())
+    bpm_filename = f"cgi_0000000000000090526_{bpm_time_str}_bpm_cal.fits"
+    bp_map.save(filedir=astrom_cal_outputdir, filename=bpm_filename)
     this_caldb.create_entry(bp_map)
 
 
