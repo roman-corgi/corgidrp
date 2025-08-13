@@ -5,6 +5,7 @@ import random
 import numpy as np
 from pathlib import Path
 import astropy.io.fits as fits
+from datetime import datetime
 
 from corgidrp import sorting as sorting
 import corgidrp.data as data
@@ -175,8 +176,20 @@ def make_minimal_image(
     hdul[1].header['EXPTIME'] = exptime_sec
     # Add corresponding VISTYPE
     hdul[0].header['VISTYPE'] = 'PUPILIMG'
-    # IIT filename convention. TODO: replace with latest L1 filename version
-    filename = str(Path('simdata', f'cgi_excam_l1_{frameid:0{10}d}.fits'))
+    # Standard L1 filename convention using header values
+    visitid = hdul[0].header.get('VISITID', '0200001999001000000')
+    filetime = hdul[1].header.get('FILETIME', hdul[0].header.get('FILETIME', None))
+    # Convert filetime to the format expected in filenames (YYYYMMDDtHHMMSS)
+    if filetime and 'T' in filetime:
+        # Parse ISO format and convert to filename format
+        try:
+            dt = datetime.fromisoformat(filetime.replace('Z', '+00:00'))
+            filetime = dt.strftime('%Y%m%dt%H%M%S')
+        except:
+            filetime = datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+    elif not filetime:
+        filetime = datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+    filename = str(Path('simdata', f'cgi_{visitid}_{filetime}_l1_{frameid:010d}.fits'))
     hdul.writeto(filename, overwrite = True)
     return filename
 
