@@ -2,11 +2,13 @@
 import os
 import glob
 import argparse
+from pandas.core import base
 import pytest
 import numpy as np
 from astropy import time
 from astropy.io import fits
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 import corgidrp
 from corgidrp import data
@@ -100,14 +102,20 @@ def test_nonlin_cal_e2e(
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits" )
+    base_time = datetime.now()
+    nln_time_str = data.format_ftimeutc(base_time.isoformat())
+    nln_filename = f"cgi_0000000000000090526_{nln_time_str}_nln_cal.fits"
+    nonlinear_cal.save(filedir=e2eoutput_path, filename=nln_filename)
     
     
     # KGain
     kgain_val = 8.7
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=e2eoutput_path, filename="mock_kgain.fits")
+    base_time = datetime.now()
+    kgain_time_str = data.format_ftimeutc(base_time.isoformat())
+    kgain_filename = f"cgi_0000000000000090526_{kgain_time_str}_krn_cal.fits"
+    kgain.save(filedir=e2eoutput_path, filename=kgain_filename)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(kgain)
 
@@ -123,7 +131,7 @@ def test_nonlin_cal_e2e(
     # Compare results
     print('Comparing the results with TVAC')
     # NL from CORGIDRP
-    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL*.fits'))
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_nln_cal*.fits'))
     nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
     nonlin_drp_filename = nonlin_drp_filepath.split(os.path.sep)[-1]
 
@@ -132,7 +140,7 @@ def test_nonlin_cal_e2e(
     n_emgain = nonlin_out_table.shape[1]
 
     # NL from TVAC
-    nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
+    nonlin_tvac = fits.open(os.path.join(e2eoutput_path, nln_filename))
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check
@@ -178,7 +186,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")
