@@ -1448,7 +1448,15 @@ class AstrometricCalibration(Image):
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-            self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
+            
+            # Remove any data level suffixes (e.g., _l1_, _l2b, etc.) FIRST
+            orig_input_filename = re.sub('_l[0-9].', '', orig_input_filename)
+            
+            # Check if the filename already contains _ast_cal to prevent double-suffixing
+            if orig_input_filename.endswith('_ast_cal'):
+                self.filename = "{0}.fits".format(orig_input_filename)
+            else:
+                self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
