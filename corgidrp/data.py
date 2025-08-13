@@ -669,12 +669,13 @@ class Dark(Image):
             # strip off everything starting at .fits
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-                self.filename = "{0}_drk_cal.fits".format(orig_input_filename)
-                # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.)
+                # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) FIRST
                 # Handle both lowercase and uppercase L, with or without periods
-                self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', self.filename)
+                orig_input_filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', orig_input_filename)
                 # dnm_cal fed directly into drk_cal when doing build_synthesized_dark, so this will delete that string if it's there:
-                self.filename = self.filename.replace("_dnm_cal", "")
+                orig_input_filename = orig_input_filename.replace("_dnm_cal", "")
+                # Now create the filename with proper underscore separation
+                self.filename = "{0}_drk_cal.fits".format(orig_input_filename)
             else:
                 if self.filename == '':
                     self.filename = "drk_cal.fits" # we shouldn't normally be here, but we default to something just in case. 
