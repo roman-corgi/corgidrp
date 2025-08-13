@@ -16,6 +16,7 @@ from astropy import wcs
 import copy
 import corgidrp
 from datetime import datetime, timedelta, timezone
+from astropy.io.fits.verify import VerifyWarning
 
 class Dataset():
     """
