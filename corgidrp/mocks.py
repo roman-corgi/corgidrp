@@ -2938,7 +2938,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
         fpam_v = 6124.9
 
     # Create image object
-    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers()
     prihdr['VISTYPE'] = 'ABSFLXBT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
@@ -2965,7 +2965,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
     # Save file
     if filedir is not None and file_save:
         ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
-        filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
+        filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l3_.fits'
         frame.save(filedir=filedir, filename=filename)
 
     return frame
