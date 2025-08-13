@@ -453,7 +453,9 @@ def match_sources(image, sources, field_path, comparison_threshold=50, rad=0.012
     target = image.pri_hdr['RA'], image.pri_hdr['DEC']
     
     ymid, xmid = image.data.shape   # fit gaussian to find target x,y location (assuming near center)
-    pf, fw, targetx, targety = fakes.gaussfit2d(frame= image.data, xguess= (xmid-1)//2, yguess= (ymid-1)//2)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        pf, fw, targetx, targety = fakes.gaussfit2d(frame= image.data, xguess= (xmid-1)//2, yguess= (ymid-1)//2)
 
     target_skycoord = SkyCoord(ra= target[0], dec= target[1], unit='deg')
     subfield = field[((field['RA'] >= target[0] - rad) & (field['RA'] <= target[0] + rad) & (field['DEC'] >= target[1] - rad) & (field['DEC'] <= target[1] + rad))]
