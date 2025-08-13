@@ -670,7 +670,9 @@ class Dark(Image):
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
                 self.filename = "{0}_drk_cal.fits".format(orig_input_filename)
-                self.filename = re.sub('_l[0-9].', '', self.filename)
+                # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.)
+                # Handle both lowercase and uppercase L, with or without periods
+                self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', self.filename)
                 # dnm_cal fed directly into drk_cal when doing build_synthesized_dark, so this will delete that string if it's there:
                 self.filename = self.filename.replace("_dnm_cal", "")
             else:
@@ -724,7 +726,9 @@ class FlatField(Image):
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the last input file as the base
-            self.filename = re.sub('_l[0-9].', '_flt_cal', input_dataset[-1].filename)
+            # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) and replace with _flt_cal
+            # Handle both lowercase and uppercase L, with or without periods
+            self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_flt_cal', input_dataset[-1].filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -968,7 +972,9 @@ class NonLinearityCalibration(Image):
 
             # Follow filename convention as of R3.0.2
             self.filedir = '.'
-            self.filename = re.sub('_l[0-9].', '_nln_cal', input_dataset[-1].filename)
+            # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) and replace with _nln_cal
+            # Handle both lowercase and uppercase L, with or without periods
+            self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_nln_cal', input_dataset[-1].filename)
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1048,7 +1054,9 @@ class KGain(Image):
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
                 # give it a default filename using the last input file as the base
-                self.filename = re.sub('_l[0-9].', '_krn_cal', input_dataset[-1].filename)
+                # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) and replace with _krn_cal
+                # Handle both lowercase and uppercase L, with or without periods
+                self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_krn_cal', input_dataset[-1].filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected EM electron/DN'
@@ -1141,7 +1149,9 @@ class BadPixelMap(Image):
             if "_flt_cal" in input_dataset[-1].filename:
                 self.filename = input_dataset[-1].filename.replace("_flt_cal", "_bpm_cal")
             else:
-                self.filename = re.sub('_l[0-9].', '_bpm_cal', input_dataset[-1].filename)
+                # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) and replace with _bpm_cal
+                # Handle both lowercase and uppercase L, with or without periods
+                self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_bpm_cal', input_dataset[-1].filename)
             
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?            
@@ -1221,8 +1231,15 @@ class DetectorNoiseMaps(Image):
                 #running the calibration code gets the name right (based on last filename in input dataset); this is a standby
                 orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0] 
             
-            self.filename = "{0}_dnm_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) FIRST
+            # Handle both lowercase and uppercase L, with or without periods, and with underscores
+            orig_input_filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', orig_input_filename)
+            
+            # Check if the filename already contains _dnm_cal to prevent double-suffixing
+            if orig_input_filename.endswith('_dnm_cal'):
+                self.filename = "{0}.fits".format(orig_input_filename)
+            else:
+                self.filename = "{0}_dnm_cal.fits".format(orig_input_filename)
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
@@ -1449,8 +1466,9 @@ class AstrometricCalibration(Image):
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             
-            # Remove any data level suffixes (e.g., _l1_, _l2b, etc.) FIRST
-            orig_input_filename = re.sub('_l[0-9].', '', orig_input_filename)
+            # Remove any data level suffixes (e.g., _l1_, _l2b, _L1_, _L2b, etc.) FIRST
+            # Handle both lowercase and uppercase L, with or without periods
+            orig_input_filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', orig_input_filename)
             
             # Check if the filename already contains _ast_cal to prevent double-suffixing
             if orig_input_filename.endswith('_ast_cal'):
@@ -1506,7 +1524,9 @@ class TrapCalibration(Image):
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             self.filename = "{0}_tpu_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_l[0-9].', '', self.filename)
+            # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.)
+            # Handle both lowercase and uppercase L, with or without periods
+            self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', self.filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1612,7 +1632,9 @@ class FluxcalFactor(Image):
             self.filedir = "."
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_L[0-9].', '', self.filename)
+            # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.)
+            # Handle both lowercase and uppercase L, with or without periods
+            self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', self.filename)
 
 class FpamFsamCal(Image):
     """
@@ -1808,10 +1830,12 @@ class CoreThroughputCalibration(Image):
                 self.ext_hdr['HISTORY'] = ('Core Throughput calibration derived '
                     f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
-            # Default convention: replace _l3_.fits from the filename of the
-            # input dataset by _ctp_cal.fits
+            # Default convention: replace data level suffixes from the filename of the
+            # input dataset by _ctp_cal
             self.filedir = '.'
-            self.filename = re.sub('_l[0-9].', '_ctp_cal', input_dataset[-1].filename)
+            # Remove any data level suffixes (e.g., _l1_, _l2a, _l3_, _L1_, _L2a, _L3_, etc.) and replace with _ctp_cal
+            # Handle both lowercase and uppercase L, with or without periods
+            self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_ctp_cal', input_dataset[-1].filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -2727,7 +2751,9 @@ class NDFilterSweetSpotDataset(Image):
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
-                self.filename = re.sub('_l[0-9].', '_ndf_cal', input_dataset[-1].filename)
+                # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) and replace with _ndf_cal
+                # Handle both lowercase and uppercase L, with or without periods
+                self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_ndf_cal', input_dataset[-1].filename)
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
