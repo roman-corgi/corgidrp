@@ -62,7 +62,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
                                      hour=(base_time.hour + ((base_time.minute + ((base_time.second + i) // 60)) // 60)))
         time_str = data.format_ftimeutc(frame_time.isoformat())
         # Use a unique visitid for illuminated frames
-        visitid = f"000000000000009052{i:03d}"  # 90520, 90521, 90522, etc.
+        visitid = f"{i:019d}"  # Pad to exactly 19 digits
         filename = f"cgi_{visitid}_{time_str}_l1_.fits"
         ill_filenames.append(filename)
     
@@ -75,7 +75,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
                                      hour=(base_time.hour + ((base_time.minute + ((base_time.second + len(ill_dataset) + i) // 60)) // 60)))
         time_str = data.format_ftimeutc(frame_time.isoformat())
         # Use a different visitid range for dark frames
-        visitid = f"000000000000009053{i:03d}"  # 90530, 90531, 90532, etc.
+        visitid = f"{i:019d}"  # Pad to exactly 19 digits
         filename = f"cgi_{visitid}_{time_str}_l1_.fits"
         dark_filenames.append(filename)
     
