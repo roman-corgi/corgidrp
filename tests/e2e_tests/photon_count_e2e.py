@@ -6,6 +6,7 @@ import pytest
 import numpy as np
 import astropy.time as time
 from astropy.io import fits
+from datetime import datetime
 
 import corgidrp
 import corgidrp.data as data
@@ -22,7 +23,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     np.random.seed(1234)
     ill_dataset, dark_dataset, ill_mean, dark_mean = mocks.create_photon_countable_frames(Nbrights=160, Ndarks=161, cosmic_rate=1, flux=0.5)
-    output_dir = os.path.join(e2eoutput_path, 'pc_sim_test_data')
+    output_dir = os.path.join(e2eoutput_path, 'photon_count_output')
     output_ill_dir = os.path.join(output_dir, 'ill_frames')
     output_dark_dir = os.path.join(output_dir, 'dark_frames')
     output_l2a_dir = os.path.join(output_dir, 'l2a')
@@ -44,14 +45,47 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         os.remove(os.path.join(output_ill_dir,f))
     for f in os.listdir(output_dark_dir):
         os.remove(os.path.join(output_dark_dir,f))
-    ill_dataset.save(output_ill_dir, ['pc_frame_ill_{0}.fits'.format(i) for i in range(len(ill_dataset))])
-    dark_dataset.save(output_dark_dir, ['pc_frame_dark_{0}.fits'.format(i) for i in range(len(dark_dataset))])
-    l1_data_ill_filelist = []
-    l1_data_dark_filelist = []
-    for f in os.listdir(output_ill_dir):
-        l1_data_ill_filelist.append(os.path.join(output_ill_dir, f))
-    for f in os.listdir(output_dark_dir):
-        l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
+    # Create input_data subfolder
+    input_data_dir = os.path.join(output_dir, 'input_data')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+
+    # Generate unique timestamps for each frame to ensure proper differentiation
+    base_time = datetime.now()
+    
+    # Save illuminated frames with proper L1 filename convention
+    ill_filenames = []
+    for i in range(len(ill_dataset)):
+        # Generate unique timestamp for each frame
+        frame_time = base_time.replace(second=(base_time.second + i) % 60, 
+                                     minute=(base_time.minute + ((base_time.second + i) // 60)) % 60,
+                                     hour=(base_time.hour + ((base_time.minute + ((base_time.second + i) // 60)) // 60)))
+        time_str = data.format_ftimeutc(frame_time.isoformat())
+        # Use a unique visitid for illuminated frames
+        visitid = f"000000000000009052{i:03d}"  # 90520, 90521, 90522, etc.
+        filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+        ill_filenames.append(filename)
+    
+    # Save dark frames with proper L1 filename convention
+    dark_filenames = []
+    for i in range(len(dark_dataset)):
+        # Generate unique timestamp for each frame (offset from illuminated frames)
+        frame_time = base_time.replace(second=(base_time.second + len(ill_dataset) + i) % 60,
+                                     minute=(base_time.minute + ((base_time.second + len(ill_dataset) + i) // 60)) % 60,
+                                     hour=(base_time.hour + ((base_time.minute + ((base_time.second + len(ill_dataset) + i) // 60)) // 60)))
+        time_str = data.format_ftimeutc(frame_time.isoformat())
+        # Use a different visitid range for dark frames
+        visitid = f"000000000000009053{i:03d}"  # 90530, 90531, 90532, etc.
+        filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+        dark_filenames.append(filename)
+    
+    # Save the datasets with proper filenames
+    ill_dataset.save(input_data_dir, ill_filenames)
+    dark_dataset.save(input_data_dir, dark_filenames)
+    
+    # Build file lists using the new filenames
+    l1_data_ill_filelist = [os.path.join(input_data_dir, f) for f in ill_filenames]
+    l1_data_dark_filelist = [os.path.join(input_data_dir, f) for f in dark_filenames]
 
     this_caldb = caldb.CalDB() # connection to cal DB
     # remove other KGain calibrations that may exist in case they don't have the added header keywords
@@ -64,7 +98,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # create a DetectorParams object and save it
     detector_params = data.DetectorParams({})
-    detector_params.save(filedir=output_dir, filename="detector_params.fits")
+    # Generate unique timestamp for detector params
+    base_time = datetime.now()
+    dp_time_str = data.format_ftimeutc(base_time.isoformat())
+    dp_filename = f"cgi_0000000000000090526_{dp_time_str}_dpr_cal.fits"
+    detector_params.save(filedir=output_dir, filename=dp_filename)
     this_caldb.create_entry(detector_params)
 
     # KGain
@@ -78,7 +116,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
     kgain.ext_hdr['RN_ERR'] = 0
-    kgain.save(filedir=output_dir, filename="mock_kgain.fits")
+    # Generate unique timestamp for KGain calibration
+    kgain_time = base_time.replace(second=(base_time.second + 1) % 60, minute=(base_time.minute + ((base_time.second + 1) // 60)))
+    kgain_time_str = data.format_ftimeutc(kgain_time.isoformat())
+    kgain_filename = f"cgi_0000000000000090526_{kgain_time_str}_krn_cal.fits"
+    kgain.save(filedir=output_dir, filename=kgain_filename)
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -92,7 +134,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=output_dir, filename="mock_detnoisemaps.fits")
+    # Generate unique timestamp for noise map calibration
+    dnm_time = base_time.replace(second=(base_time.second + 2) % 60, minute=(base_time.minute + ((base_time.second + 2) // 60)))
+    dnm_time_str = data.format_ftimeutc(dnm_time.isoformat())
+    dnm_filename = f"cgi_0000000000000090527_{dnm_time_str}_dnm_cal.fits"
+    noise_map.save(filedir=output_dir, filename=dnm_filename)
     this_caldb.create_entry(noise_map)
 
     here = os.path.abspath(os.path.dirname(__file__))
@@ -119,14 +165,22 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat.save(filedir=output_dir, filename="mock_flat.fits")
+    # Generate unique timestamp for flat field calibration
+    flat_time = base_time.replace(second=(base_time.second + 3) % 60, minute=(base_time.minute + ((base_time.second + 3) // 60)))
+    flat_time_str = data.format_ftimeutc(flat_time.isoformat())
+    flat_filename = f"cgi_0000000000000090526_{flat_time_str}_flt_cal.fits"
+    flat.save(filedir=output_dir, filename=flat_filename)
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    bp_map.save(filedir=output_dir, filename="mock_bpmap.fits")
+    # Generate unique timestamp for bad pixel map calibration
+    bpm_time = base_time.replace(second=(base_time.second + 4) % 60, minute=(base_time.minute + ((base_time.second + 4) // 60)))
+    bpm_time_str = data.format_ftimeutc(bpm_time.isoformat())
+    bpm_filename = f"cgi_0000000000000090527_{bpm_time_str}_bpm_cal.fits"
+    bp_map.save(filedir=output_dir, filename=bpm_filename)
     this_caldb.create_entry(bp_map)
 
     # make PC dark
@@ -138,7 +192,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dir):
         if not f.endswith('.fits'):
             continue
-        if f.endswith('_DRK_CAL.fits'):
+        if f.endswith('_drk_cal.fits'):
             master_dark_filename_list.append(f)
             master_dark_filepath_list.append(os.path.join(output_dir, f))
     
@@ -152,7 +206,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     l2a_files = []
     for filepath in l1_data_ill_filelist:
         # emulate naming change behaviors
-        new_filename = filepath.split(os.path.sep)[-1].replace("_L1_", "_L2a") 
+        new_filename = filepath.split(os.path.sep)[-1].replace("_l1_", "_l2a") 
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
@@ -207,7 +261,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  r"/Users/jmilton/Documents/CGI/CGI_TVAC_Data/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
