@@ -1836,7 +1836,10 @@ class CoreThroughputCalibration(Image):
             self.filedir = '.'
             # Remove any data level suffixes (e.g., _l1_, _l2a, _l3_, _L1_, _L2a, _L3_, etc.) and replace with _ctp_cal
             # Handle both lowercase and uppercase L, with or without periods
-            self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_ctp_cal', input_dataset[-1].filename)
+            # First remove the .fits extension, then replace data level suffixes, then add .fits back
+            base_filename = input_dataset[-1].filename.replace('.fits', '')
+            base_filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', base_filename)
+            self.filename = f"{base_filename}_ctp_cal.fits"
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
