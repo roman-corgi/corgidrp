@@ -344,7 +344,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
     # make output directory if needed
-    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
+    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "trad_dark_output")
     if not os.path.exists(build_trad_dark_outputdir):
         os.mkdir(build_trad_dark_outputdir)
     # remove any files in the output directory that may have been there previously
