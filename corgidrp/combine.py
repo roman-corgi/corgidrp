@@ -3,6 +3,7 @@ Module to support frame combination
 """
 import numpy as np
 import corgidrp.data as data
+import warnings
 
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling):
@@ -31,8 +32,10 @@ def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scal
     n_samples[bad] = 0
     n_samples = np.sum(n_samples, axis=0)
     if collapse.lower() == "mean":
-        data_collapse = np.nanmean(data_subset, axis=0)
-        err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) # correct assuming standard error propagation
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            data_collapse = np.nanmean(data_subset, axis=0)
+            err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) # correct assuming standard error propagation
     elif collapse.lower() == "median":
         data_collapse = np.nanmedian(data_subset, axis=0)
         err_collapse = np.sqrt(np.nanmean(err_subset**2, axis=0)) /np.sqrt(n_samples) * np.sqrt(np.pi/2) # inflate median error
