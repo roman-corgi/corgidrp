@@ -1345,9 +1345,9 @@ def create_badpixelmap_files(filedir=None, col_bp=None, row_bp=None):
 
 def nonlin_coefs(filename,EMgain,order):
     """
-    Reads TVAC nonlinearity table from location specified by ‘filename’.
-    The column in the table closest to the ‘EMgain’ value is selected and fits
-    a polynomial of order ‘order’. The coefficients of the fit are adjusted so
+    Reads TVAC nonlinearity table from location specified by 'filename'.
+    The column in the table closest to the 'EMgain' value is selected and fits
+    a polynomial of order 'order'. The coefficients of the fit are adjusted so
     that the polynomial function equals unity at 3000 DN. Outputs array polynomial
     coefficients, array of DN values from the TVAC table, and an array of the
     polynomial function values for all the DN values.
@@ -1781,7 +1781,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
         dq_map = None if bpix_map is None else dq_map
         frame = data.Image(sim_data, pri_hdr= prihdr, ext_hdr= exthdr, err=err_map, dq=dq_map)
         
-        # Generate proper filename: cgi_{visitid}_{timestamp}_l1_.fits
+        # Generate proper filename: cgi_{visitid}_{timestamp}_l2b.fits
         # Use frame index for visitid and current time for timestamp
         from datetime import datetime
         base_time = datetime.now()
@@ -3182,7 +3182,7 @@ def create_ct_psfs_with_mask(fwhm_mas, cfam_name='1F', n_psfs=10, image_shape=(1
     Returns:
         data_psf (list): List of Image objects with the PSF stamp inserted.
         psf_loc (np.array): Array of PSF locations.
-        half_psf (np.array): Array of “half” throughput values (roughly total_counts/2 after mask).
+        half_psf (np.array): Array of "half" throughput values (roughly total_counts/2 after mask).
     """
     # Set up headers, error, and dq arrays.
     prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
@@ -4137,7 +4137,7 @@ def create_synthetic_satellite_spot_image(
             plus the `angle_offset`. Positive offsets rotate the Gaussians counterclockwise.
         amplitude_multiplier (float, optional):  
             Multiplier for the amplitude of the Gaussians relative to `bg_sigma`. By default, each 
-            Gaussian’s amplitude is 10 * `bg_sigma`.
+            Gaussian's amplitude is 10 * `bg_sigma`.
 
     Returns:
         numpy.ndarray:  
