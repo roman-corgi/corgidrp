@@ -152,7 +152,8 @@ def make_minimal_image(
     exptime_sec=0,
     frameid=0,
     previous_exptime=0,
-    previous_timestamp=None
+    previous_timestamp=None,
+    auxfile=''
         ):
     """
     This function makes a mock frame with minimum memory in its data and error
@@ -164,6 +165,7 @@ def make_minimal_image(
       frameid (int): an integer value used to indentify the frame
       previous_exptime (float): exposure time of the previous frame, used to make the time stamp for the frame accurate
       previous_timestamp (str): timestamp of the previous frame, used to make the time stamp for the current frame
+      auxfile (str): auxiliary file name to be used in the header of the FITS file.  Defaults to an empty string.
     Returns:
       filename (String): filename with path of the generated FITS file
     """
@@ -192,6 +194,7 @@ def make_minimal_image(
     hdul[1].header['EXPTIME'] = exptime_sec
     # Add corresponding VISTYPE
     hdul[0].header['VISTYPE'] = 'PUPILIMG'
+    hdul[0].header['AUXFILE'] = auxfile
     hdul[1].header['DPAMNAME'] = 'PUPIL,PUPIL_FFT' #from latest update of TVAC files from SSC
     hdul[1].header['CFAMNAME'] = 'CLEAR' # would have actual filter names, but for now, just shouldn't be 'DARK'
     year=exthd['DATETIME'][:4]
@@ -391,7 +394,24 @@ def setup_module():
         exptimes += [fits.getheader(filename, 1)['EXPTIME']]
         filename_list += [filename]
         idx_frame += 1
-    # Non-linearity (two cases)
+    # EM-gain (different temperature)
+    print('Generating frames for em-gain at different temperature')
+    for i_f in range(n_emgain_total):
+        # making AUXFILE different; testing AUXFILE filter in sorting.py with this
+        filename = make_minimal_image(
+            cmdgain=cmdgain_emgain[i_f],
+            exptime_sec=exptime_emgain[i_f]+ 11, #makes it big enough to keep an increasing order of exposure times in sorting.py
+            frameid=idx_frame,
+            previous_exptime=exptime_kgain[-1] if i_f == 0 else exptime_emgain[i_f-1],
+            previous_timestamp=previous_timestamp,
+            auxfile='TEMPERATURE'
+            )
+        previous_timestamp = fits.getheader(filename, 1)['DATETIME']
+        timestamps += [previous_timestamp]
+        exptimes += [fits.getheader(filename, 1)['EXPTIME']]
+        filename_list += [filename]
+        idx_frame += 1
+    # Non-linearity (two cases) 
     print('Generating frames for non-linearity')
     filename_wo_change_list = copy.deepcopy(filename_list)
     for i_f in range(n_nonlin_wo_change_total):
@@ -494,12 +514,8 @@ def test_kgain_sorting():
     exptime_kgain_arr = np.array(exptime_kgain_list)[idx_kgain_sort]
     assert len(set(exptime_kgain_arr[-NFRAMES_KGAIN:])) == 1
     assert exptime_kgain_arr[-1] in exptime_kgain_arr[0:-NFRAMES_KGAIN]
-    
-    # XXX expousre time of 10 seconds (EM gain=1) is repeated (one in exptime_kgain and one from exptime_emgain), 
-    # and that is the last exposure time in the sorted list.  Widest time separation is for 1.538 seconds, 
-    # so one the set of 10 seconds is dropped in the output dataset.
-    # assert exptime_kgain_arr[-1] == 10
-    # assert exptime_kgain_arr[-1] not in exptime_kgain_arr[0:-NFRAMES_KGAIN]
+    _, vals = dataset_kgain.split_dataset(prihdr_keywords=['AUXFILE'])
+    assert len(vals) == 1
 
 def test_nonlin_sorting_wo_change():
     """

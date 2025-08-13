@@ -163,7 +163,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
             trap_pump_data_filelist.append(f)
 
     # update headers from TVAC data
-    fix_headers_for_tvac(trap_pump_data_filelist)
+    #fix_headers_for_tvac(trap_pump_data_filelist)
 
     ###### Setup necessary calibration files
     # Create necessary calibration files

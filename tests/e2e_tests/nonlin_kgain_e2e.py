@@ -33,6 +33,9 @@ def set_vistype_for_tvac(
         prihdr = fits_file[0].header
         # Adjust VISTYPE
         prihdr['VISTYPE'] = 'PUPILIMG'
+        exthdr = fits_file[1].header
+        if exthdr['EMGAIN_A'] == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -106,16 +109,10 @@ def test_nonlin_and_kgain_e2e(
     nonlin_l1_list.sort()
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
-
-    # both kgain and nonlin dirs have the same MNFRAME files
-    # only add the files from the kgain list that don't share the same filename
-    # grab filenames for l1 
-    nonlin_l1_filenames = [filepath.split(os.path.sep)[-1] for filepath in nonlin_l1_list]
+    
     pupilimg_l1_list = nonlin_l1_list # start with the nonlin filelist
-    # iterate through kgain filelist to find ones that don't share the same filename
     for filepath in kgain_l1_list:
-        filename = filepath.split(os.path.sep)[-1]
-        if filename not in nonlin_l1_filenames:
+        if filepath.lower().endswith('.fits'):
             pupilimg_l1_list.append(filepath)
 
 
@@ -126,7 +123,19 @@ def test_nonlin_and_kgain_e2e(
    
     # Run the walker on some test_data
     print('Running walker')
-    walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
+    #walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)
+    recipe = walker.autogen_recipe(pupilimg_l1_list, e2eoutput_path)
+    ### Modify they keywords of some of the steps
+    for step in recipe[1]['steps']:
+        if step['name'] == "calibrate_kgain":
+            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+            step['keywords']['n_cal'] = 4 # low enough for the selected set of SSC TVAC files
+    walker.run_recipe(recipe[1], save_recipe_file=True)
+    for step in recipe[0]['steps']:
+        if step['name'] == "calibrate_nonlin":
+            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+            step['keywords']['n_cal'] = 14 # low enough for the selected set of SSC TVAC files
+    walker.run_recipe(recipe[0], save_recipe_file=True)
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP

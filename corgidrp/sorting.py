@@ -19,7 +19,7 @@ def extract_datetime(datetime_str):
     output = time.mktime(dt_obj.timetuple()) + dt_obj.microsecond / 1e6
     return output
 
-def sort_remove_frames(dataset_in, actual_visit=True):
+def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
     '''For a given EM gain, this function groups frames consecutive in time stamp into 
     groups with the same exposure time.  Then it finds the two sets with the same 
     exposure time that are the most separated in time.  It then examines any other sets 
@@ -27,7 +27,12 @@ def sort_remove_frames(dataset_in, actual_visit=True):
     discards the rest.
      
     Args:
-      dataset_in (list of corgidrp.Dataset): list of datasets with all the frames to be sorted.
+      dataset_in_list (list of corgidrp.Dataset): list of datasets with all the frames to be sorted.
+      cal_type (string): the calibration type. Case insensitive.
+        Accepted values are:
+        'k-gain' or 'kgain' for K-gain calibration
+        'non-lin(earity)', 'nonlin(earity)' for non-linearity calibration, where
+        the letters within parenthesis are optional.
       actual_visit (bool): if True, the dataset is expected to be a dataset from an actual visit (frames taken in the specific order for the visit), 
         as opposed to a generic collection of files from which we might extract files that satisfy the requirements of the calibration script. Default is True.
         
@@ -46,7 +51,7 @@ def sort_remove_frames(dataset_in, actual_visit=True):
     cal_frame_time_list = []
     exptime_list = []
     filepath_list = []
-    for subset in dataset_in:
+    for subset in dataset_in_list:
         for frame in subset:
             cal_frame_time_list += [extract_datetime(frame.ext_hdr['DATETIME'])]
             exptime_list += [frame.ext_hdr['EXPTIME']]
@@ -73,7 +78,7 @@ def sort_remove_frames(dataset_in, actual_visit=True):
     if len(exptime_cons) < 3: # must have a repeated set, which must have at least one set between
         return None, None, exptime_cons, count_cons, filepath_list
     # find exptime_cons entries that are the same, and then pick the pair that has its repeated set first (since the frames after that would not be in order of increasing exposure time)
-    widest_time_sep = 0 #initialize
+    widest_time_sep = -np.inf #initialize
     widest_time_seps = []
     sets1 = []
     sets2 = []
@@ -94,57 +99,64 @@ def sort_remove_frames(dataset_in, actual_visit=True):
                 time_ind2_f = time_ind2
     exptime_cons_wo_repeats = exptime_cons.copy()
     exptime_cons_wo_repeats = np.delete(exptime_cons_wo_repeats, arrs.astype(int))
+    if len(exptime_cons_wo_repeats) == len(exptime_cons): # no repeatitions
+        return None, None, exptime_cons, count_cons, filepath_list
     # find index of first instance of exptime_cons (ignoring repeats) where exposure times are no longer increasing
     # Beyond this boundary would mean going into the territory of EM gain calibration frames
     ########
     # Find the longest set of consecutive positive values in boundary_wo_indices
-    boundary_wo_indices = np.where(np.diff(exptime_cons_wo_repeats) < 0)[0]
-    if len(boundary_wo_indices) > 0:
-        # if not actual_visit:
-        #     if len(boundary_wo_indices) == 1: 
-        #         if len(exptime_cons_wo_repeats) - 1 - boundary_wo_indices[0] > boundary_wo_indices[0] - 1:
-        #             boundary_index = None
-        #             lower_boundary_wo_index = boundary_wo_indices[0]
-        #             lower_boundary_exptime = exptime_cons_wo_repeats[lower_boundary_wo_index]
-        #             lower_boundary_index = np.where(exptime_cons == lower_boundary_exptime)[0][0]
-        #         else:
-        #             boundary_wo_index = boundary_wo_indices[0]
-        #         boundary_index = None 
-        #         lower_boundary_index = 0
-        #     else: 
-        #         # Find runs of consecutive indices
-        #         boundary_wo_index = np.argmax(np.diff(boundary_wo_indices))+1
-        #         lower_boundary_wo_index = boundary_wo_index - 1
-        #         boundary_exptime = exptime_cons_wo_repeats[boundary_wo_index]
-        #         lower_boundary_exptime = exptime_cons_wo_repeats[lower_boundary_wo_index]
-        #         boundary_index = np.where(exptime_cons == boundary_exptime)[0][0] # only one occurence since not a repeated set
-        #         lower_boundary_index = np.where(exptime_cons == lower_boundary_exptime)[0][0]
-        # else:
-        # lower_boundary_index = 0 #shouldn't be multiple series of increasing exposure times (ignoring repeats) in an actual visit XXX
-        if boundary_wo_indices[0] == len(exptime_cons_wo_repeats) - 1: # last index; must be only repeated sets (if any) after this boundary
-            boundary_index = None 
+    boundary_wo_indices = np.where(np.diff(exptime_cons_wo_repeats) < 0)[0] #XXX not actual visit:  allow for non-increasing exposure times??
+    if len(boundary_wo_indices) > 0:  
+        if len(boundary_wo_indices) == 1: 
+            # if the boundary is nearer to the beginning 
+            if len(exptime_cons_wo_repeats) - 1 - boundary_wo_indices[0] > boundary_wo_indices[0] - 1:
+                boundary_index = None
+                lower_boundary_wo_index = boundary_wo_indices[0]
+                lower_boundary_exptime = exptime_cons_wo_repeats[lower_boundary_wo_index]
+                lower_boundary_index = np.where(exptime_cons == lower_boundary_exptime)[0][0]
+            else: # if nearer to the end; for actual visit:  should be at most one turnaround in non-repeated sets, nearer to the end in all cases for a non-zero length of boundary_wo_indices
+                boundary_wo_index = boundary_wo_indices[0]
+                boundary_exptime = exptime_cons_wo_repeats[boundary_wo_index]
+                boundary_index = np.where(exptime_cons == boundary_exptime)[0][0] # only one occurence since not a repeated set
+                lower_boundary_index = 0
         else: 
-            boundary_wo_index = boundary_wo_indices[0] #+ 1 XXX
+            # Find largest run of consecutive indices
+            boundary_diffwo_index = np.argmax(np.diff(boundary_wo_indices))+1
+            lower_boundary_diffwo_index = boundary_diffwo_index - 1
+            boundary_wo_index = boundary_wo_indices[boundary_diffwo_index]
+            lower_boundary_wo_index = boundary_wo_indices[lower_boundary_diffwo_index]
             boundary_exptime = exptime_cons_wo_repeats[boundary_wo_index]
+            lower_boundary_exptime = exptime_cons_wo_repeats[lower_boundary_wo_index]
             boundary_index = np.where(exptime_cons == boundary_exptime)[0][0] # only one occurence since not a repeated set
+            lower_boundary_index = np.where(exptime_cons == lower_boundary_exptime)[0][0]
+        
     else:
         boundary_index = None 
+        lower_boundary_index = 0
 
     set1 = None
     set2 = None
     if boundary_index is None:
-        # then only one run of increasing exposure time sets present (ignoring repeats), so use the widest time separation
-        set1 = sets1[-1]
-        set2 = sets2[-1]
-    else:
-        for i in range(1, len(sets2)+1):
-            if sets2[-i] >= boundary_index:
-                continue
-            else:
-                # then this is the repeated set with the widest time separation that is within the boundary
-                set1 = sets1[-i]
-                set2 = sets2[-i]
-                break
+        # then only one run of increasing exposure time sets present (ignoring repeats), so choose set with repeated index closest to last non-repeated index
+        last_nonrepeat = np.where(exptime_cons == exptime_cons_wo_repeats[-1])[0][0] # last non-repeated set
+        set_ind = np.argmin(np.abs(sets2 - last_nonrepeat))
+        set1 = sets1[set_ind] # for an actual visit, this will be within lower boundary index, which would be 0 index; and it doesn't matter if it isn't within increasing exposure time sets if not an actual visit
+        set2 = sets2[set_ind]
+    else: # for actual visit, if this happens:  sets1 and sets2 would only have one entry anyways
+        if actual_visit:
+            for i in range(1, len(sets2)+1):
+                if sets2[-i] > boundary_index + 1:
+                    continue
+                else:
+                    # then this is the repeated set with the widest time separation that is within the boundary
+                    set1 = sets1[-i]
+                    set2 = sets2[-i]
+                    break
+        else:
+            # then just pick the last set (the widest time separation)
+            set1 = sets1[-1]
+            set2 = sets2[-1]
+
     if set1 is None or set2 is None:
         raise Exception('No repeated exposure time sets found within the frames for the calibration.')
     # other repeat sets: keep the part of each set that has the most frames (making these repeated sets not repeated)
@@ -181,14 +193,24 @@ def sort_remove_frames(dataset_in, actual_visit=True):
                 for k in range(time_ind1, time_ind2+1):
                     ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0] #[0][0] b/c should only be unique time stamps for all frames
                     inds_leave_out.append(ind_remove)
-    # now leave out sets with just 1 frame 
-    for j in range(len(exptime_cons)):
-        if count_cons[j] <= 1:
-            time_ind1 = np.sum(count_cons[0:j]).astype(int) # first of exposure time set
-            time_ind2 = time_ind1 + count_cons[j] -1 # last of exposure time set
-            for k in range(time_ind1, time_ind2+1):
-                    ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0]
-                    inds_leave_out.append(ind_remove)
+
+    if cal_type.lower() == 'k-gain' or cal_type.lower() == 'kgain':
+        # now leave out sets with just 1 frame if k gain
+        for j in range(len(exptime_cons)):
+            if count_cons[j] <= 1:
+                time_ind1 = np.sum(count_cons[0:j]).astype(int) # first of exposure time set
+                time_ind2 = time_ind1 + count_cons[j] -1 # last of exposure time set
+                for k in range(time_ind1, time_ind2+1):
+                        ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0]
+                        inds_leave_out.append(ind_remove)
+        # also remove repeated sets if k gain since no drift correction employed for k gain calibration 
+        # (and so that a no exposure time is more heavily weighted than another)
+        del_rep_inds_tot = np.append(del_rep_inds_tot, set2)
+        time_ind1 = np.sum(count_cons[0:set2]).astype(int) # first of exposure time set
+        time_ind2 = time_ind1 + count_cons[set2] -1 # last of exposure time set
+        for k in range(time_ind1, time_ind2+1):
+            ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0] #[0][0] b/c should only be unique time stamps for all frames
+            inds_leave_out.append(ind_remove)
 
     return inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, filepath_list
 
@@ -222,23 +244,24 @@ def sort_pupilimg_frames(
         Dataset with the frames used to generate a mean frame and the frames
         used to calibrate the calibration type: k-gain or non-linearity.
     """
-    # Copy dataset
-    dataset_cp = dataset_in.copy()
     if actual_visit: # should have appropriate values populated in exthdr
-        split_dpam, vals = dataset_cp.split_dataset(exthdr_keywords=['DPAMNAME'])
+        split_dpam, vals = dataset_in.split_dataset(exthdr_keywords=['DPAMNAME'])
         for val in vals:
             if 'PUPIL' not in val.upper():
                 raise Exception(f'Expected DPAMNAME to contain PUPIL, but found {val}.')
-        split_cfam, vals = dataset_cp.split_dataset(exthdr_keywords=['CFAMNAME'])
+        del split_dpam
+        split_cfam, vals = dataset_in.split_dataset(exthdr_keywords=['CFAMNAME'])
         for val in vals:
             if 'DARK' in val.upper():
                 raise Exception(f'CFAMNAME should not be DARK.')
-    split_datetime_ds, _ = dataset_cp.split_dataset(exthdr_keywords=['DATETIME'])
+        del split_cfam
+    split_datetime_ds, _ = dataset_in.split_dataset(exthdr_keywords=['DATETIME'])
     for ds in split_datetime_ds:
         if len(ds) > 1:
             raise Exception('Dataset contains more than one frame with the same DATETIME value.')
+    del split_datetime_ds
     # Split by EMGAIN_C
-    split_cmdgain = dataset_cp.split_dataset(exthdr_keywords=['EMGAIN_C'])
+    split_cmdgain = dataset_in.split_dataset(exthdr_keywords=['EMGAIN_C'])
     # Mean frame: split by EXPTIME
     idx_unity = np.where(np.array(split_cmdgain[1])==1)[0][0]
     split_exptime = split_cmdgain[0][idx_unity].split_dataset(exthdr_keywords=['EXPTIME'])
@@ -299,16 +322,30 @@ def sort_pupilimg_frames(
     # Remove MNFRAME frames from unity gain frames
     split_exptime[0].remove(split_exptime[0][idx_mean_frame])
     split_exptime[1].remove(split_exptime[1][idx_mean_frame])
-    inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames(split_exptime[0], actual_visit=actual_visit)
-    if inds_leave_out is None or del_rep_inds_tot is None:
+    # in the datasets, use the AUXFILE with the most frames
+    unity_gain_exptimes_auxs = []
+    for dataset in split_exptime[0]:
+        subs, vals = dataset.split_dataset(prihdr_keywords=['AUXFILE'])
+        subs_lengths = [len(sub) for sub in subs]
+        if len(subs_lengths) == 0:
+            unity_gain_exptimes_auxs.append(dataset)  # no AUXFILE value, so use the dataset as is
+        else:
+            dominant_ind = np.argmax(subs_lengths)
+            unity_gain_exptimes_auxs.append(subs[dominant_ind])
+    inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, unity_gain_filepath_list = sort_remove_frames(unity_gain_exptimes_auxs, cal_type=cal_type, actual_visit=actual_visit)
+    if actual_visit and (inds_leave_out is None or del_rep_inds_tot is None):
         raise Exception('No repeated exposure time sets found within the frames for k gain calibration.')
+    elif not actual_visit and (cal_type.lower() == 'k-gain' or cal_type.lower() == 'kgain'):
+        # then keep them all
+        inds_leave_out = []
+        del_rep_inds_tot = []
     
     # Sort unity gain filenames
     # Update OBSNAME and take profit to check files are in the list
     n_kgain = 0
     cal_frame_list = []
     index = -1 #initiate
-    for subset in split_exptime[0]:
+    for subset in unity_gain_exptimes_auxs:
         for i in range(len(subset)):
             index += 1
             frame = subset.frames[i]
@@ -334,12 +371,22 @@ def sort_pupilimg_frames(
         nonlin_emgain = []
         for idx_gain_set, gain_set in enumerate(split_cmdgain[0]):
             nonunity_split_exptime = gain_set.split_dataset(exthdr_keywords=['EXPTIME'])
-            inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, nonunity_gain_filepath_list = sort_remove_frames(nonunity_split_exptime[0])
+            # in the datasets, use the AUXFILE with the most frames
+            exptimes_auxs = []
+            for dataset in nonunity_split_exptime[0]:
+                subs, vals = dataset.split_dataset(prihdr_keywords=['AUXFILE'])
+                subs_lengths = [len(sub) for sub in subs]
+                if len(subs_lengths) == 0:
+                    exptimes_auxs.append(dataset)  # no AUXFILE value, so use the dataset as is
+                else:
+                    dominant_ind = np.argmax(subs_lengths)
+                    exptimes_auxs.append(subs[dominant_ind])
+            inds_leave_out, del_rep_inds_tot, exptime_cons, count_cons, nonunity_gain_filepath_list = sort_remove_frames(exptimes_auxs, cal_type=cal_type, actual_visit=actual_visit)
             if inds_leave_out is None or del_rep_inds_tot is None:
                 continue # no repeated exposure time sets found within the frames for non-linearity calibration, so ignore that EM gain value (could be for EM gain calibration instead)
             # Update OBSNAME and take profit to check files are in the list
             index = -1 #initiate
-            for subset in nonunity_split_exptime[0]:
+            for subset in exptimes_auxs:
                 for i in range(len(subset)):
                     index += 1
                     frame = subset.frames[i]
@@ -361,8 +408,9 @@ def sort_pupilimg_frames(
         f"was applied to an input dataset from {vistype} visit files." +
         f'The result: {sorting_summary}')
     print(history)
-
+    # free up memory
+    del split_exptime, split_cmdgain, dataset_in
     dataset_sorted = data.Dataset(mean_frame_list + cal_frame_list)
     dataset_sorted.update_after_processing_step(history)
-    # Return Datafrane with mean frame and cal type
+    # Return Dataset with mean frame and cal type
     return dataset_sorted

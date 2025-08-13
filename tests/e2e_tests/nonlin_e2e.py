@@ -16,6 +16,28 @@ from corgidrp import caldb
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
+def set_vistype_for_tvac(
+    list_of_fits,
+    ):
+    """ Adds proper values to VISTYPE for non-linearity calibration.
+
+    This function is unnecessary with future data because data will have
+    the proper values in VISTYPE. Hence, the "tvac" string in its name.
+
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+    """
+    print("Adding VISTYPE='PUPILIMG' to TVAC data")
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        prihdr = fits_file[0].header
+        # Adjust VISTYPE
+        prihdr['VISTYPE'] = 'PUPILIMG'
+        exthdr = fits_file[1].header
+        if exthdr['EMGAIN_A'] == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
 
 def fix_headers_for_tvac(
     list_of_fits,
@@ -64,13 +86,17 @@ def test_nonlin_cal_e2e(
     # figure out paths, assuming everything is located in the same relative location
     nonlin_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin')
+    kgain_l1_datadir = os.path.join(e2edata_path,
+        'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
     tvac_caldir = os.path.join(e2edata_path, 'TV-36_Coronagraphic_Data', 'Cals')
     e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_nonlin_output')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
             f'in {nonlin_l1_datadir}')
-
+    if not os.path.exists(kgain_l1_datadir):
+        raise FileNotFoundError('Please store L1 data used to calibrate kgain',
+            f'in {kgain_l1_datadir}')
     if not os.path.exists(tvac_caldir):
         raise FileNotFoundError(f'Please store L1 calibration data in {tvac_caldir}')
 
@@ -80,9 +106,17 @@ def test_nonlin_cal_e2e(
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
     nonlin_l1_list.sort()
+    kgain_l1_list = []
+    for filename in os.listdir(kgain_l1_datadir):
+        filepath = os.path.join(kgain_l1_datadir, filename)
+        if filepath.lower().endswith('.fits'):
+            kgain_l1_list.append(filepath)
+    kgain_l1_list.sort()
+    nonlin_l1_list = nonlin_l1_list + kgain_l1_list
 
     # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
-    fix_headers_for_tvac(nonlin_l1_list)
+    #fix_headers_for_tvac(nonlin_l1_list)
+    set_vistype_for_tvac(nonlin_l1_list)
 
     # Non-linearity calibration file used to compare the output from CORGIDRP:
     # We are going to make a new nonlinear calibration file using
@@ -99,7 +133,7 @@ def test_nonlin_cal_e2e(
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits" )
+    nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits")
     
     
     # KGain
@@ -118,6 +152,7 @@ def test_nonlin_cal_e2e(
     for step in recipe[0]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
+            step['keywords']['n_cal'] = 14 # low enough for the selected set of SSC TVAC files
     walker.run_recipe(recipe[0], save_recipe_file=True)
     # Compare results
     print('Comparing the results with TVAC')
@@ -131,7 +166,8 @@ def test_nonlin_cal_e2e(
     n_emgain = nonlin_out_table.shape[1]
 
     # NL from TVAC
-    nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
+    nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_8_11_25.fits'))
+    #nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check
@@ -177,7 +213,8 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
+    #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")

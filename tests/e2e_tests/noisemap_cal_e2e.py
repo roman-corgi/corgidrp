@@ -194,9 +194,9 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     output_filename = output_filenamel1.replace('L1','L2a',1)
 
     # Update VISTYPE to "DARK" for DRP run
-    set_obstype_for_darks(stack_arr_files)
+    #set_obstype_for_darks(stack_arr_files)XXX
     # update headers
-    fix_headers_for_tvac(stack_arr_files)
+    #fix_headers_for_tvac(stack_arr_files) XXX
 
     ####### Run the DRP walker
     template = "l1_to_l2a_noisemap.json"

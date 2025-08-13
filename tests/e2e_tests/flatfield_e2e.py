@@ -7,6 +7,7 @@ import scipy.ndimage
 import astropy.time as time
 import astropy.io.fits as fits
 import corgidrp
+import re
 import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
@@ -68,8 +69,14 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     target_snr = 250/np.sqrt(4.95) # per pix
 
     # figure out the base filename and filenumber from the first file in the filelist.
-    start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
-    base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    #start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
+    #base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
+    match = re.findall(r'\d{2,}', l1_dark_st_filename)
+    last_num_str = match[-1] if match else None
+    start_filenum = int(last_num_str)
+    last_num_str_ind = l1_dark_st_filename.find(last_num_str)
+    base_filename = l1_dark_st_filename[:last_num_str_ind]
     l1_flat_dataset = []
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
@@ -249,8 +256,14 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     target_snr = 250/np.sqrt(4.95) # per pix
 
     # figure out the base filename and filenumber from the first file in the filelist.
-    start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
-    base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    # start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
+    # base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
+    match = re.findall(r'\d{2,}', l1_dark_st_filename)
+    last_num_str = match[-1] if match else None
+    start_filenum = int(last_num_str)
+    last_num_str_ind = l1_dark_st_filename.find(last_num_str)
+    base_filename = l1_dark_st_filename[:last_num_str_ind]
     l1_flat_dataset = []
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
@@ -377,7 +390,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    # e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

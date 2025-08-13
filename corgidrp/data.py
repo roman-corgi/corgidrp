@@ -1781,7 +1781,7 @@ class CoreThroughputCalibration(Image):
         r_good = radius_cor >= radii.min()
         
         if len(x_cor[r_good]) == 0:
-            raise ValueError('All target radius are less than the minimum '
+            raise ValueError('All target radii are less than the minimum '
                 'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor

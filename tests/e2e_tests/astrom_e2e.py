@@ -70,10 +70,17 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     rawdata_dir = os.path.join(astrom_cal_outputdir, 'data')
     if not os.path.exists(rawdata_dir):
         os.mkdir(rawdata_dir)
+    # clean out any files from a previous run
+    for f in os.listdir(rawdata_dir):
+        file_path = os.path.join(rawdata_dir, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
     # get an idea of the noise rms
     noise_datacube = []
     for dark in os.listdir(noise_characterization_path):
+        if not dark.lower().endswith('.fits'):
+            continue
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             noise_datacube.append(dark_dat)
@@ -81,6 +88,8 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_rms = np.mean(noise_std)
 
     for dark in os.listdir(noise_characterization_path):
+        if not dark.lower().endswith('.fits'):
+                continue
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['VISTYPE'] = "BORESITE"
@@ -99,17 +108,25 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
                         hdulist[1].header.add_history(item)
                 elif ext_key not in hdulist[1].header:
                     hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
-
+            
+            hdulist[0].header['RA'] = image_sources[0].pri_hdr['RA'] 
+            hdulist[0].header['DEC'] = image_sources[0].pri_hdr['DEC']
             # save to the data dir in the output directory
             hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'.fits'), overwrite=True)
 
     # define the raw science data to process
     ## replace w my raw data sets
     sim_data_filelist = [os.path.join(rawdata_dir, f) for f in os.listdir(rawdata_dir)] # full paths to simulated data
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
+    mock_cal_filelist = []
+    # grab 2 files of real data to mock the calibration
+    for filename in os.listdir(l1_datadir):
+        if filename.lower().endswith('.fits'):
+            mock_cal_filelist.append(os.path.join(l1_datadir, filename))
+        if len(mock_cal_filelist) == 2:
+            break
 
     # update headers of TVAC data
-    fix_headers_for_tvac(sim_data_filelist)
+    #fix_headers_for_tvac(sim_data_filelist)
 
     ###### Setup necessary calibration files
     # Create necessary calibration files
@@ -219,7 +236,8 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(astrom_cal)
 
 if __name__ == "__main__":
-    e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
+    #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

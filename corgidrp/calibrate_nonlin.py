@@ -12,7 +12,6 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 from corgidrp import check
 import corgidrp.data as data
-from corgidrp.calibrate_kgain import CalKgainException
 
 # Dictionary with constant non-linearity calibration parameters
 nonlin_params_default = {
@@ -239,8 +238,10 @@ def calibrate_nonlin(dataset_nl,
     if np.ndim(dataset_nl.all_data) != 3:
         raise Exception('dataset_nl.all_data must be 3-D')
     # cast dataset objects into np arrays and retrieve aux information
-    cal_arr, mean_frame_arr, exp_arr, datetime_arr, len_list, actual_gain_arr = \
-        nonlin_dataset_2_stack(dataset_nl, apply_dq = apply_dq)
+    cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, actual_gain_arr, datetimes_sort_inds, _ = \
+        nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq)
+    cal_arr = np.vstack(cal_list)[datetimes_sort_inds]
+    mean_frame_arr = np.stack(mean_frame_list)
     # Get relevant constants
     rowroi1 = nonlin_params['rowroi1']
     rowroi2 = nonlin_params['rowroi2']
@@ -836,7 +837,7 @@ def calibrate_nonlin(dataset_nl,
     
     return nonlin
 
-def nonlin_dataset_2_stack(dataset, apply_dq = True):
+def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
     of numpy arrays sharing the same commanded gain value. It also returns the list of
@@ -850,11 +851,14 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
         apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
 
     Returns:
-        numpy array with stack of stacks of data array associated with each frame
+        list of data arrays associated with each frame
+        list of mean frames
         array of exposure times associated with each frame
         array of datetimes associated with each frame
         list with the number of frames with same EM gain
         List of actual EM gains
+        array of indices for timestamp ordering
+        number of frames each set of frames with same exposure time truncated to for EM gain = 1 frames
 
     """
     # Split Dataset
@@ -874,16 +878,25 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
     len_sstack = []
     # Record measured gain of each substack of calibration frames
     gains = []
+    smallest_set_len = None
     for idx_set, data_set in enumerate(split[0]):
-        # Second layer for calibration data (array of different exposure times)
-        sub_stack = []
+        obsname_dsets, obsname_vals = data_set.split_dataset(prihdr_keywords=['OBSNAME'])
+        cal_dsets = []
+        mnframe_ind = None
+        for i, v in enumerate(obsname_vals):
+            if v.upper()=='MNFRAME':
+                mnframe_ind = i
+            else:
+                cal_dsets.append(obsname_dsets[i])
+        # First layer (array of unique EM values)
+        stack_cp = []
         len_cal_frames = 0
         record_gain = True 
-        for frame in data_set.frames:
-            if apply_dq:
-                bad = np.where(frame.dq > 0)
-                frame.data[bad] = np.nan
-            if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
+        if mnframe_ind is not None:
+            for frame in obsname_dsets[mnframe_ind]:
+                if apply_dq:
+                    bad = np.where(frame.dq > 0)
+                    frame.data[bad] = np.nan
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
                     record_exp_time = False
@@ -892,44 +905,68 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
                 if frame.ext_hdr['EMGAIN_C'] != 1:
                     raise Exception('The commanded gain used to build the mean frame must be unity')
                 mean_frame_stack.append(frame.data)
-            elif (frame.pri_hdr['OBSNAME'] == 'KGAIN' or
-                frame.pri_hdr['OBSNAME'] == 'NONLIN'):
-                len_cal_frames += 1
-                sub_stack.append(frame.data)
-                exp_time = frame.ext_hdr['EXPTIME']
-                if isinstance(exp_time, float) is False:
-                    raise Exception('Exposure times must be float')
-                if exp_time <=0:
-                    raise Exception('Exposure times must be positive')
-                exp_times.append(exp_time)
-                datetime = frame.ext_hdr['DATETIME']
-                
-                if isinstance(datetime, str) is False:
-                    raise Exception('DATETIME must be a string')
-                datetimes.append(datetime)
-                if record_gain:
-                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
-                        gains.append(frame.ext_hdr['EMGAIN_M'])
-                    except:
-                        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
-                            gains.append(frame.ext_hdr['EMGAIN_A'])
-                        else: # use commanded gain otherwise
-                            gains.append(frame.ext_hdr['EMGAIN_C'])
-                        record_gain = False
+        for cal_dset in cal_dsets:
+            # each of dsets has just one frame in it
+            dsets, vals = cal_dset.split_dataset(exthdr_keywords=['DATETIME','EXPTIME'])
+            smallest_set_length = np.inf
+            sub = []
+            start_val = float(vals[0][1])
+            start_val_ind = 0
+            exptime_dsets = []
+            for val in vals:
+                if vals.index(val) == 0:
+                    continue
+                if float(val[1]) == start_val:
+                    pass
+                else:
+                    exptime_dsets.append(dsets[start_val_ind:vals.index(val)])
+                    start_val = float(val[1])
+                    start_val_ind = vals.index(val)
+            # ending set not covered
+            exptime_dsets.append(dsets[start_val_ind:])
+            for i in exptime_dsets:
+                if len(i) < smallest_set_length:
+                    smallest_set_length = len(i)
+            for i, exptime_dset_list in enumerate(exptime_dsets):
+                sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
+                for exptime_dset in exptime_dset_list[:smallest_set_length]:
+                    frame = exptime_dset.frames[0]
+                    if not (frame.pri_hdr['OBSNAME'] == 'KGAIN' or 
+                    frame.pri_hdr['OBSNAME'] == 'NONLIN'):
+                        raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
+                    datetime = frame.ext_hdr['DATETIME']                
+                    if isinstance(datetime, str) is False:
+                        raise Exception('DATETIME must be a string')
+                    datetimes.append(datetime)
+                    exp_time = frame.ext_hdr['EXPTIME']
+                    if isinstance(exp_time, float) is False:
+                        raise Exception('Exposure times must be float')
+                    if exp_time <=0:
+                        raise Exception('Exposure times must be positive')
+                    exp_times.append(exp_time)
+                    if record_gain:
+                        try: # if EM gain measured directly from frame
+                            gains.append(frame.ext_hdr['EMGAIN_M'])
+                        except:
+                            if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                                gains.append(frame.ext_hdr['EMGAIN_A'])
+                            else: # use commanded gain otherwise
+                                gains.append(frame.ext_hdr['EMGAIN_C'])
+                            record_gain = False
+                    if gains[-1] == 1:
+                        smallest_set_len = smallest_set_length
+                stack_cp.append(sub)
+                len_cal_frames += len(sub)
+            # Length of substack must be at least 1
+            if len(stack_cp) == 0:
+                raise Exception('Substacks must have at least one element')
             else:
-                raise Exception('OBSNAME can only be MNFRAME or NONLIN in non-linearity')
-        
-        # First layer (array of unique EM values)
-        if len(sub_stack):
-            stack.append(np.stack(sub_stack))
-            len_sstack.append(len_cal_frames)
-
+                stack.append(np.vstack(stack_cp))
+                len_sstack.append(len_cal_frames)
+    
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
         raise Exception('DATETIMEs cannot be duplicated')
-    # Length of substack must be at least 1
-    if len(len_sstack) == 0:
-        raise Exception('Substacks must have at least one element')
     # Every EM gain must be greater than or equal to 1
     if np.any(np.array(split[1]) < 1):
         raise Exception('Each set of frames categorized by commanded EM gains must be have 1 or more frames')
@@ -938,5 +975,5 @@ def nonlin_dataset_2_stack(dataset, apply_dq = True):
     
     # sort frames by time stamp for drift correction later
     datetimes_sort_inds = np.argsort(datetimes)
-    return (np.vstack(stack)[datetimes_sort_inds], np.stack(mean_frame_stack), np.array(exp_times)[datetimes_sort_inds],
-        np.array(datetimes)[datetimes_sort_inds], len_sstack, np.array(gains))
+    return (stack, mean_frame_stack, np.array(exp_times)[datetimes_sort_inds],
+        np.array(datetimes)[datetimes_sort_inds], len_sstack, np.array(gains), datetimes_sort_inds, smallest_set_len)

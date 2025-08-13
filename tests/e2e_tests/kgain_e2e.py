@@ -158,6 +158,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     for step in recipe[1]['steps']:
         if step['name'] == "calibrate_kgain":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+            step['keywords']['n_cal'] = 4 # low enough for the selected set of SSC TVAC files
     walker.run_recipe(recipe[1], save_recipe_file=True)
 
     ####### Load in the output data. It should be the latest kgain file produced.

@@ -10,6 +10,7 @@ from corgidrp import caldb
 from corgidrp import detector
 from corgidrp import darks
 from corgidrp import walker
+from corgidrp import mocks
 
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
@@ -58,19 +59,22 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    l1_data_filelist = []
+    for filename in os.listdir(l1_datadir)[:2]:
+        l1_data_filelist.append(os.path.join(l1_datadir, filename))
+    #l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     # update TVAC headers
-    fix_headers_for_tvac(l1_data_filelist)
+    #fix_headers_for_tvac(l1_data_filelist)
 
     ###### Setup necessary calibration files
-    # Modify input files to set KGAIN value in their headers
-    for file in l1_data_filelist:
-        with fits.open(file, mode='update') as hdulist:
-            # Modify the extension header to set KGAIN to 8.7
-            pri_hdr = hdulist[0].header
-            ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-            ext_hdr["KGAINPAR"] = 8.7
+    # Modify input files to set KGAIN value in their headers XXX
+    # for file in l1_data_filelist:
+    #     with fits.open(file, mode='update') as hdulist:
+    #         # Modify the extension header to set KGAIN to 8.7
+    #         pri_hdr = hdulist[0].header
+    #         ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
+    #         ext_hdr["KGAINPAR"] = 8.7
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
@@ -96,6 +100,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Initialize additional noise map parameters
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electrons'
     ext_hdr['B_O'] = 0
@@ -232,19 +237,22 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    l1_data_filelist = []
+    for filename in os.listdir(l1_datadir)[:2]:
+        l1_data_filelist.append(os.path.join(l1_datadir, filename))
+    # l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     # update TVAC headers
-    fix_headers_for_tvac(l1_data_filelist)
+    #fix_headers_for_tvac(l1_data_filelist)
 
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
-    for file in l1_data_filelist:
-        with fits.open(file, mode='update') as hdulist:
-            # Modify the extension header to set KGAIN to 8.7
-            pri_hdr = hdulist[0].header
-            ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-            ext_hdr["KGAIN"] = 8.7
+    # for file in l1_data_filelist: XXX
+    #     with fits.open(file, mode='update') as hdulist:
+    #         # Modify the extension header to set KGAIN to 8.7
+    #         pri_hdr = hdulist[0].header
+    #         ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
+    #         ext_hdr["KGAIN"] = 8.7
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
@@ -255,6 +263,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     ## Load and save flat field calibration data
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
+    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                           input_dataset=mock_input_dataset)
     flat.save(filedir=bp_map_outputdir, filename="mock_flat_FLT_CAL.fits")
@@ -345,7 +354,8 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
+    # e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
     outputdir = thisfile_dir
 
     # Argument parser setup

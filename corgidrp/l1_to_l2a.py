@@ -23,22 +23,26 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-
+    # Make a copy of the input dataset to operate on
+    output_dataset = input_dataset.copy(copy_data=False)
+    
     if detector_regions is None:
         detector_regions = detector_areas
 
     # Initialize list of output frames to be concatenated
-    out_frames_data = []
-    out_frames_err = []
-    out_frames_dq = []
-    out_frames_bias = []
+    out_frames_data_arr = []
+    out_frames_err_arr = []
+    out_frames_dq_arr = []
+    out_frames_bias_arr = []
 
     # Place to save new error estimates to be added later via Image.add_error_term()
     new_err_list = []
-
+    dataset_length = len(input_dataset)
+    # save memory
+    del input_dataset.all_data, input_dataset.all_err, input_dataset.all_dq
     # Iterate over frames
-    for i, frame in enumerate(input_dataset):
-
+    for i in range(dataset_length):
+        frame = input_dataset[i]
         frame_data = np.copy(frame.data)
         frame_err = np.copy(frame.err)
         frame_dq = np.copy(frame.dq)
@@ -116,36 +120,26 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         bias = medbyrow - bias_offset
         image_bias_corrected = image_data - bias
 
-        out_frames_data.append(image_bias_corrected)
-        out_frames_err.append(image_err)
-        out_frames_dq.append(image_dq)
-        out_frames_bias.append(bias[:,0]) # save 1D version of array
-
+        out_frames_data_arr.append(image_bias_corrected)
+        out_frames_err_arr.append(image_err)
+        out_frames_dq_arr.append(image_dq)
+        out_frames_bias_arr.append(bias[:,0]) # save 1D version of array
+        output_dataset.frames[i].data = image_bias_corrected
+        output_dataset.frames[i].err = image_err
+        output_dataset.frames[i].dq = image_dq
+        output_dataset.frames[i].add_extension_hdu("BIAS",data=bias[:,0])
+        # Update header with new frame dimensions
+        output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
+        output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[0]
+        # save memory
+        del frame.data, frame.err, frame.dq, prescan, al_prescan, medbyrow, sterrbyrow, frame_err, frame_dq
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
-    out_frames_data_arr = np.array(out_frames_data)
-    out_frames_err_arr = np.array(out_frames_err)
-    out_frames_dq_arr = np.array(out_frames_dq)
-    out_frames_bias_arr = np.array(out_frames_bias, dtype=np.float32)
-    # try to free some memory
-    del out_frames_data, out_frames_err, out_frames_dq, out_frames_bias
-
-    # Make a copy of the input dataset to operate on
-    output_dataset = input_dataset.copy(copy_data=False)
-
+    out_frames_data_arr = np.array(out_frames_data_arr)
+    out_frames_err_arr = np.array(out_frames_err_arr)
+    out_frames_dq_arr = np.array(out_frames_dq_arr)
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
     output_dataset.all_dq = out_frames_dq_arr
-
-    for i,frame in enumerate(output_dataset):
-        frame.data = out_frames_data_arr[i]
-        frame.err = out_frames_err_arr[i]
-        frame.dq = out_frames_dq_arr[i]
-        # frame.bias = out_frames_bias_arr[i]
-        frame.add_extension_hdu("BIAS",data=out_frames_bias_arr[i])
-
-        # Update header with new frame dimensions
-        frame.ext_hdr['NAXIS1'] = out_frames_data_arr[i].shape[1]
-        frame.ext_hdr['NAXIS2'] = out_frames_data_arr[i].shape[0]
 
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")

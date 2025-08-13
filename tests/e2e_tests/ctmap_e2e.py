@@ -14,7 +14,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
-from corgidrp import caldb
+import corgidrp.caldb as caldb
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -69,7 +69,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create CT dataset
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
-    # Create a mock coronagrahoc dataset with a different FPM's center than the
+    # Create a mock coronagrahic dataset with a different FPM's center than the
     # CT dataset
     corDataset_image_list = mocks.create_ct_psfs(50)[0]
     # Make sure all dataframes share the same common header values
@@ -108,14 +108,21 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     if os.path.exists(ctmap_outputdir):
         shutil.rmtree(ctmap_outputdir)
     os.mkdir(ctmap_outputdir)
-
+    
+    this_caldb = caldb.CalDB() # connection to cal DB
+    # remove other calibrations that may exist
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'FpamFsamCal':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'CoreThroughputCalibration':
+            this_caldb._db = this_caldb._db.drop(i)
+    this_caldb.save()
     # Create CT cal file from the mock data directly
     ct_cal_mock = corethroughput.generate_ct_cal(corethroughput_dataset)
     # Save it
     ct_cal_mock.filedir = ctmap_outputdir
     ct_cal_mock.save()
     # Add it to caldb
-    this_caldb = caldb.CalDB()
     this_caldb.create_entry(ct_cal_mock)
 
     # Create the CT map. Do not save it. We will compare it with the map from
@@ -123,6 +130,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # FPAM/FSAM
     fpam_fsam_cal = data.FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
         'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+    if 'OBSNUM' not in fpam_fsam_cal.pri_hdr:
+        fpam_fsam_cal.pri_hdr['OBSNUM'] = fpam_fsam_cal.pri_hdr['OBSID']
+    if 'EMGAIN_C' not in fpam_fsam_cal.ext_hdr:
+        fpam_fsam_cal.ext_hdr['EMGAIN_C'] = fpam_fsam_cal.ext_hdr['CMDGAIN']
+    this_caldb.create_entry(fpam_fsam_cal)
     # The first entry (dataset) is only used to get the FPM's center
     ct_map_mock = corethroughput.create_ct_map(corDataset, fpam_fsam_cal,
         ct_cal_mock)
@@ -153,6 +165,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(ct_cal_drp)
+    this_caldb.remove_entry(fpam_fsam_cal)
 
     # Print success message
     print('e2e test for corethroughput map passed')

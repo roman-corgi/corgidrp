@@ -62,7 +62,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     tvac_l2a_filelist = [os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
 
     # fix headers for TVAC
-    fix_headers_for_tvac(l1_data_filelist)
+    #fix_headers_for_tvac(l1_data_filelist)
 
     ###### Setup necessary calibration files
     # Create necessary calibration files

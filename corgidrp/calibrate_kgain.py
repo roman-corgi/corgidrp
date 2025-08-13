@@ -9,6 +9,8 @@ from corgidrp import check
 import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.detector import slice_section, detector_areas
+from corgidrp.sorting import extract_datetime
+from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
 
 # Dictionary with constant kgain calibration parameters
 kgain_params_default= {
@@ -299,7 +301,7 @@ def calibrate_kgain(dataset_kgain,
         exposure time. These two subsets are not contiguous: The first subset is
         taken near the start of the data collection and the second one is taken
         at the end of the data collection (see TVAC example below). Two subsets with 
-        the same exposure time is not strictly needed for k gain calibration, but it is needed 
+        the same exposure time are not strictly needed for k gain calibration, but they are needed 
         for nonlinearity calibration, and the same visit will be used to cover both 
         k gain and nonlinearity calibrations, so there should be two unity gain frame subsets
         with the same exposure time. The mean
@@ -372,8 +374,11 @@ def calibrate_kgain(dataset_kgain,
         detector_regions = detector_areas
 
     # cast dataset objects into np arrays for convenience
-    cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain, apply_dq = apply_dq)
-
+    #cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain, apply_dq = apply_dq)
+    cal_list, mean_frame_list, _, _, _, actual_gains, _, truncated_set_len = nonlin_kgain_dataset_2_stack(dataset_kgain, apply_dq = apply_dq)
+    split_arr = np.arange(0,len(cal_list[0]), truncated_set_len)[1:]
+    cal_list = np.split(cal_list[0], split_arr)
+    actual_gain = np.nanmean(actual_gains)
     # check number of frames, unique EM value, exposure times and datetimes
     tmp = cal_list[0]
     for idx in range(4):
@@ -838,6 +843,7 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
     len_sstack = []
     # Record measured gain of each substack of calibration frames
     gains = []    
+    latest_datetime = 0 #initialize
     for idx_set, data_set in enumerate(split[0]):
         # Second layer (array of different exposure times)
         sub_stack = []
@@ -871,6 +877,10 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
                     raise Exception('Exposure times must be positive')
                 exp_times.append(exp_time)
                 datetime = frame.ext_hdr['DATETIME']
+                date_number = extract_datetime(datetime)
+                if date_number > latest_datetime:
+                    latest_datetime = date_number
+                    repeat_ind = len(sub_stack) - 1
                 if isinstance(datetime, str) is False:
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
@@ -879,7 +889,7 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
                     raise Exception('Commanded EM gain must be >= 1')
                 em_gains.append(em_gain)
                 if record_gain:
-                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                    try: # if EM gain measured directly from frame 
                         gains.append(frame.ext_hdr['EMGAIN_M'])
                     except:
                         if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
@@ -896,10 +906,13 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
     stack_cp = []
     # Get expected size of substacks
     len_sub = min(len_sstack)
+    rep_len_sub = 2*len_sub
     # Length of substack must be at least 1
     if len(len_sstack) == 0:
         raise Exception('Substacks must have at least one element')
     for sub in stack:
+        if stack.index(sub) == repeat_ind:
+            continue
         if len(sub) == len_sub:
             stack_cp.append(sub)
         else:
@@ -911,6 +924,165 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
             for rep in range(len(sub)//len_sub):
                 stack_cp.append(sub[idx_0:idx_0+len_sub])
                 idx_0 += len_sub
+    if len(stack[repeat_ind]) == rep_len_sub:
+        stack_cp.append(sub)
+    else:
+        rep_sub = stack[repeat_ind]
+        # Add extra care confirming all collected substacks have same # frames
+        if len(rep_sub)/rep_len_sub != len(rep_sub)//rep_len_sub:
+            # truncate substack to the nearest multiple of len_sub
+            rep_sub = rep_sub[:len(rep_sub)//rep_len_sub*rep_len_sub]
+        idx_0 = 0
+        for rep in range(len(rep_sub)//rep_len_sub):
+            stack_cp.append(rep_sub[idx_0:idx_0+rep_len_sub])
+            idx_0 += rep_len_sub
+    stack = stack_cp        
+    # All elements of datetimes must be unique
+    if len(datetimes) != len(set(datetimes)):
+        raise Exception('DATETIMEs cannot be duplicated')
+    # There can only be an EM gain in the data used to calibrate K-gain
+    if len(set(em_gains)) != 1:
+        raise Exception('There can only be one commanded EM gain when calibrating K-Gain')
+    if np.any(np.array(gains) < 1):
+        raise Exception('Actual EM gains must be greater than or equal to 1')
+    # When measuring k_gain, there can only be one gain for all exposure times
+    actual_gain = np.nanmean(gains) # not actually used in k gain calibration since frames already gain-divided
+    
+    return stack, mean_frame_stack, actual_gain
+
+
+def kgain_dataset_2_list_old(dataset, apply_dq = True):
+    """
+    Casts the CORGIDRP Dataset object for K-gain calibration into a list of
+    numpy arrays sharing the same exposure time. It also returns the list of
+    unique EM values and set of exposure times used with each EM. Note: EM gain
+    is the commanded values: EMGAIN_C.
+
+    This function also performs a set of tests about the data type and values in
+    dataset.
+
+    Args:
+        dataset (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
+        pupil L1 SCI frames (counts in DN)
+        apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
+
+    Returns:
+        list with stack of stacks of data array associated with each frame
+        array of exposure times associated with each frame
+        array of datetimes associated with each frame
+
+    """
+    # Split Dataset
+    dataset_cp = dataset.copy()
+    split = dataset_cp.split_dataset(exthdr_keywords=['EXPTIME'])
+
+    # Data
+    stack = []
+    # Mean frame data
+    mean_frame_stack = []
+    # Exposure times
+    exp_times = []
+    # Datetimes
+    datetimes = []
+    # EM gains (There can only be an EM gain in the data used to calibrate K-gain)
+    em_gains = []
+    # Size of each sub stack
+    len_sstack = []
+    # Record measured gain of each substack of calibration frames
+    gains = []    
+    latest_datetime = 0 #initialize
+    for idx_set, data_set in enumerate(split[0]):
+        # Second layer (array of different exposure times)
+        sub_stack = []
+        record_exp_time = True
+        record_len = True
+        record_gain = True
+        for frame in data_set.frames:
+            if apply_dq:
+                bad = np.where(frame.dq > 0)
+                frame.data[bad] = np.nan
+            if record_exp_time:
+                exp_time_mean_frame = frame.ext_hdr['EXPTIME']
+                record_exp_time = False
+
+            if frame.ext_hdr['EXPTIME'] != exp_time_mean_frame:
+                raise Exception('Frames in the same data set must have the same exposure time')
+
+            if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
+                if frame.ext_hdr['EMGAIN_C'] != 1:
+                    raise Exception('The commanded gain used to build the mean frame must be unity')
+                mean_frame_stack.append(frame.data)
+            else:
+                if record_len:
+                    len_sstack.append(len(data_set.frames))
+                    record_len = False
+                sub_stack.append(frame.data)
+                exp_time = frame.ext_hdr['EXPTIME']
+                if isinstance(exp_time, float) is False:
+                    raise Exception('Exposure times must be float')
+                if exp_time <=0:
+                    raise Exception('Exposure times must be positive')
+                exp_times.append(exp_time)
+                datetime = frame.ext_hdr['DATETIME']
+                date_number = extract_datetime(datetime)
+                if date_number > latest_datetime:
+                    latest_datetime = date_number
+                    repeat_ind = len(sub_stack) - 1
+                if isinstance(datetime, str) is False:
+                    raise Exception('DATETIME must be a string')
+                datetimes.append(datetime)
+                em_gain = frame.ext_hdr['EMGAIN_C']
+                if em_gain < 1:
+                    raise Exception('Commanded EM gain must be >= 1')
+                em_gains.append(em_gain)
+                if record_gain:
+                    try: # if EM gain measured directly from frame 
+                        gains.append(frame.ext_hdr['EMGAIN_M'])
+                    except:
+                        if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
+                            gains.append(frame.ext_hdr['EMGAIN_A'])
+                        else: # use commanded gain otherwise
+                            gains.append(frame.ext_hdr['EMGAIN_C'])
+                        record_gain = False
+                
+        # Calibration data may have different subsets
+        if len(sub_stack) != 0:
+            stack.append(np.stack(sub_stack))
+
+    # Need to split substacks with the same exposure times
+    stack_cp = []
+    # Get expected size of substacks
+    len_sub = min(len_sstack)
+    rep_len_sub = 2*len_sub
+    # Length of substack must be at least 1
+    if len(len_sstack) == 0:
+        raise Exception('Substacks must have at least one element')
+    for sub in stack:
+        if stack.index(sub) == repeat_ind:
+            continue
+        if len(sub) == len_sub:
+            stack_cp.append(sub)
+        else:
+            # Add extra care confirming all collected substacks have same # frames
+            if len(sub)/len_sub != len(sub)//len_sub:
+                # truncate substack to the nearest multiple of len_sub
+                sub = sub[:len(sub)//len_sub*len_sub]
+            idx_0 = 0
+            for rep in range(len(sub)//len_sub):
+                stack_cp.append(sub[idx_0:idx_0+len_sub])
+                idx_0 += len_sub
+    if len(stack[repeat_ind]) == rep_len_sub:
+        stack_cp.append(sub)
+    else:
+        rep_sub = stack[repeat_ind]
+        # Add extra care confirming all collected substacks have same # frames
+        if len(rep_sub)/rep_len_sub != len(rep_sub)//rep_len_sub:
+            # truncate substack to the nearest multiple of len_sub
+            rep_sub = rep_sub[:len(rep_sub)//rep_len_sub*rep_len_sub]
+        idx_0 = 0
+        for rep in range(len(rep_sub)//rep_len_sub):
+            stack_cp.append(rep_sub[idx_0:idx_0+rep_len_sub])
+            idx_0 += rep_len_sub
     stack = stack_cp        
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):
