@@ -12,6 +12,9 @@ import pyklip.fakes as fakes
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 
+import warnings
+from scipy.optimize import OptimizeWarning
+
 def centroid(frame):
     """
     Finds the center coordinates for a given frame.
@@ -169,7 +172,9 @@ def measure_offset(frame, xstar_guess, ystar_guess, xoffset_guess, yoffset_guess
     data = ndi.map_coordinates(frame, [ydata, xdata])
     
     ### Fit the PSF to the data ###
-    popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux), maxfev=2000)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=OptimizeWarning)
+        popt, pcov = optimize.curve_fit(shift_psf, stamp, data.ravel(), p0=(0,0,guessflux), maxfev=2000)
     tinyoffsets = popt[0:2]
     fit_errs = np.sqrt([pcov[0,0], pcov[1,1], pcov[2,2]])
 

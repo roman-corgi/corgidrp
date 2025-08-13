@@ -15,6 +15,7 @@ from astropy import wcs
 import copy
 import corgidrp
 from datetime import datetime, timedelta, timezone
+from astropy.io.fits.verify import VerifyWarning
 
 class Dataset():
     """
@@ -462,7 +463,9 @@ class Image():
         for hdu in self.hdu_list:
             hdulist.append(hdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=VerifyWarning)
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
     def _record_parent_filenames(self, input_dataset):

@@ -4,6 +4,7 @@ import copy
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas
+import warnings
 
 def add_photon_noise(input_dataset):
     """
@@ -27,7 +28,9 @@ def add_photon_noise(input_dataset):
                 em_gain = em_gain
             else: # otherwise use commanded EM gain
                 em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
-        phot_err = np.sqrt(frame.data)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            phot_err = np.sqrt(frame.data)
         #add excess noise in case of em_gain
         if em_gain > 1:
             phot_err *= np.sqrt(2)           
