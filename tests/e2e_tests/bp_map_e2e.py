@@ -25,6 +25,7 @@ def fix_headers_for_tvac(
 
     Args:
         list_of_fits (list): list of FITS files that need to be updated.
+        output_dir (str): directory to write results to
     """
     print("Fixing TVAC headers and filenames")
     for i, file in enumerate(list_of_fits):
