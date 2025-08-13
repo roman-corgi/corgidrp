@@ -6,6 +6,7 @@ import numpy as np
 import scipy.ndimage
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -29,12 +30,12 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flat_neptune_output")
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_output/neptune_output")
     if not os.path.exists(flat_outputdir):
-        os.mkdir(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "mock_input_data")
+        os.makedirs(flat_outputdir)
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_data")
     if not os.path.exists(flat_mock_inputdir):
-        os.mkdir(flat_mock_inputdir)    
+        os.makedirs(flat_mock_inputdir)    
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -66,10 +67,11 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     cols = detector.detector_areas["SCI"]["image"]['cols']
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
-
-    # figure out the base filename and filenumber from the first file in the filelist.
-    start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
-    base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    
+    # Generate proper calibration filenames
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S')
+    visitid = "0000000000000000000"
+    
     l1_flat_dataset = []
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
@@ -78,7 +80,30 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
+        
+        # Extract frame number from current filename like in astrom_e2e.py
+        current_filename = base_image.filename
+        if '_l1_' in current_filename:
+            # Extract the frame number after '_l1_'
+            frame_number = current_filename.split('_l1_')[-1].replace('.fits', '')
+            visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+        else:
+            visitid = f"{i:019d}"  # Fallback- use file index padded to 19 digits
+        
+        filetime = base_image.ext_hdr.get('FILETIME', base_image.pri_hdr.get('FILETIME', None))
+        
+        # Convert filetime to the format expected in filenames (YYYYMMDDtHHMMSS)
+        if filetime and 'T' in filetime:
+            try:
+                dt = datetime.fromisoformat(filetime.replace('Z', '+00:00'))
+                filetime = dt.strftime('%Y%m%dt%H%M%S')
+            except:
+                filetime = datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+        elif not filetime:
+            filetime = datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+        
+        # Create proper L1 filename: cgi_{visitid}_{filetime}_l1_.fits
+        base_image.filename = f"cgi_{visitid}_{filetime}_l1_.fits"
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -117,7 +142,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -133,7 +158,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
+    kgain.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -157,7 +182,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
+    noise_map.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     ####### Run the walker on some test_data
@@ -174,17 +199,17 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat # compute residual from true
     smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
-    print(np.std(smoothed_diff[good_region]))
+    #print(np.std(smoothed_diff[good_region]))
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
 
     ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
@@ -210,12 +235,12 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flat_uranus_output")
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_output/uranus_output")
     if not os.path.exists(flat_outputdir):
-        os.mkdir(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "mock_input_data")
+        os.makedirs(flat_outputdir)
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_data")
     if not os.path.exists(flat_mock_inputdir):
-        os.mkdir(flat_mock_inputdir)    
+        os.makedirs(flat_mock_inputdir)    
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -248,9 +273,12 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-    # figure out the base filename and filenumber from the first file in the filelist.
-    start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
-    base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    # Create proper L1 filenames following the convention
+    
+    # Generate proper calibration filenames
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S')
+    visitid = "0000000000000000000"
+    
     l1_flat_dataset = []
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
@@ -259,7 +287,30 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
+        
+        # Extract frame number from current filename like in astrom_e2e.py
+        current_filename = base_image.filename
+        if '_l1_' in current_filename:
+            # Extract the frame number after '_l1_'
+            frame_number = current_filename.split('_l1_')[-1].replace('.fits', '')
+            visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+        else:
+            visitid = f"{i:019d}"  # Fallback- use file index padded to 19 digits
+        
+        filetime = base_image.ext_hdr.get('FILETIME', base_image.pri_hdr.get('FILETIME', None))
+        
+        # Convert filetime to the format expected in filenames (YYYYMMDDtHHMMSS)
+        if filetime and 'T' in filetime:
+            try:
+                dt = datetime.fromisoformat(filetime.replace('Z', '+00:00'))
+                filetime = dt.strftime('%Y%m%dt%H%M%S')
+            except:
+                filetime = datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+        elif not filetime:
+            filetime = datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+        
+        # Create proper L1 filename: cgi_{visitid}_{filetime}_l1_.fits
+        base_image.filename = f"cgi_{visitid}_{filetime}_l1_.fits"
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -298,7 +349,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -314,7 +365,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
+    kgain.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -338,7 +389,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
+    noise_map.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     ####### Run the walker on some test_data
@@ -349,16 +400,16 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
 
     ####### Test the result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat
     smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
-    print(np.std(smoothed_diff[good_region]))
+    #print(np.std(smoothed_diff[good_region]))
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
     ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 

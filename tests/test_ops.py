@@ -28,7 +28,7 @@ def test_ops_produces_expected_file():
     # create simulated data
     l1_dataset = mocks.create_prescan_files(filedir=datadir, arrtype="SCI", numfiles=2)
     # simulate the expected CGI naming convention
-    fname_template = "CGI_0200001999001000{:03d}_20250415T0305102_L1_.fits"
+    fname_template = "cgi_0200001999001000{:03d}_20250415t0305102_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
     l1_dataset.save(filedir=datadir)
@@ -77,7 +77,7 @@ def test_ops_produces_expected_file():
     ops.step_3_process_data(filelist, CPGS_XML_filepath, outputdir,template="l1_to_l2a_basic.json")
 
     #Check that the output files are as expected. 
-    output_filelist = [os.path.join(outputdir,os.path.basename(filename).replace("_L1_", "_L2a")) for filename in filelist]
+    output_filelist = [os.path.join(outputdir,os.path.basename(filename).replace("_l1_", "_l2a")) for filename in filelist]
     for output_file in output_filelist:
         assert os.path.exists(output_file), f"Expected output file {output_file} does not exist."
 

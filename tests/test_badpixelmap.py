@@ -160,7 +160,7 @@ def test_output_filename_convention():
     # Create a fake input dataset to set the filename
     input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = data.Image(bp_fake_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
-    fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
+    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits"
     fake_input_dataset = data.Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
     bpcal_prihdr, bpcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
@@ -169,7 +169,7 @@ def test_output_filename_convention():
     badpixelmap.save(filedir=default_cal_dir)
 
      # Construct the expected filename from the last input dataset filename.
-    expected_filename = re.sub('_L[0-9].', '_BPM_CAL', fake_input_dataset[-1].filename)
+    expected_filename = re.sub('_l[0-9].', '_bpm_cal', fake_input_dataset[-1].filename)
     full_expected_path = os.path.join(default_cal_dir, expected_filename)
     
     assert os.path.exists(full_expected_path), (

@@ -63,7 +63,7 @@ def test_create_flatfield_neptune():
     ###### perform flat division
     # load in the flatfield
     # check that the filename is what we expect
-    flat_filename = flat_dataset[-1].filename.replace("_L2a", "_FLT_CAL")
+    flat_filename = flat_dataset[-1].filename.replace("_l2a", "_flt_cal")
     flat_filepath = os.path.join(calibdir, flat_filename)
     onsky_flatfield = data.FlatField(flat_filepath)
 
@@ -141,7 +141,7 @@ def test_create_flatfield_uranus():
     ###### perform flat division
     # load in the flatfield
     # check that the filename is what we expect
-    flat_filename = flat_dataset[-1].filename.replace("_L2a", "_FLT_CAL")
+    flat_filename = flat_dataset[-1].filename.replace("_l2a", "_flt_cal")
     flat_filepath = os.path.join(calibdir, flat_filename)
     onsky_flatfield = data.FlatField(flat_filepath)
 

@@ -6,6 +6,8 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
+import datetime
+from astropy.io import fits
 
 import corgidrp
 import corgidrp.data as data
@@ -63,30 +65,39 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         image.ext_hdr['FSAM_V'] = FSAM_V_CT
     corethroughput_dataset = data.Dataset(corethroughput_image_list)
 
-    output_dir = os.path.join(e2eoutput_path, 'corethroughput_test_data')
+    output_dir = os.path.join(e2eoutput_path, 'corethroughput_output')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.mkdir(output_dir)
     
-    # List of filenames
-    corethroughput_data_filelist = ['corethroughput_e2e_{0}_L2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
-    corethroughput_dataset.save(output_dir, corethroughput_data_filelist)
+    # Create input_data directory
+    input_data_dir = os.path.join(output_dir, 'input_data')
+    os.mkdir(input_data_dir)
+    
+    # Generate filename variables
+    current_time = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')
+    
+    # List of filenames with proper format
+    corethroughput_data_filelist = []
+    for i in range(len(corethroughput_dataset)):
+        visitid = str(i).zfill(19)  # Pad to 19 digits
+        filename = f'cgi_{visitid}_{current_time}_l2b.fits'
+        corethroughput_data_filelist.append(filename)
+    
+    # Save files directly to input_data directory
+    corethroughput_dataset.save(input_data_dir, corethroughput_data_filelist)
+    
+    # Update file list to contain full paths
+    corethroughput_data_filelist = [os.path.join(input_data_dir, f) for f in corethroughput_data_filelist]
 
-    # make DRP output directory if needed
-    corethroughput_outputdir = os.path.join(e2eoutput_path, 'l2b_to_corethroughput_output')
-    if os.path.exists(corethroughput_outputdir):
-        shutil.rmtree(corethroughput_outputdir)
-    os.mkdir(corethroughput_outputdir)
-
-    # Run the DRP walker
+    # Run the DRP walker (save output in the same corethroughput_output directory)
     print('Running walker')
-    # Add path to files
-    corethroughput_data_filepath = [os.path.join(output_dir, f) for f in corethroughput_data_filelist]
-    walker.walk_corgidrp(corethroughput_data_filepath, '', corethroughput_outputdir)
+    # Use the updated file list (already contains full paths)
+    walker.walk_corgidrp(corethroughput_data_filelist, '', output_dir)
     
     # Load in the output data. It should be the latest CTP_CAL file produced.
-    corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
-        '*CTP_CAL*.fits'))[0]
+    corethroughput_drp_file = glob.glob(os.path.join(output_dir,
+        '*ctp_cal*.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
 
     # CT cal file from mock data directly

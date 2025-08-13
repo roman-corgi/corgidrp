@@ -2,12 +2,14 @@ import argparse
 import os
 import numpy as np
 from corgidrp.data import AstrometricCalibration
-
+from datetime import datetime
 import corgidrp.mocks as mocks
 import corgidrp.astrom as astrom
 import corgidrp.walker as walker
 import pytest
 import glob
+import corgidrp.data as data
+import corgidrp.caldb as caldb
 
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
@@ -36,7 +38,7 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     if not os.path.exists(distortion_outputdir):
         os.mkdir(distortion_outputdir)
 
-    e2e_mockdata_path = os.path.join(distortion_outputdir, "astrom_distortion")
+    e2e_mockdata_path = os.path.join(distortion_outputdir, "input_data")
     if not os.path.exists(e2e_mockdata_path):
         os.mkdir(e2e_mockdata_path)
 
@@ -64,14 +66,14 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     #### Pass the data to the walker ####
     #####################################
 
-    l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_mockdata_path, "*.fits")))
+    l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_mockdata_path, "*_l1_.fits")))
     template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),"corgidrp","recipe_templates","l2b_to_distortion.json")
 
     # template_path = '/Users/macuser/Roman/corgidrp/corgidrp/recipe_templates/l2b_to_distortion.json'
     walker.walk_corgidrp(l2b_data_filelist, "", distortion_outputdir, template=template_path)
 
     #Read in th Astrometric Calibration file
-    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*AST_CAL.fits"))[0]
+    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*ast_cal.fits"))[0]
     ast_cal = AstrometricCalibration(ast_cal_filename)
 
     #Check that distortion map error within the central 1" x 1" region of the detector is <4 [mas] (~0.1835 [pixel])
@@ -96,6 +98,10 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     assert np.all(np.abs(central_1arcsec_x - true_1arcsec_x) < 0.1835)
     assert np.all(np.abs(central_1arcsec_y - true_1arcsec_y) < 0.1835)
 
+    # Clean up by removing calibration entries from caldb
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(ast_cal)
+
 
 
 if __name__ == "__main__":
@@ -106,7 +112,7 @@ if __name__ == "__main__":
     # workflow.
 
     outputdir = thisfile_dir
-    e2edata_dir = '/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l2b->distortion end-to-end test")
 

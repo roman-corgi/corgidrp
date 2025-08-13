@@ -6,6 +6,7 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
+import datetime
 from astropy.io import fits
 
 import corgidrp
@@ -92,27 +93,32 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     corDataset = data.Dataset(corDataset_image_list)
 
     # Define temporary directory to store the individual frames
-    output_dir = os.path.join(e2eoutput_path, 'ctmap_test_data')
+    output_dir = os.path.join(e2eoutput_path, 'ctmap_output')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.mkdir(output_dir)
     
-    # List of filenames
-    corDataset_filelist = ['ctmap_e2e_{0}_L2b.fits'.format(i)
-        for i in range(len(corDataset))]
-    # Save them
-    corDataset.save(output_dir, corDataset_filelist)
-
-    # Make directory for the CT cal file
-    ctmap_outputdir = os.path.join(e2eoutput_path, 'l2a_to_ct_map')
-    if os.path.exists(ctmap_outputdir):
-        shutil.rmtree(ctmap_outputdir)
-    os.mkdir(ctmap_outputdir)
+    # Create input_data directory
+    input_data_dir = os.path.join(output_dir, 'input_data')
+    os.mkdir(input_data_dir)
+    
+    # Generate filename variables
+    current_time = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')
+    
+    # List of filenames with proper format
+    corDataset_filelist = []
+    for i in range(len(corDataset)):
+        visitid = str(i).zfill(19)  # Pad to 19 digits
+        filename = f'cgi_{visitid}_{current_time}_l2b.fits'
+        corDataset_filelist.append(filename)
+    
+    # Save them in input_data directory
+    corDataset.save(input_data_dir, corDataset_filelist)
 
     # Create CT cal file from the mock data directly
     ct_cal_mock = corethroughput.generate_ct_cal(corethroughput_dataset)
-    # Save it
-    ct_cal_mock.filedir = ctmap_outputdir
+    # Save it in ctmap_output directory
+    ct_cal_mock.filedir = output_dir
     ct_cal_mock.save()
     # Add it to caldb
     this_caldb = caldb.CalDB()
@@ -130,12 +136,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Run the DRP walker
     print('Running walker')
     # Add path to files
-    corDataset_filepath = [os.path.join(output_dir, f) for f in corDataset_filelist]
-    walker.walk_corgidrp(corDataset_filepath, '', ctmap_outputdir,
+    corDataset_filepath = [os.path.join(input_data_dir, f) for f in corDataset_filelist]
+    walker.walk_corgidrp(corDataset_filepath, '', output_dir,
         template='l2a_to_corethroughput_map.json')
     
     # Read CT map produced by the walker
-    ct_map_filepath = os.path.join(ctmap_outputdir, ct_map_mock.filename)
+    ct_map_filepath = os.path.join(output_dir, ct_map_mock.filename)
     ct_map_walker = fits.open(ct_map_filepath)
 
     # Check whether direct ct map and the one from the walker are the same
@@ -148,8 +154,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # Clean test data
     # Remove entry from caldb
-    corethroughput_drp_file = glob.glob(os.path.join(ctmap_outputdir,
-        '*CTP_CAL*.fits'))[0]
+    corethroughput_drp_file = glob.glob(os.path.join(output_dir,
+        '*ctp_cal*.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(ct_cal_drp)

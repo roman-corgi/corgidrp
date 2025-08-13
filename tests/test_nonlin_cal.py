@@ -201,7 +201,7 @@ def test_expected_results_nom_sub():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
     nonlin_out.save(filedir=datadir)
-    nln_cal_filename = dataset_nl[-1].filename.replace("_L2b", "_NLN_CAL")
+    nln_cal_filename = dataset_nl[-1].filename.replace("_l2b", "_nln_cal")
     nln_cal_filepath = os.path.join(datadir, nln_cal_filename)
     if os.path.exists(nln_cal_filepath) is False:
         raise IOError(f'NonLinearity calibration file {nln_cal_filepath} does not exist.')

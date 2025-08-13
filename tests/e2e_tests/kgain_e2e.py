@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime
 import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
@@ -123,18 +124,67 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     ##### Fix TVAC headers
     fix_headers_for_tvac(ordered_filelist)
 
+    ########### Now run the DRP
+
+    # make DRP output directory if needed
+    kgain_outputdir = os.path.join(e2eoutput_path, "kgain_output")
+    if os.path.exists(kgain_outputdir):
+        shutil.rmtree(kgain_outputdir)
+    os.makedirs(kgain_outputdir)
+    
+    # Create input_data subfolder
+    input_data_dir = os.path.join(kgain_outputdir, 'input_data')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    
+    # Save input files with proper L1 filenames
+    # Get current time once outside the loop
+    base_time = datetime.now()
+    
+    input_filelist = []
+    for i, filepath in enumerate(ordered_filelist):
+        # Extract frame number from original filename
+        original_filename = os.path.basename(filepath)
+        
+        # Extract frame number from filename (e.g., "51841")
+        frame_number = None
+        for j in range(51731, 51871):  # Range from the original file selection
+            if str(j) in original_filename:
+                frame_number = str(j)
+                break
+        
+        if frame_number:
+            visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+        else:
+            visitid = f"{i:019d}"  # Fallback- use file index padded to 19 digits
+        
+        # Create unique timestamp by incrementing seconds for each file
+        # Handle second rollover properly
+        new_second = (base_time.second + i) % 60
+        new_minute = base_time.minute + ((base_time.second + i) // 60)
+        file_time = base_time.replace(minute=new_minute, second=new_second)
+        # Use the format_ftimeutc function from data.py to get consistent 3-digit seconds format
+        time_str = data.format_ftimeutc(file_time.isoformat())
+        
+        # Load the file
+        with fits.open(filepath) as hdulist:
+            # Create new filename: cgi_{visitid}_{time_str}_l1_.fits
+            new_filename = f"cgi_{visitid}_{time_str}_l1_.fits"
+            new_filepath = os.path.join(input_data_dir, new_filename)
+            
+            # Save with new filename
+            hdulist.writeto(new_filepath, overwrite=True)
+            input_filelist.append(new_filepath)
+    
+    # Use the input files for the DRP walker
+    ordered_filelist = input_filelist
+
     ########## Calling II&T code
     (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
                     binwidth=68, config_file=default_config_file, 
                     mkplot=None, verbose=None)
     
-    ########### Now run the DRP
 
-    # make DRP output directory if needed
-    kgain_outputdir = os.path.join(e2eoutput_path, "l1_to_kgain_output")
-    if os.path.exists(kgain_outputdir):
-        shutil.rmtree(kgain_outputdir)
-    os.mkdir(kgain_outputdir)
 
     ####### Run the DRP walker
     print('Running walker')
@@ -147,7 +197,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     walker.run_recipe(recipe[1], save_recipe_file=True)
 
     ####### Load in the output data. It should be the latest kgain file produced.
-    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_KRN_CAL*.fits'))
+    possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_krn_cal*.fits'))
     kgain_file = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
 
     kgain = data.KGain(kgain_file)
@@ -178,7 +228,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/'  
+    e2edata_dir = '/Users/jmilton/Documents/CGI/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

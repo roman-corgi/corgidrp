@@ -1,6 +1,6 @@
 import os, shutil, glob, argparse
 import pytest
-
+from datetime import datetime
 import corgidrp.mocks as mocks
 import corgidrp.data as data
 import corgidrp.walker as walker
@@ -15,9 +15,19 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     true_flux_dim = nd_filter_calibration.compute_expected_band_irradiance('TYC 4424-1286-1', '3C')
     cal_factor = true_flux_dim / 200  # erg / (e‑ s⁻¹)
 
+    l2b_pri_hdr, l2b_ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
+
     dim_frames = mocks.create_flux_image(
         true_flux_dim, fwhm, cal_factor, target_name='TYC 4424-1286-1'
     )
+    dim_frames.pri_hdr = l2b_pri_hdr.copy()
+    dim_frames.ext_hdr = l2b_ext_hdr.copy()
+    dim_frames.err_hdr = errhdr.copy()
+    dim_frames.dq_hdr = dqhdr.copy()
+    dim_frames.bias_hdr = biashdr.copy()
+    dim_frames.pri_hdr['VISTYPE'] = 'ABSFLXFT'
+    dim_frames.pri_hdr['TARGET'] = 'tyc 4424-1286-1'
+    dim_frames.ext_hdr['CFAMNAME'] = '3C'
     dim_frames.ext_hdr['BUNIT'] = 'photoelectron'
     dim_frames = [dim_frames] if not isinstance(dim_frames, list) else dim_frames
 
@@ -34,20 +44,41 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     for fsm_x, fsm_y in fsm_positions:
         frame = mocks.create_flux_image(attenuated_flux, fwhm, cal_factor, fpamname='ND225',     
             target_name='Vega', fsm_x=fsm_x, fsm_y=fsm_y)
+        frame.pri_hdr = l2b_pri_hdr.copy()
+        frame.ext_hdr = l2b_ext_hdr.copy()
+        frame.err_hdr = errhdr.copy()
+        frame.dq_hdr = dqhdr.copy()
+        frame.bias_hdr = biashdr.copy()
+        frame.pri_hdr['TARGET'] = 'vega'
+        frame.pri_hdr['VISTYPE'] = 'ABSFLXBT'
         frame.ext_hdr['BUNIT'] = 'photoelectron'
+        frame.ext_hdr['CFAMNAME'] = '3C'
+        frame.ext_hdr['FPAMNAME'] = 'ND225'
+        frame.ext_hdr['FSMX'] = fsm_x
+        frame.ext_hdr['FSMY'] = fsm_y
         bright_frames.append(frame)
 
     # 3. Save raw files for the walker
-    simdata_dir = os.path.join(os.path.dirname(e2eoutput_path), "nd_filter_e2e_output")
+    simdata_dir = os.path.join(e2eoutput_path, "nd_filter_output")
     shutil.rmtree(simdata_dir, ignore_errors=True)
     os.makedirs(simdata_dir)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(simdata_dir, 'input_data')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
 
     for i, frame in enumerate(dim_frames + bright_frames):
         input_prihdr = frame.pri_hdr
         input_exthdr = frame.ext_hdr
-        frame.save(simdata_dir, f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L3_.fits")
+        # Generate unique timestamp for each frame
+        base_time = datetime.now()
+        frame_time = base_time.replace(second=(base_time.second + i) % 60, minute=(base_time.minute + ((base_time.second + i) // 60)))
+        time_str = data.format_ftimeutc(frame_time.isoformat())
+        
+        frame.save(input_data_dir, f"cgi_{input_prihdr['VISITID']}_{time_str}_l2b.fits")
 
-    filelist = [os.path.join(simdata_dir, f) for f in os.listdir(simdata_dir)]
+    filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir)]
 
     # 4. Run the DRP walker with outputs saved in the current folder (e2eoutput_path)
     # Remove old NDF cal files first
@@ -56,7 +87,7 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(filelist, "", simdata_dir)
 
     # 5. Load product & assert if calculated OD matches the input
-    nd_file = glob.glob(os.path.join(simdata_dir, "*_NDF_CAL*.fits"))
+    nd_file = glob.glob(os.path.join(simdata_dir, "*_ndf_cal*.fits"))
     nd_cal  = data.NDFilterSweetSpotDataset(nd_file[0])
 
     recovered_od = float(nd_cal.od_values[0])  # use the first entry for the check

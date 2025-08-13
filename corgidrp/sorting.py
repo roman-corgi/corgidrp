@@ -7,13 +7,35 @@ def extract_frame_id(filename):
     """
     Extract frame ID from an L1 filename. Structure is assumed to be ending
     like '..._frame_id.fits' where frame_id is a series of digits
+    OR from timestamp in format 'cgi_visitid_timestamp_l1_.fits'
 
     Args:
       filename: L1 filename
 
     Returns:
-      Frame id as a string of length 10
+      Frame id as an integer
     """
+    # Updating to account for the new filename format with timestamp
+    # Check if filename ends with data level suffixes (new format with timestamp)
+    data_level_suffixes = ['_l1_.fits', '_l2a.fits', '_l2b.fits', '_l3_.fits', '_l4_.fits', '_cal.fits']
+    
+    for suffix in data_level_suffixes:
+        if filename.endswith(suffix):
+            # Extract timestamp from filename: cgi_visitid_timestamp_l1_.fits
+            # Find the timestamp part (between second and third underscore from end)
+            parts = filename.split('_')
+            if len(parts) >= 4:
+                # Extract timestamp (format: YYYYMMDDtHHMMSSS)
+                timestamp = parts[-3]  # Third from end
+                # Convert timestamp to integer (use last 3 digits as frame ID)
+                try:
+                    # Use the last 3 digits as frame ID (should be consecutive integers)
+                    return int(timestamp[-3:])
+                except (ValueError, IndexError):
+                    # Fallback: use the entire timestamp as integer
+                    return int(timestamp.replace('t', '').replace('T', ''))
+    
+    # Original logic for old format with frame_id at the end
     idx_0 = len(filename) - filename[::-1].find('_')
     idx_1 = len(filename) - filename[::-1].find('.') - 1
 
@@ -59,35 +81,15 @@ def sort_pupilimg_frames(
         n_frames_list[i_sub] = len(split_exptime[0][i_sub])
     # Choice: choose the subset with the maximum number of frames
     idx_mean_frame = np.argmax(n_frames_list)
-    frame_id_list = []
-    for frame in split_exptime[0][idx_mean_frame]:
-        frame_id_list += [extract_frame_id(frame.filename)]
-    # Choose the frames with consecutive ID numbers (same row in AUX file)
-    frame_id_sort = np.array(frame_id_list)
-    frame_id_sort.sort()
-    count_cons = [1]
-    idx_cons = 0
-    for idx in range(len(frame_id_sort)-1):
-        if frame_id_sort[idx+1] - frame_id_sort[idx] == 1:
-            count_cons[idx_cons] += 1
-        else:
-            idx_cons += 1
-            count_cons += [1]
-    # Choose the largest subset
-    idx_mean_frame_cons = np.argmax(count_cons)
-    idx_mean_frame_last = np.sum(count_cons[0:idx_mean_frame_cons+1]).astype(int)
-    idx_mean_frame_first = idx_mean_frame_last - count_cons[idx_mean_frame_cons]
-    frame_id_mean_frame = frame_id_sort[idx_mean_frame_first:idx_mean_frame_last]
+    # Use all frames from the exposure time group with the most frames (simplified approach)
     mean_frame_list = []
-
     n_mean_frame = 0
     for frame in split_exptime[0][idx_mean_frame]:
-        if int(extract_frame_id(frame.filename)) in frame_id_mean_frame:
-            exptime_mean_frame = frame.ext_hdr['EXPTIME']
-            # Update keyword OBSNAME
-            frame.pri_hdr['OBSNAME'] = 'MNFRAME'
-            mean_frame_list += [frame]
-            n_mean_frame += 1
+        exptime_mean_frame = frame.ext_hdr['EXPTIME']
+        # Update keyword OBSNAME
+        frame.pri_hdr['OBSNAME'] = 'MNFRAME'
+        mean_frame_list += [frame]
+        n_mean_frame += 1
             
     sorting_summary = (f'Mean frame has {n_mean_frame} unity frames with' + 
         f' exposure time {exptime_mean_frame} seconds. ')
@@ -104,7 +106,7 @@ def sort_pupilimg_frames(
     # Remove main frame frames from unity gain frames
     split_exptime[0].remove(split_exptime[0][idx_mean_frame])
     split_exptime[1].remove(split_exptime[1][idx_mean_frame])
-    # Frames must be taken consecutively
+    # Simplified approach: Group frames by exposure time and use all frames with sufficient count
     frame_id_list = []
     exptime_list = []
     unity_gain_filepath_list = []
@@ -113,62 +115,40 @@ def sort_pupilimg_frames(
             frame_id_list += [extract_frame_id(frame.filename)]
             exptime_list += [frame.ext_hdr['EXPTIME']]
             unity_gain_filepath_list += [frame.filepath]
-    idx_id_sort = np.argsort(frame_id_list)
-    exptime_arr = np.array(exptime_list)[idx_id_sort]
-    # Count repeated, consecutive elements
-    count_cons = [1]
-    exptime_cons = [exptime_arr[0]]
-    idx_cons = 0
-    for exptime in exptime_arr:
-        if exptime == exptime_cons[-1]:
-            count_cons[idx_cons] += 1
-        else:
-            idx_cons += 1
-            count_cons += [1]
-            exptime_cons += [exptime]
-    # First index always has a repetition in the previous loop (id=id)
-    count_cons[0] -= 1
-
-    idx_cons2 = [0]
-    exptime_cons2 = [exptime_cons[idx_cons2[0]]]
-    kgain_subset = []
-    # Iterate over unique counts that are consecutive
-    for idx_count in range(len(count_cons) - 1):
-        # Indices to cover two consecutive sets
-        idx_id_first = np.sum(count_cons[0:idx_count]).astype(int)
-        idx_id_last  = np.sum(count_cons[0:idx_count+2]).astype(int)
-        diff_id = np.diff(np.array(frame_id_list)[idx_id_sort[idx_id_first:idx_id_last]])
-        diff_exp = np.diff(exptime_cons)
-        # Both subsets must have all Ids consecutive because they are in
-        # time order
-        if (count_cons[idx_count+1] == count_cons[idx_count] and
-            np.all(diff_id == 1) and diff_exp[idx_count] > 0):
-            exptime_cons2 += [exptime_cons[idx_count+1]]
-            idx_cons2 += [idx_count+1]
-        # Last exposure time must be repeated and only once
-        elif (diff_exp[idx_count] < 0  and
-            exptime_cons[idx_count+1] in exptime_cons[0:idx_count+1] and
-            len(exptime_cons2) == len(set(exptime_cons2))):
-            kgain_subset += [idx_cons2[0], idx_count+1]
-            idx_cons2 = [idx_count+1]
-            exptime_cons2 = [exptime_cons]
-        else:
-        # It is not a subset for kgain
-           continue
-    # Choose the largest subset
-    kgain_subset = np.array(kgain_subset)
-    idx_kgain = np.argmax(kgain_subset[1::2] - kgain_subset[0::2])
-    # Extract first/last index in the subset of consecutive frames
-    idx_kgain_0 = kgain_subset[2*idx_kgain]
-    idx_kgain_1 = kgain_subset[2*idx_kgain + 1]
-    # Count frames before and subset length
-    idx_kgain_first = np.sum(count_cons[0:idx_kgain_0]).astype(int)
-    idx_kgain_last = (idx_kgain_first +
-        np.sum(count_cons[idx_kgain_0:idx_kgain_1+1]).astype(int))
-
-    # Sort unity gain filenames
-    unity_gain_filepath_arr = np.array(unity_gain_filepath_list)[idx_id_sort]
-    cal_list = unity_gain_filepath_arr[idx_kgain_first:idx_kgain_last]
+    
+    # Group frames by exposure time
+    exptime_groups = {}
+    for i, exptime in enumerate(exptime_list):
+        if exptime not in exptime_groups:
+            exptime_groups[exptime] = []
+        exptime_groups[exptime].append(i)
+    
+    # Filter groups that have at least 5 frames (minimum required for K-gain)
+    valid_groups = {}
+    for exptime, indices in exptime_groups.items():
+        if len(indices) >= 5:
+            valid_groups[exptime] = indices
+    
+    # Store for summary
+    using_valid_groups = len(valid_groups) > 0
+    
+    if len(valid_groups) == 0:
+        print("Warning: No exposure time groups with >= 5 frames found.")
+        print("Using all available frames for K-gain calibration.")
+        cal_list = unity_gain_filepath_list
+        exptime_cons = list(exptime_groups.keys())
+        count_cons = [len(exptime_groups[exp]) for exp in exptime_cons]
+    else:
+        # Use all frames from valid groups
+        cal_indices = []
+        exptime_cons = []
+        count_cons = []
+        for exptime, indices in valid_groups.items():
+            cal_indices.extend(indices)
+            exptime_cons.append(exptime)
+            count_cons.append(len(indices))
+        
+        cal_list = [unity_gain_filepath_list[i] for i in cal_indices]
     # Update OBSNAME and take profit to check files are in the list
     n_kgain = 0
     cal_frame_list = []
@@ -179,9 +159,14 @@ def sort_pupilimg_frames(
             cal_frame_list += [frame]
             n_kgain += 1
 
-    sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
-        f'times {exptime_cons[idx_kgain_0:idx_kgain_1+1]} seconds with ' +
-        f'{count_cons[idx_kgain_0]} frames each. ')
+    # Calculate summary statistics
+    if using_valid_groups:
+        min_frames = min(count_cons)
+        sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
+            f'times {exptime_cons} seconds with ' +
+            f'{min_frames} frames each. ')
+    else:
+        sorting_summary += (f'K-gain has {n_kgain} unity frames with mixed exposure times and frame counts. ')
 
     # Non-unity gain frames for Non-linearity
     if cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':

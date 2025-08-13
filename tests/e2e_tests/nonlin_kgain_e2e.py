@@ -6,7 +6,9 @@ import pytest
 import numpy as np
 from astropy import time
 from astropy.io import fits
+from datetime import datetime
 import matplotlib.pyplot as plt
+import shutil
 
 import corgidrp
 from corgidrp import data
@@ -82,7 +84,7 @@ def test_nonlin_and_kgain_e2e(
     kgain_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'kgain')
 
-    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_and_kgain_output')
+    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_kgain_output')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
@@ -93,6 +95,11 @@ def test_nonlin_and_kgain_e2e(
 
     if not os.path.exists(e2eoutput_path):
         os.mkdir(e2eoutput_path)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(e2eoutput_path, "input_data")
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
@@ -111,6 +118,38 @@ def test_nonlin_and_kgain_e2e(
         if filename not in nonlin_l1_filenames:
             pupilimg_l1_list.append(filepath)
 
+    # Rename and save input files to input_data subfolder with proper L1 filename convention
+    renamed_pupilimg_list = []
+    base_time = datetime.now()
+    for i, file_path in enumerate(pupilimg_l1_list):
+        # Extract visitid from original filename or use index
+        current_filename = os.path.basename(file_path)
+        if '_L1_' in current_filename:
+            # Extract the frame number after '_L1_'
+            frame_number = current_filename.split('_L1_')[-1].replace('.fits', '')
+            visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+        else:
+            visitid = f"{i:019d}"  # Fallback - use file index padded to 19 digits
+        
+        # Generate unique timestamp for each file
+        # Handle second and minute rollover properly
+        new_second = (base_time.second + i) % 60
+        new_minute = (base_time.minute + ((base_time.second + i) // 60)) % 60
+        new_hour = (base_time.hour + ((base_time.minute + ((base_time.second + i) // 60)) // 60))
+        file_time = base_time.replace(hour=new_hour, minute=new_minute, second=new_second)
+        time_str = data.format_ftimeutc(file_time.isoformat())
+        
+        # Create new filename with proper L1 convention
+        new_filename = f'cgi_{visitid}_{time_str}_l1_.fits'
+        new_file_path = os.path.join(input_data_dir, new_filename)
+        
+        # Copy the file to input_data with new name
+        shutil.copy2(file_path, new_file_path)
+        renamed_pupilimg_list.append(new_file_path)
+    
+    # Use the renamed files for DRP processing
+    pupilimg_l1_list = renamed_pupilimg_list
+
 
     # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
@@ -123,12 +162,12 @@ def test_nonlin_and_kgain_e2e(
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP
-    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL*.fits'))
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_nln_cal*.fits'))
     nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
     nonlin = data.NonLinearityCalibration(nonlin_drp_filepath)
 
     # kgain from corgidrp
-    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_KRN_CAL*.fits'))
+    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_krn_cal*.fits'))
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
 
@@ -148,7 +187,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the non-linearity end-to-end test")

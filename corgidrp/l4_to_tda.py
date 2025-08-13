@@ -427,7 +427,7 @@ def update_to_tda(input_dataset):
         frame.ext_hdr['DATALVL'] = "TDA"
         # update filename convention. The file convention should be
         # "CGI_[datalevel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L4_", "_TDA_", 1)
+        frame.filename = frame.filename.replace("_l4_", "_tda_", 1)
 
     history_msg = "Updated Data Level to TDA"
     updated_dataset.update_after_processing_step(history_msg)
