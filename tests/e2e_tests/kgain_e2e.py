@@ -9,6 +9,7 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import warnings
 
 try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
@@ -124,9 +125,12 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     fix_headers_for_tvac(ordered_filelist)
 
     ########## Calling II&T code
-    (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
-                    binwidth=68, config_file=default_config_file, 
-                    mkplot=None, verbose=None)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        warnings.filterwarnings('ignore', category=DeprecationWarning)
+        (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
+                        binwidth=68, config_file=default_config_file, 
+                        mkplot=None, verbose=None)
     
     ########### Now run the DRP
 

@@ -939,7 +939,9 @@ class KGain(Image):
         ptchdu = fits.ImageHDU(data=self.ptc, header = self.ptc_hdr)
         hdulist.append(ptchdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=VerifyWarning)
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
 class BadPixelMap(Image):

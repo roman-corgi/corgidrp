@@ -551,11 +551,13 @@ def calibrate_kgain(dataset_kgain,
         deviations0 = [array.reshape(-1, 1) for array in std_diffs]
         deviations.extend(deviations0)
         
-        added_deviations_shot_arr = [
-                np.sqrt(np.square(np.reshape(std_diffs[x], 
-                newshape=(-1, 1))) - complex(rn_std[x])**2)
-                for x in range(len(rn_std))
-                ]
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=DeprecationWarning)
+            added_deviations_shot_arr = [
+                    np.sqrt(np.square(np.reshape(std_diffs[x], 
+                    newshape=(-1, 1))) - complex(rn_std[x])**2)
+                    for x in range(len(rn_std))
+                    ]
         
         deviations_shot.extend(added_deviations_shot_arr)
 
@@ -589,9 +591,13 @@ def calibrate_kgain(dataset_kgain,
         # Compute statistics if there are data points within the bin
         if current_binned_averages.size > 0:
             binned_averages_compiled.append(np.mean(current_binned_averages))
-            binned_averages_error.append(np.std(current_binned_averages, ddof=1) / np.sqrt(current_binned_averages.size))
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                binned_averages_error.append(np.std(current_binned_averages, ddof=1) / np.sqrt(current_binned_averages.size))
             binned_shot_deviations_compiled.append(np.mean(current_binned_deviations))
-            binned_deviations_error.append(np.std(current_binned_deviations, ddof=1) / np.sqrt(current_binned_averages.size))
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                binned_deviations_error.append(np.std(current_binned_deviations, ddof=1) / np.sqrt(current_binned_averages.size))
             binned_total_deviations.append(np.mean(current_binned_total_deviations))
         else:
             # Append NaN or some other placeholder if no data points in the bin
