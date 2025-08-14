@@ -105,7 +105,7 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
     # Beyond this boundary would mean going into the territory of EM gain calibration frames
     ########
     # Find the longest set of consecutive positive values in boundary_wo_indices
-    boundary_wo_indices = np.where(np.diff(exptime_cons_wo_repeats) < 0)[0] #XXX not actual visit:  allow for non-increasing exposure times??
+    boundary_wo_indices = np.where(np.diff(exptime_cons_wo_repeats) < 0)[0] 
     if len(boundary_wo_indices) > 0:  
         if len(boundary_wo_indices) == 1: 
             # if the boundary is nearer to the beginning 
@@ -204,7 +204,7 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
                         ind_remove = np.where(cal_frame_time_list == cal_frame_time_list_sorted[k])[0][0]
                         inds_leave_out.append(ind_remove)
         # also remove repeated sets if k gain since no drift correction employed for k gain calibration 
-        # (and so that a no exposure time is more heavily weighted than another)
+        # (and so that no exposure time is more heavily weighted than another)
         del_rep_inds_tot = np.append(del_rep_inds_tot, set2)
         time_ind1 = np.sum(count_cons[0:set2]).astype(int) # first of exposure time set
         time_ind2 = time_ind1 + count_cons[set2] -1 # last of exposure time set
@@ -358,8 +358,8 @@ def sort_pupilimg_frames(
                 n_kgain += 1
 
     sorting_summary += (f'K-gain has {n_kgain} unity frames with exposure ' +
-        f'times {list(np.delete(exptime_cons, del_rep_inds_tot.astype(int)))} seconds with ' +
-        f'{list(np.delete(count_cons, del_rep_inds_tot.astype(int)))} frames each. ')
+        f'times {list(np.delete(exptime_cons, np.array(del_rep_inds_tot).astype(int)))} seconds with ' +
+        f'{list(np.delete(count_cons, np.array(del_rep_inds_tot).astype(int)))} frames each. ')
 
     # Non-unity gain frames for Non-linearity
     if cal_type.lower()[0:7] == 'non-lin' or cal_type.lower()[0:6] == 'nonlin':

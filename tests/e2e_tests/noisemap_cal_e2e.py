@@ -388,7 +388,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(kgain)
 
     # Update VISTPYE to "DARK" for DRP run
-    set_obstype_for_darks(l2a_filepaths)
+    #set_obstype_for_darks(l2a_filepaths)
 
     ####### Run the DRP walker
     template = "l2a_to_l2a_noisemap.json"
@@ -467,7 +467,8 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    #e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l2a->l2a_noisemap end-to-end test")

@@ -197,7 +197,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
     eperdn = kgain_val # what is used in DRP above
     bias_offset = 0 # what is used in DRP
-    emgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['EMGAIN_A']
+    emgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['EMGAIN_C']
     em_gain = emgain_val # read off header from TVAC files
     exptime_val = fits.getheader(os.path.join(trad_dark_raw_datadir,os.listdir(trad_dark_raw_datadir)[0]), 1)['EXPTIME']
     exptime = exptime_val # read off header from TVAC files

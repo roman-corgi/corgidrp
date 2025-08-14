@@ -4,7 +4,7 @@ import numpy as np
 import corgidrp.data as data
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
-                    detector_regions=None, use_imaging_area = False):
+                    detector_regions=None, use_imaging_area = False, dataset_copy=True):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
@@ -19,12 +19,17 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         detector_regions: (dict):  A dictionary of detector geometry properties.
             Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         use_imaging_area (bool): flag indicating whether to use the imaging area (like in the trap pump code) or use the defualt (equivalent to EMCCDFrame)
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-    # Make a copy of the input dataset to operate on
-    output_dataset = input_dataset.copy(copy_data=False)
+    if dataset_copy:
+        # Make a copy of the input dataset to operate on
+        output_dataset = input_dataset.copy(copy_data=False)
+    else:
+        output_dataset = input_dataset
     
     if detector_regions is None:
         detector_regions = detector_areas
@@ -38,8 +43,6 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     # Place to save new error estimates to be added later via Image.add_error_term()
     new_err_list = []
     dataset_length = len(input_dataset)
-    # save memory
-    del input_dataset.all_data, input_dataset.all_err, input_dataset.all_dq
     # Iterate over frames
     for i in range(dataset_length):
         frame = input_dataset[i]
@@ -131,8 +134,6 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         # Update header with new frame dimensions
         output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
         output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[0]
-        # save memory
-        del frame.data, frame.err, frame.dq, prescan, al_prescan, medbyrow, sterrbyrow, frame_err, frame_dq
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data_arr)
     out_frames_err_arr = np.array(out_frames_err_arr)

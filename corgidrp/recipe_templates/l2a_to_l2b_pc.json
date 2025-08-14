@@ -20,6 +20,9 @@
             "name": "get_pc_mean",
             "calibs" : {
                 "Dark" : "AUTOMATIC"
+            },
+            "keywords" : {
+                "dataset_copy" : false
             }
         },
         {

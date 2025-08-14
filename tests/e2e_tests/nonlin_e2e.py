@@ -32,7 +32,8 @@ def set_vistype_for_tvac(
         fits_file = fits.open(file)
         prihdr = fits_file[0].header
         # Adjust VISTYPE
-        prihdr['VISTYPE'] = 'PUPILIMG'
+        if prihdr['VISTYPE'] == 'N/A':
+            prihdr['VISTYPE'] = 'PUPILIMG'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
