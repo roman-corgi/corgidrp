@@ -810,15 +810,17 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     return processed_dataset 
 
 
-def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0):
+def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials = 1000):
     """
-    wave_cal adds the wavelength map + error as extensions to the frames
+    add_wavelength_map adds the wavelength map + error and the position lookup table as extensions to the frames
     
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of spectroscopy Images (L3-level)
         disp_model (corgidrp.data.DispersionModel): dispersion model of the corresponding band
         pixel_pitch_um (float): EXCAM pixel pitch in microns, default: 13.0
-        
+        ntrials (int): number of trials when applying a Monte Carlo error propagation to estimate the uncertainties of the
+                       values in the wavelength calibration map
+
     Returns:
         corgidrp.data.Dataset: dataset with appended wavelength map and error
     """
@@ -837,9 +839,12 @@ def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0):
         'shapey': head['shapey0']
         }
     
-        wave_map, wave_err, pos_lookup = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um)
+        wave_map, wave_err, pos_lookup, x_refwav, y_refwav = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um, ntrials = ntrials)
         wave_hdr = fits.Header()
         wave_hdr["BUNIT"] = "nm"
+        wave_hdr["REFWAVE"] = disp_model.ext_hdr["REFWAVE"]
+        wave_hdr["XREFWAV"] = x_refwav
+        wave_hdr["YREFWAV"] = y_refwav
         wave_err_hdr = fits.Header()
         wave_err_hdr["BUNIT"] = "nm"
         frames.add_extension_hdu("WAVE" ,data = wave_map, header = wave_hdr)
