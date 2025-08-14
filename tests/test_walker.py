@@ -4,6 +4,7 @@ Test the walker infrastructure to read and execute recipes
 import os
 import glob
 import json
+import warnings
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
@@ -66,8 +67,8 @@ def test_autoreducing():
     mycaldb.create_entry(new_nonlinearity)
     
     #Make a KGain calibration file
-    kgain_arr = np.array([[8.8]])
-    new_kgain = data.KGain(kgain_arr,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
+    kgain = 8.8
+    new_kgain = data.KGain(kgain,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
     new_kgain.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
     new_kgain.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     new_kgain.save(filedir = os.path.join(os.path.dirname(__file__), "test_data"), filename = "kgain.fits")
@@ -126,7 +127,7 @@ def test_auto_template_identification():
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(filelist)
@@ -145,7 +146,7 @@ def test_auto_template_identification():
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
@@ -155,7 +156,7 @@ def test_auto_template_identification():
 
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
@@ -166,7 +167,7 @@ def test_auto_template_identification():
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -255,7 +256,7 @@ def test_saving():
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     fake_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     fake_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
@@ -318,7 +319,9 @@ def test_skip_missing_calib():
     # use l1 to l2b recipe
     template_filepath = os.path.join(os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2b.json")
     template_recipe = json.load(open(template_filepath, "r"))
-    recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # because walker throws a UserWarning about skipping missing calibs, catch here in tests
+        recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
     assert recipe['name'] == 'l1_to_l2b'
     assert recipe['template'] == False
@@ -386,7 +389,9 @@ def test_skip_missing_optional_calib():
     template_filepath = os.path.join(os.path.dirname(walker.__file__), "recipe_templates", "l1_to_l2a_basic.json")
     template_recipe = json.load(open(template_filepath, "r"))
 
-    recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # because walker throws a UserWarning about skipping missing calibs, catch here in tests
+        recipe = walker.autogen_recipe(filelist, outputdir, template=template_recipe)
 
     # check prescan bias sub is not skipped and Detector Noise Maps is None
     assert 'skip' not in recipe['steps'][0] # prescan biassub
@@ -436,7 +441,7 @@ def test_jit_calibs():
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
     test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fits"
     nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     # fake the headers because this frame doesn't have the proper headers
@@ -449,8 +454,8 @@ def test_jit_calibs():
     mycaldb.create_entry(new_nonlinearity)
 
     #Make a KGain calibration file
-    kgain_arr = np.array([[8.8]])
-    new_kgain = data.KGain(kgain_arr,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
+    kgain_val = 8.8
+    new_kgain = data.KGain(kgain_val,pri_hdr=prihdr,ext_hdr=exthdr,input_dataset = dummy_dataset)
     new_kgain.ext_hdr.set('DRPCTIME', time.Time.now().isot, "When this file was saved")
     new_kgain.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
     new_kgain.save(filedir = os.path.join(os.path.dirname(__file__), "test_data"), filename = "kgain.fits")

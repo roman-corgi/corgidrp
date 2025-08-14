@@ -42,6 +42,7 @@ def fix_headers_for_tvac(
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
         prihdr['PHTCNT'] = False
         exthdr['ISPC'] = False
+        exthdr['BUNIT'] = 'DN'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -88,12 +89,17 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
     this_caldb = caldb.CalDB() # connection to cal DB
+
+    # create a DetectorParams object and save it
+    detector_params = data.DetectorParams({})
+    detector_params.save(filedir=test_outputdir, filename="detector_params.fits")
+    this_caldb.create_entry(detector_params)
 
     # Nonlinearity calibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
@@ -104,7 +110,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=test_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
@@ -123,7 +129,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -162,6 +168,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(noise_map)
     this_caldb.remove_entry(flat)
     this_caldb.remove_entry(bp_map)
+    this_caldb.remove_entry(detector_params)
 
     ##### Check against TVAC data
     # l2a data

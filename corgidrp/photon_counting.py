@@ -27,10 +27,15 @@ def varL23(g, L, T, N):
             2*g*L*(3 + L)*T + L**2*T**2))/(12*g**2))
     std_dev = np.sqrt(N * eThresh * (1-eThresh))
 
-    return (std_dev)**2*(((np.e**((T/g)))/N) +
-    2*((np.e**((2*T)/g)*(g - T))/(2*g*N**2))*(N*eThresh) +
-    3*(((np.e**(((3*T)/g)))*(4*g**2 - 8*g*T + 5*T**2))/(
-    12*g**2*N**3))*(N*eThresh)**2)**2
+    with warnings.catch_warnings():
+        # prevent RuntimeWarning: divide by zero and invalid value
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        var_after_corr = (std_dev)**2*(((np.e**((T/g)))/N) +
+        2*((np.e**((2*T)/g)*(g - T))/(2*g*N**2))*(N*eThresh) +
+        3*(((np.e**(((3*T)/g)))*(4*g**2 - 8*g*T + 5*T**2))/(
+        12*g**2*N**3))*(N*eThresh)**2)**2
+
+    return var_after_corr
 
 class PhotonCountException(Exception):
     """Exception class for photon_count module."""
@@ -203,7 +208,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         if thresh < 0:
             raise PhotonCountException('thresh must be nonnegative')
         
-        if 'EMGAIN_M' in dataset.frames[0].ext_hdr: # if EM gain measured directly from frame TODO change hdr name if necessary
+        if 'EMGAIN_M' in dataset.frames[0].ext_hdr: # if EM gain measured directly from frame
             em_gain = dataset.frames[0].ext_hdr['EMGAIN_M']
         else:
             em_gain = dataset.frames[0].ext_hdr['EMGAIN_A']
@@ -270,7 +275,9 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         up = mean_expected_up +  pc_variance
         low = mean_expected_low -  pc_variance
         errs.append(np.max([up - mean_expected, mean_expected - low], axis=0))
-        dq = (nframes == 0).astype(int) 
+        good_inds = np.where(nframes != 0)
+        dq = np.bitwise_or.reduce(dataset.all_dq, axis=0)
+        dq[good_inds] = 0 
         pc_means.append(mean_expected)
         dqs.append(dq)
         
@@ -301,6 +308,7 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             dark_sub = "no"
 
         # now subtract the dark PC mean
+        combined_dq = np.bitwise_or(dqs[0], dqs[1])
         combined_pc_mean = pc_means[0] - pc_means[1]
         combined_pc_mean[combined_pc_mean<0] = 0
         combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
@@ -387,18 +395,21 @@ def calc_lam_approx(nobs, nfr, t, g):
 
     """
     # First step of equation (before taking log)
-    init = 1 - (nobs/nfr) * np.exp(t/g)
-    # Mask out all values less than or equal to 0
-    lam_m = np.zeros_like(init).astype(bool)
-    lam_m[init > 0] = True
+    with warnings.catch_warnings():
+        # prevent RuntimeWarning: invalid value in both div statements
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        init = 1 - (nobs/nfr) * np.exp(t/g)
+        # Mask out all values less than or equal to 0
+        lam_m = np.zeros_like(init).astype(bool)
+        lam_m[init > 0] = True
 
-    # Use the first order approximation on all values greater than zero
-    lam1 = np.zeros_like(init)
-    lam1[lam_m] = -np.log(init[lam_m])
+        # Use the first order approximation on all values greater than zero
+        lam1 = np.zeros_like(init)
+        lam1[lam_m] = -np.log(init[lam_m])
 
-    # For any values less than zero, revert to the zeroth order approximation
-    lam0 = nobs / nfr
-    lam1[~lam_m] = lam0[~lam_m]
+        # For any values less than zero, revert to the zeroth order approximation
+        lam0 = nobs / nfr
+        lam1[~lam_m] = lam0[~lam_m]
 
     return lam1
 

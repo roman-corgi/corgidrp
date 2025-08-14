@@ -159,7 +159,10 @@ binwidth = 68
 
 def test_expected_results_sub():
     """Outputs are as expected, for imported frames."""
-    kgain = calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, binwidth)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning) # dof <= 0, and invalid value in scalar div
+        warnings.filterwarnings("ignore", category=UserWarning) #catch expected Number of sub-stacks in cal_list warning from calibrate_kgain, because in this test n_cal = 3
+        kgain = calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, binwidth)
         
     signal_bins_N = kgain_params_default['signal_bins_N']
     # kgain - should be close to the assumed value
@@ -179,21 +182,29 @@ def test_psi():
     # min_val
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kg, n_cal, n_mean, perr, max_val, binwidth)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning) #catch expected Number of sub-stacks in cal_list warning from calibrate_kgain, because in this test n_cal = 3
+                calibrate_kgain(dataset_kg, n_cal, n_mean, perr, max_val, binwidth)
     # max_val
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, perr, binwidth)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning) #catch expected Number of sub-stacks in cal_list warning from calibrate_kgain, because in this test n_cal = 3
+                calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, perr, binwidth)
 
     # binwidth
     for perr in check_list:
         with pytest.raises(TypeError):
-            calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, perr)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning) #catch expected Number of sub-stacks in cal_list warning from calibrate_kgain, because in this test n_cal = 3
+                calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, perr)
       
 def test_binwidth():
     """binwidth must be >= 10."""
     with pytest.raises(CalKgainException):
-        calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, 9)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning) #catch expected Number of sub-stacks in cal_list warning from calibrate_kgain
+            calibrate_kgain(dataset_kg, n_cal, n_mean, min_val, max_val, 9)
  
 if __name__ == '__main__':
     setup_module()
