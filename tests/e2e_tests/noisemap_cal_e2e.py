@@ -44,7 +44,7 @@ def set_obstype_for_darks(
         exthdr = fits_file[1].header
         prihdr['VISTYPE'] = 'DARK'
         prihdr['PHTCNT'] = False
-        exthdr['ISPC'] = False
+        #exthdr['ISPC'] = False
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -194,9 +194,9 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     output_filename = output_filenamel1.replace('L1','L2a',1)
 
     # Update VISTYPE to "DARK" for DRP run
-    #set_obstype_for_darks(stack_arr_files)XXX
+    set_obstype_for_darks(stack_arr_files)
     # update headers
-    #fix_headers_for_tvac(stack_arr_files) XXX
+    #fix_headers_for_tvac(stack_arr_files) 
 
     ####### Run the DRP walker
     template = "l1_to_l2a_noisemap.json"
@@ -388,7 +388,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(kgain)
 
     # Update VISTPYE to "DARK" for DRP run
-    #set_obstype_for_darks(l2a_filepaths)
+    set_obstype_for_darks(l2a_filepaths)
 
     ####### Run the DRP walker
     template = "l2a_to_l2a_noisemap.json"

@@ -67,15 +67,6 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # update TVAC headers
     #fix_headers_for_tvac(l1_data_filelist)
 
-    ###### Setup necessary calibration files
-    # Modify input files to set KGAIN value in their headers XXX
-    # for file in l1_data_filelist:
-    #     with fits.open(file, mode='update') as hdulist:
-    #         # Modify the extension header to set KGAIN to 8.7
-    #         pri_hdr = hdulist[0].header
-    #         ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-    #         ext_hdr["KGAINPAR"] = 8.7
-
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
@@ -244,15 +235,6 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 
     # update TVAC headers
     #fix_headers_for_tvac(l1_data_filelist)
-
-    ###### Setup necessary calibration files
-    # Modify input files to set KGAIN value in their headers
-    # for file in l1_data_filelist: XXX
-    #     with fits.open(file, mode='update') as hdulist:
-    #         # Modify the extension header to set KGAIN to 8.7
-    #         pri_hdr = hdulist[0].header
-    #         ext_hdr = hdulist[1].header if len(hdulist) > 1 else None
-    #         ext_hdr["KGAIN"] = 8.7
 
     # Create a mock dataset object using the input files
     mock_input_dataset = data.Dataset(l1_data_filelist)
