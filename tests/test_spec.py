@@ -307,11 +307,6 @@ def test_calibrate_dispersion_model():
     psf_centroid = steps.compute_psf_centroid(
         dataset=dataset
     )
-    #calibrate dispersion without the broad band fit
-    #psf_centroid.xfit = psf_centroid.xfit[:-1] - (np.array(psf_table['xoffset'])[:-1] - np.array(psf_table['xoffset'])[-1])
-    #psf_centroid.yfit = psf_centroid.yfit[:-1] - (np.array(psf_table['yoffset'])[:-1] - np.array(psf_table['yoffset'])[-1])
-    #psf_centroid.xfit_err = psf_centroid.xfit_err[:-1]
-    #psf_centroid.yfit_err = psf_centroid.yfit_err[:-1]
     
     disp_model = steps.calibrate_dispersion_model(psf_centroid)
     disp_model.save(output_dir, disp_model.filename)
@@ -369,7 +364,6 @@ def test_add_wavelength_map():
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
     
     out_im = output_dataset.frames[0]
-    out_im.save(filedir = "/home/schreiber/", filename = "test_wave.fits")
     wave = out_im.hdu_list["wave"].data
     assert wave.shape == (wave_0.get('shapex'), wave_0.get('shapey'))
     wave_err = out_im.hdu_list["wave_err"].data

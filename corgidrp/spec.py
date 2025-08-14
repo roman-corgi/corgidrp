@@ -615,6 +615,8 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
                 yoff.append(-yoff_band)
     if len(center_wavel) < 4:
         raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
+    if len(center_wavel) != len(centroid_psf.xfit) -1:
+        raise ValueError ("number of measured sub-bands {0} does not fit to the measured number of centroids {1}".format(len(center_wavel), len(centroid_psf.xfit)))
     center_wavel = np.array(center_wavel)
     xfit = centroid_psf.xfit[:-1] - np.array(xoff)
     yfit = centroid_psf.yfit[:-1] - np.array(yoff)
