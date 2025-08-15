@@ -250,7 +250,7 @@ def test_read_cent_wave():
     assert cen_wave == 726.0
     cen_wave_list = steps.read_cent_wave('3G')
     assert cen_wave_list[0] == 752.5
-    assert len(cen_wave_list) == 1
+    assert len(cen_wave_list) == 4
     with pytest.raises(ValueError):
         cen_wave = steps.read_cent_wave('X')[0]
     

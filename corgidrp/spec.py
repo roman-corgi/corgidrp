@@ -458,14 +458,8 @@ def read_cent_wave(band, filter_file = None):
     else:
         cen_wave = data.columns[1][filter_names == band][0]
     ret_list.append(cen_wave)
-    if data.columns[3][filter_names == band]:
-        fwhm = data.columns[3][filter_names == band][0]
-        ret_list.append(fwhm)
-    if data.columns[4][filter_names == band]:
-        xoff = data.columns[4][filter_names == band][0]
-        yoff = data.columns[5][filter_names == band][0]
-        ret_list.append(xoff)
-        ret_list.append(yoff)
+    for i in range(3, 6):
+        ret_list.append(data.columns[i][filter_names == band][0])
     return ret_list
     
 def estimate_dispersion_clocking_angle(xpts, ypts, weights):
@@ -585,12 +579,10 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     
     ##bandpass_frac = fwhm/cen_wave, needed for the wavelength calibration
     band_list = read_cent_wave(ref_cfam, filter_file = band_center_file)
-    xoff_band, yoff_band = 0.,0.
-    if len(band_list) > 2:
-        xoff_band = band_list[2]
-        yoff_band = band_list[3]
     band_center = band_list[0]
     fwhm = band_list[1]
+    xoff_band = band_list[2]
+    yoff_band = band_list[3]
     bandpass_frac = fwhm/band_center
     if 'FILTERS' not in centroid_psf.ext_hdr:
         raise AttributeError("there should be a FILTERS header keyword in the filtersweep SpectroscopyCentroidPsf")
@@ -607,12 +599,8 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
         else:
             cen_wave = read_cent_wave(band_str, filter_file = band_center_file)
             center_wavel.append(cen_wave[0])
-            if len(cen_wave) > 2:
-                xoff.append(cen_wave[1] - xoff_band)
-                yoff.append(cen_wave[2] - yoff_band)
-            else:
-                xoff.append(-xoff_band)
-                yoff.append(-yoff_band)
+            xoff.append(cen_wave[2] - xoff_band)
+            yoff.append(cen_wave[3] - yoff_band)
     if len(center_wavel) < 4:
         raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
     if len(center_wavel) != len(centroid_psf.xfit) -1:
