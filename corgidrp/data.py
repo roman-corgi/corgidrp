@@ -790,7 +790,6 @@ class DispersionModel(Image):
         data_or_filepath (str or dict): either the filepath to the FITS file to read in OR the dictionary containing the dispersion data
         pri_hdr (fits.Header): Primary header.
         ext_hdr (fits.Header): Extension header.
-        input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
         
     Attributes:
         data (dict): table containing the dispersion data
@@ -816,7 +815,7 @@ class DispersionModel(Image):
     """
     
     params_key = ['clocking_angle', 'clocking_angle_uncertainty', 'pos_vs_wavlen_polycoeff', 'pos_vs_wavlen_cov', 'wavlen_vs_pos_polycoeff', 'wavlen_vs_pos_cov']
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
         if isinstance(data_or_filepath, str):
             # run the image class contructor
             super().__init__(data_or_filepath)
@@ -849,7 +848,11 @@ class DispersionModel(Image):
             self.data = data_list
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['DRPCTIME'])
+            if "BAND" in self.ext_hdr:
+                self.filename = "DispersionModel_band{0}.fits".format(self.ext_hdr["BAND"])
+            else:
+                self.filename = "DispersionModel_bandX.fits"
+            #self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['DRPCTIME'])
         # initialization data passed in
         self.clocking_angle = self.data["clocking_angle"][0]
         self.clocking_angle_uncertainty = self.data["clocking_angle_uncertainty"][0]
