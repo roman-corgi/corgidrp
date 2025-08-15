@@ -210,6 +210,7 @@ def make_minimal_image(
     hdul.writeto(filepath, overwrite = True)
     return filepath
 
+
 def setup_module():
     global EXPTIME_MEAN_FRAME, NFRAMES_MEAN_FRAME
     global EXPTIME_KGAIN,  NFRAMES_KGAIN

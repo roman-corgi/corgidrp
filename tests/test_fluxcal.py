@@ -169,7 +169,7 @@ def test_fluxcal_file():
     assert fluxcal_fac.filter == '3C'
     assert fluxcal_fac.fluxcal_fac == fluxcal_factor
     assert fluxcal_fac.fluxcal_err == fluxcal_factor_error
-    assert(fluxcal_fac.filename.split(".")[0] == "test2_ABF_CAL")
+    assert(fluxcal_fac.filename.split(".")[0] == "test2_abf_cal")
     
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
     filename = fluxcal_fac.filename
