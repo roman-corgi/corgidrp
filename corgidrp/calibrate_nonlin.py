@@ -302,21 +302,36 @@ def calibrate_nonlin(dataset_nl,
     if (exp_arr <= min_exp_time).any():
         raise CalNonlinException('Each element of exp_arr must be '
             ' greater than min_exp_time.')
+    # check to see if there is at least one set of exposure times with length different from that of the others
+    index = 0
+    r_flag = True
+    for x in range(len(len_list)):
+        temp = np.copy(exp_arr[index:index+len_list[x]])
+        # Unique counts of exposure times
+        _, u_counts = np.unique(temp, return_counts=True)
+        # Check if all elements are the same
+        all_elements_same = np.all(u_counts == u_counts[0])
+        if all_elements_same == True:
+            r_flag = False
+        index = index + len_list[x]
+    # check to see that there is a repeated exposure time (e.g., at least one set in between 2 sets of the same exposure time)
     index = 0
     repeated_lens = [] # to be used later, to know how to split up the repeated sets
     for x in range(len(len_list)):
         temp = np.copy(exp_arr[index:index+len_list[x]])
-        # frames are already time-ordered, so if there is non-monotonicity, there is repitition, which we want
-        if np.all(np.diff(temp) >= 0):
+        # first condition below: frames are already time-ordered, so if there is non-monotonicity, there is repitition, which we want
+        # r_flag condition:  merely a set with length longer than the others (which TVAC code has); this gives a "way out" if no repeated set after other sets
+        if np.all(np.diff(temp) >= 0) and not r_flag:
             raise CalNonlinException('Each substack of cal_arr must have a '
             'group of frames with a repeated exposure time.')
-        repeat_ind = np.where(np.diff(temp) < 0)[0][0]
-        ending = np.where(np.diff(temp)[repeat_ind+1:] != 0)[0]
-        if len(ending) == 0: # repeated set is last one in time
-            end_ind = None
-        else:
-            end_ind = ending[0]+1
-        repeated_lens.append(len(np.diff(temp)[repeat_ind:end_ind]))
+        if np.all(np.diff(temp) < 0):
+            repeat_ind = np.where(np.diff(temp) < 0)[0][0]
+            ending = np.where(np.diff(temp)[repeat_ind+1:] != 0)[0]
+            if len(ending) == 0: # repeated set is last one in time
+                end_ind = None
+            else:
+                end_ind = ending[0]+1
+            repeated_lens.append(len(np.diff(temp)[repeat_ind:end_ind]))
         
         index = index + len_list[x]
     if len(len_list) != len(actual_gain_arr):
