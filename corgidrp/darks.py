@@ -457,7 +457,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         check.threeD_array(datasets[i].all_data,
                            'datasets['+str(i)+'].all_data', TypeError)
         if len(datasets[i].all_data) < 1300:
-            warnings.warn('A sub-stack was found with less than 1300 frames, '
+            print('A sub-stack was found with less than 1300 frames, '
             'which is the recommended number per sub-stack for an analog '
             'master dark')
         if i > 0:

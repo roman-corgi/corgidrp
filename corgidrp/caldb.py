@@ -227,7 +227,9 @@ class CalDB:
             if len(self._db) == 0:
                 self._db = new_entry
             else:
-                self._db = pd.concat([self._db, new_entry], ignore_index=True)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=FutureWarning)
+                    self._db = pd.concat([self._db, new_entry], ignore_index=True)
 
         # save to disk to update changes
         if to_disk:
