@@ -18,7 +18,7 @@ import pyklip.rdi
 import os
 from astropy.io import fits
 from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
-from corgidrp.spec import compute_wave_zeropoint, compute_psf_centroid, calibrate_dispersion_model, create_wave_cal
+from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model, create_wave_cal, read_cent_wave
 
 
 def distortion_correction(input_dataset, astrom_calibration):
@@ -810,7 +810,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
-def wave_cal(input_dataset, template_dataset = None, ref_wavlen = 730., halfwidth=10, halfheight=10, pixel_pitch_um = 13.0, bandpass_frac = 0.17):
+def wave_test(input_dataset, template_dataset = None, ref_wavlen = 730., halfwidth=10, halfheight=10, pixel_pitch_um = 13.0, bandpass_frac = 0.17):
     dataset = input_dataset.copy()
     wave_zero = compute_wave_zeropoint(dataset, template_dataset = template_dataset)
     spec_centroids = compute_psf_centroid(dataset, template_dataset, halfwidth = halfwidth, halfheight = halfheight)
@@ -823,6 +823,49 @@ def wave_cal(input_dataset, template_dataset = None, ref_wavlen = 730., halfwidt
     history_msg = "wavelength map extension added"
     dataset.update_after_processing_step(history_msg)
     return dataset
+
+def determine_wave_zeropoint(input_dataset, template_dataset = None):
+    """ 
+    A procedure for estimating the centroid of the zero-point image
+    (satellite spot or PSF) taken through the narrowband filter and slit.
+
+    Args:
+        dataset (Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        template_dataset (Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template path is taken
+    
+    Returns:
+        WavelengthZeropoint: object containing the values, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
+                              new_all_dq=np.array(new_all_dq) of the wavelength zero point 
+    """
+    dataset = input_dataset.copy()
+    
+    slit = dataset.frames[0].ext_hdr['FSAMNAME']
+    if not slit.startswith("R"):
+        raise ValueError("not a slit observation")
+    band = dataset.frames[0].ext_hdr['CFAMNAME']
+    # Assumed that only sat spots frames are taken to fit the zeropoint
+    split_dataset, vals = dataset.split_dataset(prihdr_keywords = ["SATSPOTS"])
+    satspot_dataset = split_dataset[1]
+    science_dataset = split_dataset[0]
+    spot_centroids = compute_psf_centroid(dataset = satspot_dataset, template_dataset = template_dataset)
+    
+    cen_wave = read_cent_wave(band)
+    x0 = np.mean(spot_centroids.xfit)
+    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+    y0 = np.mean(spot_centroids.yfit)
+    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+    for frame in science_dataset:
+        frame.ext_hdr["WAVLEN0"] = cen_wave
+        frame.ext_hdr["X0"] = x0
+        frame.ext_hdr["X0ERR"] = x0err
+        frame.ext_hdr["Y0"] = y0
+        frame.ext_hdr["Y0ERR"] = y0err
+        frame.ext_hdr["SHAPEX0"] = satspot_dataset[0].ext_hdr['NAXIS1']
+        frame.ext_hdr["SHAPEY0"] = satspot_dataset[0].ext_hdr['NAXIS2']
+                              
+    history_msg = "wavelength zeropoint values added to header"
+    science_dataset.update_after_processing_step(history_msg)
+    return science_dataset
 
 def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0):
     """
@@ -842,13 +885,13 @@ def wave_cal(input_dataset, disp_model, pixel_pitch_um = 13.0):
         #get the corgidrp.data.Dataset:wavelength zeropoint information from the input science frames header
         head = frames.ext_hdr
         wave_zero = {
-        'wavlen': head['wavlen0'],
-        'x' : head['x0'],
-        'xerr': head['x0err'],
-        'y': head['y0'],
-        'yerr': head['y0err'],
-        'shapex': head['shapex0'],
-        'shapey': head['shapey0']
+        'wavlen': head['WAVLEN0'],
+        'x' : head['X0'],
+        'xerr': head['X0ERR'],
+        'y': head['Y0'],
+        'yerr': head['Y0ERR'],
+        'shapex': head['SHAPEX0'],
+        'shapey': head['SHAPEY0']
         }
     
         wave_map, wave_err, pos_lookup = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um)

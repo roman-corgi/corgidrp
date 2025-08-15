@@ -382,6 +382,59 @@ def test_wave_cal():
     assert len(pos_lookup.colnames) == 5
     assert np.allclose(pos_lookup.columns[0].data, ref_wavlen, atol = 65)
     
+def test_determine_zeropoint():
+    """
+    test the calculation of the wavelength zeropoint position of satspot data
+    """
+    filepath = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
+    pri_hdr, ext_hdr = create_default_L1_headers()
+    
+    with fits.open(filepath) as hdul:
+        psf_array = hdul[0].data
+        psf_table = Table(hdul[1].data)
+ 
+    assert psf_array.ndim == 3, "Expected 3D PSF array"
+    assert "xcent" in psf_table.colnames and "ycent" in psf_table.colnames, "Missing centroid columns"
+
+    initial_cent = {
+        "xcent": np.array(psf_table["xcent"]),
+        "ycent": np.array(psf_table["ycent"])
+    }
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'R1C2'
+    psf_images = []
+    for i in range(psf_array.shape[0]):
+        data_2d = np.copy(psf_array[i])
+        ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
+        ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        if i == 12:
+            pri_hdr["SATSPOTS"] = 1
+        else:
+            pri_hdr["SATSPOTS"] = 0
+        image = Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq
+        )
+        image.ext_hdr['CFAMNAME'] = '3d'
+        psf_images.append(image)
+
+    input_dataset = Dataset(psf_images)
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset)
+    for frame in dataset:
+        assert frame.pri_hdr["SATSPOTS"] == 0
+        assert frame.ext_hdr["WAVLEN0"] == 753.83
+        assert "X0" in frame.ext_hdr
+        assert "Y0" in frame.ext_hdr
+        assert "X0ERR" in frame.ext_hdr
+        assert "Y0ERR" in frame.ext_hdr
+        assert frame.ext_hdr["SHAPEX0"] == 81
+        assert frame.ext_hdr["SHAPEY0"] == 81
+    
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
@@ -390,3 +443,4 @@ if __name__ == "__main__":
     test_read_cent_wave()
     test_calibrate_dispersion_model()
     test_wave_cal()
+    test_determine_zeropoint()
