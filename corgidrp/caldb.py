@@ -7,6 +7,7 @@ import pandas as pd
 import corgidrp
 import corgidrp.data as data
 import astropy.time as time
+import warnings
 
 column_dtypes = {
     "Filepath": str,
@@ -217,7 +218,9 @@ class CalDB:
             row_index = self._db[
                 self._db["Filepath"] == row_dict["Filepath"]
             ].index.values
-            self._db.loc[row_index, self.columns] = new_row
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=FutureWarning)
+                self._db.loc[row_index, self.columns] = new_row
         # otherwise create new entry
         else:
             new_entry = pd.DataFrame([new_row], columns=self.columns)
