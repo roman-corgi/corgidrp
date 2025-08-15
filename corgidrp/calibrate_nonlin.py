@@ -310,12 +310,12 @@ def calibrate_nonlin(dataset_nl,
         if np.all(np.diff(temp) >= 0):
             raise CalNonlinException('Each substack of cal_arr must have a '
             'group of frames with a repeated exposure time.')
-        repeat_ind = np.where(np.diff(temp) == 0)[0][0]
-        ending = np.where(temp[repeat_ind:] != 0)[0]
+        repeat_ind = np.where(np.diff(temp) < 0)[0][0]
+        ending = np.where(np.diff(temp)[repeat_ind+1:] != 0)[0]
         if len(ending) == 0: # repeated set is last one in time
             end_ind = None
         else:
-            end_ind = ending[0][0]
+            end_ind = ending[0]+1
         repeated_lens.append(len(np.diff(temp)[repeat_ind:end_ind]))
         
         index = index + len_list[x]

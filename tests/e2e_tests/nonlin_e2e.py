@@ -124,9 +124,11 @@ def test_nonlin_cal_e2e(
     # We are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
     # our unit test version of the NonLinearityCalibration
-    nonlin_table_from_eng = 'nonlin_table_091224.txt'
-    nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,nonlin_table_from_eng),
-        delimiter=",")
+    #nonlin_table_from_eng = 'nonlin_table_091224.txt'
+    #nonlin_dat = np.genfromtxt(os.path.join(tvac_caldir,nonlin_table_from_eng),
+        #delimiter=",")
+    nonlin_table_from_eng = 'nonlin_8_11_25.fits' #II&T code run on updated SSC TVAC files
+    nonlin_dat = fits.getdata(os.path.join(tvac_caldir,nonlin_table_from_eng))
     pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -168,8 +170,8 @@ def test_nonlin_cal_e2e(
     n_emgain = nonlin_out_table.shape[1]
 
     # NL from TVAC
-    nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_8_11_25.fits'))
-    #nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
+    #nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_8_11_25.fits'))
+    nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check
