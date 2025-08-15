@@ -262,7 +262,6 @@ if __name__ == '__main__':
     test_get_masked_data()
     test_err_adderr_notrack()
     test_read_many_errors_notrack()
-    test_err_array_sizes()
 
     for i in range(3):
         os.remove('test_image{0}.fits'.format(i))

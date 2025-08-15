@@ -166,8 +166,9 @@ def make_minimal_image(
       previous_exptime (float): exposure time of the previous frame, used to make the time stamp for the frame accurate
       previous_timestamp (str): timestamp of the previous frame, used to make the time stamp for the current frame
       auxfile (str): auxiliary file name to be used in the header of the FITS file.  Defaults to an empty string.
+    
     Returns:
-      filename (String): filename with path of the generated FITS file
+      filepath (String): filepath of the generated FITS file
     """
     signal = np.zeros(1)
     prhd, exthd = create_default_L1_headers() # makes timestamp according to current time
@@ -494,26 +495,23 @@ def test_kgain_sorting():
                 raise Exception((f'Frame #{idx_frame}: Unidentified calibration',
                     'type in the Kgain calibration dataset'))
     
-    # Same number of files as expected
-    assert n_kgain_test == n_kgain_total
+    # Same number of files as expected (sort_pupilimg_frames deletes the repeated set since no drift correction is done for k gain cal and so that that exposure time isn't doubly weighted compared to the others)
+    assert n_kgain_test == n_kgain_total - NFRAMES_KGAIN
     # Unique exposure time for the mean frame
     assert len(set(exptime_mean_frame_list)) == 1
     # Expected exposure time for the mean frame
     assert exptime_mean_frame_list[0] == EXPTIME_MEAN_FRAME
     # Expected number of frames for the mean frame
     assert n_mean_frame == NFRAMES_MEAN_FRAME
-    # Expected identical number of frames per exposure time in K-gain with
-    # only one repeated case at the end
+    # Expected identical number of frames per exposure time in K-gain
     kgain_unique, kgain_counts = np.unique(exptime_kgain_list, return_counts=True)
-    assert len(set(kgain_counts)) == 2
-    assert min(kgain_counts) == NFRAMES_KGAIN
-    assert max(kgain_counts) == 2*min(kgain_counts)
+    assert len(set(kgain_counts)) == 1
+    assert (kgain_counts == NFRAMES_KGAIN).all()
     # Needs ordering
     idx_kgain_sort = np.argsort(filename_kgain_list)
     # Expected exposure times for K-gain
     exptime_kgain_arr = np.array(exptime_kgain_list)[idx_kgain_sort]
     assert len(set(exptime_kgain_arr[-NFRAMES_KGAIN:])) == 1
-    assert exptime_kgain_arr[-1] in exptime_kgain_arr[0:-NFRAMES_KGAIN]
     _, vals = dataset_kgain.split_dataset(prihdr_keywords=['AUXFILE'])
     assert len(vals) == 1
 

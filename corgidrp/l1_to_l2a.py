@@ -39,7 +39,6 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
     out_frames_err_arr = []
     out_frames_dq_arr = []
     out_frames_bias_arr = []
-
     # Place to save new error estimates to be added later via Image.add_error_term()
     new_err_list = []
     dataset_length = len(input_dataset)
@@ -127,20 +126,25 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         out_frames_err_arr.append(image_err)
         out_frames_dq_arr.append(image_dq)
         out_frames_bias_arr.append(bias[:,0]) # save 1D version of array
-        output_dataset.frames[i].data = image_bias_corrected
-        output_dataset.frames[i].err = image_err
-        output_dataset.frames[i].dq = image_dq
-        output_dataset.frames[i].add_extension_hdu("BIAS",data=bias[:,0])
-        # Update header with new frame dimensions
-        output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[1]
-        output_dataset.frames[i].ext_hdr['NAXIS1'] = image_bias_corrected.shape[0]
+
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
     out_frames_data_arr = np.array(out_frames_data_arr)
     out_frames_err_arr = np.array(out_frames_err_arr)
     out_frames_dq_arr = np.array(out_frames_dq_arr)
+    out_frames_bias_arr = np.array(out_frames_bias_arr, dtype=np.float32)
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
     output_dataset.all_dq = out_frames_dq_arr
+    for i,frame in enumerate(output_dataset):
+        frame.data = out_frames_data_arr[i]
+        frame.err = out_frames_err_arr[i]
+        frame.dq = out_frames_dq_arr[i]
+        # frame.bias = out_frames_bias_arr[i]
+        frame.add_extension_hdu("BIAS",data=out_frames_bias_arr[i])
+
+        # Update header with new frame dimensions
+        frame.ext_hdr['NAXIS1'] = out_frames_data_arr[i].shape[1]
+        frame.ext_hdr['NAXIS2'] = out_frames_data_arr[i].shape[0]
 
     # Add new error component from this step to each frame using the Dataset class method
     output_dataset.add_error_term(np.array(new_err_list),"prescan_bias_sub")

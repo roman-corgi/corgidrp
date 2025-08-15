@@ -375,7 +375,7 @@ def calibrate_kgain(dataset_kgain,
 
     # cast dataset objects into np arrays for convenience
     #cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain, apply_dq = apply_dq)
-    cal_list, mean_frame_list, _, _, _, actual_gains, _, truncated_set_len = nonlin_kgain_dataset_2_stack(dataset_kgain, apply_dq = apply_dq)
+    cal_list, mean_frame_list, _, _, _, actual_gains, _, truncated_set_len = nonlin_kgain_dataset_2_stack(dataset_kgain, apply_dq = apply_dq, cal_type='kgain')
     split_arr = np.arange(0,len(cal_list[0]), truncated_set_len)[1:]
     cal_list = np.split(cal_list[0], split_arr)
     actual_gain = np.nanmean(actual_gains)

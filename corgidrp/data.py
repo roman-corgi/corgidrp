@@ -2629,7 +2629,9 @@ datatypes = { "Image" : Image,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
+              "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
+              
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset}
 
 def autoload(filepath):

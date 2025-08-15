@@ -123,7 +123,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     set_vistype_for_tvac(file_list)
     file_dataset = data.Dataset(file_list)
     out_dataset = sort_pupilimg_frames(file_dataset, cal_type='k-gain')
-    cal_list, mean_frame_list, exp_arr, _, _, _, datetimes_sort_inds, truncated_set_len = nonlin_kgain_dataset_2_stack(out_dataset, apply_dq = False)
+    cal_list, mean_frame_list, exp_arr, _, _, _, datetimes_sort_inds, truncated_set_len = nonlin_kgain_dataset_2_stack(out_dataset, apply_dq = False, cal_type='kgain')
     cal_arr = cal_list[0]
     split_arr = np.arange(0,len(cal_arr), truncated_set_len)[1:]
     cal_ed_list = np.split(cal_arr, split_arr)

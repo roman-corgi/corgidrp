@@ -158,7 +158,7 @@ def calibrate_nonlin(dataset_nl,
         subset -- 0.077, 0.770, 1.538, 2.308, 3.077, 3.846, 4.615, 5.385, 6.154,
         6.923, 7.692, 8.462, 9.231, 10.000, 11.538, 10.769, 12.308, 13.077,
         13.846, 14.615, 15.385, and 1.538 (again).
-        Set with non-unity gain frames:: a set of subsets of frames. All frames
+        Set with non-unity gain frames: a set of subsets of frames. All frames
         in each subset have a unique, non-unity EM gain. For instance, in TVAC,
         11 subsets were considered with EM values (EMGAIN_C): 1.65, 5.24, 8.60,
         16.70, 27.50, 45.26, 87.50, 144.10, 237.26, 458.70 and 584.40. These
@@ -239,7 +239,7 @@ def calibrate_nonlin(dataset_nl,
         raise Exception('dataset_nl.all_data must be 3-D')
     # cast dataset objects into np arrays and retrieve aux information
     cal_list, mean_frame_list, exp_arr, datetime_arr, len_list, actual_gain_arr, datetimes_sort_inds, _ = \
-        nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq)
+        nonlin_kgain_dataset_2_stack(dataset_nl, apply_dq = apply_dq, cal_type='nonlin')
     cal_arr = np.vstack(cal_list)[datetimes_sort_inds]
     mean_frame_arr = np.stack(mean_frame_list)
     # Get relevant constants
@@ -303,19 +303,22 @@ def calibrate_nonlin(dataset_nl,
         raise CalNonlinException('Each element of exp_arr must be '
             ' greater than min_exp_time.')
     index = 0
-    r_flag = True
+    repeated_lens = [] # to be used later, to know how to split up the repeated sets
     for x in range(len(len_list)):
         temp = np.copy(exp_arr[index:index+len_list[x]])
-        # Unique counts of exposure times
-        _, u_counts = np.unique(temp, return_counts=True)
-        # Check if all elements are the same
-        all_elements_same = np.all(u_counts == u_counts[0])
-        if all_elements_same == True:
-            r_flag = False
+        # frames are already time-ordered, so if there is non-monotonicity, there is repitition, which we want
+        if np.all(np.diff(temp) >= 0):
+            raise CalNonlinException('Each substack of cal_arr must have a '
+            'group of frames with a repeated exposure time.')
+        repeat_ind = np.where(np.diff(temp) == 0)[0][0]
+        ending = np.where(temp[repeat_ind:] != 0)[0]
+        if len(ending) == 0: # repeated set is last one in time
+            end_ind = None
+        else:
+            end_ind = ending[0][0]
+        repeated_lens.append(len(np.diff(temp)[repeat_ind:end_ind]))
+        
         index = index + len_list[x]
-    if not r_flag:
-        raise CalNonlinException('each substack of cal_arr must have a '
-            'group of frames with a repeated exposure time.')   
     if len(len_list) != len(actual_gain_arr):
         raise CalNonlinException('Length of actual_gain_arr be the same as the '
                                  'length of len_list.')
@@ -523,7 +526,9 @@ def calibrate_nonlin(dataset_nl,
                 del_s = (ctime_datetime[idx] - ctime_datetime[0]).total_seconds()
                 group_mean_time.append(np.mean(del_s))
             elif t0 == repeat_exp and not first_flag:
-                idx_2 = len(idx) // 2
+                # NOTE works fine for same number of frames per exposure time for a given EM gain (which is the observation plan, and this 
+                # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
+                idx_2 = len(idx) // 2 
                 start_time_repeated = ctime_datetime[idx[0]]
                 end_time_repeated = ctime_datetime[idx[idx_2]]
                 del_s2 = (ctime_datetime[idx[:idx_2]] - ctime_datetime[0]).total_seconds()
@@ -589,6 +594,8 @@ def calibrate_nonlin(dataset_nl,
                 elif repeat_flag:
                     # for repeated exposure frames, split into the first half/set
                     # and the second half/set
+                    # NOTE works fine for same number of frames per exposure time for a given EM gain (which is the observation plan, and this 
+                    # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
                     first_half = len(selected_files) // 2
                     for i in range(first_half):
 
@@ -662,6 +669,8 @@ def calibrate_nonlin(dataset_nl,
         repeat_times_idx = np.where(exp_em == repeat_exp)[0]  # np.where returns a tuple, extract first element
         
         # Calculate the mean times for the first and second halves of these indices
+        # NOTE works fine for same number of frames per exposure time for a given EM gain (which is the observation plan, and this 
+        # is what the TVAC code has), but for more general case, use repeated_lens[gain_index] instead for the number of frames in the 2nd (repeated) set
         first_half = len(repeat_times_idx) // 2
         first_half_mean_time = delta_ctimes_s.iloc[repeat_times_idx[:first_half]].mean()
         
@@ -837,7 +846,7 @@ def calibrate_nonlin(dataset_nl,
     
     return nonlin
 
-def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True):
+def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True, cal_type='nonlin'):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
     of numpy arrays sharing the same commanded gain value. It also returns the list of
@@ -849,6 +858,8 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True):
         dataset (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
         pupil L1 SCI frames (counts in DN)
         apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
+        cal_type (str): If 'kgain', then sets of frames with the same exposure time for a given EM gain 
+            are truncated so that each has the same number of frames.  Otherwise (for the 'nonlin' case), there is no truncation.
 
     Returns:
         list of data arrays associated with each frame
@@ -927,6 +938,8 @@ def nonlin_kgain_dataset_2_stack(dataset, apply_dq = True):
             for i in exptime_dsets:
                 if len(i) < smallest_set_length:
                     smallest_set_length = len(i)
+            if cal_type == 'nonlin':
+                smallest_set_length = None # for nonlin, don't need to truncate exptime sets to be same length for a given EM gain
             for i, exptime_dset_list in enumerate(exptime_dsets):
                 sub = np.stack([dset.frames[0].data for dset in exptime_dset_list[:smallest_set_length]])
                 for exptime_dset in exptime_dset_list[:smallest_set_length]:
