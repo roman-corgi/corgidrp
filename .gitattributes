@@ -12,3 +12,4 @@ tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRIS
 tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R3C1SLIT_PRISM3_offset_array.fits filter=lfs diff=lfs merge=lfs -text
 tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits filter=lfs diff=lfs merge=lfs -text
 tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits filter=lfs diff=lfs merge=lfs -text
+corgidrp/data/header_formats/*.csv filter=lfs diff=lfs merge=lfs -text

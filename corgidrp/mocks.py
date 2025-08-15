@@ -1,4 +1,5 @@
 import os
+import csv
 from pathlib import Path
 import numpy as np
 import warnings
@@ -101,9 +102,77 @@ detector_areas_test= {
         }
 }
 
+def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
+                    value_col="Example Value", datatype_col="Datatype"):
+    """
+    Parse a combined CSV (with a Section column) and extract keywords and values
+    from a specified section.
+
+    Args:
+        csv_file_path (str): Path to the combined CSV file.
+        section_name (str): Name of the section to filter on
+                            (eg, "Primary Header (HDU 0)" or "Image Header (HDU 1)").
+        key_col (str): Column name holding the keyword (default: "Keyword").
+        value_col (str): Column name holding the example/value (default: "Example Value").
+        datatype_col (str): Column name holding the datatype (default: "Datatype").
+
+    Returns:
+        dict: values are coerced using the datatype column. If the section is not a header 
+                table or required columns are missing, returns an empty dict.
+    """
+    def coerce(val_str, dtype_str):
+        if val_str is None:
+            return None
+        s = str(val_str).strip()
+        # strip surrounding quotes if present
+        if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
+            s = s[1:-1].strip()
+
+        dtype = (dtype_str or "").strip().lower()
+        if dtype == "int":
+            try:
+                return int(float(s))  # tolerate "0.0"
+            except ValueError:
+                return 0
+        if dtype == "float":
+            try:
+                return float(s)
+            except ValueError:
+                return 0.0
+        if dtype == "bool":
+            return s.lower() in ("true", "1", "yes", "y", "t")
+        # default: string
+        return s
+
+    out = {}
+
+    if not os.path.exists(csv_file_path):
+        print(f"Warning: CSV file not found at {csv_file_path}")
+        return out
+
+    with open(csv_file_path, newline="") as f:
+        reader = csv.DictReader(f)
+        # Ensure required columns exist
+        required_cols = {"Section", key_col, value_col, datatype_col}
+        if not required_cols.issubset(reader.fieldnames or []):
+            # Not a header-style section or wrong CSV
+            return out
+
+        for row in reader:
+            if row.get("Section") != section_name:
+                continue
+            key = (row.get(key_col) or "").strip()
+            if not key or key.lower() in {"keyword", "datatype", "example value", "description"}:
+                continue
+            val = coerce(row.get(value_col), row.get(datatype_col))
+            out[key] = val
+
+    return out
+
+
 def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     """
-    Creates default L1 headers by reading values from the l1.rst documentation file.
+    Creates default L1 headers by reading values from the l1.csv documentation file.
     
     Args:
         arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
@@ -126,100 +195,13 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     NAXIS1 = 1024
     NAXIS2 = 1024
     
-    def parse_rst_table(rst_file_path, section_name, stop_at=None):
-        """
-        Parse .rst file and extract keyword-value pairs from a specified section.
-        
-        Args:
-            rst_file_path (str): Path to the RST file to parse
-            section_name (str): Name of the section to find (e.g., "Primary Header (HDU 0)")
-            stop_at (str, optional): Section name to stop parsing at. If provided, 
-                                   parsing stops before this section. Defaults to None.
-        
-        Returns:
-            keyword_values (dict): Dictionary mapping keyword names to their parsed values. 
-                Values are converted to appropriate Python types (int, float, bool, str) based
-                on the datatype column in the RST table.
-        
-        """
-
-        keyword_values = {}
-        
-        if not os.path.exists(rst_file_path):
-            print(f"Warning: RST file not found at {rst_file_path}")
-            return keyword_values
-            
-        with open(rst_file_path, 'r') as f:
-            content = f.read()
-        
-        # Find the section
-        section_pattern = rf"{section_name}\s*\n\^+\s*\n(.*?)(?=\n\w+\s*\n\^+\s*\n|\Z)"
-        section_match = re.search(section_pattern, content, re.DOTALL)
-        
-        if not section_match:
-            print(f"Warning: Section '{section_name}' not found in RST file")
-            return keyword_values
-        
-        section_content = section_match.group(1)
-
-        # Look for the next section header and cut off at that point
-        if stop_at:
-            # Use the specific stop_at section
-            stop_pattern = rf'\n{re.escape(stop_at)}\s*\n\^+\s*\n'
-            stop_match = re.search(stop_pattern, section_content)
-            if stop_match:
-                section_content = section_content[:stop_match.start()]
-        else:
-            # Use the generic next section pattern
-            next_section_pattern = r'\n\w+\s*\([^)]+\)\s*\n\^+\s*\n'
-            next_match = re.search(next_section_pattern, section_content)
-            if next_match:
-                section_content = section_content[:next_match.start()]
-        
-        # Parse the table
-        # Look for table rows with | keyword | datatype | example_value | description |
-        table_pattern = r'\|\s*(\w+)\s*\|\s*(\w+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|'
-        matches = re.findall(table_pattern, section_content)
-        
-        for match in matches:
-            keyword = match[0].strip()
-            datatype = match[1].strip()
-            example_value = match[2].strip()
-            description = match[3].strip()
-            
-            # Skip the header row
-            if keyword.lower() in ['keyword', 'datatype', 'example value', 'description']:
-                continue
-            
-            # Convert example value to appropriate type
-            if datatype == 'int':
-                try:
-                    value = int(example_value)
-                except ValueError:
-                    value = 0
-            elif datatype == 'float':
-                try:
-                    value = float(example_value)
-                except ValueError:
-                    value = 0.0
-            elif datatype == 'bool':
-                if example_value.lower() in ['true', '1']:
-                    value = True
-                else:
-                    value = False
-            else:  # str
-                value = example_value
-            
-            keyword_values[keyword] = value
-        
-        return keyword_values
 
     # Get the path to the RST file
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    rst_file_path = os.path.join(current_dir, '..', 'docs', 'source', 'data_formats', 'l1.rst')
+    csv_file_path = os.path.join(current_dir, 'data', 'header_formats', 'l1.csv')
     
     # Parse primary header values
-    primary_values = parse_rst_table(rst_file_path, "Primary Header \\(HDU 0\\)", stop_at="Image Header (HDU 1)")
+    primary_values = parse_csv_table(csv_file_path, "Primary Header (HDU 0)")
     
     # Fill in primary header with values from RST
     for keyword, value in primary_values.items():
@@ -230,7 +212,7 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     prihdr['VISTYPE'] = vistype
     
     # Parse image header values  
-    image_values = parse_rst_table(rst_file_path, "Image Header \\(HDU 1\\)")
+    image_values = parse_csv_table(csv_file_path, "Image Header (HDU 1)")
     
     # Fill in extension header with values from RST
     for keyword, value in image_values.items():
@@ -248,7 +230,7 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
 
 def create_default_L1_TrapPump_headers(arrtype="SCI"):
     """
-    Creates default L1 trap pump headers by reading values from the l1.rst documentation file.
+    Creates default L1 trap pump headers by reading values from the l1.csv documentation file.
     
     Args:
         arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
@@ -270,114 +252,14 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     NAXIS1 = 1024
     NAXIS2 = 1024
     
-    def parse_rst_table(rst_file_path, section_name, stop_at=None):
-        """
-        Parse a reStructuredText file and extract keyword-value pairs from a specified section.
-        
-        This function reads an RST file, finds a specific section containing a table,
-        and extracts keyword-value pairs from the table rows. It supports type conversion
-        based on the datatype column in the table.
-        
-        Args:
-            rst_file_path (str): Path to the RST file to parse
-            section_name (str): Name of the section to find (e.g., "Primary Header (HDU 0)")
-            stop_at (str, optional): Section name to stop parsing at. If provided, 
-                                   parsing stops before this section. Defaults to None.
-        
-        Returns:
-            dict: Dictionary mapping keyword names to their parsed values. Values are
-                  converted to appropriate Python types (int, float, bool, str) based
-                  on the datatype column in the RST table.
-        
-        Example:
-            >>> values = parse_rst_table("l1.rst", "Primary Header (HDU 0)")
-            >>> print(values)
-            {'SIMPLE': True, 'BITPIX': 16, 'NAXIS': 0, ...}
-        
-        Notes:
-            - The function expects RST tables with columns: | keyword | datatype | example_value | description |
-            - Supported datatypes: 'int', 'float', 'bool', 'str'
-            - Table header rows are automatically skipped
-            - If a section is not found, an empty dictionary is returned
-            - If the RST file doesn't exist, a warning is printed and an empty dict is returned
-        """
-        keyword_values = {}
-        
-        if not os.path.exists(rst_file_path):
-            print(f"Warning: RST file not found at {rst_file_path}")
-            return keyword_values
-            
-        with open(rst_file_path, 'r') as f:
-            content = f.read()
-        
-        # Find the section
-        section_pattern = rf"{section_name}\s*\n\^+\s*\n(.*?)(?=\n\w+\s*\n\^+\s*\n|\Z)"
-        section_match = re.search(section_pattern, content, re.DOTALL)
-        
-        if not section_match:
-            print(f"Warning: Section '{section_name}' not found in RST file")
-            return keyword_values
-        
-        section_content = section_match.group(1)
 
-        # Look for the next section header and cut off at that point
-        if stop_at:
-            # Use the specific stop_at section
-            stop_pattern = rf'\n{re.escape(stop_at)}\s*\n\^+\s*\n'
-            stop_match = re.search(stop_pattern, section_content)
-            if stop_match:
-                section_content = section_content[:stop_match.start()]
-        else:
-            # Use the generic next section pattern
-            next_section_pattern = r'\n\w+\s*\([^)]+\)\s*\n\^+\s*\n'
-            next_match = re.search(next_section_pattern, section_content)
-            if next_match:
-                section_content = section_content[:next_match.start()]
-        
-        # Parse the table
-        # Look for table rows with | keyword | datatype | example_value | description |
-        table_pattern = r'\|\s*(\w+)\s*\|\s*(\w+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|'
-        matches = re.findall(table_pattern, section_content)
-        
-        for match in matches:
-            keyword = match[0].strip()
-            datatype = match[1].strip()
-            example_value = match[2].strip()
-            description = match[3].strip()
-            
-            # Skip the header row
-            if keyword.lower() in ['keyword', 'datatype', 'example value', 'description']:
-                continue
-            
-            # Convert example value to appropriate type
-            if datatype == 'int':
-                try:
-                    value = int(example_value)
-                except ValueError:
-                    value = 0
-            elif datatype == 'float':
-                try:
-                    value = float(example_value)
-                except ValueError:
-                    value = 0.0
-            elif datatype == 'bool':
-                if example_value.lower() in ['true', '1']:
-                    value = True
-                else:
-                    value = False
-            else:  # str
-                value = example_value
-            
-            keyword_values[keyword] = value
-        
-        return keyword_values
 
     # Get the path to the RST file
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    rst_file_path = os.path.join(current_dir, '..', 'docs', 'source', 'data_formats', 'l1.rst')
+    csv_file_path = os.path.join(current_dir, 'data', 'header_formats', 'l1.csv')
     
     # Parse primary header values
-    primary_values = parse_rst_table(rst_file_path, "Primary Header \\(HDU 0\\)", stop_at="Image Header (HDU 1)")
+    primary_values = parse_csv_table(csv_file_path, "Primary Header (HDU 0)")
     
     # Fill in primary header with values from RST
     for keyword, value in primary_values.items():
@@ -385,10 +267,10 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     
     # Override some values that should be dynamic
     prihdr['FILETIME'] = dt_str
-    prihdr['VISTYPE'] = 'MOCK'  # Trap pump specific
+    prihdr['VISTYPE'] = 'TPUMP'  # Trap pump specific
     
     # Parse image header values  
-    image_values = parse_rst_table(rst_file_path, "Image Header \\(HDU 1\\)")
+    image_values = parse_csv_table(csv_file_path, "Image Header (HDU 1)")
     
     # Fill in extension header with values from RST
     for keyword, value in image_values.items():
@@ -2449,7 +2331,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, 100, temp)
             # add in 'CENel1' trap for all phase times
         #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
-    #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
             add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, 100, temp)
             add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, 100, temp)
             # add in 'RHSel1' trap for more than length limit (but diff lengths)
@@ -2532,7 +2414,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, phase_times, temp)
             # add in 'CENel1' trap for all phase times
         #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
-    #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
             add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, phase_times, temp)
             add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, phase_times, temp)
             # add in 'RHSel1' trap for more than length limit (but diff lengths)
