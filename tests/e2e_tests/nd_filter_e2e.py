@@ -18,6 +18,7 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     dim_frames = mocks.create_flux_image(
         true_flux_dim, fwhm, cal_factor, target_name='TYC 4424-1286-1'
     )
+    dim_frames.ext_hdr['BUNIT'] = 'photoelectron'
     dim_frames = [dim_frames] if not isinstance(dim_frames, list) else dim_frames
 
     # 2. Synthetic “bright star” frames (with ND)
@@ -33,6 +34,7 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     for fsm_x, fsm_y in fsm_positions:
         frame = mocks.create_flux_image(attenuated_flux, fwhm, cal_factor, fpamname='ND225',     
             target_name='Vega', fsm_x=fsm_x, fsm_y=fsm_y)
+        frame.ext_hdr['BUNIT'] = 'photoelectron'
         bright_frames.append(frame)
 
     # 3. Save raw files for the walker

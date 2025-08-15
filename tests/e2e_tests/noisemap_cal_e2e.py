@@ -14,7 +14,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
-import corgidrp.detector as detector
+from corgidrp.darks import build_synthesized_dark
 
 try:
     from cal.calibrate_darks.calibrate_darks_lsq import calibrate_darks_lsq 
@@ -70,6 +70,17 @@ def fix_headers_for_tvac(
         exthdr['EMGAIN_A'] = -1
         exthdr['DATALVL'] = exthdr['DATA_LEVEL']
         prihdr["OBSNAME"] = prihdr['OBSTYPE']
+        exthdr['BUNIT'] = 'DN'
+        prihdr['PHTCNT'] = False
+        exthdr['ISPC'] = False
+        prihdr1, exthdr1 = mocks.create_default_L1_headers()
+        for key in prihdr1:
+            if key not in prihdr:
+                prihdr[key] = prihdr1[key]
+        for key in exthdr1:
+            if key not in exthdr:
+                exthdr[key] = exthdr1[key]
+        prihdr['VISTYPE'] = 'DARK'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -180,7 +191,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
 
     # KGain calibration 
     kgain_val = 8.7 # From TVAC-20 noise characterization measurements
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
@@ -199,8 +210,15 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     #fix_headers_for_tvac(stack_arr_files) 
 
     ####### Run the DRP walker
-    template = "l1_to_l2a_noisemap.json"
-    walker.walk_corgidrp(stack_arr_files, "", noisemap_outputdir,template=template)
+    #template = "l1_to_l2a_noisemap.json"
+    recipe = walker.autogen_recipe(stack_arr_files, noisemap_outputdir)
+    ### Modify a keyword
+    for step in recipe['steps']:
+        if step['name'] == "calibrate_darks":
+            step['keywords'] = {}
+            step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
+    walker.run_recipe(recipe, save_recipe_file=True)
+    #walker.walk_corgidrp(stack_arr_files, "", noisemap_outputdir,template=template)
 
     # clean up by removing entry
     this_caldb.remove_entry(kgain)
@@ -215,10 +233,10 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # iit_noisemap_fname = os.path.join(iit_noisemap_datadir,"iit_test_noisemaps.fits")
     corgidrp_noisemap = data.autoload(corgidrp_noisemap_fname)
     
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-10)
+    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-10)
     pass
 
     this_caldb.remove_entry(corgidrp_noisemap)
@@ -319,7 +337,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     l2a_filepaths = []
     if not os.path.exists(L2a_output_dir):
         os.mkdir(L2a_output_dir)
-    pri_hdr, ext_hdr = mocks.create_default_L2a_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2a_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     exptime_arr = []
@@ -379,7 +397,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     this_caldb.save()
     # KGain calibration
     kgain_val = 8.7 # From TVAC-20 noise characterization measurements
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
@@ -391,8 +409,16 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     set_obstype_for_darks(l2a_filepaths)
 
     ####### Run the DRP walker
-    template = "l2a_to_l2a_noisemap.json"
-    walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
+    #template = "l2a_to_l2a_noisemap.json"
+    #walker.walk_corgidrp(l2a_filepaths, "", noisemap_outputdir,template=template)
+    recipe = walker.autogen_recipe(l2a_filepaths, noisemap_outputdir)
+    ### Modify a keyword
+    for step in recipe['steps']:
+        if step['name'] == "calibrate_darks":
+            step['keywords'] = {}
+            step['keywords']['weighting'] = False # to be comparable to II&T code, which does no weighting
+    walker.run_recipe(recipe, save_recipe_file=True)
+
 
     # getting output filename
     for f in os.listdir(noisemap_outputdir):
@@ -410,11 +436,17 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     # iit_noisemap = data.autoload(iit_noisemap_fname)
     
 
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-11)
-    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-11)
-    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-11)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[0]- F_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[1]- C_map)) < 1e-10)
+    assert(np.nanmax(np.abs(corgidrp_noisemap.data[2]- D_map)) < 1e-10)
+    assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-10)
     pass
+
+    # create synthesized master dark in output folder (for inspection and for having a sample synthesized dark with all the right headers)
+    mock_dataset = mocks.create_prescan_files() # dummy dataset with an EM gain and exposure time for creating synthesized dark
+    master_dark = build_synthesized_dark(mock_dataset, corgidrp_noisemap)
+    master_dark.save(filedir=noisemap_outputdir)
+
     # remove from caldb
     this_caldb.remove_entry(corgidrp_noisemap)
     

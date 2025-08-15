@@ -2310,7 +2310,7 @@ def tpump_analysis(input_dataset,time_head = 'TPTAU',
             #Find the TPSCHEM keyword that is non-zero
             this_num_pumps = [header0[x] for x in scheme_header_keywords]
             this_num_pumps = np.array(scheme_list[i] )
-            this_scheme = int(np.where(this_num_pumps != 0)[0]) + 1
+            this_scheme = int(np.where(this_num_pumps != 0)[0].item()) + 1
             sch_list.append(this_scheme)
 
             #Grab the number of pumps from the first dataset. 
@@ -3291,6 +3291,7 @@ def create_TrapCalibration_from_trap_dict(trap_dict,input_dataset):
     #Great the header from the first file
     first_file_pri_hdr = input_dataset[0].pri_hdr
     first_file_ext_hdr = input_dataset[0].ext_hdr
+    first_file_ext_hdr['BUNIT'] = ""
 
     trapcal = TrapCalibration(trap_cal_array,pri_hdr = first_file_pri_hdr, 
                     ext_hdr = first_file_ext_hdr, 

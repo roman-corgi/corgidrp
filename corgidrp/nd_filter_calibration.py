@@ -1,10 +1,8 @@
 import os
-import re
 import math
 import numpy as np
 from astropy.io import fits
 import corgidrp.fluxcal as fluxcal
-import corgidrp.astrom as astrom
 from corgidrp.data import Dataset, FluxcalFactor, NDFilterSweetSpotDataset
 from corgidrp.astrom import centroid_with_roi
 from scipy.interpolate import griddata
@@ -104,7 +102,7 @@ def compute_expected_band_irradiance(star_name, filter_name):
     Compute the expected band-integrated irradiance (erg/(s*cm^2)) for a given star.
 
     Parameters:
-        star_name (str): The name of the star for which to compute the irradiance.
+        star_name (str): The name of the star or file path to the (calspec) SED fits file for which to compute the irradiance.
         filter_name (str): The name of the filter used to determine the transmission curve.
 
     Returns:
@@ -113,7 +111,10 @@ def compute_expected_band_irradiance(star_name, filter_name):
     Raises:
         ValueError: If no matching filter curve file is found.
     """
-    calspec_filepath = fluxcal.get_calspec_file(star_name)[0]
+    if star_name.split(".")[-1] == "fits":
+        calspec_filepath = star_name
+    else:
+        calspec_filepath = fluxcal.get_calspec_file(star_name)[0]
     datadir = os.path.join(os.path.dirname(fluxcal.__file__), "data", "filter_curves")
     filter_files = [f for f in os.listdir(datadir) if filter_name in f and f.endswith('.csv')]
     if not filter_files:
@@ -125,32 +126,52 @@ def compute_expected_band_irradiance(star_name, filter_name):
     return fluxcal.calculate_band_irradiance(transmission, calspec_flux, wave)
 
 
-def compute_avg_calibration_factor(dim_stars_dataset, phot_method, flux_or_irr="irr", phot_kwargs=None):
+def compute_avg_calibration_factor(dim_stars_dataset, phot_method, calspec_files = None, flux_or_irr="irr", phot_kwargs=None):
     """
     Compute the average flux calibration factor using dim stars (no ND filter).
 
     Parameters:
         dim_stars_dataset (iterable): Dataset containing dim star entries.
         phot_method (str): Photometry method to use ("Aperture" or "Gaussian").
+        calspec_files (str, optional): str of one calspec file path or list of calspec filepaths
         flux_or_irr (str): Whether flux ('flux') or in-band irradiance ('irr') should be used.
         phot_kwargs (dict, optional): Dictionary of keyword arguments to pass to calibrate_fluxcal_aper.
 
     Returns:
         float: The average calibration factor.
     """
+    if calspec_files is not None:
+        one_calspec = False
+        if isinstance(calspec_files, list):
+            if len(calspec_files) != len(dim_stars_dataset):
+                raise ValueError("wrong number of calspec filepaths")
+        else:
+            one_calspec = True
     if phot_kwargs is None:
         phot_kwargs = {}
 
+    cal_values = []
     if phot_method == "Aperture":
-        cal_values = [
-            fluxcal.calibrate_fluxcal_aper(entry, flux_or_irr, phot_kwargs).fluxcal_fac
-            for entry in dim_stars_dataset
-        ]
+        for i, entry in enumerate(dim_stars_dataset):
+            if calspec_files is None:
+                file = None
+            else:
+                if one_calspec:
+                    file = calspec_files
+                else:
+                    file = calspec_files[i]
+            cal_values.append(fluxcal.calibrate_fluxcal_aper(entry, calspec_file = file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac)
     elif phot_method == "Gaussian":
-        cal_values = [
-            fluxcal.calibrate_fluxcal_gauss2d(entry, flux_or_irr, phot_kwargs).fluxcal_fac
-            for entry in dim_stars_dataset
-        ]
+        for i, entry in enumerate(dim_stars_dataset):
+            if calspec_files is None:
+                file = None
+            else:
+                if one_calspec:
+                    file = calspec_files
+                else:
+                    file = calspec_files[i]
+            cal_values.append(
+            fluxcal.calibrate_fluxcal_gauss2d(entry, calspec_file = file, flux_or_irr = flux_or_irr, phot_kwargs = phot_kwargs).fluxcal_fac)
     else:
         raise ValueError("Photometry method must be either Aperture or Gaussian.")
 
@@ -233,7 +254,7 @@ def process_bright_target(target, files, cal_factor, od_raster_threshold,
     This allows users to override default settings for functions like aper_phot.
     
     Parameters:
-        target (str): The target star name.
+        target (str): The target star name or the file path to the corresponding (calspec) SED fits file.
         files (corgidrp.data.Dataset): Dataset of bright star images
         cal_factor (float or corgidrp.data.FluxcalFactor): Calibration factor.
         od_raster_threshold (float): Threshold for flagging OD variations.
@@ -334,7 +355,7 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
 
     # keeping the common metadata because if you do provide dim stars as part of the dataset
     # and grab the last header you might get the FPAM info of a frame with no ND filter in.
-    ext_hdr['BUNIT']    = 'None (dimensionless)'
+    ext_hdr['BUNIT']    = '' #dimensionless
     ext_hdr['DATALVL']  = 'CAL'
     ext_hdr['FPAMNAME'] = common_metadata.get('FPAMNAME')
     ext_hdr['FPAM_H']   = common_metadata.get('FPAM_H')
@@ -406,7 +427,8 @@ def create_nd_filter_cal(stars_dataset,
                          phot_method="Aperture",
                          flux_or_irr="irr",
                          phot_kwargs=None,
-                         fluxcal_factor=None):
+                         fluxcal_factor=None,
+                         calspec_files = None):
     """
     Main ND Filter calibration workflow:
       1. Split dataset into dim and bright stars based on FPAMNAME keyword (or use cal factor input for dim)
@@ -426,6 +448,7 @@ def create_nd_filter_cal(stars_dataset,
             (e.g., aper_phot).
         fluxcal_factor (corgidrp.Data.FluxcalFactor, optional): A pre-computed flux factor calibration product to use
             if dim stars are not included as part of the input dataset
+        calspec_files (list, optional): list of calspec filepaths
 
     Returns:
         sweet_spot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter calibration product for the dataset given
@@ -434,8 +457,6 @@ def create_nd_filter_cal(stars_dataset,
         phot_kwargs = {}
 
     # 1. Split the stars dataset into dim and bright stars based on FPAMNAME or FSAMNAME
-    dim_stars_dataset = []
-    bright_stars_dataset = []
     try:
         grouped_nd_files = group_by_keyword(stars_dataset, prihdr_keyword=None, exthdr_keyword='FPAMNAME')
     except:
@@ -463,8 +484,9 @@ def create_nd_filter_cal(stars_dataset,
         # star frames
         cal_factor = compute_avg_calibration_factor(dim_stars_dataset,
                                                     phot_method,
-                                                    flux_or_irr,
-                                                    phot_kwargs)
+                                                    calspec_files = calspec_files,
+                                                    flux_or_irr = flux_or_irr,
+                                                    phot_kwargs = phot_kwargs)
 
     # 3. Process bright star frames
     grouped_files = group_by_keyword(bright_stars_dataset, prihdr_keyword='TARGET', exthdr_keyword=None)

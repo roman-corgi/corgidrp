@@ -724,9 +724,10 @@ if __name__ == "__main__":
     args = ap.parse_args()
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
+    test_l2bpc_dataformat_e2e(e2edata_dir, outputdir)
+    test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
     test_l2banalog_dataformat_e2e(e2edata_dir, outputdir)
-    test_l2bpc_dataformat_e2e(e2edata_dir, outputdir)
     test_l3_dataformat_e2e(e2edata_dir, outputdir)
     test_l4coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4noncoron_dataformat_e2e(e2edata_dir, outputdir)
@@ -740,5 +741,4 @@ if __name__ == "__main__":
     test_nonlin_dataformat_e2e(e2edata_dir, outputdir)
     test_ndfilter_dataformat_e2e(e2edata_dir, outputdir)
     test_noisemaps_dataformat_e2e(e2edata_dir, outputdir)
-    test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_tpump_dataformat_e2e(e2edata_dir, outputdir)

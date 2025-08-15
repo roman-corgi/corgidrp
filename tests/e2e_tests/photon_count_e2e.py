@@ -62,13 +62,18 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
             this_caldb._db = this_caldb._db.drop(i)
     this_caldb.save()
 
+    # create a DetectorParams object and save it
+    detector_params = data.DetectorParams({})
+    detector_params.save(filedir=output_dir, filename="detector_params.fits")
+    this_caldb.create_entry(detector_params)
+
     # KGain
-    kgain_val = 7 # default value used in mocks.create_photon_countable_frames()
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    kgain_val = 7. # default value used in mocks.create_photon_countable_frames()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(l1_data_ill_filelist)
-    kgain = data.KGain(np.array([[kgain_val]]), pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     # add in keywords that didn't make it into mock_kgain.fits, using values used in mocks.create_photon_countable_frames()
     kgain.ext_hdr['RN'] = 100
@@ -81,7 +86,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     ext_hdr['B_O'] = 0
     ext_hdr['B_O_ERR'] = 0
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -90,8 +95,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     noise_map.save(filedir=output_dir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
-    corgidrp_dir = os.path.split(corgidrp.__path__[0])[0]
-    tests_dir = os.path.join(corgidrp_dir, 'tests')
+    here = os.path.abspath(os.path.dirname(__file__))
+    tests_dir = os.path.join(here, os.pardir)
     # Nonlinearity calibration
     ### Create a dummy non-linearity file ####
     #Create a mock dataset because it is a required input when creating a NonLinearityCalibration
@@ -103,12 +108,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     nonlin_fits_filepath = os.path.join(tests_dir, "test_data", test_non_linearity_filename)
     tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     new_nonlinearity = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
     new_nonlinearity.filename = nonlin_fits_filepath
     new_nonlinearity.pri_hdr = pri_hdr
     new_nonlinearity.ext_hdr = ext_hdr
-    new_nonlinearity.save(filedir=output_dir, filename=test_non_linearity_filename)
     this_caldb.create_entry(new_nonlinearity)
 
     ## Flat field
@@ -194,6 +198,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     post_caldb.remove_entry(new_nonlinearity)
     post_caldb.remove_entry(flat)
     post_caldb.remove_entry(bp_map)
+    post_caldb.remove_entry(detector_params)
     for filepath in master_dark_filepath_list:
         pc_dark = data.Dark(filepath)
         post_caldb.remove_entry(pc_dark)

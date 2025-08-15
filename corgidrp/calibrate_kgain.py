@@ -564,7 +564,7 @@ def calibrate_kgain(dataset_kgain,
         
         added_deviations_shot_arr = [
                 np.sqrt(np.square(np.reshape(std_diffs[x], 
-                newshape=(-1, 1))) - complex(rn_std[x])**2)
+                shape=(-1, 1))) - complex(rn_std[x])**2)
                 for x in range(len(rn_std))
                 ]
         
@@ -794,15 +794,14 @@ def calibrate_kgain(dataset_kgain,
     rn_err_DN = np.nanstd(rn_gauss)
     rn_err_e = np.sqrt((kgain*rn_err_DN)**2 + (mean_rn_gauss_DN*kgain_err)**2)
     exthd['RN_ERR'] = rn_err_e
-    exthd['RN_UNIT'] = 'detected electrons'
+    exthd['RN_UNIT'] = 'detected electron'
     
     # Update history
     exthd['HISTORY'] = f"Kgain and read noise derived from a set of frames on {exthd['DATETIME']}"
-    gain_value = np.array([[kgain]])
 
-    kgain = data.KGain(gain_value, err = np.array([[np.nanstd(kgain_clipped)]]), ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
+    k_gain = data.KGain(kgain, err = kgain_err, ptc = ptc, pri_hdr = prhd, ext_hdr = exthd, input_dataset=dataset_kgain)
     
-    return kgain
+    return k_gain
 
 def kgain_dataset_2_list(dataset, apply_dq = True):
     """

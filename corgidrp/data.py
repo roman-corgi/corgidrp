@@ -1,12 +1,13 @@
 import os
 import re
-import warnings
-import re
 import numpy as np
 import numpy.ma as ma
 import astropy.io.fits as fits
+import warnings
+from astropy.io.fits.card import VerifyWarning
 import astropy.time as time
 import pandas as pd
+from astropy.table import Table
 import pyklip
 from pyklip.instruments.Instrument import Data as pyKLIP_Data
 from pyklip.instruments.utils.wcsgen import generate_wcs
@@ -290,10 +291,14 @@ class Image():
 
                 # we assume that if the err and dq array is given as parameter they supersede eventual err and dq extensions
                 if err is not None:
-                    if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
+                    if isinstance(err, float):
+                        if np.size(self.data) != 1:
+                            raise ValueError("err can only be a float if data is a float value")
+                        self.err = np.array([err])
+                    elif np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
                         raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
                     #we want to have an extra dimension in the error array
-                    if err.ndim == self.data.ndim+1:
+                    elif err.ndim == self.data.ndim+1:
                         self.err = err
                     else:
                         self.err = err.reshape((1,)+err.shape)
@@ -301,7 +306,7 @@ class Image():
                     err_hdu = hdulist.pop("ERR")
                     self.err = err_hdu.data
                     self.err_hdr = err_hdu.header
-                    if self.err.ndim == self.data.ndim:
+                    if self.err.ndim != 1 and self.err.ndim == self.data.ndim:
                         self.err = self.err.reshape((1,)+self.err.shape)
                 else:
                     self.err = np.zeros((1,)+self.data.shape)
@@ -340,26 +345,36 @@ class Image():
         else:
             # data has been passed in directly
             # creation of a new file in DRP eyes
+            if isinstance(data_or_filepath, float):
+                self.data = np.array([data_or_filepath])
+                if err is not None:
+                    if isinstance(err, float):
+                        self.err = np.array([err])
+                    else:
+                        raise ValueError("err value must be float")
+                else:
+                    self.err = np.array([0.])
+            elif hasattr(data_or_filepath, "__len__"):
+                self.data = data_or_filepath
+                if err is not None:
+                    if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
+                        raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
+                    #we want to have a 3 dim error array
+                    if err.ndim == self.data.ndim + 1:
+                        self.err = err
+                    else:
+                        self.err = err.reshape((1,)+err.shape)
+                else:
+                    self.err = np.zeros((1,)+self.data.shape)
+            else:
+                raise ValueError("input must be an array or float")
+            
             if pri_hdr is None or ext_hdr is None:
                 raise ValueError("Missing primary and/or extension headers, because you passed in raw data")
             self.pri_hdr = pri_hdr
             self.ext_hdr = ext_hdr
-            self.data = data_or_filepath
             self.filedir = "."
             self.filename = ""
-
-            # self.hdu_names = [hdu.name for hdu in self.hdu_list]
-
-            if err is not None:
-                if np.shape(self.data) != np.shape(err)[-self.data.ndim:]:
-                    raise ValueError("The shape of err is {0} while we are expecting shape {1}".format(err.shape[-self.data.ndim:], self.data.shape))
-                #we want to have a 3 dim error array
-                if err.ndim == self.data.ndim + 1:
-                    self.err = err
-                else:
-                    self.err = err.reshape((1,)+err.shape)
-            else:
-                self.err = np.zeros((1,)+self.data.shape)
 
             if dq is not None:
                 if np.shape(self.data) != np.shape(dq):
@@ -380,11 +395,6 @@ class Image():
                     self.hdu_names.append(hdu.name)
             else: 
                 self.hdu_list = fits.HDUList()
-
-            
-            
-            #A list of extensions
-            
 
             # record when this file was created and with which version of the pipeline
             self.ext_hdr.set('DRPVERSN', corgidrp.__version__, "corgidrp version that produced this file")
@@ -462,7 +472,9 @@ class Image():
         for hdu in self.hdu_list:
             hdulist.append(hdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
     def _record_parent_filenames(self, input_dataset):
@@ -576,7 +588,9 @@ class Image():
             raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
 
         #first layer is always the updated combined error
-        self.err = self.err*input_error
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
+            self.err = self.err*input_error
         self.err_hdr["Layer_1"] = "combined_error"
 
         # record history since 2-D error map doesn't track individual terms
@@ -640,7 +654,7 @@ class Dark(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a new dark. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this dark.")
             self.ext_hdr['DATATYPE'] = 'Dark' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'detected electrons'
+            self.ext_hdr['BUNIT'] = 'detected electron'
             # TO-DO: check PC_STAT and whether this will be in L2s
             if 'PC_STAT' not in ext_hdr:
                 self.ext_hdr['PC_STAT'] = 'analog master dark'
@@ -651,7 +665,7 @@ class Dark(Image):
             # add to history
             self.ext_hdr['HISTORY'] = "Dark with exptime = {0} s and commanded EM gain = {1} created from {2} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['EMGAIN_C'], self.ext_hdr['DRPNFILE'])
 
-            # give it a default filename using the first input file as the base
+            # give it a default filename using the last input file as the base
             # strip off everything starting at .fits
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
@@ -660,8 +674,10 @@ class Dark(Image):
                 # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
                 self.filename = self.filename.replace("_DNM_CAL", "")
             else:
-                self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
-
+                if self.filename == '':
+                    self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
+                else:
+                    self.filename = self.filename.replace("_DNM_CAL", "")
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
@@ -669,7 +685,7 @@ class Dark(Image):
             self.ext_hdr['PC_STAT'] = 'analog master dark'
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'Detected Electrons'
+            self.err_hdr['BUNIT'] = 'detected electron'
 
         # double check that this is actually a dark file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -699,7 +715,7 @@ class FlatField(Image):
                 # error check. this is required in this case
                 raise ValueError("This appears to be a master flat. The dataset of input files needs to be passed in to the input_dataset keyword to record history of this flat")
             self.ext_hdr['DATATYPE'] = 'FlatField' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = "None" # flat field is dimentionless
+            self.ext_hdr['BUNIT'] = '' # flat field is dimensionless
 
             # log all the data that went into making this flat
             self._record_parent_filenames(input_dataset)
@@ -719,6 +735,152 @@ class FlatField(Image):
             raise ValueError("File that was loaded was not a FlatField file.")
         if self.ext_hdr['DATATYPE'] != 'FlatField':
             raise ValueError("File that was loaded was not a FlatField file.")
+
+class SpectroscopyCentroidPSF(Image):
+    """
+    Calibration product that stores fitted PSF centroid (x, y) positions
+    for a grid of simulated PSFs.
+
+    Args:
+        data_or_filepath (str or np.ndarray): 2D array of (x, y) centroid positions 
+                                              with shape (N, 2), where N is the number of PSFs.
+        err (np.ndarray): 2D array of (x,y) errors of centroid positions with shape (N,2)
+        pri_hdr (fits.Header): Primary header.
+        ext_hdr (fits.Header): Extension header.
+        err_hdr (fits.Header): error extension header
+        input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, err_hdr = None, err = None, input_dataset=None):
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr = err_hdr, err = err)
+
+
+        # if this is a new SpectroscopyCentroidPSF, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpectroscopyCentroidPSF 
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
+            
+            self.ext_hdr["EXTNAME"] = "CENTROIDS"
+
+            self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
+            self._record_parent_filenames(input_dataset)
+            self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
+
+            # Generate default output filename
+            base = input_dataset[0].filename.split(".fits")[0]
+            self.filename = f"{base}_psf_centroid.fits"
+            if err is None:
+                self.err = np.zeros(self.data.shape)
+                self.err_hdr = fits.Header
+
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'PSFCentroidCalibration':
+            raise ValueError("This file is not a valid PSFCentroidCalibration.")
+
+        self.xfit = self.data[:, 0]
+        self.yfit = self.data[:, 1]
+        self.xfit_err = self.err[0][:, 0]
+        self.yfit_err = self.err[0][:, 1]
+
+
+class DispersionModel(Image):
+    """ 
+    Class for dispersion model parameter data structure
+
+    Args:
+        data_or_filepath (str or dict): either the filepath to the FITS file to read in OR the dictionary containing the dispersion data
+        pri_hdr (fits.Header): Primary header.
+        ext_hdr (fits.Header): Extension header.
+        input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
+        
+    Attributes:
+        data (dict): table containing the dispersion data
+        clocking_angle (float): Clocking angle of the dispersion axis, theta,
+        oriented in the direction of increasing wavelength, measured in degrees
+        counterclockwise from the positive x-axis on the EXCAM data array
+        (direction of increasing column index).
+        clocking_angle_uncertainty (float): Uncertainty of the dispersion axis
+        clocking angle in degrees.
+        pos_vs_wavlen_polycoeff (numpy.ndarray): Polynomial fit to the
+        source displacement on EXCAM along the dispersion axis as a function of
+        wavelength, relative to the source position at the band reference
+        wavelength (lambda_c = 730.0 nm for Band 3) in units of millimeters.
+        pos_vs_wavlen_cov (numpy.ndarray): Covariance matrix of the
+        polynomial coefficients
+        wavlen_vs_pos_polycoeff (numpy.ndarray): Polynomial fit to the
+        wavelength as a function of displacement along the dispersion axis on
+        EXCAM, relative to the source position at the Band 3 reference
+        wavelength (x_c at lambda_c = 730.0 nm) in units of nanometers. 
+        wavlen_vs_pos_cov (numpy.ndarray): Covariance matrix of the
+        polynomial coefficients
+        params_key (list): key names of the parameters
+    """
+    
+    params_key = ['clocking_angle', 'clocking_angle_uncertainty', 'pos_vs_wavlen_polycoeff', 'pos_vs_wavlen_cov', 'wavlen_vs_pos_polycoeff', 'wavlen_vs_pos_cov']
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        if isinstance(data_or_filepath, str):
+            # run the image class contructor
+            super().__init__(data_or_filepath)
+            # double check that this is actually a DispersionModel file that got read in
+            # since if only a filepath was passed in, any file could have been read in
+            if 'DATATYPE' not in self.ext_hdr:
+                raise ValueError("File that was loaded was not a DispersionModel file.")
+            if self.ext_hdr['DATATYPE'] != 'DispersionModel':
+                raise ValueError("File that was loaded was not a DispersionModel file.")
+        else:
+            if not isinstance(data_or_filepath, dict):
+                raise ValueError("Input should either be a dictionary or a filepath string")
+            if pri_hdr == None:
+                pri_hdr = fits.Header()
+            if ext_hdr == None:
+                ext_hdr = fits.Header()
+            ext_hdr['DRPCTIME'] =  time.Time.now().isot
+            ext_hdr['DRPVERSN'] =  corgidrp.__version__
+            self.pri_hdr = pri_hdr
+            self.ext_hdr = ext_hdr
+            self.ext_hdr['DATATYPE'] = 'DispersionModel' # corgidrp specific keyword for saving to disk
+            # add to history
+            self.ext_hdr['HISTORY'] = "DispersionModel file created"
+            
+            #check that all parameters are available in the input dict
+            for key in self.params_key:
+                if key not in data_or_filepath:
+                    raise ValueError("parameter {0} is missing in the data".format(key))
+            data_list = Table(rows = [data_or_filepath])
+            self.data = data_list
+            # use the start date for the filename by default
+            self.filedir = "."
+            self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['DRPCTIME'])
+        # initialization data passed in
+        self.clocking_angle = self.data["clocking_angle"][0]
+        self.clocking_angle_uncertainty = self.data["clocking_angle_uncertainty"][0]
+        self.pos_vs_wavlen_polycoeff = np.array(self.data["pos_vs_wavlen_polycoeff"][0])
+        self.pos_vs_wavlen_cov = np.array(self.data["pos_vs_wavlen_cov"][0])
+        self.wavlen_vs_pos_polycoeff = np.array(self.data["wavlen_vs_pos_polycoeff"][0])
+        self.wavlen_vs_pos_cov = np.array(self.data["wavlen_vs_pos_cov"][0])
+
+
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.BinTableHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
 
 class NonLinearityCalibration(Image):
     """
@@ -821,7 +983,8 @@ class KGain(Image):
     Class for KGain calibration file. Until further insights it is just one float value.
 
     Args:
-        data_or_filepath (str or np.array): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        data_or_filepath (str or float): either the filepath to the FITS file to read in OR the calibration data. See above for the required format.
+        err (float): uncertainty value of kgain factor
         ptc (np.array): 2 column array with the photon transfer curve
         pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
         ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
@@ -847,11 +1010,11 @@ class KGain(Image):
         if 'RN_ERR' not in self.ext_hdr:
             self.ext_hdr['RN_ERR'] = ''
         # File format checks
-        if self.data.shape != (1,1):
+        if self.data.shape != (1,):
             raise ValueError('The KGain calibration data should be just one float value')
-
-        self._kgain = self.data[0,0] 
-        self._kgain_error = self.err[0,0]
+        
+        self._kgain = self.data[0] 
+        self._kgain_error = self.err[0]
         
         if isinstance(data_or_filepath, str):
             # a filepath is passed in
@@ -888,13 +1051,15 @@ class KGain(Image):
                 self.filename = re.sub('_L[0-9].', '_KRN_CAL', input_dataset[-1].filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'Detected Electrons/DN'
+            self.ext_hdr['BUNIT'] = 'detected EM electron/DN'
             # add to history
             self.ext_hdr['HISTORY'] = "KGain Calibration file created"
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
-
+        
+        if err_hdr is not None:
+            self.err_hdr['BUNIT'] = 'detected EM electron/DN'
         # double check that this is actually a KGain file that got read in
         # since if only a filepath was passed in, any file could have been read in
         if 'DATATYPE' not in self.ext_hdr:
@@ -936,7 +1101,9 @@ class KGain(Image):
         ptchdu = fits.ImageHDU(data=self.ptc, header = self.ptc_hdr)
         hdulist.append(ptchdu)
 
-        hdulist.writeto(self.filepath, overwrite=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
         hdulist.close()
 
 class BadPixelMap(Image):
@@ -981,6 +1148,7 @@ class BadPixelMap(Image):
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
+
 
         # double check that this is actually a bad pixel map that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1036,9 +1204,9 @@ class DetectorNoiseMaps(Image):
                 raise ValueError("This appears to be a new DetectorNoiseMaps instance. The dataset of input files needs to be passed in to the input_dataset keyword to record the history of the files that made the calibration products.")
 
             self.ext_hdr['DATATYPE'] = 'DetectorNoiseMaps' # corgidrp specific keyword for saving to disk
-            self.ext_hdr['BUNIT'] = 'Detected Electrons'
+            self.ext_hdr['BUNIT'] = 'detected electron'
             # bias offset
-            self.ext_hdr['B_0_UNIT'] = 'DN' # err unit is also in DN
+            self.ext_hdr['B_O_UNIT'] = 'DN' # err unit is also in DN
 
             # log all the data that went into making this calibration file
             if 'DRPNFILE' not in ext_hdr.keys():
@@ -1059,7 +1227,7 @@ class DetectorNoiseMaps(Image):
             self.ext_hdr['DATALVL']    = 'CAL'
 
         if err_hdr is not None:
-            self.err_hdr['BUNIT'] = 'Detected Electrons'
+            self.err_hdr['BUNIT'] = 'detected electron'
 
         # double check that this is actually a DetectorNoiseMaps file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1197,7 +1365,6 @@ class DetectorParams(Image):
                 self.params[new_key] = self.ext_hdr['HIERARCH ' + key]
             else:
                 self.params[new_key] = self.ext_hdr[key]
-
 
 
         # for backwards compatability:
@@ -1349,10 +1516,15 @@ class FluxcalFactor(Image):
     To create a new instance of FluxcalFactor, you need to pass the value and error and the filter name in the ext_hdr:
 
     Args:
-        data_or_filepath (dict or str): either a filepath string corresponding to an 
-                                        existing FluxcalFactor file saved to disk or the data and error values of the
+        data_or_filepath (str or float): either a filepath string corresponding to an 
+                                        existing FluxcalFactor file saved to disk or the data and error float values of the
                                         flux cal factor of a certain filter defined in the header
-
+        err (float): uncertainty value of fluxcal factor
+        pri_hdr (astropy.io.fits.Header): the primary header (required only if raw data is passed in)
+        ext_hdr (astropy.io.fits.Header): the image extension header (required only if raw data is passed in)
+        err_hdr (astropy.io.fits.Header): the err extension header (required only if raw data is passed in)
+        input_dataset (corgidrp.data.Dataset): the Image files combined together to make this FluxcalFactor file (required only if raw 2D data is passed in)
+    
     Attributes:
         filter (str): used filter name
         nd_filter (str): used neutral density filter or "No"
@@ -1364,7 +1536,7 @@ class FluxcalFactor(Image):
         super().__init__(data_or_filepath, err=err, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err_hdr=err_hdr)
         # if filepath passed in, just load in from disk as usual
         # File format checks
-        if self.data.shape != (1,1):
+        if self.data.shape != (1,):
             raise ValueError('The FluxcalFactor calibration data should be just one float value')
         
         #TBC
@@ -1398,8 +1570,8 @@ class FluxcalFactor(Image):
             self.ext_hdr['DRPCTIME'] =  time.Time.now().isot
             
         # make some attributes to be easier to use
-        self.fluxcal_fac = self.data[0,0]
-        self.fluxcal_err =  self.err[0,0,0]
+        self.fluxcal_fac = self.data[0]
+        self.fluxcal_err =  self.err[0]
 
         # if this is a new FluxcalFactors file, we need to bookkeep it in the header
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new FluxcalFactors file
@@ -1420,8 +1592,8 @@ class FluxcalFactor(Image):
   
             self.ext_hdr['DATATYPE'] = 'FluxcalFactor' # corgidrp specific keyword for saving to disk
             # JM: moved the below to fluxcal.py since it varies depending on the method
-            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
-            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+            #self.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+            #self.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
             # add to history
             self.ext_hdr['HISTORY'] = "Flux calibration file created"
 
@@ -2475,9 +2647,13 @@ class PyKLIPDataset(pyKLIP_Data):
         
         # Write FITS file.
         try:
-            hdul.writeto(filepath, overwrite=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+                hdul.writeto(filepath, overwrite=True)
         except TypeError:
-            hdul.writeto(filepath, clobber=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+                hdul.writeto(filepath, clobber=True)
         hdul.close()
         
         pass
@@ -2631,8 +2807,10 @@ datatypes = { "Image" : Image,
               "FpamFsamCal" : FpamFsamCal,
               "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
-              
-              "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset}
+              "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
+              "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
+              "DispersionModel": DispersionModel
+              }
 
 def autoload(filepath):
     """

@@ -82,7 +82,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
             np.random.seed(39)
             mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
             for i in os.listdir(trap_pump_outputdir):
-                if 'Scheme_' not in i:
+                # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
+                if ('Scheme_' not in i) or ('TPU_CAL' in i): 
                     continue
                 temperature = i[0:4]
                 sch = i[4:12]
@@ -98,11 +99,11 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     else:
         # figure out paths, assuming everything is located in the same relative location
         if not e2e: # if you want to test older simulated data
-            trap_pump_datadir = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
+            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
+            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
         if e2e:
-            trap_pump_datadir = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
+            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
+            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
         # this is a .npy file; read it in as a dictionary
         td = np.load(sim_traps, allow_pickle=True)
         TVAC_trap_dict = dict(td[()])
@@ -155,7 +156,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     trap_cal_filename = None
     for root, _, files in os.walk(trap_pump_datadir):
         for name in files:
-            if 'TPUMP_Npumps' not in name:
+            if ('TPUMP_Npumps' not in name) or ('TPU_CAL' in name): # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
                 continue
             if trap_cal_filename is None:
                 trap_cal_filename = name # get first filename fed to walk_corgidrp for finding cal file later
@@ -174,7 +175,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -204,7 +205,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code

@@ -46,7 +46,6 @@ def e2eoutput_path(request):
     """
     return request.config.getoption("--e2eoutput_path")
 
-
 def pytest_configure(config):
     """
     Adds e2e marker for specifying e2e tests
