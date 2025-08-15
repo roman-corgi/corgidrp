@@ -6,6 +6,7 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
+from astropy.io import fits
 
 import corgidrp
 import corgidrp.data as data
@@ -110,6 +111,60 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Print success message
     print('e2e test for corethroughput calibration passed')
     
+@pytest.mark.e2e
+def test_expected_results_simdata_e2e(e2edata_path, e2eoutput_path):
+    
+    
+    # Read the files in the directory
+    files = os.listdir(e2edata_path)
+    data = [os.path.join(e2edata_path, x) for x in files if x.startswith('flux_map-3-f') or x.startswith('pupil')]
+    
+    # Create the dataset
+    images = []
+    for file in data:
+        image = fits.open(file)
+        exptime = image[1].header['EXPTIME']
+        images.append(data.Image(image[0].data/exptime, pri_hdr=image[0].header, ext_hdr=image[1].header))
+
+    dataset = data.Dataset(images)
+    
+    # Create the output directory
+    corethroughput_outputdir = os.path.join(e2eoutput_path, 'l2b_to_corethroughput_output_sim_data')
+    if os.path.exists(corethroughput_outputdir):
+        shutil.rmtree(corethroughput_outputdir)
+    os.mkdir(corethroughput_outputdir)
+    
+    walker.walk_corgidrp(data, '', corethroughput_outputdir)
+    
+    # Load in the output data. It should be the latest CTP_CAL file produced.
+    corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
+        '*CTP_CAL*.fits'))[0]
+    ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
+    
+    ct_cal_sim = corethroughput.generate_ct_cal(dataset)
+
+    # Asserts
+
+    assert ct_cal_drp.data == pytest.approx(ct_cal_sim.data, abs=1e-12)
+    assert ct_cal_drp.ct_excam == pytest.approx(ct_cal_sim.ct_excam, abs=1e-12)
+    assert np.all(ct_cal_drp.err == ct_cal_sim.err)
+    assert np.all(ct_cal_drp.dq == ct_cal_sim.dq)
+    assert np.all(ct_cal_drp.ct_fpam == ct_cal_sim.ct_fpam)
+    assert np.all(ct_cal_drp.ct_fsam == ct_cal_sim.ct_fsam)
+
+    assert ct_cal_drp.data is not None, "CoreThroughput calibration data is None"
+    assert len(ct_cal_drp.data) == len(dataset), "CoreThroughput calibration data length does not match dataset length"
+    assert len(ct_cal_drp.data) == len(ct_cal_drp.ct_excam), "CoreThroughput calibration excam length does not match data length"
+    assert ct_cal_drp.ct_excam is not None, "CoreThroughput excam data is None"
+    assert ct_cal_drp.err is not None, "CoreThroughput error data is None"
+    assert ct_cal_drp.dq is not None, "CoreThroughput dq data is None"
+    
+    assert np.min(ct_cal_drp.ct_excam[:, 2]) > 0, "CoreThroughput measurements have non-positive values"
+    assert np.max(ct_cal_drp.ct_excam[:, 2]) <= 1, "CoreThroughput measurements exceed 1"
+
+    # Print success message
+    print('e2e test for corethroughput calibration with simulated data passed')
+    
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
     # that call this script with the correct arguments and they do not need
@@ -122,8 +177,11 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
                     help='Path to CGI_TVAC_Data Folder [%(default)s]')
+    ap.add_argument('-e2es', '--e2esim_dir', default=e2edata_path,
+                    help='Path to simulated data Folder [%(default)s]')
     ap.add_argument('-o', '--outputdir', default=outputdir,
                     help='directory to write results to [%(default)s]')
     args = ap.parse_args()
     outputdir = args.outputdir
     test_expected_results_e2e(args.e2edata_dir, args.outputdir)
+    test_expected_results_simdata_e2e(args.e2esim_dir, args.outputdir)
