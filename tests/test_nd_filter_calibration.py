@@ -282,7 +282,7 @@ def test_nd_filter_calibration_object_with_calspec(bright_files_cached):
     
     results.save(filedir=default_cal_dir)
 
-    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_NDF_CAL.fits')]
+    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
     assert nd_files, "No NDFilterOD files were generated."
     with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
@@ -303,7 +303,7 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
     
     results.save(filedir=default_cal_dir)
 
-    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_NDF_CAL.fits')]
+    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
     assert nd_files, "No NDFilterOD files were generated."
     with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
@@ -322,7 +322,7 @@ def test_output_filename_convention(stars_dataset_cached):
     ds_copy = copy.deepcopy(stars_dataset_cached)
 
     # Construct the expected filename from the last input dataset filename.
-    expected_filename = re.sub('_L[0-9].', '_NDF_CAL', stars_dataset_cached[-1].filename)
+    expected_filename = re.sub('_l[0-9].', '_ndf_cal', stars_dataset_cached[-1].filename)
     full_expected_path = os.path.join(default_cal_dir, expected_filename)
 
     # Create the calibration product
@@ -626,7 +626,7 @@ def test_calculate_od_at_new_location(output_dir):
     # Create a fake input dataset to set the filename
     input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
-    fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
+    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits"
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
     # Build the NDFilterSweetSpotDataset

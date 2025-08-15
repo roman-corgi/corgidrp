@@ -135,7 +135,7 @@ def test_expected_results_sub():
 
     # check headers
     assert(noise_maps.data.ndim == 3)
-    test_filename = dataset.frames[-1].filename.split('.fits')[0] + '_DNM_CAL.fits'
+    test_filename = dataset.frames[-1].filename.split('.fits')[0] + '_dnm_cal.fits'
     test_filename = re.sub('_L[0-9].', '', test_filename)
     assert(noise_maps.filename == test_filename)
     assert(noise_maps.ext_hdr["BUNIT"] == "detected electron")
