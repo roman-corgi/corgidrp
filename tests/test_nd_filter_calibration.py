@@ -9,13 +9,14 @@ import re
 import copy
 from termcolor import cprint
 
+import corgidrp
 from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
 import corgidrp.data as data 
-from corgidrp.data import (Dataset, FluxcalFactor, NDFilterSweetSpotDataset,
-    FpamFsamCal)
+from corgidrp.data import (Image, Dataset, FluxcalFactor,
+    NDFilterSweetSpotDataset, FpamFsamCal)
 import corgidrp.mocks as mocks
 
 

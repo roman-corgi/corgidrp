@@ -376,9 +376,8 @@ def calculate_od_at_new_location(clean_frame_entry, fpamfsamcal,
     """
     final_sweet_spot_data = ndsweetspot_dataset.data
     fpam2excam_matrix, _ = fpamfsamcal.data
-    breakpoint() # Check it's the fpam2excam matrix
 
-    if (clean_frame_entry is not None) and (transformation_matrix is not None):
+    if (clean_frame_entry is not None) and (fpam2excam_matrix is not None):
         x_clean, y_clean = centroid_with_roi(clean_frame_entry.data)
         cframe_hdr = clean_frame_entry.ext_hdr
         sweetspot_hdr = ndsweetspot_dataset.ext_hdr
