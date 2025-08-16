@@ -381,9 +381,8 @@ def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file,
     
     Parameters:
         clean_frame_entry (corgidrp.Data.Image): A clean frame image.
-        transformation_matrix_file (string): File path to the 2x2 matrix for transforming 
+        transformation_matrix_file (corgidrp.data.FpamFsamCal): File path to the 2x2 matrix for transforming 
             FPAM offsets to EXCAM offsets.
-            # TO DO: is this going to be a data object?
         ndsweetspot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter 
             Sweet Spot dataset
 
