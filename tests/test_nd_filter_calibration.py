@@ -19,6 +19,7 @@ from corgidrp.data import (Image, Dataset, FluxcalFactor,
     NDFilterSweetSpotDataset, FpamFsamCal)
 import corgidrp.mocks as mocks
 
+here = os.path.abspath(os.path.dirname(__file__))
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -632,12 +633,15 @@ def test_calculate_od_at_new_location(output_dir):
     clean_image_data = np.zeros((5, 5), dtype=float)
     clean_image_data[2, 2] = 100.0  # star pixel
     cframe_prihdr, cframe_exthdr, errhdr, dqhdr, biashdr= mocks.create_default_L2b_headers()
-    cframe_exthdr["FPAM_H"] = 3.0
-    cframe_exthdr["FPAM_V"] = 3.0
+    # Choosing some values that will help predict the expected value of the OD
+    # when using the bilinear OD interpolation in nd_filter_calibration.interpolate_od()
+    # These values ensure that the shift in EXCAM pixels is (3,3)
+    cframe_exthdr["FPAM_H"] = -24.42
+    cframe_exthdr["FPAM_V"] = 24.42
     clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
                               ext_hdr=cframe_exthdr)
 
-    # FPAM/FSAM transformations
+    # Default FPAM/FSAM transformations
     fpamfsamcal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
         'FpamFsamCal_2024-02-10T00:00:00.000.fits'))    
 
@@ -649,8 +653,18 @@ def test_calculate_od_at_new_location(output_dir):
     )
 
     # Expect the final location = (2+3, 2+3) = (5,5).
-    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
+    fpam2excam_matrix = fits.getdata(os.path.join(here, 'test_data',
+        'fpam_to_excam_modelbased.fits'))
+    # Check final position is (5,5)
+    final_excam_pos = (np.array([2,2]) + fpam2excam_matrix @
+        np.array([cframe_exthdr["FPAM_H"],cframe_exthdr["FPAM_V"]]))
+    # Single precision because the FPAM_H/V values were set to be close to
+    # produce a change of 3 EXCAM pixels within single precision
+    assert np.all(np.abs(final_excam_pos - np.array([5,5])) < 1e-7)
+
+    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5  
     expected_value = 3.5
+
     atol_nd = 1e-6
     test_result_od_accuracy = abs(interpolated_od - expected_value) < atol_nd
     print(f'calculate_od_at_new_location() estimates OD as {expected_value} +/- {atol_nd}: ', end='')
