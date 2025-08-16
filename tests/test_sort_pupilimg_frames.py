@@ -174,7 +174,10 @@ def make_minimal_image(
     prhd, exthd = create_default_L1_headers() # makes timestamp according to current time
     if previous_timestamp is None:
         previous_timestamp = exthd['DATETIME'][:26]
-    dt_obj = datetime.strptime(previous_timestamp, "%Y-%m-%dT%H:%M:%S.%f")
+    if len(previous_timestamp) == 19:
+        dt_obj = datetime.strptime(previous_timestamp, "%Y-%m-%dT%H:%M:%S")
+    else:        
+        dt_obj = datetime.strptime(previous_timestamp, "%Y-%m-%dT%H:%M:%S.%f")
     # Add previous_exptime (in seconds) to dt_obj to get updated_time, along with a little offset time (time between frames)
     updated_time = dt_obj + timedelta(seconds=float(previous_exptime)+0.2)
     # Round to nearest tenth of a second
@@ -345,6 +348,12 @@ def setup_module():
     # Create directory for temporary data files (not tracked by git)
     if not os.path.exists(Path('simdata')):
         os.mkdir(Path('simdata'))
+    # clean out any previous files in there; files are not overwritten since their names depend on the present time
+    for filename in os.listdir('simdata'):
+        if not filename.endswith('.fits'):
+            continue
+        filepath = os.path.join('simdata', filename)
+        os.remove(filepath)
     idx_frame = 0
     filename_list = []
     exptimes = []

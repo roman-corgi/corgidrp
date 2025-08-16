@@ -38,10 +38,15 @@ def test_pickling():
     """
     Test detector params can be pickled
     """
-    filename = os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00:00:00.000.fits")
+    filename = os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00.00.00.000.fits")
     default_detparams = data.DetectorParams(filename)
         
     # check they can be pickled (for CTC operations)
     pickled = pickle.dumps(default_detparams)
     pickled_detparams = pickle.loads(pickled)
     assert np.all((default_detparams.data == pickled_detparams.data))
+
+    if __name__ == '__main__':
+        test_default_params()
+        test_hashing()
+        test_pickling()
