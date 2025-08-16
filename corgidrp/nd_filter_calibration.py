@@ -3,7 +3,8 @@ import math
 import numpy as np
 from astropy.io import fits
 import corgidrp.fluxcal as fluxcal
-from corgidrp.data import Dataset, FluxcalFactor, NDFilterSweetSpotDataset
+from corgidrp.data import (Dataset, FluxcalFactor, NDFilterSweetSpotDataset,
+    FpamFsamCal)
 from corgidrp.astrom import centroid_with_roi
 from scipy.interpolate import griddata
 import warnings
@@ -11,22 +12,6 @@ import warnings
 # =============================================================================
 # Helper Functions
 # =============================================================================
-
-def load_transformation_matrix_from_fits(file_path):
-    """
-    Load a transformation matrix from a FITS file.
-    
-    Parameters:
-        file_path (str): Path to the FITS file containing the transformation matrix.
-    
-    Returns:
-        np.ndarray: The transformation matrix extracted from the FITS file.
-    """
-    with fits.open(file_path) as hdul:
-        data = hdul[0].data
-        if data is None:
-            data = hdul[1].data
-        return np.array(data)
 
 def group_by_keyword(dataset, prihdr_keyword=None, exthdr_keyword=None):
     """
@@ -373,16 +358,16 @@ def create_nd_sweet_spot_dataset(aggregated_sweet_spot_data, common_metadata, od
     return ndsweetspot_dataset
 
 
-def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file, 
+def calculate_od_at_new_location(clean_frame_entry, fpamfsamcal, 
                                  ndsweetspot_dataset):
     """
     Use the NDFilterSweetSpot Dataset to calculate the OD at a new location for an input 
-    image, using a provided EXCAM to FPAM transformation_matrix.
+    image, using an FpamFsamCal calibration instance.
     
     Parameters:
         clean_frame_entry (corgidrp.Data.Image): A clean frame image.
-        transformation_matrix_file (corgidrp.data.FpamFsamCal): File path to the 2x2 matrix for transforming 
-            FPAM offsets to EXCAM offsets.
+        fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
+              FpamFsamCal calibration class. 
         ndsweetspot_dataset (corgidrp.Data.NDFilterSweetSpotDataset): ND Filter 
             Sweet Spot dataset
 
@@ -390,7 +375,8 @@ def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file,
         interpolated_od (float): OD that is interpolated at the new star location
     """
     final_sweet_spot_data = ndsweetspot_dataset.data
-    transformation_matrix = load_transformation_matrix_from_fits(transformation_matrix_file)
+    fpam2excam_matrix, _ = fpamfsamcal.data
+    breakpoint() # Check it's the fpam2excam matrix
 
     if (clean_frame_entry is not None) and (transformation_matrix is not None):
         x_clean, y_clean = centroid_with_roi(clean_frame_entry.data)
@@ -405,7 +391,7 @@ def calculate_od_at_new_location(clean_frame_entry, transformation_matrix_file,
         fpam_offset  = np.array([clean_fpam_h - sp_fpam_h, clean_fpam_v - sp_fpam_v])
 
         # Transform to EXCAM offset
-        excam_offset = transformation_matrix @ fpam_offset
+        excam_offset = fpam2excam_matrix @ fpam_offset
         x_adj = x_clean + excam_offset[0]
         y_adj = y_clean + excam_offset[1]
 
