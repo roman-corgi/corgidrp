@@ -6,7 +6,7 @@ from astropy.wcs import WCS
 from matplotlib import pyplot as plt
 import numpy as np
 
-def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False):
+def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False,test_offset=False):
     """
     unit test of the northup function
 
@@ -53,6 +53,23 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           os.makedirs(outdir, exist_ok=True)
           updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg.fits')
        updated_datalist.append(updated_dataset[0])
+    if test_offset:
+       mock_dataset =  mock_dataset_ori.copy()
+
+       # add an angle offset
+       mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
+
+       # create the wcs
+       updated_dataset = create_wcs(mock_dataset,astrom_cal,offset=(3.3, 1.0))
+       # inject fake sources for test
+       updated_dataset[0].data[340:360,340:360]=5
+       updated_dataset[0].ext_hdr['X_1VAL']=350
+       updated_dataset[0].ext_hdr['Y_1VAL']=350
+       updated_dataset[0].dq[340:360,340:360]=1
+       if save_mock_dataset:
+          outdir = os.path.join('./',dirname)
+          os.makedirs(outdir, exist_ok=True)
+          updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg_testoffset.fits')
 
     input_dataset = data.Dataset(updated_datalist)
     derot_dataset = northup(input_dataset)
@@ -157,4 +174,5 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
 
     return
 if __name__ == '__main__':
- test_northup() 
+ test_northup()
+#  test_northup(save_mock_dataset=True, test_offset=True)  
