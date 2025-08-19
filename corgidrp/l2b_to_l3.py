@@ -13,6 +13,7 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
         astrom_calibration (corgidrp.data.AstrometricCalibration): an astrometric calibration file for the input dataset
         offset (optional, tuple(float, float)): x and y offset in units of pixel between the dataset and WCS center (for spectroscopy or other optics offset from imaging mode)
+    
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
     """
