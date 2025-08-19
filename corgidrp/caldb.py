@@ -18,7 +18,7 @@ column_dtypes = {
     "Date Created": float,
     "Hash": str,
     "DRPVERSN": str,
-    "OBSNUM": int,
+    "OBSNUM": str,
     "NAXIS1": int,
     "NAXIS2": int,
     "OPMODE": str,
@@ -129,7 +129,7 @@ class CalDB:
                 "Date Created" : time_now.mjd,
                 "Hash" : hash(time_now),
                 "DRPVERSN" : "0.0",
-                "OBSNUM" : 000,
+                "OBSNUM" : "000",
                 "NAXIS1": 0,
                 "NAXIS2" : 0,
                 "OPMODE" : "",
@@ -174,9 +174,9 @@ class CalDB:
         if "OBSNUM" in entry.pri_hdr:
             obsid = entry.pri_hdr["OBSNUM"]
             if obsid is None:
-                obsid = -1
+                obsid = ""
         else:
-            obsid = -1
+            obsid = ""
 
         hash_val = entry.get_hash()
 
