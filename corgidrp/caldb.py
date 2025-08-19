@@ -243,18 +243,14 @@ class CalDB:
             row_index = self._db[
                 self._db["Filepath"] == row_dict["Filepath"]
             ].index.values
-            with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', category=FutureWarning)
-                self._db.loc[row_index, self.columns] = new_row
+            self._db.loc[row_index, self.columns] = new_row
         # otherwise create new entry
         else:
             new_entry = pd.DataFrame([new_row], columns=self.columns)
             if len(self._db) == 0:
                 self._db = new_entry
             else:
-                with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore', category=FutureWarning)
-                    self._db = pd.concat([self._db, new_entry], ignore_index=True)
+                self._db = pd.concat([self._db, new_entry], ignore_index=True)
 
         # save to disk to update changes
         if to_disk:
