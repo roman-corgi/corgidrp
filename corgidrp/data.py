@@ -1902,7 +1902,7 @@ class CoreThroughputCalibration(Image):
           corDataset (corgidrp.data.Dataset): a dataset containing some
               coronagraphic observations.
           fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
-              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+              FpamFsamCal calibration class.
           logr (bool) (optional): If True, radii are mapped into their logarithmic
               values before constructing the interpolant.
 
