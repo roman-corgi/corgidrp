@@ -121,8 +121,10 @@ def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
                 
             # Ensure that there is at least one element to calculate mean and std
             if np.any(mean_idx):
-                local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx])
-                local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx])
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=RuntimeWarning)
+                    local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx])
+                    local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx])
             else:
                 local_mean_array[m, n] = 0
                 local_noise_array[m, n] = 0
@@ -525,7 +527,9 @@ def calibrate_kgain(dataset_kgain,
             in range(len(frames_diff))]
         
         # split each frame up into bins, take std and mean of each region
-        mean_frames_mean_curr0 = np.nanmean(frames, axis=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            mean_frames_mean_curr0 = np.nanmean(frames, axis=0)
         mean_frames_mean_curr = np.nanmean(mean_frames_mean_curr0[rowroi,colroi])
         
         # Calculate the means
