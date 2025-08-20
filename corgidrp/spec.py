@@ -630,9 +630,6 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     ext_hdr["REFWAVE"] = ref_wavlen
     ext_hdr["BAND"] = ref_cfam
     ext_hdr["BANDFRAC"] = bandpass_frac
-    ext_hdr["REFWAVE"] = ref_wavlen
-    ext_hdr["BAND"] = ref_cfam
-    ext_hdr["BANDFRAC"] = bandpass_frac
     corgi_dispersion_profile = DispersionModel(
         disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr
     )
