@@ -231,8 +231,12 @@ def test_mean_num():
         ds[i].all_dq[:,7,8] = 4
         ds[i].all_dq[:int(1+len(ds[i])/2),10,12] = 2
 
-    with pytest.warns(UserWarning):
-        nm_out = calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+    ##warning check is removed because the expected warning was supressed
+    #with pytest.warns(UserWarning):
+        #nm_out = calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+    
+    nm_out = calibrate_darks_lsq(data_set, detector_params, detector_regions=dat)
+    
     # last of out is the DetectorNoiseMaps instance
     # And dq is really a 3-frame stack, and all 3 are the same.  So pick one of them.
     assert nm_out.dq[0,7,8] == 4
