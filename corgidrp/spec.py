@@ -3,10 +3,12 @@ import glob
 import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
+from scipy.interpolate import interp1d
 import corgidrp
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
 import os
 from astropy.io import ascii, fits
+from astropy.table import Table
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
@@ -430,10 +432,11 @@ def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, 
         
     return calibration
 
-def read_cent_wave(filter_file, band):
+def read_cent_wave(band, filter_file = None):
     """
     read the csv filter file containing the band names and the central wavelength in nm.
-    There are 3 columns: the CFAM filter name, the (Phase C) center wavelength, the TVAC TV-40b measured center wavelength.
+    There are 6 columns: the CFAM filter name, the (Phase C) center wavelength, the TVAC TV-40b measured center wavelength 
+    and the FWHM for the 4 broad bands, and xoffset, yoffset between the bands
     The TVAC wavelengths are not measured for all filters, but are the preferred value if available.
     
     Args:
@@ -441,19 +444,24 @@ def read_cent_wave(filter_file, band):
        band (str): name of the filter band
        
     Returns:
-       float: central wavelength of the filter band
+       list: [central wavelength of the filter band, fwhm, xoffset, yoffset]
     """
+    if filter_file is None:
+        filter_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
     data = ascii.read(filter_file, format = 'csv', data_start = 1)
     filter_names = data.columns[0]
     if band not in filter_names:
         raise ValueError("{0} is not in table band names {1}".format(band, filter_names))
+    ret_list = []
     if data.columns[2][filter_names == band]:
         cen_wave = data.columns[2][filter_names == band][0]
     else:
         cen_wave = data.columns[1][filter_names == band][0]
+    ret_list.append(cen_wave)
+    for i in range(3, 6):
+        ret_list.append(data.columns[i][filter_names == band][0])
+    return ret_list
     
-    return cen_wave
-
 def estimate_dispersion_clocking_angle(xpts, ypts, weights):
     """ 
     Estimate the clocking angle of the dispersion axis based on the centroids of
@@ -543,46 +551,45 @@ def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wa
     return pfit_pos_vs_wavlen, cov_pos_vs_wavlen, pfit_wavlen_vs_pos, cov_wavlen_vs_pos
 
 
-def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'PRISM3', pixel_pitch_um = 13.0):
+def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitch_um = 13.0):
     """ 
     Generate a DispersionModel of the spectral dispersion profile of the CGI ZOD prism.
 
     Args:
        centroid_psf (SpectroscopyCentroidPsf): instance of SpectroscopyCentroidPsf calibration class
        band_center_file (str): file name of the band centers, optional, default is in data/spectroscopy
-       prism (str): Label for the selected DPAM zero-deviation prism; must be
-                    either 'PRISM3' or 'PRISM2'
        pixel_pitch_um (float): EXCAM pixel pitch in micron, default 13 micron
     
     Returns:
        data.DispersionModel: DispersionModel calfile object with the fit results including errors of the spectral trace and the dispersion
     """
-    #if not isinstance(dataset, Dataset):
-    #    raise TypeError("Input must be a corgidrp.data.Dataset object.")
+    prism = centroid_psf.ext_hdr['DPAMNAME']
     if prism not in ['PRISM2', 'PRISM3']:
         raise ValueError("prism must be PRISM2 or PRISM3")
     
     #PRISM2 not yet available
     if prism == 'PRISM2':
         subband_list = ['2A', '2B', '2C']
-        ref_wavlen = 660.0
         ref_cfam = '2'
-        #bandpass = [610, 710]
-        #halfheight = 10
+        ref_wavlen = 660.
     else:
         subband_list = ['3A', '3B', '3C', '3D', '3E', '3G']
-        ref_wavlen = 730.0
         ref_cfam = '3'
-        #bandpass = [675, 785]
-        #halfheight = 30
-        
-    if band_center_file is None:
-        band_center_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
+        ref_wavlen = 730.
     
+    ##bandpass_frac = fwhm/cen_wave, needed for the wavelength calibration
+    band_list = read_cent_wave(ref_cfam, filter_file = band_center_file)
+    band_center = band_list[0]
+    fwhm = band_list[1]
+    xoff_band = band_list[2]
+    yoff_band = band_list[3]
+    bandpass_frac = fwhm/band_center
     if 'FILTERS' not in centroid_psf.ext_hdr:
         raise AttributeError("there should be a FILTERS header keyword in the filtersweep SpectroscopyCentroidPsf")
     filters = centroid_psf.ext_hdr['FILTERS'].upper().split(",")
     center_wavel = []
+    xoff = []
+    yoff = []
     for band in filters:
         band_str = band.strip()
         if band_str == ref_cfam:
@@ -590,19 +597,26 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'P
         elif band_str not in subband_list:
             warnings.warn("measured band {0} is not in the sub band list {1} of the used prism".format(band_str, subband_list))
         else:
-            center_wavel.append(read_cent_wave(band_center_file,band_str))
+            cen_wave = read_cent_wave(band_str, filter_file = band_center_file)
+            center_wavel.append(cen_wave[0])
+            xoff.append(cen_wave[2] - xoff_band)
+            yoff.append(cen_wave[3] - yoff_band)
     if len(center_wavel) < 4:
         raise ValueError ("number of measured sub-bands {0} is too small to model the dispersion".format(len(center_wavel)))
+    if len(center_wavel) != len(centroid_psf.xfit) -1:
+        raise ValueError ("number of measured sub-bands {0} does not fit to the measured number of centroids {1}".format(len(center_wavel), len(centroid_psf.xfit)))
     center_wavel = np.array(center_wavel)
+    xfit = centroid_psf.xfit[:-1] - np.array(xoff)
+    yfit = centroid_psf.yfit[:-1] - np.array(yoff)
+    xfit_err = centroid_psf.xfit_err[:-1]
+    yfit_err = centroid_psf.yfit_err[:-1]
     (clocking_angle,
-     clocking_angle_uncertainty) = estimate_dispersion_clocking_angle(
-            centroid_psf.xfit, centroid_psf.yfit, weights = 1. / centroid_psf.yfit_err
-     )
+     clocking_angle_uncertainty) = estimate_dispersion_clocking_angle(xfit, yfit, weights = 1. / yfit_err)
 
     (pfit_pos_vs_wavlen, cov_pos_vs_wavlen,
      pfit_wavlen_vs_pos, cov_wavlen_vs_pos) = fit_dispersion_polynomials(
-            center_wavel, centroid_psf.xfit, centroid_psf.yfit, 
-            centroid_psf.yfit_err, clocking_angle, ref_wavlen, pixel_pitch_um = pixel_pitch_um
+            center_wavel, xfit, yfit, 
+            yfit_err, clocking_angle, ref_wavlen, pixel_pitch_um = pixel_pitch_um
      )
 
     disp_dict = {"clocking_angle": clocking_angle,
@@ -613,8 +627,116 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, prism = 'P
         "wavlen_vs_pos_cov": cov_wavlen_vs_pos}
     pri_hdr = centroid_psf.pri_hdr.copy()
     ext_hdr = centroid_psf.ext_hdr.copy()
+    ext_hdr["REFWAVE"] = ref_wavlen
+    ext_hdr["BAND"] = ref_cfam
+    ext_hdr["BANDFRAC"] = bandpass_frac
     corgi_dispersion_profile = DispersionModel(
         disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr
     )
 
     return corgi_dispersion_profile
+
+
+def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1000):
+    """
+    Create a wavelength calibration map and a wavelength-position lookup table,
+    given a dispersion model and a wavelength zero-point
+
+    Args:
+        disp_model (data.DispersionModel): Dispersion model calibration object
+        wave_zeropoint (dict): Wavelength zero-point dictionary
+        pixel_pitch_um (float): EXCAM pixel pitch in microns
+        ntrials (int): number of trials when applying a Monte Carlo error propagation to estimate the uncertainties of the
+                       values in the wavelength calibration map
+    
+    Returns:
+        wavlen_map (numpy.ndarray): 2-D wavelength calibration map. Each image
+        pixel value is a wavelength in units of nanometers, computed for the
+        dispersion profile, zero-point position, coordinates, and image shape
+        specified in the input wavelength zero-point object.
+        wavlen_uncertainty (numpy.ndarray): 2-D array of wavelength calibration map
+        uncertainty values in units of nanometers.
+        pos_lookup_table (astropy.table.Table): Wavelength-to-position
+        lookup table, computed for the dispersion profile, zero-point position,
+        coordinates, and image shape specified in the input wavelength
+        zero-point object. The table contains 5 columns: wavelength, x, x
+        uncertainty, y, y uncertainty.
+        x_refwav, y_refwave (float): coordinates of the source at the reference wavelength
+
+    """
+    ref_wavlen = disp_model.ext_hdr["REFWAVE"]
+    #bandpass_frac = fwhm/cen_wave
+    bandpass_frac = disp_model.ext_hdr["BANDFRAC"]
+    pos_vs_wavlen_poly = np.poly1d(disp_model.pos_vs_wavlen_polycoeff)
+    wavlen_vs_pos_poly = np.poly1d(disp_model.wavlen_vs_pos_polycoeff)
+    wavlen_c = ref_wavlen
+    d_zp_mm = pos_vs_wavlen_poly((wave_zeropoint.get('wavlen') - wavlen_c) / wavlen_c)
+
+    pixel_pitch_mm = pixel_pitch_um * 1E-3
+    theta = np.deg2rad(disp_model.clocking_angle)
+    x_refwav, y_refwav = (wave_zeropoint.get('x') - d_zp_mm * np.cos(theta) / pixel_pitch_mm,
+                wave_zeropoint.get('y') - d_zp_mm * np.sin(theta) / pixel_pitch_mm)
+
+    yy, xx = np.indices((wave_zeropoint.get('shapex'), wave_zeropoint.get('shapey')))
+    dd_mm = (xx - x_refwav) * np.cos(theta) + (yy - y_refwav) * np.sin(theta) * pixel_pitch_mm
+    wavlen_map = wavlen_vs_pos_poly(dd_mm)
+
+    delta_wav = 0.5
+    n_wav = int(ref_wavlen * bandpass_frac / delta_wav)
+    n_wav_odd = n_wav + (n_wav % 2 == 0) # force odd array length
+    wavlen_beg = ref_wavlen - n_wav_odd // 2 * delta_wav
+    wavlen_end = ref_wavlen + n_wav_odd // 2 * delta_wav
+    
+    wavlens = np.linspace(wavlen_beg, wavlen_end, n_wav_odd)
+    #np.testing.assert_almost_equal(wavlens[n_wav_odd // 2], ref_wavlen)
+        
+    # Use a Monte Carlo error propagation to estimate the uncertainties of the
+    # values in the wavelength calibration map and the position lookup table. 
+    polyfit_order = len(disp_model.pos_vs_wavlen_polycoeff) - 1
+    prand_wavlen_pos = np.zeros((ntrials, polyfit_order + 1))
+    prand_pos_wavlen = np.zeros((ntrials, polyfit_order + 1))
+    
+    # Add the wavelength zero-point position error to the dispersion profile uncertainty 
+    d_zp_err_mm = np.sqrt((wave_zeropoint.get('xerr') * np.cos(theta))**2 + (wave_zeropoint.get('yerr') * np.sin(theta))**2) * pixel_pitch_mm
+    # To translate the position uncertainty to wavelength uncertainty, use the second coefficient of the
+    # the wavelength(x) polynomial, which is the linear dispersion coefficient (units nm/mm).
+    d_zp_err_nm = disp_model.wavlen_vs_pos_polycoeff[2] * d_zp_err_mm 
+    disp_model.pos_vs_wavlen_cov[polyfit_order, polyfit_order] += d_zp_err_mm**2
+    disp_model.wavlen_vs_pos_cov[polyfit_order, polyfit_order] += d_zp_err_nm**2 
+
+    # Generate random polynomial coefficients consistent with the covariance
+    # matrix in the dispersion profile.
+    for ii in range(ntrials):
+        prand_wavlen_pos[ii] = np.random.multivariate_normal(disp_model.wavlen_vs_pos_polycoeff, cov=disp_model.wavlen_vs_pos_cov)
+        prand_pos_wavlen[ii] = np.random.multivariate_normal(disp_model.pos_vs_wavlen_polycoeff, cov=disp_model.pos_vs_wavlen_cov)
+
+    ws = (wavlens - wavlen_c) / wavlen_c
+    ds_mm = pos_vs_wavlen_poly(ws)
+    
+    ds_vander = np.vander(ds_mm, N=polyfit_order+1, increasing=False)
+    ws_vander = np.vander(ws, N=polyfit_order+1, increasing=False)
+    
+    wavlen_rand_eval = prand_wavlen_pos.dot(ds_vander.T)
+    pos_rand_eval = prand_pos_wavlen.dot(ws_vander.T)
+    pos_eval_std = np.std(pos_rand_eval, axis=0)
+    wavlen_eval_std = np.std(wavlen_rand_eval, axis=0)
+    
+    pos_vs_wavlen_err_func = interp1d(wavlens, pos_eval_std, fill_value="extrapolate")
+    wavlen_vs_pos_err_func = interp1d(ds_mm, wavlen_eval_std, fill_value="extrapolate")
+
+    # Wavelength uncertainty map
+    wavlen_uncertainty_map = wavlen_vs_pos_err_func(dd_mm)
+
+    # Build the position lookup table 
+    ds_eval = pos_vs_wavlen_poly((wavlens - wavlen_c) / wavlen_c) / pixel_pitch_mm
+    xs_eval, ys_eval = (x_refwav + ds_eval * np.cos(theta),
+                        y_refwav + ds_eval * np.sin(theta))
+    pos_lookup_1d = (wavlens, xs_eval, ys_eval)
+
+    xs_uncertainty, ys_uncertainty = (np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.cos(theta)),
+                                      np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.sin(theta)))
+
+    pos_lookup_table = Table((wavlens, xs_eval, xs_uncertainty, ys_eval, ys_uncertainty),
+                             names=('Wavelength (nm)', 'x (column)', 'x uncertainty', 'y (row)', 'y uncertainty'))
+
+    return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav

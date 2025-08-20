@@ -678,6 +678,7 @@ class Dark(Image):
                     self.filename = "drk_cal.fits" # we shouldn't normally be here, but we default to something just in case. 
                 else:
                     self.filename = self.filename.replace("_dnm_cal", "_drk_cal")
+            self.pri_hdr['FILENAME'] = self.filename
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
@@ -725,6 +726,7 @@ class FlatField(Image):
 
             # give it a default filename using the last input file as the base
             self.filename = re.sub('_l[0-9].', '_flt_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -763,12 +765,14 @@ class SpectroscopyCentroidPSF(Image):
             self.ext_hdr["EXTNAME"] = "CENTROIDS"
 
             self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
+            self.ext_hdr['DATALVL'] = 'CAL'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
 
             # Generate default output filename
             base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_psf_centroid.fits"
+            self.filename = re.sub('_l[0-9].', '_scp_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
                 self.err_hdr = fits.Header
@@ -817,6 +821,8 @@ class DispersionModel(Image):
     
     params_key = ['clocking_angle', 'clocking_angle_uncertainty', 'pos_vs_wavlen_polycoeff', 'pos_vs_wavlen_cov', 'wavlen_vs_pos_polycoeff', 'wavlen_vs_pos_cov']
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+        import re
+        from datetime import datetime
         if isinstance(data_or_filepath, str):
             # run the image class contructor
             super().__init__(data_or_filepath)
@@ -840,16 +846,18 @@ class DispersionModel(Image):
             self.ext_hdr['DATATYPE'] = 'DispersionModel' # corgidrp specific keyword for saving to disk
             # add to history
             self.ext_hdr['HISTORY'] = "DispersionModel file created"
-            
             #check that all parameters are available in the input dict
             for key in self.params_key:
                 if key not in data_or_filepath:
                     raise ValueError("parameter {0} is missing in the data".format(key))
             data_list = Table(rows = [data_or_filepath])
             self.data = data_list
-            # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['DRPCTIME'])
+            # Use the last input file's name if available, else timestamp
+            filetime = format_ftimeutc(pri_hdr['FILETIME'])
+            self.filename = f"cgi_{pri_hdr['VISITID']}_{filetime}_dpm_cal.fits"
+            self.pri_hdr['FILENAME'] = self.filename
+
         # initialization data passed in
         self.clocking_angle = self.data["clocking_angle"][0]
         self.clocking_angle_uncertainty = self.data["clocking_angle_uncertainty"][0]
@@ -969,6 +977,7 @@ class NonLinearityCalibration(Image):
             # Follow filename convention as of R3.0.2
             self.filedir = '.'
             self.filename = re.sub('_l[0-9].', '_nln_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1049,6 +1058,7 @@ class KGain(Image):
                 self._record_parent_filenames(input_dataset)
                 # give it a default filename using the last input file as the base
                 self.filename = re.sub('_l[0-9].', '_krn_cal', input_dataset[-1].filename)
+                self.pri_hdr['FILENAME'] = self.filename
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected EM electron/DN'
@@ -1142,9 +1152,7 @@ class BadPixelMap(Image):
                 self.filename = input_dataset[-1].filename.replace("_flt_cal", "_bpm_cal")
             else:
                 self.filename = re.sub('_l[0-9].', '_bpm_cal', input_dataset[-1].filename)
-            
-            # if no input_dataset is given, do we want to set the filename manually using 
-            # header values?            
+            self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1223,6 +1231,7 @@ class DetectorNoiseMaps(Image):
             
             self.filename = "{0}_dnm_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
@@ -1384,6 +1393,7 @@ class DetectorParams(Image):
             # use the start date for the filename by default
             self.filedir = "."
             self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.pri_hdr['FILENAME'] = self.filename
 
     def get_hash(self):
         """
@@ -1450,6 +1460,7 @@ class AstrometricCalibration(Image):
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1500,6 +1511,7 @@ class TrapCalibration(Image):
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
             self.filename = "{0}_tpu_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_l[0-9].', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1606,6 +1618,7 @@ class FluxcalFactor(Image):
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_L[0-9].', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
 class FpamFsamCal(Image):
     """
@@ -1697,6 +1710,7 @@ class FpamFsamCal(Image):
             # use the start date for the filename by default
             self.filedir = '.'
             self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1805,6 +1819,7 @@ class CoreThroughputCalibration(Image):
             # input dataset by _ctp_cal.fits
             self.filedir = '.'
             self.filename = re.sub('_l[0-9].', '_ctp_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -2230,6 +2245,7 @@ class CoreThroughputMap(Image):
             # calibration files
             self.filedir = '.'
             self.filename = 'corethroughput_map.fits'
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = L3
             self.ext_hdr['DATALVL']    = 'L3'

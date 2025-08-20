@@ -6,7 +6,6 @@ import warnings
 import math
 import re
 import datetime
-import datetime
 import scipy.ndimage
 import pandas as pd
 import astropy.io.fits as fits
@@ -189,7 +188,9 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr = fits.Header()
     
     # Set up dynamic values
-    dt_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
     # Override NAXIS values to match test expectations (1024x1024)
     # L1.rst documents actual detector dimensions (2200x1200 for SCI, 2200x2200 for ENG)
     NAXIS1 = 1024
@@ -224,6 +225,7 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+    prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
 
     return prihdr, exthdr
 
@@ -246,7 +248,9 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr = fits.Header()
     
     # Set up dynamic values
-    dt_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
     # Override NAXIS values to match test expectations (1024x1024)
     # L1.rst documents actual detector dimensions (2200x1200 for SCI, 2200x2200 for ENG)
     NAXIS1 = 1024
@@ -282,6 +286,8 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+
+    prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
     
     # Override BUNIT for trap pump data (different from regular L1)
     exthdr['BUNIT'] = 'detected EM electron'
@@ -316,8 +322,9 @@ def create_default_L2a_headers(arrtype="SCI"):
 
 
     """
-    dt = datetime.datetime.now(datetime.timezone.utc)
-    dt_str = dt.isoformat() 
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
 
     prihdr, exthdr = create_default_L1_headers(arrtype)
     
@@ -326,6 +333,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     biashdr = fits.Header()
 
     prihdr['ORIGIN']        = 'DRP'         # Who is responsible for the data
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2a.fits"
 
     del(exthdr['BSCALE'])
     del(exthdr['BZERO'])
@@ -343,6 +351,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
     exthdr['HISTORY']       = ''            # History comments
+    exthdr['FTIMEUTC']      = dt_str
 
     errhdr['XTENSION']    = 'IMAGE'         # Image Extension (FITS format keyword)
     errhdr['BITPIX']      = 16              # Array data type – instrument data is unsigned 16-bit
@@ -394,8 +403,9 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
 
     """
     # TO DO: Update this once L2a headers have been finalized
-    dt = datetime.datetime.now(datetime.timezone.utc)
-    dt_str = dt.isoformat() 
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
 
     prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
     
@@ -404,6 +414,7 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
     biashdr = fits.Header()
 
     prihdr['ORIGIN']        = 'DRP'         # Who is responsible for the data
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2a.fits"
 
     del(exthdr['BSCALE'])
     del(exthdr['BZERO'])
@@ -475,6 +486,12 @@ def create_default_L2b_headers(arrtype="SCI"):
 
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2a_headers(arrtype)
 
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
+
     exthdr['BUNIT'] = 'photoelectron'   # Physical unit of the array (brightness unit)
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
@@ -517,6 +534,12 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
     """
 
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2a_TrapPump_headers(arrtype)
+
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
 
     exthdr['BUNIT'] = 'photoelectron'   # Physical unit of the array (brightness unit)
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
@@ -561,6 +584,13 @@ def create_default_L3_headers(arrtype="SCI"):
     """
     # TO DO: Update this once L3 headers have been finalized
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers(arrtype)
+
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    exthdr['HISTORY']       = ''            # History comments
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l3_.fits"
     
     exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
@@ -599,6 +629,13 @@ def create_default_L4_headers(arrtype="SCI"):
     """
     # TO DO: Update this once L4 headers have been finalized
     prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers(arrtype)
+
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    exthdr['HISTORY']       = ''            # History comments
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l4_.fits"
     
     exthdr['NUM_FR']        = 2             # Number of frames that were used in the combine_subexposures step
     exthdr['DRPNFILE']      = 2             # Num raw files used in final image combination
