@@ -20,6 +20,7 @@ except:
 # Adjust the system's limit of open files. We need to load 200 files at once. 
 # some systems don't like that. 
 import resource
+import warnings
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (6001, hard_limit))
 
@@ -137,18 +138,20 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     #num_pumps = {1:10000,2:10000,3:10000,4:10000}
     num_pumps = {1:50000,2:50000,3:50000,4:50000}
     
-    (TVAC_trap_dict, TVAC_trap_densities, TVAC_bad_fit_counter, TVAC_pre_sub_el_count,
-    TVAC_unused_fit_data, TVAC_unused_temp_fit_data, TVAC_two_or_less_count,
-    TVAC_noncontinuous_count) = tpump_analysis(trap_pump_datadir, time_head,
-    emgain_head, num_pumps, meta_path_eng, nonlin_path = nonlin_path,
-    length_lim = length_lim, thresh_factor = thresh_factor,
-    ill_corr = ill_corr, tfit_const = tfit_const, save_temps = None,
-    tau_min = 0.7e-6, tau_max = 1.3e-2, tau_fit_thresh = tau_fit_thresh,
-    tauc_min = tauc_min, tauc_max = tauc_max, offset_min = offset_min,
-    offset_max = offset_max,
-    pc_min=pc_min, pc_max=pc_max, k_prob = k_prob, mean_field = mean_field,
-    cs_fit_thresh = cs_fit_thresh, bins_E = bins_E, bins_cs = bins_cs,
-    sample_data = sample_data)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        (TVAC_trap_dict, TVAC_trap_densities, TVAC_bad_fit_counter, TVAC_pre_sub_el_count,
+        TVAC_unused_fit_data, TVAC_unused_temp_fit_data, TVAC_two_or_less_count,
+        TVAC_noncontinuous_count) = tpump_analysis(trap_pump_datadir, time_head,
+        emgain_head, num_pumps, meta_path_eng, nonlin_path = nonlin_path,
+        length_lim = length_lim, thresh_factor = thresh_factor,
+        ill_corr = ill_corr, tfit_const = tfit_const, save_temps = None,
+        tau_min = 0.7e-6, tau_max = 1.3e-2, tau_fit_thresh = tau_fit_thresh,
+        tauc_min = tauc_min, tauc_max = tauc_max, offset_min = offset_min,
+        offset_max = offset_max,
+        pc_min=pc_min, pc_max=pc_max, k_prob = k_prob, mean_field = mean_field,
+        cs_fit_thresh = cs_fit_thresh, bins_E = bins_E, bins_cs = bins_cs,
+        sample_data = sample_data)
     ######################
 
     # define the raw science data to process
