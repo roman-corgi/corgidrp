@@ -4,7 +4,6 @@ Module to support frame combination
 import warnings
 import numpy as np
 import corgidrp.data as data
-import warnings
 
 
 def combine_images(data_subset, err_subset, dq_subset, collapse, num_frames_scaling):
