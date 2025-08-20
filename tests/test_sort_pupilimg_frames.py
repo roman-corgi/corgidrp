@@ -176,7 +176,7 @@ def make_minimal_image(
     # Add corresponding VISTYPE
     hdul[0].header['VISTYPE'] = 'PUPILIMG'
     # IIT filename convention. TODO: replace with latest L1 filename version
-    filename = str(Path('simdata', f'CGI_EXCAM_L1_{frameid:0{10}d}.fits'))
+    filename = str(Path('simdata', f'cgi_excam_l1_{frameid:0{10}d}.fits'))
     hdul.writeto(filename, overwrite = True)
     return filename
 
