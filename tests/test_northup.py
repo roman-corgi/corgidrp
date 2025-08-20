@@ -189,12 +189,16 @@ def test_wcs_and_offset(save_mock_dataset=False):
    mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
 
    # create the wcs
-   updated_dataset = create_wcs(mock_dataset,astrom_cal,offset=(3.3, 1.0))
-   # inject fake sources for test
-   updated_dataset[0].data[340:360,340:360]=5
-   updated_dataset[0].ext_hdr['X_1VAL']=350
-   updated_dataset[0].ext_hdr['Y_1VAL']=350
-   updated_dataset[0].dq[340:360,340:360]=1
+   test_offset = (3.3, 1.0)
+   updated_dataset = create_wcs(mock_dataset,astrom_cal,offset=test_offset)
+
+   im_data = updated_dataset[0].data
+   image_y, image_x = im_data.shape
+   center_pixel = [(image_x-1) // 2, (image_y-1) // 2]
+   # ensure offset worked, test it doesn't equal previous center, and that it does equal center + offset
+   assert updated_dataset[0].ext_hdr['CRPIX1'] != center_pixel[0] 
+   assert updated_dataset[0].ext_hdr['CRPIX2'] == center_pixel[1]+test_offset[1]
+
    if save_mock_dataset:
       outdir = os.path.join('./',dirname)
       os.makedirs(outdir, exist_ok=True)
