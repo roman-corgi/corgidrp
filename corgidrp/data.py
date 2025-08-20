@@ -794,7 +794,6 @@ class DispersionModel(Image):
         data_or_filepath (str or dict): either the filepath to the FITS file to read in OR the dictionary containing the dispersion data
         pri_hdr (fits.Header): Primary header.
         ext_hdr (fits.Header): Extension header.
-        input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
         
     Attributes:
         data (dict): table containing the dispersion data
@@ -820,9 +819,7 @@ class DispersionModel(Image):
     """
     
     params_key = ['clocking_angle', 'clocking_angle_uncertainty', 'pos_vs_wavlen_polycoeff', 'pos_vs_wavlen_cov', 'wavlen_vs_pos_polycoeff', 'wavlen_vs_pos_cov']
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
-        import re
-        from datetime import datetime
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
         if isinstance(data_or_filepath, str):
             # run the image class contructor
             super().__init__(data_or_filepath)
@@ -1407,7 +1404,8 @@ class DetectorParams(Image):
             hashing_str += str(self.params[key])
 
         return str(hash(hashing_str))
-
+        
+            
 class AstrometricCalibration(Image):
     """
     Class for astrometric calibration file. 
@@ -1913,7 +1911,7 @@ class CoreThroughputCalibration(Image):
           corDataset (corgidrp.data.Dataset): a dataset containing some
               coronagraphic observations.
           fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
-              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+              FpamFsamCal calibration class.
           logr (bool) (optional): If True, radii are mapped into their logarithmic
               values before constructing the interpolant.
 

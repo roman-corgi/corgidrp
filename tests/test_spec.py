@@ -4,9 +4,11 @@ import pytest
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
 from corgidrp.spec import get_template_dataset
+import corgidrp.l3_to_l4 as l3_to_l4
 import corgidrp.l3_to_l4 as l3_to_l4
 
 datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
