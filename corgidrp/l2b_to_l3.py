@@ -13,7 +13,7 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
         astrom_calibration (corgidrp.data.AstrometricCalibration): an astrometric calibration file for the input dataset
         offset (optional, tuple(float, float)): x and y offset in units of pixel between the dataset and WCS center (for spectroscopy or other optics offset from imaging mode)
-    
+
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
     """
@@ -29,10 +29,10 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
         im_data = image.data
         image_y, image_x = im_data.shape
         center_pixel = [(image_x-1) // 2, (image_y-1) // 2]
-        target_ra, target_dec = image.pri_hdr['RA'], image.pri_hdr['DEC']
         if offset is not None:
-            ra_offset += offset[0] * (platescale * 0.001) / 3600.
-            dec_offset += offset[1] * (platescale * 0.001) / 3600.
+            center_pixel[0] += offset[0]
+            center_pixel[1] += offset[1]
+        target_ra, target_dec = image.pri_hdr['RA'], image.pri_hdr['DEC']
         corrected_ra, corrected_dec = target_ra - ra_offset, target_dec - dec_offset
         roll_ang = image.pri_hdr['ROLL']
 
