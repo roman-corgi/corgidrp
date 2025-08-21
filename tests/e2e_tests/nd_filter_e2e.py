@@ -6,6 +6,7 @@ import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 from corgidrp import caldb
+import time
 
 # ----------------------------------------------------------------------
 @pytest.mark.e2e
@@ -20,6 +21,9 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     )
     dim_frames.ext_hdr['BUNIT'] = 'photoelectron'
     dim_frames = [dim_frames] if not isinstance(dim_frames, list) else dim_frames
+
+    # sleep for 2 seconds so the next file has a different timestamp
+    time.sleep(2)
 
     # 2. Synthetic “bright star” frames (with ND)
     true_flux_bright = nd_filter_calibration.compute_expected_band_irradiance('Vega', '3C')
@@ -45,18 +49,18 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     for i, frame in enumerate(dim_frames + bright_frames):
         input_prihdr = frame.pri_hdr
         input_exthdr = frame.ext_hdr
-        frame.save(simdata_dir, f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L3_.fits")
+        frame.save(simdata_dir, f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l3_.fits")
 
     filelist = [os.path.join(simdata_dir, f) for f in os.listdir(simdata_dir)]
 
     # 4. Run the DRP walker with outputs saved in the current folder (e2eoutput_path)
     # Remove old NDF cal files first
-    for old_file in glob.glob(os.path.join(simdata_dir, "*NDF_CAL.fits")):
+    for old_file in glob.glob(os.path.join(simdata_dir, "*ndf_cal.fits")):
         os.remove(old_file)
     walker.walk_corgidrp(filelist, "", simdata_dir)
 
     # 5. Load product & assert if calculated OD matches the input
-    nd_file = glob.glob(os.path.join(simdata_dir, "*_NDF_CAL*.fits"))
+    nd_file = glob.glob(os.path.join(simdata_dir, "*_ndf_cal*.fits"))
     nd_cal  = data.NDFilterSweetSpotDataset(nd_file[0])
 
     recovered_od = float(nd_cal.od_values[0])  # use the first entry for the check

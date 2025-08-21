@@ -7,6 +7,7 @@ import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas, ENF
 
+
 def add_shot_noise_to_err(input_dataset, kgain, detector_params):
     """
     Propagate the Poisson/shot noise determined from the image signal to the error map. 
@@ -41,6 +42,7 @@ def add_shot_noise_to_err(input_dataset, kgain, detector_params):
                 em_gain = em_gain
             else : # otherwise use commanded EM gain
                 em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
+                
         #estimate of photon/poisson/shot noise by interpolation of the photon transfer curve
         interp_func = interp1d(ptc[:,0], ptc[:,1], kind='linear', fill_value='extrapolate')
 
@@ -476,7 +478,7 @@ def update_to_l2b(input_dataset):
         frame.ext_hdr['DATALVL'] = "L2b"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L2a", "_L2b", 1)
+        frame.filename = frame.filename.replace("_l2a", "_l2b", 1)
 
     history_msg = "Updated Data Level to L2b"
     updated_dataset.update_after_processing_step(history_msg)

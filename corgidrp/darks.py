@@ -457,7 +457,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
         check.threeD_array(datasets[i].all_data,
                            'datasets['+str(i)+'].all_data', TypeError)
         if len(datasets[i].all_data) < 1300:
-            warnings.warn('A sub-stack was found with less than 1300 frames, '
+            print('A sub-stack was found with less than 1300 frames, '
             'which is the recommended number per sub-stack for an analog '
             'master dark')
         if i > 0:
@@ -759,7 +759,7 @@ def calibrate_darks_lsq(dataset, detector_params, weighting=True, detector_regio
                            input_err, input_dq, err_hdr=err_hdr)
     
     l2a_data_filename = dataset.copy()[-1].filename.split('.fits')[0]
-    noise_maps.filename =  l2a_data_filename + '_DNM_CAL.fits'
+    noise_maps.filename =  l2a_data_filename + '_dnm_cal.fits'
     noise_maps.filename = re.sub('_L[0-9].', '', noise_maps.filename)
 
     return noise_maps
