@@ -208,7 +208,7 @@ def make_minimal_image(
     minute= exthd['DATETIME'][14:16]
     seconds= exthd['DATETIME'][17:19]
     tenth = int(updated_time.microsecond/1E5)
-    filename = 'CGI_0200001001001001001_{0}{1}{2}T{3}{4}{5}{6}_L1_.fits'.format(year, month, day, hour, minute, seconds, tenth)
+    filename = 'cgi_0200001001001001001_{0}{1}{2}T{3}{4}{5}{6}_l1_.fits'.format(year, month, day, hour, minute, seconds, tenth)
     filepath = str(Path('simdata', filename))
     hdul.writeto(filepath, overwrite = True)
     return filepath

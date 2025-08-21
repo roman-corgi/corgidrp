@@ -71,7 +71,7 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(l2b_data_filelist, "", distortion_outputdir, template=template_path)
 
     #Read in th Astrometric Calibration file
-    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*AST_CAL.fits"))[0]
+    ast_cal_filename = glob.glob(os.path.join(distortion_outputdir, "*ast_cal.fits"))[0]
     ast_cal = AstrometricCalibration(ast_cal_filename)
 
     #Check that distortion map error within the central 1" x 1" region of the detector is <4 [mas] (~0.1835 [pixel])

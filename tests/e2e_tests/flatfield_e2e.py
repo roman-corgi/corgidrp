@@ -16,6 +16,24 @@ import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+
+def fix_str_for_tvac(
+    list_of_fits,
+    ):
+    """ Gets around EMGAIN_A being set to 1 in TVAC data.
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+    """
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        exthdr = fits_file[1].header
+        if float(exthdr['EMGAIN_A']) == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if type(exthdr['EMGAIN_C']) is str:
+            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 @pytest.mark.e2e
 def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     """
@@ -56,7 +74,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
                                                     radius=54, snr=25000, snr_constant=4.95, flat_map=input_flat, 
                                                     raster_radius=40, raster_subexps=6)
     # raw science data to mock from
-    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
+    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
+    fix_str_for_tvac(l1_dark_filelist)
     l1_dark_filelist.sort()
     # l1_dark_dataset = data.Dataset(l1_dark_filelist[:len(raster_dataset)])
     l1_dark_dataset = mocks.create_prescan_files(numfiles=len(raster_dataset))
@@ -181,7 +200,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat # compute residual from true
@@ -191,7 +210,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
 
 
     ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
@@ -243,7 +262,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
                                                     radius=90, snr=250000, snr_constant=9.66, flat_map=input_flat, 
                                                     raster_radius=40, raster_subexps=6)
     # raw science data to mock from
-    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "CGI_*.fits"))
+    l1_dark_filelist = glob.glob(os.path.join(l1_dark_datadir, "cgi_*.fits"))
     l1_dark_filelist.sort()
     # l1_dark_dataset = data.Dataset(l1_dark_filelist[:len(raster_dataset)])
     l1_dark_dataset = mocks.create_prescan_files(numfiles=len(raster_dataset))
@@ -362,7 +381,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
 
     ####### Test the result
     # the requirement: <=0.71% error per resolution element
-    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_FLT_CAL")
+    flat_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_flt_cal")
     flat = data.FlatField(os.path.join(flat_outputdir, flat_filename))
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat
@@ -371,7 +390,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
     ####### Check the bad pixel map result
-    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_L1_", "_BPM_CAL")
+    bp_map_filename = l1_flatfield_filelist[-1].split(os.path.sep)[-1].replace("_l1_", "_bpm_cal")
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
@@ -391,7 +410,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     # e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")

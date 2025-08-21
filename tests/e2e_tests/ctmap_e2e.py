@@ -161,7 +161,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Clean test data
     # Remove entry from caldb
     corethroughput_drp_file = glob.glob(os.path.join(ctmap_outputdir,
-        '*CTP_CAL*.fits'))[0]
+        '*ctp_cal*.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     this_caldb = caldb.CalDB()
     this_caldb.remove_entry(ct_cal_drp)

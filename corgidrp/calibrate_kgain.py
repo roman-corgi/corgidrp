@@ -564,7 +564,7 @@ def calibrate_kgain(dataset_kgain,
         
         added_deviations_shot_arr = [
                 np.sqrt(np.square(np.reshape(std_diffs[x], 
-                shape=(-1, 1))) - complex(rn_std[x])**2)
+                newshape=(-1, 1))) - complex(rn_std[x])**2)
                 for x in range(len(rn_std))
                 ]
         

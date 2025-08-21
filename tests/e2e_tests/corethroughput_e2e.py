@@ -69,7 +69,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     os.mkdir(output_dir)
     
     # List of filenames
-    corethroughput_data_filelist = ['corethroughput_e2e_{0}_L2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
+    corethroughput_data_filelist = ['corethroughput_e2e_{0}_l2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
     corethroughput_dataset.save(output_dir, corethroughput_data_filelist)
 
     # make DRP output directory if needed
@@ -84,9 +84,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     corethroughput_data_filepath = [os.path.join(output_dir, f) for f in corethroughput_data_filelist]
     walker.walk_corgidrp(corethroughput_data_filepath, '', corethroughput_outputdir)
     
-    # Load in the output data. It should be the latest CTP_CAL file produced.
+    # Load in the output data. It should be the latest ctp_cal file produced.
     corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
-        '*CTP_CAL*.fits'))[0]
+        '*ctp_cal*.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
 
     # CT cal file from mock data directly

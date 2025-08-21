@@ -14,6 +14,24 @@ import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+
+def fix_str_for_tvac(
+    list_of_fits,
+    ):
+    """ Gets around EMGAIN_A being set to 1 in TVAC data.
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+    """
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        exthdr = fits_file[1].header
+        if float(exthdr['EMGAIN_A']) == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if type(exthdr['EMGAIN_C']) is str:
+            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 def fix_headers_for_tvac(
     list_of_fits,
     ):
@@ -53,6 +71,11 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_output")
     if not os.path.exists(astrom_cal_outputdir):
         os.mkdir(astrom_cal_outputdir)
+    # clean out any files from a previous run
+    for f in os.listdir(astrom_cal_outputdir):
+        file_path = os.path.join(astrom_cal_outputdir, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -130,8 +153,23 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
     # update headers of TVAC data
     #fix_headers_for_tvac(sim_data_filelist)
+    fix_str_for_tvac(sim_data_filelist)
 
     ###### Setup necessary calibration files
+    this_caldb = caldb.CalDB() # connection to cal DB
+    # remove older calibrations 
+    for i in range(len(this_caldb._db['Type'])):
+        if this_caldb._db['Type'][i] == 'KGain':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'DetectorNoiseMaps':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'FlatField':
+            this_caldb._db = this_caldb._db.drop(i)
+        elif this_caldb._db['Type'][i] == 'BadPixelMap':
+            this_caldb._db = this_caldb._db.drop(i)
+    this_caldb.save()
     # Create necessary calibration files
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
@@ -140,8 +178,6 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
-
-    this_caldb = caldb.CalDB() # connection to cal DB
 
     # Nonlinearity calibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
@@ -218,11 +254,11 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     expected_northangle = 45
     target = (80.553428801, -69.514096821)
 
-    astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_AST_CAL.fits'))[0])
+    astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_ast_cal.fits'))[0])
 
     # check that the astrometric calibration filename is based on the last file in the input file list
-    expected_last_filename = sim_data_filelist[-1].split('L1_')[-1].split('.fits')[0]
-    assert astrom_cal.filename.split('L2b')[-1] == expected_last_filename + '_AST_CAL.fits'
+    expected_last_filename = sim_data_filelist[-1].split('_l1_')[0].split(os.path.sep)[-1]
+    assert astrom_cal.filename.split('l2b')[-1] == expected_last_filename + '_ast_cal.fits'
 
     # check orientation is correct within 0.05 [deg]
     # and plate scale is correct within 0.5 [mas] (arbitrary)
@@ -240,7 +276,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2b->boresight end-to-end test")

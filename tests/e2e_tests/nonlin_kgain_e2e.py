@@ -97,6 +97,9 @@ def test_nonlin_and_kgain_e2e(
 
     if not os.path.exists(e2eoutput_path):
         os.mkdir(e2eoutput_path)
+    # clean up output directory
+    for f in os.listdir(e2eoutput_path):
+        os.remove(os.path.join(e2eoutput_path, f))
 
     # create a DetectorParams object and save it
     detector_params = data.DetectorParams({})
@@ -140,12 +143,12 @@ def test_nonlin_and_kgain_e2e(
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests
     # NL from CORGIDRP
-    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_NLN_CAL*.fits'))
+    possible_nonlin_files = glob.glob(os.path.join(e2eoutput_path, '*_nln_cal*.fits'))
     nonlin_drp_filepath = max(possible_nonlin_files, key=os.path.getmtime) # get the one most recently modified
     nonlin = data.NonLinearityCalibration(nonlin_drp_filepath)
 
     # kgain from corgidrp
-    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_KRN_CAL*.fits'))
+    possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_krn_cal*.fits'))
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
 

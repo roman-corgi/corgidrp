@@ -18,6 +18,23 @@ except:
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+def fix_str_for_tvac(
+    list_of_fits,
+    ):
+    """ Gets around EMGAIN_A being set to 1 in TVAC data.
+    Args:
+    list_of_fits (list): list of FITS files that need to be updated.
+    """
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        exthdr = fits_file[1].header
+        if float(exthdr['EMGAIN_A']) == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if type(exthdr['EMGAIN_C']) is str:
+            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 def fix_headers_for_tvac(
     list_of_fits,
     ):
@@ -71,8 +88,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     '''There is no official II&T code for creating a "traditional" master dark (i.e., a dark made from taking the 
     mean of several darks at the same EM gain and exposure time), but all the parts are there in proc_cgi_frame.  
     So this function compares the DRP's output of build_trad_dark()
-    to the output of CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/results/run_TVAC_data_ENG_code_trad_dark.py, 
-    which uses proc_cgi_frame code to make a traditional master dark. This is for the full-frame case.
+    to the output of proc_cgi_frame code to make a traditional master dark. This is for the full-frame case.
 
     Args:
         e2edata_path (str): path to TVAC data root directory
@@ -81,7 +97,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location    
     trad_dark_raw_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'darkmap')
     #TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
-    TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    #TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
 
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -127,6 +143,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
 
     # modify headers from TVAC to in-flight headers
     #fix_headers_for_tvac(trad_dark_data_filelist)
+    fix_str_for_tvac(trad_dark_data_filelist)
 
 
     ###### Setup necessary calibration files
@@ -139,7 +156,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     #mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
     mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] # use first two files in L1 directory
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -186,7 +203,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
-    kgain_dat = np.array([[kgain_val]]) # KGain value from TVAC files
+    kgain_dat = kgain_val # KGain value from TVAC files
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -209,7 +226,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(detector_params)
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
-        if f.endswith('_DRK_CAL.fits'):
+        if f.endswith('_drk_cal.fits'):
             trad_dark_filename = f
             break
     generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, trad_dark_filename) 
@@ -253,7 +270,7 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_l1_", "_l2a_", 1)) 
     trad_dark_data = trad_dark_fits[1].data
     ###################
     
@@ -274,8 +291,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     '''There is no official II&T code for creating a "traditional" master dark (i.e., a dark made from taking the 
     mean of several darks at the same EM gain and exposure time), but all the parts are there in proc_cgi_frame.  
     So this function compares the DRP's output of build_trad_dark()
-    to the output of CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/results/run_TVAC_data_ENG_code_trad_dark.py, 
-    which uses proc_cgi_frame code to make a traditional master dark. This is for the image-area case.
+    to the output of proc_cgi_frame code to make a traditional master dark. This is for the image-area case.
 
     Args:
         e2edata_path (str): path to TVAC data root directory
@@ -284,7 +300,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # figure out paths, assuming everything is located in the same relative location    
     trad_dark_raw_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'darkmap')
     #TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "dark_current_20240322.fits")
-    TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
+    #TVAC_dark_path = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
 
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -344,7 +360,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     #mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
     mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] # use first two files in L1 directory
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -391,7 +407,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
-    kgain_dat = np.array([[kgain_val]]) # KGain value from TVAC files
+    kgain_dat = kgain_val # KGain value from TVAC files
     kgain = data.KGain(kgain_dat,
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
@@ -414,7 +430,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     this_caldb.remove_entry(detector_params)
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
-        if f.endswith('_DRK_CAL.fits'):
+        if f.endswith('_drk_cal.fits'):
             trad_dark_filename = f
             break
     generated_trad_dark_file = os.path.join(build_trad_dark_outputdir, trad_dark_filename) 
@@ -458,7 +474,7 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # fits.writeto(TVAC_dark_path, mean_frame, overwrite=True)
     # np.save(TVAC_dark_path, trad_dark_data_filelist)
     # TVAC_dark_path = os.path.join(e2edata_dir, 'TV-20_EXCAM_noise_characterization', "results", "proc_cgi_frame_trad_dark.fits")
-    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_L1_", "_L2a_", 1)) 
+    trad_dark_fits = fits.open(generated_trad_dark_file.replace("_l1_", "_l2a_", 1)) 
     trad_dark_data = trad_dark_fits[1].data
     ###################
     
@@ -470,9 +486,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     trad_dark = data.Dark(generated_trad_dark_file)
     assert trad_dark.ext_hdr['BUNIT'] == 'detected electron'
     assert trad_dark.err_hdr['BUNIT'] == 'detected electron'
-    test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_DRK_CAL.fits'
+    test_filepath = trad_dark_data_filelist[-1].split('.fits')[0] + '_drk_cal.fits'
     test_filename = os.path.basename(test_filepath)
-    test_filename = re.sub('_L[0-9].', '', test_filename)
+    test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(trad_dark.filename == test_filename)
     pass
 
@@ -487,7 +503,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
     outputdir = thisfile_dir

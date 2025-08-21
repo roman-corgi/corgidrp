@@ -1383,7 +1383,9 @@ class DetectorParams(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':','.')
+
+            self.filename = filename
 
     def get_hash(self):
         """
@@ -1697,6 +1699,7 @@ class FpamFsamCal(Image):
             # use the start date for the filename by default
             self.filedir = '.'
             self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = self.filename.replace(':', '.') # compatible with Windows machines
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'

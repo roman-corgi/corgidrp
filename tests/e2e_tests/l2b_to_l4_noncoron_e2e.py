@@ -139,7 +139,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.ext_hdr.set('FSMLOS', 0) # non-coron
 
         # new_image.filename ="CGI_020000199900100{}00{}_20250415T0305102_L2b.fits".format(ibatch,i)
-        new_image.filename = "CGI_0200001999001000001_20250415T0305{0:02d}_L2b.fits".format(i)
+        new_image.filename = "CGI_0200001999001000001_20250415T0305{0:02d}_L2b.fits".format(i).lower()
 
 
         image_list.append(new_image)
@@ -162,7 +162,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path)
 
     #Read in an L3 file
-    l3_filename = glob.glob(os.path.join(e2eoutput_path, "*L3_.fits"))[0]
+    l3_filename = glob.glob(os.path.join(e2eoutput_path, "*l3_.fits"))[0]
     l3_image = Image(l3_filename)
 
     #Check if there's a WCS header
@@ -247,7 +247,7 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the L3 data and run ####
     #####################################
 
-    l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*L3_.fits")))
+    l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
     walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4)
 
@@ -255,9 +255,9 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the psf_subtracted images and test for source detection ###
     ########################################################################
 
-    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*L4_.fits"))[0]
+    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*l4_.fits"))[0]
     combined_image = Image(l4_filename)
-    assert combined_image.filename == l3_data_filelist[-1].split(os.path.sep)[-1].replace("_L3_", "_L4_")
+    assert combined_image.filename == l3_data_filelist[-1].split(os.path.sep)[-1].replace("_l3_", "_l4_")
     
     #Find the sources and get their (x,y) coordinate
     y_source, x_source = np.unravel_index(np.nanargmax(combined_image.data), combined_image.data.shape)
@@ -302,7 +302,7 @@ if __name__ == "__main__":
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hcl_os11_v3" with the OS11 data in it.
     #e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data/" 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

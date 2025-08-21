@@ -54,12 +54,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
 
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
+    # remove other calibrations that may exist in case they don't have the added header keywords
     for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'Dark':
-            this_caldb._db = this_caldb._db.drop(i)
+        this_caldb._db = this_caldb._db.drop(i)
     this_caldb.save()
 
     # create a DetectorParams object and save it
@@ -143,7 +140,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dir):
         if not f.endswith('.fits'):
             continue
-        if f.endswith('_DRK_CAL.fits'):
+        if f.endswith('_drk_cal.fits'):
             master_dark_filename_list.append(f)
             master_dark_filepath_list.append(os.path.join(output_dir, f))
     
@@ -157,7 +154,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     l2a_files = []
     for filepath in l1_data_ill_filelist:
         # emulate naming change behaviors
-        new_filename = filepath.split(os.path.sep)[-1].replace("_L1_", "_L2a") 
+        new_filename = filepath.split(os.path.sep)[-1].replace("_l1_", "_l2a") 
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)

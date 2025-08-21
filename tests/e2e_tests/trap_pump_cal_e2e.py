@@ -59,54 +59,44 @@ def fix_headers_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 @pytest.mark.e2e
-def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_fly=True):
-    '''When e2e=True, the end-to-end test is run, which uses more realistic simulated data compared 
-    to when e2e=False, in which case the less-realistic simulated data for the unit test in test_trap_pump_calibration is used.
-    The recipe for that scaled-down data for the unit test is stored in the e2e_tests folder.
+def test_trap_pump_cal(e2edata_path, e2eoutput_path):
+    '''Data is simulated using mocks.generate_mock_pump_trap_data() function, run through the DRP's trap pump calibration, and 
+    compared to the results from the II&T trap pump analysis code.
 
     Args:
         e2edata_path (str): path to TVAC data root directory.
         e2eoutput_path (str): path to output files made by this test. 
-        e2e (bool): If True, run this for the official end-to-end test.  If False, run the scaled-down simulated data used for the unit test for pump_trap_calibration.
-        sim_data_on_the_fly (bool): If True, the data is simulated in real time, not loaded from Box.  If False, the same 
-            simulated data is instead loaded from Box via the input e2edata_path.  Defaults to True.
     '''
     # make output directory if needed
     trap_pump_outputdir = os.path.join(e2eoutput_path, "trap_pump_cal_output")
     if not os.path.exists(trap_pump_outputdir):
         os.mkdir(trap_pump_outputdir)
 
-    if sim_data_on_the_fly: # generate data on the fly, saves it to e2eoutput_path
-        trap_pump_datadir = trap_pump_outputdir
-        if True:
-            np.random.seed(39)
-            mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
-            for i in os.listdir(trap_pump_outputdir):
-                # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
-                if ('Scheme_' not in i) or ('TPU_CAL' in i): 
-                    continue
-                temperature = i[0:4]
-                sch = i[4:12]
-                old_filepath = os.path.join(trap_pump_outputdir, i)
-                temp_dir = os.path.join(trap_pump_outputdir, temperature)
-                sch_dir = os.path.join(temp_dir, sch)
-                if not os.path.exists(temp_dir):  
-                    os.mkdir(temp_dir)
-                if not os.path.exists(sch_dir):
-                    os.mkdir(sch_dir)
-                new_filepath = os.path.join(sch_dir, i)
-                shutil.move(old_filepath, new_filepath)   
-    else:
-        # figure out paths, assuming everything is located in the same relative location
-        if not e2e: # if you want to test older simulated data
-            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
-        if e2e:
-            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
-        # this is a .npy file; read it in as a dictionary
-        td = np.load(sim_traps, allow_pickle=True)
-        TVAC_trap_dict = dict(td[()])
+    trap_pump_datadir = trap_pump_outputdir
+    # Remove all files ending with .json and .fits in the output directory and its subdirectories
+    for root, _, files in os.walk(trap_pump_outputdir):
+        for fname in files:
+            if fname.endswith('.json') or fname.endswith('.fits'):
+                os.remove(os.path.join(root, fname))
+    np.random.seed(39)
+    e2e = True
+    mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
+    for i in os.listdir(trap_pump_outputdir):
+        # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
+        if ('Scheme_' not in i) or ('tpu_cal' in i): 
+            continue
+        temperature = i[0:4]
+        sch = i[4:12]
+        old_filepath = os.path.join(trap_pump_outputdir, i)
+        temp_dir = os.path.join(trap_pump_outputdir, temperature)
+        sch_dir = os.path.join(temp_dir, sch)
+        if not os.path.exists(temp_dir):  
+            os.mkdir(temp_dir)
+        if not os.path.exists(sch_dir):
+            os.mkdir(sch_dir)
+        new_filepath = os.path.join(sch_dir, i)
+        shutil.move(old_filepath, new_filepath)   
+    
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -156,7 +146,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     trap_cal_filename = None
     for root, _, files in os.walk(trap_pump_datadir):
         for name in files:
-            if ('TPUMP_Npumps' not in name) or ('TPU_CAL' in name): # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
+            if ('TPUMP_Npumps' not in name) or ('tpu_cal' in name): # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
                 continue
             if trap_cal_filename is None:
                 trap_cal_filename = name # get first filename fed to walk_corgidrp for finding cal file later
@@ -174,7 +164,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
+    mock_cal_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [-2,-1]]
+    #mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -245,7 +236,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     this_caldb.remove_entry(noise_maps)
     # find cal file (naming convention for data.TrapCalibration class)
     for f in os.listdir(trap_pump_outputdir):
-        if f.endswith('_TPU_CAL.fits'):
+        if f.endswith('_tpu_cal.fits'):
             generated_trapcal_file = f
             break
     generated_trapcal_file = os.path.join(trap_pump_outputdir, generated_trapcal_file) 
@@ -324,15 +315,10 @@ if __name__ == "__main__":
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
-    ap.add_argument('-e2e', '--e2e_flag', default=True, help="True if testing newer simulated data, false if testing older scaled-down data")
-    ap.add_argument('-on_the_fly', '--fly_flag', default=True, help="True if simulated data should be generated in real time and not loaded from e2edata_dir.")
-    args_here = ['--e2edata_dir', e2edata_dir, '--outputdir', outputdir, '--fly_flag', True]#, '--e2e_flag',False]
+    args_here = ['--e2edata_dir', e2edata_dir, '--outputdir', outputdir]
     args = ap.parse_args()
     #args = ap.parse_args(args_here)
     e2edata_dir = args.e2edata_dir
     outputdir = args.outputdir
-    e2e = args.e2e_flag
-    on_the_fly = args.fly_flag
-    # NOTE just use e2e=True, the default.  Other scaled-down test not so pertinent anymore.
-    test_trap_pump_cal(e2edata_dir, outputdir, e2e, sim_data_on_the_fly=on_the_fly)
+    test_trap_pump_cal(e2edata_dir, outputdir)
 

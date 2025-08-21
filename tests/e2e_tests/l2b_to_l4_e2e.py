@@ -19,6 +19,7 @@ import pathlib
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+
 @pytest.mark.e2e
 def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     '''
@@ -53,6 +54,9 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     e2eoutput_path = os.path.join(e2eoutput_path, "l2b_to_l3_output")
     if not os.path.exists(e2eoutput_path):
         os.mkdir(e2eoutput_path)
+    # clean out any old files 
+    for f in os.listdir(e2eoutput_path):
+        os.remove(os.path.join(e2eoutput_path, f))
 
     ##################################################
     #### Generate an astrometric calibration file ####
@@ -157,7 +161,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
             new_image.pri_hdr.set('PSFREF', 1)
 
         # new_image.filename ="CGI_020000199900100{}00{}_20250415T0305102_L2b.fits".format(ibatch,i)
-        new_image.filename = "CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch)
+        new_image.filename = "CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch).lower()
         #Save the last science filename for later. 
         if star[ibatch] == 1:
             last_sci_filename = new_image.filename
@@ -192,7 +196,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     mock_satspot_ext_header['FSMPRFL']='NFOV'
 
     sat_spot_image = Image(big_array, mock_satspot_pri_header, mock_satspot_ext_header)
-    sat_spot_image.filename ="CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch+1)
+    sat_spot_image.filename ="CGI_0200001999001000{:03d}_20250415T0305102_L2b.fits".format(ibatch+1).lower()
 
     image_list.append(sat_spot_image)
 
@@ -213,7 +217,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path)
 
     #Read in an L3 file
-    l3_filename = glob.glob(os.path.join(e2eoutput_path, "*L3_.fits"))[0]
+    l3_filename = glob.glob(os.path.join(e2eoutput_path, "*l3_.fits"))[0]
     l3_image = Image(l3_filename)
 
     #Check if there's a WCS header
@@ -332,7 +336,7 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the L3 data and run ####
     #####################################
 
-    l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*L3_.fits")))
+    l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
     walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4)
 
@@ -340,7 +344,7 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the psf_subtracted images and test for source detection ###
     ########################################################################
 
-    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*L4_.fits"))[0]
+    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*l4_.fits"))[0]
     psf_subtracted_image = Image(l4_filename)
     psf_subtracted_image.data = psf_subtracted_image.data[-1,:,:] #Just pick one of the KL modes for now
     
@@ -393,7 +397,7 @@ if __name__ == "__main__":
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hcl_os11_v3" with the OS11 data in it.
     #e2edata_dir = "/Users/maxmb/Data/corgi/corgidrp/" 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2'
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
