@@ -5,6 +5,7 @@ import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas
+import warnings
 
 def add_photon_noise(input_dataset):
     """
@@ -28,7 +29,9 @@ def add_photon_noise(input_dataset):
                 em_gain = em_gain
             else: # otherwise use commanded EM gain
                 em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
-        phot_err = np.sqrt(frame.data)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            phot_err = np.sqrt(frame.data)
         #add excess noise in case of em_gain
         if em_gain > 1:
             phot_err *= np.sqrt(2)           
@@ -460,7 +463,7 @@ def update_to_l2b(input_dataset):
         frame.ext_hdr['DATALVL'] = "L2b"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L2a", "_L2b", 1)
+        frame.filename = frame.filename.replace("_l2a", "_l2b", 1)
 
     history_msg = "Updated Data Level to L2b"
     updated_dataset.update_after_processing_step(history_msg)

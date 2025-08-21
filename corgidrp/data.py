@@ -669,15 +669,15 @@ class Dark(Image):
             # strip off everything starting at .fits
             if input_dataset is not None:
                 orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-                self.filename = "{0}_DRK_CAL.fits".format(orig_input_filename)
-                self.filename = re.sub('_L[0-9].', '', self.filename)
-                # DNM_CAL fed directly into DRK_CAL when doing build_synthesized_dark, so this will delete that string if it's there:
-                self.filename = self.filename.replace("_DNM_CAL", "")
+                self.filename = "{0}_drk_cal.fits".format(orig_input_filename)
+                self.filename = re.sub('_l[0-9].', '', self.filename)
+                # dnm_cal fed directly into drk_cal when doing build_synthesized_dark, so this will delete that string if it's there:
+                self.filename = self.filename.replace("_dnm_cal", "")
             else:
                 if self.filename == '':
-                    self.filename = "DRK_CAL.fits" # we shouldn't normally be here, but we default to something just in case. 
+                    self.filename = "drk_cal.fits" # we shouldn't normally be here, but we default to something just in case. 
                 else:
-                    self.filename = self.filename.replace("_DNM_CAL", "")
+                    self.filename = self.filename.replace("_dnm_cal", "_drk_cal")
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
@@ -724,7 +724,7 @@ class FlatField(Image):
             self.ext_hdr['HISTORY'] = "Flat with exptime = {0} s created from {1} frames".format(self.ext_hdr['EXPTIME'], self.ext_hdr['DRPNFILE'])
 
             # give it a default filename using the last input file as the base
-            self.filename = re.sub('_L[0-9].', '_FLT_CAL', input_dataset[-1].filename)
+            self.filename = re.sub('_l[0-9].', '_flt_cal', input_dataset[-1].filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -971,7 +971,7 @@ class NonLinearityCalibration(Image):
 
             # Follow filename convention as of R3.0.2
             self.filedir = '.'
-            self.filename = re.sub('_L[0-9].', '_NLN_CAL', input_dataset[-1].filename)
+            self.filename = re.sub('_l[0-9].', '_nln_cal', input_dataset[-1].filename)
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1051,7 +1051,7 @@ class KGain(Image):
                 # log all the data that went into making this calibration file
                 self._record_parent_filenames(input_dataset)
                 # give it a default filename using the last input file as the base
-                self.filename = re.sub('_L[0-9].', '_KRN_CAL', input_dataset[-1].filename)
+                self.filename = re.sub('_l[0-9].', '_krn_cal', input_dataset[-1].filename)
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected EM electron/DN'
@@ -1141,10 +1141,10 @@ class BadPixelMap(Image):
             self.ext_hdr['HISTORY'] = "Bad Pixel map created"
 
             # check whether we're making the bpmap from a flat only, or from L1/2 files. 
-            if "_FLT_CAL" in input_dataset[-1].filename:
-                self.filename = input_dataset[-1].filename.replace("_FLT_CAL", "_BPM_CAL")
+            if "_flt_cal" in input_dataset[-1].filename:
+                self.filename = input_dataset[-1].filename.replace("_flt_cal", "_bpm_cal")
             else:
-                self.filename = re.sub('_L[0-9].', '_BPM_CAL', input_dataset[-1].filename)
+                self.filename = re.sub('_l[0-9].', '_bpm_cal', input_dataset[-1].filename)
             
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?            
@@ -1224,8 +1224,8 @@ class DetectorNoiseMaps(Image):
                 #running the calibration code gets the name right (based on last filename in input dataset); this is a standby
                 orig_input_filename = self.ext_hdr['FILE0'].split(".fits")[0] 
             
-            self.filename = "{0}_DNM_CAL.fits".format(orig_input_filename)
-            self.filename = re.sub('_L[0-9].', '', self.filename)
+            self.filename = "{0}_dnm_cal.fits".format(orig_input_filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
@@ -1451,7 +1451,8 @@ class AstrometricCalibration(Image):
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-            self.filename = "{0}_AST_CAL.fits".format(orig_input_filename)
+            self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1500,8 +1501,8 @@ class TrapCalibration(Image):
             # give it a default filename using the first input file as the base
             # strip off everything starting at .fits
             orig_input_filename = input_dataset[-1].filename.split(".fits")[0]
-            self.filename = "{0}_TPU_CAL.fits".format(orig_input_filename)
-            self.filename = re.sub('_L[0-9].', '', self.filename)
+            self.filename = "{0}_tpu_cal.fits".format(orig_input_filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1606,7 +1607,7 @@ class FluxcalFactor(Image):
             # use the start date for the filename by default
             self.filedir = "."
             # slight hack for old mocks not in the stardard filename format
-            self.filename = "{0}_ABF_CAL.fits".format(orig_input_filename)
+            self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
             self.filename = re.sub('_L[0-9].', '', self.filename)
 
 class FpamFsamCal(Image):
@@ -1803,10 +1804,10 @@ class CoreThroughputCalibration(Image):
                 self.ext_hdr['HISTORY'] = ('Core Throughput calibration derived '
                     f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
-            # Default convention: replace _L3_.fits from the filename of the
-            # input dataset by _CTP_CAL.fits
+            # Default convention: replace _l3_.fits from the filename of the
+            # input dataset by _ctp_cal.fits
             self.filedir = '.'
-            self.filename = re.sub('_L[0-9].', '_CTP_CAL', input_dataset[-1].filename)
+            self.filename = re.sub('_l[0-9].', '_ctp_cal', input_dataset[-1].filename)
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1900,7 +1901,7 @@ class CoreThroughputCalibration(Image):
           corDataset (corgidrp.data.Dataset): a dataset containing some
               coronagraphic observations.
           fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
-              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+              FpamFsamCal calibration class.
           logr (bool) (optional): If True, radii are mapped into their logarithmic
               values before constructing the interpolant.
 
@@ -2722,7 +2723,7 @@ class NDFilterSweetSpotDataset(Image):
         if ext_hdr is not None:
             if input_dataset is not None:
                 self._record_parent_filenames(input_dataset)
-                self.filename = re.sub('_L[0-9].', '_NDF_CAL', input_dataset[-1].filename)
+                self.filename = re.sub('_l[0-9].', '_ndf_cal', input_dataset[-1].filename)
             # if no input_dataset is given, do we want to set the filename manually using 
             # header values?
 
@@ -2757,14 +2758,13 @@ class NDFilterSweetSpotDataset(Image):
 def format_ftimeutc(ftime_str):
     """
     Round the input FTIMEUTC time to the nearest 0.01 sec and reformat as:
-    yyyymmddThhmmssss.
+    yyyymmddthhmmsss.
 
     Args:
         ftime_str (str): Time string in ISO format, e.g. "2025-04-15T03:05:10.21".
 
     Returns:
-        formatted_time (str): Reformatted time string that complies with documentation
-            guidelines.
+        formatted_time (str): Reformatted time string in yyyymmddthhmmsss format.
     """
     # Parse the input using fromisoformat, which can handle timezone offsets.
     try:
@@ -2776,9 +2776,8 @@ def format_ftimeutc(ftime_str):
     if ftime.tzinfo is not None:
         ftime = ftime.astimezone(timezone.utc).replace(tzinfo=None)
     
-    # Define rounding interval: 0.01 sec = 10,000 microseconds.
+    # Round to nearest 0.01 seconds (10,000 microseconds)
     rounding_interval = 10000
-    # Round the microseconds to the nearest 0.1 sec.
     rounded_microsec = int((ftime.microsecond + rounding_interval / 2) // rounding_interval * rounding_interval)
     
     # Handle rollover: if rounding reaches or exceeds 1,000,000 microseconds increment the second
@@ -2787,12 +2786,23 @@ def format_ftimeutc(ftime_str):
     else:
         ftime = ftime.replace(microsecond=rounded_microsec)
     
-    # Extract seconds (two digits) and the hundredths of seconds
+    # Format seconds with exactly 3 digits total
+    # We want the seconds part to be exactly 3 digits
+    # Format: sss where sss = seconds (00-59) + first digit of hundredths (0-9)
+    # Example: 10.21 becomes 102, 5.05 becomes 505, 59.99 becomes 599
     sec_int = ftime.second
-    tenth = int(ftime.microsecond / 10000)  # (0-99)
+    hundredths = int(ftime.microsecond / 10000)  # (0-99)
     
-    # Format as YYYYMMDDTHHMM then append seconds and hundredths of seconds
-    formatted_time = ftime.strftime("%Y%m%dT%H%M") + f"{sec_int:02d}{tenth:d}"
+    # Take only the first digit of hundredths (0-9)
+    first_hundredth = hundredths // 10
+    
+    # Combine seconds and first hundredth: ss * 10 + h
+    # This gives us a 3-digit number where the first 2 digits are seconds and last digit is tenths
+    combined_seconds = sec_int * 10 + first_hundredth
+    
+    # Format as yyyymmddthhmmsss (17 characters total)
+    # Use :03d to ensure exactly 3 digits with leading zeros if needed
+    formatted_time = ftime.strftime("%Y%m%dt%H%M") + f"{combined_seconds:03d}"
     return formatted_time
 
 
@@ -2809,6 +2819,8 @@ datatypes = { "Image" : Image,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
               "CoreThroughputCalibration": CoreThroughputCalibration,
+              "CoreThroughputMap": CoreThroughputMap,
+              "PSFCentroidCalibration": SpectroscopyCentroidPSF,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel

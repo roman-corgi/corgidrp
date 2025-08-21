@@ -2062,7 +2062,7 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
         raise ValueError('cs_max must be > cs_min')
     check.real_positive_scalar(input_T, 'input_T', TypeError)
     if len(np.unique(temps)) < 3:
-        warnings.warn('temps did not have a unique number of temperatures '
+        print('temps did not have a unique number of temperatures '
         'longer than the number of fitted parameters.')
         return None, None, None, None, None, None, None
 
@@ -2113,7 +2113,7 @@ def fit_cs(taus, tau_errs, temps, cs_fit_thresh, E_min, E_max, cs_min, cs_max,
     Rsq = 1 - (ssres/sstot)*(len(temps) - 1)/(len(temps) - len(popt))
 
     if Rsq < cs_fit_thresh:
-        warnings.warn('Fitting of tau vs temperature has an adjusted R^2 '
+        print('Fitting of tau vs temperature has an adjusted R^2 '
         'value < cs_fit_thresh')
 
     return (E, sig_E, cs, sig_cs, Rsq, tau_input_T, sig_tau_input_T)

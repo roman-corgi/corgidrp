@@ -6,7 +6,7 @@ from astropy.wcs import WCS
 from matplotlib import pyplot as plt
 import numpy as np
 
-def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False):
+def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figure=False,test_offset=False):
     """
     unit test of the northup function
 
@@ -156,5 +156,54 @@ def test_northup(save_mock_dataset=False,save_derot_dataset=False,save_comp_figu
           plt.close(fig)
 
     return
+
+def test_wcs_and_offset(save_mock_dataset=False):
+   """
+   unit test of the create_wcs function and offset keyword 
+
+    Args:
+        save_mock_dataset (optional): if you want to save the original mock files at the input directory, turn True
+        
+   """
+   # read mock file
+   dirname = 'test_data/'
+   filename = 'JWST_CALFIELD2020.csv'
+
+   fieldpath = os.path.join(os.path.dirname(__file__),dirname,filename)
+   if not fieldpath:
+      raise FileNotFoundError(f"No filed data {filename} found")
+   
+   # running northup function
+   ang = 0
+   north_angle = 30
+   updated_datalist = []
+
+   # make a mock dataset
+   mock_dataset_ori = mocks.create_astrom_data(fieldpath, rotation=north_angle)
+   # run the boresight calibration to get an AstrometricCalibration file
+   astrom_cal = astrom.boresight_calibration(mock_dataset_ori, fieldpath, find_threshold=10)
+
+   mock_dataset =  mock_dataset_ori.copy()
+
+   # add an angle offset
+   mock_dataset[0].pri_hdr['ROLL']=(ang,'roll angle (deg)')
+
+   # create the wcs
+   test_offset = (3.3, 1.0)
+   updated_dataset = create_wcs(mock_dataset,astrom_cal,offset=test_offset)
+
+   im_data = updated_dataset[0].data
+   image_y, image_x = im_data.shape
+   center_pixel = [(image_x-1) // 2, (image_y-1) // 2]
+   # ensure offset worked, test it doesn't equal previous center, and that it does equal center + offset
+   assert updated_dataset[0].ext_hdr['CRPIX1'] != center_pixel[0] 
+   assert updated_dataset[0].ext_hdr['CRPIX2'] == center_pixel[1]+test_offset[1]
+
+   if save_mock_dataset:
+      outdir = os.path.join('./',dirname)
+      os.makedirs(outdir, exist_ok=True)
+      updated_dataset[0].save(filedir='./',filename=f'mock_offset{ang+north_angle}deg_testoffset.fits')
+
 if __name__ == '__main__':
- test_northup() 
+   test_northup()
+   test_wcs_and_offset()  

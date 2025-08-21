@@ -527,12 +527,16 @@ def do_psf_subtraction(input_dataset,
         unique_vals = np.array(unique_vals)
 
         if 0. in unique_vals:
-            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0].item())]
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=DeprecationWarning)
+                sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0])]
         else:
             raise UserWarning('No science files found in input dataset.')
 
         if 1. in unique_vals:
-            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0].item())]
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=DeprecationWarning)
+                ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0])]
         else:
             ref_dataset = None
 
@@ -934,7 +938,7 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L3_", "_L4_", 1)
+        frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)
