@@ -553,7 +553,7 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
 
     return fluxcal_obj
 
-def calibrate_fluxcal_aper_pol(dataset_or_image, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
+def calibrate_fluxcal_aper_pol(dataset_or_image, image_center, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
     """
     Same overall process as calibrate_fluxcal_aper, adapted for polarimetric images 
     from WP1 or WP2 with two apertures instead of one.
@@ -584,6 +584,8 @@ def calibrate_fluxcal_aper_pol(dataset_or_image, calspec_file = None, flux_or_ir
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
             the calibration factor. Should already be normalized for exposure time. Images must
             be from polarimetric observations taken with WP1 or WP2 in the DPAM.
+        image_center (int tuple): X and Y pixel coordinate of where the two wollaston spots are 
+            centered around
         calspec_file (str, optional): file path to the calspec fits file of the observed star
         flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
             be used.
@@ -603,16 +605,17 @@ def calibrate_fluxcal_aper_pol(dataset_or_image, calspec_file = None, flux_or_ir
         dataset = corgidrp.data.Dataset([image])
     if image.ext_hdr['BUNIT'] != "photoelectron/s":
         raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
+    #estimate the centers of the wollaston spots based on relative position from image center
     if image.ext_hdr['DPAMNAME'] == 'POL0':
         #0 degree pol PSF center estimate
-        centering_initial_guess_beam_1 = (340, 512)
+        centering_initial_guess_beam_1 = (image_center[0] - 172, image_center[1])
         #90 degree pol PSF center estimate
-        centering_initial_guess_beam_2 = (684, 512) 
+        centering_initial_guess_beam_2 = (image_center[0] + 172, image_center[1]) 
     elif image.ext_hdr['DPAMNAME'] == 'POL45':
         #45 degree pol PSF center estimate
-        centering_initial_guess_beam_1 = (390, 634)
+        centering_initial_guess_beam_1 = (image_center[0] - 122, image_center[1] + 122)
         #135 degree pol PSF center estimate
-        centering_initial_guess_beam_2 = (634, 390)
+        centering_initial_guess_beam_2 = (image_center[0] + 122, image_center[1] - 122)
     else:
         raise ValueError('input dataset must be a polarimetric observation')
     if phot_kwargs is None:
@@ -681,9 +684,8 @@ def calibrate_fluxcal_aper_pol(dataset_or_image, calspec_file = None, flux_or_ir
     result_beam_1 = aper_phot(image, **phot_kwargs_beam_1)
     result_beam_2 = aper_phot(image, **phot_kwargs_beam_2)
     if phot_kwargs.get('background_sub', False):
-        #TODO: figure out what to do with back
-        ap_sum_beam_1, ap_sum_err_beam_1, back = result_beam_1
-        ap_sum_beam_2, ap_sum_err_beam_2, back = result_beam_2
+        ap_sum_beam_1, ap_sum_err_beam_1, back_beam_1 = result_beam_1
+        ap_sum_beam_2, ap_sum_err_beam_2, back_beam_2 = result_beam_2
     else:
         ap_sum_beam_1, ap_sum_err_beam_1 = result_beam_1
         ap_sum_beam_2, ap_sum_err_beam_2 = result_beam_2
@@ -701,6 +703,8 @@ def calibrate_fluxcal_aper_pol(dataset_or_image, calspec_file = None, flux_or_ir
 
     # If background subtraction was performed, set the LOCBACK keyword.
     if phot_kwargs.get('background_sub', False):
+        #add up background photoelectrons from both beams
+        back = back_beam_1 + back_beam_2
         # Here, "back" is the third value returned from phot_by_gauss2d_fit.
         fluxcal_obj.ext_hdr['LOCBACK'] = back
 
