@@ -1,5 +1,8 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
-
+import warnings
+import numpy as np
+import os
+import pyklip
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
@@ -12,9 +15,6 @@ from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
-import warnings
-import numpy as np
-import os
 from astropy.io import fits
 from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
@@ -819,12 +819,13 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None):
     (satellite spot or PSF) taken through the narrowband filter and slit.
 
     Args:
-        dataset (Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
-        template_dataset (Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template path is taken
+        input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
+                                                  path is taken
     
     Returns:
-        WavelengthZeropoint: object containing the values, new_all_data=np.array(new_all_data), new_all_err=np.array(new_all_err),\
-                              new_all_dq=np.array(new_all_dq) of the wavelength zero point 
+        corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
+                               information as header keywords, which is WAVLEN0, X0, X0ERR, Y0, Y0ERR, SHAPEX0, SHAPEY0
     """
     dataset = input_dataset.copy()
     
