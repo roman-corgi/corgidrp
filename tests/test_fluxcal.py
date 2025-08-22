@@ -423,12 +423,11 @@ def test_pol_abs_fluxcal():
         os.mkdir(resdir)
     
     fwhm = 3
-    flux_ratio = 200
-    flux_ratio_right = 150
+    flux_ratio = 400
     cal_factor = band_flux/flux_ratio
     #split flux by polarization
-    band_flux_left = 0.75 * band_flux
-    band_flux_right = 0.25 * band_flux
+    band_flux_left = 0.6 * band_flux
+    band_flux_right = 0.4 * band_flux
     # create a simulated mock images for WP1 and WP2
     #left PSF should have count of 150 photo electrons
     #right PSF should have count of 50 photo electons
@@ -456,16 +455,102 @@ def test_pol_abs_fluxcal():
               background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(390, 634))
     [flux_el_pol135, flux_err_pol135] = fluxcal.aper_phot(flux_image_WP2, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
               background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(634, 390))
-    #150 is the input count of photo electrons for 0 and 45
-    #50 is the input count of phot electrons for 90 and 135
-    assert flux_el_pol0== pytest.approx(150, rel = 0.05)
-    assert flux_el_pol45== pytest.approx(150, rel = 0.05)
-    assert flux_el_pol90== pytest.approx(50, rel = 0.05)
-    assert flux_el_pol135== pytest.approx(50, rel = 0.05)
+    #240 is the input count of photo electrons for 0 and 45
+    #160 is the input count of phot electrons for 90 and 135
+    assert flux_el_pol0== pytest.approx(240, rel = 0.05)
+    assert flux_el_pol45== pytest.approx(240, rel = 0.05)
+    assert flux_el_pol90== pytest.approx(160, rel = 0.05)
+    assert flux_el_pol135== pytest.approx(160, rel = 0.05)
     assert flux_err_pol0 == pytest.approx(error_sum, rel = 0.05)
     assert flux_err_pol45 == pytest.approx(error_sum, rel = 0.05)
     assert flux_err_pol90 == pytest.approx(error_sum, rel = 0.05)
     assert flux_err_pol135 == pytest.approx(error_sum, rel = 0.05)
+
+    dataset_WP1 = Dataset([flux_image_WP1])
+    dataset_WP2 = Dataset([flux_image_WP2])
+    fluxcal_factor_WP1 = fluxcal.calibrate_pol_fluxcal_aper(dataset_WP1, (512, 512), flux_or_irr = 'flux', phot_kwargs=None)
+    fluxcal_factor_WP2 = fluxcal.calibrate_pol_fluxcal_aper(dataset_WP2, (512, 512), flux_or_irr = 'flux', phot_kwargs=None)
+    assert fluxcal_factor_WP1.filter == '3C'
+    assert fluxcal_factor_WP2.filter == '3C'
+    # band_flux/400 was the input calibration factor cal_factor of the
+    # simulated mock image "alpha_lyr_stis_011.fits"
+    test_result_WP1 = fluxcal_factor_WP1.fluxcal_fac == pytest.approx(cal_factor, rel=rel_tol_flux)
+    test_result_WP2 = fluxcal_factor_WP2.fluxcal_fac == pytest.approx(cal_factor, rel=rel_tol_flux)
+    assert test_result_WP1
+    assert test_result_WP2
+
+    print('\nWP1 polarimetric flux from fluxcal.calibrate_pol_fluxcal_aper() is correct to within %.2f%% ***: ' % (rel_tol_flux*100), end='')
+    print_pass() if test_result_WP1 else print_fail()
+
+    print('\nWP2 polarimetric flux from fluxcal.calibrate_pol_fluxcal_aper() is correct to within %.2f%% ***: ' % (rel_tol_flux*100), end='')
+    print_pass() if test_result_WP2 else print_fail()
+
+    # divisive error propagation of the aperture phot error
+    err_fluxcal_WP1 = band_flux/(flux_el_pol0 + flux_el_pol90)**2*np.sqrt((flux_err_pol0)**2 + (flux_err_pol90)**2)
+    err_fluxcal_WP2 = band_flux/(flux_el_pol45 + flux_el_pol135)**2*np.sqrt((flux_err_pol45)**2 + (flux_err_pol135)**2)
+    assert fluxcal_factor_WP1.fluxcal_err == pytest.approx(err_fluxcal_WP1)
+    assert fluxcal_factor_WP2.fluxcal_err == pytest.approx(err_fluxcal_WP2)
+
+    #Test the optional background subtraction#
+    flux_image_back_WP1 = create_pol_flux_image(
+                      band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL0', target_name='Vega', fsm_x=0.0, 
+                      fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8, background=3,
+                      add_gauss_noise=True, noise_scale=1., file_save=True)
+    flux_image_back_WP2 = create_pol_flux_image(
+                      band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL45', target_name='Vega', fsm_x=0.0, 
+                      fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8, background=3,
+                      add_gauss_noise=True, noise_scale=1., file_save=True)
+    [flux_back_pol0, flux_err_back_pol0, back_pol0] = fluxcal.aper_phot(flux_image_back_WP1, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=True, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(340, 512))
+    [flux_back_pol90, flux_err_back_pol90, back_pol90] = fluxcal.aper_phot(flux_image_back_WP1, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=True, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(684, 512))
+    [flux_back_pol45, flux_err_back_pol45, back_pol45] = fluxcal.aper_phot(flux_image_back_WP2, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=True, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(390, 634))
+    [flux_back_pol135, flux_err_back_pol135, back_pol135] = fluxcal.aper_phot(flux_image_back_WP2, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=True, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(634, 390))
+    #calculated median background should be close to the input
+    assert back_pol0 == pytest.approx(3, rel = 0.05)
+    assert back_pol45 == pytest.approx(3, rel = 0.05)
+    assert back_pol90 == pytest.approx(3, rel = 0.05)
+    assert back_pol135 == pytest.approx(3, rel = 0.05)
+    #the found values should be close to the ones without background subtraction
+    assert flux_back_pol0 == pytest.approx(flux_el_pol0, rel = 0.05)
+    assert flux_back_pol45 == pytest.approx(flux_el_pol45, rel = 0.05)
+    assert flux_back_pol90 == pytest.approx(flux_el_pol90, rel = 0.05)
+    assert flux_back_pol135 == pytest.approx(flux_el_pol135, rel = 0.05)
+    assert flux_err_back_pol0 == pytest.approx(flux_err_pol0, rel = 0.05)
+    assert flux_err_back_pol45 == pytest.approx(flux_err_pol45, rel = 0.05)
+    assert flux_err_back_pol90 == pytest.approx(flux_err_pol90, rel = 0.05)
+    assert flux_err_back_pol135 == pytest.approx(flux_err_pol135, rel = 0.05)
+
+    #Also test again the generation of the cal file now with a background subtraction
+    aper_kwargs = {
+        "encircled_radius": radius,
+        "frac_enc_energy": 0.997,
+        "method": "subpixel",
+        "subpixels": 10,
+        "background_sub": True,
+        "r_in": 5,
+        "r_out": 10,
+        "centering_method": "xy",
+        "centroid_roi_radius": 5
+    }
+    fluxcal_factor_back_WP1 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP1, (512, 512), flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    fluxcal_factor_back_WP2 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP2, (512, 512), flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    assert fluxcal_factor_back_WP1.fluxcal_fac == pytest.approx(fluxcal_factor_WP1.fluxcal_fac)
+    assert fluxcal_factor_back_WP2.fluxcal_fac == pytest.approx(fluxcal_factor_WP2.fluxcal_fac)
+    assert fluxcal_factor_back_WP1.ext_hdr["LOCBACK"] == 0.5 * (back_pol0 + back_pol90)
+    assert fluxcal_factor_back_WP2.ext_hdr["LOCBACK"] == 0.5 * (back_pol45 + back_pol135)
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
+
+    #test the direct input of the calspec fits file
+    fluxcal_factor_back_WP1 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP1, (512, 512), calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    fluxcal_factor_back_WP2 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP2, (512, 512), calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    assert fluxcal_factor_back_WP1.fluxcal_fac == pytest.approx(fluxcal_factor_WP1.fluxcal_fac)
+    assert fluxcal_factor_back_WP2.fluxcal_fac == pytest.approx(fluxcal_factor_WP2.fluxcal_fac)
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
+    assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
     
 if __name__ == '__main__':
     test_get_filter_name()

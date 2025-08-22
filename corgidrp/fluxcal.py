@@ -620,7 +620,7 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = No
         raise ValueError('input dataset must be a polarimetric observation')
     #ensure xy centering method is used with estimated centers for aperture photometry
     if phot_kwargs is None:
-        phot_kwargs_beam_1 = {
+        phot_kwargs = {
             'encircled_radius': 5,
             'frac_enc_energy': 1.0,
             'method': 'subpixel',
@@ -628,34 +628,19 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = No
             'background_sub': False,
             'r_in': 5,
             'r_out': 10,
-            'centering_method': 'xy',
             'centroid_roi_radius': 5,
-            'centering_initial_guess': centering_initial_guess_beam_1
         }
-        phot_kwargs_beam_2 = {
-            'encircled_radius': 5,
-            'frac_enc_energy': 1.0,
-            'method': 'subpixel',
-            'subpixels': 5,
-            'background_sub': False,
-            'r_in': 5,
-            'r_out': 10,
-            'centering_method': 'xy',
-            'centroid_roi_radius': 5,
-            'centering_initial_guess': centering_initial_guess_beam_2
-        }
-    else:
-        #update parameters to ensure centering is performed correctly
-        phot_kwargs_beam_1 = phot_kwargs.copy()
-        phot_kwargs_beam_2 = phot_kwargs.copy()
-        phot_kwargs_beam_1.update({
-            'centering_method': 'xy',
-            'centering_initial_guess': centering_initial_guess_beam_1
-        })
-        phot_kwargs_beam_2.update({
-            'centering_method': 'xy',
-            'centering_initial_guess': centering_initial_guess_beam_2
-        })
+    #update parameters to ensure centering is performed correctly
+    phot_kwargs_beam_1 = phot_kwargs.copy()
+    phot_kwargs_beam_2 = phot_kwargs.copy()
+    phot_kwargs_beam_1.update({
+        'centering_method': 'xy',
+        'centering_initial_guess': centering_initial_guess_beam_1
+    })
+    phot_kwargs_beam_2.update({
+        'centering_method': 'xy',
+        'centering_initial_guess': centering_initial_guess_beam_2
+    })
     
     filter_name = image.ext_hdr["CFAMNAME"]
     filter_file = get_filter_name(image)
@@ -705,8 +690,8 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = No
 
     # If background subtraction was performed, set the LOCBACK keyword.
     if phot_kwargs.get('background_sub', False):
-        #add up background photoelectrons from both beams
-        back = back_beam_1 + back_beam_2
+        #average medium background photoelectrons from both beams
+        back = 0.5 * (back_beam_1 + back_beam_2)
         # Here, "back" is the third value returned from phot_by_gauss2d_fit.
         fluxcal_obj.ext_hdr['LOCBACK'] = back
 
