@@ -22,9 +22,11 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 def fix_str_for_tvac(
     list_of_fits,
     ):
-    """ Gets around EMGAIN_A being set to 1 in TVAC data.
+    """ 
+    Gets around EMGAIN_A being set to 1 in TVAC data.
+    
     Args:
-    list_of_fits (list): list of FITS files that need to be updated.
+        list_of_fits (list): list of FITS files that need to be updated.
     """
     for file in list_of_fits:
         fits_file = fits.open(file)
