@@ -9,16 +9,17 @@ import re
 import copy
 from termcolor import cprint
 
+import corgidrp
 from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
 import corgidrp.data as data 
-from corgidrp.data import Dataset
-from corgidrp.data import Image
+from corgidrp.data import (Image, Dataset, FluxcalFactor,
+    NDFilterSweetSpotDataset, FpamFsamCal)
 import corgidrp.mocks as mocks
-from corgidrp.data import Image, NDFilterSweetSpotDataset
 
+here = os.path.abspath(os.path.dirname(__file__))
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -189,15 +190,6 @@ def mock_clean_entry(bright_dataset):
     # appropriate level input file
     return bright_dataset[0]
 
-
-def mock_transformation_matrix(output_dir):
-    # TO DO: use Sergi's FPAM to EXCAM transformation matrix product once it is
-    # ready
-    transformation_matrix_file = os.path.join(output_dir, "fpam_to_excam.fits")
-    dummy_matrix = np.eye(2)
-    hdu = fits.PrimaryHDU(dummy_matrix)
-    hdu.writeto(transformation_matrix_file, overwrite=True)
-    return transformation_matrix_file
 
 # ---------------------------------------------------------------------------
 # Pytest fixtures
@@ -636,29 +628,43 @@ def test_calculate_od_at_new_location(output_dir):
     nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
                                                     input_dataset=fake_input_dataset)
  
-    # Create an identity transformation matrix FITS file in output_dir
-    transformation_matrix_file = mock_transformation_matrix(output_dir)
-
     # Make a 5x5 mock 'clean_frame_entry' with a star at (2,2) => centroid (2,2)
     # Shift it by (3,3) => final location (5,5).
     clean_image_data = np.zeros((5, 5), dtype=float)
     clean_image_data[2, 2] = 100.0  # star pixel
     cframe_prihdr, cframe_exthdr, errhdr, dqhdr, biashdr= mocks.create_default_L2b_headers()
-    cframe_exthdr["FPAM_H"] = 3.0
-    cframe_exthdr["FPAM_V"] = 3.0
+    # Choosing some values that will help predict the expected value of the OD
+    # when using the bilinear OD interpolation in nd_filter_calibration.interpolate_od()
+    # These values ensure that the shift in EXCAM pixels is (3,3)
+    cframe_exthdr["FPAM_H"] = -24.42
+    cframe_exthdr["FPAM_V"] = 24.42
     clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
                               ext_hdr=cframe_exthdr)
+
+    # Default FPAM/FSAM transformations
+    fpamfsamcal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))    
 
     # Call the function under test
     interpolated_od = nd_filter_calibration.calculate_od_at_new_location(
         clean_frame_entry=clean_frame_entry,
-        transformation_matrix_file=transformation_matrix_file,
+        fpamfsamcal=fpamfsamcal,
         ndsweetspot_dataset=nd_sweetspot_dataset
     )
 
     # Expect the final location = (2+3, 2+3) = (5,5).
-    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
+    fpam2excam_matrix = fits.getdata(os.path.join(here, 'test_data',
+        'fpam_to_excam_modelbased.fits'))
+    # Check final position is (5,5)
+    final_excam_pos = (np.array([2,2]) + fpam2excam_matrix @
+        np.array([cframe_exthdr["FPAM_H"],cframe_exthdr["FPAM_V"]]))
+    # Single precision because the FPAM_H/V values were set to be close to
+    # produce a change of 3 EXCAM pixels within single precision
+    assert np.all(np.abs(final_excam_pos - np.array([5,5])) < 1e-7)
+
+    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5  
     expected_value = 3.5
+
     atol_nd = 1e-6
     test_result_od_accuracy = abs(interpolated_od - expected_value) < atol_nd
     print(f'calculate_od_at_new_location() estimates OD as {expected_value} +/- {atol_nd}: ', end='')

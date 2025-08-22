@@ -7,6 +7,7 @@ import pandas as pd
 import corgidrp
 import corgidrp.data as data
 import astropy.time as time
+import warnings
 
 column_dtypes = {
     "Filepath": str,
@@ -17,12 +18,18 @@ column_dtypes = {
     "Date Created": float,
     "Hash": str,
     "DRPVERSN": str,
-    "OBSNUM": int,
+    "OBSNUM": str,
     "NAXIS1": int,
     "NAXIS2": int,
     "OPMODE": str,
     "EMGAIN_C": float,
     "EXCAMT": float
+}
+
+default_values = {
+    str : "",
+    float : np.nan,
+    int : -1
 }
 
 column_names = list(column_dtypes.keys())
@@ -122,7 +129,7 @@ class CalDB:
                 "Date Created" : time_now.mjd,
                 "Hash" : hash(time_now),
                 "DRPVERSN" : "0.0",
-                "OBSNUM" : 000,
+                "OBSNUM" : "000",
                 "NAXIS1": 0,
                 "NAXIS2" : 0,
                 "OPMODE" : "",
@@ -137,25 +144,39 @@ class CalDB:
         else:
             datatype = "Sci"
         mjd = time.Time(entry.ext_hdr["SCTSRT"]).mjd
+
         exptime = entry.ext_hdr["EXPTIME"]
+        if exptime is None:
+            exptime = np.nan
 
         # check if this exists. will be a keyword written by corgidrp
         if "DRPNFILE" in entry.ext_hdr:
             files_used = entry.ext_hdr["DRPNFILE"]
+            if files_used is None:
+                files_used = -1
         else:
-            files_used = 0
+            files_used = -1
 
         if "DRPCTIME" in entry.ext_hdr:
             date_created = time.Time(entry.ext_hdr["DRPCTIME"]).mjd
+            if date_created is None:
+                date_created = np.nan
         else:
-            date_created = -1
+            date_created = np.nan
 
         if "DRPVERSN" in entry.ext_hdr:
             drp_version = entry.ext_hdr["DRPVERSN"]
+            if drp_version is None:
+                drp_version = ""
         else:
             drp_version = ""
 
-        obsid = entry.pri_hdr["OBSNUM"]
+        if "OBSNUM" in entry.pri_hdr:
+            obsid = entry.pri_hdr["OBSNUM"]
+            if obsid is None:
+                obsid = ""
+        else:
+            obsid = ""
 
         hash_val = entry.get_hash()
 
@@ -190,7 +211,13 @@ class CalDB:
         # rest are ext_hdr keys we can copy
         start_index = len(row)
         for i in range(start_index, len(self.columns)):
-            row.append(entry.ext_hdr[self.columns[i]])  # add value straight from header
+
+            val = entry.ext_hdr[self.columns[i]]
+            if val is not None:
+                row.append(val)  # add value staright from header
+            else:
+                # if value is not in header, use default value
+                row.append(default_values[column_dtypes[self.columns[i]]])
 
         row_dict = {}
         for key, val in zip(self.columns, row):
