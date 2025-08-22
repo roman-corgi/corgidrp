@@ -1702,8 +1702,7 @@ class FpamFsamCal(Image):
 
             # use the start date for the filename by default
             self.filedir = '.'
-            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
-            self.filename = self.filename.replace(':', '.') # compatible with Windows machines
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':', '.') # compatible with Windows machines
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'

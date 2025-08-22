@@ -142,7 +142,10 @@ def test_nonlin_cal_e2e(
                                                  input_dataset=mock_input_dataset)
     nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits")
     
-    
+    # create a DetectorParams object and save it
+    detector_params = data.DetectorParams({})
+    detector_params.save(filedir=e2eoutput_path, filename="detector_params.fits")
+
     # KGain
     kgain_val = 8.7
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
@@ -150,7 +153,7 @@ def test_nonlin_cal_e2e(
     kgain.save(filedir=e2eoutput_path, filename="mock_kgain.fits")
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(kgain)
-
+    this_caldb.create_entry(detector_params)
     # Run the walker on some test_data
     print('Running walker')
     #walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")

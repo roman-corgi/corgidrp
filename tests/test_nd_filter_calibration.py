@@ -618,7 +618,7 @@ def test_calculate_od_at_new_location(output_dir):
     # Create a fake input dataset to set the filename
     input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
-    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits"
+    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits".replace(":", ".")
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
     # Build the NDFilterSweetSpotDataset
