@@ -2,7 +2,7 @@
 import warnings
 import numpy as np
 import os
-import pyklip
+import pyklip.rdi
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
