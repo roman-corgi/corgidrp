@@ -2843,6 +2843,157 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     return frame
 
+def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, filter='3C', dpamname = 'POL0', fpamname = 'HOLE', 
+                      target_name='Vega', fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=None, platescale=21.8, 
+                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
+    """
+    Create simulated data for polarimetric absolute flux calibration. Two point sources to
+    simulate images split by polarization, with a 2D-Gaussian PSF and Gaussian noise.
+
+    Args:
+        star_flux_left (float): Flux of the point source on the left size of the image in erg/(s*cm^2*AA)
+        star_flux_right (float): Flux of the point source on the right size of the image in erg/(s*cm^2*AA)
+        fwhm (float): Full width at half max (FWHM) of the centroid
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electron/s
+        filter (str): (Optional) The CFAM filter used.
+        dpamname (str): (Optional) The wollaston prism being used
+        fpamname (str): (Optional) Position of the FPAM
+        target_name (str): (Optional) Name of the calspec star
+        fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
+        fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
+        exptime (float): (Optional) Exposure time (s)
+        filedir (str): (Optional) Directory path to save the output file
+        platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
+        background (float): optional additive background value
+        add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
+        noise_scale (float): Spread of the Gaussian noise
+        file_save (bool): Whether to save the image (default: False)
+
+    Returns:
+        corgidrp.data.Image: The simulated image
+    """
+
+    # Create directory if needed
+    if filedir is not None and not os.path.exists(filedir):
+        os.mkdir(filedir)
+
+    # Image properties
+    size = (1024, 1024)
+    sim_data = np.zeros(size)
+    ny, nx = size
+    center = [nx // 2, ny // 2]  # Default image center
+    target_location = (80.553428801, -69.514096821)
+
+    # Convert flux from calspec units to photo-electrons/s
+    flux_left = star_flux_left / cal_factor
+    flux_right = star_flux_right / cal_factor
+
+    if dpamname == 'POL0':
+        x_int_left = center[1] - 172
+        x_int_right = center[1] + 172
+        y_int_left = center[1]
+        y_int_right = center[1]
+        dpam_h = 8991.3
+        dpam_v = 1261.3
+    elif dpamname == 'POL45':
+        x_int_left = center[1] - 122
+        x_int_right = center[1] + 122
+        y_int_left = center[1] + 122
+        y_int_right = center[1] - 122
+        dpam_h = 44660.1
+        dpam_v = 1261.3
+    else:
+        raise ValueError('dpamname have to be "POL0" or "POL45"')
+
+
+    # Inject Gaussian PSF star
+    stampsize = int(np.ceil(3 * fwhm))
+    sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+
+    # coordinate system
+    y, x = np.indices([stampsize, stampsize])
+    y -= stampsize // 2
+    x -= stampsize // 2
+
+    x_left = x + x_int_left
+    x_right = x + x_int_right
+    y_left = y + y_int_left
+    y_right = y + y_int_right
+    
+    xmin_left = x_left[0][0]
+    xmax_left = x_left[-1][-1]
+    xmin_right = x_right[0][0]
+    xmax_right = x_right[-1][-1]
+    ymin_left = y_left[0][0]
+    ymax_left = y_left[-1][-1]
+    ymin_right = y_right[0][0]
+    ymax_right = y_right[-1][-1]
+
+    psf_left = gaussian_array((stampsize,stampsize),sigma,flux_left) / (2.0 * np.pi * sigma**2)
+    psf_right = gaussian_array((stampsize,stampsize),sigma,flux_right) / (2.0 * np.pi * sigma**2)
+
+    # Inject the star into the image
+    sim_data[ymin_left:ymax_left + 1, xmin_left:xmax_left + 1] += psf_left
+    sim_data[ymin_right:ymax_right + 1, xmin_right:xmax_right + 1] += psf_right
+
+    # Add background
+    sim_data += background
+
+    # Add Gaussian noise
+    if add_gauss_noise:
+        # add Gaussian random noise
+        noise_rng = np.random.default_rng(10)
+        noise = noise_rng.normal(scale=noise_scale, size=size)
+        sim_data += noise
+
+    # Error map
+    err = np.full(size, noise_scale)
+
+    # Get FPAM positions, not strictly necessary but
+    if fpamname == 'HOLE':
+        fpam_h = 40504.4
+        fpam_v = 9616.8
+    elif fpamname == 'ND225':
+        fpam_h = 61507.8
+        fpam_v = 25612.4
+    elif fpamname == 'ND475':
+        fpam_h = 2503.7
+        fpam_v = 6124.9
+
+    # Create image object
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['TARGET'] = target_name
+
+    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
+    exthdr['FPAMNAME'] = fpamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['DPAM_H'] = dpam_h
+    exthdr['DPAM_V'] = dpam_v
+    exthdr['FPAM_H']   = 2503.7
+    exthdr['FPAM_V']   = 6124.9
+    exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['CRPIX1']   = center[1]               # Ensure xpos is defined
+    exthdr['CRPIX2']   = center[0]               # Ensure ypos is defined
+    exthdr['CTYPE1']   = 'RA---TAN'
+    exthdr['CTYPE2']   = 'DEC--TAN'
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
+    exthdr['CRVAL2']   = target_location[1]
+    exthdr['BUNIT'] = 'photoelectron/s'
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+   
+    # Save file
+    if filedir is not None and file_save:
+        ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
+        filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
+        frame.save(filedir=filedir, filename=filename)
+
+    return frame
+
 def generate_reference_star_dataset_with_flux(
     n_frames=3,
     roll_angles=None,
