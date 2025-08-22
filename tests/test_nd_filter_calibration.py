@@ -643,7 +643,7 @@ def test_calculate_od_at_new_location(output_dir):
 
     # Default FPAM/FSAM transformations
     fpamfsamcal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))    
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))    
 
     # Call the function under test
     interpolated_od = nd_filter_calibration.calculate_od_at_new_location(
