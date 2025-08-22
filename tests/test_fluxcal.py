@@ -5,6 +5,7 @@ import numpy as np
 import corgidrp
 from corgidrp.mocks import create_default_L3_headers
 from corgidrp.mocks import create_flux_image
+from corgidrp.mocks import create_pol_flux_image
 from corgidrp.data import Image, Dataset, FluxcalFactor
 import corgidrp.fluxcal as fluxcal
 import corgidrp.l4_to_tda as l4_to_tda
@@ -401,6 +402,70 @@ def test_abs_fluxcal():
     assert output_dataset[0].ext_hdr["MAGERR"] == pytest.approx(mag_err_gauss, rel = 0.1)
     
     corgidrp.track_individual_errors = old_ind
+
+def test_pol_abs_fluxcal():
+    """ 
+    Generate a simulated polarimetric image and test the flux calibration computation.
+    Adapted from test_abs_fluxcal()
+    
+    """
+    rel_tol_flux = 0.05
+
+    # create a simulated polarimetric flux image
+    # check that the simulated image folder exists and create if not
+    datadir = os.path.join(os.path.dirname(__file__), "test_data", "sim_fluxcal")
+    if not os.path.exists(datadir):
+        os.mkdir(datadir)
+
+    # check that the results folder exists and create if not
+    resdir = os.path.join(os.path.dirname(__file__), "test_data", "results")
+    if not os.path.exists(resdir):
+        os.mkdir(resdir)
+    
+    fwhm = 3
+    flux_ratio = 200
+    flux_ratio_right = 150
+    cal_factor = band_flux/flux_ratio
+    #split flux by polarization
+    band_flux_left = 0.75 * band_flux
+    band_flux_right = 0.25 * band_flux
+    # create a simulated mock images for WP1 and WP2
+    #left PSF should have count of 150 photo electrons
+    #right PSF should have count of 50 photo electons
+    flux_image_WP1 = create_pol_flux_image(
+        band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL0', target_name='Vega',
+        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
+        background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
+    flux_image_WP2 = create_pol_flux_image(
+        band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL45', target_name='Vega',
+        fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
+        background=0, add_gauss_noise=True, noise_scale=1., file_save=True)
+    assert isinstance(flux_image_WP1, Image)
+    assert isinstance(flux_image_WP2, Image)
+    sigma = fwhm/(2.*np.sqrt(2*np.log(2)))
+    radius = 3.* sigma
+
+    #Test the aperture photometry for each polarization state
+    #The error of one pixel is 1, so the error of the aperture sum should be: 
+    error_sum = np.sqrt(np.pi * radius * radius)
+    [flux_el_pol0, flux_err_pol0] = fluxcal.aper_phot(flux_image_WP1, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(340, 512))
+    [flux_el_pol90, flux_err_pol90] = fluxcal.aper_phot(flux_image_WP1, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(684, 512))
+    [flux_el_pol45, flux_err_pol45] = fluxcal.aper_phot(flux_image_WP2, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(390, 634))
+    [flux_el_pol135, flux_err_pol135] = fluxcal.aper_phot(flux_image_WP2, radius, frac_enc_energy=0.997, method='subpixel', subpixels=5,
+              background_sub=False, r_in=5, r_out=10, centering_method='xy', centroid_roi_radius=5, centering_initial_guess=(634, 390))
+    #150 is the input count of photo electrons for 0 and 45
+    #50 is the input count of phot electrons for 90 and 135
+    assert flux_el_pol0== pytest.approx(150, rel = 0.05)
+    assert flux_el_pol45== pytest.approx(150, rel = 0.05)
+    assert flux_el_pol90== pytest.approx(50, rel = 0.05)
+    assert flux_el_pol135== pytest.approx(50, rel = 0.05)
+    assert flux_err_pol0 == pytest.approx(error_sum, rel = 0.05)
+    assert flux_err_pol45 == pytest.approx(error_sum, rel = 0.05)
+    assert flux_err_pol90 == pytest.approx(error_sum, rel = 0.05)
+    assert flux_err_pol135 == pytest.approx(error_sum, rel = 0.05)
     
 if __name__ == '__main__':
     test_get_filter_name()
@@ -410,6 +475,7 @@ if __name__ == '__main__':
     test_app_mag()
     test_fluxcal_file()
     test_abs_fluxcal()
+    test_pol_abs_fluxcal()
 
 
 

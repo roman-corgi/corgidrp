@@ -553,7 +553,7 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
 
     return fluxcal_obj
 
-def calibrate_fluxcal_aper_pol(dataset_or_image, image_center, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
+def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
     """
     Same overall process as calibrate_fluxcal_aper, adapted for polarimetric images 
     from WP1 or WP2 with two apertures instead of one.
