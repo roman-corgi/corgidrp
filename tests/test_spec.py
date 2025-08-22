@@ -420,6 +420,7 @@ def test_determine_zeropoint():
     # the zero offset template image is our fake satspot observation in the slit center
     assert(offset_cent.get("xoffset")[12] == 0.)
     assert(offset_cent.get("yoffset")[12] == 0.)
+    slit_x = initial_cent.get("xcent")[12]
     slit_y = initial_cent.get("ycent")[12]
     
     ext_hdr['DPAMNAME'] = 'PRISM3'
@@ -445,6 +446,7 @@ def test_determine_zeropoint():
         image.ext_hdr['CFAMNAME'] = '3d'
         psf_images.append(image)
 
+
     input_dataset = Dataset(psf_images)
     dataset = l3_to_l4.determine_wave_zeropoint(input_dataset)
 
@@ -460,6 +462,13 @@ def test_determine_zeropoint():
 
     x0 = frame.ext_hdr["X0"]
     y0 = frame.ext_hdr["Y0"]
+    x0err = frame.ext_hdr["x0err"]
+    y0err = frame.ext_hdr["y0err"]
+    errortol_pix = 0.5
+    assert x0 == pytest.approx(slit_x, abs = errortol_pix)
+    assert y0 == pytest.approx(slit_y, abs = errortol_pix)
+    assert x0err < errortol_pix
+    assert y0err < errortol_pix
     
     #to test the accuracy add noise to the templates
     read_noise = 200
@@ -473,7 +482,6 @@ def test_determine_zeropoint():
     temp_peak_pix_snr = np.max(input_dataset[12].data/3)/read_noise
     
     halfwidth = 12
-    errortol_pix = 0.5
     xmin_cut, xmax_cut = (int(x0) - halfwidth, int(x0) + halfwidth)
     ymin_cut, ymax_cut = (int(y0) - halfwidth, int(y0) + halfwidth) 
 
