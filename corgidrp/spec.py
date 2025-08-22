@@ -741,4 +741,110 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
+def star_spectrum_registration(dataset_fsm, dataset_template, errortol_pix=0.5):
+    """ This step function addresses:
+
+      CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
+      unocculted star observed through the FSAM slit mask, observed with the
+      same CFAM filter, and acquired over a grid of FSM offsets and (2) an
+      estimate of the spectroscopic target source position on EXCAM and its
+      alignment error from the FSAM slit, the CTC GSW should identify the
+      dispersed star image whose PSF-to-FSAM slit alignment most closely matches
+      that of the target source.
+
+      NOTE: This calibration is repeated for each roll angle in the observation
+      campaign
+  
+    Args:
+      dataset_fsm (Dataset): Dataset containing a series of L2b cleaned images of a
+        prism-dispersed unocculted star observed through the FSAM slit mask,
+        observed with the same CFAM filter, and acquired over a grid of FSM
+        offsets. By default, the grid of FSM offsets spans a 3×3 FSM offset grid. 
+        Each of the L2b images must have the following header keywords:
+          – FSMX, FSMY (float64)
+          – CFAMNAME (same for all images)
+          – FSAMNAME = slit
+          – STARLOCX, STARLOCY (target source estimate)
+      dataset_template (Dataset): Dataset containing the star spectrum that is
+        used as a template to find the image in the dataset_fsm that best
+        matches it.
+      errortol_pix (numpy.float): Tolerance on the registration offset between
+        the noisy spectrum image and the best-matched template.
+
+    Returns:
+      Spectroscopy slit calibration product FITS file with:
+        HDU0 = header only
+        HDU1 = binary table containing: 
+          • best_fsmx, best_fsmy (float64): offsets of best-matching image
+          • align_err_x, align_err_y (float64): alignment error values
+          • best_file (string): filename of best-matching image (also written to HISTORY)
+        HDU2 = header only (for consistency)
+        HDU3 = header only (for consistency)
+      
+    """
+    # Confirm Spectroscopy configuration
+    cfam_name = dataset[0].ext_hdr['CFAMNAME']
+    if cfam_name.find('3') != -1:
+        dpam_name = 'PRISM3'
+        # fsam_name = []
+    elif cfam_name.find('2') != -1:
+        dpam_name = 'PRISM2'
+        # fsam_name = []
+    else:
+        raise ValueError('{cfam_name} is not a spectroscopy filter')
+    # fpam_name = []
+    # spam = 
+    # lsam =
+
+    for img in dataset_fsm:
+        exthdr = img.ext_hdr
+        assert exthdr['CFAMNAME'] == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'] == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        # assert exthdr['FSAMNAME'] in fsma_name, f"FSAMNAME={exthdr['FSAMNAME'] differs from expcted values: {fsam_name}""
+
+        # Confirm presence of FSMX, FSMY
+        assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
+        # Confirm presence of STARLOCX, STARLOCY 
+        assert 'STARLOCX' in exthdr.keys() and 'STARLOCY' in exthdr.keys(), 'Missing STARLOCX/Y'
+
+    # TODO: If the template is more than one image (?), then, perform a double loop
+
+
+    # Get Wavelength zero-point from the header information
+    zeropt_x, zeropt_y = 0, 0 # Replace once the zero-point is done
+
+    # Find best PSF centroid fit for each image compared to the template
+    # TODO: set the input parameters that have some prior information
+    # Any large value (pixels) that is impossible
+    zeropt_dist = 1e8
+    for img in dataset_fsm:
+        (xfit, yfit,
+         _, _,
+         _,
+         xprecis, yprecis) = fit_psf_centroid(image, dataset_template[0].data,
+                     xcent_template = None, ycent_template = None,
+                     xcent_guess = None, ycent_guess = None,
+                     halfwidth = 10, halfheight = 10,
+                     fwhm_major_guess = 3, fwhm_minor_guess = 6,
+                     gauss2d_oversample = 9):
+
+        #TODO: Verify if best-matching image is wrt zero-point
+        zeropt_dist_img = np.sqrt((xfit-zeropt_x)**2 + (yfit-zeropt_y)**2)
+        if zeropt_dist_img < zeropt_dist:
+            zeropt_dist = zeropt_dist_img
+            img_best = img
+            img_best['best_fsmx'] = xfit
+            img_best['best_fsmy'] = yfit
+            img_best['align_err_x'] = xprecis
+            img_best['align_err_y'] = yprecis
+            # TODO: double check
+            img_best['best_file'] = img_best.filename
+        
+    # Check that there's at least one solution
+    assert img_best in locals(), 'No suitable best image found.'        
+
+    # TODO: Check this works
+    breakpoint()
+    return Dataset(img_best['best_file'])
+
 
