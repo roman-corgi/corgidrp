@@ -618,6 +618,7 @@ def calibrate_fluxcal_aper_pol(dataset_or_image, image_center, calspec_file = No
         centering_initial_guess_beam_2 = (image_center[0] + 122, image_center[1] - 122)
     else:
         raise ValueError('input dataset must be a polarimetric observation')
+    #ensure xy centering method is used with estimated centers for aperture photometry
     if phot_kwargs is None:
         phot_kwargs_beam_1 = {
             'encircled_radius': 5,
@@ -681,6 +682,7 @@ def calibrate_fluxcal_aper_pol(dataset_or_image, image_center, calspec_file = No
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
+    #calculate flux from both apertures
     result_beam_1 = aper_phot(image, **phot_kwargs_beam_1)
     result_beam_2 = aper_phot(image, **phot_kwargs_beam_2)
     if phot_kwargs.get('background_sub', False):
