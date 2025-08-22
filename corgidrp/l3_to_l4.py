@@ -14,11 +14,10 @@ from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
 import numpy as np
-import pyklip.rdi
 import os
 from astropy.io import fits
 from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
-from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model, create_wave_cal, read_cent_wave
+from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
 
 
 def distortion_correction(input_dataset, astrom_calibration):

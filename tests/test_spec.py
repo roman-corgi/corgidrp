@@ -8,6 +8,7 @@ import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
+from scipy.signal import correlate2d
 
 datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy"))
@@ -409,6 +410,18 @@ def test_determine_zeropoint():
         "xcent": np.array(psf_table["xcent"]),
         "ycent": np.array(psf_table["ycent"])
     }
+    offset_cent = {
+        "xoffset": np.array(psf_table["xoffset"]),
+        "yoffset": np.array(psf_table["yoffset"])
+    }
+    # Use the position for the zero-offset PSF template to set the projected,
+    # vertical slit position on the image array. This should be in the exact
+    # center of the array. 
+    # the zero offset template image is our fake satspot observation in the slit center
+    assert(offset_cent.get("xoffset")[12] == 0.)
+    assert(offset_cent.get("yoffset")[12] == 0.)
+    slit_y = initial_cent.get("ycent")[12]
+    
     ext_hdr['DPAMNAME'] = 'PRISM3'
     ext_hdr['FSAMNAME'] = 'R1C2'
     psf_images = []
@@ -434,6 +447,7 @@ def test_determine_zeropoint():
 
     input_dataset = Dataset(psf_images)
     dataset = l3_to_l4.determine_wave_zeropoint(input_dataset)
+
     for frame in dataset:
         assert frame.pri_hdr["SATSPOTS"] == 0
         assert frame.ext_hdr["WAVLEN0"] == 753.83
@@ -443,6 +457,51 @@ def test_determine_zeropoint():
         assert "Y0ERR" in frame.ext_hdr
         assert frame.ext_hdr["SHAPEX0"] == 81
         assert frame.ext_hdr["SHAPEY0"] == 81
+
+    x0 = frame.ext_hdr["X0"]
+    y0 = frame.ext_hdr["Y0"]
+    
+    #to test the accuracy add noise to the templates
+    read_noise = 200
+    num_rand_realiz = 5 # number of random realizations per offset position
+    num_trials = len(input_dataset) * num_rand_realiz
+    np.random.seed(0)
+
+    source_to_slit_offset_errs = [] 
+    peak_pix_snrs = []
+    
+    temp_peak_pix_snr = np.max(input_dataset[12].data/3)/read_noise
+    
+    halfwidth = 12
+    errortol_pix = 0.5
+    xmin_cut, xmax_cut = (int(x0) - halfwidth, int(x0) + halfwidth)
+    ymin_cut, ymax_cut = (int(y0) - halfwidth, int(y0) + halfwidth) 
+
+    for offset_idx in range(len(input_dataset)):
+        source_to_slit_offset_true = initial_cent.get("ycent")[offset_idx] - slit_y
+        for rr in range(num_rand_realiz):
+            zeropt_img = (np.random.poisson(np.abs(input_dataset[offset_idx].data)/3) 
+                        + np.random.normal(loc=0, scale=read_noise, 
+                          size = input_dataset[offset_idx].data.shape))
+            zeropt_stamp = zeropt_img[ymin_cut:ymax_cut+1, xmin_cut:xmax_cut+1]
+
+            # Cross-correlate the noisy zero-point spot image and the templates to
+            # estimate the best match.
+            peak_cross = []
+            for jj in range(len(input_dataset)):
+                template_stamp = input_dataset[jj].data[ymin_cut:ymax_cut+1, xmin_cut:xmax_cut+1]
+                crosscorr_arr = correlate2d(template_stamp, zeropt_stamp)
+                peak_cross.append(np.max(crosscorr_arr))
+            peak_row = np.argmax(peak_cross)
+            # Now use the best-matched template to fit the PSF centroid.
+            source_to_slit_offset_est = offset_cent.get("yoffset")[peak_row] - slit_y
+            source_to_slit_offset_errs.append(source_to_slit_offset_est - source_to_slit_offset_true)
+            peak_pix_snrs.append(np.max(zeropt_img) / read_noise)
+
+    print(f"Mean peak pixel SNR = {np.mean(peak_pix_snrs):.1f}")
+    print(f"Std of {num_trials:d} source-to-slit vertical offset errors: {np.std(source_to_slit_offset_errs):.2f} pixels")
+    assert np.mean(peak_pix_snrs) == pytest.approx(temp_peak_pix_snr, abs=0.5)
+    assert np.std(source_to_slit_offset_errs) == pytest.approx(0, abs=errortol_pix)
     
     
 if __name__ == "__main__":
