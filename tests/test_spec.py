@@ -3,17 +3,17 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, Image, DispersionModel
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L1_headers
 from corgidrp.spec import get_template_dataset
+import corgidrp.l3_to_l4 as l3_to_l4
 
 datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy"))
 template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
-
 
 def convert_tvac_to_dataset():
     """
@@ -70,8 +70,8 @@ def convert_tvac_to_dataset():
                 file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
         
         #for now only one image needed as template
-        dataset = Dataset([psf_images[0]])
-        dataset.save(filedir=template_dir, filenames = [file_names[0]])
+        dataset = Dataset([psf_images[12]])
+        dataset.save(filedir=template_dir, filenames = [file_names[12]])
     
     file_path_filtersweep = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits")
     psf_array = fits.getdata(file_path_filtersweep, ext = 0)
@@ -130,8 +130,6 @@ def test_psf_centroid():
     with fits.open(file_path) as hdul:
         psf_array = hdul[0].data
         psf_table = Table(hdul[1].data)
-        #pri_hdr = hdul[0].header
-        #ext_hdr = hdul[1].header
 
     assert psf_array.ndim == 3, "Expected 3D PSF array"
     assert "xcent" in psf_table.colnames and "ycent" in psf_table.colnames, "Missing centroid columns"
@@ -248,19 +246,28 @@ def test_dispersion_model():
     assert np.array_equal(load_disp.wavlen_vs_pos_cov, disp_dict.get('wavlen_vs_pos_cov'))
 
 def test_read_cent_wave():
-    band_file = os.path.join(spec_datadir, 'CGI_bandpass_centers.csv')
-    cen_wave = steps.read_cent_wave(band_file, '3C')
+    cen_wave = steps.read_cent_wave('3C')[0]
     assert cen_wave == 726.0
-    cen_wave = steps.read_cent_wave(band_file, '3G')
-    assert cen_wave == 752.5
+    cen_wave_list = steps.read_cent_wave('3G')
+    assert cen_wave_list[0] == 752.5
+    assert len(cen_wave_list) == 4
     with pytest.raises(ValueError):
-        cen_wave = steps.read_cent_wave(band_file, 'X')
+        cen_wave = steps.read_cent_wave('X')[0]
+    
+    cen_wave_list = steps.read_cent_wave('3')
+    assert len(cen_wave_list) == 4
+    assert cen_wave_list[0] == 729.3
+    assert cen_wave_list[1] == 122.3
+    assert cen_wave_list[2] == 0.725909
+    assert cen_wave_list[3] == -0.09398
+    
     
 def test_calibrate_dispersion_model():    
     """
     Test PSF dispersion computation with mock data and assert correctness of output FITS structure.
     """
     
+    global disp_model
     file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
@@ -300,27 +307,19 @@ def test_calibrate_dispersion_model():
     psf_centroid = steps.compute_psf_centroid(
         dataset=dataset
     )
-    #calibrate dispersion without the broad band fit
-    psf_centroid.xfit = psf_centroid.xfit[:-1] - (np.array(psf_table['xoffset'])[:-1] - np.array(psf_table['xoffset'])[-1])
-    psf_centroid.yfit = psf_centroid.yfit[:-1] - (np.array(psf_table['yoffset'])[:-1] - np.array(psf_table['yoffset'])[-1])
-    psf_centroid.xfit_err = psf_centroid.xfit_err[:-1]
-    psf_centroid.yfit_err = psf_centroid.yfit_err[:-1]
     
-    disp_model = steps.calibrate_dispersion_model(psf_centroid, prism = 'PRISM3')
+    disp_model = steps.calibrate_dispersion_model(psf_centroid)
     disp_model.save(output_dir, disp_model.filename)
     assert disp_model.filename.startswith("DispersionModel")
     assert disp_model.clocking_angle == pytest.approx(psf_header["PRISMANG"], abs = 2 * disp_model.clocking_angle_uncertainty) 
     
-    pos_func_wavlen = np.poly1d(disp_model.pos_vs_wavlen_polycoeff)
     wavlen_func_pos = np.poly1d(disp_model.wavlen_vs_pos_polycoeff)
     
     #read the TVAC result of PRISM3 and compare
-    ref_wavlen = 730.0
+    ref_wavlen = 730.
     bandpass = [675, 785]  
     tvac_pos_vs_wavlen_polycoeff = disp_dict.get('pos_vs_wavlen_polycoeff')
-    tvac_pos_vs_wavlen_cov = disp_dict.get('pos_vs_wavlen_cov')
     tvac_wavlen_vs_pos_polycoeff = disp_dict.get('wavlen_vs_pos_polycoeff')
-    tvac_wavlen_vs_pos_cov = disp_dict.get('wavlen_vs_pos_cov')
     tvac_pos_func_wavlen = np.poly1d(tvac_pos_vs_wavlen_polycoeff)
     tvac_wavlen_func_pos = np.poly1d(tvac_wavlen_vs_pos_polycoeff)
     
@@ -334,6 +333,64 @@ def test_calibrate_dispersion_model():
     print(f"Worst case wavelength disagreement from the test input model: {worst_case_wavlen_error:.2f} nm")
     assert worst_case_wavlen_error == pytest.approx(0, abs=0.5)
     print("Dispersion profile fit test passed.")
+
+def test_add_wavelength_map():
+    """
+    test l3_to_l4.add_wavelength_map(), the generation of the wavelength map extensions
+    this test requires running test_calibrate_dispersion_model() beforehand, since the function 
+    needs the DispersionModel calibration file as input
+    """
+    # invented wavelength zero point
+    wave_0 = {"wavlen": 753.83,
+              'x': 40.,
+              'xerr': 0.1,
+              'y': 32.,
+              'yerr': 0.1,
+              'shapex': 81,
+              'shapey': 81}
+    
+    ref_wavlen = disp_model.ext_hdr["REFWAVE"]
+    filepath = os.path.join(spec_datadir, "templates", "spec_unocc_noslit_offset_prism3_3d_12.fits")
+    image = Image(filepath)
+    image.ext_hdr['wavlen0'] = wave_0.get('wavlen')
+    image.ext_hdr['x0'] = wave_0.get('x')
+    image.ext_hdr['x0err'] = wave_0.get('xerr')
+    image.ext_hdr['y0'] = wave_0.get('y')
+    image.ext_hdr['y0err'] = wave_0.get('yerr')
+    image.ext_hdr['shapex0'] = wave_0.get('shapex')
+    image.ext_hdr['shapey0'] = wave_0.get('shapey')
+    dataset = Dataset([image])
+    
+    output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
+    
+    out_im = output_dataset.frames[0]
+    wave = out_im.hdu_list["wave"].data
+    assert wave.shape == (wave_0.get('shapex'), wave_0.get('shapey'))
+    wave_err = out_im.hdu_list["wave_err"].data
+    assert wave_err.shape == (wave_0.get('shapex'), wave_0.get('shapey'))
+    # assert that the wavelengths are within bandpass 3
+    assert ref_wavlen > np.min(wave) and ref_wavlen < np.max(wave)
+    assert wave_0.get('wavlen') > np.min(wave) and  wave_0.get('wavlen') < np.max(wave)
+    #show that the ref_wavlen is approx. in the center of the array and the narrow band center wavelength at the max of the psf
+    c_max = np.where(image.data == np.max(image.data))
+    wave_center_band = wave[c_max[0][0],c_max[1][0]]
+    wave_ref_band = wave[40,40]
+    assert wave_0.get('wavlen') == pytest.approx(wave_center_band, abs = 0.1) 
+    assert ref_wavlen == pytest.approx(wave_ref_band, abs = 1.5)
+    assert wave_err.shape[0] == wave_0.get("shapex")
+    assert wave_err.shape[1] == wave_0.get("shapey")
+    wave_hdr = out_im.hdu_list["wave"].header
+    #position of ref wavelength should be in array center 
+    assert wave_hdr["XREFWAV"] == pytest.approx(40, abs = 1.)
+    assert wave_hdr["YREFWAV"] == pytest.approx(40, abs = 1.)
+    assert wave_hdr["REFWAVE"] ==730.
+
+    #Worst case wavelength uncertainty should be smaller than 1 nm
+    assert np.max(wave_err) == pytest.approx(0., abs = 1.)
+    pos_lookup = Table(out_im.hdu_list["poslookup"].data)
+    assert len(pos_lookup.colnames) == 5
+    assert np.allclose(pos_lookup.columns[0].data, ref_wavlen, atol = 65)
+    
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
@@ -341,3 +398,4 @@ if __name__ == "__main__":
     test_dispersion_model()
     test_read_cent_wave()
     test_calibrate_dispersion_model()
+    test_add_wavelength_map()

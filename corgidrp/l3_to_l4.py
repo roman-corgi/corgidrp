@@ -10,6 +10,7 @@ from corgidrp import star_center
 import corgidrp
 from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
+from corgidrp.spec import create_wave_cal
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 import warnings
@@ -525,12 +526,16 @@ def do_psf_subtraction(input_dataset,
         unique_vals = np.array(unique_vals)
 
         if 0. in unique_vals:
-            sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0].item())]
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=DeprecationWarning)
+                sci_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 0)[0])]
         else:
             raise UserWarning('No science files found in input dataset.')
 
         if 1. in unique_vals:
-            ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0].item())]
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=DeprecationWarning)
+                ref_dataset = split_datasets[int(np.nonzero(np.array(unique_vals) == 1)[0])]
         else:
             ref_dataset = None
 
@@ -807,6 +812,54 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
                                                    new_all_dq=np.array(new_all_dq))
 
     return processed_dataset 
+
+
+def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials = 1000):
+    """
+    add_wavelength_map adds the wavelength map + error and the position lookup table as extensions to the frames
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of spectroscopy Images (L3-level)
+        disp_model (corgidrp.data.DispersionModel): dispersion model of the corresponding band
+        pixel_pitch_um (float): EXCAM pixel pitch in microns, default: 13.0
+        ntrials (int): number of trials when applying a Monte Carlo error propagation to estimate the uncertainties of the
+                       values in the wavelength calibration map
+
+    Returns:
+        corgidrp.data.Dataset: dataset with appended wavelength map and error
+    """
+    dataset = input_dataset.copy()
+    
+    for frames in dataset:
+        #get the corgidrp.data.Dataset:wavelength zeropoint information from the input science frames header
+        head = frames.ext_hdr
+        wave_zero = {
+        'wavlen': head['wavlen0'],
+        'x' : head['x0'],
+        'xerr': head['x0err'],
+        'y': head['y0'],
+        'yerr': head['y0err'],
+        'shapex': head['shapex0'],
+        'shapey': head['shapey0']
+        }
+    
+        wave_map, wave_err, pos_lookup, x_refwav, y_refwav = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um, ntrials = ntrials)
+        wave_hdr = fits.Header()
+        wave_hdr["BUNIT"] = "nm"
+        wave_hdr["REFWAVE"] = disp_model.ext_hdr["REFWAVE"]
+        wave_hdr["XREFWAV"] = x_refwav
+        wave_hdr["YREFWAV"] = y_refwav
+        wave_err_hdr = fits.Header()
+        wave_err_hdr["BUNIT"] = "nm"
+        frames.add_extension_hdu("WAVE" ,data = wave_map, header = wave_hdr)
+        frames.add_extension_hdu("WAVE_ERR", data = wave_err, header = wave_err_hdr)
+        pos_hdu = fits.BinTableHDU(data = pos_lookup, header = fits.Header(), name = "POSLOOKUP")
+        frames.hdu_list.append(pos_hdu.copy())
+        frames.hdu_names.append("POSLOOKUP")
+    
+    history_msg = "wavelength map and position lookup table extension added"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
 
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
