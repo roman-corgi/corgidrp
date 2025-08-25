@@ -151,6 +151,13 @@ def test_nonlin_cal_e2e(
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=e2eoutput_path, filename="mock_kgain.fits")
+    
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(kgain)
     this_caldb.create_entry(detector_params)
@@ -208,11 +215,9 @@ def test_nonlin_cal_e2e(
     # Set a quantitative test for the comparison
     assert np.less(np.abs(rel_out_tvac_perc).max(), 1e-4)
 
-    # remove entry from caldb
-    nonlin_entry = data.NonLinearityCalibration(os.path.join(e2eoutput_path, nonlin_drp_filename))
-    this_caldb.remove_entry(nonlin_entry)
-    this_caldb.remove_entry(kgain)
-   # Print success message
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+    # Print success message
     print('e2e test for NL passed')
 
 if __name__ == "__main__":

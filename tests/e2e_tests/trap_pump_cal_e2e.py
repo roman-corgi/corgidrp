@@ -212,6 +212,12 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     
 
     # add calibration files to caldb
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     if e2e:
         this_caldb.create_entry(nonlinear_cal)
@@ -229,14 +235,14 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
         walker.run_recipe(recipe)
     if e2e:
-        template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_e2e.json"), 'r'))
-        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
+        #template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_e2e.json"), 'r'))
+        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir)
+        ### Modify they keywords of some of the steps
+        for step in recipe[0]['steps']:
+            if step['name'] == "calibrate_trap_pump":
+                step['keywords']['bin_size'] = None 
         walker.run_recipe(recipe)
 
-
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(noise_maps)
     # find cal file (naming convention for data.TrapCalibration class)
     for f in os.listdir(trap_pump_outputdir):
         if f.endswith('_tpu_cal.fits'):
@@ -290,9 +296,9 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     # trap densities should all match if the above passes; that was tested in II&T tests mainly 
     # b/c all the outputs of the trap-pump function were tested
 
-    # remove generated calibration from caldb
-    this_cal = data.TrapCalibration(generated_trapcal_file)
-    this_caldb.remove_entry(this_cal)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -301,7 +307,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/' #'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     if False: # making e2e simulated data, which is ENG and includes nonlinearity
         nonlin_path = os.path.join(e2edata_dir, "TV-36_Coronagraphic_Data", "Cals", "nonlin_table_240322.txt")

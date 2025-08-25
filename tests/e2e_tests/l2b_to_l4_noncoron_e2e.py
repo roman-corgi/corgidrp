@@ -2,6 +2,7 @@ import argparse
 import os
 import numpy as np
 from astropy.io import fits
+import corgidrp
 from corgidrp.data import Image
 from corgidrp.mocks import (create_default_L2b_headers, create_default_L3_headers, 
                             create_synthetic_satellite_spot_image, create_ct_psfs)
@@ -75,6 +76,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     astrom_cal.save(filedir=e2eoutput_path, filename="mock_astro.fits" )
 
     # add calibration file to caldb
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(astrom_cal)
 
@@ -173,7 +179,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
     #Clean up
-    this_caldb.remove_entry(astrom_cal)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
     shutil.rmtree(e2e_data_path)
     # shutil.rmtree(e2eoutput_path)
     
@@ -227,6 +234,11 @@ def test_l3_to_l4(e2eoutput_path):
     astrom_cal.save(filedir=e2eoutput_path_l4, filename="mock_astro.fits" )
 
     # add calibration file to caldb
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(astrom_cal)
 
@@ -282,10 +294,8 @@ def test_l3_to_l4(e2eoutput_path):
     assert combined_image.ext_hdr['FILE3'] in input_filenames
     assert combined_image.ext_hdr['FILE4'] in input_filenames
 
-
-    #Clean up
-    this_caldb.remove_entry(astrom_cal)
-    this_caldb.remove_entry(fluxcal_fac)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
     # shutil.rmtree(e2eoutput_path_l4)
     # shutil.rmtree(e2eintput_path)
 

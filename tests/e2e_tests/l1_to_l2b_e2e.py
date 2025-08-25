@@ -131,11 +131,14 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
+
     # create a DetectorParams object and save it
     detector_params = data.DetectorParams({})
     detector_params.save(filedir=test_outputdir, filename="detector_params.fits")
@@ -249,15 +252,6 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
     walker.walk_corgidrp(new_l2a_filenames, "", l2b_outputdir)
 
-
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(noise_map)
-    this_caldb.remove_entry(flat)
-    this_caldb.remove_entry(bp_map)
-    this_caldb.remove_entry(detector_params)
-
     ##### Check against TVAC data
     # l2a data
     for new_filename, tvac_filename in zip(sorted(new_l2a_filenames), sorted(tvac_l2a_filelist)):
@@ -311,6 +305,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         # plt.ylim([475, 535])
 
         # plt.show()
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

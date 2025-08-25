@@ -53,6 +53,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
     # remove other calibrations that may exist in case they don't have the added header keywords
     for i in range(len(this_caldb._db['Type'])):
@@ -188,17 +194,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
 
-    # load in CalDB again to reflect the PC Dark that was implicitly added in (but not found in this_caldb, which was loaded before the Dark was created)
-    post_caldb = caldb.CalDB()
-    post_caldb.remove_entry(kgain)
-    post_caldb.remove_entry(noise_map)
-    post_caldb.remove_entry(new_nonlinearity)
-    post_caldb.remove_entry(flat)
-    post_caldb.remove_entry(bp_map)
-    post_caldb.remove_entry(detector_params)
-    for filepath in master_dark_filepath_list:
-        pc_dark = data.Dark(filepath)
-        post_caldb.remove_entry(pc_dark)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+
 
 
 if __name__ == "__main__":
@@ -209,7 +207,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,

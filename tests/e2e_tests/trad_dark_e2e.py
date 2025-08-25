@@ -115,18 +115,14 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     for f in os.listdir(build_trad_dark_outputdir):
         os.remove(os.path.join(build_trad_dark_outputdir, f))
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'Dark':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'DetectorNoiseMaps':
-            this_caldb._db = this_caldb._db.drop(i)        
-    this_caldb.save()
+
 
     # define the raw science data to process
     trad_dark_data_filelist = []
@@ -221,11 +217,6 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
     walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_full_frame.json")
 
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(noise_maps)
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(detector_params)
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
         if f.endswith('_drk_cal.fits'):
@@ -282,10 +273,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     pass
-    trad_dark = data.Dark(generated_trad_dark_file)
     
-    # remove from caldb
-    this_caldb.remove_entry(trad_dark)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 
 @pytest.mark.e2e
@@ -317,21 +307,14 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # remove any files in the output directory that may have been there previously
     for f in os.listdir(build_trad_dark_outputdir):
         os.remove(os.path.join(build_trad_dark_outputdir, f))
-
+    
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'Dark':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'DetectorNoiseMaps':
-            this_caldb._db = this_caldb._db.drop(i)     
-        elif this_caldb._db['Type'][i] == 'DetectorParams':
-            this_caldb._db = this_caldb._db.drop(i)     
-    this_caldb.save()
 
     # define the raw science data to process
     trad_dark_data_filelist = []
@@ -425,11 +408,6 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
     walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_image.json")
 
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(noise_maps)
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(detector_params)
     # find cal file (naming convention for data.Dark class)
     for f in os.listdir(build_trad_dark_outputdir):
         if f.endswith('_drk_cal.fits'):
@@ -494,8 +472,8 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     assert(trad_dark.filename == test_filename)
     pass
 
-    # remove from caldb
-    this_caldb.remove_entry(trad_dark)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 
 if __name__ == "__main__":

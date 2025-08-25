@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import colors
 from astropy.io import fits
+import corgidrp
 from corgidrp import data
 from corgidrp import caldb
 from corgidrp import detector
@@ -91,6 +92,11 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
     # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
     # Load and combine noise maps from various calibration files into a single array
@@ -230,6 +236,8 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         plt.savefig(output_path)
 
     this_caldb.remove_entry(generated_bp_map_img)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 @pytest.mark.e2e
 def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
@@ -260,6 +268,11 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
     # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
     ## Load and save flat field calibration data
@@ -353,6 +366,8 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         plt.savefig(output_path)
     
     this_caldb.remove_entry(generated_bp_map_img)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments

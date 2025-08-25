@@ -113,6 +113,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     det_params = data.DetectorParams({})
+    det_params.save(filedir=noisemap_outputdir, filename="mock_det_params.fits")
     fwc_pp_e = int(det_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
     fwc_em_e = int(det_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
     telem_rows_start = det_params.params['TELRSTRT']
@@ -172,12 +173,17 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         os.remove(old_DNM)
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
+
+    det_params.save(filedir=noisemap_outputdir, filename="mock_det_params.fits")
     this_caldb.create_entry(det_params)
+
     pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
@@ -220,10 +226,6 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     walker.run_recipe(recipe, save_recipe_file=True)
     #walker.walk_corgidrp(stack_arr_files, "", noisemap_outputdir,template=template)
 
-    # clean up by removing entry
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(nonlinear_cal)
-
     ##### Check against II&T ("TVAC") data
     for f in os.listdir(noisemap_outputdir):
         if f.endswith('_dnm_cal.fits'):
@@ -239,7 +241,6 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     assert(np.abs(corgidrp_noisemap.ext_hdr['B_O']- bias_offset) < 1e-9)
     pass
 
-    this_caldb.remove_entry(corgidrp_noisemap)
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
         # corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
         # iit_dat = detector.imaging_slice('SCI', iit_noisemap.__dict__[noise_ext])
@@ -279,6 +280,9 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
         # plt.close()
 
         # assert np.all(np.abs(diff) < 1e-5)
+    
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 @pytest.mark.e2e
 def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
@@ -390,14 +394,16 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         os.remove(old_DNM)
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'Dark':
-            this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
+    
+    det_params.save(filedir=noisemap_outputdir, filename="mock_det_params.fits")
+    this_caldb.create_entry(det_params)
     # KGain calibration
     kgain_val = 8.7 # From TVAC-20 noise characterization measurements
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
@@ -429,9 +435,6 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
             output_filename = f
             break
 
-    # clean up by removing entry
-    this_caldb.remove_entry(kgain)
-
     ##### Check against II&T ("TVAC") data
     corgidrp_noisemap_fname = os.path.join(noisemap_outputdir,output_filename)
 
@@ -449,9 +452,6 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     mock_dataset = mocks.create_prescan_files() # dummy dataset with an EM gain and exposure time for creating synthesized dark
     master_dark = build_synthesized_dark(mock_dataset, corgidrp_noisemap)
     master_dark.save(filedir=noisemap_outputdir)
-
-    # remove from caldb
-    this_caldb.remove_entry(corgidrp_noisemap)
     
     # for noise_ext in ["FPN_map","CIC_map","DC_map"]:
         # corgi_dat = detector.imaging_slice('SCI', corgidrp_noisemap.__dict__[noise_ext])
@@ -495,6 +495,9 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         # plt.close()
 
         # assert np.all(np.abs(diff) < 1e-5)
+    
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

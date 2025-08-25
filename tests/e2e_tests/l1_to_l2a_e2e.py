@@ -126,14 +126,13 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
 
     ###### Setup necessary calibration files
     # add calibration file to caldb
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
-    # remove other calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
-            this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
     # Create necessary calibration files
     # we are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
@@ -150,6 +149,10 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     nonlinear_cal.save(filedir=l2a_outputdir, filename="mock_nonlinearcal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
+    # DetectorParams
+    det_params = data.DetectorParams({})
+    det_params.save(filedir=l2a_outputdir, filename="mock_detparams.fits")
+    this_caldb.create_entry(det_params)
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:
@@ -184,11 +187,6 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(l1_data_filelist, "", l2a_outputdir, template="l1_to_l2a_basic.json")
-
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(noise_map)
-    this_caldb.remove_entry(kgain)
     
     ##### Check against TVAC data
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir)] # "{0}.fits".format(i)) for i in [90499, 90500]] 
@@ -226,6 +224,9 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
         # plt.ylim([475, 535])
 
         # plt.show()
+    
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts

@@ -105,6 +105,12 @@ def test_nonlin_and_kgain_e2e(
     detector_params = data.DetectorParams({})
     detector_params.save(filedir=e2eoutput_path, filename="detector_params.fits")
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(detector_params)
 
@@ -152,10 +158,9 @@ def test_nonlin_and_kgain_e2e(
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
 
-    # remove entry from caldb
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(nonlin)
-    this_caldb.remove_entry(kgain)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+
 
    # Print success message
     print('e2e test for NL passed')

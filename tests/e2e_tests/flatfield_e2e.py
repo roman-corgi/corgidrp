@@ -138,6 +138,11 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
 
     # Nonlinearity calibration
@@ -147,13 +152,12 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
+    # DetectorParams
+    det_params = data.DetectorParams({})
+    det_params.save(filedir=flat_outputdir, filename="mock_detparams.fits")
+    this_caldb.create_entry(det_params)
+
     # KGain
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'FlatField':
-            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
     ext_hdr['RN'] = 100
@@ -215,12 +219,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(noise_map)
-    this_caldb.remove_entry(flat)
-    this_caldb.remove_entry(bpmap)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 
 @pytest.mark.e2e
@@ -324,6 +324,11 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
 
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
 
     # Nonlinearity calibration
@@ -333,13 +338,12 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
+    # DetectorParams
+    det_params = data.DetectorParams({})
+    det_params.save(filedir=flat_outputdir, filename="mock_detparams.fits")
+    this_caldb.create_entry(det_params)
+
     # KGain
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'FlatField':
-            this_caldb._db = this_caldb._db.drop(i)
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
     ext_hdr['RN'] = 100
@@ -394,12 +398,8 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     bpmap = data.BadPixelMap(os.path.join(flat_outputdir, bp_map_filename))
     assert np.all(bpmap.data == 0) # this bpmap should have no bad pixels
 
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(noise_map)
-    this_caldb.remove_entry(flat)
-    this_caldb.remove_entry(bpmap)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 
 

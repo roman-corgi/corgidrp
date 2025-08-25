@@ -42,6 +42,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(fluxcal_outputdir)
     os.mkdir(fluxcal_outputdir)
 
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+
     ####### Run the DRP walker
     print('Running walker')
     walker.walk_corgidrp(flux_data_filelist, '', fluxcal_outputdir)
@@ -54,9 +60,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     print("fluxcal factor", flux_fac.fluxcal_fac)
     print("fluxcal factor error", flux_fac.fluxcal_err)
     assert flux_fac.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac.fluxcal_err)
-    # remove entry from caldb
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(flux_fac)
+    
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
    # Print success message
     print('e2e test for flux calibration factor passed')

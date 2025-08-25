@@ -109,14 +109,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(ctmap_outputdir)
     os.mkdir(ctmap_outputdir)
     
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other calibrations that may exist
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'FpamFsamCal':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'CoreThroughputCalibration':
-            this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
+
     # Create CT cal file from the mock data directly
     ct_cal_mock = corethroughput.generate_ct_cal(corethroughput_dataset)
     # Save it
@@ -128,12 +127,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create the CT map. Do not save it. We will compare it with the map from
     # the walker
     # FPAM/FSAM
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00.00.00.000.fits")):
+        fpamfsam_2excam = data.FpamFsamCal([],
+            date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
+        fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
     fpam_fsam_cal = data.FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
-    if 'OBSNUM' not in fpam_fsam_cal.pri_hdr:
-        fpam_fsam_cal.pri_hdr['OBSNUM'] = fpam_fsam_cal.pri_hdr['OBSID']
-    if 'EMGAIN_C' not in fpam_fsam_cal.ext_hdr:
-        fpam_fsam_cal.ext_hdr['EMGAIN_C'] = fpam_fsam_cal.ext_hdr['CMDGAIN']
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     this_caldb.create_entry(fpam_fsam_cal)
     # The first entry (dataset) is only used to get the FPM's center
     ct_map_mock = corethroughput.create_ct_map(corDataset, fpam_fsam_cal,
@@ -158,14 +157,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # DQ
     assert np.all(ct_map_walker[3].data == ct_map_mock.dq)
 
-    # Clean test data
-    # Remove entry from caldb
-    corethroughput_drp_file = glob.glob(os.path.join(ctmap_outputdir,
-        '*ctp_cal*.fits'))[0]
-    ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(ct_cal_drp)
-    this_caldb.remove_entry(fpam_fsam_cal)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
     # Print success message
     print('e2e test for corethroughput map passed')

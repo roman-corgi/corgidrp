@@ -158,20 +158,13 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     fix_str_for_tvac(sim_data_filelist)
 
     ###### Setup necessary calibration files
-    this_caldb = caldb.CalDB() # connection to cal DB
-    # remove older calibrations 
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'DetectorNoiseMaps':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'FlatField':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'BadPixelMap':
-            this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()  # connection to cal DB
+
     # Create necessary calibration files
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
@@ -232,18 +225,14 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     bp_map.save(filedir=astrom_cal_outputdir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
+    # DetectorParams
+    det_params = data.DetectorParams({})
+    det_params.save(filedir=astrom_cal_outputdir, filename="mock_detparams.fits")
+    this_caldb.create_entry(det_params)
 
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
-
-
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(noise_map)
-    this_caldb.remove_entry(flat)
-    this_caldb.remove_entry(bp_map)
 
     ## Check against astrom ground truth -- target= [80.553428801, -69.514096821],
     ## plate scale = 21.8[mas/pixel], north angle = 45 [deg]
@@ -273,8 +262,9 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
-
-    this_caldb.remove_entry(astrom_cal)
+    
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     #e2edata_dir = "/Users/macuser/Roman/corgidrp_develop/calibration_notebooks/TVAC"

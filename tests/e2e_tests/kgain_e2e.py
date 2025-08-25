@@ -167,6 +167,19 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         shutil.rmtree(kgain_outputdir)
     os.mkdir(kgain_outputdir)
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()
+
+    # DetectorParams
+    det_params = data.DetectorParams({})
+    det_params.save(filedir=kgain_outputdir, filename="mock_detparams.fits")
+    this_caldb.create_entry(det_params)
+
     ####### Run the DRP walker
     print('Running walker')
     #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
@@ -200,8 +213,9 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     assert np.abs(diff_kgain) == 0
     assert np.abs(diff_readnoise) == 0 
 
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(kgain)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+
 
     
 if __name__ == "__main__":
