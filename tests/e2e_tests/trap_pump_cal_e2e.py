@@ -236,11 +236,14 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         walker.run_recipe(recipe)
     if e2e:
         #template = json.load(open(os.path.join(thisfile_dir,"trap_pump_cal_e2e.json"), 'r'))
-        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir)
+        template_path = template = os.path.join(thisfile_dir, '..', '..', 'corgidrp', 'recipe_templates', "trap_pump_cal.json")
+        template = json.load(open(template_path, 'r'))
+        recipe = walker.autogen_recipe(trap_pump_data_filelist, trap_pump_outputdir, template=template)
         ### Modify they keywords of some of the steps
-        for step in recipe[0]['steps']:
+        for step in recipe['steps']:
             if step['name'] == "calibrate_trap_pump":
-                step['keywords']['bin_size'] = None 
+                step['keywords'] = {}
+                step['keywords']['bin_size'] = None
         walker.run_recipe(recipe)
 
     # find cal file (naming convention for data.TrapCalibration class)
