@@ -2884,22 +2884,35 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     center = [nx // 2, ny // 2]  # Default image center
     target_location = (80.553428801, -69.514096821)
 
+    # Convert FSM shifts from mas to pixels
+    fsm_x_shift = fsm_x * 0.001 / (platescale * 0.001)  # Convert mas to degrees, then to pixels
+    fsm_y_shift = fsm_y * 0.001 / (platescale * 0.001)
+
+    # New star position
+    xpos = center[0] + fsm_x_shift
+    ypos = center[1] + fsm_y_shift
+
+    # Find nearest pixel
+    x_int = int(round(xpos))
+    y_int = int(round(ypos))
+
+
     # Convert flux from calspec units to photo-electrons/s
     flux_left = star_flux_left / cal_factor
     flux_right = star_flux_right / cal_factor
 
     if dpamname == 'POL0':
-        x_int_left = center[1] - 172
-        x_int_right = center[1] + 172
-        y_int_left = center[1]
-        y_int_right = center[1]
+        x_int_left = x_int - 172
+        x_int_right = x_int + 172
+        y_int_left = y_int
+        y_int_right = y_int
         dpam_h = 8991.3
         dpam_v = 1261.3
     elif dpamname == 'POL45':
-        x_int_left = center[1] - 122
-        x_int_right = center[1] + 122
-        y_int_left = center[1] + 122
-        y_int_right = center[1] - 122
+        x_int_left = x_int - 122
+        x_int_right = x_int + 122
+        y_int_left = y_int + 122
+        y_int_right = y_int - 122
         dpam_h = 44660.1
         dpam_v = 1261.3
     else:
@@ -2975,8 +2988,8 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
     exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
     exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
     exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
-    exthdr['CRPIX1']   = center[1]               # Ensure xpos is defined
-    exthdr['CRPIX2']   = center[0]               # Ensure ypos is defined
+    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
+    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
     exthdr['CTYPE1']   = 'RA---TAN'
     exthdr['CTYPE2']   = 'DEC--TAN'
     exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined

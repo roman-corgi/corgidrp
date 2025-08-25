@@ -606,6 +606,9 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = No
     if image.ext_hdr['BUNIT'] != "photoelectron/s":
         raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     #estimate the centers of the wollaston spots based on relative position from image center
+    #polarized images separated 7.5" or 344 pix on the detector (1"=0.0218 pix)
+    #WP1 output is aligned horizontally across the image center (+/- 172 pixels in the x direction)
+    #WP2 output is algined diagonally across the image center (+/- 122 pixels in the x and y direction)
     if image.ext_hdr['DPAMNAME'] == 'POL0':
         #0 degree pol PSF center estimate
         centering_initial_guess_beam_1 = (image_center[0] - 172, image_center[1])
