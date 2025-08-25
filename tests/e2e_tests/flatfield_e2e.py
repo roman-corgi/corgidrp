@@ -285,8 +285,8 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     l1_flat_dataset = []
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
-        base_image.pri_hdr['TARGET'] = "Neptune"
-        base_image.ext_hdr['CFAMNAME'] = "4F"
+        base_image.pri_hdr['TARGET'] = "Uranus"
+        base_image.ext_hdr['CFAMNAME'] = "1F"
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
