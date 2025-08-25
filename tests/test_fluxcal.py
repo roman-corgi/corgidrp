@@ -429,8 +429,8 @@ def test_pol_abs_fluxcal():
     band_flux_left = 0.6 * band_flux
     band_flux_right = 0.4 * band_flux
     # create a simulated mock images for WP1 and WP2
-    #left PSF should have count of 150 photo electrons
-    #right PSF should have count of 50 photo electons
+    #left PSF should have count of 240 photo electrons
+    #right PSF should have count of 160 photo electons
     flux_image_WP1 = create_pol_flux_image(
         band_flux_left, band_flux_right, fwhm, cal_factor, filter='3C', dpamname='POL0', target_name='Vega',
         fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=datadir, platescale=21.8,
