@@ -89,15 +89,13 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-    # figure out the base filename and filenumber from the first file in the filelist.
+    # change the UTC time using the UTC time from the first time as the start
     #start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
     #base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
     l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
     match = re.findall(r'\d{2,}', l1_dark_st_filename)
     last_num_str = match[-1] if match else None
-    start_filenum = int(last_num_str)
-    last_num_str_ind = l1_dark_st_filename.find(last_num_str)
-    base_filename = l1_dark_st_filename[:last_num_str_ind]
+    start_utc = int(last_num_str)
     l1_flat_dataset = []
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
@@ -106,7 +104,8 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
+        # add 1 millisecond each time to UTC time
+        base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -276,24 +275,23 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
-    # figure out the base filename and filenumber from the first file in the filelist.
-    # start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
-    # base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    # change the UTC time using the UTC time from the first time as the start
+    #start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
+    #base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
     l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
     match = re.findall(r'\d{2,}', l1_dark_st_filename)
     last_num_str = match[-1] if match else None
-    start_filenum = int(last_num_str)
-    last_num_str_ind = l1_dark_st_filename.find(last_num_str)
-    base_filename = l1_dark_st_filename[:last_num_str_ind]
+    start_utc = int(last_num_str)
     l1_flat_dataset = []
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
-        base_image.pri_hdr['TARGET'] = "Uranus"
-        base_image.ext_hdr['CFAMNAME'] = "1F"
+        base_image.pri_hdr['TARGET'] = "Neptune"
+        base_image.ext_hdr['CFAMNAME'] = "4F"
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        base_image.filename = base_filename + "{0:010d}.fits".format(start_filenum+i)
+        # add 1 millisecond each time to UTC time
+        base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
