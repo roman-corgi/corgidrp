@@ -175,14 +175,9 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     this_caldb = caldb.CalDB() # connection to cal DB
     # remove other KGain calibrations that may exist in case they don't have the added header keywords
     for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'Dark':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'NonLinearityCalibration':
-            this_caldb._db = this_caldb._db.drop(i)
+        this_caldb._db = this_caldb._db.drop(i)
     this_caldb.save()
-
+    this_caldb.create_entry(det_params)
     pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
