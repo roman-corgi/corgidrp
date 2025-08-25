@@ -1,2 +1,3 @@
 git+https://github.com/roman-corgi/cgi_iit_drp.git#egg=cal&subdirectory=Calibration_NTR
 git+https://github.com/roman-corgi/cgi_iit_drp.git#egg=proc_cgi_frame&subdirectory=proc_cgi_frame_NTR
+resource

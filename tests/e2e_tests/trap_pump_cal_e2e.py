@@ -17,12 +17,15 @@ try:
     from cal.tpumpanalysis.tpump_final import tpump_analysis
 except:
     pass
-# Adjust the system's limit of open files. We need to load 200 files at once. 
-# some systems don't like that. 
-import resource
 import warnings
-soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (6001, hard_limit))
+# Adjust the system's limit of open files. We need to load 200 files at once.
+# some systems don't like that.
+try: # this will fail on Windows
+    import resource
+    soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (6001, hard_limit))
+except:
+    pass
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 metadata_path = os.path.join(thisfile_dir, '..', 'test_data', "metadata_eng.yaml")
@@ -31,8 +34,8 @@ metadata_path = os.path.join(thisfile_dir, '..', 'test_data', "metadata_eng.yaml
 def fix_headers_for_tvac(
     list_of_fits,
     ):
-    """ 
-    Fixes TVAC headers to be consistent with flight headers. 
+    """
+    Fixes TVAC headers to be consistent with flight headers.
     Writes headers back to disk
 
     Args:
@@ -61,12 +64,12 @@ def fix_headers_for_tvac(
 
 @pytest.mark.e2e
 def test_trap_pump_cal(e2edata_path, e2eoutput_path):
-    '''Data is simulated using mocks.generate_mock_pump_trap_data() function, run through the DRP's trap pump calibration, and 
+    '''Data is simulated using mocks.generate_mock_pump_trap_data() function, run through the DRP's trap pump calibration, and
     compared to the results from the II&T trap pump analysis code.
 
     Args:
         e2edata_path (str): path to TVAC data root directory.
-        e2eoutput_path (str): path to output files made by this test. 
+        e2eoutput_path (str): path to output files made by this test.
     '''
     # make output directory if needed
     trap_pump_outputdir = os.path.join(e2eoutput_path, "trap_pump_cal_output")
@@ -84,20 +87,20 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
     for i in os.listdir(trap_pump_outputdir):
         # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
-        if ('Scheme_' not in i) or ('tpu_cal' in i): 
+        if ('Scheme_' not in i) or ('tpu_cal' in i):
             continue
         temperature = i[0:4]
         sch = i[4:12]
         old_filepath = os.path.join(trap_pump_outputdir, i)
         temp_dir = os.path.join(trap_pump_outputdir, temperature)
         sch_dir = os.path.join(temp_dir, sch)
-        if not os.path.exists(temp_dir):  
+        if not os.path.exists(temp_dir):
             os.mkdir(temp_dir)
         if not os.path.exists(sch_dir):
             os.mkdir(sch_dir)
         new_filepath = os.path.join(sch_dir, i)
-        shutil.move(old_filepath, new_filepath)   
-    
+        shutil.move(old_filepath, new_filepath)
+
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -127,7 +130,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     sample_data = False #True
     #num_pumps = {1:10000,2:10000,3:10000,4:10000}
     num_pumps = {1:50000,2:50000,3:50000,4:50000}
-    
+
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=UserWarning)
         (TVAC_trap_dict, TVAC_trap_densities, TVAC_bad_fit_counter, TVAC_pre_sub_el_count,
@@ -209,7 +212,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
     noise_maps.save(filedir=trap_pump_outputdir, filename="mock_detnoisemaps.fits")
-    
+
 
     # add calibration files to caldb
     # Initialize a connection to the calibration database
@@ -240,7 +243,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         ### Modify they keywords of some of the steps
         for step in recipe[0]['steps']:
             if step['name'] == "calibrate_trap_pump":
-                step['keywords']['bin_size'] = None 
+                step['keywords']['bin_size'] = None
         walker.run_recipe(recipe)
 
     # find cal file (naming convention for data.TrapCalibration class)
@@ -248,16 +251,16 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
         if f.endswith('_tpu_cal.fits'):
             generated_trapcal_file = f
             break
-    generated_trapcal_file = os.path.join(trap_pump_outputdir, generated_trapcal_file) 
+    generated_trapcal_file = os.path.join(trap_pump_outputdir, generated_trapcal_file)
     # Load
     tpump_calibration = data.Image(generated_trapcal_file)
     ##### Check against TVAC trap pump dictionary
-    
-    #Convert the output back to a dictionary for more testing. 
+
+    #Convert the output back to a dictionary for more testing.
     e2e_trap_dict = rebuild_dict(tpump_calibration.data)
     e2e_trap_dict_keys = list(e2e_trap_dict.keys())
 
-    #Extract the extra info. 
+    #Extract the extra info.
     unused_fit_data = tpump_calibration.ext_hdr['unfitdat']
     unused_temp_fit_data = tpump_calibration.ext_hdr['untempfd']
     two_or_less_count = tpump_calibration.ext_hdr['twoorles']
@@ -281,19 +284,19 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
 
     for t in e2e_trap_dict_keys:
         assert(t in TVAC_trap_dict)
-        
-    
+
+
     #Note: removed several tests about sig_E and sig_cs, since we're not saving sig_E and sig_cs currently
     for t in list(TVAC_trap_dict.keys()):
         assert(t in e2e_trap_dict_keys)
-        assert(((TVAC_trap_dict[t]['E'] is None and np.isnan(e2e_trap_dict[t]['E']))) or 
+        assert(((TVAC_trap_dict[t]['E'] is None and np.isnan(e2e_trap_dict[t]['E']))) or
                np.abs((TVAC_trap_dict[t]['E'] - e2e_trap_dict[t]['E'])/TVAC_trap_dict[t]['E']) == 0)#< 1e-4)
-        assert(((TVAC_trap_dict[t]['cs'] is None and np.isnan(e2e_trap_dict[t]['cs']))) or 
+        assert(((TVAC_trap_dict[t]['cs'] is None and np.isnan(e2e_trap_dict[t]['cs']))) or
                np.abs((TVAC_trap_dict[t]['cs']-e2e_trap_dict[t]['cs'])/TVAC_trap_dict[t]['cs']) == 0)#< 1e-4)
-        assert(((TVAC_trap_dict[t]['tau at input T'] is None and np.isnan(e2e_trap_dict[t]['tau at input T']))) or 
+        assert(((TVAC_trap_dict[t]['tau at input T'] is None and np.isnan(e2e_trap_dict[t]['tau at input T']))) or
                np.abs((TVAC_trap_dict[t]['tau at input T']-e2e_trap_dict[t]['tau at input T'])/TVAC_trap_dict[t]['tau at input T']) == 0)#< 1e-4)
     pass
-    # trap densities should all match if the above passes; that was tested in II&T tests mainly 
+    # trap densities should all match if the above passes; that was tested in II&T tests mainly
     # b/c all the outputs of the trap-pump function were tested
 
     # remove temporary caldb file
