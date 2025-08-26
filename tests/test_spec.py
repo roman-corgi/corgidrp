@@ -245,7 +245,7 @@ def test_dispersion_model():
                 'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
                 'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
     
-    disp_model = DispersionModel(disp_dict, pri_hdr = prhdr, ext_hdr = exthdr)
+    disp_model = DispersionModel(disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr)
     assert disp_model.clocking_angle == disp_dict.get('clocking_angle')
     assert disp_model.clocking_angle_uncertainty == disp_dict.get('clocking_angle_uncertainty')
     assert np.array_equal(disp_model.pos_vs_wavlen_polycoeff, disp_dict.get('pos_vs_wavlen_polycoeff'))
@@ -289,8 +289,8 @@ def test_calibrate_dispersion_model():
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    exthdr["DPAMNAME"] = 'PRISM3'
-    exthdr["FSAMNAME"] = 'OPEN'
+    ext_hdr["DPAMNAME"] = 'PRISM3'
+    ext_hdr["FSAMNAME"] = 'OPEN'
     psf_array = fits.getdata(file_path, ext = 0)
     psf_table = Table(fits.getdata(file_path, ext = 1))
     psf_header = fits.getheader(file_path, ext = 0)
@@ -311,8 +311,8 @@ def test_calibrate_dispersion_model():
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
             data_or_filepath=data_2d,
-            pri_hdr=prihdr.copy(),
-            ext_hdr=exthdr.copy(),
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
             err=err,
             dq=dq
         )
@@ -416,3 +416,4 @@ if __name__ == "__main__":
     test_read_cent_wave()
     test_calibrate_dispersion_model()
     test_add_wavelength_map()
+    
