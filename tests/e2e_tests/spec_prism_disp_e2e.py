@@ -137,15 +137,11 @@ print('yfit:', centroid_cal.yfit)
 print('xfit_err:', centroid_cal.xfit_err)
 print('yfit_err:', centroid_cal.yfit_err)
 
-# --- MIRROR test_spec.py: Remove broadband filter (last entry) before dispersion calibration ---
-centroid_cal.xfit = centroid_cal.xfit[:-1]
-centroid_cal.yfit = centroid_cal.yfit[:-1]
-centroid_cal.xfit_err = centroid_cal.xfit_err[:-1]
-centroid_cal.yfit_err = centroid_cal.yfit_err[:-1]
+# --- NOTE: Do NOT remove any centroids - calibrate_dispersion_model handles reference bands internally ---
 
 # --- DISPERSION CALIBRATION ---
 print('Calibrating dispersion model...')
-disp_model = calibrate_dispersion_model(centroid_cal, prism='PRISM3')
+disp_model = calibrate_dispersion_model(centroid_cal)
 
 # --- SAVE OUTPUT ---
 print('Saving output calibration product to current directory...')

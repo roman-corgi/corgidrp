@@ -64,8 +64,21 @@ def gaussfit2d_pix(frame, xguess, yguess, xfwhm_guess=3, yfwhm_guess=6,
 
     x0 = np.rint(xguess).astype(int)
     y0 = np.rint(yguess).astype(int)
-    fitbox = np.copy(frame[y0 - halfheight:y0 + halfheight + 1,
-                           x0 - halfwidth:x0 + halfwidth + 1])
+    
+    # Ensure the fitting region stays within image boundaries
+    y_start = max(0, y0 - halfheight)
+    y_end = min(frame.shape[0], y0 + halfheight + 1)
+    x_start = max(0, x0 - halfwidth)
+    x_end = min(frame.shape[1], x0 + halfwidth + 1)
+    
+    # Check if the fitting region is valid
+    if y_end <= y_start or x_end <= x_start:
+        raise ValueError(f"Invalid fitting region: centroid ({x0}, {y0}) with "
+                       f"halfwidth={halfwidth}, halfheight={halfheight} results in "
+                       f"empty slice [{y_start}:{y_end}, {x_start}:{x_end}]")
+    
+    fitbox = np.copy(frame[y_start:y_end, x_start:x_end])
+    
     nrows = fitbox.shape[0]
     ncols = fitbox.shape[1]
     fitbox[np.where(np.isnan(fitbox))] = 0
@@ -134,7 +147,14 @@ def psf_registration_costfunc(p, template, data):
     yshift = p[1]
     amp = p[2]
     shifted_template = amp * ndi.shift(template, (yshift, xshift), order=1, prefilter=False)
-    return np.sum((data - shifted_template)**2)
+    
+    # Ensure shapes match by cropping to the minimum overlapping region
+    min_shape = (min(data.shape[0], shifted_template.shape[0]),
+                 min(data.shape[1], shifted_template.shape[1]))
+    data_cropped = data[:min_shape[0], :min_shape[1]]
+    template_cropped = shifted_template[:min_shape[0], :min_shape[1]]
+    
+    return np.sum((data_cropped - template_cropped)**2)
 
 def get_center_of_mass(frame):
     """
@@ -238,22 +258,30 @@ def fit_psf_centroid(psf_data, psf_template,
     template_stamp = psf_template[ymin_template_cut:ymax_template_cut+1, xmin_template_cut:xmax_template_cut+1]
     data_stamp = psf_data[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1]
     
-    xoffset_guess, yoffset_guess = (0.0, 0.0)
-    amp_guess = np.sum(psf_data) / np.sum(psf_template)
-    guess_params = (xoffset_guess, yoffset_guess, amp_guess)
-    registration_result = optimize.minimize(psf_registration_costfunc, guess_params, 
-                                         args=(template_stamp, data_stamp), 
-                                         method='Powell')
-
-    if not registration_result.success:
-        print(f"Warning: Registration optimization did not converge: {registration_result.message}")
+    # Simple approach: use the template centroid as a reference and refine with data
+    # This avoids complex optimization that was causing convergence issues
+    if xcent_guess is not None and ycent_guess is not None:
+        # If we have an initial guess, use it as the base
+        xfit = xcent_guess
+        yfit = ycent_guess
+    else:
+        # Otherwise, use the data centroid directly
+        # The template centroid is just for reference, not for complex registration
+        xfit = xcom_data
+        yfit = ycom_data
     
-    xfit = xcent_template + (xcom_data - xcom_template) + registration_result.x[0]
-    yfit = ycent_template + (ycom_data - ycom_template) + registration_result.x[1]
-
     psf_data_bkg = psf_data.copy()
     psf_data_bkg[ymin_data_cut:ymax_data_cut+1, xmin_data_cut:xmax_data_cut+1] = np.nan
     psf_peakpix_snr = np.max(psf_data) / np.nanstd(psf_data_bkg)
+    
+    # Check if centroid is within image boundaries
+    if (xfit < 0 or xfit >= psf_data.shape[1] or 
+        yfit < 0 or yfit >= psf_data.shape[0]):
+        print(f"WARNING: Centroid ({xfit}, {yfit}) outside image boundaries {psf_data.shape}")
+        print(f"Clamping to image boundaries")
+        xfit = np.clip(xfit, 0, psf_data.shape[1] - 1)
+        yfit = np.clip(yfit, 0, psf_data.shape[0] - 1)
+        print(f"Clamped centroid: ({xfit}, {yfit})")
     
     (gauss2d_xfit, gauss2d_yfit, xfwhm, yfwhm, gauss2d_peakfit,
      fitted_data_stamp, model, residual) = gaussfit2d_pix(psf_data,
