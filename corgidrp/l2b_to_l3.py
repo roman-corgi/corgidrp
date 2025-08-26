@@ -113,6 +113,24 @@ def divide_by_exptime(input_dataset):
 
     return data
 
+def split_image_by_polarization_state(input_dataset, image_center=(512,512), separation_diameter_arcsec=7.5, image_size=None):
+    """
+    Split each polarimetric input image into two images by its polarization state, 
+    recompose the two images into a 2 x image_size x image_size datacube
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
+        image_center (optional, tuple(int, int)): x and y pixel coordinate location of the center location between the two polarized images on the detector,
+            default is the detector center at 512, 512
+        separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec, 
+            Default for Roman CGI is 7.5"
+        image_size (optional, int): length/width of the cropped polarized images, if none is provided, 
+            the size is automatically determined based on the coronagraph mask used
+    
+    Returns:
+        corgidrp.data.Dataset: The input dataset with each image now being a 2 x image_size x image_size datacubes
+    """
+
 def update_to_l3(input_dataset):
     """
     Updates the data level to L3. Only works on L2b data.
