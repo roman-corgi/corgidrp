@@ -781,6 +781,9 @@ class SpectroscopyCentroidPSF(Image):
         self.xfit_err = self.err[0][:, 0]
         self.yfit_err = self.err[0][:, 1]
 
+        # Enforce data level = CAL
+        self.ext_hdr['DATALVL'] = 'CAL'
+
 
 class DispersionModel(Image):
     """ 
@@ -860,7 +863,8 @@ class DispersionModel(Image):
         self.pos_vs_wavlen_cov = np.array(self.data["pos_vs_wavlen_cov"][0])
         self.wavlen_vs_pos_polycoeff = np.array(self.data["wavlen_vs_pos_polycoeff"][0])
         self.wavlen_vs_pos_cov = np.array(self.data["wavlen_vs_pos_cov"][0])
-
+        # Enforce data level = CAL
+        self.ext_hdr['DATALVL'] = 'CAL'
 
     def save(self, filedir=None, filename=None):
         """
