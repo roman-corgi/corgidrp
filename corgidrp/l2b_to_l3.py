@@ -128,8 +128,108 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
             the size is automatically determined based on the coronagraph mask used
     
     Returns:
-        corgidrp.data.Dataset: The input dataset with each image now being a 2 x image_size x image_size datacubes
+        corgidrp.data.Dataset: The input dataset with each image now being a 2 x image_size x image_size datacube
     """
+
+    passband = input_dataset[0].ext_hdr['CFAMNAME']
+    if passband != '1F' or passband != '4F':
+        raise ValueError(f'Polarimetric datasets must be imaged in band 1F or 4F, not {passband}')
+    
+    updated_dataset = input_dataset.copy()
+
+    # determine coronagraph FOV
+    bandpass_center_um = {
+        '1F': 0.5738,
+        '4F': 0.8255
+    }
+    diam = 2.363114
+    fov = input_dataset[0].ext_hdr['FSMPRFL']
+    if fov == 'NFOV':
+        # NFOV outer radius is 9.7 λ/D
+        # convert to arcsec: λ/D * 206265
+        radius_arcsec = 9.7 * ((bandpass_center_um['passband'] * 1e-6) / diam) * 206265
+    elif fov == 'WFOV':
+        # WFOV outer radius is 20.1 λ/D
+        # convert to arcsec: λ/D * 206265
+        radius_arcsec = 20.1 * ((bandpass_center_um['passband'] * 1e-6) / diam) * 206265
+    else:
+        # default to unvignetted polarimetry FOV diameter of 3.8"
+        radius_arcsec = 3.8 / 2
+    # convert to pixel: 0.0218" = 1 pixel
+    radius_pix = int(round(radius_arcsec / 0.0218))
+
+    # raise error if the polarized images are close enough to overlap
+    if separation_diameter_arcsec < 2 * radius_arcsec:
+        raise ValueError(f'The inputted separation diameter of {separation_diameter_arcsec}" must be greater than {2 * radius_arcsec}"')
+    
+    # auto determine image size based on FOV if none is provided
+    if image_size == None:
+        # number of pixels between the coronagraph focal plane's outer radius and the image edge
+        padding = 5
+        image_size = 2 * (radius_pix + padding)
+    
+    for image in updated_dataset:
+        im_data = image.data
+        image_y, image_x = im_data.shape
+        prism = image.ext_hdr['DPAMNAME']
+        # make sure input image is polarized
+        if prism != 'POL0' or prism != 'POl45':
+            raise ValueError('Input image must be a polarimetric observation')
+        
+        # find polarized image centers
+        if prism == 'POL0':
+            # polarized images placed horizontally on detector
+            displacement = int(round(separation_diameter_arcsec / (2 * 0.0218)))
+            center_left = (image_center[0] - displacement, image_center[1])
+            center_right = (image_center[0] + displacement, image_center[1])
+        else:
+            # polarized images placed diagonally on detector
+            displacement = int(round(separation_diameter_arcsec / (2 * 0.0218 * np.sqrt(2))))
+            center_left = (image_center[0] - displacement, image_center[1] + displacement)
+            center_right = (image_center[0] + displacement, image_center[1] - displacement)
+        
+        # find starting point for cropping
+        image_radius = image_size // 2
+        start_left = (center_left[0] - image_radius, center_left[1] - image_radius)
+        start_right = (center_right[0] - image_radius, center_right[1] - image_radius)
+
+        # check that cropped image doesn't exceed full image bounds
+        if start_left[0] < 0 or start_left[1] < 0 or start_right[0] < 0 or start_right[1] < 0\
+        or start_left[0] + image_size >= image_x or start_left[1] + image_size >= image_y\
+        or start_right[1] + image_size >= image_x or start_right[1] + image_size >= image_y:
+            raise ValueError('Image bounds exceed that of the input data, please decrease the image size')
+        
+        # construct new datacube
+        im_data_new = np.zeros(2, image_size, image_size)
+
+        # fill in the first dimension, corresponding to 0 or 45 degree polarization
+        # for each pixel in the cropped area, if it's inside the radius of the other polarized image, replace it with a NaN
+        for i in len(image_size):
+            for j in len(image_size):
+                y = start_left[1] + i
+                x = start_left[0] + j
+                # check if (x-h)^2+(y-k)^2<=r^2, (h,k) is the center of the right image since we're cropping the left one
+                if ((x-center_right[0])**2) + ((y-center_right[1])**2) <= radius_pix**2:
+                    im_data_new[0, i, j] = float('nan')
+                else:
+                    im_data_new[0, i, j] = im_data[y, x]
+        # fill in the second dimension, corresponding to the 90 or 135 degree polarization
+        for i in len(image_size):
+            for j in len(image_size):
+                y = start_right[1] + i
+                x = start_right[0] + j
+                # (h,k) is the center of the left image this time since we're cropping the right
+                if ((x-center_left[0])**2) + ((y-center_left[1])**2) <= radius_pix**2:
+                    im_data_new[1, i, j] = float('nan')
+                else:
+                    im_data_new[1, i, j] = im_data[y, x]
+        
+        #update data
+        image.data = im_data_new
+    
+    return updated_dataset
+
+
 
 def update_to_l3(input_dataset):
     """
