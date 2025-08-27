@@ -29,20 +29,6 @@ def test_image_splitting():
             if ((x-img_center)**2) + ((y-img_center)**2) <= radius**2:
                 expected_output_autocrop[0,y,x] = 1
                 expected_output_autocrop[1,y,x] = 2
-    diff_0 = abs(output_dataset_autocrop.frames[1].data[0] - expected_output_autocrop[0])
-    diff_1 = abs(output_dataset_autocrop.frames[1].data[1] - expected_output_autocrop[1])
-    arrays = [image_WP1.data, image_WP2.data, output_dataset_autocrop.frames[1].data[0], output_dataset_autocrop.frames[1].data[1], expected_output_autocrop[0], expected_output_autocrop[1], diff_0, diff_1]
-
-    save_dir = "plots"
-    os.makedirs(save_dir, exist_ok=True)
-
-    for i, arr in enumerate(arrays, start=1):
-        plt.imshow(arr, origin="lower", cmap="viridis", aspect="auto")
-        plt.colorbar(label="Value")
-        plt.title(f"Array {i}")
-        save_path = os.path.join(save_dir, f"array_{i}.png")
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-        plt.close()
 
     ## check that actual output is as expected
     assert output_dataset_autocrop.frames[0].data == pytest.approx(expected_output_autocrop)

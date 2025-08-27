@@ -222,10 +222,11 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
                 # mark anything on the other side of the center line dividing the two images as NaN to avoid including the other image
                 if (prism == 'POL0' and x <= image_center[0]) or\
                 (prism=='POL45' and y + image_center[1] >= x + image_center[0]):
-                    im_data_new[0, i, j] = float('nan')
+                    print('NaN')
+                    im_data_new[1, i, j] = float('nan')
                 else:
-                    im_data_new[0, i, j] = im_data[y, x]
-                    
+                    im_data_new[1, i, j] = im_data[y, x]
+
         #update data
         image.data = im_data_new
     
