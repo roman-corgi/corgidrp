@@ -84,7 +84,6 @@ tests/e2e_tests/pc_sim_test_data/*.json
 *.FITS
 *.fits
 !nonlin_table_TVAC.fits 
-!corgidrp/data/spectroscopy/*.fits
 
 # Output figures
 figures/
