@@ -6,6 +6,7 @@ import astropy.io.fits as fits
 from datetime import datetime, timedelta
 import logging
 import pytest
+import argparse
 
 from corgidrp.data import Dataset, DispersionModel
 from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
@@ -14,23 +15,8 @@ from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
 
-# Configuration
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'spec_prism_disp_output')
-INPUT_DATA_DIR = os.path.join(OUTPUT_DIR, 'input_data')
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(INPUT_DATA_DIR, exist_ok=True)
 
-# Setup logging
-log_file = os.path.join(OUTPUT_DIR, 'spec_prism_disp_e2e.log')
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+
 
 # ================================================================================
 # Validation functions - can be used in other E2E tests
@@ -177,94 +163,117 @@ def validate_binary_table_fields(hdu1, required_fields):
                 logger.info(f"HDU1: Field '{field}' missing. Expected: 1×4 array. FAIL.")
         return False
 
-def get_latest_cal_file(output_dir, pattern):
+def get_latest_cal_file(e2eoutput_path, pattern):
     """Get the most recent calibration file matching the pattern.
 
     Args:
-        output_dir (str): Directory to search for calibration files
+        e2eoutput_path (str): Directory to search for calibration files
         pattern (str): Pattern to match (e.g., '*_dpm_cal.fits')
 
     Returns:
         str: Path to the most recent calibration file
     """
-    cal_files = sorted(glob.glob(os.path.join(output_dir, pattern)), key=os.path.getmtime, reverse=True)
-    assert len(cal_files) > 0, f'No {pattern} files found in {output_dir}!'
+    cal_files = sorted(glob.glob(os.path.join(e2eoutput_path, pattern)), key=os.path.getmtime, reverse=True)
+    assert len(cal_files) > 0, f'No {pattern} files found in {e2eoutput_path}!'
     return cal_files[0]
 
-def setup_input_files():
-    """Pre-test: create input files and save to disk.
+# ================================================================================
+# Main Spec Prism Disp E2E Test Function
+# ================================================================================
 
+def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
+    """Run the complete spectroscopy prism dispersion end-to-end test.
+    
+    This function consolidates all the test steps into a single linear flow
+    for easier reading and understanding.
+    
+    Args:
+        e2edata_path (str): Path to input data directory
+        e2eoutput_path (str): Path to output directory
+        
     Returns:
-        tuple: (l2b_dataset_with_filenames, saved_files)
+        tuple: (disp_model, coeffs, angle) from the baseline performance checks
     """
+    
+    # ================================================================================
+    # (1) Setup Input Files
+    # ================================================================================
     logger.info('='*80)
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
 
-    # Load test data
-    datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
-    file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
-
-    assert os.path.exists(file_path), f'Test file not found: {file_path}'
-
-    psf_array = fits.getdata(file_path, ext=0)
-    psf_table = Table(fits.getdata(file_path, ext=1))
-
-    # Create dataset with mock headers and noise
-    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    ext_hdr["DPAMNAME"] = 'PRISM3'
-    ext_hdr["FSAMNAME"] = 'OPEN'
-
-    # Add random noise for reproducibility
-    np.random.seed(5)
-    read_noise = 200
-    noisy_data_array = (np.random.poisson(np.abs(psf_array) / 2) + 
-                        np.random.normal(loc=0, scale=read_noise, size=psf_array.shape))
-
-    # Create Image objects
-    psf_images = []
-    for i in range(noisy_data_array.shape[0]):
-        image = Image(
-            data_or_filepath=np.copy(noisy_data_array[i]),
-            pri_hdr=pri_hdr.copy(),
-            ext_hdr=ext_hdr.copy(),
-            err=np.zeros_like(noisy_data_array[i]),
-            dq=np.zeros_like(noisy_data_array[i], dtype=int)
-        )
-        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
-        psf_images.append(image)
-
-    # Save images to disk with timestamped filenames
-    def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
-        visitid = pri_hdr.get('VISITID', '0000000000000000000')
-        now = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-        return f"cgi_{visitid}_{now}_{suffix}.fits"
-
-    basetime = datetime.now()
-    for i, img in enumerate(psf_images):
-        fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l2b")
-        fpath = os.path.join(INPUT_DATA_DIR, fname)
+    # Check if input folder already contains the expected files
+    existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
+    
+    if existing_files:
+        logger.info(f"Found {len(existing_files)} existing L2b files in {e2edata_path}")
+        logger.info("Using existing input files (skipping generation)")
+        saved_files = existing_files
+        l2b_dataset_with_filenames = Dataset(saved_files)
+    else:
+        logger.info("No existing input files found. Generating new input files...")
         
-        # Save as FITS
-        primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
-        image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
-        fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
+        # Load test data
+        datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
+        file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
 
-    # Load saved files back into dataset
-    saved_files = sorted(glob.glob(os.path.join(INPUT_DATA_DIR, 'cgi_*_l2b.fits')))
-    assert len(saved_files) > 0, f'No saved L2b files found in {INPUT_DATA_DIR}!'
+        assert os.path.exists(file_path), f'Test file not found: {file_path}'
 
-    l2b_dataset_with_filenames = Dataset(saved_files)
+        psf_array = fits.getdata(file_path, ext=0)
+        psf_table = Table(fits.getdata(file_path, ext=1))
+
+        # Create dataset with mock headers and noise
+        pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+        ext_hdr["DPAMNAME"] = 'PRISM3'
+        ext_hdr["FSAMNAME"] = 'OPEN'
+
+        # Add random noise for reproducibility
+        np.random.seed(5)
+        read_noise = 200
+        noisy_data_array = (np.random.poisson(np.abs(psf_array) / 2) + 
+                            np.random.normal(loc=0, scale=read_noise, size=psf_array.shape))
+
+        # Create Image objects
+        psf_images = []
+        for i in range(noisy_data_array.shape[0]):
+            image = Image(
+                data_or_filepath=np.copy(noisy_data_array[i]),
+                pri_hdr=pri_hdr.copy(),
+                ext_hdr=ext_hdr.copy(),
+                err=np.zeros_like(noisy_data_array[i]),
+                dq=np.zeros_like(noisy_data_array[i], dtype=int)
+            )
+            image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+            psf_images.append(image)
+
+        # Save images to disk with timestamped filenames
+        def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
+            visitid = pri_hdr.get('VISITID', '0000000000000000000')
+            now = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+            return f"cgi_{visitid}_{now}_{suffix}.fits"
+
+        basetime = datetime.now()
+        for i, img in enumerate(psf_images):
+            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l2b")
+            fpath = os.path.join(e2edata_path, fname)
+            
+            # Save as FITS
+            primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
+            image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
+            fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
+
+        # Load saved files back into dataset
+        saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
+        assert len(saved_files) > 0, f'No saved L2b files found in {e2edata_path}!'
+
+        l2b_dataset_with_filenames = Dataset(saved_files)
+        logger.info(f"Generated and saved {len(saved_files)} new input files")
+
     logger.info('')
     
-    return l2b_dataset_with_filenames, saved_files
-
-def validate_input_images(l2b_dataset_with_filenames):
-    """Test Case 1: Input Image Data Format and Content.
-
-    Args:
-        l2b_dataset_with_filenames (Dataset): Dataset object containing L2b images
-    """
+    # ================================================================================
+    # (2) Validate Input Images
+    # ================================================================================
     logger.info('='*80)
     logger.info('Test Case 1: Input Image Data Format and Content')
     logger.info('='*80)
@@ -281,16 +290,10 @@ def validate_input_images(l2b_dataset_with_filenames):
 
     logger.info(f"Total input images validated: {len(l2b_dataset_with_filenames)}")
     logger.info("")
-
-def run_processing_pipeline(saved_files):
-    """Running processing pipeline.
-
-    Args:
-        saved_files (list): List of saved L2b files
-
-    Returns:
-        Recipe: Recipe object containing the processing pipeline
-    """
+    
+    # ================================================================================
+    # (3) Run Processing Pipeline
+    # ================================================================================
     logger.info('='*80)
     logger.info('Running processing pipeline')
     logger.info('='*80)
@@ -299,25 +302,20 @@ def run_processing_pipeline(saved_files):
     recipe = walk_corgidrp(
         filelist=saved_files, 
         CPGS_XML_filepath="",
-        outputdir=OUTPUT_DIR,
+        outputdir=e2eoutput_path,
         template="l2b_to_spec_prism_disp.json"
     )
     logger.info("")
     
-    return recipe
-
-def validate_output_calibration_product():
-    """Test Case 2: Output Calibration Product Data Format and Content.
-
-    Returns:
-        str: Path to the latest calibration file
-    """
+    # ================================================================================
+    # (4) Validate Output Calibration Product
+    # ================================================================================
     logger.info('='*80)
     logger.info('Test Case 2: Output Calibration Product Data Format and Content')
     logger.info('='*80)
 
     # Validate output calibration product
-    cal_file = get_latest_cal_file(OUTPUT_DIR, '*_dpm_cal.fits')
+    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits')
     check_filename_convention(os.path.basename(cal_file), 'cgi_*_dpm_cal.fits', "DPM calibration product")
 
     with fits.open(cal_file) as hdul:
@@ -348,20 +346,15 @@ def validate_output_calibration_product():
 
     logger.info("")
     
-    return cal_file
-
-def baseline_performance_checks():
-    """Test Case 3: Baseline Performance Checks.
-
-    Returns:
-        tuple: (disp_model, coeffs, angle)
-    """
+    # ================================================================================
+    # (5) Baseline Performance Checks
+    # ================================================================================
     logger.info('='*80)
     logger.info('Test Case 3: Baseline Performance Checks')
     logger.info('='*80)
 
     # Load and display dispersion model results
-    cal_file = get_latest_cal_file(OUTPUT_DIR, '*_dpm_cal.fits')
+    cal_file = get_latest_cal_file(e2eoutput_path, '*_dpm_cal.fits')
     disp_model = DispersionModel(cal_file)
 
     coeffs = disp_model.pos_vs_wavlen_polycoeff
@@ -376,35 +369,64 @@ def baseline_performance_checks():
 # Pytest Test Function
 # ================================================================================
 @pytest.mark.e2e
-def test_run_end_to_end():
-    """Run the complete end-to-end test."""
+def test_run_end_to_end(e2edata_path, e2eoutput_path):
+    """Run the complete end-to-end test.
+    
+    Args:
+        e2edata_path (str): Path to input data directory
+        e2eoutput_path (str): Output directory path for results and logs.
+    """
+    # Set up output directory and logging
+    global logger
+    
+    # Create output directories first
+    os.makedirs(e2eoutput_path, exist_ok=True)
+    input_data_dir = os.path.join(e2eoutput_path, 'input_data')
+    os.makedirs(input_data_dir, exist_ok=True)
+    
+    log_file = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e.log')
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
+    
     logger.info('='*80)
     logger.info('SPECTROSCOPY PRISM SCALE AND DISPERSION END-TO-END TEST')
     logger.info('='*80)
     logger.info("")
     
-    # Setup input files
-    l2b_dataset_with_filenames, saved_files = setup_input_files()
-    
-    # Validate input images
-    validate_input_images(l2b_dataset_with_filenames)
-    
-    # Run processing pipeline
-    recipe = run_processing_pipeline(saved_files)
-    
-    # Validate output calibration product
-    cal_file = validate_output_calibration_product()
-    
-    # Baseline performance checks
-    disp_model, coeffs, angle = baseline_performance_checks()
+    # Run the complete end-to-end test
+    disp_model, coeffs, angle = run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
+    
+    return disp_model, coeffs, angle
 
 
 # Run the test if this script is executed directly
 if __name__ == "__main__":
-    test_run_end_to_end()
+    thisfile_dir = os.path.dirname(__file__)
+    outputdir = os.path.join(thisfile_dir, 'spec_prism_disp_output')
+    e2edata_dir = os.path.join(outputdir, 'input_data')
+
+    os.makedirs(e2edata_dir, exist_ok=True)
+    os.makedirs(outputdir, exist_ok=True)
+
+    ap = argparse.ArgumentParser(description="run the spectroscopy prism dispersion end-to-end test")
+    ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
+                    help="directory to get input files from [%(default)s]")
+    ap.add_argument("-o", "--outputdir", default=outputdir,
+                    help="directory to write results to [%(default)s]")
+    args = ap.parse_args()
+    
+    # Run the e2e test
+    test_run_end_to_end(args.e2edata_dir, args.outputdir)
 
 
