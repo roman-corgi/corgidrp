@@ -16,6 +16,18 @@ template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
 
+def get_formatted_filename(dt, visitid):
+    """Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
+    Args:
+        dt (datetime): Datetime object
+        visitid (str): Visit ID
+
+    Returns:
+        str: Formatted filename
+    """
+    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
+    return f"cgi_{visitid}_{timestamp}_l2b_.fits"
+
 def convert_tvac_to_dataset():
     """
     for me to convert the tvac data once.
@@ -23,11 +35,6 @@ def convert_tvac_to_dataset():
     file_path = [os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits"), 
                  os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")]
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    
-    def get_formatted_filename(dt, visitid):
-        """Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits"""
-        timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
-        return f"cgi_{visitid}_{timestamp}_l2b_.fits"
     
     for k, file in enumerate(file_path):
         with fits.open(file) as hdul:
@@ -416,4 +423,3 @@ if __name__ == "__main__":
     test_read_cent_wave()
     test_calibrate_dispersion_model()
     test_add_wavelength_map()
-    
