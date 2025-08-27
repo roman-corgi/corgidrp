@@ -4150,3 +4150,64 @@ def create_satellite_spot_observing_sequence(
     dataset = data.Dataset(all_frames)
 
     return dataset
+
+def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='FSM_PROFILE_UNKNOWN'):
+    """
+    Creates mock L2b polarimetric data with two polarized images placed on the larger
+    detector frame. Image size and placement depends on the wollaston used and the observing mode.
+
+    Args:
+        image_center (optional, tuple(int, int)): pixel location of where the two images are centered on the detector
+        dpamname (optional, string): name of the wollaston prism used, accepted values are 'POL0' and 'POL45'
+        observing_mode (optional, string): observing mode of the coronagraph
+    
+    Returns:
+        corgidrp.data.Image: The simulated L2b polarimetric image
+    """
+    assert dpamname in ['POL0', 'POL45'], \
+        "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
+    # create initial blank frame
+    image_data = np.zeros(1024, 1024)
+
+    image_separation_arcsec = 7.5
+
+    #determine radius of the images
+    if observing_mode == 'NFOV':
+        cfamname = '1F'
+        radius = int(round((9.7 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    elif observing_mode == 'WFOV':
+        cfamname = '4F'
+        radius = int(round((20.1 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    else:
+        cfamname = '1F'
+        radius = int(round(1.9 / 0.0218))
+    
+    #determine the center of the two images
+    if dpamname == 'POL0':
+        displacement = int(round(image_separation_arcsec / (2 * 0.0218)))
+        center_left = (image_center[0] - displacement, image_center[1])
+        center_right = (image_center[0] + displacement, image_center[1])
+    else:
+        displacement = int(round(image_separation_arcsec / (2 * 0.0218 * np.sqrt(2))))
+        center_left = (image_center[0] - displacement, image_center[1] + displacement)
+        center_right = (image_center[0] + displacement, image_center[1] + displacement)
+
+    #fill the location where the images are with 1s
+    for y in range(1024):
+        for x in range(1024):
+            # check if x,y location falls inside image radius
+            if (((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2) or\
+            (((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2):
+                image_data[y,x] = 1
+    
+    #create L2b headers
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    #define necessary header keywords
+    exthdr['CFAMNAME'] = cfamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['FSMPRFL'] = observing_mode
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    return image
+
