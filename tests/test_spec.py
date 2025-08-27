@@ -17,7 +17,9 @@ output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
 
 def get_formatted_filename(dt, visitid):
-    """Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
+    """
+    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
+    
     Args:
         dt (datetime): Datetime object
         visitid (str): Visit ID
