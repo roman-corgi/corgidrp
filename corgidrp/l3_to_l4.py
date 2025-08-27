@@ -809,49 +809,74 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
-def determine_wave_zeropoint(input_dataset, template_dataset = None):
+def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None):
     """ 
     A procedure for estimating the centroid of the zero-point image
-    (satellite spot or PSF) taken through the narrowband filter and slit.
+    (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
 
     Args:
         input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
         template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
                                                   path is taken
+        xcent_guess (float): initial x guess for the centroid fit for all frames
+        ycent_guess (float): initial y guess for the centroid fit for all frames
     
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
-                               information as header keywords, which is WAVLEN0, X0, X0ERR, Y0, Y0ERR, SHAPEX0, SHAPEY0
+                               information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
     """
     dataset = input_dataset.copy()
     
     slit = dataset.frames[0].ext_hdr['FSAMNAME']
     if not slit.startswith("R"):
         raise ValueError("not a slit observation")
-    band = dataset.frames[0].ext_hdr['CFAMNAME']
     # Assumed that only sat spots frames are taken to fit the zeropoint
-    split_dataset, vals = dataset.split_dataset(prihdr_keywords = ["SATSPOTS"])
-    satspot_dataset = split_dataset[1]
-    science_dataset = split_dataset[0]
-    spot_centroids = compute_psf_centroid(dataset = satspot_dataset, template_dataset = template_dataset)
+    split_datasets, vals = dataset.split_dataset(prihdr_keywords=["SATSPOTS"])
+    vals = np.array(vals)
+    if 0 in vals:
+        sci_dataset = split_datasets[int(np.nonzero(vals == 0)[0].item())]
+    else:
+        raise AttributeError('No science frames found in input dataset.')
+
+    if 1 in vals:
+        sat_dataset = split_datasets[int(np.nonzero(vals == 1)[0].item())]
+    else:
+        #case of no satspots but narrowband frame
+        narrow_dataset, band = sci_dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
+        band = np.array(band)
+        if "3d" in band:
+            sat_dataset = narrow_dataset[int(np.nonzero(band == "3d")[0].item())]
+        elif "2c" in band:
+            sat_dataset = narrow_dataset[int(np.nonzero(band == "2c")[0].item())]
+        else:
+            raise AttributeError("No satspot or narrowband frames found in input dataset")
     
-    cen_wave = read_cent_wave(band)[0]
+    if xcent_guess is not None and ycent_guess is not None:
+        n = len(sat_dataset)
+        initial_cent = {"xcent": np.repeat(xcent_guess, n),
+                        "ycent": np.repeat(ycent_guess, n)}
+    else:
+        initial_cent = None
+    spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
+    
     x0 = np.mean(spot_centroids.xfit)
     x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
     y0 = np.mean(spot_centroids.yfit)
     y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    for frame in science_dataset:
+    filter = sat_dataset[0].ext_hdr["CFAMNAME"]
+    cen_wave = read_cent_wave(filter)[0]
+    for frame in sci_dataset:
         frame.ext_hdr["WAVLEN0"] = cen_wave
-        frame.ext_hdr["X0"] = x0
-        frame.ext_hdr["X0ERR"] = x0err
-        frame.ext_hdr["Y0"] = y0
-        frame.ext_hdr["Y0ERR"] = y0err
-        frame.ext_hdr["SHAPEX0"] = satspot_dataset[0].ext_hdr['NAXIS1']
-        frame.ext_hdr["SHAPEY0"] = satspot_dataset[0].ext_hdr['NAXIS2']
+        frame.ext_hdr["WV0_X"] = x0
+        frame.ext_hdr["WV0_XERR"] = x0err
+        frame.ext_hdr["WV0_Y"] = y0
+        frame.ext_hdr["WV0_YERR"] = y0err
+        frame.ext_hdr["WV0_DIMX"] = sat_dataset[0].ext_hdr['NAXIS1']
+        frame.ext_hdr["WV0_DIMY"] = sat_dataset[0].ext_hdr['NAXIS2']
                               
     history_msg = "wavelength zeropoint values added to header"
-    science_dataset.update_after_processing_step(history_msg)
-    return science_dataset
+    sci_dataset.update_after_processing_step(history_msg)
+    return sci_dataset
 
 def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials = 1000):
     """
@@ -874,12 +899,12 @@ def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials
         head = frames.ext_hdr
         wave_zero = {
         'wavlen': head['WAVLEN0'],
-        'x' : head['X0'],
-        'xerr': head['X0ERR'],
-        'y': head['Y0'],
-        'yerr': head['Y0ERR'],
-        'shapex': head['SHAPEX0'],
-        'shapey': head['SHAPEY0']
+        'x' : head['WV0_X'],
+        'xerr': head['WV0_XERR'],
+        'y': head['WV0_Y'],
+        'yerr': head['WV0_YERR'],
+        'shapex': head['WV0_DIMX'],
+        'shapey': head['WV0_DIMY']
         }
     
         wave_map, wave_err, pos_lookup, x_refwav, y_refwav = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um, ntrials = ntrials)
