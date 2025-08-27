@@ -573,7 +573,6 @@ def calibrate_kgain(dataset_kgain,
                     newshape=(-1, 1))) - complex(rn_std[x])**2)
                     for x in range(len(rn_std))
                     ]
-
         
         deviations_shot.extend(added_deviations_shot_arr)
 
