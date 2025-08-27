@@ -4,7 +4,6 @@ import corgidrp.mocks as mocks
 import corgidrp.l2b_to_l3 as l2b_to_l3
 import corgidrp.data as data
 import matplotlib.pyplot as plt
-import os
 
 def test_image_splitting():
     """
