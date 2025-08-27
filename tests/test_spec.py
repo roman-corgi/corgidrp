@@ -5,7 +5,7 @@ from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_L2b_headers
+from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
@@ -15,20 +15,6 @@ spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "co
 template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
-
-def get_formatted_filename(dt, visitid):
-    """
-    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
-    
-    Args:
-        dt (datetime): Datetime object
-        visitid (str): Visit ID
-
-    Returns:
-        str: Formatted filename
-    """
-    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
-    return f"cgi_{visitid}_{timestamp}_l2b_.fits"
 
 def convert_tvac_to_dataset():
     """

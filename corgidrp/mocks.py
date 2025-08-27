@@ -4187,3 +4187,17 @@ def create_satellite_spot_observing_sequence(
     dataset = data.Dataset(all_frames)
 
     return dataset
+
+def get_formatted_filename(dt, visitid):
+    """
+    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
+    
+    Args:
+        dt (datetime): Datetime object
+        visitid (str): Visit ID
+
+    Returns:
+        str: Formatted filename
+    """
+    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
+    return f"cgi_{visitid}_{timestamp}_l2b_.fits"
