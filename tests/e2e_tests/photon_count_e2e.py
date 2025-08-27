@@ -60,10 +60,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     if os.path.exists(corgidrp.caldb_filepath):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
 
     # create a DetectorParams object and save it
     detector_params = data.DetectorParams({})

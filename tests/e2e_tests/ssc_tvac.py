@@ -1,3 +1,5 @@
+'''Script Kevin used to help gather and organize SSC TVAC data for use in CGI DRP end-to-end tests.'''
+
 from astropy.io import fits
 import numpy as np
 import os

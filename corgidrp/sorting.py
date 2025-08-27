@@ -60,7 +60,7 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
     cal_frame_time_list_sorted = np.array(cal_frame_time_list)[idx_id_sort]
     exptime_arr = np.array(exptime_list)[idx_id_sort]
     # Count repeated, consecutive elements
-    count_cons = [1]
+    count_cons = [0]
     exptime_cons = [exptime_arr[0]]
     idx_cons = 0
     for exptime in exptime_arr:
@@ -70,8 +70,6 @@ def sort_remove_frames(dataset_in_list, cal_type, actual_visit=True):
             idx_cons += 1
             count_cons += [1]
             exptime_cons += [exptime]
-    # First index always has a repetition in the previous loop (id=id)
-    count_cons[0] -= 1
 
     count_cons = np.array(count_cons)
     exptime_cons = np.array(exptime_cons)

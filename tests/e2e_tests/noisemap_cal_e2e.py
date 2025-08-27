@@ -105,6 +105,13 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     # output_filename = l2a_data_filename[:24] + '_DNM_CAL.fits'
     mock_cal_filelist = l1_data_filelist[-2:] # grab the last two input data to mock the calibration 
     
+    # make DRP output directory if needed
+    if not os.path.exists(e2eoutput_path):
+        os.mkdir(e2eoutput_path)
+    noisemap_outputdir = os.path.join(e2eoutput_path, "noisemap_output")
+    if not os.path.exists(noisemap_outputdir):
+        os.mkdir(noisemap_outputdir)
+
     ########## prepping inputs for II&T run
     # drawing same parameters and metadata as found in DRP
     corgidrp_folder = os.path.split(corgidrp.__file__)[0]
@@ -156,13 +163,6 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     ##########
 
     ####### Now prep and setup necessary calibration files for DRP run
-
-    # make DRP output directory if needed
-    if not os.path.exists(e2eoutput_path):
-        os.mkdir(e2eoutput_path)
-    noisemap_outputdir = os.path.join(e2eoutput_path, "noisemap_output")
-    if not os.path.exists(noisemap_outputdir):
-        os.mkdir(noisemap_outputdir)
 
     # remove old DetectorNoiseMaps
     old_DNMs = sorted(glob(os.path.join(noisemap_outputdir,'*_DNM_CAL.fits')))

@@ -111,11 +111,7 @@ def test_nonlin_cal_e2e(
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
     nonlin_l1_list.sort()
-    kgain_l1_list = []
-    for filename in os.listdir(kgain_l1_datadir):
-        filepath = os.path.join(kgain_l1_datadir, filename)
-        if filepath.lower().endswith('.fits'):
-            kgain_l1_list.append(filepath)
+    kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
     nonlin_l1_list = nonlin_l1_list + kgain_l1_list
 
@@ -169,7 +165,6 @@ def test_nonlin_cal_e2e(
     for step in recipe[0]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
-            step['keywords']['n_cal'] = 14 # low enough for the selected set of SSC TVAC files
     walker.run_recipe(recipe[0], save_recipe_file=True)
     # Compare results
     print('Comparing the results with TVAC')

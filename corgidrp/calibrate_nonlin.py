@@ -175,7 +175,7 @@ def calibrate_nonlin(dataset_nl,
         2.816, 3.520, 4.225, 4.929, 5.633, 6.337, 7.041, 7.745, 8.449, 9.153,
         9.857, 10.561, 11.265, 11.969, 12.674, 13.378, 14.082, and 1.408 (repeated).
       n_cal (int):
-        Minimum number of sub-stacks used to calibrate Non-Linearity. The default
+        Minimum number of frames per sub-stack used to calibrate Non-Linearity. The default
         value is 20.
       n_mean (int):
         Minimum number of frames used to generate the mean frame. The default value
