@@ -48,7 +48,7 @@ def test_image_splitting():
                 expected_output_WP1[1,y,x] = 2
                 expected_output_WP2[0,y,x] = 1
                 expected_output_WP2[1,y,x] = 2
-            #fill in NaN pixels accordingly
+            # fill in NaN pixels accordingly
             if x >= 372:
                 expected_output_WP1[0,y,x] = float('nan')
             if x <= 28:
