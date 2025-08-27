@@ -381,37 +381,42 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    # Create the proper directory structure
-    # If custom paths are provided, create spec_prism_disp_e2e subfolder structure
-    if e2eoutput_path != os.path.join(os.path.dirname(__file__), 'spec_prism_disp_e2e', 'output'):
-        # Custom paths provided - create spec_prism_disp_e2e subfolder structure
-        input_top_level = os.path.join(e2edata_path, 'spec_prism_disp_e2e')
-        output_top_level = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e')
-        
-        # Create the structure
-        os.makedirs(input_top_level, exist_ok=True)
-        os.makedirs(output_top_level, exist_ok=True)
-        
-        # Update paths to use the subfolder structure
-        e2edata_path = input_top_level
-        e2eoutput_path = output_top_level
-    else:
-        # Default paths - create the structure as intended
-        os.makedirs(e2eoutput_path, exist_ok=True)
-        os.makedirs(e2edata_path, exist_ok=True)
+    # Create the spec_prism_disp_e2e subfolder regardless
+    input_top_level = os.path.join(e2edata_path, 'spec_prism_disp_e2e')
+    output_top_level = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e')
     
-
+    os.makedirs(input_top_level, exist_ok=True)
+    os.makedirs(output_top_level, exist_ok=True)
+    
+    # Update paths to use the subfolder structure
+    e2edata_path = input_top_level
+    e2eoutput_path = output_top_level
     
     log_file = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e.log')
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler()
-        ]
-    )
-    logger = logging.getLogger(__name__)
+    
+    # Create a new logger specifically for this test, otherwise things have issues
+    logger = logging.getLogger('spec_prism_disp_e2e')
+    logger.setLevel(logging.INFO)
+    
+    # Clear any existing handlers to avoid duplicates
+    logger.handlers.clear()
+    
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
     
     logger.info('='*80)
     logger.info('SPECTROSCOPY PRISM SCALE AND DISPERSION END-TO-END TEST')
