@@ -309,9 +309,6 @@ def run_processing_pipeline(saved_files):
 def validate_output_calibration_product():
     """Test Case 2: Output Calibration Product Data Format and Content.
 
-    Args:
-        None
-
     Returns:
         str: Path to the latest calibration file
     """
@@ -355,9 +352,6 @@ def validate_output_calibration_product():
 
 def baseline_performance_checks():
     """Test Case 3: Baseline Performance Checks.
-
-    Args:
-        None
 
     Returns:
         tuple: (disp_model, coeffs, angle)
