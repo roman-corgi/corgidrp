@@ -362,6 +362,8 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     
     return disp_model, coeffs, angle
 
+
+
 # ================================================================================
 # Pytest Test Function
 # ================================================================================
@@ -379,10 +381,26 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    # Create output directories first
-    os.makedirs(e2eoutput_path, exist_ok=True)
-    input_data_dir = os.path.join(e2eoutput_path, 'input_data')
-    os.makedirs(input_data_dir, exist_ok=True)
+    # Create the proper directory structure
+    # If custom paths are provided, create spec_prism_disp_e2e subfolder structure
+    if e2eoutput_path != os.path.join(os.path.dirname(__file__), 'spec_prism_disp_e2e', 'output'):
+        # Custom paths provided - create spec_prism_disp_e2e subfolder structure
+        input_top_level = os.path.join(e2edata_path, 'spec_prism_disp_e2e')
+        output_top_level = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e')
+        
+        # Create the structure
+        os.makedirs(input_top_level, exist_ok=True)
+        os.makedirs(output_top_level, exist_ok=True)
+        
+        # Update paths to use the subfolder structure
+        e2edata_path = input_top_level
+        e2eoutput_path = output_top_level
+    else:
+        # Default paths - create the structure as intended
+        os.makedirs(e2eoutput_path, exist_ok=True)
+        os.makedirs(e2edata_path, exist_ok=True)
+    
+
     
     log_file = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e.log')
     logging.basicConfig(
@@ -413,11 +431,10 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
 # Run the test if this script is executed directly
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
-    outputdir = os.path.join(thisfile_dir, 'spec_prism_disp_output')
-    e2edata_dir = os.path.join(outputdir, 'input_data')
-
-    os.makedirs(e2edata_dir, exist_ok=True)
-    os.makedirs(outputdir, exist_ok=True)
+    # Create top-level spec_prism_disp_e2e folder
+    top_level_dir = os.path.join(thisfile_dir, 'spec_prism_disp_e2e')
+    outputdir = os.path.join(top_level_dir, 'output')
+    e2edata_dir = os.path.join(top_level_dir, 'input_data')
 
     ap = argparse.ArgumentParser(description="run the spectroscopy prism dispersion end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
@@ -426,7 +443,7 @@ if __name__ == "__main__":
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     
-    # Run the e2e test
+    # Run the e2e test with the same nested structure logic
     test_run_end_to_end(args.e2edata_dir, args.outputdir)
 
 
