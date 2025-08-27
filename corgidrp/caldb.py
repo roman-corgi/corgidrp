@@ -50,9 +50,8 @@ labels = {data.Dark: "Dark",
           data.FluxcalFactor : "FluxcalFactor",
           data.FpamFsamCal : "FpamFsamCal",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
-          data.CoreThroughputMap: "CoreThroughputMap",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
-          data.SpectroscopyCentroidPSF: "PSFCentroidCalibration",
+          data.SpectroscopyCentroidPSF: "SpectroscopyCentroidPSF",
           data.DispersionModel: "DispersionModel"
           }
 
@@ -417,42 +416,36 @@ def initialize():
         rescan_needed = True
     # Add default DispersionModel calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DispersionModel_band3.fits")):
-        datadir = os.path.join(os.path.split(os.path.split(corgidrp.__file__)[0])[0], 'tests', "test_data", "spectroscopy")
-        file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
-        output_dir = corgidrp.default_cal_dir
+        spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
+        prhdr, exthdr = mocks.create_default_L1_headers()
+        # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
+        # the observations that produced it, but just to avoid confusion, we set the values to something sensible
+        ext_hdr['DPAMNAME'] = 'PRISM3' 
+        ext_hdr['CFAMNAME'] = '3F'
+        ext_hdr['FSAMNAME'] = 'OPEN'
+        # these below are needed for the DispersionModel calibration 
+        ext_hdr["REFWAVE"] = 730.
+        ext_hdr["BAND"] = '3'
+        band_list = spec.read_cent_wave('3')
+        band_center = band_list[0]
+        fwhm = band_list[1]
+        bandpass_frac = fwhm/band_center
+        ext_hdr["BANDFRAC"] = bandpass_frac
+        disp_file_path = os.path.join(spec_datadir, "TVAC_PRISM3_dispersion_profile.npz")
+        disp_params = np.load(disp_file_path)
+        disp_dict = {'clocking_angle': disp_params['clocking_angle'],
+                    'clocking_angle_uncertainty': disp_params['clocking_angle_uncertainty'],
+                    'pos_vs_wavlen_polycoeff': disp_params['pos_vs_wavlen_polycoeff'],
+                    'pos_vs_wavlen_cov' : disp_params['pos_vs_wavlen_cov'],
+                    'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
+                    'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
         
-        prihdr, exthdr = mocks.create_default_L1_headers()
-        exthdr["DPAMNAME"] = 'PRISM3'
-        exthdr["FSAMNAME"] = 'OPEN'
-        psf_array = fits.getdata(file_path, ext = 0)
-        psf_table = Table(fits.getdata(file_path, ext = 1))
-        psf_header = fits.getheader(file_path, ext = 0)
-        psf_table_header = fits.getheader(file_path, ext = 1)
-
-        psf_images = []
-        for i in range(psf_array.shape[0]):
-            data_2d = np.copy(psf_array[i])
-            err = np.zeros_like(data_2d)
-            dq = np.zeros_like(data_2d, dtype=int)
-            image = data.Image(
-                data_or_filepath=data_2d,
-                pri_hdr=prihdr.copy(),
-                ext_hdr=exthdr.copy(),
-                err=err,
-                dq=dq
-            )
-            image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
-            psf_images.append(image)
-
-        dataset = data.Dataset(psf_images)
-
-        psf_centroid = spec.compute_psf_centroid(dataset=dataset)
-        
-        disp_model = spec.calibrate_dispersion_model(psf_centroid)
+        disp_model = data.DispersionModel(disp_dict, pri_hdr = prhdr, ext_hdr = exthdr)
         disp_model.save(output_dir, disp_model.filename)
+        rescan_needed = True
     # Add default SpectroscopyCentroidPSF calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "centroid_calibration.fits")):
-        datadir = os.path.join(os.path.split(os.path.split(corgidrp.__file__)[0])[0], 'tests', "test_data", "spectroscopy")
+        datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
         file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
         output_dir = corgidrp.default_cal_dir
         
@@ -480,7 +473,7 @@ def initialize():
                 err=err,
                 dq=dq
             )
-            image.ext_hdr['CFAMNAME'] = '3d'
+            image.ext_hdr['CFAMNAME'] = '3D'
             psf_images.append(image)
 
         dataset = data.Dataset(psf_images)
@@ -494,6 +487,7 @@ def initialize():
         calibration.filename = "centroid_calibration.fits"
         calibration.filedir = output_dir
         calibration.save()
+        rescan_needed = True
 
     if rescan_needed:
         # add default caldb entries
