@@ -4,68 +4,244 @@ import glob
 import numpy as np
 import astropy.io.fits as fits
 from datetime import datetime, timedelta
+import logging
 
-from corgidrp.data import Dataset
+from corgidrp.data import Dataset, DispersionModel
 from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
-
-# --- CONFIGURATION ---
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'spec_prism_disp_output')
-INPUT_DATA_DIR = os.path.join(OUTPUT_DIR, 'input_data')
-os.makedirs(INPUT_DATA_DIR, exist_ok=True)
-
-# --- USE THE SAME INPUT DATA AS test_spec.py ---
-print('Using the same input data as test_spec.py...')
-from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
+from corgidrp.walker import walk_corgidrp
 
-# Use the exact same data source as test_spec.py
+# Configuration
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'spec_prism_disp_output')
+INPUT_DATA_DIR = os.path.join(OUTPUT_DIR, 'input_data')
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(INPUT_DATA_DIR, exist_ok=True)
+
+# Setup logging
+log_file = os.path.join(OUTPUT_DIR, 'spec_prism_disp_e2e.log')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# ================================================================================
+# Validation functions - can be used in other E2E tests
+# ================================================================================
+
+def check_filename_convention(filename, expected_pattern, frame_info=""):
+    """Check if filename follows the expected naming convention.
+
+    Args:
+        filename (str): Filename to check
+        expected_pattern (str): Expected pattern (e.g., 'cgi_*_l2b.fits')
+        frame_info (str): Additional info for logging (e.g., "Frame 0")
+
+    Returns:
+        bool: True if filename matches convention
+    """
+    if not filename:
+        logger.info(f"{frame_info}: No filename. Naming convention FAIL.")
+        return False
+    
+    # Basic pattern check
+    if expected_pattern == 'cgi_*_l2b.fits':
+        parts = filename.split('_')
+        valid = (len(parts) >= 4 and 
+                parts[0] == 'cgi' and 
+                len(parts[2]) == 16 and parts[2][8] == 't' and 
+                parts[2][:8].isdigit() and parts[2][9:].isdigit() and
+                filename.endswith('_l2b.fits'))
+    elif expected_pattern == 'cgi_*_dpm_cal.fits':
+        valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
+    else:
+        valid = expected_pattern in filename
+    
+    status = "PASS" if valid else "FAIL"
+    logger.info(f"{frame_info}: Filename: {filename}. Naming convention {status}.")
+    return valid
+
+def check_dimensions(data, expected_shape, frame_info=""):
+    """Check if data has expected dimensions.
+
+    Args:
+        data (numpy.ndarray): Data array to check
+        expected_shape (tuple): Expected shape tuple
+        frame_info (str): Additional info for logging (e.g., "Frame 0")
+
+    Returns:
+        bool: True if dimensions match
+    """
+    if data.shape == expected_shape:
+        logger.info(f"{frame_info}: Shape={data.shape}. Expected: {expected_shape}. PASS.")
+        return True
+    else:
+        logger.info(f"{frame_info}: Shape={data.shape}. Expected: {expected_shape}. FAIL.")
+        return False
+
+def verify_hdu_count(hdul, expected_count, frame_info=""):
+    """Verify that the number of HDUs in the FITS file is as expected.
+
+    Args:
+        hdul (astropy.io.fits.HDUList): FITS HDUList object
+        expected_count (int): Expected number of HDUs
+        frame_info (str): Additional info for logging (e.g., "Frame 0")
+
+    Returns:
+        bool: True if HDU count matches expected count
+    """
+    if len(hdul) == expected_count:
+        logger.info(f"{frame_info}: HDU count={len(hdul)}. Expected: {expected_count}. PASS.")
+        return True
+
+def verify_header_keywords(header, required_keywords, frame_info=""):
+    """Verify that required header keywords are present and have expected values.
+
+    Args:
+        header (astropy.io.fits.Header): FITS header object
+        required_keywords (dict or list): Dictionary of {keyword: expected_value} or list of keywords
+        frame_info (str): Additional info for logging (e.g., "Frame 0")
+
+    Returns:
+        bool: True if all keywords are valid
+    """
+    all_valid = True
+    
+    if isinstance(required_keywords, dict):
+        # Check keyword-value pairs
+        for keyword, expected_value in required_keywords.items():
+            if keyword not in header:
+                logger.error(f"{frame_info}: Missing required keyword {keyword}!")
+                all_valid = False
+            else:
+                actual_value = header[keyword]
+                if actual_value == expected_value:
+                    logger.info(f"{frame_info}: {keyword}={actual_value}. Expected {keyword}: {expected_value}. PASS.")
+                else:
+                    logger.info(f"{frame_info}: {keyword}={actual_value}. Expected {keyword}: {expected_value}. FAIL.")
+                    all_valid = False
+    else:
+        # Just check if keywords exist
+        for keyword in required_keywords:
+            if keyword not in header:
+                logger.error(f"{frame_info}: Missing required keyword {keyword}!")
+                all_valid = False
+            else:
+                logger.info(f"{frame_info}: {keyword}={header[keyword]},")
+    
+    return all_valid
+
+def validate_binary_table_fields(hdu1, required_fields):
+    """Validate binary table fields with consistent error reporting.
+
+    Args:
+        hdu1 (astropy.io.fits.BinTableHDU): FITS binary table HDU
+        required_fields (list): List of required field names
+
+    Returns:
+        bool: True if all fields are valid
+    """
+    if isinstance(hdu1, fits.BinTableHDU):
+        logger.info("HDU1: Binary table format. Expected: BinTableHDU. PASS.")
+        
+        for field in required_fields:
+            if field in hdu1.data.names:
+                data = hdu1.data[field]
+                # Check if dtype is 64-bit float (ignoring endianness)
+                is_float64 = (data.dtype.kind == 'f' and data.dtype.itemsize == 8)
+                status = "PASS" if is_float64 else "FAIL"
+                logger.info(f"HDU1: Table field '{field}' present. Data type {data.dtype}. Expected: 64-bit float. {status}.")
+                
+                # Additional shape validation for polynomial coefficients
+                if field == 'pos_vs_wavlen_polycoeff':
+                    expected_shape = (1, 4)
+                    shape_status = "PASS" if data.shape == expected_shape else "FAIL"
+                    logger.info(f"HDU1: {field} shape {data.shape}. Expected: {expected_shape}. {shape_status}.")
+            else:
+                logger.info(f"HDU1: Field '{field}' missing. Expected: field present. FAIL.")
+        return True
+    else:
+        logger.info(f"HDU1: Format {type(hdu1)}. Expected: BinTableHDU. FAIL.")
+        # Report all field failures when format is wrong
+        for field in required_fields:
+            logger.info(f"HDU1: Field '{field}' missing. Expected: field present. FAIL.")
+            if field == 'pos_vs_wavlen_polycoeff':
+                logger.info(f"HDU1: Field '{field}' missing. Expected: 64-bit float. FAIL.")
+                logger.info(f"HDU1: Field '{field}' missing. Expected: 1×4 array. FAIL.")
+        return False
+
+def get_latest_cal_file(output_dir, pattern):
+    """Get the most recent calibration file matching the pattern.
+
+    Args:
+        output_dir (str): Directory to search for calibration files
+        pattern (str): Pattern to match (e.g., '*_dpm_cal.fits')
+
+    Returns:
+        str: Path to the most recent calibration file
+    """
+    cal_files = sorted(glob.glob(os.path.join(output_dir, pattern)), key=os.path.getmtime, reverse=True)
+    if not cal_files:
+        raise RuntimeError(f'No {pattern} files found in {output_dir}!')
+    return cal_files[0]
+
+# ================================================================================
+# E2E Test Begin
+# ================================================================================
+
+logger.info('='*80)
+logger.info('SPECTROSCOPY PRISM SCALE AND DISPERSION END-TO-END TEST')
+logger.info('='*80)
+logger.info("")
+
+# ================================================================================
+# (0) Pre-test: create input files and save to disk
+# ================================================================================
+logger.info('='*80)
+logger.info('Pre-test: set up input files and save to disk')
+logger.info('='*80)
+
+# Load test data
 datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
 file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
 
 if not os.path.exists(file_path):
     raise RuntimeError(f'Test file not found: {file_path}')
 
-# Load the same data that test_spec.py uses
 psf_array = fits.getdata(file_path, ext=0)
 psf_table = Table(fits.getdata(file_path, ext=1))
 
-print(f"Loaded PSF array with shape: {psf_array.shape}")
-print(f"PSF table has {len(psf_table)} rows")
-
-# Create the same dataset structure as test_spec.py
+# Create dataset with mock headers and noise
 pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
 ext_hdr["DPAMNAME"] = 'PRISM3'
 ext_hdr["FSAMNAME"] = 'OPEN'
 
-# Add random noise to the filter sweep template images to serve as fake data (same as test_spec.py)
+# Add random noise for reproducibility
 np.random.seed(5)
 read_noise = 200
 noisy_data_array = (np.random.poisson(np.abs(psf_array) / 2) + 
                     np.random.normal(loc=0, scale=read_noise, size=psf_array.shape))
 
+# Create Image objects
 psf_images = []
 for i in range(noisy_data_array.shape[0]):
-    data_2d = np.copy(noisy_data_array[i])
-    err = np.zeros_like(data_2d)
-    dq = np.zeros_like(data_2d, dtype=int)
     image = Image(
-        data_or_filepath=data_2d,
+        data_or_filepath=np.copy(noisy_data_array[i]),
         pri_hdr=pri_hdr.copy(),
         ext_hdr=ext_hdr.copy(),
-        err=err,
-        dq=dq
+        err=np.zeros_like(noisy_data_array[i]),
+        dq=np.zeros_like(noisy_data_array[i], dtype=int)
     )
     image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
     psf_images.append(image)
 
-l2b_dataset = Dataset(psf_images)
-
-# --- SAVE INPUT DATA TO input_data SUBFOLDER ---
-print('Saving input data to input_data subfolder...')
-os.makedirs(INPUT_DATA_DIR, exist_ok=True)
-
+# Save images to disk with timestamped filenames
 def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
     visitid = pri_hdr.get('VISITID', '0000000000000000000')
     now = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
@@ -73,78 +249,114 @@ def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
 
 basetime = datetime.now()
 for i, img in enumerate(psf_images):
-    cfam = img.ext_hdr.get('CFAMNAME', 'unknown')
     fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l2b")
     fpath = os.path.join(INPUT_DATA_DIR, fname)
     
-    # Save with both primary and extension headers
+    # Save as FITS
     primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
     image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
-    hdul = fits.HDUList([primary_hdu, image_hdu])
-    hdul.writeto(fpath, overwrite=True)
-    print(f"Saved {cfam} to {fname}")
+    fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
 
-# --- CHECK INPUT DATASET ---
-print('Checking input dataset headers and dimensions...')
-for i, frame in enumerate(l2b_dataset):
-    ext_hdr = frame.ext_hdr
-    assert 'CFAMNAME' in ext_hdr, f"Frame {i} missing CFAMNAME!"
-    print(f"Frame {i}: CFAMNAME={ext_hdr['CFAMNAME']}, shape={frame.data.shape}")
-
-# --- CENTROIDING ---
-print('Computing PSF centroids...')
-
-# Load the saved files back into a dataset so they have proper filenames
-# This is needed for the SpectroscopyCentroidPSF constructor to auto-generate filenames
+# Load saved files back into dataset
 saved_files = sorted(glob.glob(os.path.join(INPUT_DATA_DIR, 'cgi_*_l2b.fits')))
 if not saved_files:
     raise RuntimeError(f'No saved L2b files found in {INPUT_DATA_DIR}!')
 
-print(f"Loading {len(saved_files)} saved files for centroid computation...")
 l2b_dataset_with_filenames = Dataset(saved_files)
+logger.info('')
 
-# Use the same approach as test_spec.py - let it use the default template dataset
-centroid_cal = compute_psf_centroid(l2b_dataset_with_filenames)
+# ================================================================================
+# (1) Test Case 1: Input Image Data Format and Content
+# ================================================================================
+logger.info('='*80)
+logger.info('Test Case 1: Input Image Data Format and Content')
+logger.info('='*80)
 
-# The SpectroscopyCentroidPSF class should auto-generate a filename
-# Just set the output directory
-centroid_cal.filedir = OUTPUT_DIR
-centroid_cal.save()
+# Validate all input images
+for i, frame in enumerate(l2b_dataset_with_filenames):
+    frame_info = f"Frame {i}"
+    
+    check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l2b.fits', frame_info)
+    check_dimensions(frame.data, (81, 81), frame_info)
+    verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info)
+    verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info)
+    logger.info("")
 
-# --- PRINT CENTROID CALIBRATION CONTENTS ---
-print('\nCentroid calibration results:')
-print(f'Number of centroids: {len(centroid_cal.xfit)}')
-print('Sub-bands (FILTERS header):', centroid_cal.ext_hdr.get('FILTERS', 'N/A'))
-print('xfit:', centroid_cal.xfit)
-print('yfit:', centroid_cal.yfit)
-print('xfit_err:', centroid_cal.xfit_err)
-print('yfit_err:', centroid_cal.yfit_err)
+logger.info(f"Total input images validated: {len(l2b_dataset_with_filenames)}")
+logger.info("")
 
-# --- NOTE: Do NOT remove any centroids - calibrate_dispersion_model handles reference bands internally ---
+# ================================================================================
+# (2) Running processing pipeline
+# ================================================================================
+logger.info('='*80)
+logger.info('Running processing pipeline')
+logger.info('='*80)
 
-# --- DISPERSION CALIBRATION ---
-print('Calibrating dispersion model...')
-disp_model = calibrate_dispersion_model(centroid_cal)
+logger.info('Running e2e recipe...')
+recipe = walk_corgidrp(
+    filelist=saved_files, 
+    CPGS_XML_filepath="",
+    outputdir=OUTPUT_DIR,
+    template="l2b_to_spec_prism_disp.json"
+)
+logger.info("")
 
-# --- SAVE OUTPUT ---
-print('Saving output calibration product to current directory...')
-disp_model.save(filedir=OUTPUT_DIR)
+# ================================================================================
+# (3) Test Case 2: Output Calibration Product Data Format and Content
+# ================================================================================
+logger.info('='*80)
+logger.info('Test Case 2: Output Calibration Product Data Format and Content')
+logger.info('='*80)
 
-# --- VERIFY OUTPUT ---
-# Find the most recent file ending with _dpm_cal.fits in OUTPUT_DIR
-cal_files = sorted(glob.glob(os.path.join(OUTPUT_DIR, '*_dpm_cal.fits')), key=os.path.getmtime, reverse=True)
-if not cal_files:
-    raise RuntimeError(f'No _dpm_cal.fits file found in {OUTPUT_DIR}!')
-cal_file = cal_files[0]
-print(f'Verifying output calibration product: {cal_file}')
-hdul = fits.open(cal_file)
+# Validate output calibration product
+cal_file = get_latest_cal_file(OUTPUT_DIR, '*_dpm_cal.fits')
+check_filename_convention(os.path.basename(cal_file), 'cgi_*_dpm_cal.fits', "DPM calibration product")
 
+with fits.open(cal_file) as hdul:
+    verify_hdu_count(hdul, 2, "DPM calibration product")
+    
+    # Verify HDU0 (header only)
+    hdu0 = hdul[0]
+    if hdu0.data is None:
+        logger.info("HDU0: Header only. Expected: header only. PASS.")
+    else:
+        logger.info(f"HDU0: Contains data with shape {hdu0.data.shape}. Expected: header only. FAIL.")
+    
+    # Verify HDU1 (binary table with required fields)
+    if len(hdul) > 1:
+        validate_binary_table_fields(hdul[1], ['clocking_angle', 'pos_vs_wavlen_polycoeff'])
+    else:
+        logger.info("HDU1: Missing. Expected: HDU1 present. FAIL.")
+        # Report all field failures when HDU1 is missing
+        for field in ['clocking_angle', 'pos_vs_wavlen_polycoeff']:
+            logger.info(f"HDU1: Field '{field}' missing. Expected: field present. FAIL.")
+            if field == 'pos_vs_wavlen_polycoeff':
+                logger.info(f"HDU1: Field '{field}' missing. Expected: 64-bit float. FAIL.")
+                logger.info(f"HDU1: Field '{field}' missing. Expected: 1×4 array. FAIL.")
+    
+    # Verify header keywords
+    if len(hdul) > 1:
+        verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'DispersionModel'}, "DPM calibration product")
 
+logger.info("")
 
-# Print polynomial coefficients and orientation
+# ================================================================================
+# (4) Test Case 3: Baseline Performance Checks
+# ================================================================================
+logger.info('='*80)
+logger.info('Test Case 3: Baseline Performance Checks')
+logger.info('='*80)
+
+# Load and display dispersion model results
+cal_file = get_latest_cal_file(OUTPUT_DIR, '*_dpm_cal.fits')
+disp_model = DispersionModel(cal_file)
+
 coeffs = disp_model.pos_vs_wavlen_polycoeff
 angle = disp_model.clocking_angle
-print(f"Polynomial coefficients (dispersion): {coeffs}")
-print(f"Dispersion axis orientation angle: {angle} deg")
+logger.info(f"Dispersion axis orientation angle (clocking_angle): {angle} deg")
+logger.info(f"Polynomial coefficients (pos_vs_wavlen_polycoeff): {coeffs}")
+logger.info("")
 
-print('End-to-end test complete.')
+logger.info('='*80)
+logger.info('END-TO-END TEST COMPLETE')
+logger.info('='*80)

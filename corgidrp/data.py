@@ -862,6 +862,10 @@ class DispersionModel(Image):
         self.pos_vs_wavlen_cov = np.array(self.data["pos_vs_wavlen_cov"][0])
         self.wavlen_vs_pos_polycoeff = np.array(self.data["wavlen_vs_pos_polycoeff"][0])
         self.wavlen_vs_pos_cov = np.array(self.data["wavlen_vs_pos_cov"][0])
+        
+        # Add err and dq attributes for walker compatibility (set to None since DispersionModel doesn't have these)
+        self.err = None
+        self.dq = None
 
 
     def save(self, filedir=None, filename=None):
