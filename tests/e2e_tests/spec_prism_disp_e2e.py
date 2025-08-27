@@ -15,9 +15,6 @@ from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
 
-
-
-
 # ================================================================================
 # Validation functions - can be used in other E2E tests
 # ================================================================================
@@ -375,6 +372,9 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     Args:
         e2edata_path (str): Path to input data directory
         e2eoutput_path (str): Output directory path for results and logs.
+
+    Returns:
+        tuple: (disp_model, coeffs, angle)
     """
     # Set up output directory and logging
     global logger
