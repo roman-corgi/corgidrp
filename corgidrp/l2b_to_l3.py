@@ -208,8 +208,9 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
             for j in range(image_size):
                 y = start_left[1] + i
                 x = start_left[0] + j
-                # check if (x-h)^2+(y-k)^2<=r^2, (h,k) is the center of the right image since we're cropping the left one
-                if ((x-center_right[0])**2) + ((y-center_right[1])**2) <= radius_pix**2:
+                # mark anything on the other side of the center line dividing the two images as NaN to avoid including the other image
+                if (prism == 'POL0' and x >= image_center[0]) or\
+                (prism=='POL45' and y + image_center[1] <= x + image_center[0]):
                     im_data_new[0, i, j] = float('nan')
                 else:
                     im_data_new[0, i, j] = im_data[y, x]
@@ -218,12 +219,13 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
             for j in range(image_size):
                 y = start_right[1] + i
                 x = start_right[0] + j
-                # (h,k) is the center of the left image this time since we're cropping the right
-                if ((x-center_left[0])**2) + ((y-center_left[1])**2) <= radius_pix**2:
-                    im_data_new[1, i, j] = float('nan')
+                # mark anything on the other side of the center line dividing the two images as NaN to avoid including the other image
+                if (prism == 'POL0' and x <= image_center[0]) or\
+                (prism=='POL45' and y + image_center[1] >= x + image_center[0]):
+                    im_data_new[0, i, j] = float('nan')
                 else:
-                    im_data_new[1, i, j] = im_data[y, x]
-        
+                    im_data_new[0, i, j] = im_data[y, x]
+                    
         #update data
         image.data = im_data_new
     
