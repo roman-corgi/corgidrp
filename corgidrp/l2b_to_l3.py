@@ -132,7 +132,7 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
     """
 
     passband = input_dataset[0].ext_hdr['CFAMNAME']
-    if passband != '1F' or passband != '4F':
+    if passband != '1F' and passband != '4F':
         raise ValueError(f'Polarimetric datasets must be imaged in band 1F or 4F, not {passband}')
     
     updated_dataset = input_dataset.copy()
@@ -147,11 +147,11 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
     if fov == 'NFOV':
         # NFOV outer radius is 9.7 λ/D
         # convert to arcsec: λ/D * 206265
-        radius_arcsec = 9.7 * ((bandpass_center_um['passband'] * 1e-6) / diam) * 206265
+        radius_arcsec = 9.7 * ((bandpass_center_um[passband] * 1e-6) / diam) * 206265
     elif fov == 'WFOV':
         # WFOV outer radius is 20.1 λ/D
         # convert to arcsec: λ/D * 206265
-        radius_arcsec = 20.1 * ((bandpass_center_um['passband'] * 1e-6) / diam) * 206265
+        radius_arcsec = 20.1 * ((bandpass_center_um[passband] * 1e-6) / diam) * 206265
     else:
         # default to unvignetted polarimetry FOV diameter of 3.8"
         radius_arcsec = 3.8 / 2
@@ -173,7 +173,7 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
         image_y, image_x = im_data.shape
         prism = image.ext_hdr['DPAMNAME']
         # make sure input image is polarized
-        if prism != 'POL0' or prism != 'POl45':
+        if prism != 'POL0' and prism != 'POL45':
             raise ValueError('Input image must be a polarimetric observation')
         
         # find polarized image centers
@@ -200,12 +200,12 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
             raise ValueError('Image bounds exceed that of the input data, please decrease the image size')
         
         # construct new datacube
-        im_data_new = np.zeros(2, image_size, image_size)
+        im_data_new = np.zeros(shape=(2, image_size, image_size))
 
         # fill in the first dimension, corresponding to 0 or 45 degree polarization
         # for each pixel in the cropped area, if it's inside the radius of the other polarized image, replace it with a NaN
-        for i in len(image_size):
-            for j in len(image_size):
+        for i in range(image_size):
+            for j in range(image_size):
                 y = start_left[1] + i
                 x = start_left[0] + j
                 # check if (x-h)^2+(y-k)^2<=r^2, (h,k) is the center of the right image since we're cropping the left one
@@ -214,8 +214,8 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
                 else:
                     im_data_new[0, i, j] = im_data[y, x]
         # fill in the second dimension, corresponding to the 90 or 135 degree polarization
-        for i in len(image_size):
-            for j in len(image_size):
+        for i in range(image_size):
+            for j in range(image_size):
                 y = start_right[1] + i
                 x = start_right[0] + j
                 # (h,k) is the center of the left image this time since we're cropping the right
