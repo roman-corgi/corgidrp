@@ -192,7 +192,11 @@ def get_latest_cal_file(output_dir, pattern):
     return cal_files[0]
 
 def setup_input_files():
-    """Pre-test: create input files and save to disk."""
+    """Pre-test: create input files and save to disk.
+
+    Returns:
+        tuple: (l2b_dataset_with_filenames, saved_files)
+    """
     logger.info('='*80)
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
@@ -256,7 +260,11 @@ def setup_input_files():
     return l2b_dataset_with_filenames, saved_files
 
 def validate_input_images(l2b_dataset_with_filenames):
-    """Test Case 1: Input Image Data Format and Content."""
+    """Test Case 1: Input Image Data Format and Content.
+
+    Args:
+        l2b_dataset_with_filenames (Dataset): Dataset object containing L2b images
+    """
     logger.info('='*80)
     logger.info('Test Case 1: Input Image Data Format and Content')
     logger.info('='*80)
@@ -275,7 +283,14 @@ def validate_input_images(l2b_dataset_with_filenames):
     logger.info("")
 
 def run_processing_pipeline(saved_files):
-    """Running processing pipeline."""
+    """Running processing pipeline.
+
+    Args:
+        saved_files (list): List of saved L2b files
+
+    Returns:
+        Recipe: Recipe object containing the processing pipeline
+    """
     logger.info('='*80)
     logger.info('Running processing pipeline')
     logger.info('='*80)
@@ -292,7 +307,14 @@ def run_processing_pipeline(saved_files):
     return recipe
 
 def validate_output_calibration_product():
-    """Test Case 2: Output Calibration Product Data Format and Content."""
+    """Test Case 2: Output Calibration Product Data Format and Content.
+
+    Args:
+        None
+
+    Returns:
+        str: Path to the latest calibration file
+    """
     logger.info('='*80)
     logger.info('Test Case 2: Output Calibration Product Data Format and Content')
     logger.info('='*80)
@@ -332,7 +354,14 @@ def validate_output_calibration_product():
     return cal_file
 
 def baseline_performance_checks():
-    """Test Case 3: Baseline Performance Checks."""
+    """Test Case 3: Baseline Performance Checks.
+
+    Args:
+        None
+
+    Returns:
+        tuple: (disp_model, coeffs, angle)
+    """
     logger.info('='*80)
     logger.info('Test Case 3: Baseline Performance Checks')
     logger.info('='*80)
