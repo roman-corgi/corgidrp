@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
+from corgidrp.data import Dataset, Image, DispersionModel
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
 from corgidrp.spec import get_template_dataset
@@ -366,13 +366,13 @@ def test_add_wavelength_map():
     ref_wavlen = disp_model.ext_hdr["REFWAVE"]
     filepath = os.path.join(spec_datadir, "templates", "spec_unocc_noslit_offset_prism3_3d_12.fits")
     image = Image(filepath)
-    image.ext_hdr['wavlen0'] = wave_0.get('wavlen')
-    image.ext_hdr['x0'] = wave_0.get('x')
-    image.ext_hdr['x0err'] = wave_0.get('xerr')
-    image.ext_hdr['y0'] = wave_0.get('y')
-    image.ext_hdr['y0err'] = wave_0.get('yerr')
-    image.ext_hdr['shapex0'] = wave_0.get('shapex')
-    image.ext_hdr['shapey0'] = wave_0.get('shapey')
+    image.ext_hdr['WAVLEN0'] = wave_0.get('wavlen')
+    image.ext_hdr['WV0_X'] = wave_0.get('x')
+    image.ext_hdr['WV0_XERR'] = wave_0.get('xerr')
+    image.ext_hdr['WV0_Y'] = wave_0.get('y')
+    image.ext_hdr['WV0_YERR'] = wave_0.get('yerr')
+    image.ext_hdr['WV0_DIMX'] = wave_0.get('shapex')
+    image.ext_hdr['WV0_DIMY'] = wave_0.get('shapey')
     dataset = Dataset([image])
     
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
@@ -405,6 +405,152 @@ def test_add_wavelength_map():
     assert len(pos_lookup.colnames) == 5
     assert np.allclose(pos_lookup.columns[0].data, ref_wavlen, atol = 65)
     
+def test_determine_zeropoint():
+    """
+    test the calculation of the wavelength zeropoint position of satspot data
+    """
+    errortol_pix = 0.5
+    filepath = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
+    pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
+    
+    with fits.open(filepath) as hdul:
+        psf_array = hdul[0].data
+        psf_table = Table(hdul[1].data)
+ 
+    assert psf_array.ndim == 3, "Expected 3D PSF array"
+    assert "xcent" in psf_table.colnames and "ycent" in psf_table.colnames, "Missing centroid columns"
+
+    initial_cent = {
+        "xcent": np.array(psf_table["xcent"]),
+        "ycent": np.array(psf_table["ycent"])
+    }
+    offset_cent = {
+        "xoffset": np.array(psf_table["xoffset"]),
+        "yoffset": np.array(psf_table["yoffset"])
+    }
+    # Use the position for the zero-offset PSF template to set the projected,
+    # vertical slit position on the image array. This should be in the exact
+    # center of the array. 
+    # the zero offset template image is our fake satspot observation in the slit center
+    assert(offset_cent.get("xoffset")[12] == 0.)
+    assert(offset_cent.get("yoffset")[12] == 0.)
+    slit_x = initial_cent.get("xcent")[12]
+    slit_y = initial_cent.get("ycent")[12]
+
+    ext_hdr['DPAMNAME'] = 'PRISM3'
+    ext_hdr['FSAMNAME'] = 'R1C2'
+    psf_images = []
+    for i in range(psf_array.shape[0]):
+        data_2d = np.copy(psf_array[i])
+        ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
+        ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
+        ext_hdr['CFAMNAME'] = '3'
+        if i == 12:
+            pri_hdr["SATSPOTS"] = 1
+            ext_hdr['CFAMNAME'] = '3d'
+        else:
+            pri_hdr["SATSPOTS"] = 0
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image = Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq
+        )
+        psf_images.append(image)
+
+    #test it with optional initial guess and with one satspot frame
+    input_dataset = Dataset(psf_images)
+    dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, xcent_guess = 40., ycent_guess = 32.)
+
+    assert len(dataset_guess) < len(input_dataset)
+    for frame in dataset_guess:
+        assert frame.pri_hdr["SATSPOTS"] == 0
+        assert frame.ext_hdr["WAVLEN0"] == 753.83
+        assert "WV0_X" in frame.ext_hdr
+        assert "WV0_Y" in frame.ext_hdr
+        assert "WV0_XERR" in frame.ext_hdr
+        assert "WV0_YERR" in frame.ext_hdr
+        assert frame.ext_hdr["WV0_DIMX"] == 81
+        assert frame.ext_hdr["WV0_DIMY"] == 81
+        x0 = frame.ext_hdr["WV0_X"]
+        y0 = frame.ext_hdr["WV0_Y"]
+        x0err = frame.ext_hdr["WV0_XERR"]
+        y0err = frame.ext_hdr["WV0_YERR"]
+        assert x0 == pytest.approx(slit_x, abs = errortol_pix)
+        assert y0 == pytest.approx(slit_y, abs = errortol_pix)
+        assert x0err < errortol_pix
+        assert y0err < errortol_pix
+    
+    psf_images = []
+    for i in range(psf_array.shape[0]):
+        data_2d = np.copy(psf_array[i])
+        ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
+        ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
+        ext_hdr['CFAMNAME'] = '3d'
+        pri_hdr["SATSPOTS"] = 0
+        err = np.zeros_like(data_2d)
+        dq = np.zeros_like(data_2d, dtype=int)
+        image = Image(
+            data_or_filepath=data_2d,
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
+            err=err,
+            dq=dq
+        )
+        psf_images.append(image)
+
+    #test it as non-coronagraphic observation of only psf narrowband, so no science frames
+    input_dataset2 = Dataset(psf_images)
+    with pytest.raises(AttributeError):
+        dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    
+    #only 1 fake science dataset frame
+    input_dataset2.frames[0].ext_hdr['CFAMNAME'] = '3'
+    dataset = l3_to_l4.determine_wave_zeropoint(input_dataset2)
+    assert len(dataset) == 1
+    for frame in dataset:
+        assert frame.pri_hdr["SATSPOTS"] == 0
+        assert frame.ext_hdr["WAVLEN0"] == 753.83
+        assert "WV0_X" in frame.ext_hdr
+        assert "WV0_Y" in frame.ext_hdr
+        assert "WV0_XERR" in frame.ext_hdr
+        assert "WV0_YERR" in frame.ext_hdr
+        assert frame.ext_hdr["WV0_DIMX"] == 81
+        assert frame.ext_hdr["WV0_DIMY"] == 81
+        x0 = frame.ext_hdr["WV0_X"]
+        y0 = frame.ext_hdr["WV0_Y"]
+        x0err = frame.ext_hdr["WV0_XERR"]
+        y0err = frame.ext_hdr["WV0_YERR"]
+        assert x0 == pytest.approx(slit_x, abs = errortol_pix)
+        assert y0 == pytest.approx(slit_y, abs = errortol_pix)
+        assert x0err < errortol_pix
+        assert y0err < errortol_pix
+    
+    #to test the accuracy add noise to the dataset frames
+    read_noise = 200
+    np.random.seed(0)
+
+    noise_dataset = input_dataset.copy()
+    for frame in noise_dataset:
+        frame.data = np.random.poisson(np.abs(frame.data)/3) + \
+        np.random.normal(loc=0, scale=read_noise, size = frame.data.shape)
+    noisci_dataset = l3_to_l4.determine_wave_zeropoint(noise_dataset)
+    for i in range(len(noisci_dataset)):
+        x0_noi = noisci_dataset[i].ext_hdr["WV0_X"]
+        y0_noi = noisci_dataset[i].ext_hdr["WV0_Y"]
+        x0err_noi = noisci_dataset[i].ext_hdr["WV0_XERR"]
+        y0err_noi = noisci_dataset[i].ext_hdr["WV0_YERR"]
+        x0 = dataset_guess[i].ext_hdr["WV0_X"]
+        y0 = dataset_guess[i].ext_hdr["WV0_Y"]
+        x0err = dataset_guess[i].ext_hdr["WV0_XERR"]
+        y0err = dataset_guess[i].ext_hdr["WV0_YERR"]
+        assert x0 == pytest.approx(x0_noi, abs = errortol_pix)
+        assert y0 == pytest.approx(y0_noi, abs = errortol_pix)
+        assert x0err_noi < errortol_pix
+        assert y0err_noi < errortol_pix
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
@@ -412,4 +558,5 @@ if __name__ == "__main__":
     test_dispersion_model()
     test_read_cent_wave()
     test_calibrate_dispersion_model()
+    test_determine_zeropoint()
     test_add_wavelength_map()

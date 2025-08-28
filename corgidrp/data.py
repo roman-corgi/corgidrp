@@ -1414,7 +1414,6 @@ class DetectorParams(Image):
             hashing_str += str(self.params[key])
 
         return str(hash(hashing_str))
-        
             
 class AstrometricCalibration(Image):
     """
