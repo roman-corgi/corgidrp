@@ -126,18 +126,15 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # Create the CT map. Do not save it. We will compare it with the map from
     # the walker
-    # FPAM/FSAM
-    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00.00.00.000.fits")):
-        fpamfsam_2excam = data.FpamFsamCal([],
-            date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
-        fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
-    fpam_fsam_cal = data.FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
-    this_caldb.create_entry(fpam_fsam_cal)
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    fpam_fsam_cal = this_caldb.get_calib(None, data.FpamFsamCal)
     # The first entry (dataset) is only used to get the FPM's center
     ct_map_mock = corethroughput.create_ct_map(corDataset, fpam_fsam_cal,
         ct_cal_mock)
-
+    
     # Run the DRP walker
     print('Running walker')
     # Add path to files

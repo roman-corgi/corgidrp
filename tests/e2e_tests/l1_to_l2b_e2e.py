@@ -139,11 +139,6 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
 
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=test_outputdir, filename="detector_params.fits")
-    this_caldb.create_entry(detector_params)
-
     # Nonlinearity calibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
@@ -203,7 +198,8 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     tvac_l2a_filelist = []
     tvac_l2b_filelist = []
     bad_pix = np.zeros((1024,1024)) # what is used in DRP
-    det_params = data.DetectorParams({})
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    det_params = this_caldb.get_calib(None, data.DetectorParams)
     fwc_pp_e = int(det_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
     fwc_em_e = int(det_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
     telem_rows_start = det_params.params['TELRSTRT']

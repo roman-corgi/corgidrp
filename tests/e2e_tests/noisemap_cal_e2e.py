@@ -112,6 +112,14 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     if not os.path.exists(noisemap_outputdir):
         os.mkdir(noisemap_outputdir)
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB() # connection to cal DB
+
     ########## prepping inputs for II&T run
     # drawing same parameters and metadata as found in DRP
     corgidrp_folder = os.path.split(corgidrp.__file__)[0]
@@ -119,7 +127,8 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     meta_path = os.path.join(corgidrp_f, 'tests', 'test_data', 'metadata.yaml')
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
-    det_params = data.DetectorParams({})
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    det_params = this_caldb.get_calib(None, data.DetectorParams)
     det_params.save(filedir=noisemap_outputdir, filename="mock_det_params.fits")
     fwc_pp_e = int(det_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
     fwc_em_e = int(det_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
@@ -172,17 +181,6 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     for old_DNM in old_DNMs2:
         os.remove(old_DNM)
     mock_input_dataset = data.Dataset(mock_cal_filelist)
-
-    # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
-    corgidrp.caldb_filepath = tmp_caldb_csv
-    # remove any existing caldb file so that CalDB() creates a new one
-    if os.path.exists(corgidrp.caldb_filepath):
-        os.remove(tmp_caldb_csv)
-    this_caldb = caldb.CalDB() # connection to cal DB
-
-    det_params.save(filedir=noisemap_outputdir, filename="mock_det_params.fits")
-    this_caldb.create_entry(det_params)
 
     pri_hdr, ext_hdr = mocks.create_default_L1_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
@@ -300,6 +298,14 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     l1_data_filelist = sorted(glob(os.path.join(l1_datadir,"*.fits")))
     mock_cal_filelist = l1_data_filelist [-2:] # grab the last two input data to mock the calibration 
     
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB() # connection to cal DB
+
     ########## prepping inputs for II&T run
     # drawing same parameters and metadata as found in DRP
     corgidrp_folder = os.path.split(corgidrp.__file__)[0]
@@ -310,7 +316,8 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
     eperdn = 8.7 # what is used in DRP
     b_offset = 0 # what is used in DRP
-    det_params = data.DetectorParams({})
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    det_params = this_caldb.get_calib(None, data.DetectorParams)
     fwc_pp_e = int(det_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
     fwc_em_e = int(det_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
     telem_rows_start = det_params.params['TELRSTRT']
@@ -393,17 +400,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     for old_DNM in old_DNMs2:
         os.remove(old_DNM)
     mock_input_dataset = data.Dataset(mock_cal_filelist)
-
-    # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
-    corgidrp.caldb_filepath = tmp_caldb_csv
-    # remove any existing caldb file so that CalDB() creates a new one
-    if os.path.exists(corgidrp.caldb_filepath):
-        os.remove(tmp_caldb_csv)
-    this_caldb = caldb.CalDB() # connection to cal DB
     
-    det_params.save(filedir=noisemap_outputdir, filename="mock_det_params.fits")
-    this_caldb.create_entry(det_params)
     # KGain calibration
     kgain_val = 8.7 # From TVAC-20 noise characterization measurements
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 

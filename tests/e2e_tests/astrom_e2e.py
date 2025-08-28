@@ -225,10 +225,10 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     bp_map.save(filedir=astrom_cal_outputdir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
-    # DetectorParams
-    det_params = data.DetectorParams({})
-    det_params.save(filedir=astrom_cal_outputdir, filename="mock_detparams.fits")
-    this_caldb.create_entry(det_params)
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data
 

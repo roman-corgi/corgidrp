@@ -232,6 +232,11 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path):
     # trap_pump_data_filelist[4] = trap_pump_data_filelist[3]
     # trap_pump_data_filelist[3] = tempp
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     ####### Run the walker on some test_data
     if not e2e: # if you want to test older simulated data
         template = json.load(open(os.path.join(thisfile_dir, "trap_pump_cal_small_size_e2e.json"), 'r'))

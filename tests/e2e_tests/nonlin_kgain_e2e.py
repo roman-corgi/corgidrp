@@ -101,10 +101,6 @@ def test_nonlin_and_kgain_e2e(
     for f in os.listdir(e2eoutput_path):
         os.remove(os.path.join(e2eoutput_path, f))
 
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=e2eoutput_path, filename="detector_params.fits")
-
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -112,7 +108,6 @@ def test_nonlin_and_kgain_e2e(
     if os.path.exists(corgidrp.caldb_filepath):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
-    this_caldb.create_entry(detector_params)
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
@@ -130,7 +125,11 @@ def test_nonlin_and_kgain_e2e(
     set_vistype_for_tvac(pupilimg_l1_list)
     #fix_headers_for_tvac(pupilimg_l1_list)
 
-   
+   # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+
     # Run the walker on some test_data
     print('Running walker')
     #walker.walk_corgidrp(pupilimg_l1_list, '', e2eoutput_path)

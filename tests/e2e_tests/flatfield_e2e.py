@@ -152,11 +152,6 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
-    # DetectorParams
-    det_params = data.DetectorParams({})
-    det_params.save(filedir=flat_outputdir, filename="mock_detparams.fits")
-    this_caldb.create_entry(det_params)
-
     # KGain
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
@@ -190,6 +185,11 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
                                     dq = noise_map_dq, err_hdr=err_hdr)
     noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
+
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data
 
@@ -338,11 +338,6 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
-    # DetectorParams
-    det_params = data.DetectorParams({})
-    det_params.save(filedir=flat_outputdir, filename="mock_detparams.fits")
-    this_caldb.create_entry(det_params)
-
     # KGain
     kgain_val = 8.7
     # add in keywords not provided by create_default_L1_headers() (since L1 headers are simulated from that function)
@@ -377,6 +372,11 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
     this_caldb.create_entry(noise_map)
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     ####### Run the walker on some test_data
 
     recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)

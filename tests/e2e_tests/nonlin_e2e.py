@@ -137,10 +137,6 @@ def test_nonlin_cal_e2e(
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
     nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits")
-    
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=e2eoutput_path, filename="detector_params.fits")
 
     # KGain
     kgain_val = 8.7
@@ -156,7 +152,10 @@ def test_nonlin_cal_e2e(
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(kgain)
-    this_caldb.create_entry(detector_params)
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     # Run the walker on some test_data
     print('Running walker')
     #walker.walk_corgidrp(nonlin_l1_list, '', e2eoutput_path, "l1_to_l2a_nonlin.json")

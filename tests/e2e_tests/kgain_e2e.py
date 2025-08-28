@@ -175,11 +175,11 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
-    # DetectorParams
-    det_params = data.DetectorParams({})
-    det_params.save(filedir=kgain_outputdir, filename="mock_detparams.fits")
-    this_caldb.create_entry(det_params)
-
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     ####### Run the DRP walker
     print('Running walker')
     #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")

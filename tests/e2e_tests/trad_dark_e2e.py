@@ -194,10 +194,6 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
     noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
-    
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -212,7 +208,11 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
     this_caldb.create_entry(noise_maps)
     this_caldb.create_entry(kgain)
-    this_caldb.create_entry(detector_params)
+
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
     walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_full_frame.json")
@@ -232,8 +232,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     em_gain = emgain_val # read off header from TVAC files
     exptime_val = fits.getheader(os.path.join(trad_dark_raw_datadir,os.listdir(trad_dark_raw_datadir)[0]), 1)['EXPTIME']
     exptime = exptime_val # read off header from TVAC files
-    fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
-    fwc_em_e = 100000  # same as what is in DRP's DetectorParams
+    detector_params = this_caldb.get_calib(None, data.DetectorParams)
+    fwc_pp_e = int(detector_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
+    fwc_em_e = int(detector_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
     telem_rows_start = detector_params.params['TELRSTRT']
     telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)
@@ -385,10 +386,6 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
     noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
-    
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({'KGAINPAR': 6.0})
-    detector_params.save(filedir=build_trad_dark_outputdir, filename="detector_params.fits")
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -403,7 +400,11 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(nonlinear_cal)
     this_caldb.create_entry(noise_maps)
     this_caldb.create_entry(kgain)
-    this_caldb.create_entry(detector_params)
+
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data; use template in recipes folder, so we can use walk_corgidrp()
     walker.walk_corgidrp(trad_dark_data_filelist, "", build_trad_dark_outputdir, template="build_trad_dark_image.json")
@@ -423,8 +424,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     em_gain = emgain_val # read off header from TVAC files
     exptime_val = fits.getheader(os.path.join(trad_dark_raw_datadir,os.listdir(trad_dark_raw_datadir)[0]), 1)['EXPTIME']
     exptime = exptime_val # read off header from TVAC files
-    fwc_pp_e = 90000 # same as what is in DRP's DetectorParams
-    fwc_em_e = 100000  # same as what is in DRP's DetectorParams
+    detector_params = this_caldb.get_calib(None, data.DetectorParams)
+    fwc_pp_e = int(detector_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
+    fwc_em_e = int(detector_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
     telem_rows_start = detector_params.params['TELRSTRT']
     telem_rows_end = detector_params.params['TELREND']
     telem_rows = slice(telem_rows_start, telem_rows_end)

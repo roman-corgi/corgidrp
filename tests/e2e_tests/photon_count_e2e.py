@@ -61,11 +61,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
 
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=output_dir, filename="detector_params.fits")
-    this_caldb.create_entry(detector_params)
-
     # KGain
     kgain_val = 7. # default value used in mocks.create_photon_countable_frames()
     pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
@@ -128,11 +123,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     bp_map.save(filedir=output_dir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=e2eoutput_path, filename="detector_params.fits")
-    this_caldb.create_entry(detector_params)
-
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     # make PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")

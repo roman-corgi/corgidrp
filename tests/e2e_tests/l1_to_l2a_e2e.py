@@ -87,6 +87,14 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     for file in os.listdir(l2a_tvac_outputdir):
         os.remove(os.path.join(l2a_tvac_outputdir, file))
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB() # connection to cal DB
+
     # define the raw science data to process
 
     l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
@@ -95,7 +103,11 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     # run the L1 data through the II&T code to process to L2a
     tvac_l2a_filelist = []
     bad_pix = np.zeros((1200,2200)) # what is used in DRP
-    det_params = data.DetectorParams({})
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    det_params = this_caldb.get_calib(None, data.DetectorParams)
     fwc_pp_e = int(det_params.params['FWC_PP_E']) # same as what is in DRP's DetectorParams
     fwc_em_e = int(det_params.params['FWC_EM_E']) # same as what is in DRP's DetectorParams
     telem_rows_start = det_params.params['TELRSTRT']
@@ -126,13 +138,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
 
     ###### Setup necessary calibration files
     # add calibration file to caldb
-    # Initialize a connection to the calibration database
-    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
-    corgidrp.caldb_filepath = tmp_caldb_csv
-    # remove any existing caldb file so that CalDB() creates a new one
-    if os.path.exists(corgidrp.caldb_filepath):
-        os.remove(tmp_caldb_csv)
-    this_caldb = caldb.CalDB()
+
     # Create necessary calibration files
     # we are going to make a new nonlinear calibration file using
     # a combination of the II&T nonlinearty file and the mock headers from
@@ -148,11 +154,6 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
                                                  input_dataset=mock_input_dataset)
     nonlinear_cal.save(filedir=l2a_outputdir, filename="mock_nonlinearcal.fits" )
     this_caldb.create_entry(nonlinear_cal)
-
-    # DetectorParams
-    det_params = data.DetectorParams({})
-    det_params.save(filedir=l2a_outputdir, filename="mock_detparams.fits")
-    this_caldb.create_entry(det_params)
 
     # NoiseMap
     with fits.open(fpn_path) as hdulist:

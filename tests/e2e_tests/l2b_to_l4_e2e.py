@@ -211,8 +211,13 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     mock_dataset = corgidata.Dataset(image_list)
     mock_dataset.save(filedir=e2e_data_path)
 
-    ## Next step run things through the walker. 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
+    ## Next step run things through the walker. 
+    
     #####################################
     #### Pass the data to the walker ####
     #####################################
@@ -344,6 +349,11 @@ def test_l3_to_l4(e2eoutput_path):
     #####################################
     #### Read in the L3 data and run ####
     #####################################
+
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
