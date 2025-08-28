@@ -52,6 +52,7 @@ all_steps = {
     "divide_by_exptime" : corgidrp.l2b_to_l3.divide_by_exptime,
     "northup" : corgidrp.l3_to_l4.northup,
     "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper,
+    "calibrate_pol_fluxcal_aper": corgidrp.fluxcal.calibrate_pol_fluxcal_aper,
     "update_to_l3": corgidrp.l2b_to_l3.update_to_l3,
     "create_wcs": corgidrp.l2b_to_l3.create_wcs,
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
@@ -289,7 +290,10 @@ def guess_template(dataset):
             if len(fsm_unique) > 1:
                 recipe_filename = "l2b_to_nd_filter.json"
             else:
-                recipe_filename = "l2b_to_fluxcal_factor.json"
+                if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+                    recipe_filename = 'l2b_to_fluxcal_factor_pol.json'
+                else:
+                    recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
             recipe_filename = 'l2b_to_corethroughput.json'
         else:

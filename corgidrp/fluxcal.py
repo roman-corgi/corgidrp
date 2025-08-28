@@ -553,7 +553,7 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
 
     return fluxcal_obj
 
-def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
+def calibrate_pol_fluxcal_aper(dataset_or_image, image_center_x, image_center_y, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
     """
     Same overall process as calibrate_fluxcal_aper, adapted for polarimetric images 
     from WP1 or WP2 with two apertures instead of one.
@@ -584,7 +584,9 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = No
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
             the calibration factor. Should already be normalized for exposure time. Images must
             be from polarimetric observations taken with WP1 or WP2 in the DPAM.
-        image_center (int tuple): X and Y pixel coordinate of where the two wollaston spots are 
+        image_center_x (int): X pixel coordinate of where the two wollaston spots are 
+            centered around
+        image_center_y (int): Y pixel coordinate of where the two wollaston spots are 
             centered around
         calspec_file (str, optional): file path to the calspec fits file of the observed star
         flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
@@ -609,6 +611,7 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center, calspec_file = No
     #polarized images separated 7.5" or 344 pix on the detector (1"=0.0218 pix)
     #WP1 output is aligned horizontally across the image center (+/- 172 pixels in the x direction)
     #WP2 output is algined diagonally across the image center (+/- 122 pixels in the x and y direction)
+    image_center = (image_center_x, image_center_y)
     if image.ext_hdr['DPAMNAME'] == 'POL0':
         #0 degree pol PSF center estimate
         centering_initial_guess_beam_1 = (image_center[0] - 172, image_center[1])

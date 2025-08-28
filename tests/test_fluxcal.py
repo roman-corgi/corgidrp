@@ -468,8 +468,8 @@ def test_pol_abs_fluxcal():
 
     dataset_WP1 = Dataset([flux_image_WP1])
     dataset_WP2 = Dataset([flux_image_WP2])
-    fluxcal_factor_WP1 = fluxcal.calibrate_pol_fluxcal_aper(dataset_WP1, (512, 512), flux_or_irr = 'flux', phot_kwargs=None)
-    fluxcal_factor_WP2 = fluxcal.calibrate_pol_fluxcal_aper(dataset_WP2, (512, 512), flux_or_irr = 'flux', phot_kwargs=None)
+    fluxcal_factor_WP1 = fluxcal.calibrate_pol_fluxcal_aper(dataset_WP1, 512, 512, flux_or_irr = 'flux', phot_kwargs=None)
+    fluxcal_factor_WP2 = fluxcal.calibrate_pol_fluxcal_aper(dataset_WP2, 512, 512, flux_or_irr = 'flux', phot_kwargs=None)
     assert fluxcal_factor_WP1.filter == '3C'
     assert fluxcal_factor_WP2.filter == '3C'
     # band_flux/400 was the input calibration factor cal_factor of the
@@ -535,8 +535,8 @@ def test_pol_abs_fluxcal():
         "centering_method": "xy",
         "centroid_roi_radius": 5
     }
-    fluxcal_factor_back_WP1 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP1, (512, 512), flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
-    fluxcal_factor_back_WP2 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP2, (512, 512), flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    fluxcal_factor_back_WP1 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP1, 512, 512, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    fluxcal_factor_back_WP2 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP2, 512, 512, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     assert fluxcal_factor_back_WP1.fluxcal_fac == pytest.approx(fluxcal_factor_WP1.fluxcal_fac)
     assert fluxcal_factor_back_WP2.fluxcal_fac == pytest.approx(fluxcal_factor_WP2.fluxcal_fac)
     assert fluxcal_factor_back_WP1.ext_hdr["LOCBACK"] == 0.5 * (back_pol0 + back_pol90)
@@ -545,8 +545,8 @@ def test_pol_abs_fluxcal():
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP2.ext_hdr['HISTORY'])
 
     #test the direct input of the calspec fits file
-    fluxcal_factor_back_WP1 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP1, (512, 512), calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
-    fluxcal_factor_back_WP2 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP2, (512, 512), calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    fluxcal_factor_back_WP1 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP1, 512, 512, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
+    fluxcal_factor_back_WP2 = fluxcal.calibrate_pol_fluxcal_aper(flux_image_back_WP2, 512, 512, calspec_file = calspec_filepath, flux_or_irr = 'flux', phot_kwargs=aper_kwargs)
     assert fluxcal_factor_back_WP1.fluxcal_fac == pytest.approx(fluxcal_factor_WP1.fluxcal_fac)
     assert fluxcal_factor_back_WP2.fluxcal_fac == pytest.approx(fluxcal_factor_WP2.fluxcal_fac)
     assert 'alpha_lyr_stis_011.fits' in str (fluxcal_factor_back_WP1.ext_hdr['HISTORY'])
