@@ -763,6 +763,7 @@ class SpectroscopyCentroidPSF(Image):
                 raise ValueError("Must pass `input_dataset` to create new SpectroscopyCentroidPSF.")
             
             self.ext_hdr["EXTNAME"] = "CENTROIDS"
+
             self.ext_hdr['DATATYPE'] = 'SpectroscopyCentroidPSF'
             self.ext_hdr['DATALVL'] = 'CAL'
             self._record_parent_filenames(input_dataset)
@@ -783,11 +784,6 @@ class SpectroscopyCentroidPSF(Image):
         self.yfit = self.data[:, 1]
         self.xfit_err = self.err[0][:, 0]
         self.yfit_err = self.err[0][:, 1]
-
-        # Enforce data level = CAL
-        self.ext_hdr['DATALVL'] = 'CAL'
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
-        self.err_hdr['COMMENT'] = 'err not meaningful for this calibration; just present for class consistency' 
 
 
 class DispersionModel(Image):
@@ -866,12 +862,11 @@ class DispersionModel(Image):
         self.pos_vs_wavlen_cov = np.array(self.data["pos_vs_wavlen_cov"][0])
         self.wavlen_vs_pos_polycoeff = np.array(self.data["wavlen_vs_pos_polycoeff"][0])
         self.wavlen_vs_pos_cov = np.array(self.data["wavlen_vs_pos_cov"][0])
-
-        # Enforce data level = CAL
-        self.ext_hdr['DATALVL'] = 'CAL'
         
-        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
-        self.err_hdr['COMMENT'] = 'err not meaningful for this calibration; just present for class consistency' 
+        # Add err and dq attributes for walker compatibility (set to None since DispersionModel doesn't have these)
+        self.err = None
+        self.dq = None
+
 
     def save(self, filedir=None, filename=None):
         """

@@ -231,7 +231,7 @@ def test_default_calibs():
 
 
 if __name__ == "__main__":
-    test_default_calibs()
+    #test_default_calibs()
     test_caldb_init()
     test_get_calib()
     test_caldb_create_default()
