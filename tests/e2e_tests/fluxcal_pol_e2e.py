@@ -75,10 +75,43 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     ####### Run the DRP walker for WP1
     print('Running walker for WP1')
     walker.walk_corgidrp(data_filelist_WP1, '', fluxcal_outputdir_WP1)
+    fluxcal_file_WP1 = glob.glob(os.path.join(fluxcal_outputdir_WP1, '*abf_cal*.fits'))[0]
+    fluxcal_image_WP1 = data.Image(fluxcal_file_WP1)
+
+    #check that the calibration file is configured correctly
+    assert fluxcal_image_WP1.pri_hdr['NAXIS'] == 0
+    assert fluxcal_image_WP1.ext_hdr['DPAMNAME'] == 'POL0'
+    assert fluxcal_image_WP1.data.shape == (1,)
+    assert fluxcal_image_WP1.err.shape == (1,)
+    assert fluxcal_image_WP1.dq.shape == (1,)
+
+    #output values
+    flux_fac_WP1 = data.FluxcalFactor(fluxcal_file_WP1)
+    print("used color filter", flux_fac_WP1.filter)
+    print("used ND filter", flux_fac_WP1.nd_filter)
+    print("fluxcal factor", flux_fac_WP1.fluxcal_fac)
+    print("fluxcal factor error", flux_fac_WP1.fluxcal_err)
+
 
      ####### Run the DRP walker for WP2
     print('Running walker for WP2')
-    walker.walk_corgidrp(data_filelist_WP1, '', fluxcal_outputdir_WP2)
+    walker.walk_corgidrp(data_filelist_WP2, '', fluxcal_outputdir_WP2)
+    fluxcal_file_WP2 = glob.glob(os.path.join(fluxcal_outputdir_WP2, '*abf_cal*.fits'))[0]
+    fluxcal_image_WP2 = data.Image(fluxcal_file_WP2)
+
+    #check that the calibration file is configured correctly
+    assert fluxcal_image_WP2.pri_hdr['NAXIS'] == 0
+    assert fluxcal_image_WP2.ext_hdr['DPAMNAME'] == 'POL0'
+    assert fluxcal_image_WP2.data.shape == (1,)
+    assert fluxcal_image_WP2.err.shape == (1,)
+    assert fluxcal_image_WP2.dq.shape == (1,)
+
+    #output values
+    flux_fac_WP2 = data.FluxcalFactor(fluxcal_file_WP2)
+    print("used color filter", flux_fac_WP2.filter)
+    print("used ND filter", flux_fac_WP2.nd_filter)
+    print("fluxcal factor", flux_fac_WP2.fluxcal_fac)
+    print("fluxcal factor error", flux_fac_WP2.fluxcal_err)
 
 
 
