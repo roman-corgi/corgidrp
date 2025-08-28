@@ -5,9 +5,10 @@ from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, Image, DispersionModel
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_L1_headers
+from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
+from datetime import datetime, timedelta
 
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy"))
 template_dir = os.path.join(spec_datadir, "templates")
@@ -18,9 +19,11 @@ def convert_tvac_to_dataset():
     """
     for me to convert the tvac data once.
     """
+
     file_path = [os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits"), 
                  os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")]
-    pri_hdr, ext_hdr = create_default_L1_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+
     for k, file in enumerate(file_path):
         with fits.open(file) as hdul:
             psf_array = hdul[0].data
@@ -37,6 +40,7 @@ def convert_tvac_to_dataset():
     
         psf_images = []
         file_names = []
+        basetime = datetime.now()
         for i in range(psf_array.shape[0]):
             data_2d = np.copy(psf_array[i])
             err = np.zeros_like(data_2d)
@@ -59,14 +63,16 @@ def convert_tvac_to_dataset():
             image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
             image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
             psf_images.append(image)
-            if i > 0 and i <10:
-                num = "0"+str(i)
-            else:
-                num = str(i)
-            if k == 0:
-                file_names.append("spec_unocc_noslit_offset_prism3_3d_" +num+".fits")
-            else:
-                file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
+            
+            # Generate timestamp for this file
+            dt = basetime + timedelta(seconds=i)
+            filename = get_formatted_filename(dt, pri_hdr['VISITID'])
+            file_names.append(filename)
+        
+        # Sort by CFAMNAME for deterministic output
+        sorted_indices = sorted(range(len(psf_images)), key=lambda x: psf_images[x].ext_hdr['CFAMNAME'])
+        psf_images = [psf_images[i] for i in sorted_indices]
+        file_names = [file_names[i] for i in sorted_indices]
         
         #for now only one image needed as template
         dataset = Dataset([psf_images[12]])
@@ -89,6 +95,7 @@ def convert_tvac_to_dataset():
     
     psf_images = []
     file_names = []
+    basetime = datetime.now()
     for i in range(psf_array.shape[0]):
         data_2d = np.copy(psf_array[i])
         err = np.zeros_like(data_2d)
@@ -108,11 +115,17 @@ def convert_tvac_to_dataset():
         image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
         image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
         psf_images.append(image)
-        if i>0 and i <10:
-            num = "0"+str(i)
-        else:
-            num = str(i)
-        file_names.append("spec_unocc_noslit_prism3_filtersweep_" +num+".fits")
+        
+        # Generate timestamp for this file
+        dt = basetime + timedelta(seconds=i)
+        filename = get_formatted_filename(dt, pri_hdr['VISITID'])
+        file_names.append(filename)
+    
+    # Sort by CFAMNAME for deterministic output
+    sorted_indices = sorted(range(len(psf_images)), key=lambda x: psf_images[x].ext_hdr['CFAMNAME'])
+    psf_images = [psf_images[i] for i in sorted_indices]
+    file_names = [file_names[i] for i in sorted_indices]
+    
     dataset = Dataset(psf_images)
     dataset.save(filedir=template_dir, filenames = file_names)
 
@@ -124,7 +137,7 @@ def test_psf_centroid():
     file_path = os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
-    pri_hdr, ext_hdr = create_default_L1_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
     
     with fits.open(file_path) as hdul:
         psf_array = hdul[0].data
@@ -216,8 +229,10 @@ def test_psf_centroid():
     
 def test_dispersion_model():
     global disp_dict
-    prhdr, exthdr = create_default_L1_headers()
+
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
     disp_file_path = os.path.join(spec_datadir, "TVAC_PRISM3_dispersion_profile.npz")
+
     assert os.path.exists(disp_file_path), f"Test file not found: {disp_file_path}"
     disp_params = np.load(disp_file_path)
     disp_dict = {'clocking_angle': disp_params['clocking_angle'],
@@ -227,7 +242,7 @@ def test_dispersion_model():
                 'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
                 'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
     
-    disp_model = DispersionModel(disp_dict, pri_hdr = prhdr, ext_hdr = exthdr)
+    disp_model = DispersionModel(disp_dict, pri_hdr = pri_hdr, ext_hdr = ext_hdr)
     assert disp_model.clocking_angle == disp_dict.get('clocking_angle')
     assert disp_model.clocking_angle_uncertainty == disp_dict.get('clocking_angle_uncertainty')
     assert np.array_equal(disp_model.pos_vs_wavlen_polycoeff, disp_dict.get('pos_vs_wavlen_polycoeff'))
@@ -270,9 +285,9 @@ def test_calibrate_dispersion_model():
     file_path = os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
-    prihdr, exthdr = create_default_L1_headers()
-    exthdr["DPAMNAME"] = 'PRISM3'
-    exthdr["FSAMNAME"] = 'OPEN'
+    pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    ext_hdr["DPAMNAME"] = 'PRISM3'
+    ext_hdr["FSAMNAME"] = 'OPEN'
     psf_array = fits.getdata(file_path, ext = 0)
     psf_table = Table(fits.getdata(file_path, ext = 1))
     psf_header = fits.getheader(file_path, ext = 0)
@@ -293,8 +308,8 @@ def test_calibrate_dispersion_model():
         dq = np.zeros_like(data_2d, dtype=int)
         image = Image(
             data_or_filepath=data_2d,
-            pri_hdr=prihdr.copy(),
-            ext_hdr=exthdr.copy(),
+            pri_hdr=pri_hdr.copy(),
+            ext_hdr=ext_hdr.copy(),
             err=err,
             dq=dq
         )
@@ -309,7 +324,7 @@ def test_calibrate_dispersion_model():
     
     disp_model = steps.calibrate_dispersion_model(psf_centroid)
     disp_model.save(output_dir, disp_model.filename)
-    assert disp_model.filename.startswith("DispersionModel")
+    assert disp_model.filename.endswith("dpm_cal.fits")
     assert disp_model.clocking_angle == pytest.approx(psf_header["PRISMANG"], abs = 2 * disp_model.clocking_angle_uncertainty) 
     
     wavlen_func_pos = np.poly1d(disp_model.wavlen_vs_pos_polycoeff)
