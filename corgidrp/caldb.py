@@ -418,7 +418,7 @@ def initialize():
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DispersionModel_band3.fits")):
         spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
         output_dir = corgidrp.default_cal_dir
-        prhdr, exthdr = mocks.create_default_L1_headers()
+        prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
         # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
         # the observations that produced it, but just to avoid confusion, we set the values to something sensible
         exthdr['DPAMNAME'] = 'PRISM3' 
@@ -441,7 +441,7 @@ def initialize():
                     'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
                     'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
         
-        disp_model = data.DispersionModel(disp_dict, pri_hdr = prhdr, ext_hdr = exthdr)
+        disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
         disp_model.save(output_dir, disp_model.filename)
         rescan_needed = True
     # Add default SpectroscopyCentroidPSF calibration file if it doesn't exist
@@ -450,7 +450,7 @@ def initialize():
         file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
         output_dir = corgidrp.default_cal_dir
         
-        pri_hdr, ext_hdr = mocks.create_default_L1_headers()
+        pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
         
         with fits.open(file_path) as hdul:
             psf_array = hdul[0].data
