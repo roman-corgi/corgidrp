@@ -781,7 +781,100 @@ class SpectroscopyCentroidPSF(Image):
         self.xfit_err = self.err[0][:, 0]
         self.yfit_err = self.err[0][:, 1]
 
+class LineSpread(Image):
+    """
+    Calibration product that stores a flux profile vs. wavelength of a narrowband observation and the fitted Gaussian parameters
 
+    Args:
+        data_or_filepath (str or np.ndarray): 1D wavelength array (nm)
+                                              1D flux profile
+                                              with shape (N, 2), where N is the length of the wavelength array.
+        pri_hdr (fits.Header): Primary header.
+        ext_hdr (fits.Header): Extension header.
+        gauss_par (np.ndarray): Gaussian fit parameters: [amplitude, mean_wavelen, fwhm]
+        input_dataset (Dataset): Dataset used to generate this calibration.
+        
+    Attr:
+        wavlens (np.array): wavelengths in nm
+        flux_profile (np.array): normalized flux
+        amplitude (float): Gaussian amplitude
+        mean_wave (float): mean wavelength
+        fwhm (float): Gaussian FWHM
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, gauss_par=None, input_dataset=None):
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+
+        # if this is a new LineSpread, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new LineSpread 
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("Must pass `input_dataset` to create new LineSpread calibration.")
+
+            self.ext_hdr['DATATYPE'] = 'LineSpread'
+            self._record_parent_filenames(input_dataset)
+            self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
+
+            # Generate default output filename
+            base = input_dataset[0].filename.split(".fits")[0]
+            self.filename = f"{base}_line_spread.fits"
+            if gauss_par is not None:
+                if not (gauss_par.ndim == 1 and len(gauss_par) == 3):
+                    raise ValueError('The LineSpread calibration gauss_par array must have 3 entries')
+                else:
+                    self.gauss_par = gauss_par
+            else:
+                raise ValueError('The LineSpread calibration must have also the Gaussian parameters')
+            self.gauss_hdr = fits.Header()
+            self.gauss_hdr["EXTNAME"] = "GAUSS_PAR"
+        else:
+            # a filepath is passed in
+            with fits.open(data_or_filepath) as hdulist:
+                #gauss par is in FITS extension
+                self.gauss_par = hdulist[3].data
+                self.gauss_hdr = hdulist[3].header
+            
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'LineSpread':
+            raise ValueError("This file is not a valid LineSpread calibration.")
+
+        if self.data.shape[1] != 2:
+            raise ValueError('The LineSpread calibration array must have a shape of (N,2)')
+        
+        #convenience attributes
+        self.wavlens = self.data[:, 0]
+        self.flux_profile = self.data[:, 1]
+        self.amplitude = self.gauss_par[0]
+        self.mean_wave = self.gauss_par[1]
+        self.fwhm = self.gauss_par[2]
+   
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        gauss_hdu = fits.ImageHDU(data=self.gauss_par, header = self.gauss_hdr)
+        hdulist.append(gauss_hdu)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
+        
 class DispersionModel(Image):
     """ 
     Class for dispersion model parameter data structure

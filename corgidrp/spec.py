@@ -742,3 +742,42 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
 
+def fit_line_spread_function(image, halfwidth = 1, halfheight = 9, guess_fwhm = 10.):
+    """
+    Fit the line spread function to a wavelength calibrated (averaged) spec image, by reading 
+    the wavelength map extension and wavelength zeropoint header
+
+    Args:
+        image (corgidrp.data.Image): Image object containg a narrowband filter + prism PSF
+        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels.
+        halfheight (int): The height of the fitting region is 2 * halfwidth + 1 pixels.
+
+    Returns:
+        LineSpread object (corgidrp.data.LineSpread) containing
+        wavlens (numpy.ndarray)
+        flux_profile (numpy.ndarray) 
+        fwhm_fit (float)
+        mean_fit (float)
+        peak_fit (float)
+
+    """
+    xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
+    image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                         xcent_round - halfwidth:xcent_round + halfwidth + 1]
+
+    wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                       xcent_round - halfwidth:xcent_round + halfwidth + 1]
+
+    flux_profile = np.sum(image_cutout, axis=1) / np.sum(image_cutout)
+    wavlens = np.mean(wave_cal_map_cutout, axis=1)
+
+    g_init = models.Gaussian1D(amplitude = np.max(flux_profile),
+                               mean = wavlens[halfheight], 
+                               stddev = guess_fwhm/(2 * np.sqrt(2*np.log(2))))
+    fit_g = fitting.LevMarLSQFitter()
+    g_func = fit_g(g_init, x = wavlens, y = flux_profile)
+    fwhm_fit_nm = 2 * np.sqrt(2*np.log(2)) * g_func.stddev.value
+    mean_wavlen_fit_nm = g_func.mean.value
+    peak_fit = g_func.amplitude
+
+    return wavlens, flux_profile, fwhm_fit_nm, mean_wavlen_fit_nm, peak_fit
