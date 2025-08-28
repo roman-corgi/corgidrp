@@ -826,30 +826,30 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
                                information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
     """
     dataset = input_dataset.copy()
-    
+    dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
+    if not dpamname.startswith("PRISM"):
+        raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
     slit = dataset.frames[0].ext_hdr['FSAMNAME']
     if not slit.startswith("R"):
-        raise ValueError("not a slit observation")
-    # Assumed that only sat spots frames are taken to fit the zeropoint
-    split_datasets, vals = dataset.split_dataset(prihdr_keywords=["SATSPOTS"])
-    vals = np.array(vals)
-    if 0 in vals:
-        sci_dataset = split_datasets[int(np.nonzero(vals == 0)[0].item())]
+        raise AttributeError("not a slit observation")
+    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
+    narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
+    band = np.array(band)
+    if len(band) < 2:
+        raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
+                             to determine the wavelength zero point")
+        
+    if "3d" in band:
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "3d")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "3d")[0].item())]
+    elif "2c" in band:
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "2c")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "2c")[0].item())]
     else:
-        raise AttributeError('No science frames found in input dataset.')
-
-    if 1 in vals:
-        sat_dataset = split_datasets[int(np.nonzero(vals == 1)[0].item())]
-    else:
-        #case of no satspots but narrowband frame
-        narrow_dataset, band = sci_dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
-        band = np.array(band)
-        if "3d" in band:
-            sat_dataset = narrow_dataset[int(np.nonzero(band == "3d")[0].item())]
-        elif "2c" in band:
-            sat_dataset = narrow_dataset[int(np.nonzero(band == "2c")[0].item())]
-        else:
-            raise AttributeError("No satspot or narrowband frames found in input dataset")
+        raise AttributeError("No narrowband frames found in input dataset")
+    
+    if len(sci_dataset) == 0:
+        raise AttributeError("No science frames found in input dataset")
     
     if xcent_guess is not None and ycent_guess is not None:
         n = len(sat_dataset)
