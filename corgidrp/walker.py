@@ -22,6 +22,7 @@ import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
 import corgidrp.fluxcal
+import corgidrp.spec
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -62,6 +63,8 @@ all_steps = {
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
     "create_nd_filter_cal": corgidrp.nd_filter_calibration.create_nd_filter_cal,
+    "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
+    "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")

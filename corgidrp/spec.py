@@ -4,7 +4,6 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d
-import corgidrp
 from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
 import os
 from astropy.io import ascii, fits
@@ -311,8 +310,7 @@ def get_template_dataset(dataset):
         filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_prism3_filtersweep_*.fits")))
         filtersweep = True
     return Dataset(filenames), filtersweep
-            
-
+    
 def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False, halfwidth=10, halfheight=10, verbose = False):
     """
     Compute PSF centroids for a grid of PSFs and return them as a calibration object.
@@ -450,6 +448,7 @@ def read_cent_wave(band, filter_file = None):
         filter_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
     data = ascii.read(filter_file, format = 'csv', data_start = 1)
     filter_names = data.columns[0]
+    band = band.upper()
     if band not in filter_names:
         raise ValueError("{0} is not in table band names {1}".format(band, filter_names))
     ret_list = []
@@ -731,8 +730,7 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     ds_eval = pos_vs_wavlen_poly((wavlens - wavlen_c) / wavlen_c) / pixel_pitch_mm
     xs_eval, ys_eval = (x_refwav + ds_eval * np.cos(theta),
                         y_refwav + ds_eval * np.sin(theta))
-    pos_lookup_1d = (wavlens, xs_eval, ys_eval)
-
+    
     xs_uncertainty, ys_uncertainty = (np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.cos(theta)),
                                       np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.sin(theta)))
 
@@ -741,4 +739,4 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
-
+    
