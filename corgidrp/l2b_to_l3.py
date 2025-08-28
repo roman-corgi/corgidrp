@@ -4,7 +4,7 @@ import astropy.wcs as wcs
 # A file that holds the functions that transmogrify l2b data to l3 data 
 import numpy as np
 
-def create_wcs(input_dataset, astrom_calibration):
+def create_wcs(input_dataset, astrom_calibration, offset=None):
     """
     
     Create the WCS headers for the dataset.
@@ -12,6 +12,7 @@ def create_wcs(input_dataset, astrom_calibration):
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
         astrom_calibration (corgidrp.data.AstrometricCalibration): an astrometric calibration file for the input dataset
+        offset (optional, tuple(float, float)): x and y offset in units of pixel between the dataset and WCS center (for spectroscopy or other optics offset from imaging mode)
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the WCS headers added
@@ -28,6 +29,9 @@ def create_wcs(input_dataset, astrom_calibration):
         im_data = image.data
         image_y, image_x = im_data.shape
         center_pixel = [(image_x-1) // 2, (image_y-1) // 2]
+        if offset is not None:
+            center_pixel[0] += offset[0]
+            center_pixel[1] += offset[1]
         target_ra, target_dec = image.pri_hdr['RA'], image.pri_hdr['DEC']
         corrected_ra, corrected_dec = target_ra - ra_offset, target_dec - dec_offset
         roll_ang = image.pri_hdr['ROLL']
@@ -79,6 +83,8 @@ def divide_by_exptime(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in units of electrons/s
     """
+    if input_dataset[0].ext_hdr['BUNIT'] != "photoelectron":
+        raise ValueError("input dataset must have unit photoelectron for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     data = input_dataset.copy()
 
     all_data_new = np.zeros(data.all_data.shape)
@@ -99,7 +105,7 @@ def divide_by_exptime(input_dataset):
         all_data_new[i] = data.frames[i].data
         all_err_new[i] = data.frames[i].err
 
-        data.frames[i].ext_hdr.set('BUNIT', 'photoelectrons/s')
+        data.frames[i].ext_hdr.set('BUNIT', 'photoelectron/s')
     
     history_msg = 'divided by the exposure time'
     data.update_after_processing_step(history_msg, new_all_data = all_data_new, new_all_err = all_err_new)
@@ -133,7 +139,7 @@ def update_to_l3(input_dataset):
         frame.ext_hdr['DATALVL'] = "L3"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L2b", "_L3_", 1)
+        frame.filename = frame.filename.replace("_l2b", "_l3_", 1)
 
     history_msg = "Updated Data Level to L3"
     updated_dataset.update_after_processing_step(history_msg)

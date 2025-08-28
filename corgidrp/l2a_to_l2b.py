@@ -1,9 +1,11 @@
 # A file that holds the functions that transmogrify l2a data to l2b data
 import numpy as np
 import copy
+import warnings
 import corgidrp.data as data
 from corgidrp.darks import build_synthesized_dark
 from corgidrp.detector import detector_areas
+import warnings
 
 def add_photon_noise(input_dataset):
     """
@@ -19,7 +21,7 @@ def add_photon_noise(input_dataset):
     phot_noise_dataset = input_dataset.copy() # necessary at all?
 
     for i, frame in enumerate(phot_noise_dataset.frames):
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             em_gain = phot_noise_dataset[i].ext_hdr["EMGAIN_M"]
         except:
             em_gain = frame.ext_hdr.get("EMGAIN_A", 0)
@@ -27,7 +29,9 @@ def add_photon_noise(input_dataset):
                 em_gain = em_gain
             else: # otherwise use commanded EM gain
                 em_gain = frame.ext_hdr.get("EMGAIN_C", 0)
-        phot_err = np.sqrt(frame.data)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            phot_err = np.sqrt(frame.data)
         #add excess noise in case of em_gain
         if em_gain > 1:
             phot_err *= np.sqrt(2)           
@@ -58,6 +62,8 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     Returns:
         corgidrp.data.Dataset: a dark-subtracted version of the input dataset including error propagation
     """
+    if input_dataset[0].ext_hdr['BUNIT'] != "detected electron":
+        raise ValueError ("input dataset must have unit 'detected electron' for dark subtraction, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     _, unique_vals = input_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR'])
     if len(unique_vals) > 1:
         raise Exception('Input dataset should contain frames of the same exposure time, commanded EM gain, and k gain.')
@@ -111,7 +117,7 @@ def dark_subtraction(input_dataset, dark, detector_regions=None, outputdir=None)
     history_msg = "Dark subtracted using dark {0}.  Units changed from detected electrons to photoelectrons.".format(dark.filename)
 
     # update the output dataset with this new dark subtracted data and update the history
-    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"Photoelectrons"})
+    darksub_dataset.update_after_processing_step(history_msg, new_all_data=darksub_cube, new_all_dq = new_all_dq, header_entries = {"BUNIT":"photoelectron"})
 
     return darksub_dataset
 
@@ -132,7 +138,9 @@ def flat_division(input_dataset, flat_field):
     flatdiv_dataset = input_dataset.copy()
 
     #Divide by the master flat
-    flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+        flatdiv_cube = flatdiv_dataset.all_data /  flat_field.data
 
     #Find where the flat_field is 0 and set a DQ flag: 
     where_zero = np.where(flat_field.data == 0)
@@ -142,8 +150,10 @@ def flat_division(input_dataset, flat_field):
 
     # propagate the error of the master flat frame
     if hasattr(flat_field, "err"):
-        flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
-        flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning) # catch divide by zero
+            flatdiv_dataset.rescale_error(1/flat_field.data, "FlatField")
+            flatdiv_dataset.add_error_term(flatdiv_dataset.all_data*flat_field.err[0]/(flat_field.data**2), "FlatField_error")
     else:
         raise Warning("no error attribute in the FlatField")
 
@@ -266,12 +276,14 @@ def convert_to_electrons(input_dataset, k_gain):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in electrons
     """
-   # you should make a copy the dataset to start
+    if input_dataset[0].ext_hdr['BUNIT'] != "DN":
+        raise ValueError("input dataset must have unit DN for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
+    # you should make a copy the dataset to start
     kgain_dataset = input_dataset.copy()
     kgain_cube = kgain_dataset.all_data
 
     kgain = k_gain.value #extract from caldb
-    kgainerr = k_gain.error[0]
+    kgainerr = k_gain.error
     # x = c*kgain, where c (counts beforehand) and kgain both have error, so do propogation of error due to the product of 2 independent sources
     kgain_error = np.zeros_like(input_dataset.all_err)
     kgain_tot_err = (np.sqrt((kgain*kgain_dataset.all_err[:,0,:,:])**2 + (kgain_cube*kgainerr)**2))
@@ -281,8 +293,8 @@ def convert_to_electrons(input_dataset, k_gain):
     history_msg = "data converted to detected EM electrons by kgain {0}".format(str(kgain))
 
     # update the output dataset with this converted data and update the history
-    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electrons", "KGAINPAR":kgain, 
-                                                                                    "KGAIN_ER": k_gain.error[0], "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
+    kgain_dataset.update_after_processing_step(history_msg, new_all_data=kgain_cube, new_all_err=kgain_error, header_entries = {"BUNIT":"detected EM electron", "KGAINPAR":kgain, 
+                                               "KGAIN_ER": k_gain.error, "RN":k_gain.ext_hdr['RN'], "RN_ERR":k_gain.ext_hdr["RN_ERR"]})
     return kgain_dataset
 
 def em_gain_division(input_dataset):
@@ -297,14 +309,15 @@ def em_gain_division(input_dataset):
     Returns:
         corgidrp.data.Dataset: a version of the input dataset with the data in units "detected electrons"
     """
-
+    if input_dataset[0].ext_hdr['BUNIT'] != "detected EM electron":
+        raise ValueError("input dataset must have unit 'detected EM electron' for the conversion, not {0}".format(input_dataset[0].ext_hdr['BUNIT']))
     # you should make a copy the dataset to start
     emgain_dataset = input_dataset.copy()
     emgain_cube = emgain_dataset.all_data
     emgain_error = emgain_dataset.all_err
 
     for i in range(len(emgain_dataset)):
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_M"]
         except:
             emgain = emgain_dataset[i].ext_hdr["EMGAIN_A"]
@@ -322,7 +335,7 @@ def em_gain_division(input_dataset):
         history_msg = "data divided by EM gain for dataset with frames with the same commanded EM gain"
 
     # update the output dataset with this EM gain divided data and update the history
-    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electrons"})
+    emgain_dataset.update_after_processing_step(history_msg, new_all_data=emgain_cube, new_all_err=emgain_error, header_entries = {"BUNIT":"detected electron"})
 
     return emgain_dataset
 
@@ -450,7 +463,7 @@ def update_to_l2b(input_dataset):
         frame.ext_hdr['DATALVL'] = "L2b"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L2a", "_L2b", 1)
+        frame.filename = frame.filename.replace("_l2a", "_l2b", 1)
 
     history_msg = "Updated Data Level to L2b"
     updated_dataset.update_after_processing_step(history_msg)

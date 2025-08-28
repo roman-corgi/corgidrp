@@ -46,7 +46,7 @@ def setup_module():
     global ct_in, ct_syn
    
     # Default headers
-    prhd, exthd = create_default_L3_headers()
+    prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
     # DRP
     exthd['DRPCTIME'] = time.Time.now().isot
     exthd['DRPVERSN'] = corgidrp.__version__
@@ -137,7 +137,7 @@ def setup_module():
     pupil_image = np.zeros([1024, 1024])
     # Set it to some known value for a selected range of pixels
     pupil_image[510:530, 510:530]=1
-    prhd, exthd_pupil = create_default_L3_headers()
+    prhd, exthd_pupil, errhdr, dqhdr = create_default_L3_headers()
     # DRP
     exthd_pupil['DRPCTIME'] = time.Time.now().isot
     exthd_pupil['DRPVERSN'] = corgidrp.__version__
@@ -398,7 +398,7 @@ def test_cal_file():
     ct_cal_file_in.save(filedir=test_dir)
 
     # Check that the filename is what we expect
-    ct_cal_filename = dataset_ct[-1].filename.replace("_L2b", "_CTP_CAL")
+    ct_cal_filename = dataset_ct[-1].filename.replace("_l2b", "_ctp_cal")
     ct_cal_filepath = os.path.join(test_dir,ct_cal_filename)
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
@@ -527,7 +527,7 @@ def test_ct_interp():
     pupil_image = np.zeros([1024, 1024])
     # Set it to some known value for a selected range of pixels
     pupil_image[510:530, 510:530]=1
-    prhd, exthd_pupil = create_default_L3_headers()
+    prhd, exthd_pupil, errhdr, dqhdr = create_default_L3_headers()
     # DRP
     exthd_pupil['DRPCTIME'] = time.Time.now().isot
     exthd_pupil['DRPVERSN'] = corgidrp.__version__

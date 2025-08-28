@@ -18,7 +18,7 @@ def test_l1_to_l4():
     """
     l1_dataset = mocks.create_prescan_files(arrtype="SCI", numfiles=2)
     # edit filenames
-    fname_template = "CGI_0000011222333OOO111_20250101T12{0:02d}00_L1_.fits"
+    fname_template = "cgi_0000011222333ooo111_20250101t12{0:02d}00_l1_.fits"
     for i, image in enumerate(l1_dataset):
         image.filename = fname_template.format(i)
         assert image.pri_hdr['ORIGIN'] == 'DRP' # should already be DRP origin
@@ -27,23 +27,23 @@ def test_l1_to_l4():
 
     for i,frame in enumerate(l2a_dataset):
         assert frame.ext_hdr['DATALVL'] == "L2a"
-        assert frame.filename == "CGI_0000011222333OOO111_20250101T12{0:02d}00_L2a.fits".format(i)
+        assert frame.filename == "cgi_0000011222333ooo111_20250101t12{0:02d}00_l2a.fits".format(i)
     
 
     l2b_dataset = l2a_to_l2b.update_to_l2b(l2a_dataset)
 
     for i,frame in enumerate(l2b_dataset):
         assert frame.ext_hdr['DATALVL'] == "L2b"
-        assert frame.filename == "CGI_0000011222333OOO111_20250101T12{0:02d}00_L2b.fits".format(i)
+        assert frame.filename == "cgi_0000011222333ooo111_20250101t12{0:02d}00_l2b.fits".format(i)
 
     l3_dataset = l2b_to_l3.update_to_l3(l2b_dataset)
 
     for i,frame in enumerate(l3_dataset):
         assert frame.ext_hdr['DATALVL'] == "L3"
-        assert frame.filename == "CGI_0000011222333OOO111_20250101T12{0:02d}00_L3_.fits".format(i)
+        assert frame.filename == "cgi_0000011222333ooo111_20250101t12{0:02d}00_l3_.fits".format(i)
 
     #Create dummy dataset to pass in to update_to_l4 (which needs filenames)
-    pri_hdr, ext_hdr = mocks.create_default_L3_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_L3_headers()
     test = Image(np.array([1,1]),pri_hdr = pri_hdr, ext_hdr = ext_hdr)
     # expect an exception
 
@@ -51,7 +51,7 @@ def test_l1_to_l4():
 
     for i,frame in enumerate(l4_dataset):
         assert frame.ext_hdr['DATALVL'] == "L4"
-        assert frame.filename == "CGI_0000011222333OOO111_20250101T12{0:02d}00_L4_.fits".format(i)
+        assert frame.filename == "cgi_0000011222333ooo111_20250101t12{0:02d}00_l4_.fits".format(i)
 
 def test_l1_to_l2a_bad():
     """
@@ -92,7 +92,7 @@ def test_l3_to_l4_bad():
     l1_dataset = mocks.create_dark_calib_files(numfiles=2)
     
     #Create dummy dataset to pass in to update_to_l4 (which needs filenames)
-    pri_hdr, ext_hdr = mocks.create_default_L3_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_L3_headers()
     test = Image(np.array([1,1]),pri_hdr = pri_hdr, ext_hdr = ext_hdr)
     # expect an exception
     with pytest.raises(ValueError):

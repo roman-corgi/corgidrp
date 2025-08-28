@@ -9,6 +9,7 @@ import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+import warnings
 
 try:
     from cal.kgain.calibrate_kgain import calibrate_kgain
@@ -124,9 +125,12 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     fix_headers_for_tvac(ordered_filelist)
 
     ########## Calling II&T code
-    (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
-                    binwidth=68, config_file=default_config_file, 
-                    mkplot=None, verbose=None)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=RuntimeWarning)
+        warnings.filterwarnings('ignore', category=DeprecationWarning)
+        (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
+                        binwidth=68, config_file=default_config_file, 
+                        mkplot=None, verbose=None)
     
     ########### Now run the DRP
 
@@ -138,7 +142,13 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
 
     ####### Run the DRP walker
     print('Running walker')
-    walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
+    #walker.walk_corgidrp(ordered_filelist, "", kgain_outputdir, template="l1_to_kgain.json")
+    recipe = walker.autogen_recipe(ordered_filelist, kgain_outputdir)
+    ### Modify they keywords of some of the steps
+    for step in recipe[1]['steps']:
+        if step['name'] == "calibrate_kgain":
+            step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+    walker.run_recipe(recipe[1], save_recipe_file=True)
 
     ####### Load in the output data. It should be the latest kgain file produced.
     possible_kgain_files = glob.glob(os.path.join(kgain_outputdir, '*_KRN_CAL*.fits'))
@@ -172,7 +182,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'  
+    e2edata_dir = '/home/schreiber/DataCopy/corgi/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

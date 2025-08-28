@@ -20,6 +20,7 @@ except:
 # Adjust the system's limit of open files. We need to load 200 files at once. 
 # some systems don't like that. 
 import resource
+import warnings
 soft_limit, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (6001, hard_limit))
 
@@ -82,7 +83,8 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
             np.random.seed(39)
             mocks.generate_mock_pump_trap_data(trap_pump_outputdir, metadata_path, EMgain=1.5, e2emode=e2e, arrtype='ENG')
             for i in os.listdir(trap_pump_outputdir):
-                if 'Scheme_' not in i:
+                # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
+                if ('Scheme_' not in i) or ('TPU_CAL' in i): 
                     continue
                 temperature = i[0:4]
                 sch = i[4:12]
@@ -98,11 +100,11 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     else:
         # figure out paths, assuming everything is located in the same relative location
         if not e2e: # if you want to test older simulated data
-            trap_pump_datadir = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
+            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_trap_pumped_frames')
+            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_results.npy")
         if e2e:
-            trap_pump_datadir = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
-            sim_traps = os.path.join(e2edata_path, 'untitled folder', 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
+            trap_pump_datadir = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', 'simulated_e2e_trap_pumped_frames')
+            sim_traps = os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results", "tpump_e2e_results.npy")
         # this is a .npy file; read it in as a dictionary
         td = np.load(sim_traps, allow_pickle=True)
         TVAC_trap_dict = dict(td[()])
@@ -136,18 +138,20 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     #num_pumps = {1:10000,2:10000,3:10000,4:10000}
     num_pumps = {1:50000,2:50000,3:50000,4:50000}
     
-    (TVAC_trap_dict, TVAC_trap_densities, TVAC_bad_fit_counter, TVAC_pre_sub_el_count,
-    TVAC_unused_fit_data, TVAC_unused_temp_fit_data, TVAC_two_or_less_count,
-    TVAC_noncontinuous_count) = tpump_analysis(trap_pump_datadir, time_head,
-    emgain_head, num_pumps, meta_path_eng, nonlin_path = nonlin_path,
-    length_lim = length_lim, thresh_factor = thresh_factor,
-    ill_corr = ill_corr, tfit_const = tfit_const, save_temps = None,
-    tau_min = 0.7e-6, tau_max = 1.3e-2, tau_fit_thresh = tau_fit_thresh,
-    tauc_min = tauc_min, tauc_max = tauc_max, offset_min = offset_min,
-    offset_max = offset_max,
-    pc_min=pc_min, pc_max=pc_max, k_prob = k_prob, mean_field = mean_field,
-    cs_fit_thresh = cs_fit_thresh, bins_E = bins_E, bins_cs = bins_cs,
-    sample_data = sample_data)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        (TVAC_trap_dict, TVAC_trap_densities, TVAC_bad_fit_counter, TVAC_pre_sub_el_count,
+        TVAC_unused_fit_data, TVAC_unused_temp_fit_data, TVAC_two_or_less_count,
+        TVAC_noncontinuous_count) = tpump_analysis(trap_pump_datadir, time_head,
+        emgain_head, num_pumps, meta_path_eng, nonlin_path = nonlin_path,
+        length_lim = length_lim, thresh_factor = thresh_factor,
+        ill_corr = ill_corr, tfit_const = tfit_const, save_temps = None,
+        tau_min = 0.7e-6, tau_max = 1.3e-2, tau_fit_thresh = tau_fit_thresh,
+        tauc_min = tauc_min, tauc_max = tauc_max, offset_min = offset_min,
+        offset_max = offset_max,
+        pc_min=pc_min, pc_max=pc_max, k_prob = k_prob, mean_field = mean_field,
+        cs_fit_thresh = cs_fit_thresh, bins_E = bins_E, bins_cs = bins_cs,
+        sample_data = sample_data)
     ######################
 
     # define the raw science data to process
@@ -155,7 +159,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     trap_cal_filename = None
     for root, _, files in os.walk(trap_pump_datadir):
         for name in files:
-            if 'TPUMP_Npumps' not in name:
+            if ('TPUMP_Npumps' not in name) or ('TPU_CAL' in name): # skip over any files that are not trap-pump files, and also skip over any previous TPU_CAL file from a previous run of this e2e
                 continue
             if trap_cal_filename is None:
                 trap_cal_filename = name # get first filename fed to walk_corgidrp for finding cal file later
@@ -174,7 +178,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     # dummy data; basically just need the header info to combine with II&T nonlin calibration
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]]
-    pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+    pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
@@ -204,7 +208,7 @@ def test_trap_pump_cal(e2edata_path, e2eoutput_path, e2e=True, sim_data_on_the_f
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
     err_hdr = fits.Header()
-    err_hdr['BUNIT'] = 'detected electrons'
+    err_hdr['BUNIT'] = 'detected electron'
     # from CGI_TVAC_Data/TV-20_EXCAM_noise_characterization/tvac_noisemap_original_data/results/bias_offset.txt
     ext_hdr['B_O'] = 0 # bias offset not simulated in the data, so set to 0;  -0.0394 DN from tvac_noisemap_original_data/results
     ext_hdr['B_O_ERR'] = 0 # was not estimated with the II&T code

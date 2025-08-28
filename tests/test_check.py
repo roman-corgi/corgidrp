@@ -43,6 +43,7 @@ threeDlist = [np.ones((5,)), np.ones((5, 5)), np.ones((2, 2, 2, 2)), [], 'foo']
 
 
 class TestCheckException(Exception):
+    __test__ = False # prevent PytestCollectionWarning
     pass
 
 
