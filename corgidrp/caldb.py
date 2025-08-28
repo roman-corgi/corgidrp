@@ -417,20 +417,21 @@ def initialize():
     # Add default DispersionModel calibration file if it doesn't exist
     if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DispersionModel_band3.fits")):
         spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
+        output_dir = corgidrp.default_cal_dir
         prhdr, exthdr = mocks.create_default_L1_headers()
         # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
         # the observations that produced it, but just to avoid confusion, we set the values to something sensible
-        ext_hdr['DPAMNAME'] = 'PRISM3' 
-        ext_hdr['CFAMNAME'] = '3F'
-        ext_hdr['FSAMNAME'] = 'OPEN'
-        # these below are needed for the DispersionModel calibration 
-        ext_hdr["REFWAVE"] = 730.
-        ext_hdr["BAND"] = '3'
+        exthdr['DPAMNAME'] = 'PRISM3' 
+        exthdr['CFAMNAME'] = '3F'
+        exthdr['FSAMNAME'] = 'OPEN'
+        # these below, however, are needed for the DispersionModel calibration 
+        exthdr["REFWAVE"] = 730.
+        exthdr["BAND"] = '3'
         band_list = spec.read_cent_wave('3')
         band_center = band_list[0]
         fwhm = band_list[1]
         bandpass_frac = fwhm/band_center
-        ext_hdr["BANDFRAC"] = bandpass_frac
+        exthdr["BANDFRAC"] = bandpass_frac
         disp_file_path = os.path.join(spec_datadir, "TVAC_PRISM3_dispersion_profile.npz")
         disp_params = np.load(disp_file_path)
         disp_dict = {'clocking_angle': disp_params['clocking_angle'],
