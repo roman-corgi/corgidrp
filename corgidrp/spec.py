@@ -875,5 +875,3 @@ def star_spectrum_registration(
     # TODO: Check this works
     breakpoint()
     return Dataset(img_best['best_file'])
-
-
