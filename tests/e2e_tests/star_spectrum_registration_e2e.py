@@ -9,47 +9,11 @@ import pytest
 import argparse
 
 from corgidrp.data import Dataset, DispersionModel
-from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
+from corgidrp.spec import star_spectrum_registration
 from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
-
-# ================================================================================
-# Validation functions - can be used in other E2E tests
-# ================================================================================
-
-def check_filename_convention(filename, expected_pattern, frame_info=""):
-    """Check if filename follows the expected naming convention.
-
-    Args:
-        filename (str): Filename to check
-        expected_pattern (str): Expected pattern (e.g., 'cgi_*_l2b.fits')
-        frame_info (str): Additional info for logging (e.g., "Frame 0")
-
-    Returns:
-        bool: True if filename matches convention
-    """
-    if not filename:
-        logger.info(f"{frame_info}: No filename. Naming convention FAIL.")
-        return False
-    
-    # Basic pattern check
-    if expected_pattern == 'cgi_*_l2b.fits':
-        parts = filename.split('_')
-        valid = (len(parts) >= 4 and 
-                parts[0] == 'cgi' and 
-                len(parts[2]) == 16 and parts[2][8] == 't' and 
-                parts[2][:8].isdigit() and parts[2][9:].isdigit() and
-                filename.endswith('_l2b.fits'))
-    elif expected_pattern == 'cgi_*_dpm_cal.fits':
-        valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
-    else:
-        valid = expected_pattern in filename
-    
-    status = "PASS" if valid else "FAIL"
-    logger.info(f"{frame_info}: Filename: {filename}. Naming convention {status}.")
-    return valid
 
 def check_dimensions(data, expected_shape, frame_info=""):
     """Check if data has expected dimensions.
@@ -178,8 +142,8 @@ def get_latest_cal_file(e2eoutput_path, pattern):
 # Main Spec Prism Disp E2E Test Function
 # ================================================================================
 
-def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
-    """Run the complete spectroscopy prism dispersion end-to-end test.
+def run_star_spectrum_registration_e2e_test(e2edata_path, e2eoutput_path):
+    """Run the complete star_spectrum_registration end-to-end test.
     
     This function consolidates all the test steps into a single linear flow
     for easier reading and understanding.
@@ -189,7 +153,8 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
         e2eoutput_path (str): Path to output directory
         
     Returns:
-        tuple: (disp_model, coeffs, angle) from the baseline performance checks
+        Dispersed star image whose PSF-to-FSAM slit alignment most closely matches
+      that of the target source
     """
     
     # ================================================================================
@@ -199,7 +164,11 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('Pre-test: set up input files and save to disk')
     logger.info('='*80)
 
+    # CFAM. Accommodate band2 wherever its is straightforward
+    cfam_test = '3F'
+
     # Check if input folder already contains the expected files
+    breakpoint()
     existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
     
     if existing_files:
@@ -212,7 +181,8 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
         
         # Load test data
         datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
-        file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
+        file_path = os.path.join(datadir,
+            f'g0v_vmag6_spc-spec_band{cfam_test[0]:s}_unocc_NOSLIT_PRISM{cfam_test[0]}_filtersweep_withoffsets.fits')
 
         assert os.path.exists(file_path), f'Test file not found: {file_path}'
 
@@ -221,7 +191,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
 
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-        ext_hdr["DPAMNAME"] = 'PRISM3'
+        ext_hdr["DPAMNAME"] = f'PRISM{cfam_test[0]:s}'
         ext_hdr["FSAMNAME"] = 'OPEN'
 
         # Add random noise for reproducibility
@@ -265,6 +235,9 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
 
         l2b_dataset_with_filenames = Dataset(saved_files)
         logger.info(f"Generated and saved {len(saved_files)} new input files")
+
+    breakpoint()
+    # Double check and set up rest of PAM enumvalues
 
     logger.info('')
     
@@ -381,6 +354,8 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
+    breakpoint()
+    # Adjust folders
     # Create the spec_prism_disp_e2e subfolder regardless
     input_top_level = os.path.join(e2edata_path, 'spec_prism_disp_e2e')
     output_top_level = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e')
@@ -424,7 +399,7 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info("")
     
     # Run the complete end-to-end test
-    disp_model, coeffs, angle = run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path)
+    best_img = run_star_spectrum_registration_e2e_test(e2edata_path, e2eoutput_path)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')

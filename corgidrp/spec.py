@@ -839,7 +839,7 @@ def star_spectrum_registration(
         assert exthdr['FPAMNAME'] == dpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
         assert exthdr['SPAMNAME'] == dpam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
         assert exthdr['LSAMNAME'] == dpam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
-        assert exthdr['FSAMNAME'] in fsma_name, f"FSAMNAME={exthdr['FSAMNAME'] differs from expected values: {fsam_name}"
+        assert exthdr['FSAMNAME'] in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
         # Same wavelength zero-point
         assert exthdr['WV0_X'] == wv0_x and exthdr['WV0_Y'] == wv0_y, f"Wavelength zero-point values {exthdr['WV0_X']}, {exthdr['WV0_Y']} differ from expected values {wv0_x}, {wv0_y}"
 
