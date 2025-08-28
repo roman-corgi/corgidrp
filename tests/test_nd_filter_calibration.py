@@ -9,16 +9,17 @@ import re
 import copy
 from termcolor import cprint
 
+import corgidrp
 from corgidrp import default_cal_dir
 import corgidrp.fluxcal as fluxcal
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 import corgidrp.l2b_to_l3 as l2b_tol3
 import corgidrp.data as data 
-from corgidrp.data import Dataset
-from corgidrp.data import Image
+from corgidrp.data import (Image, Dataset, FluxcalFactor,
+    NDFilterSweetSpotDataset, FpamFsamCal)
 import corgidrp.mocks as mocks
-from corgidrp.data import Image, NDFilterSweetSpotDataset
 
+here = os.path.abspath(os.path.dirname(__file__))
 
 def print_fail():
     cprint(' FAIL ', "black", "on_red")
@@ -40,6 +41,7 @@ DIM_STARS = ['TYC 4424-1286-1',
 #DIM_STARS = ['TYC 4433-1800-1', 'TYC 4205-1677-1', 'TYC 4212-455-1', 'TYC 4209-1396-1',
 #            'TYC 4413-304-1', 'UCAC3 313-62260', 'BPS BS 17447-0067', 'TYC 4424-1286-1',
 #             'GSC 02581-02323', 'TYC 4207-219-1']
+calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_lyr_stis_011.fits")
 
 DIM_EXPTIME = 10.0
 BRIGHT_EXPTIME = 5.0
@@ -167,11 +169,10 @@ def mock_bright_dataset_files(bright_exptime, filter_used, OD, cal_factor, save_
     ND_transmission = 10 ** (-OD)
     bright_star_images = []
     for star_name in BRIGHT_STARS:
+        bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, filter_used)
+        attenuated_flux = bright_star_flux * ND_transmission
         for dy in [-10, 0, 10]:
             for dx in [-10, 0, 10]:
-                bright_star_flux = nd_filter_calibration.compute_expected_band_irradiance(star_name, 
-                                                                                          filter_used)
-                attenuated_flux = bright_star_flux * ND_transmission
                 flux_image = mocks.create_flux_image(
                     attenuated_flux, FWHM, cal_factor, filter=filter_used, fpamname="ND225", target_name=star_name,
                     fsm_x=dx, fsm_y=dy, exptime=bright_exptime, filedir=output_path,
@@ -189,15 +190,6 @@ def mock_clean_entry(bright_dataset):
     # appropriate level input file
     return bright_dataset[0]
 
-
-def mock_transformation_matrix(output_dir):
-    # TO DO: use Sergi's FPAM to EXCAM transformation matrix product once it is
-    # ready
-    transformation_matrix_file = os.path.join(output_dir, "fpam_to_excam.fits")
-    dummy_matrix = np.eye(2)
-    hdu = fits.PrimaryHDU(dummy_matrix)
-    hdu.writeto(transformation_matrix_file, overwrite=True)
-    return transformation_matrix_file
 
 # ---------------------------------------------------------------------------
 # Pytest fixtures
@@ -227,7 +219,7 @@ def stars_dataset_cached(bright_files_cached, dim_files_cached):
     combined_files = bright_files_cached + dim_files_cached
     # TO DO: May eventually need to add other processing steps to get the mocks
     # to a representative input state
-    return l2b_tol3.divide_by_exptime(Dataset(combined_files))
+    return Dataset(combined_files)
 
 @pytest.fixture(scope="module")
 def stars_dataset_cached_bright_count(bright_files_cached, dim_files_cached):
@@ -235,7 +227,7 @@ def stars_dataset_cached_bright_count(bright_files_cached, dim_files_cached):
     n_bright = len(bright_files_cached)
     # TO DO: May eventually need to add other processing steps to get the mocks
     # to a representative input state
-    return l2b_tol3.divide_by_exptime(Dataset(combined_files)), n_bright
+    return Dataset(combined_files), n_bright
 
 @pytest.fixture(scope="module")
 def dim_dir(tmp_path_factory):
@@ -265,6 +257,34 @@ def output_dir(tmp_path):
 # ---------------------------------------------------------------------------
 # Test functions using pytest
 # ---------------------------------------------------------------------------
+def test_compute_exp_irrad():
+    print("**Testing calculation of same irradiance with star name and calspec file**")
+    name_irr = nd_filter_calibration.compute_expected_band_irradiance('Vega', '3C')
+    file_irr = nd_filter_calibration.compute_expected_band_irradiance(calspec_filepath, '3C')
+    assert file_irr == name_irr
+
+def test_nd_filter_calibration_object_with_calspec(bright_files_cached):
+    print("**Testing ND filter calibration object generation and expected headers with calspec file input**")
+    # don't want the datasets to get overwritten for subsequent tests
+    ds_copy = copy.deepcopy(Dataset([bright_files_cached[0], bright_files_cached[1]]))
+    ds_copy[1].ext_hdr["FPAMNAME"] = 'OPEN_12'
+    results = nd_filter_calibration.create_nd_filter_cal(
+        ds_copy, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
+        fluxcal_factor = None, calspec_files = [calspec_filepath])
+    
+    results.save(filedir=default_cal_dir)
+
+    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
+    assert nd_files, "No NDFilterOD files were generated."
+    with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
+        primary_hdr = hdul[0].header
+        ext_hdr = hdul[1].header
+        assert primary_hdr.get('SIMPLE') is True, "Primary header missing or SIMPLE not True."
+        assert ext_hdr.get('FPAMNAME') is not None, "Missing FPAMNAME keyword."
+        assert ext_hdr.get('FPAM_H') is not None, "Missing FPAM_H keyword."
+        assert ext_hdr.get('FPAM_V') is not None, "Missing FPAM_V keyword."
+        assert ext_hdr.get('CFAMNAME') is not None, "Missing CFAMNAME keyword."
+
 def test_nd_filter_calibration_object(stars_dataset_cached):
     print("**Testing ND filter calibration object generation and expected headers**")
     # don't want the datasets to get overwritten for subsequent tests
@@ -275,7 +295,7 @@ def test_nd_filter_calibration_object(stars_dataset_cached):
     
     results.save(filedir=default_cal_dir)
 
-    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_NDF_CAL.fits')]
+    nd_files = [fn for fn in os.listdir(default_cal_dir) if fn.endswith('_ndf_cal.fits')]
     assert nd_files, "No NDFilterOD files were generated."
     with fits.open(os.path.join(default_cal_dir, nd_files[0])) as hdul:
         primary_hdr = hdul[0].header
@@ -294,7 +314,7 @@ def test_output_filename_convention(stars_dataset_cached):
     ds_copy = copy.deepcopy(stars_dataset_cached)
 
     # Construct the expected filename from the last input dataset filename.
-    expected_filename = re.sub('_L[0-9].', '_NDF_CAL', stars_dataset_cached[-1].filename)
+    expected_filename = re.sub('_l[0-9].', '_ndf_cal', stars_dataset_cached[-1].filename)
     full_expected_path = os.path.join(default_cal_dir, expected_filename)
 
     # Create the calibration product
@@ -411,7 +431,7 @@ def test_multiple_nd_levels(dim_dir, output_dir, test_od):
     dim_filepaths = glob.glob(os.path.join(dim_dir, "*")) # use cached dim images
     dim_images = [Image(path) for path in dim_filepaths]
     combined_files = bright_images + dim_images
-    combined_dataset = l2b_tol3.divide_by_exptime(Dataset(combined_files))
+    combined_dataset = Dataset(combined_files)
 
     results = nd_filter_calibration.create_nd_filter_cal(
         combined_dataset, OD_RASTER_THRESHOLD, PHOT_METHOD, FLUX_OR_IRR, PHOT_ARGS, 
@@ -438,7 +458,7 @@ def test_nd_filter_calibration_with_fluxcal(dim_dir, stars_dataset_cached, phot_
     dim_images = [Image(path) for path in dim_filepaths]
 
     # Convert list of Image objects into a Dataset
-    dim_dataset = l2b_tol3.divide_by_exptime(Dataset(dim_images))
+    dim_dataset = Dataset(dim_images)
 
     # 1) Generate a flux calibration object from the single image
     if phot_method == "Aperture":
@@ -549,8 +569,8 @@ def test_background_effect(tmp_path):
     
     combined_no = dim_files_no + bright_files_no
     combined_bg = dim_files_bg + bright_files_bg
-    ds_no = l2b_tol3.divide_by_exptime(Dataset(combined_no))
-    ds_bg = l2b_tol3.divide_by_exptime(Dataset(combined_bg))
+    ds_no = Dataset(combined_no)
+    ds_bg = Dataset(combined_bg)
     
     output_directory = str(tmp_path / "output")
     if not os.path.exists(output_directory):
@@ -596,41 +616,55 @@ def test_calculate_od_at_new_location(output_dir):
     ], dtype=float)
 
     # Create a fake input dataset to set the filename
-    input_prihdr, input_exthdr = mocks.create_default_L2b_headers()
+    input_prihdr, input_exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
     fake_input_image = Image(sweetspot_data, pri_hdr=input_prihdr, ext_hdr=input_exthdr)
-    fake_input_image.filename = f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_L2b.fits"
+    fake_input_image.filename = f"cgi_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l2b.fits"
     fake_input_dataset = Dataset(frames_or_filepaths=[fake_input_image, fake_input_image])
 
     # Build the NDFilterSweetSpotDataset
-    ndcal_prihdr, ndcal_exthdr = mocks.create_default_calibration_product_headers()
+    ndcal_prihdr, ndcal_exthdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
     ndcal_exthdr["FPAM_H"] = 0.0
     ndcal_exthdr["FPAM_V"] = 0.0
     nd_sweetspot_dataset = NDFilterSweetSpotDataset(data_or_filepath=sweetspot_data, pri_hdr=ndcal_prihdr, ext_hdr=ndcal_exthdr,
                                                     input_dataset=fake_input_dataset)
  
-    # Create an identity transformation matrix FITS file in output_dir
-    transformation_matrix_file = mock_transformation_matrix(output_dir)
-
     # Make a 5x5 mock 'clean_frame_entry' with a star at (2,2) => centroid (2,2)
     # Shift it by (3,3) => final location (5,5).
     clean_image_data = np.zeros((5, 5), dtype=float)
     clean_image_data[2, 2] = 100.0  # star pixel
-    cframe_prihdr, cframe_exthdr = mocks.create_default_L2b_headers()
-    cframe_exthdr["FPAM_H"] = 3.0
-    cframe_exthdr["FPAM_V"] = 3.0
+    cframe_prihdr, cframe_exthdr, errhdr, dqhdr, biashdr= mocks.create_default_L2b_headers()
+    # Choosing some values that will help predict the expected value of the OD
+    # when using the bilinear OD interpolation in nd_filter_calibration.interpolate_od()
+    # These values ensure that the shift in EXCAM pixels is (3,3)
+    cframe_exthdr["FPAM_H"] = -24.42
+    cframe_exthdr["FPAM_V"] = 24.42
     clean_frame_entry = Image(data_or_filepath=clean_image_data, pri_hdr=cframe_prihdr, 
                               ext_hdr=cframe_exthdr)
+
+    # Default FPAM/FSAM transformations
+    fpamfsamcal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
+        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))    
 
     # Call the function under test
     interpolated_od = nd_filter_calibration.calculate_od_at_new_location(
         clean_frame_entry=clean_frame_entry,
-        transformation_matrix_file=transformation_matrix_file,
+        fpamfsamcal=fpamfsamcal,
         ndsweetspot_dataset=nd_sweetspot_dataset
     )
 
     # Expect the final location = (2+3, 2+3) = (5,5).
-    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5
+    fpam2excam_matrix = fits.getdata(os.path.join(here, 'test_data',
+        'fpam_to_excam_modelbased.fits'))
+    # Check final position is (5,5)
+    final_excam_pos = (np.array([2,2]) + fpam2excam_matrix @
+        np.array([cframe_exthdr["FPAM_H"],cframe_exthdr["FPAM_V"]]))
+    # Single precision because the FPAM_H/V values were set to be close to
+    # produce a change of 3 EXCAM pixels within single precision
+    assert np.all(np.abs(final_excam_pos - np.array([5,5])) < 1e-7)
+
+    # Bilinear interpolation of corners: (2,3,4,5) at center => 3.5  
     expected_value = 3.5
+
     atol_nd = 1e-6
     test_result_od_accuracy = abs(interpolated_od - expected_value) < atol_nd
     print(f'calculate_od_at_new_location() estimates OD as {expected_value} +/- {atol_nd}: ', end='')
@@ -645,7 +679,7 @@ def test_calculate_od_at_new_location(output_dir):
         f"estimated OD = {interpolated_od}, expected OD = {expected_value}"
     )
 
-
+'''
 BRIGHT_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/bright"
 DIM_CACHE_DIR = "/Users/jmilton/Github/corgidrp/corgidrp/data/nd_filter_mocks/dim"
 
@@ -689,7 +723,7 @@ def main():
 
     # 3) Combine them into stars_dataset_cached
     combined_files = bright_files + dim_files
-    stars_dataset_cached = l2b_tol3.divide_by_exptime(Dataset(combined_files))
+    stars_dataset_cached = Dataset(combined_files)
 
     # 4) Create an "output" subdirectory for storing calibration products, etc.
     output_dir = os.path.join(os.path.dirname(DIM_CACHE_DIR), "output")
@@ -709,6 +743,8 @@ def main():
 
     print("\n========== BEGIN TESTS ==========")
 
+    run_test(test_compute_exp_irrad)
+    run_test(test_nd_filter_calibration_object_with_calspec, bright_files_cached)
     run_test(test_nd_filter_calibration_object, stars_dataset_cached)
     run_test(test_output_filename_convention, stars_dataset_cached)
     run_test(test_average_od_within_tolerance, stars_dataset_cached)
@@ -733,3 +769,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+'''

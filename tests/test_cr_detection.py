@@ -24,14 +24,13 @@ test_non_linearity_filename = input_non_linearity_filename.split(".")[0] + ".fit
 nonlin_fits_filepath = os.path.join(os.path.dirname(__file__), "test_data", test_non_linearity_filename)
 tvac_nonlin_data = np.genfromtxt(input_non_linearity_path, delimiter=",")
 
-pri_hdr, ext_hdr = mocks.create_default_calibration_product_headers()
+pri_hdr, ext_hdr, errhdr, dqhdr = mocks.create_default_calibration_product_headers()
 non_linearity_correction = data.NonLinearityCalibration(tvac_nonlin_data,pri_hdr=pri_hdr,ext_hdr=ext_hdr,input_dataset = dummy_dataset)
 non_linearity_correction.save(filename = nonlin_fits_filepath)
 
 # Make a dummy kgain calibration file
 kgain = 8.7
-gain_value = np.array([[kgain]])
-k_gain = data.KGain(gain_value, pri_hdr = pri_hdr, ext_hdr = ext_hdr, input_dataset = dummy_dataset)
+k_gain = data.KGain(kgain, pri_hdr = pri_hdr, ext_hdr = ext_hdr, input_dataset = dummy_dataset)
 
 # Metadata code from https://github.com/roman-corgi/cgi_iit_drp/blob/main/proc_cgi_frame_NTR/proc_cgi_frame/read_metadata.py
 

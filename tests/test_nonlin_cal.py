@@ -102,6 +102,9 @@ def setup_module():
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
         image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
+        #to test the correct handling of cosmic ray flags
+        if j == 1:
+            image_sim.dq[400, 200:300] = 128
         frame_list.append(image_sim)
 
     init_nonlins = []
@@ -135,6 +138,9 @@ def setup_module():
                 image_sim = make_fluxmap_image(fluxMap4,bias,kgain,rn,g,t,coeffs,
                     nonlin_flag=nonlin_flag)
                 image_sim.ext_hdr['DATETIME'] = time_stack_test[idx_t]
+            #to test the correct handling of cosmic ray flags
+            if idx_t == 1:
+                image_sim.dq[400, 200:300] = 128
             image_sim.pri_hdr['OBSNAME'] = 'NONLIN'
             frame_list.append(image_sim)
     # Join all frames in a Dataset
@@ -150,27 +156,12 @@ def setup_module():
     min_write = 800
     max_write = 10000
 
-def teardown_module():
-    """
-    Runs at the end. Deletes variables
-    """
-    global n_cal, n_mean
-    global init_nonlins_arr
-    global rms_test
-    global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
-    global dataset_nl
-    global norm_val, min_write, max_write
-
-    del n_cal, n_mean
-    del init_nonlins_arr
-    del rms_test
-    del exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
-    del dataset_nl
-    del norm_val, min_write, max_write
-
 def test_expected_results_nom_sub():
     """Outputs are as expected for the provided frames with nominal arrays."""
-    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch UserWarning: norm_val is not between the minimum and maximum values from calibrate_nonlin:777
+        nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write,
         max_write)
 
     # Test its DATALVL is CAL
@@ -210,7 +201,7 @@ def test_expected_results_nom_sub():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
     nonlin_out.save(filedir=datadir)
-    nln_cal_filename = dataset_nl[-1].filename.replace("_L2b", "_NLN_CAL")
+    nln_cal_filename = dataset_nl[-1].filename.replace("_l2b", "_nln_cal")
     nln_cal_filepath = os.path.join(datadir, nln_cal_filename)
     if os.path.exists(nln_cal_filepath) is False:
         raise IOError(f'NonLinearity calibration file {nln_cal_filepath} does not exist.')
@@ -253,7 +244,9 @@ def test_expected_results_time_sub():
             dataset_nl[idx_frame].ext_hdr['DATETIME'] = time_stack_test[idx_t]
             idx_frame += 1
 
-    nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning) # catch UserWarning: norm_val is not between the minimum and maximum values from calibrate_nonlin:777
+        nonlin_out = calibrate_nonlin(dataset_nl, n_cal, n_mean, norm_val, min_write, max_write)
      
     # Calculate rms of the differences between the assumed nonlinearity and 
     # the nonlinearity determined with calibrate_nonlin
@@ -273,25 +266,24 @@ def test_expected_results_time_sub():
     assert np.less(rms2,rms_test)
     assert np.less(rms3,rms_test)
     assert np.less(rms4,rms_test)
-  
 
 def teardown_module():
     """
-    Run at end of tests. Deletes variables
-
+    Runs at the end of tests; deletes variables
     """
     global n_cal, n_mean
     global init_nonlins_arr
     global rms_test
     global exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
     global dataset_nl
+    global norm_val, min_write, max_write
 
     del n_cal, n_mean
     del init_nonlins_arr
     del rms_test
     del exp_time_stack_arr0, time_stack_arr0, len_list0, gain_arr0
     del dataset_nl
-
+    del norm_val, min_write, max_write
 
 def test_norm_val():
     """norm_val must be divisible by 20."""
@@ -335,6 +327,8 @@ def test_nonlin_params():
                         nonlin_params=nonlin_params_bad)
  
 if __name__ == '__main__':
+    print('Running setup_module')
+    setup_module()
     print('Running test_nonlin_params')
     test_nonlin_params()
     print('Running test_expected_results_nom_sub')
@@ -349,4 +343,6 @@ if __name__ == '__main__':
     test_max_gt_min()
     print('Running test_psi')
     test_psi()
+    print('Running teardown_module')
+    teardown_module()
     print('Non-Linearity Calibration tests passed')

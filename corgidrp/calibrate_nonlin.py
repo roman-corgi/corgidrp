@@ -126,7 +126,7 @@ def calibrate_nonlin(dataset_nl,
                      pfit_upp_cutoff1 = -2, pfit_upp_cutoff2 = -3,
                      pfit_low_cutoff1 = 2, pfit_low_cutoff2 = 1,
                      make_plot=False, plot_outdir='figures', show_plot=False,
-                     verbose=False, nonlin_params=None):
+                     verbose=False, nonlin_params=None, apply_dq = True):
     """
     Function that derives the non-linearity calibration table for a set of DN
     and EM values.
@@ -222,7 +222,8 @@ def calibrate_nonlin(dataset_nl,
         of two values.  The coordinates of each square are specified by matching 
         up as follows: (rowroi1, colroi1), (rowroi1, colroi2), (rowback11, colback11), 
         (rowback11, colback12), etc. Defaults to nonlin_params_default specified in this file.
-    
+      apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
+      
     Returns:
       nonlin_arr (NonLinearityCalibration): 2-D array with nonlinearity values
         for input signal level (DN) in rows and EM gain values in columns. The
@@ -239,7 +240,7 @@ def calibrate_nonlin(dataset_nl,
         raise Exception('dataset_nl.all_data must be 3-D')
     # cast dataset objects into np arrays and retrieve aux information
     cal_arr, mean_frame_arr, exp_arr, datetime_arr, len_list, actual_gain_arr = \
-        nonlin_dataset_2_stack(dataset_nl)
+        nonlin_dataset_2_stack(dataset_nl, apply_dq = apply_dq)
     # Get relevant constants
     rowroi1 = nonlin_params['rowroi1']
     rowroi2 = nonlin_params['rowroi2']
@@ -559,9 +560,9 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
+                        frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, 
+                        frame_1_back2 = np.nanmean(frame_1[rowback2[0]:rowback2[-1]+1, 
                                                         colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
         
@@ -573,13 +574,13 @@ def calibrate_nonlin(dataset_nl,
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
         
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
                         
                         mean_frame_index += 1
-                    mean_signal.append(np.mean(frame_mean))
+                    mean_signal.append(np.nanmean(frame_mean))
                 elif repeat_flag:
                     # for repeated exposure frames, split into the first half/set
                     # and the second half/set
@@ -590,9 +591,9 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, 
+                        frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, 
                                                         colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, 
+                        frame_1_back2 = np.nanmean(frame_1[rowback2[0]:rowback2[-1]+1, 
                                                         colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
         
@@ -605,7 +606,7 @@ def calibrate_nonlin(dataset_nl,
                         # Apply mask and calculate the positive mean
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
                         
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
@@ -621,8 +622,8 @@ def calibrate_nonlin(dataset_nl,
                         frame_1 = frame_1.astype(np.float64)
         
                         # Subtract background
-                        frame_1_back1 = np.mean(frame_1[rowback1[0]:rowback1[-1]+1, colback1[0]:colback1[-1]+1])
-                        frame_1_back2 = np.mean(frame_1[rowback2[0]:rowback2[-1]+1, colback2[0]:colback2[-1]+1])
+                        frame_1_back1 = np.nanmean(frame_1[rowback1[0]:rowback1[-1]+1, colback1[0]:colback1[-1]+1])
+                        frame_1_back2 = np.nanmean(frame_1[rowback2[0]:rowback2[-1]+1, colback2[0]:colback2[-1]+1])
                         frame_back = (frame_1_back1 + frame_1_back2) / 2
         
                         # Calculate counts and mean
@@ -631,7 +632,7 @@ def calibrate_nonlin(dataset_nl,
                         frame_mean0 = frame_1 - frame_back
                         frame_mean0 *= mask
                         positive_means = frame_mean0[frame_mean0 > 0]
-                        frame_mean1 = np.mean(positive_means) if positive_means.size > 0 else np.nan
+                        frame_mean1 = np.nanmean(positive_means) if positive_means.size > 0 else np.nan
         
                         frame_count.append(frame_count0)
                         frame_mean.append(frame_mean1)
@@ -733,8 +734,8 @@ def calibrate_nonlin(dataset_nl,
                             corr_mean_signal_sorted, frac=lowess_frac)[:, 1]
         
         # find the min/max values of corrected measured means and append array
-        temp_min = np.min(corr_mean_signal_sorted)
-        temp_max = np.max(corr_mean_signal_sorted)
+        temp_min = np.nanmin(corr_mean_signal_sorted)
+        temp_max = np.nanmax(corr_mean_signal_sorted)
         
         if make_plot:
             # Plotting Signal vs. Relative Gain
@@ -831,7 +832,7 @@ def calibrate_nonlin(dataset_nl,
     
     return nonlin
 
-def nonlin_dataset_2_stack(dataset):
+def nonlin_dataset_2_stack(dataset, apply_dq = True):
     """
     Casts the CORGIDRP Dataset object for non-linearity calibration into a stack
     of numpy arrays sharing the same commanded gain value. It also returns the list of
@@ -842,6 +843,7 @@ def nonlin_dataset_2_stack(dataset):
     Args:
         dataset (corgidrp.Dataset): Dataset with a set of of EXCAM illuminated
         pupil L1 SCI frames (counts in DN)
+        apply_dq (bool): consider the dq mask (from cosmic ray detection) or not
 
     Returns:
         numpy array with stack of stacks of data array associated with each frame
@@ -874,6 +876,9 @@ def nonlin_dataset_2_stack(dataset):
         len_cal_frames = 0
         record_gain = True 
         for frame in data_set.frames:
+            if apply_dq:
+                bad = np.where(frame.dq > 0)
+                frame.data[bad] = np.nan
             if frame.pri_hdr['OBSNAME'] == 'MNFRAME':
                 if record_exp_time:
                     exp_time_mean_frame = frame.ext_hdr['EXPTIME'] 
@@ -899,7 +904,7 @@ def nonlin_dataset_2_stack(dataset):
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
                 if record_gain:
-                    try: # if EM gain measured directly from frame TODO change hdr name if necessary
+                    try: # if EM gain measured directly from frame
                         gains.append(frame.ext_hdr['EMGAIN_M'])
                     except:
                         if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available

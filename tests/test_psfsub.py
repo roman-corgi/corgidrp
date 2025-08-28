@@ -1,4 +1,4 @@
-from corgidrp.mocks import create_psfsub_dataset,create_default_headers
+from corgidrp.mocks import create_psfsub_dataset,create_default_L1_headers
 from corgidrp.l3_to_l4 import do_psf_subtraction
 from corgidrp.data import PyKLIPDataset, Image, Dataset
 from corgidrp.detector import nan_flags, flag_nans
@@ -172,7 +172,7 @@ def make_test_data(frame_shape,n_frames=1,):
     
     frames = []
     for i in range(n_frames):
-        prihdr, exthdr = create_default_headers()
+        prihdr, exthdr = create_default_L1_headers()
         im_data = np.zeros(frame_shape).astype(np.float64)
         frame = Image(im_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
@@ -322,7 +322,10 @@ def test_psf_sub_split_dataset():
     """
 
     # Sci & Ref
-    numbasis = [1,4,8]
+    numbasis = [1]
+    subsections = 2
+    annuli = 2
+    movement = 2
     rolls = [270+13,270-13,0,0]
     mock_sci,mock_ref = create_psfsub_dataset(2,2,rolls,
                                               st_amp=st_amp,
@@ -332,41 +335,64 @@ def test_psf_sub_split_dataset():
     # combine mock_sci and mock_ref into 1 dataset
     frames = [*mock_sci,*mock_ref]
     mock_sci_and_ref = Dataset(frames)
-
+    klip_kwargs={"numbasis":numbasis,
+                    "subsections":subsections,
+                    "annuli":annuli,
+                    "movement":movement,}
+    
     # Pass combined dataset to do_psf_subtraction
     result = do_psf_subtraction(mock_sci_and_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_single_dataset',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
     
-    # Should choose ADI+RDI
+    # Check correct KLIP parameters are used (Should choose ADI+RDI)
     for frame in result:
-        if not frame.pri_hdr['KLIP_ALG'] == 'ADI+RDI':
-            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI+RDI' mode when provided 2 science images and 2 references.")
 
+        # Parse PSFPARAM header string
+        psfparams = frame.ext_hdr['PSFPARAM'].split(',')
+        psfparams_dict = {}
+        for pair in psfparams:
+            param, val = pair.strip().split('=')
+            psfparams_dict[param] = val
+
+        # Check values
+        if psfparams_dict['mode'] != 'ADI+RDI':
+            raise Exception(f"Chose {psfparams_dict['mode']} instead of 'ADI+RDI' when provided 2 science images and 2 references.")
+        if psfparams_dict['annuli'] != str(annuli):
+            raise Exception(f"Unexpected number of annuli was used in KLIP parameters.")
+        if psfparams_dict['subsect'] != str(subsections):
+            raise Exception(f"Unexpected number of subsections was used in KLIP parameters.")
+        if psfparams_dict['minmove'] != str(movement):
+            raise Exception(f"Unexpected minimum movement was used in KLIP parameters.")
+        if psfparams_dict['numbasis'] != f'{numbasis}/1':
+            raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
+        
+    klip_kwargs={"numbasis":numbasis}
     # Try passing only science frames
     result = do_psf_subtraction(mock_sci,
-                                numbasis=numbasis,
                                 fileprefix='test_sci_only_dataset',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
     
     # Should choose ADI
     for frame in result:
         if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
             raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
 
+    klip_kwargs={"numbasis":numbasis}
     # pass only reference frames (should fail)
     with pytest.raises(UserWarning):
         _ = do_psf_subtraction(mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_ref_only_dataset',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
 
 def test_psf_sub_ADI_nocrop():
     """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
@@ -381,12 +407,13 @@ def test_psf_sub_ADI_nocrop():
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
 
+    klip_kwargs={"numbasis":numbasis}
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_ADI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
 
     analytical_result = shift((rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2,
                               [0.5,0.5],
@@ -427,13 +454,29 @@ def test_psf_sub_ADI_nocrop():
         if np.nanmax(np.abs(frame.data[0] - analytical_result)) > np.nanmax(analytical_result) * rel_tolerance:
             raise Exception(f"Relative difference between ADI result and analytical result is greater then 5%.")
         
-        if not frame.pri_hdr['KLIP_ALG'] == 'ADI':
-            raise Exception(f"Chose {frame.pri_hdr['KLIP_ALG']} instead of 'ADI' mode when provided 2 science images and no references.")
-
     # Check expected data shape
     expected_data_shape = (1,len(numbasis),*mock_sci[0].data.shape)
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
+
+    # Parse PSFPARAM header string
+    psfparams = frame.ext_hdr['PSFPARAM'].split(',')
+    psfparams_dict = {}
+    for pair in psfparams:
+        param, val = pair.strip().split('=')
+        psfparams_dict[param] = val
+
+    # Check values
+    if psfparams_dict['mode'] != 'ADI':
+        raise Exception(f"Chose {psfparams_dict['mode']} instead of 'ADI' when provided 2 science images and no references.")
+    if psfparams_dict['annuli'] != '1':
+        raise Exception(f"Unexpected number of annuli was used in KLIP parameters.")
+    if psfparams_dict['subsect'] != '1':
+        raise Exception(f"Unexpected number of subsections was used in KLIP parameters.")
+    if psfparams_dict['minmove'] != '1':
+        raise Exception(f"Unexpected minimum movement was used in KLIP parameters.")
+    if psfparams_dict['numbasis'] != f'{numbasis}/1':
+        raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
 
 def test_psf_sub_RDI_nocrop(): 
     """Tests that psf subtraction step correctly identifies an RDI dataset (single roll, 1 or more references), 
@@ -450,13 +493,15 @@ def test_psf_sub_RDI_nocrop():
                                 st_amp=st_amp
                                 )
 
+    klip_kwargs={"numbasis":numbasis}
+                                
     result = do_psf_subtraction(mock_sci,
                                 reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_RDI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs
                                 )
     analytical_result = rotate(mock_sci[0].data - mock_ref[0].data,-rolls[0],reshape=False,cval=np.nan)
     
@@ -543,12 +588,14 @@ def test_psf_sub_ADIRDI_nocrop():
     analytical_result2 = (rotate(mock_sci[0].data - mock_sci[1].data,-rolls[0],reshape=False,cval=0) + rotate(mock_sci[1].data - mock_sci[0].data,-rolls[1],reshape=False,cval=0)) / 2                         
     analytical_results = [analytical_result1,analytical_result2]
     
+    klip_kwargs={"numbasis":numbasis}
+                                
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_ADI+RDI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
     
     for i,frame in enumerate(result):
 
@@ -605,12 +652,13 @@ def test_psf_sub_withcrop():
     numbasis = [1,2]
     rolls = [270+13,270-13]
     mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,pl_contrast=1e-3)
-
+    klip_kwargs={"numbasis":numbasis}
+                                
     result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
                                 fileprefix='test_withcrop',
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
 
     for i,frame in enumerate(result):
     
@@ -623,6 +671,52 @@ def test_psf_sub_withcrop():
     if not result.all_data.shape == expected_data_shape:
         raise Exception(f"Result data shape was {result.all_data.shape} instead of expected {expected_data_shape} after ADI subtraction.")
 
+def test_psf_sub_explicit_klip_kwargs():
+    """Tests that psf subtraction step correctly identifies an ADI dataset (multiple rolls, no references), 
+    that overall counts decrease, that the KLIP result matches the analytical expectation, and that the 
+    output data shape is correct.
+    """
+
+    numbasis = [1]
+    rolls = [270+13,270-13]
+    mock_sci,mock_ref = create_psfsub_dataset(2,0,rolls,
+                                              st_amp=st_amp,
+                                              noise_amp=noise_amp,
+                                              pl_contrast=pl_contrast)
+
+    result = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
+                                fileprefix='test_ADI_explicit_klip_kwargs',
+                                do_crop=False,
+                                measure_klip_thrupt=False,
+                                measure_1d_core_thrupt=False,
+                                mode='ADI',
+                                annuli=2,
+                                subsections=2,
+                                movement=2,
+                                numbasis=numbasis)
+
+    frame = result[0]
+    
+    # Parse PSFPARAM header string
+    psfparams = frame.ext_hdr['PSFPARAM'].split(',')
+    psfparams_dict = {}
+    for pair in psfparams:
+        param, val = pair.strip().split('=')
+        psfparams_dict[param] = val
+
+    # Check values
+    if psfparams_dict['mode'] != 'ADI':
+        raise Exception(f"Chose {psfparams_dict['mode']} instead of 'ADI' when provided 2 science images and no references.")
+    if psfparams_dict['annuli'] != '2':
+        raise Exception(f"Unexpected number of annuli was used in KLIP parameters.")
+    if psfparams_dict['subsect'] != '2':
+        raise Exception(f"Unexpected number of subsections was used in KLIP parameters.")
+    if psfparams_dict['minmove'] != '2':
+        raise Exception(f"Unexpected minimum movement was used in KLIP parameters.")
+    if psfparams_dict['numbasis'] != f'{numbasis}/1':
+        raise Exception(f"Unexpected numbasis was used in KLIP parameters.")
+
+
 def test_psf_sub_badmode():
     """Tests that psf subtraction step fails correctly if an unconfigured mode is supplied (e.g. SDI).
     """
@@ -634,38 +728,39 @@ def test_psf_sub_badmode():
                                               noise_amp=noise_amp,
                                               pl_contrast=pl_contrast)
     
-
+    klip_kwargs={"numbasis":numbasis,
+                 "mode" : 'SDI'}
     with pytest.raises(Exception):
         _ = do_psf_subtraction(mock_sci,reference_star_dataset=mock_ref,
-                                numbasis=numbasis,
-                                mode='SDI',
                                 fileprefix='test_SDI',
                                 do_crop=False,
                                 measure_klip_thrupt=False,
-                                measure_1d_core_thrupt=False)
+                                measure_1d_core_thrupt=False,
+                                **klip_kwargs)
     
 if __name__ == '__main__':  
-    # test_pyklipdata_ADI()
-    # test_pyklipdata_RDI()
-    # test_pyklipdata_ADIRDI()
-    # test_pyklipdata_badtelescope()
-    # test_pyklipdata_badinstrument()
-    # test_pyklipdata_badcfamname()
-    # test_pyklipdata_notdataset()
-    # test_pyklipdata_badimgshapes()
-    # test_pyklipdata_multiplepixscales()
+    test_pyklipdata_ADI()
+    test_pyklipdata_RDI()
+    test_pyklipdata_ADIRDI()
+    test_pyklipdata_badtelescope()
+    test_pyklipdata_badinstrument()
+    test_pyklipdata_badcfamname()
+    test_pyklipdata_notdataset()
+    test_pyklipdata_badimgshapes()
+    test_pyklipdata_multiplepixscales()
 
-    # test_nanflags_2D()
-    # test_nanflags_3D() 
-    # test_nanflags_mixed_dqvals()
-    # test_flagnans_2D()
-    # test_flagnans_3D()
-    # test_flagnans_flagval2()
+    test_nanflags_2D()
+    test_nanflags_3D() 
+    test_nanflags_mixed_dqvals()
+    test_flagnans_2D()
+    test_flagnans_3D()
+    test_flagnans_flagval2()
 
-    #test_psf_sub_split_dataset()
+    test_psf_sub_split_dataset()
+    test_psf_sub_explicit_klip_kwargs()
 
-    # test_psf_sub_ADI_nocrop()
+    test_psf_sub_ADI_nocrop()
     test_psf_sub_RDI_nocrop()
     test_psf_sub_ADIRDI_nocrop()
-    # test_psf_sub_withcrop()
-    # test_psf_sub_badmode()
+    test_psf_sub_withcrop()
+    test_psf_sub_badmode()

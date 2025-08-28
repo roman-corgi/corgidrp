@@ -1,6 +1,7 @@
 # This module is written to do an absolute flux calibration observing a standard star having CALSPEC data.
 import glob
 import os
+import json
 import numpy as np
 from astropy.io import fits, ascii
 from astropy import wcs
@@ -12,33 +13,35 @@ from photutils.background import LocalBackground
 from photutils.psf import fit_2dgaussian
 from scipy import integrate
 from corgidrp.astrom import centroid_with_roi
-import urllib
+from urllib.request import Request, urlopen, urlretrieve
 
 # Dictionary of anticipated bright and dim CASLPEC standard star names and corresponding fits names
 calspec_names= {
 # bright standards
-'109 Vir': '109vir_stis_005.fits',
-'Vega': 'alpha_lyr_stis_011.fits',
-'Eta Uma': 'etauma_stis_008.fits',
-'Lam Lep': 'lamlep_stis_008.fits',
-'KSI2 CETI': 'ksi2ceti_stis_008.fits',
+'109 vir': '109vir_stis_005.fits',
+'vega': 'alpha_lyr_stis_011.fits',
+'eta uma': 'etauma_stis_008.fits',
+'lam lep': 'lamlep_stis_008.fits',
+'ksi2 ceti': 'ksi2ceti_stis_008.fits',
 # dim standards
-'TYC 4433-1800-1': '1808347_stiswfc_006.fits',
-'TYC 4205-1677-1': '1812095_stisnic_008.fits',
-'TYC 4212-455-1': '1757132_stiswfc_006.fits',
-'TYC 4209-1396-1': '1805292_stisnic_008.fits',
-'TYC 4413-304-1': 'p041c_stisnic_010.fits',
-'UCAC3 313-62260': 'kf08t3_stisnic_005.fits',
-'BPS BS 17447-0067': '1802271_stiswfcnic_006.fits',
-'TYC 4424-1286-1': '1732526_stisnic_009.fits',
-'GSC 02581-02323': 'p330e_stiswfcnic_007.fits',
-'TYC 4207-219-1': '1740346_stisnic_005.fits'
+'tyc 4433-1800-1': '1808347_stiswfc_006.fits',
+'tyc 4205-1677-1': '1812095_stisnic_008.fits',
+'tyc 4212-455-1': '1757132_stiswfc_006.fits',
+'tyc 4209-1396-1': '1805292_stisnic_008.fits',
+'tyc 4413-304-1': 'p041c_stisnic_010.fits',
+'ucac3 313-62260': 'kf08t3_stisnic_005.fits',
+'bps bs 17447-0067': '1802271_stiswfcnic_006.fits',
+'tyc 4424-1286-1': '1732526_stisnic_009.fits',
+'gsc 02581-02323': 'p330e_stiswfcnic_007.fits',
+'tyc 4207-219-1': '1740346_stisnic_005.fits'
 }
 
 calspec_url = 'https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_calspec/'
 
 def get_calspec_file(star_name):
     """
+    look up the calspec fits file name in the names dict and look for 
+    the corresponding file in the .corgidrp/  calspec_data. If not available 
     download the corresponding CALSPEC fits file and return the file path
     
     Args:
@@ -46,20 +49,46 @@ def get_calspec_file(star_name):
     
     Returns:
         str: file path
+        str: fits file name
     """
-    if star_name not in calspec_names:
-        raise ValueError('{0} is not in list of anticipated standard stars {1}, please check naming'.format(star_name, calspec_names.keys()) )
-    fits_name = calspec_names.get(star_name)
-    # TODO: be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
-    fits_url = calspec_url + fits_name
-    try:
-        calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
-        if not os.path.exists(calspec_dir):
-            os.mkdir(calspec_dir)
-        file_name, headers = urllib.request.urlretrieve(fits_url, filename =  os.path.join(calspec_dir, fits_name))
-    except:
-        raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(fits_name))
-    return file_name
+    
+    calspec_dir = os.path.join(os.path.dirname(corgidrp.config_filepath), "calspec_data")
+    names_file = os.path.join(calspec_dir, "calspec_names.json")
+    calspec_names_ff = calspec_names
+    if not os.path.exists(calspec_dir):
+        os.mkdir(calspec_dir)
+        with open(names_file, 'w') as f:
+            json.dump(calspec_names_ff, f)
+    else:
+        if not os.path.exists(names_file):
+            with open(names_file, 'w') as f:
+                json.dump(calspec_names_ff, f)
+        else:
+            with open(names_file, 'r') as f:
+                calspec_names_ff = json.load(f)
+    if star_name.lower() not in calspec_names_ff.keys():
+        raise ValueError('{0} is not in list of anticipated standard stars \n {1},\n please check naming'.format(star_name, [*calspec_names_ff])) 
+    fits_name = calspec_names_ff.get(star_name.lower())
+    if fits_name in os.listdir(calspec_dir):
+        file_name = os.path.join(calspec_dir, fits_name)
+        name =  fits_name
+    else:
+        basic_name = fits_name.split('stis')[0]+'stis'
+        #to be flexible with the version of the calspec fits file, so essentially, the number in the name should not matter
+        req = Request(calspec_url)
+        list = urlopen(req).readlines()
+        for line in list:
+            str_line = str(line)
+            if basic_name in str_line: 
+                name = str_line.split(".fits")[1].split(">")[-1] + ".fits"
+                break
+
+        fits_url = calspec_url + name
+        try:
+            file_name, headers = urlretrieve(fits_url, filename =  os.path.join(calspec_dir, name))
+        except:
+            raise Exception("cannot access CALSPEC archive web page and/or download {0}".format(name))
+    return file_name, name
 
 def get_filter_name(image):
     """
@@ -98,19 +127,19 @@ def read_filter_curve(filter_filename):
     transmission = tab['%T'].data
     return lambda_nm * 10 , transmission/100.
 
-def read_cal_spec(calspec_filename, filter_wavelength):
+def read_cal_spec(calspec_file, filter_wavelength):
     """
     read the calspec flux density data interpolated on the wavelength grid of the transmission curve
     
     Args:
-        calspec_filename (str): file name of the CALSPEC fits file
+        calspec_file (str): file path to the CALSPEC fits file
         filter_wavelength (np.array): wavelength grid of the transmission curve in unit Angstroem
     
     Returns:
         np.array: flux density in Jy interpolated on the wavelength grid of the transmission curve 
         in CALSPEC units erg/(s * cm^2 * AA)
     """
-    hdulist = fits.open(calspec_filename)
+    hdulist = fits.open(calspec_file)
     data = hdulist[1].data
     hdulist.close()
     w = data['WAVELENGTH'] #wavelength in Angstroem
@@ -196,7 +225,7 @@ def calculate_flux_ref(filter_wavelength, calspec_flux, wave_ref):
 
 def calculate_vega_mag(source_flux, filter_file):
     """
-    determine the apparent Vega magnitude of the source with known flux in CALSPEC units (erg/(s * cm^2 *AA)
+    determine the apparent Vega magnitude of the source with known flux in CALSPEC units erg/(s * cm^2 *AA)
     in the used filter band.
     
     Args:
@@ -209,7 +238,7 @@ def calculate_vega_mag(source_flux, filter_file):
     
     wave, filter_trans = read_filter_curve(filter_file)
     # calculate the flux of VEGA and the source star from the user given CALSPEC file binned on the wavelength grid of the filter
-    vega_filepath = get_calspec_file('Vega')
+    vega_filepath = get_calspec_file('Vega')[0]
     vega_sed = read_cal_spec(vega_filepath, wave)
 
     vega_flux = calculate_band_flux(filter_trans, vega_sed, wave)
@@ -409,7 +438,7 @@ def phot_by_gauss2d_fit(image, fwhm, fit_shape=None, background_sub=False, r_in=
         return [flux, flux_err]
 
 
-def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=None):
+def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by aperture photometry.
@@ -439,6 +468,7 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     Parameters:
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
             the calibration factor. Should already be normalized for exposure time.
+        calspec_file (str, optional): file path to the calspec fits file of the observed star
         flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
             be used.
         phot_kwargs (dict, optional): A dictionary of keyword arguments controlling the aperture 
@@ -448,13 +478,15 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
             flux calibration factor in (TO DO: what units should this be in)
     """
-    if isinstance(dataset_or_image, corgidrp.data.Dataset):
-        image = dataset_or_image[0]
-        dataset = dataset_or_image
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, corgidrp.data.Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
     else:
-        image = dataset_or_image
+        image = d_or_i
         dataset = corgidrp.data.Dataset([image])
-    
+    if image.ext_hdr['BUNIT'] != "photoelectron/s":
+        raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     if phot_kwargs is None:
         phot_kwargs = {
             'encircled_radius': 5,
@@ -468,23 +500,28 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
             'centroid_roi_radius': 5
         }
     
-    star_name = image.pri_hdr["TARGET"]
     filter_name = image.ext_hdr["CFAMNAME"]
     filter_file = get_filter_name(image)
     
     # Read filter and CALSPEC data.
     wave, filter_trans = read_filter_curve(filter_file)
-    calspec_filepath = get_calspec_file(star_name) 
+    
+    if calspec_file is not None:
+        calspec_filepath = calspec_file
+        calspec_filename = os.path.basename(calspec_file)
+    else:
+        star_name = image.pri_hdr["TARGET"]
+        calspec_filepath, calspec_filename = get_calspec_file(star_name)
     flux_ref = read_cal_spec(calspec_filepath, wave)
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
     elif flux_or_irr == 'irr':
         flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
@@ -498,8 +535,8 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
     fluxcal_fac_err = flux / ap_sum**2 * ap_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
-        np.array([[fluxcal_fac]]),
-        err=np.array([[[fluxcal_fac_err]]]),
+        fluxcal_fac,
+        err=fluxcal_fac_err,
         pri_hdr=image.pri_hdr,
         ext_hdr=image.ext_hdr,
         input_dataset=dataset
@@ -511,13 +548,13 @@ def calibrate_fluxcal_aper(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=N
         fluxcal_obj.ext_hdr['LOCBACK'] = back
 
     # Append to or create a HISTORY entry in the header.
-    history_entry = "Flux calibration factor was determined by aperture photometry."
+    history_entry = "Flux calibration factor was determined by aperture photometry using SED file {0}".format(calspec_filename)
     fluxcal_obj.ext_hdr.add_history(history_entry)
 
     return fluxcal_obj
 
 
-def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwargs=None):
+def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
     """
     fills the FluxcalFactors calibration product values for one filter band,
     calculates the flux calibration factors by fitting a 2D Gaussian.
@@ -542,6 +579,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     Parameters:
         dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
             the calibration factor. Should already be normalized for exposure time.
+        calspec_file (str, optional): file path to the calspec fits file of the observed star
         flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
             be used.
         phot_kwargs (dict, optional): A dictionary of keyword arguments controlling the Gaussian 
@@ -551,13 +589,15 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
             flux calibration factor in (TO DO: what units should this be in)
     """
-    if isinstance(dataset_or_image, corgidrp.data.Dataset):
-        image = dataset_or_image[0]
-        dataset = dataset_or_image
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, corgidrp.data.Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
     else:
-        image = dataset_or_image
+        image = d_or_i
         dataset = corgidrp.data.Dataset([image])
-    
+    if image.ext_hdr['BUNIT'] != "photoelectron/s":
+        raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     if phot_kwargs is None:
         phot_kwargs = {
         'fwhm': 3,
@@ -569,21 +609,25 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         'centroid_roi_radius': 5
     }
 
-    star_name = image.pri_hdr["TARGET"]
     filter_file = get_filter_name(image)
-    
     wave, filter_trans = read_filter_curve(filter_file)
-    calspec_filepath = get_calspec_file(star_name)
+    
+    if calspec_file is not None:
+        calspec_filepath = calspec_file
+        calspec_filename = os.path.basename(calspec_file)
+    else:
+        star_name = image.pri_hdr["TARGET"]
+        calspec_filepath, calspec_filename = get_calspec_file(star_name)
     flux_ref = read_cal_spec(calspec_filepath, wave)
     
     if flux_or_irr == 'flux':
         flux = calculate_band_flux(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
     elif flux_or_irr == 'irr':
         flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
-        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
-        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(electron/s)'
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
     else:
         raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
     
@@ -596,8 +640,8 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
     fluxcal_fac_err = flux / gauss_sum**2 * gauss_sum_err
 
     fluxcal_obj = corgidrp.data.FluxcalFactor(
-        np.array([[fluxcal_fac]]),
-        err=np.array([[[fluxcal_fac_err]]]),
+        fluxcal_fac,
+        err=fluxcal_fac_err,
         pri_hdr=image.pri_hdr,
         ext_hdr=image.ext_hdr,
         input_dataset=dataset
@@ -609,7 +653,7 @@ def calibrate_fluxcal_gauss2d(dataset_or_image, flux_or_irr = 'flux', phot_kwarg
         fluxcal_obj.ext_hdr['LOCBACK'] = back
 
     # Append to or create a HISTORY entry in the header.
-    history_entry = "Flux calibration factor was determined by a Gaussian 2D fit photometry."
+    history_entry = "Flux calibration factor was determined by a Gaussian 2D fit photometry using SED file {0}".format(calspec_filename)
     fluxcal_obj.ext_hdr.add_history(history_entry)
     
     return fluxcal_obj

@@ -223,7 +223,7 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         kgain = k_gain.value
     emgain_list = []
     for frame in crmasked_dataset:
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             emgain = frame.ext_hdr['EMGAIN_M']
         except:
             if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
@@ -308,7 +308,7 @@ def correct_nonlinearity(input_dataset, non_lin_correction, threshold=np.inf):
         raise ValueError("EM gain not found in header of input dataset. Non-linearity correction requires EM gain to be in header.")
 
     for i in range(linearized_cube.shape[0]):
-        try: # use measured gain if available TODO change hdr name if necessary
+        try: # use measured gain if available
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_M"]
         except:
             em_gain = linearized_dataset[i].ext_hdr["EMGAIN_A"]
@@ -356,7 +356,7 @@ def update_to_l2a(input_dataset):
         frame.ext_hdr['DATALVL'] = "L2a"
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L1_", "_L2a", 1)
+        frame.filename = frame.filename.replace("_l1_", "_l2a", 1)
 
     history_msg = "Updated Data Level to L2a"
     updated_dataset.update_after_processing_step(history_msg)

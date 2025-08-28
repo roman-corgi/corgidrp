@@ -21,6 +21,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     star_flux = 1.5e-09 #erg/(s*cm^2*AA)
     cal_factor = star_flux/200
     flux_image = mocks.create_flux_image(star_flux, fwhm, cal_factor)
+    flux_image.ext_hdr['BUNIT'] = 'photoelectron'
     flux_dataset = data.Dataset([flux_image])
     output_dir = os.path.join(e2eoutput_path, 'flux_sim_test_data')
 

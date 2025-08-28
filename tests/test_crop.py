@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import warnings
 from corgidrp.data import Dataset, Image
 from corgidrp.l3_to_l4 import crop
 from corgidrp.mocks import create_default_L3_headers
@@ -23,7 +24,7 @@ def make_test_dataset(shape=[100,100],centxy=None):
     else:
         cent = [centxy[-i] for i in np.array(range(len(centxy)))+1]
         
-    prihdr,exthdr = create_default_L3_headers()
+    prihdr,exthdr, errhdr, dqhdr = create_default_L3_headers()
     exthdr['STARLOCX'] = cent[1]
     exthdr['STARLOCY'] = cent[0]
     exthdr['LSAM_H'] = cent[1]
