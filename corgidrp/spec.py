@@ -216,7 +216,8 @@ def fit_psf_centroid(psf_data, psf_template,
         y_precis (float): Statistical precision of the y centroid fit, estimated from
                 peak-pixel S/N ratio
     """
-
+    if not isinstance(halfheight, int):
+        raise ValueError("halfheight must be an integer")
     # Use the center of mass as a starting point if positions were not provided.
     if xcent_template is None or ycent_template is None: 
         xcom_template, ycom_template = np.rint(get_center_of_mass(psf_template))
@@ -741,8 +742,14 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
-def star_spectrum_registration(dataset_fsm, dataset_template, errortol_pix=0.5):
-    """ This step function addresses:
+def star_spectrum_registration(
+    dataset_fsm,
+    dataset_template,
+    xcent_template=0,
+    ycent_template=0,
+    align_err_disp=0,
+    halfheight=30):
+    """ This function addresses:
 
       CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
       unocculted star observed through the FSAM slit mask, observed with the
@@ -763,26 +770,33 @@ def star_spectrum_registration(dataset_fsm, dataset_template, errortol_pix=0.5):
         Each of the L2b images must have the following header keywords:
           – FSMX, FSMY (float64)
           – CFAMNAME (same for all images)
-          – FSAMNAME = slit
+          – FSAMNAME = OPEN, R1C2, R6C5, R3C1
           – STARLOCX, STARLOCY (target source estimate)
       dataset_template (Dataset): Dataset containing the star spectrum that is
         used as a template to find the image in the dataset_fsm that best
         matches it.
-      errortol_pix (numpy.float): Tolerance on the registration offset between
-        the noisy spectrum image and the best-matched template.
+      xcent_target (float): true x centroid of the template PSF; for accurate
+        results this must be determined in advance.
+      ycent_target (float): true y centroid of the template PSF; for accurate
+        results this must be determined in advance.
+      align_err_disp (float64): Error in the FSAM alignment. This value is
+        determined after each observation by looking at the data.
+      halfheight: 1/2 the height of the box used for the fit.
 
     Returns:
-      Spectroscopy slit calibration product FITS file with:
+      Dispersed star image whose PSF-to-FSAM slit alignment most closely matches
+      that of the target source.
         HDU0 = header only
         HDU1 = binary table containing: 
           • best_fsmx, best_fsmy (float64): offsets of best-matching image
-          • align_err_x, align_err_y (float64): alignment error values
+          • align_err_disp (float64): alignment error value
           • best_file (string): filename of best-matching image (also written to HISTORY)
         HDU2 = header only (for consistency)
         HDU3 = header only (for consistency)
       
     """
-    # Confirm Spectroscopy configuration
+    # Confirm Spectroscopy configuration based on supported values for spectroscopy
+    # CFAM
     cfam_name = dataset[0].ext_hdr['CFAMNAME']
     if cfam_name.find('3') != -1:
         dpam_name = 'PRISM3'
@@ -791,53 +805,68 @@ def star_spectrum_registration(dataset_fsm, dataset_template, errortol_pix=0.5):
         dpam_name = 'PRISM2'
         # fsam_name = []
     else:
-        raise ValueError('{cfam_name} is not a spectroscopy filter')
-    # fpam_name = []
-    # spam = 
-    # lsam =
-
+        raise ValueError(f'{cfam_name} is not a spectroscopy filter')
+    # DPAM
+    if dataset[0].ext_hdr['DPAMNAME'] != dpam_name:
+        raise ValueError(f'DPAMNAME should be {dpam_name}')
+    # FPAM
+    fpam_name = dataset[0].ext_hdr['FPAMNAME']
+    if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
+        raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
+    # SPAM
+    spam_name = dataset[0].ext_hdr['SPAMNAME']
+    if spam_name[0:4] != 'SPEC':
+        raise ValueError('SPAMNAME should be SPEC')
+    # LSAM
+    lsam_name = dataset[0].ext_hdr['LSAMNAME']
+    if lsam_name[0:4] != 'SPEC':
+        raise ValueError('LSAMNAME should be SPEC')
+    # FSAM
+    fsam_name = dataset[0].ext_hdr['FSAMNAME']
+    if (fsam_name != 'OPEN' and fsam_name != 'R1C2' and fsam_name != 'R6C5' and
+        fsam_name != 'R3C1'):
+        raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
+    # Wavelength zero-point solution must be present
+    try:
+        wv0_x, wv0_y = dataset[0].ext_hdr['WV0_X'], dataset[0].ext_hdr['WV0_Y']
+    except:
+        raise ValueError('Wavelength zero-point keywords WV0_X, WV0_Y are missing')
+    # All images must have the same setup
     for img in dataset_fsm:
         exthdr = img.ext_hdr
         assert exthdr['CFAMNAME'] == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
         assert exthdr['DPAMNAME'] == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
-        # assert exthdr['FSAMNAME'] in fsma_name, f"FSAMNAME={exthdr['FSAMNAME'] differs from expcted values: {fsam_name}""
+        assert exthdr['FPAMNAME'] == dpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'] == dpam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'] == dpam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        assert exthdr['FSAMNAME'] in fsma_name, f"FSAMNAME={exthdr['FSAMNAME'] differs from expected values: {fsam_name}"
+        # Same wavelength zero-point
+        assert exthdr['WV0_X'] == wv0_x and exthdr['WV0_Y'] == wv0_y, f"Wavelength zero-point values {exthdr['WV0_X']}, {exthdr['WV0_Y']} differ from expected values {wv0_x}, {wv0_y}"
 
         # Confirm presence of FSMX, FSMY
         assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
-        # Confirm presence of STARLOCX, STARLOCY 
+        # TODO: Needed? Confirm presence of STARLOCX, STARLOCY 
         assert 'STARLOCX' in exthdr.keys() and 'STARLOCY' in exthdr.keys(), 'Missing STARLOCX/Y'
 
-    # TODO: If the template is more than one image (?), then, perform a double loop
-
-
-    # Get Wavelength zero-point from the header information
-    zeropt_x, zeropt_y = 0, 0 # Replace once the zero-point is done
-
     # Find best PSF centroid fit for each image compared to the template
-    # TODO: set the input parameters that have some prior information
-    # Any large value (pixels) that is impossible
+    # Cost function: Start with any large value that cannot happen. Units are
+    # EXCAM pixels
     zeropt_dist = 1e8
     for img in dataset_fsm:
-        (xfit, yfit,
-         _, _,
-         _,
-         xprecis, yprecis) = fit_psf_centroid(image, dataset_template[0].data,
-                     xcent_template = None, ycent_template = None,
-                     xcent_guess = None, ycent_guess = None,
-                     halfwidth = 10, halfheight = 10,
-                     fwhm_major_guess = 3, fwhm_minor_guess = 6,
-                     gauss2d_oversample = 9):
+        x_fit, yfit = fit_psf_centroid(img,
+                     dataset_template[int(round(align_err_disp))].data,
+                     xcent_template = xcent_template,
+                     ycent_template = ycent_template,
+                     halfheight = halfheight)
 
-        #TODO: Verify if best-matching image is wrt zero-point
-        zeropt_dist_img = np.sqrt((xfit-zeropt_x)**2 + (yfit-zeropt_y)**2)
+        # best-matching image is wrt zero-point
+        zeropt_dist_img = np.sqrt((xfit-wv0_x)**2 + (yfit-wv0_y)**2)
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
             img_best = img
             img_best['best_fsmx'] = xfit
             img_best['best_fsmy'] = yfit
-            img_best['align_err_x'] = xprecis
-            img_best['align_err_y'] = yprecis
-            # TODO: double check
+            # TODO: double check there's a valid filename:
             img_best['best_file'] = img_best.filename
         
     # Check that there's at least one solution
