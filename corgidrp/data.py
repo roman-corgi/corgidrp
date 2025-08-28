@@ -774,7 +774,7 @@ class SpectroscopyCentroidPSF(Image):
             self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
-                self.err_hdr = fits.Header
+                self.err_hdr = fits.Header()
 
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SpectroscopyCentroidPSF':
             raise ValueError("This file is not a valid SpectroscopyCentroidPSF.")
@@ -786,6 +786,8 @@ class SpectroscopyCentroidPSF(Image):
 
         # Enforce data level = CAL
         self.ext_hdr['DATALVL'] = 'CAL'
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        self.err_hdr['COMMENT'] = 'err not meaningful for this calibration; just present for class consistency' 
 
 
 class DispersionModel(Image):
@@ -868,9 +870,8 @@ class DispersionModel(Image):
         # Enforce data level = CAL
         self.ext_hdr['DATALVL'] = 'CAL'
         
-        # Add err and dq attributes for walker compatibility (set to None since DispersionModel doesn't have these)
-        self.err = None
-        self.dq = None
+        self.dq_hdr['COMMENT'] = 'DQ not meaningful for this calibration; just present for class consistency' 
+        self.err_hdr['COMMENT'] = 'err not meaningful for this calibration; just present for class consistency' 
 
     def save(self, filedir=None, filename=None):
         """
