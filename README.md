@@ -205,6 +205,15 @@ Before creating a pull request, review the design Principles below. Use the Gith
  
 ## Change Log
 
+**v3.0-alpha**
+ * Alpha-version pre-release for new VAP testing x e2e testing setup
+ * E2E test in new VAP format for spectroscopy dispersion calibration
+ * New spectrsocpy module with calibrations functions
+ * Begin changing of filename and headers to match new file standards
+ * End-to-end tests for some band 3 calibrations
+ * Suppression of some warnings
+
+
 
 **v2.2**
  * Specific print statements in unit tests for AAC testing
