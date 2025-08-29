@@ -410,7 +410,7 @@ def test_determine_zeropoint():
     test the calculation of the wavelength zeropoint position of satspot data
     """
     errortol_pix = 0.5
-    filepath = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
+    filepath = os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
     pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
     
     with fits.open(filepath) as hdul:
