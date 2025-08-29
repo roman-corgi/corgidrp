@@ -71,7 +71,12 @@ def test_nonlin_and_kgain_e2e(
     ):
     """ 
     Performs the e2e test to generate both nonlin and kgain calibrations from the same
-    L1 pupilimg dataset
+    L1 pupilimg dataset.
+    NOTE:  The original II&T code for nonlin calibration did not have a restriction on the number of
+        frames per EM gain, but the CORGI DRP does, and the default number is 20.  
+        For this e2e test, we use 3 EM gains, and for one of those EM gains, there 
+        are only 14 frames in the e2e test data.  So, we set the keyword n_cal=14 below 
+        before running the steps through the walker.
 
     Args:
         e2edata_path (str): Location of L1 data. Folders for both kgain and nonlin

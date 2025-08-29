@@ -11,25 +11,27 @@ tvac_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Worki
 ssc_dir = '/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/ssc_331'
 
 if __name__ == "__main__":
-    dest_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data3'
-    dest_kgain = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
-    dest_nonlin = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin')
-    dest_darkmap = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'darkmap')
-    dest_noisemap = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'noisemap_test_data', 'test_l1_data')
-    source_kgain = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
-    source_nonlin = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin')
-    source_darkmap = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'darkmap')
-    source_noisemap = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'noisemap_test_data', 'test_l1_data')
-    for dest in [(dest_kgain,source_kgain), (dest_nonlin,source_nonlin), (dest_darkmap,source_darkmap), (dest_noisemap,source_noisemap)]:
-        for file in os.listdir(dest[1]):
-            if not file.lower().endswith('.fits'):
-                continue
-            ssc_filepath = os.path.join(ssc_dir, file.split('_')[1], file.lower())
-            t_indices = [m.start() for m in re.finditer('t', ssc_filepath)]
-            ssc_filepath = ssc_filepath[:t_indices[-2]] + 'T' + ssc_filepath[t_indices[-2]+1:]
-            dest_filepath = os.path.join(dest[0], file.lower())
-            with fits.open(ssc_filepath) as hdul:
-                hdul.writeto(dest_filepath, overwrite=True)
+    if False:
+        dest_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data3'
+        dest_kgain = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
+        dest_nonlin = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin')
+        dest_darkmap = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'darkmap')
+        dest_noisemap = os.path.join(dest_dir, 'TV-20_EXCAM_noise_characterization', 'noisemap_test_data', 'test_l1_data')
+        source_kgain = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
+        source_nonlin = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'nonlin')
+        source_darkmap = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'darkmap')
+        source_noisemap = os.path.join(output_base_dir, 'TV-20_EXCAM_noise_characterization', 'noisemap_test_data', 'test_l1_data')
+        for dest in [(dest_kgain,source_kgain), (dest_nonlin,source_nonlin), (dest_darkmap,source_darkmap), (dest_noisemap,source_noisemap)]:
+            for file in os.listdir(dest[1]):
+                if not file.lower().endswith('.fits'):
+                    continue
+                ssc_filepath = os.path.join(ssc_dir, file.split('_')[1], file.lower())
+                t_indices = [m.start() for m in re.finditer('t', ssc_filepath)]
+                ssc_filepath = ssc_filepath[:t_indices[-2]] + 'T' + ssc_filepath[t_indices[-2]+1:]
+                dest_filepath = os.path.join(dest[0], file.lower())
+                with fits.open(ssc_filepath) as hdul:
+                    hdul.writeto(dest_filepath, overwrite=True)
+                    
     if False:
         datetime_list = []
         

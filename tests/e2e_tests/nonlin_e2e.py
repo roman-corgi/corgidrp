@@ -74,7 +74,12 @@ def test_nonlin_cal_e2e(
     ):
     """ Performs the e2e test to generate a non-linearity calibration object
         from raw L1 data and compares with the existing TVAC correction for the
-        same data.
+        same data.  
+        NOTE:  The original II&T code did not have a restriction on the number of
+        frames per EM gain, but the CORGI DRP does, and the default number is 20.  
+        For this e2e test, we use 3 EM gains, and for one of those EM gains, there 
+        are only 14 frames in the e2e test data.  So, we set the keyword n_cal=14 below 
+        before running the steps through the walker.
 
         Args:
         e2edata_path (str): Location of L1 data used to generate the non-linearity
