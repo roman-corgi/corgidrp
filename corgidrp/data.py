@@ -833,8 +833,10 @@ class DispersionModel(Image):
                 raise ValueError("Input should either be a dictionary or a filepath string")
             if pri_hdr == None:
                 pri_hdr = fits.Header()
-            if ext_hdr == None:
-                ext_hdr = fits.Header()
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=VerifyWarning)
+                if ext_hdr == None:
+                    ext_hdr = fits.Header()
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             self.pri_hdr = pri_hdr
