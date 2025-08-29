@@ -40,22 +40,15 @@ def test_image_splitting():
     expected_output_WP1 = np.zeros(shape=(2, img_size, img_size))
     expected_output_WP2 = np.zeros(shape=(2, img_size, img_size))
     img_center = 200
-    for y in range(img_size):
-        for x in range(img_size):
-            if ((x-img_center)**2) + ((y-img_center)**2) <= radius**2:
-                expected_output_WP1[0,y,x] = 1
-                expected_output_WP1[1,y,x] = 2
-                expected_output_WP2[0,y,x] = 1
-                expected_output_WP2[1,y,x] = 2
-            # fill in NaN pixels accordingly
-            if x >= 372:
-                expected_output_WP1[0,y,x] = float('nan')
-            if x <= 28:
-                expected_output_WP1[1,y,x] = float('nan')
-            if y <= x - 244:
-                expected_output_WP2[0,y,x] = float('nan')
-            if y >= x + 244:
-                expected_output_WP2[1,y,x] = float('nan')
+    y, x = np.indices([img_size, img_size])
+    expected_output_WP1[0, ((x-img_center)**2) + ((y-img_center)**2) <= radius**2] = 1
+    expected_output_WP1[1, ((x-img_center)**2) + ((y-img_center)**2) <= radius**2] = 2
+    expected_output_WP2[0, ((x-img_center)**2) + ((y-img_center)**2) <= radius**2] = 1
+    expected_output_WP2[1, ((x-img_center)**2) + ((y-img_center)**2) <= radius**2] = 2
+    expected_output_WP1[0, x >= 372] = np.nan
+    expected_output_WP1[1, x <= 28] = np.nan
+    expected_output_WP2[0, y <= x - 244] = np.nan
+    expected_output_WP2[1, y >= x + 244] = np.nan
     ## check that the actual output is as expected
     assert output_dataset_custom_crop.frames[0].data == pytest.approx(expected_output_WP1, nan_ok=True)
     assert output_dataset_custom_crop.frames[1].data == pytest.approx(expected_output_WP2, nan_ok=True)

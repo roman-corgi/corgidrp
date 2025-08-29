@@ -181,7 +181,6 @@ def split_image_by_polarization_state(input_dataset, image_center_x=512, image_c
             raise ValueError('Input image must be a polarimetric observation')
         
         # find polarized image centers
-        image_center = (image_center_x, image_center_y)
         if alignment_angle != None:
             #place image according to specified angle
             angle_rad = (alignment_angle * np.pi) / 180
@@ -193,8 +192,8 @@ def split_image_by_polarization_state(input_dataset, image_center_x=512, image_c
             angle_rad = np.pi / 4
         displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
         displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
-        center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
-        center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+        center_left = (image_center_x - displacement_x, image_center_y + displacement_y)
+        center_right = (image_center_x + displacement_x, image_center_y - displacement_y)
         
         # find starting point for cropping
         image_radius = image_size // 2
@@ -210,29 +209,23 @@ def split_image_by_polarization_state(input_dataset, image_center_x=512, image_c
         # construct new datacube
         im_data_new = np.zeros(shape=(2, image_size, image_size))
 
+        # define coordinates
+        y, x = np.indices([image_size, image_size])
+        x_left = x + start_left[0]
+        y_left = y + start_left[1]
+        x_right = x + start_right[0]
+        y_right = y + start_right[1]
         # fill in the first dimension, corresponding to 0 or 45 degree polarization
-        # for each pixel in the cropped area, if it's inside the radius of the other polarized image, replace it with a NaN
-        for i in range(image_size):
-            for j in range(image_size):
-                y = start_left[1] + i
-                x = start_left[0] + j
-                # mark anything on the other side of the center line dividing the two images as NaN to avoid including the other image
-                if (prism == 'POL0' and x >= image_center[0]) or\
-                (prism=='POL45' and y - image_center[1] <= x - image_center[0]):
-                    im_data_new[0, i, j] = float('nan')
-                else:
-                    im_data_new[0, i, j] = im_data[y, x]
+        im_data_new[0,:,:] = im_data[start_left[1]:start_left[1] + image_size, start_left[0]:start_left[0] + image_size]
         # fill in the second dimension, corresponding to the 90 or 135 degree polarization
-        for i in range(image_size):
-            for j in range(image_size):
-                y = start_right[1] + i
-                x = start_right[0] + j
-                # mark anything on the other side of the center line dividing the two images as NaN to avoid including the other image
-                if (prism == 'POL0' and x <= image_center[0]) or\
-                (prism=='POL45' and y - image_center[1] >= x - image_center[0]):
-                    im_data_new[1, i, j] = float('nan')
-                else:
-                    im_data_new[1, i, j] = im_data[y, x]
+        im_data_new[1,:,:] = im_data[start_right[1]:start_right[1] + image_size, start_right[0]:start_right[0] + image_size]
+        # mark anything on the other side of the center line dividing the two images as NaN to avoid including the other image
+        if prism == 'POL0':
+            im_data_new[0, x_left >= image_center_x] = np.nan
+            im_data_new[1, x_right <= image_center_x] = np.nan
+        else:
+            im_data_new[0, y_left - image_center_y <= x_left - image_center_x] = np.nan
+            im_data_new[1, y_right - image_center_y >= x_right - image_center_x] = np.nan         
 
         #update data
         image.data = im_data_new

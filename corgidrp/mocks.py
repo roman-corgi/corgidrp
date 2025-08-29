@@ -4248,13 +4248,9 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         center_right = (image_center[0] + displacement, image_center[1] - displacement)
 
     #fill the location where the images are with 1s
-    for y in range(1024):
-        for x in range(1024):
-            # check if x,y location falls inside image radius
-            if ((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2:
-                image_data[y,x] = left_image_value
-            elif ((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2:
-                image_data[y,x] = right_image_value
+    y, x = np.indices([1024, 1024])
+    image_data[((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2] = left_image_value
+    image_data[((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2] = right_image_value
     
     #create L2b headers
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
