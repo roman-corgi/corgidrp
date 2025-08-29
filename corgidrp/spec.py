@@ -4,8 +4,7 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d
-import corgidrp
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
@@ -311,8 +310,7 @@ def get_template_dataset(dataset):
         filenames = sorted(glob.glob(os.path.join(template_dir, "spec_unocc_noslit_prism3_filtersweep_*.fits")))
         filtersweep = True
     return Dataset(filenames), filtersweep
-            
-
+    
 def compute_psf_centroid(dataset, template_dataset = None, initial_cent = None, filtersweep = False, halfwidth=10, halfheight=10, verbose = False):
     """
     Compute PSF centroids for a grid of PSFs and return them as a calibration object.
@@ -450,6 +448,7 @@ def read_cent_wave(band, filter_file = None):
         filter_file = os.path.join(os.path.dirname(__file__), "data", "spectroscopy", "CGI_bandpass_centers.csv")
     data = ascii.read(filter_file, format = 'csv', data_start = 1)
     filter_names = data.columns[0]
+    band = band.upper()
     if band not in filter_names:
         raise ValueError("{0} is not in table band names {1}".format(band, filter_names))
     ret_list = []
@@ -731,8 +730,7 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     ds_eval = pos_vs_wavlen_poly((wavlens - wavlen_c) / wavlen_c) / pixel_pitch_mm
     xs_eval, ys_eval = (x_refwav + ds_eval * np.cos(theta),
                         y_refwav + ds_eval * np.sin(theta))
-    pos_lookup_1d = (wavlens, xs_eval, ys_eval)
-
+    
     xs_uncertainty, ys_uncertainty = (np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.cos(theta)),
                                       np.abs(pos_vs_wavlen_err_func(wavlens) / pixel_pitch_mm * np.sin(theta)))
 
@@ -742,18 +740,18 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
 
-def fit_line_spread_function(image, halfwidth = 1, halfheight = 9, guess_fwhm = 10.):
+def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm = 10.):
     """
-    Fit the line spread function to a wavelength calibrated (averaged) spec image, by reading 
+    Fit the line spread function to a wavelength calibrated (averaged) dataset, by reading 
     the wavelength map extension and wavelength zeropoint header
 
     Args:
-        image (corgidrp.data.Image): Image object containg a narrowband filter + prism PSF
+        dataset (corgidrp.data.Dataset): dataset containg a narrowband filter + prism PSF
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels.
         halfheight (int): The height of the fitting region is 2 * halfwidth + 1 pixels.
 
     Returns:
-        LineSpread object (corgidrp.data.LineSpread) containing
+        corgidrp.data.LineSpread: LineSpread object containing
         wavlens (numpy.ndarray)
         flux_profile (numpy.ndarray) 
         fwhm_fit (float)
@@ -779,5 +777,9 @@ def fit_line_spread_function(image, halfwidth = 1, halfheight = 9, guess_fwhm = 
     fwhm_fit_nm = 2 * np.sqrt(2*np.log(2)) * g_func.stddev.value
     mean_wavlen_fit_nm = g_func.mean.value
     peak_fit = g_func.amplitude
-
-    return wavlens, flux_profile, fwhm_fit_nm, mean_wavlen_fit_nm, peak_fit
+    
+    ls_data = np.array([wavlens, flux_profile])
+    gauss_profile = np.array([peak_fit, mean_wavlen_fit_nm, fwhm_fit_nm])
+    
+    line_spread = LineSpread(ls_data, pri_hdr = image_cutout.pri_hdr.copy(), ext_hdr = image_cutout.ext_hdr.copy(), gauss_par = gauss_profile, input_dataset = Dataset(image))
+    return line_spread
