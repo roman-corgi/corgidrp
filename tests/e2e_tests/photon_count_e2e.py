@@ -53,19 +53,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dark_dir):
         l1_data_dark_filelist.append(os.path.join(output_dark_dir, f))
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB() # connection to cal DB
-    # remove other KGain calibrations that may exist in case they don't have the added header keywords
-    for i in range(len(this_caldb._db['Type'])):
-        if this_caldb._db['Type'][i] == 'KGain':
-            this_caldb._db = this_caldb._db.drop(i)
-        elif this_caldb._db['Type'][i] == 'Dark':
-            this_caldb._db = this_caldb._db.drop(i)
-    this_caldb.save()
-
-    # create a DetectorParams object and save it
-    detector_params = data.DetectorParams({})
-    detector_params.save(filedir=output_dir, filename="detector_params.fits")
-    this_caldb.create_entry(detector_params)
 
     # KGain
     kgain_val = 7. # default value used in mocks.create_photon_countable_frames()
@@ -129,6 +123,11 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     bp_map.save(filedir=output_dir, filename="mock_bpmap.fits")
     this_caldb.create_entry(bp_map)
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
     # make PC dark
     # below I leave out the template specification to check that the walker recipe guesser works as expected
     walker.walk_corgidrp(l1_data_dark_filelist, '', output_dir)#, template="l1_to_l2b_pc_dark.json")
@@ -138,7 +137,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     for f in os.listdir(output_dir):
         if not f.endswith('.fits'):
             continue
-        if f.endswith('_DRK_CAL.fits'):
+        if f.endswith('_drk_cal.fits'):
             master_dark_filename_list.append(f)
             master_dark_filepath_list.append(os.path.join(output_dir, f))
     
@@ -152,7 +151,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     l2a_files = []
     for filepath in l1_data_ill_filelist:
         # emulate naming change behaviors
-        new_filename = filepath.split(os.path.sep)[-1].replace("_L1_", "_L2a") 
+        new_filename = filepath.split(os.path.sep)[-1].replace("_l1_", "_l2a") 
         # loook in new dir
         new_filepath = os.path.join(output_l2a_dir, new_filename)
         l2a_files.append(new_filepath)
@@ -186,17 +185,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
 
-    # load in CalDB again to reflect the PC Dark that was implicitly added in (but not found in this_caldb, which was loaded before the Dark was created)
-    post_caldb = caldb.CalDB()
-    post_caldb.remove_entry(kgain)
-    post_caldb.remove_entry(noise_map)
-    post_caldb.remove_entry(new_nonlinearity)
-    post_caldb.remove_entry(flat)
-    post_caldb.remove_entry(bp_map)
-    post_caldb.remove_entry(detector_params)
-    for filepath in master_dark_filepath_list:
-        pc_dark = data.Dark(filepath)
-        post_caldb.remove_entry(pc_dark)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+
 
 
 if __name__ == "__main__":
@@ -207,7 +198,7 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir =  '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/'#'/home/jwang/Desktop/CGI_TVAC_Data/'
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
