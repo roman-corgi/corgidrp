@@ -142,6 +142,7 @@ def test_nonlin_and_kgain_e2e(
     for step in recipe[0]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False #do not apply the cosmics in e2etests
+            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
     walker.run_recipe(recipe[0], save_recipe_file=True)
 
     # check that files can be loaded from disk successfully. no need to check correctness as done in other e2e tests

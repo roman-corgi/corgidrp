@@ -164,6 +164,7 @@ def test_nonlin_cal_e2e(
     for step in recipe[0]['steps']:
         if step['name'] == "calibrate_nonlin":
             step['keywords']['apply_dq'] = False # full shaped pupil FOV
+            step['keywords']['n_cal'] = 14 #fewer SSC frames found, and this works fine for II&T code
     walker.run_recipe(recipe[0], save_recipe_file=True)
     # Compare results
     print('Comparing the results with TVAC')
