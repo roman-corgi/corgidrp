@@ -173,25 +173,26 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
         Calls Image.rescale_errors() for each frame.
         Updates Dataset.all_err
 
         Args:
-          input_error (np.array): 2-d error layer or 3-d layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim == 3:
-            for i,frame in enumerate(self.frames):
-                frame.rescale_error(input_error[i], err_name)
-
-        elif input_error.ndim ==2:
+        if isinstance(scale_factor, float):
             for frame in self.frames:
-                frame.rescale_error(input_error, err_name)
-
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 2:
+            for frame in self.frames:
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.rescale_error(scale_factor[i], scale_name)
         else:
-            raise ValueError("input_error is not either a 2D or 3D array.")
+            raise ValueError("scale_factor is neither a float nor a 2D or 3D array.")
 
         # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])
@@ -571,30 +572,27 @@ class Image():
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
-        Add a layer of a specific additive uncertainty on the 3-dim error array extension
-        and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name.
-
-        Only tracks individual errors if the "track_individual_errors" setting is set to True
-        in the configuration file
+        scale the 3-dim error array extension with a factor.
+        Update the error header with the history and reason of the scaling.
 
         Args:
-          input_error (np.array): 2-d error layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim != 2 or input_error.shape != self.data.shape:
-            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        if isinstance(scale_factor, float):
+            pass
+        elif scale_factor.ndim == 2 or scale_factor.shape == self.data.shape:
+            pass
+        else:
+            raise ValueError("we expect a 2-dimensional input array with dimensions {0} or a float value".format(self.data.shape))
 
-        #first layer is always the updated combined error
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
-            self.err = self.err*input_error
-        self.err_hdr["Layer_1"] = "combined_error"
-
+            self.err = self.err*scale_factor
         # record history since 2-D error map doesn't track individual terms
-        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(err_name)
+        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(scale_name)
 
 
     def get_hash(self):

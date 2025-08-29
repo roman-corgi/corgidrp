@@ -95,7 +95,7 @@ def get_filter_name(image):
     return the name of the transmission curve csv file of used color filter
     
     Args:
-        image (corgidrp.image): image of the observed calstar
+        image (corgidrp.image): image of the observed calibration star
     
     Returns:
         str: filepath of the selected filter curve
@@ -159,7 +159,7 @@ def calculate_band_flux(filter_curve, calspec_flux, filter_wavelength):
     
     Args:
         filter_curve (np.array): filter transmission curve over the filter_wavelength
-        calspec_flux (np.array): converted flux in units of erg/(s*cm^2*AA) of the calpec source in the filter band
+        calspec_flux (np.array): converted flux in units of erg/(s*cm^2*AA) of the calspec source in the filter band
         filter_wavelength (np.array): wavelengths in units Angstroem in the filter band 
     
     Returns:
@@ -178,7 +178,7 @@ def calculate_effective_lambda(filter_curve, calspec_flux, filter_wavelength):
     
     Args:
         filter_curve (np.array): filter transmission curve over the filter_wavelength
-        calspec_flux (np.array): converted flux in units of the calpec source in the filter band
+        calspec_flux (np.array): converted flux in units of the calspec source in the filter band
         filter_wavelength (np.array): wavelengths in units nm in the filter band 
     
     Returns:
@@ -213,7 +213,7 @@ def calculate_flux_ref(filter_wavelength, calspec_flux, wave_ref):
     
     Args:
         filter_wavelength (np.array): wavelengths in unit Angstroem in the filter band 
-        calspec_flux (np.array): converted flux in units of the calpec source in the filter band
+        calspec_flux (np.array): converted flux in units of the calspec source in the filter band
         wave_ref (float): reference wavelength in unit Angstroem
     
     Returns:
@@ -289,7 +289,7 @@ def calculate_band_irradiance(filter_curve, calspec_flux, filter_wavelength):
     
     Args:
         filter_curve (np.array): filter transmission curve over the filter_wavelength
-        calspec_flux (np.array): converted flux in units of erg/(s*cm^2*AA) of the calpec source in the filter band
+        calspec_flux (np.array): converted flux in units of erg/(s*cm^2*AA) of the calspec source in the filter band
         filter_wavelength (np.array): wavelengths in units Angstroem in the filter band 
     
     Returns:
