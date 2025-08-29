@@ -113,17 +113,21 @@ def divide_by_exptime(input_dataset):
 
     return data
 
-def split_image_by_polarization_state(input_dataset, image_center=(512,512), separation_diameter_arcsec=7.5, image_size=None):
+def split_image_by_polarization_state(input_dataset, image_center_x=512, image_center_y=512, separation_diameter_arcsec=7.5, alignment_angle=None, image_size=None):
     """
     Split each polarimetric input image into two images by its polarization state, 
     recompose the two images into a 2 x image_size x image_size datacube
 
     Args:
         input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
-        image_center (optional, tuple(int, int)): x and y pixel coordinate location of the center location between the two polarized images on the detector,
-            default is the detector center at 512, 512
+        image_center_x (optional, int): x pixel coordinate location of the center location between the two polarized images on the detector,
+            default is the detector center at x=512
+        image_center_y (optional, int): y pixel coordinate location of the center location between the two polarized images on the detector,
+            default is the detector center at y=512
         separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec, 
-            Default for Roman CGI is 7.5"
+            default for Roman CGI is 7.5"
+        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            if none is provided, defaults to 0 for WP1 and 45 for WP2
         image_size (optional, int): length/width of the cropped polarized images, if none is provided, 
             the size is automatically determined based on the coronagraph mask used
     
@@ -177,16 +181,20 @@ def split_image_by_polarization_state(input_dataset, image_center=(512,512), sep
             raise ValueError('Input image must be a polarimetric observation')
         
         # find polarized image centers
-        if prism == 'POL0':
+        image_center = (image_center_x, image_center_y)
+        if alignment_angle != None:
+            #place image according to specified angle
+            angle_rad = (alignment_angle * np.pi) / 180
+        elif prism == 'POL0':
             # polarized images placed horizontally on detector
-            displacement = int(round(separation_diameter_arcsec / (2 * 0.0218)))
-            center_left = (image_center[0] - displacement, image_center[1])
-            center_right = (image_center[0] + displacement, image_center[1])
+            angle_rad = 0
         else:
             # polarized images placed diagonally on detector
-            displacement = int(round(separation_diameter_arcsec / (2 * 0.0218 * np.sqrt(2))))
-            center_left = (image_center[0] - displacement, image_center[1] + displacement)
-            center_right = (image_center[0] + displacement, image_center[1] - displacement)
+            angle_rad = np.pi / 4
+        displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
+        displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
+        center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+        center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
         
         # find starting point for cropping
         image_radius = image_size // 2
