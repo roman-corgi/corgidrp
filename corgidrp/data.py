@@ -760,11 +760,10 @@ class SpectroscopyCentroidPSF(Image):
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpectroscopyCentroidPSF 
         if ext_hdr is not None:
             if input_dataset is None:
-                raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
+                raise ValueError("Must pass `input_dataset` to create new SpectroscopyCentroidPSF.")
             
             self.ext_hdr["EXTNAME"] = "CENTROIDS"
-
-            self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
+            self.ext_hdr['DATATYPE'] = 'SpectroscopyCentroidPSF'
             self.ext_hdr['DATALVL'] = 'CAL'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
@@ -777,8 +776,8 @@ class SpectroscopyCentroidPSF(Image):
                 self.err = np.zeros(self.data.shape)
                 self.err_hdr = fits.Header
 
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'PSFCentroidCalibration':
-            raise ValueError("This file is not a valid PSFCentroidCalibration.")
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SpectroscopyCentroidPSF':
+            raise ValueError("This file is not a valid SpectroscopyCentroidPSF.")
 
         self.xfit = self.data[:, 0]
         self.yfit = self.data[:, 1]
@@ -1393,7 +1392,9 @@ class DetectorParams(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':','.')
+            self.filename = filename
             self.pri_hdr['FILENAME'] = self.filename
 
     def get_hash(self):
@@ -1710,8 +1711,9 @@ class FpamFsamCal(Image):
 
             # use the start date for the filename by default
             self.filedir = '.'
-            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':', '.') # compatible with Windows machines
             self.pri_hdr['FILENAME'] = self.filename
+
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1970,7 +1972,7 @@ class CoreThroughputCalibration(Image):
         r_good = radius_cor >= radii.min()
         
         if len(x_cor[r_good]) == 0:
-            raise ValueError('All target radius are less than the minimum '
+            raise ValueError('All target radii are less than the minimum '
                 'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor
@@ -2832,9 +2834,8 @@ datatypes = { "Image" : Image,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
+              "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
-              "CoreThroughputMap": CoreThroughputMap,
-              "PSFCentroidCalibration": SpectroscopyCentroidPSF,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel

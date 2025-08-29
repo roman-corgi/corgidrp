@@ -211,6 +211,7 @@ class CalDB:
         # rest are ext_hdr keys we can copy
         start_index = len(row)
         for i in range(start_index, len(self.columns)):
+
             val = entry.ext_hdr[self.columns[i]]
             if val is not None:
                 row.append(val)  # add value staright from header
@@ -398,12 +399,12 @@ def initialize():
     ### Create set of default calibrations
     rescan_needed = False
     # Add default detector_params calibration file if it doesn't exist
-    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00:00:00.000.fits")):
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00.00.00.000.fits")):
         default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
-        default_detparams.save(filedir=corgidrp.default_cal_dir)
+        default_detparams.save(filedir=corgidrp.default_cal_dir, filename="DetectorParams_2023-11-01T00.00.00.000.fits")
         rescan_needed = True
     # Add default FpamFsamCal calibration file if it doesn't exist
-    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00:00:00.000.fits")):
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00.00.00.000.fits")):
         fpamfsam_2excam = data.FpamFsamCal([],
             date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
         fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
