@@ -553,6 +553,160 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
 
     return fluxcal_obj
 
+def calibrate_pol_fluxcal_aper(dataset_or_image, image_center_x, image_center_y, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
+    """
+    Same overall process as calibrate_fluxcal_aper, adapted for polarimetric images 
+    from WP1 or WP2 with two apertures instead of one.
+
+    fills the FluxcalFactors calibration product values for one filter band,
+    calculates the flux calibration factors by aperture photometry.
+    The band flux values are divided by the found photoelectrons/s.
+    Propagates also errors to flux calibration factor calfile.
+    Background subtraction can be done optionally using a user defined circular annulus.
+    
+    The photometry parameters are controlled via the `phot_kwargs` dictionary.
+    Defaults are provided below if these parameters are not defined. 
+    Accepted keywords:
+        'encircled_radius' (float): The radius of the circular aperture used for photometry.
+        'frac_enc_energy' (float): The fraction of the total flux expected to be enclosed 
+            within the aperture. Must be in the range (0, 1].
+        'method' (str): The photometry method to use. For example, 'subpixel' indicates subpixel 
+            sampling for the aperture.
+        'subpixels' (int): The number of subpixels per pixel to use in the photometry calculation 
+            or improved resolution.
+        'background_sub' (bool): Flag indicating whether to subtract background using an annulus.
+        'r_in' (float): The inner radius of the annulus used for background estimation.
+        'r_out' (float): The outer radius of the annulus used for background estimation.
+        'centroid_roi_radius' (int or float): Half-size of the box around the peak,
+                                   in pixels. Adjust based on desired λ/D.
+    
+    Parameters:
+        dataset_or_image (corgidrp.data.Dataset or corgidrp.data.Image): Image(s) to compute 
+            the calibration factor. Should already be normalized for exposure time. Images must
+            be from polarimetric observations taken with WP1 or WP2 in the DPAM.
+        image_center_x (int): X pixel coordinate of where the two wollaston spots are 
+            centered around
+        image_center_y (int): Y pixel coordinate of where the two wollaston spots are 
+            centered around
+        calspec_file (str, optional): file path to the calspec fits file of the observed star
+        flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
+            be used.
+        phot_kwargs (dict, optional): A dictionary of keyword arguments controlling the aperture 
+            photometry function.
+
+    Returns:
+        FluxcalFactor (corgidrp.data.FluxcalFactor): A calibration object containing the computed 
+            flux calibration factor in (TO DO: what units should this be in)
+    """
+    d_or_i = dataset_or_image.copy()
+    if isinstance(d_or_i, corgidrp.data.Dataset):
+        image = d_or_i[0]
+        dataset = d_or_i
+    else:
+        image = d_or_i
+        dataset = corgidrp.data.Dataset([image])
+    if image.ext_hdr['BUNIT'] != "photoelectron/s":
+        raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
+    #estimate the centers of the wollaston spots based on relative position from image center
+    #polarized images separated 7.5" or 344 pix on the detector (1"=0.0218 pix)
+    #WP1 output is aligned horizontally across the image center (+/- 172 pixels in the x direction)
+    #WP2 output is algined diagonally across the image center (+/- 122 pixels in the x and y direction)
+    image_center = (image_center_x, image_center_y)
+    if image.ext_hdr['DPAMNAME'] == 'POL0':
+        #0 degree pol PSF center estimate
+        centering_initial_guess_beam_1 = (image_center[0] - 172, image_center[1])
+        #90 degree pol PSF center estimate
+        centering_initial_guess_beam_2 = (image_center[0] + 172, image_center[1]) 
+    elif image.ext_hdr['DPAMNAME'] == 'POL45':
+        #45 degree pol PSF center estimate
+        centering_initial_guess_beam_1 = (image_center[0] - 122, image_center[1] + 122)
+        #135 degree pol PSF center estimate
+        centering_initial_guess_beam_2 = (image_center[0] + 122, image_center[1] - 122)
+    else:
+        raise ValueError('input dataset must be a polarimetric observation')
+    #ensure xy centering method is used with estimated centers for aperture photometry
+    if phot_kwargs is None:
+        phot_kwargs = {
+            'encircled_radius': 5,
+            'frac_enc_energy': 1.0,
+            'method': 'subpixel',
+            'subpixels': 5,
+            'background_sub': False,
+            'r_in': 5,
+            'r_out': 10,
+            'centroid_roi_radius': 5,
+        }
+    #update parameters to ensure centering is performed correctly
+    phot_kwargs_beam_1 = phot_kwargs.copy()
+    phot_kwargs_beam_2 = phot_kwargs.copy()
+    phot_kwargs_beam_1.update({
+        'centering_method': 'xy',
+        'centering_initial_guess': centering_initial_guess_beam_1
+    })
+    phot_kwargs_beam_2.update({
+        'centering_method': 'xy',
+        'centering_initial_guess': centering_initial_guess_beam_2
+    })
+    
+    filter_name = image.ext_hdr["CFAMNAME"]
+    filter_file = get_filter_name(image)
+    
+    # Read filter and CALSPEC data.
+    wave, filter_trans = read_filter_curve(filter_file)
+    
+    if calspec_file is not None:
+        calspec_filepath = calspec_file
+        calspec_filename = os.path.basename(calspec_file)
+    else:
+        star_name = image.pri_hdr["TARGET"]
+        calspec_filepath, calspec_filename = get_calspec_file(star_name)
+    flux_ref = read_cal_spec(calspec_filepath, wave)
+    
+    if flux_or_irr == 'flux':
+        flux = calculate_band_flux(filter_trans, flux_ref, wave)
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2 * AA)/(photoelectron/s)'
+    elif flux_or_irr == 'irr':
+        flux = calculate_band_irradiance(filter_trans, flux_ref, wave)
+        image.ext_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
+        image.err_hdr['BUNIT'] = 'erg/(s * cm^2)/(photoelectron/s)'
+    else:
+        raise ValueError("Invalid flux method. Choose 'flux' or 'irr'.")
+    
+    #calculate flux from both apertures
+    result_beam_1 = aper_phot(image, **phot_kwargs_beam_1)
+    result_beam_2 = aper_phot(image, **phot_kwargs_beam_2)
+    if phot_kwargs.get('background_sub', False):
+        ap_sum_beam_1, ap_sum_err_beam_1, back_beam_1 = result_beam_1
+        ap_sum_beam_2, ap_sum_err_beam_2, back_beam_2 = result_beam_2
+    else:
+        ap_sum_beam_1, ap_sum_err_beam_1 = result_beam_1
+        ap_sum_beam_2, ap_sum_err_beam_2 = result_beam_2
+
+    fluxcal_fac = flux / (ap_sum_beam_1 + ap_sum_beam_2)
+    fluxcal_fac_err = flux / (ap_sum_beam_1 + ap_sum_beam_2)**2 * np.sqrt((ap_sum_err_beam_1**2) + (ap_sum_err_beam_2**2))
+
+    fluxcal_obj = corgidrp.data.FluxcalFactor(
+        fluxcal_fac,
+        err=fluxcal_fac_err,
+        pri_hdr=image.pri_hdr,
+        ext_hdr=image.ext_hdr,
+        input_dataset=dataset
+    )
+
+    # If background subtraction was performed, set the LOCBACK keyword.
+    if phot_kwargs.get('background_sub', False):
+        #average medium background photoelectrons from both beams
+        back = 0.5 * (back_beam_1 + back_beam_2)
+        # Here, "back" is the third value returned from phot_by_gauss2d_fit.
+        fluxcal_obj.ext_hdr['LOCBACK'] = back
+
+    # Append to or create a HISTORY entry in the header.
+    history_entry = "Flux calibration factor was determined by aperture photometry using SED file {0}".format(calspec_filename)
+    fluxcal_obj.ext_hdr.add_history(history_entry)
+
+    return fluxcal_obj
+
 
 def calibrate_fluxcal_gauss2d(dataset_or_image, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
     """
