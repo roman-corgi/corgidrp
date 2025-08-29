@@ -835,14 +835,14 @@ class LineSpread(Image):
             # a filepath is passed in
             with fits.open(data_or_filepath) as hdulist:
                 #gauss par is in FITS extension
-                self.gauss_par = hdulist[3].data
-                self.gauss_hdr = hdulist[3].header
+                self.gauss_par = hdulist[2].data
+                self.gauss_hdr = hdulist[2].header
             
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'LineSpread':
             raise ValueError("This file is not a valid LineSpread calibration.")
 
-        if self.data.shape[1] != 2:
-            raise ValueError('The LineSpread calibration array must have a shape of (N,2)')
+        if self.data.shape[0] != 2:
+            raise ValueError('The LineSpread calibration array must have a shape of (2,N)')
         
         #convenience attributes
         self.wavlens = self.data[:, 0]

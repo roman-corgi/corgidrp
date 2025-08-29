@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, Image, DispersionModel
+from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
 from corgidrp.spec import get_template_dataset
@@ -52,7 +52,7 @@ def convert_tvac_to_dataset():
                 err=err,
                 dq=dq
             )
-            image.ext_hdr['CFAMNAME'] = '3d'
+            image.ext_hdr['CFAMNAME'] = '3D'
             image.ext_hdr['DPAMNAME'] = 'PRISM3'
             if k == 0:
                 image.ext_hdr['FSAMNAME'] = 'OPEN'
@@ -164,7 +164,7 @@ def test_psf_centroid():
             err=err,
             dq=dq
         )
-        image.ext_hdr['CFAMNAME'] = '3d'
+        image.ext_hdr['CFAMNAME'] = '3D'
         psf_images.append(image)
 
     dataset = Dataset(psf_images)
@@ -364,6 +364,7 @@ def test_add_wavelength_map():
     ref_wavlen = disp_model.ext_hdr["REFWAVE"]
     filepath = os.path.join(spec_datadir, "templates", "spec_unocc_noslit_offset_prism3_3d_12.fits")
     image = Image(filepath)
+    image.ext_hdr['CFAMNAME'] = '3D'
     image.ext_hdr['WAVLEN0'] = wave_0.get('wavlen')
     image.ext_hdr['WV0_X'] = wave_0.get('x')
     image.ext_hdr['WV0_XERR'] = wave_0.get('xerr')
@@ -373,6 +374,7 @@ def test_add_wavelength_map():
     image.ext_hdr['WV0_DIMY'] = wave_0.get('shapey')
     dataset = Dataset([image])
     
+    global output_dataset
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
     
     out_im = output_dataset.frames[0]
@@ -445,7 +447,7 @@ def test_determine_zeropoint():
         ext_hdr['CFAMNAME'] = '3'
         if i == 12:
             pri_hdr["SATSPOTS"] = 1
-            ext_hdr['CFAMNAME'] = '3d'
+            ext_hdr['CFAMNAME'] = '3D'
         else:
             pri_hdr["SATSPOTS"] = 0
         err = np.zeros_like(data_2d)
@@ -487,7 +489,7 @@ def test_determine_zeropoint():
         data_2d = np.copy(psf_array[i])
         ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
-        ext_hdr['CFAMNAME'] = '3d'
+        ext_hdr['CFAMNAME'] = '3D'
         pri_hdr["SATSPOTS"] = 0
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
@@ -550,11 +552,23 @@ def test_determine_zeropoint():
         assert x0err_noi < errortol_pix
         assert y0err_noi < errortol_pix
     
-def test_fit_linespread_function():
+def test_linespread_function():
     """
     test the fit of a linespread function to a narrowband observation and storing in a LineSpread calibration file
+    using the output_dataset of the test of the wavelength map
     """
+    line_spread = steps.fit_line_spread_function(output_dataset)
+    print(np.max(output_dataset[0].data)/np.sum(output_dataset[0].data))
+    print(np.mean(output_dataset[0].hdu_list["WAVE"].data))
+    print(line_spread.amplitude)
+    print(line_spread.fwhm)
+    print(line_spread.mean_wave)
+    line_spread.save(filedir = output_dir)
     
+    line_spread_load = LineSpread(os.path.join(output_dir, line_spread.filename))
+    assert line_spread_load.amplitude == line_spread.amplitude
+    assert line_spread_load.fwhm == line_spread.fwhm
+    assert line_spread_load.mean_wave == line_spread.mean_wave
     
     
 if __name__ == "__main__":
@@ -565,4 +579,4 @@ if __name__ == "__main__":
     test_calibrate_dispersion_model()
     test_determine_zeropoint()
     test_add_wavelength_map()
-    test_fit_linespread_function()
+    test_linespread_function()

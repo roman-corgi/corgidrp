@@ -839,12 +839,12 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
                              to determine the wavelength zero point")
         
-    if "3d" in band:
-        sat_dataset = narrow_dataset[int(np.nonzero(band == "3d")[0].item())]
-        sci_dataset = narrow_dataset[int(np.nonzero(band != "3d")[0].item())]
+    if "3D" in band:
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
     elif "2c" in band:
-        sat_dataset = narrow_dataset[int(np.nonzero(band == "2c")[0].item())]
-        sci_dataset = narrow_dataset[int(np.nonzero(band != "2c")[0].item())]
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
     else:
         raise AttributeError("No narrowband frames found in input dataset")
     
