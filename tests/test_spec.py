@@ -11,6 +11,7 @@ import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
 
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy")) 
+test_datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
 template_dir = os.path.join(spec_datadir, "templates")
 output_dir = os.path.join(os.path.dirname(__file__), "testcalib")
 os.makedirs(output_dir, exist_ok=True)
@@ -21,7 +22,7 @@ def convert_tvac_to_dataset():
     """
 
     file_path = [os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits"), 
-                 os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")]
+                 os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")]
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
 
     for k, file in enumerate(file_path):
@@ -78,7 +79,7 @@ def convert_tvac_to_dataset():
         dataset = Dataset([psf_images[12]])
         dataset.save(filedir=template_dir, filenames = [file_names[12]])
     
-    file_path_filtersweep = os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits")
+    file_path_filtersweep = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits")
     psf_array = fits.getdata(file_path_filtersweep, ext = 0)
     psf_table = Table(fits.getdata(file_path_filtersweep, ext = 1))
     psf_header = fits.getheader(file_path_filtersweep, ext = 0)
@@ -282,7 +283,7 @@ def test_calibrate_dispersion_model():
     """
     
     global disp_model
-    file_path = os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
+    file_path = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
@@ -410,7 +411,7 @@ def test_determine_zeropoint():
     test the calculation of the wavelength zeropoint position of satspot data
     """
     errortol_pix = 0.5
-    filepath = os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
+    filepath = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
     pri_hdr, ext_hdr = create_default_L2b_headers()[:2]
     
     with fits.open(filepath) as hdul:
