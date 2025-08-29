@@ -178,7 +178,6 @@ def test_nonlin_cal_e2e(
     n_emgain = nonlin_out_table.shape[1]
 
     # NL from TVAC
-    #nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_8_11_25.fits'))
     nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
     nonlin_tvac_table = nonlin_tvac[1].data
 
