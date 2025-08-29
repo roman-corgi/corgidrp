@@ -90,7 +90,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     #Read in the PSFs
     input_file = 'hlc_os11_no_fpm.fits'
-    input_hdul = fits.open(os.path.join(e2edata_path, "hcl_os11_v3", input_file))
+    input_hdul = fits.open(os.path.join(e2edata_path, "hlc_os11_v3", input_file))
     input_image = input_hdul[0].data
     header = input_hdul[0].header
     # I think we work with (0,0) at the center of the pixel
@@ -320,9 +320,8 @@ if __name__ == "__main__":
 
 
     outputdir = thisfile_dir
-    #This folder should contain an OS11 folder: ""hcl_os11_v3" with the OS11 data in it.
-    #e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data/" 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2'
+    #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
+    e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data/" 
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
