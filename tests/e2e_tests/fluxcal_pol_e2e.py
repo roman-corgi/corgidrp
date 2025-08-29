@@ -36,7 +36,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     #create L2b images using L1 data
     L2b_image_WP1 = data.Image(data_WP1, pri_hdr=prihdr, ext_hdr=exthdr)
-    L2b_image_WP2 = data.Image(data_WP2, pri_hdr=prihdr, ext_hdr=exthdr)
+    exthdr_WP2 = exthdr.copy()
+    exthdr_WP2['DPAMNAME'] = 'POL45'
+    L2b_image_WP2 = data.Image(data_WP2, pri_hdr=prihdr, ext_hdr=exthdr_WP2)
     flux_dataset_WP1 = data.Dataset([L2b_image_WP1])
     flux_dataset_WP2 = data.Dataset([L2b_image_WP2])
 
@@ -101,7 +103,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     #check that the calibration file is configured correctly
     assert fluxcal_image_WP2.pri_hdr['NAXIS'] == 0
-    assert fluxcal_image_WP2.ext_hdr['DPAMNAME'] == 'POL0'
+    assert fluxcal_image_WP2.ext_hdr['DPAMNAME'] == 'POL45'
     assert fluxcal_image_WP2.data.shape == (1,)
     assert fluxcal_image_WP2.err.shape == (1,)
     assert fluxcal_image_WP2.dq.shape == (1,)
@@ -112,6 +114,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     print("used ND filter", flux_fac_WP2.nd_filter)
     print("fluxcal factor", flux_fac_WP2.fluxcal_fac)
     print("fluxcal factor error", flux_fac_WP2.fluxcal_err)
+
+    #check the flux values are similar regardless of the wollaston used
+    assert flux_fac_WP1.fluxcal_fac == pytest.approx(flux_fac_WP2.fluxcal_fac, rel=0.05)
 
 
 
