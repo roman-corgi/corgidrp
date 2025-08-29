@@ -549,6 +549,19 @@ def test_determine_zeropoint():
         assert y0 == pytest.approx(y0_noi, abs = errortol_pix)
         assert x0err_noi < errortol_pix
         assert y0err_noi < errortol_pix
+
+def test_star_spec_registration()
+    """ Test the star spectrum registration """
+
+    # Create some mock data
+
+    # Identify best image 
+
+    # Test properties
+
+    # Expected failures
+    # Break assumptions
+ 
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
@@ -558,3 +571,4 @@ if __name__ == "__main__":
     test_calibrate_dispersion_model()
     test_determine_zeropoint()
     test_add_wavelength_map()
+    test_star_spec_registration()

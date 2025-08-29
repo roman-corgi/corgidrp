@@ -740,7 +740,7 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
-def star_spectrum_registration(
+def star_spec_registration(
     dataset_fsm,
     dataset_template,
     xcent_template=0,
