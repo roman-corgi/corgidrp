@@ -85,6 +85,11 @@ tests/e2e_tests/pc_sim_test_data/*.json
 *.FITS
 *.fits
 !nonlin_table_TVAC.fits 
+!tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep_withoffsets.fits
+!tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_NOSLIT_PRISM3_filtersweep.fits
+!tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits
+!tests/test_data/spectroscopy/g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits
+
 
 # Output figures
 figures/
