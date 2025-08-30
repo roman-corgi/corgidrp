@@ -769,7 +769,6 @@ def star_spec_registration(
           – FSMX, FSMY (float64)
           – CFAMNAME (same for all images)
           – FSAMNAME = OPEN, R1C2, R6C5, R3C1
-          – STARLOCX, STARLOCY (target source estimate)
       dataset_template (Dataset): Dataset containing the star spectrum that is
         used as a template to find the image in the dataset_fsm that best
         matches it.
@@ -795,7 +794,7 @@ def star_spec_registration(
     """
     # Confirm Spectroscopy configuration based on supported values for spectroscopy
     # CFAM
-    cfam_name = dataset[0].ext_hdr['CFAMNAME']
+    cfam_name = dataset_fsm[0].ext_hdr['CFAMNAME'].upper()
     if cfam_name.find('3') != -1:
         dpam_name = 'PRISM3'
         # fsam_name = []
@@ -805,71 +804,70 @@ def star_spec_registration(
     else:
         raise ValueError(f'{cfam_name} is not a spectroscopy filter')
     # DPAM
-    if dataset[0].ext_hdr['DPAMNAME'] != dpam_name:
+    if dataset_fsm[0].ext_hdr['DPAMNAME'] != dpam_name:
         raise ValueError(f'DPAMNAME should be {dpam_name}')
     # FPAM
-    fpam_name = dataset[0].ext_hdr['FPAMNAME']
+    fpam_name = dataset_fsm[0].ext_hdr['FPAMNAME'].upper()
     if (fpam_name != 'OPEN' and fpam_name != 'ND225' and fpam_name != 'ND475'):
         raise ValueError('FPAMNAME should be either OPEN, ND225 or ND475')
     # SPAM
-    spam_name = dataset[0].ext_hdr['SPAMNAME']
+    spam_name = dataset_fsm[0].ext_hdr['SPAMNAME'].upper()
     if spam_name[0:4] != 'SPEC':
         raise ValueError('SPAMNAME should be SPEC')
     # LSAM
-    lsam_name = dataset[0].ext_hdr['LSAMNAME']
+    lsam_name = dataset_fsm[0].ext_hdr['LSAMNAME'].upper()
     if lsam_name[0:4] != 'SPEC':
         raise ValueError('LSAMNAME should be SPEC')
     # FSAM
-    fsam_name = dataset[0].ext_hdr['FSAMNAME']
+    fsam_name = dataset_fsm[0].ext_hdr['FSAMNAME'].upper()
     if (fsam_name != 'OPEN' and fsam_name != 'R1C2' and fsam_name != 'R6C5' and
         fsam_name != 'R3C1'):
         raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
     # Wavelength zero-point solution must be present
     try:
-        wv0_x, wv0_y = dataset[0].ext_hdr['WV0_X'], dataset[0].ext_hdr['WV0_Y']
+        wv0_x, wv0_y = dataset_fsm[0].ext_hdr['WV0_X'], dataset_fsm[0].ext_hdr['WV0_Y']
     except:
         raise ValueError('Wavelength zero-point keywords WV0_X, WV0_Y are missing')
     # All images must have the same setup
     for img in dataset_fsm:
         exthdr = img.ext_hdr
-        assert exthdr['CFAMNAME'] == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
-        assert exthdr['DPAMNAME'] == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
-        assert exthdr['FPAMNAME'] == dpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
-        assert exthdr['SPAMNAME'] == dpam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
-        assert exthdr['LSAMNAME'] == dpam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
-        assert exthdr['FSAMNAME'] in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
+        assert exthdr['CFAMNAME'].upper() == cfam_name, f"CFAMNAME={exthdr['CFAMNAME']} differs from expected value: {cfam_name}"
+        assert exthdr['DPAMNAME'].upper() == dpam_name, f"DPAMNAME={exthdr['DPAMNAME']} differs from expected value: {dpam_name}"
+        assert exthdr['FPAMNAME'].upper() == fpam_name, f"FPAMNAME={exthdr['FPAMNAME']} differs from expected value: {fpam_name}"
+        assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
+        assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
+        assert exthdr['FSAMNAME'].upper() in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
         # Same wavelength zero-point
         assert exthdr['WV0_X'] == wv0_x and exthdr['WV0_Y'] == wv0_y, f"Wavelength zero-point values {exthdr['WV0_X']}, {exthdr['WV0_Y']} differ from expected values {wv0_x}, {wv0_y}"
 
         # Confirm presence of FSMX, FSMY
         assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
-        # TODO: Needed? Confirm presence of STARLOCX, STARLOCY 
-        assert 'STARLOCX' in exthdr.keys() and 'STARLOCY' in exthdr.keys(), 'Missing STARLOCX/Y'
+
+    # Copies
+    dataset_fsm = dataset_fsm.copy()
+    dataset_template = dataset_template.copy()
 
     # Find best PSF centroid fit for each image compared to the template
     # Cost function: Start with any large value that cannot happen. Units are
     # EXCAM pixels
     zeropt_dist = 1e8
-    for img in dataset_fsm:
-        x_fit, yfit = fit_psf_centroid(img,
+    for idx_img, img in enumerate(dataset_fsm):
+        x_fit, y_fit = fit_psf_centroid(img.data,
                      dataset_template[int(round(align_err_disp))].data,
-                     xcent_template = xcent_template,
-                     ycent_template = ycent_template,
-                     halfheight = halfheight)
+                     xcent_template = xcent_template[idx_img],
+                     ycent_template = ycent_template[idx_img],
+                     halfheight = halfheight)[0:2]
 
         # best-matching image is wrt zero-point
-        zeropt_dist_img = np.sqrt((xfit-wv0_x)**2 + (yfit-wv0_y)**2)
+        zeropt_dist_img = np.sqrt((x_fit-wv0_x)**2 + (y_fit-wv0_y)**2)
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
             img_best = img
-            img_best['best_fsmx'] = xfit
-            img_best['best_fsmy'] = yfit
-            # TODO: double check there's a valid filename:
-            img_best['best_file'] = img_best.filename
+            img_best.ext_hdr['BESTFSMX'] = x_fit
+            img_best.ext_hdr['BESTFSMY'] = y_fit
+            img_best.ext_hdr['BESTFILE'] = img_best.filename
         
     # Check that there's at least one solution
-    assert img_best in locals(), 'No suitable best image found.'        
+    assert isinstance(img_best, type(img)), 'No suitable best image found.'        
 
-    # TODO: Check this works
-    breakpoint()
-    return Dataset(img_best['best_file'])
+    return img_best
