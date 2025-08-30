@@ -605,8 +605,14 @@ class Image():
             str: the hash of the data, err, and dq
         """
         data_bytes = self.data.data.tobytes()
-        err_bytes = self.err.data.tobytes()
-        dq_bytes = self.dq.data.tobytes()
+        if self.err is not None:
+            err_bytes = self.err.data.tobytes()
+        else:
+            err_bytes = b''
+        if self.dq is not None:
+            dq_bytes = self.dq.data.tobytes()
+        else:
+            dq_bytes = b''
 
         total_bytes = data_bytes + err_bytes + dq_bytes
 
@@ -774,7 +780,7 @@ class SpectroscopyCentroidPSF(Image):
             self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
-                self.err_hdr = fits.Header
+                self.err_hdr = fits.Header()
 
         if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SpectroscopyCentroidPSF':
             raise ValueError("This file is not a valid SpectroscopyCentroidPSF.")
