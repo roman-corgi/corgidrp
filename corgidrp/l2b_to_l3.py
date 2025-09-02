@@ -1,5 +1,6 @@
 import numpy as np
 import astropy.wcs as wcs
+from corgidrp.spec import read_cent_wave
 
 # A file that holds the functions that transmogrify l2b data to l3 data 
 import numpy as np
@@ -113,49 +114,57 @@ def divide_by_exptime(input_dataset):
 
     return data
 
-def split_image_by_polarization_state(input_dataset, image_center_x=512, image_center_y=512, separation_diameter_arcsec=7.5, alignment_angle=None, image_size=None):
+def split_image_by_polarization_state(input_dataset,
+                                      image_center_x=512,
+                                      image_center_y=512,
+                                      separation_diameter_arcsec=7.5, 
+                                      alignment_angle_WP1=0,
+                                      alignment_angle_WP2=45,
+                                      image_size=None,
+                                      padding=5):
     """
     Split each polarimetric input image into two images by its polarization state, 
     recompose the two images into a 2 x image_size x image_size datacube
 
     Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level)
+        input_dataset (corgidrp.data.Dataset): a dataset of Images (L2b-level), should all be taken with the same color filter (same CFAMNAME header)
         image_center_x (optional, int): x pixel coordinate location of the center location between the two polarized images on the detector,
             default is the detector center at x=512
         image_center_y (optional, int): y pixel coordinate location of the center location between the two polarized images on the detector,
             default is the detector center at y=512
         separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec, 
             default for Roman CGI is 7.5"
-        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
-            if none is provided, defaults to 0 for WP1 and 45 for WP2
+        alignment_angle_WP1 (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal
+            for WP1, defaults to 0
+        alignment_angle_WP2 (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal
+            for WP1, defaults to 45
         image_size (optional, int): length/width of the cropped polarized images, if none is provided, 
             the size is automatically determined based on the coronagraph mask used
+        padding (optional, int): number of pixels to leave as blank space between the outer radius of each PSF and the edge of the image,
+            default is 5, is overriden if a custom image size is provided
     
     Returns:
         corgidrp.data.Dataset: The input dataset with each image now being a 2 x image_size x image_size datacube
     """
 
     passband = input_dataset[0].ext_hdr['CFAMNAME']
-    if passband != '1F' and passband != '4F':
-        raise ValueError(f'Polarimetric datasets must be imaged in band 1F or 4F, not {passband}')
+    #remove the letter F to make it compatible with table
+    if passband[1] == 'F':
+        passband = passband[0]
     
     updated_dataset = input_dataset.copy()
 
     # determine coronagraph FOV
-    bandpass_center_um = {
-        '1F': 0.5738,
-        '4F': 0.8255
-    }
     diam = 2.363114
-    fov = input_dataset[0].ext_hdr['FSMPRFL']
+    fov = input_dataset[0].ext_hdr['LSAMNAME']
     if fov == 'NFOV':
         # NFOV outer radius is 9.7 λ/D
         # convert to arcsec: λ/D * 206265
-        radius_arcsec = 9.7 * ((bandpass_center_um[passband] * 1e-6) / diam) * 206265
+        radius_arcsec = 9.7 * ((read_cent_wave(passband)[0] * 1e-9) / diam) * 206265
     elif fov == 'WFOV':
         # WFOV outer radius is 20.1 λ/D
         # convert to arcsec: λ/D * 206265
-        radius_arcsec = 20.1 * ((bandpass_center_um[passband] * 1e-6) / diam) * 206265
+        radius_arcsec = 20.1 * ((read_cent_wave(passband)[0] * 1e-9) / diam) * 206265
     else:
         # default to unvignetted polarimetry FOV diameter of 3.8"
         radius_arcsec = 3.8 / 2
@@ -169,7 +178,6 @@ def split_image_by_polarization_state(input_dataset, image_center_x=512, image_c
     # auto determine image size based on FOV if none is provided
     if image_size == None:
         # number of pixels between the coronagraph focal plane's outer radius and the image edge
-        padding = 5
         image_size = 2 * (radius_pix + padding)
     
     for image in updated_dataset:
@@ -180,16 +188,16 @@ def split_image_by_polarization_state(input_dataset, image_center_x=512, image_c
         if prism != 'POL0' and prism != 'POL45':
             raise ValueError('Input image must be a polarimetric observation')
         
+        # make sure every image in the input dataset uses the same filter
+        if image.ext_hdr['CFAMNAME'] != input_dataset[0].ext_hdr['CFAMNAME']:
+            raise ValueError('The color filter must be the same for all images in the dataset')
+
         # find polarized image centers
-        if alignment_angle != None:
+        if prism == 'POL0':
             #place image according to specified angle
-            angle_rad = (alignment_angle * np.pi) / 180
-        elif prism == 'POL0':
-            # polarized images placed horizontally on detector
-            angle_rad = 0
+            angle_rad = (alignment_angle_WP1 * np.pi) / 180
         else:
-            # polarized images placed diagonally on detector
-            angle_rad = np.pi / 4
+            angle_rad = (alignment_angle_WP2 * np.pi) / 180
         displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
         displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
         center_left = (image_center_x - displacement_x, image_center_y + displacement_y)
@@ -229,6 +237,9 @@ def split_image_by_polarization_state(input_dataset, image_center_x=512, image_c
 
         #update data
         image.data = im_data_new
+
+    history_msg = 'images split by polarization state'
+    updated_dataset.update_after_processing_step(history_msg)
     
     return updated_dataset
 

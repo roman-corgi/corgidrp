@@ -54,6 +54,16 @@ def test_image_splitting():
     assert output_dataset_autocrop_nfov.frames[0].data == pytest.approx(expected_output_autocrop_nfov)
     assert output_dataset_autocrop_nfov.frames[1].data == pytest.approx(expected_output_autocrop_nfov)
 
+    # test cropping with alignment angle input
+    image_WP1_custom_angle = mocks.create_mock_l2b_polarimetric_image(dpamname='POL0', observing_mode='NFOV', left_image_value=1, right_image_value=2, alignment_angle=5)
+    image_WP2_custom_angle = mocks.create_mock_l2b_polarimetric_image(dpamname='POL45', observing_mode='NFOV', left_image_value=1, right_image_value=2, alignment_angle=40)
+    input_dataset_custom_angle = data.Dataset([image_WP1_custom_angle, image_WP2_custom_angle])
+    output_dataset_custom_angle = l2b_to_l3.split_image_by_polarization_state(input_dataset_custom_angle, alignment_angle_WP1=5, alignment_angle_WP2=40)
+
+    ## check that actual output is as expected, should still be the same as the previous test since mock data is in NFOV mode
+    assert output_dataset_custom_angle.frames[0].data == pytest.approx(expected_output_autocrop_nfov)
+    assert output_dataset_custom_angle.frames[1].data == pytest.approx(expected_output_autocrop_nfov)
+
     # test NaN pixels
     img_size = 400
     output_dataset_custom_crop = l2b_to_l3.split_image_by_polarization_state(input_dataset_wfov, image_size=img_size)

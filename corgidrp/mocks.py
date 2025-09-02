@@ -4202,8 +4202,8 @@ def get_formatted_filename(dt, visitid):
     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
     return f"cgi_{visitid}_{timestamp}_l2b_.fits"
 
-def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='FSM_PROFILE_UNKNOWN',
-                                       left_image_value=1, right_image_value=1):
+def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
+                                       left_image_value=1, right_image_value=1, alignment_angle=None):
     """
     Creates mock L2b polarimetric data with two polarized images placed on the larger
     detector frame. Image size and placement depends on the wollaston used and the observing mode.
@@ -4214,6 +4214,8 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         observing_mode (optional, string): observing mode of the coronagraph
         left_image_value (optional, int): value to fill inside the radius of the left image, corresponding to 0 or 45 degree polarization
         right_image_value (optional, int): value to fill inside the radius of the right image, corresponding to 90 or 135 degree polarization
+        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 0 for WP1 and 45 for WP2
     
     Returns:
         corgidrp.data.Image: The simulated L2b polarimetric image
@@ -4238,14 +4240,16 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
         radius = int(round(1.9 / 0.0218))
     
     #determine the center of the two images
-    if dpamname == 'POL0':
-        displacement = int(round(image_separation_arcsec / (2 * 0.0218)))
-        center_left = (image_center[0] - displacement, image_center[1])
-        center_right = (image_center[0] + displacement, image_center[1])
-    else:
-        displacement = int(round(image_separation_arcsec / (2 * 0.0218 * np.sqrt(2))))
-        center_left = (image_center[0] - displacement, image_center[1] + displacement)
-        center_right = (image_center[0] + displacement, image_center[1] - displacement)
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
 
     #fill the location where the images are with 1s
     y, x = np.indices([1024, 1024])
@@ -4257,7 +4261,7 @@ def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0',
     #define necessary header keywords
     exthdr['CFAMNAME'] = cfamname
     exthdr['DPAMNAME'] = dpamname
-    exthdr['FSMPRFL'] = observing_mode
+    exthdr['LSAMNAME'] = observing_mode
     image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
 
     return image
