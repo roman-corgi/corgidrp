@@ -9,6 +9,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.fluxcal as fluxcal
+from corgidrp import caldb
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -151,6 +152,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # check that polarized fluxcal factor is the same as unpolarized fluxcal factor accounting for loss from wollaston
     loss = 0.9
     assert flux_fac_WP1.fluxcal_fac == pytest.approx(loss * flux_fac_unpol.fluxcal_fac, rel=0.05)
+
+    # clean up
+    this_caldb = caldb.CalDB()
+    this_caldb.remove_entry(flux_fac_WP1)
+    this_caldb.remove_entry(flux_fac_WP2)
+    this_caldb.remove_entry(flux_fac_unpol)
 
 
 

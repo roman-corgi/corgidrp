@@ -13,8 +13,6 @@
         {
             "name" : "calibrate_pol_fluxcal_aper",
                "keywords" : {
-                              "image_center_x": 512,
-                              "image_center_y": 512,
                               "phot_kwargs" : {"encircled_radius" : 4}
                             }
         },
