@@ -6,8 +6,13 @@ import numpy as np
 import pandas as pd
 import corgidrp
 import corgidrp.data as data
+import corgidrp.mocks as mocks
+import corgidrp.spec as spec
+
 import astropy.time as time
-import warnings
+from astropy.io import fits
+from astropy.table import Table
+import datetime
 
 column_dtypes = {
     "Filepath": str,
@@ -47,6 +52,8 @@ labels = {data.Dark: "Dark",
           data.FpamFsamCal : "FpamFsamCal",
           data.CoreThroughputCalibration: "CoreThroughputCalibration",
           data.NDFilterSweetSpotDataset: "NDFilterSweetSpot",
+          data.SpectroscopyCentroidPSF: "SpectroscopyCentroidPSF",
+          data.DispersionModel: "DispersionModel"
           }
 
 class CalDB:
@@ -211,6 +218,7 @@ class CalDB:
         # rest are ext_hdr keys we can copy
         start_index = len(row)
         for i in range(start_index, len(self.columns)):
+
             val = entry.ext_hdr[self.columns[i]]
             if val is not None:
                 row.append(val)  # add value staright from header
@@ -398,15 +406,107 @@ def initialize():
     ### Create set of default calibrations
     rescan_needed = False
     # Add default detector_params calibration file if it doesn't exist
-    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00:00:00.000.fits")):
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "DetectorParams_2023-11-01T00.00.00.000.fits")):
         default_detparams = data.DetectorParams({}, date_valid=time.Time("2023-11-01 00:00:00", scale='utc'))
-        default_detparams.save(filedir=corgidrp.default_cal_dir)
+        default_detparams.save(filedir=corgidrp.default_cal_dir, filename="DetectorParams_2023-11-01T00.00.00.000.fits")
         rescan_needed = True
     # Add default FpamFsamCal calibration file if it doesn't exist
-    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00:00:00.000.fits")):
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "FpamFsamCal_2024-02-10T00.00.00.000.fits")):
         fpamfsam_2excam = data.FpamFsamCal([],
             date_valid=time.Time("2024-02-10 00:00:00", scale='utc'))
         fpamfsam_2excam.save(filedir=corgidrp.default_cal_dir)
+        rescan_needed = True
+    # Add default DispersionModel calibration file if it doesn't exist
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, 'cgi_0200001001001001001_20240210t0000000_dpm_cal.fits')):
+        spec_datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
+        output_dir = corgidrp.default_cal_dir
+        prihdr, exthdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
+        dt = time.Time("2024-02-10 00:00:00", scale='utc').to_datetime()
+        dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+        disp_filename = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
+        prihdr['FILETIME'] = dt_str
+        prihdr['FILENAME'] = disp_filename
+        exthdr['DATETIME'] = dt_str
+        exthdr['FTIMEUTC'] = dt_str
+        # not physically relevant since we are just constructing the calibration product for the dispersion model, not 
+        # the observations that produced it, but just to avoid confusion, we set the values to something sensible
+        exthdr['DPAMNAME'] = 'PRISM3' 
+        exthdr['CFAMNAME'] = '3F'
+        exthdr['FSAMNAME'] = 'OPEN'
+        # these below, however, are needed for the DispersionModel calibration 
+        exthdr["REFWAVE"] = 730.
+        exthdr["BAND"] = '3'
+        band_list = spec.read_cent_wave('3')
+        band_center = band_list[0]
+        fwhm = band_list[1]
+        bandpass_frac = fwhm/band_center
+        exthdr["BANDFRAC"] = bandpass_frac
+        disp_file_path = os.path.join(spec_datadir, "TVAC_PRISM3_dispersion_profile.npz")
+        disp_params = np.load(disp_file_path)
+        disp_dict = {'clocking_angle': disp_params['clocking_angle'],
+                    'clocking_angle_uncertainty': disp_params['clocking_angle_uncertainty'],
+                    'pos_vs_wavlen_polycoeff': disp_params['pos_vs_wavlen_polycoeff'],
+                    'pos_vs_wavlen_cov' : disp_params['pos_vs_wavlen_cov'],
+                    'wavlen_vs_pos_polycoeff': disp_params['wavlen_vs_pos_polycoeff'],
+                    'wavlen_vs_pos_cov': disp_params['wavlen_vs_pos_cov']}
+        
+        disp_model = data.DispersionModel(disp_dict, pri_hdr = prihdr, ext_hdr = exthdr)
+        disp_model.save(output_dir, disp_model.filename)
+        rescan_needed = True
+    # Add default SpectroscopyCentroidPSF calibration file if it doesn't exist
+    if not os.path.exists(os.path.join(corgidrp.default_cal_dir, "'cgi_0200001001001001001_20240210t0000000_scp_cal.fits'")):
+        datadir = os.path.join(os.path.split(corgidrp.__file__)[0], "data", "spectroscopy")
+        file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
+        output_dir = corgidrp.default_cal_dir
+        
+        pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = mocks.create_default_L2b_headers()
+        dt = time.Time("2024-02-10 00:00:00", scale='utc').to_datetime()
+        dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+        ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+        cent_filename = f"cgi_{pri_hdr['VISITID']}_{ftime}_l2b.fits"
+        pri_hdr['FILETIME'] = dt_str
+        pri_hdr['FILENAME'] = cent_filename
+        ext_hdr['DATETIME'] = dt_str
+        ext_hdr['FTIMEUTC'] = dt_str
+
+        with fits.open(file_path) as hdul:
+            psf_array = hdul[0].data
+            psf_table = Table(hdul[1].data)
+
+        initial_cent = {
+            "xcent": np.array(psf_table["xcent"]),
+            "ycent": np.array(psf_table["ycent"])
+        }
+        ext_hdr['DPAMNAME'] = 'PRISM3'
+        ext_hdr['FSAMNAME'] = 'OPEN'
+        psf_images = []
+        for i in range(psf_array.shape[0]):
+            data_2d = np.copy(psf_array[i])
+            err = np.zeros_like(data_2d)
+            dq = np.zeros_like(data_2d, dtype=int)
+            image = data.Image(
+                data_or_filepath=data_2d,
+                pri_hdr=pri_hdr,
+                ext_hdr=ext_hdr,
+                err=err,
+                dq=dq
+            )
+            image.ext_hdr['CFAMNAME'] = '3D'
+            image.filename = image.pri_hdr['FILENAME']
+            image.filedir = output_dir
+            psf_images.append(image)
+
+        dataset = data.Dataset(psf_images)
+        temp_dataset, filtersweep = spec.get_template_dataset(dataset)
+        calibration = spec.compute_psf_centroid(dataset=dataset, 
+        initial_cent=initial_cent,
+        template_dataset=temp_dataset, filtersweep=filtersweep
+        )
+
+        # Manually assign filedir and filename before saving
+        calibration.filedir = output_dir
+        calibration.save()
         rescan_needed = True
 
     if rescan_needed:
