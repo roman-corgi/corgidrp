@@ -553,7 +553,14 @@ def calibrate_fluxcal_aper(dataset_or_image, calspec_file = None, flux_or_irr = 
 
     return fluxcal_obj
 
-def calibrate_pol_fluxcal_aper(dataset_or_image, image_center_x, image_center_y, calspec_file = None, flux_or_irr = 'flux', phot_kwargs=None):
+def calibrate_pol_fluxcal_aper(dataset_or_image,
+                               image_center_x=512,
+                               image_center_y=512,
+                               separation_diameter_arcsec=7.5, 
+                               alignment_angle=None,
+                               calspec_file = None,
+                               flux_or_irr = 'flux',
+                               phot_kwargs=None):
     """
     Same overall process as calibrate_fluxcal_aper, adapted for polarimetric images 
     from WP1 or WP2 with two apertures instead of one.
@@ -588,6 +595,10 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center_x, image_center_y,
             centered around
         image_center_y (int): Y pixel coordinate of where the two wollaston spots are 
             centered around
+        separation_diameter_arcsec (optional, float): Distance between the centers of the two polarized images on the detector in arcsec, 
+            default for Roman CGI is 7.5"
+        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 0 for WP1 and 45 for WP2
         calspec_file (str, optional): file path to the calspec fits file of the observed star
         flux_or_irr (str, optional): Whether flux ('flux') or in-band irradiance ('irr) should 
             be used.
@@ -608,22 +619,25 @@ def calibrate_pol_fluxcal_aper(dataset_or_image, image_center_x, image_center_y,
     if image.ext_hdr['BUNIT'] != "photoelectron/s":
         raise ValueError("input dataset must have unit photoelectron/s for the calibration, not {0}".format(image.ext_hdr['BUNIT']))
     #estimate the centers of the wollaston spots based on relative position from image center
-    #polarized images separated 7.5" or 344 pix on the detector (1"=0.0218 pix)
-    #WP1 output is aligned horizontally across the image center (+/- 172 pixels in the x direction)
-    #WP2 output is algined diagonally across the image center (+/- 122 pixels in the x and y direction)
+    #polarized images separated 7.5" or 344 pix on the detector by default (1"=0.0218 pix)
+    #WP1 output is aligned horizontally across the image center by default
+    #WP2 output is algined diagonally across the image center by default
     image_center = (image_center_x, image_center_y)
-    if image.ext_hdr['DPAMNAME'] == 'POL0':
-        #0 degree pol PSF center estimate
-        centering_initial_guess_beam_1 = (image_center[0] - 172, image_center[1])
-        #90 degree pol PSF center estimate
-        centering_initial_guess_beam_2 = (image_center[0] + 172, image_center[1]) 
-    elif image.ext_hdr['DPAMNAME'] == 'POL45':
-        #45 degree pol PSF center estimate
-        centering_initial_guess_beam_1 = (image_center[0] - 122, image_center[1] + 122)
-        #135 degree pol PSF center estimate
-        centering_initial_guess_beam_2 = (image_center[0] + 122, image_center[1] - 122)
-    else:
+    dpamname = image.ext_hdr['DPAMNAME']
+    if dpamname not in ['POL0', 'POL45']:
         raise ValueError('input dataset must be a polarimetric observation')
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((separation_diameter_arcsec * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((separation_diameter_arcsec * np.sin(angle_rad)) / (2 * 0.0218)))
+    #estimate where the centers are based on alignment angle and separation
+    centering_initial_guess_beam_1 = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    centering_initial_guess_beam_2 = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
     #ensure xy centering method is used with estimated centers for aperture photometry
     if phot_kwargs is None:
         phot_kwargs = {
