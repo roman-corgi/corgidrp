@@ -248,6 +248,40 @@ def test_detpix0_nonzero():
     if not (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
             cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy:
         raise Exception("Extension header DETPIX0X/Y not updated correctly.")
+
+def test_non_nfov_input():
+    '''
+    test that for a non nfov input, if no sizexy parameter is inputted, the size
+    of the cropped image is calculated correctly
+    '''
+    test_dataset = make_test_dataset(shape=[250,250],centxy=[124.5,124.5])
+    #test WFOV band 1
+    for frame in test_dataset:
+        frame.ext_hdr['LSAMNAME'] = 'WFOV'
+        frame.ext_hdr['CFAMNAME'] = '1F'
+    cropped_data_WFOV_band_1 = crop(test_dataset)
+    assert cropped_data_WFOV_band_1[0].data.shape == (102, 102)
+
+    #test WFOV band 4
+    for frame in test_dataset:
+        frame.ext_hdr['LSAMNAME'] = 'WFOV'
+        frame.ext_hdr['CFAMNAME'] = '4F'
+    cropped_data_WFOV_band_4 = crop(test_dataset)
+    assert cropped_data_WFOV_band_4[0].data.shape == (142, 142)
+
+    #test SPEC band 2
+    for frame in test_dataset:
+        frame.ext_hdr['LSAMNAME'] = 'SPEC'
+        frame.ext_hdr['CFAMNAME'] = '2F'
+    cropped_data_WFOV_band_4 = crop(test_dataset)
+    assert cropped_data_WFOV_band_4[0].data.shape == (58, 58)
+
+    #test SPEC band 3
+    for frame in test_dataset:
+        frame.ext_hdr['LSAMNAME'] = 'SPEC'
+        frame.ext_hdr['CFAMNAME'] = '3F'
+    cropped_data_WFOV_band_4 = crop(test_dataset)
+    assert cropped_data_WFOV_band_4[0].data.shape == (64, 64)
     
 
 if __name__ == "__main__":
@@ -261,6 +295,7 @@ if __name__ == "__main__":
     # test_nonhalfinteger_centxy()
     # test_header_updates_2d()
     # test_header_updates_3d()
-    # test_non_nfov_input()
+    test_non_nfov_input()
     test_detpix0_nonzero()
+    test_unsupported_input()
 
