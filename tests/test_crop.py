@@ -211,20 +211,20 @@ def test_header_updates_3d():
     if not cropped_test_dataset[0].err_hdr["NAXIS3"] == 3:
         raise Exception("Frame err header kw NAXIS3 not updated correctly.")
     
-def test_non_nfov_input():
-    """ Crop function is not configured for non-NFOV observations and should
-    fail if the Lyot stop is not in the narrow FOV position, unless the desired
+def test_unsupported_input():
+    """ Crop function is not configured for certain observations and should
+    fail if the Lyot stop or filter is not the supported positions, unless the desired
     image size is provided manually.
     """
 
     test_dataset = make_test_dataset(shape=[100,100],centxy=[50.5,50.5])
     for frame in test_dataset:
-        frame.ext_hdr['LSAMNAME'] = 'WFOV'
+        frame.ext_hdr['LSAMNAME'] = 'OPEN'
 
     try:
         _ = crop(test_dataset,sizexy=20,centerxy=None)
     except:
-        raise ValueError('Cropping a non-NFOV observation failed even though sizexy was provided')
+        raise ValueError('Crop function is currently only configured for NFOV, WFOV, and SPEC observations in bands 1, 2, 3, and 4 if sizexy is not provided.')
     
     
     with pytest.raises(UserWarning):

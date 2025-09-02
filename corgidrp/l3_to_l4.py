@@ -361,17 +361,15 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         if sizexy is None:
             outer_working_angle_mas = {
                 # info found on table 1: https://arxiv.org/pdf/2108.05986
-                'NFOV_band_1': 486.8,
-                'NFOV_band_2': 558.8,
-                'NFOV_band_3': 618.1,
-                'NFOV_band_4': 655.3,
                 'WFOV_band_1': 1008.8,
                 'WFOV_band_4': 1447.4,
                 'SPEC_band_2': 524.2,
                 'SPEC_band_3': 579.8
             }
             observing_mode = exthdr['LSAMNAME'] + '_band_' + exthdr['CFAMNAME'][0]
-            if observing_mode not in outer_working_angle_mas:
+            if exthdr['LSAMNAME'] == 'NFOV':
+                sizexy = 60
+            elif observing_mode not in outer_working_angle_mas:
                 raise UserWarning('Crop function is currently only configured for NFOV, WFOV, and SPEC observations in bands 1, 2, 3, and 4 if sizexy is not provided.')
             else:
                 padding = 5
