@@ -16,6 +16,7 @@ import test_check
 import corgidrp
 from corgidrp import check
 from corgidrp.data import Image, Dataset, NonLinearityCalibration
+from corgidrp.sorting import sort_pupilimg_frames
 from corgidrp.calibrate_nonlin import (calibrate_nonlin, CalNonlinException, nonlin_params_default)
 from corgidrp.mocks import (make_fluxmap_image, nonlin_coefs)
 
@@ -98,7 +99,8 @@ def setup_module():
     for j in range(n_mean):
         image_sim = make_fluxmap_image(fluxMap1,bias,kgain,rn,emgain,5.0,coeffs_1,
             nonlin_flag=nonlin_flag)
-        # Datetime cannot be duplicated
+        # Datetime will have same time as some frames in the cal set, but for this test, 
+        # that doesn't matter; no sorting happening via sorting.py, where that would be caught
         image_sim.ext_hdr['DATETIME'] = time_stack_arr0[j]
         # Temporary keyword value. Mean frame is TBD
         image_sim.pri_hdr['OBSNAME'] = 'MNFRAME'
@@ -201,7 +203,7 @@ def test_expected_results_nom_sub():
     if not os.path.exists(datadir):
         os.mkdir(datadir)
     nonlin_out.save(filedir=datadir)
-    nln_cal_filename = dataset_nl[-1].filename.replace("_L2b", "_NLN_CAL")
+    nln_cal_filename = dataset_nl[-1].filename.replace("_l2b", "_nln_cal")
     nln_cal_filepath = os.path.join(datadir, nln_cal_filename)
     if os.path.exists(nln_cal_filepath) is False:
         raise IOError(f'NonLinearity calibration file {nln_cal_filepath} does not exist.')

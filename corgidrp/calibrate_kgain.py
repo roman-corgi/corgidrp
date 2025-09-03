@@ -9,6 +9,8 @@ from corgidrp import check
 import corgidrp.data as data
 from corgidrp.data import Image
 from corgidrp.detector import slice_section, detector_areas
+from corgidrp.sorting import extract_datetime
+from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
 
 # Dictionary with constant kgain calibration parameters
 kgain_params_default= {
@@ -121,8 +123,10 @@ def ptc_bin2(frame_in, mean_frame, binwidth, max_DN):
                 
             # Ensure that there is at least one element to calculate mean and std
             if np.any(mean_idx):
-                local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx])
-                local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx])
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=RuntimeWarning)
+                    local_mean_array[m, n] = np.nanmean(frame_in_flat[mean_idx])
+                    local_noise_array[m, n] = np.nanstd(frame_in_flat[mean_idx])
             else:
                 local_mean_array[m, n] = 0
                 local_noise_array[m, n] = 0
@@ -298,9 +302,14 @@ def calibrate_kgain(dataset_kgain,
         before moving to the next subset. Two of the subsets have the same (repeated)
         exposure time. These two subsets are not contiguous: The first subset is
         taken near the start of the data collection and the second one is taken
-        at the end of the data collection (see TVAC example below). The mean
+        at the end of the data collection (see TVAC example below). Two subsets with 
+        the same exposure time are not strictly needed for k gain calibration, but they are needed 
+        for nonlinearity calibration, and the same visit will be used to cover both 
+        k gain and nonlinearity calibrations, so there should be two unity gain frame subsets
+        with the same exposure time. The mean
         signal of these two subsets is used to correct for illumination
-        brightness/sensor sensitivity drifts for all the frames in the whole set,
+        brightness/sensor sensitivity drifts in nonlinearity calibration 
+        for all the frames in the whole set,
         depending on when the frames were taken. There should be no other repeated
         exposure time among the subsets. In TVAC, a total of 110 frames were taken
         within this category. The 110 frames consisted of 22 subsets, each with
@@ -367,8 +376,11 @@ def calibrate_kgain(dataset_kgain,
         detector_regions = detector_areas
 
     # cast dataset objects into np arrays for convenience
-    cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain, apply_dq = apply_dq)
-
+    #cal_list, mean_frame_list, actual_gain = kgain_dataset_2_list(dataset_kgain, apply_dq = apply_dq)
+    cal_list, mean_frame_list, _, _, _, actual_gains, _, truncated_set_len = nonlin_kgain_dataset_2_stack(dataset_kgain, apply_dq = apply_dq, cal_type='kgain')
+    split_arr = np.arange(0,len(cal_list[0]), truncated_set_len)[1:]
+    cal_list = np.split(cal_list[0], split_arr)
+    actual_gain = np.nanmean(actual_gains)
     # check number of frames, unique EM value, exposure times and datetimes
     tmp = cal_list[0]
     for idx in range(4):
@@ -388,7 +400,7 @@ def calibrate_kgain(dataset_kgain,
     for i in range(len(cal_list)):
         check.threeD_array(cal_list[i], 'cal_list['+str(i)+']', TypeError)
         if len(cal_list[i]) < 5:
-            raise CalKgainException('A sub-stack in cal_list was found with less than 5 '
+            raise CalKgainException(f'A sub-stack in cal_list was found with less than 5 '
             'frames, which is the required minimum number per sub-stack')
         if i > 0:
             if len(cal_list[i-1]) != len(cal_list[i]):
@@ -408,8 +420,8 @@ def calibrate_kgain(dataset_kgain,
                 'be equal to or greater than {n_mean}.')
 
     check.real_positive_scalar(actual_gain, 'actual_gain', TypeError)
-    if actual_gain < 1:
-        raise CalKgainException('Actual gain must be >= 1.')
+    if actual_gain != 1:
+        raise CalKgainException('Actual gain must equal 1.')
     check.positive_scalar_integer(min_val, 'min_val', TypeError)
     check.positive_scalar_integer(max_val, 'max_val', TypeError)
     if min_val >= max_val:
@@ -525,7 +537,9 @@ def calibrate_kgain(dataset_kgain,
             in range(len(frames_diff))]
         
         # split each frame up into bins, take std and mean of each region
-        mean_frames_mean_curr0 = np.nanmean(frames, axis=0)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RuntimeWarning)
+            mean_frames_mean_curr0 = np.nanmean(frames, axis=0)
         mean_frames_mean_curr = np.nanmean(mean_frames_mean_curr0[rowroi,colroi])
         
         # Calculate the means
@@ -552,11 +566,13 @@ def calibrate_kgain(dataset_kgain,
         deviations0 = [array.reshape(-1, 1) for array in std_diffs]
         deviations.extend(deviations0)
         
-        added_deviations_shot_arr = [
-                np.sqrt(np.square(np.reshape(std_diffs[x], 
-                shape=(-1, 1))) - complex(rn_std[x])**2)
-                for x in range(len(rn_std))
-                ]
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=DeprecationWarning)
+            added_deviations_shot_arr = [
+                    np.sqrt(np.square(np.reshape(std_diffs[x], 
+                    newshape=(-1, 1))) - complex(rn_std[x])**2)
+                    for x in range(len(rn_std))
+                    ]
         
         deviations_shot.extend(added_deviations_shot_arr)
 
@@ -589,11 +605,15 @@ def calibrate_kgain(dataset_kgain,
     
         # Compute statistics if there are data points within the bin
         if current_binned_averages.size > 0:
-            binned_averages_compiled.append(np.nanmean(current_binned_averages))
-            binned_averages_error.append(np.nanstd(current_binned_averages, ddof=1) / np.sqrt(current_binned_averages.size))
-            binned_shot_deviations_compiled.append(np.nanmean(current_binned_deviations))
-            binned_deviations_error.append(np.nanstd(current_binned_deviations, ddof=1) / np.sqrt(current_binned_averages.size))
-            binned_total_deviations.append(np.nanmean(current_binned_total_deviations))
+            binned_averages_compiled.append(np.mean(current_binned_averages))
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                binned_averages_error.append(np.std(current_binned_averages, ddof=1) / np.sqrt(current_binned_averages.size))
+            binned_shot_deviations_compiled.append(np.mean(current_binned_deviations))
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=RuntimeWarning)
+                binned_deviations_error.append(np.std(current_binned_deviations, ddof=1) / np.sqrt(current_binned_averages.size))
+            binned_total_deviations.append(np.mean(current_binned_total_deviations))
         else:
             # Append NaN or some other placeholder if no data points in the bin
             binned_averages_compiled.append(np.nan)
@@ -832,6 +852,7 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
     len_sstack = []
     # Record measured gain of each substack of calibration frames
     gains = []    
+    latest_datetime = 0 #initialize
     for idx_set, data_set in enumerate(split[0]):
         # Second layer (array of different exposure times)
         sub_stack = []
@@ -865,6 +886,10 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
                     raise Exception('Exposure times must be positive')
                 exp_times.append(exp_time)
                 datetime = frame.ext_hdr['DATETIME']
+                date_number = extract_datetime(datetime)
+                if date_number > latest_datetime:
+                    latest_datetime = date_number
+                    repeat_ind = len(sub_stack) - 1
                 if isinstance(datetime, str) is False:
                     raise Exception('DATETIME must be a string')
                 datetimes.append(datetime)
@@ -873,7 +898,7 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
                     raise Exception('Commanded EM gain must be >= 1')
                 em_gains.append(em_gain)
                 if record_gain:
-                    try: # if EM gain measured directly from frame
+                    try: # if EM gain measured directly from frame 
                         gains.append(frame.ext_hdr['EMGAIN_M'])
                     except:
                         if frame.ext_hdr['EMGAIN_A'] > 0: # use applied EM gain if available
@@ -890,20 +915,36 @@ def kgain_dataset_2_list(dataset, apply_dq = True):
     stack_cp = []
     # Get expected size of substacks
     len_sub = min(len_sstack)
+    rep_len_sub = 2*len_sub
     # Length of substack must be at least 1
     if len(len_sstack) == 0:
         raise Exception('Substacks must have at least one element')
     for sub in stack:
+        if stack.index(sub) == repeat_ind:
+            continue
         if len(sub) == len_sub:
             stack_cp.append(sub)
         else:
             # Add extra care confirming all collected substacks have same # frames
             if len(sub)/len_sub != len(sub)//len_sub:
-                raise Exception('All substacks must have the same number of frames')
+                # truncate substack to the nearest multiple of len_sub
+                sub = sub[:len(sub)//len_sub*len_sub]
             idx_0 = 0
             for rep in range(len(sub)//len_sub):
                 stack_cp.append(sub[idx_0:idx_0+len_sub])
                 idx_0 += len_sub
+    if len(stack[repeat_ind]) == rep_len_sub:
+        stack_cp.append(sub)
+    else:
+        rep_sub = stack[repeat_ind]
+        # Add extra care confirming all collected substacks have same # frames
+        if len(rep_sub)/rep_len_sub != len(rep_sub)//rep_len_sub:
+            # truncate substack to the nearest multiple of len_sub
+            rep_sub = rep_sub[:len(rep_sub)//rep_len_sub*rep_len_sub]
+        idx_0 = 0
+        for rep in range(len(rep_sub)//rep_len_sub):
+            stack_cp.append(rep_sub[idx_0:idx_0+rep_len_sub])
+            idx_0 += rep_len_sub
     stack = stack_cp        
     # All elements of datetimes must be unique
     if len(datetimes) != len(set(datetimes)):

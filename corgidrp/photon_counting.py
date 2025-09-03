@@ -67,7 +67,7 @@ def photon_count(e_image, thresh):
 
 
 def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max=None, 
-                niter=2, mask_filepath=None, safemode=True, inputmode='illuminated', bin_size=None):
+                niter=2, mask_filepath=None, safemode=True, inputmode='illuminated', bin_size=None, dataset_copy=True):
     """Take a stack of images, frames of the same exposure 
     time, k gain, read noise, and EM gain, and return the mean expected value per 
     pixel. The frames are taken in photon-counting mode, which means high EM 
@@ -120,6 +120,8 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
             good SNR with many frames vs countering speckle time variability with fewer frames), one specifies this number for the size of each subset. If the number does not evenly divide the 
             number of frames in input_dataset, the remainder frames are ignored.  The output is the a dataset containing the more than 1 photon-counted mean-combined frame. Defaults to None, in which case 
             the entire input dataset is used, and the output dataset consists of one frame.
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset or corgidrp.data.Dark: If If the input dataset's header key 'VISTYPE' is not equal to 'DARK', 
@@ -157,8 +159,10 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
     for i in range(num_bins):
         subset_frames = input_dataset.frames[bin_size*i:bin_size*(i+1)]
         sub_dataset = data.Dataset(subset_frames)
-
-        test_dataset, _ = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
+        if dataset_copy:
+            test_dataset, _ = sub_dataset.copy().split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
+        else:
+            test_dataset, _ = sub_dataset.split_dataset(exthdr_keywords=['EXPTIME', 'EMGAIN_C', 'KGAINPAR', 'RN'])
         if len(test_dataset) > 1:
             raise PhotonCountException('All frames must have the same exposure time, '
                                     'commanded EM gain, and k gain.')
@@ -308,11 +312,19 @@ def get_pc_mean(input_dataset, pc_master_dark=None, T_factor=None, pc_ecount_max
         combined_pc_mean = pc_means[0] - pc_means[1]
         combined_pc_mean[combined_pc_mean<0] = 0
         combined_err = np.sqrt(errs[0]**2 + errs[1]**2)
-        pri_hdr = dataset[-1].pri_hdr.copy()
-        ext_hdr = dataset[-1].ext_hdr.copy()
-        err_hdr = dataset[-1].err_hdr.copy()
-        dq_hdr = dataset[-1].dq_hdr.copy()
-        hdulist = dataset[-1].hdu_list.copy()
+        combined_dq = np.bitwise_or(dqs[0], dqs[1])
+        if dataset_copy:
+            pri_hdr = dataset[-1].pri_hdr.copy()
+            ext_hdr = dataset[-1].ext_hdr.copy()
+            err_hdr = dataset[-1].err_hdr.copy()
+            dq_hdr = dataset[-1].dq_hdr.copy()
+            hdulist = dataset[-1].hdu_list.copy()
+        else:
+            pri_hdr = dataset[-1].pri_hdr
+            ext_hdr = dataset[-1].ext_hdr
+            err_hdr = dataset[-1].err_hdr
+            dq_hdr = dataset[-1].dq_hdr
+            hdulist = dataset[-1].hdu_list
 
         if val[0] != "DARK":  
             new_image = data.Image(combined_pc_mean, pri_hdr=pri_hdr, ext_hdr=ext_hdr, err=combined_err, dq=combined_dq, err_hdr=err_hdr, 

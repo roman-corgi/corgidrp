@@ -166,7 +166,7 @@ def setup_module():
     ct_cal_tmp = corethroughput.generate_ct_cal(Dataset(data_ct_interp))
     # FPAM/FSAM
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     # FPM during the CT observations (different to the coronagraphic one since
     # FPAM/FSAM H/V values are different)
     fpm_ct = ct_cal_tmp.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
@@ -319,7 +319,7 @@ def test_fpm_pos():
     """
     # FPAM/FSAM transformations
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     
     fpam2excam_matrix, fsam2excam_matrix = fpam_fsam_cal.data
     # TVAC files
@@ -398,7 +398,7 @@ def test_cal_file():
     ct_cal_file_in.save(filedir=test_dir)
 
     # Check that the filename is what we expect
-    ct_cal_filename = dataset_ct[-1].filename.replace("_L2b", "_CTP_CAL")
+    ct_cal_filename = dataset_ct[-1].filename.replace("_l2b", "_ctp_cal")
     ct_cal_filepath = os.path.join(test_dir,ct_cal_filename)
     if os.path.exists(ct_cal_filepath) is False:
         raise IOError(f'Core throughput calibration file {ct_cal_filepath} does not exist.')
@@ -510,7 +510,7 @@ def test_ct_interp():
     # Get CT FPM center
     # FPAM/FSAM
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     fpam_ct_pix = ct_cal_in.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # Reference grid to test the interpolation: wrt CT FPM because the positions
     # used to interpolate the CT are, by definition, wrt the FPM
@@ -742,7 +742,7 @@ def test_ct_map():
     
         # FPAM/FSAM
         fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-            'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+            'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     
         # Create CT map for the HLC area (default)
         ct_map_def = corethroughput.create_ct_map(dataset_cor, fpam_fsam_cal,
@@ -819,7 +819,7 @@ def test_psf_interp():
     # We need to refer the PSF locations to the FPM's center
     # Get PAM cal file
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     # Get CT FPM's center
     fpam_ct_pix_eq = ct_cal_eq.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # PSF locations with respect to the FPM's center. EXCAM pixels
@@ -856,7 +856,7 @@ def test_psf_interp():
     # We need to refer the PSF locations to the FPM's center
     # Get PAM cal file
     fpam_fsam_cal = FpamFsamCal(os.path.join(corgidrp.default_cal_dir,
-        'FpamFsamCal_2024-02-10T00:00:00.000.fits'))
+        'FpamFsamCal_2024-02-10T00.00.00.000.fits'))
     # Get CT FPM's center
     fpam_ct_pix = ct_cal.GetCTFPMPosition(dataset_cor, fpam_fsam_cal)[0]
     # PSF locations with respect to the FPM's center. EXCAM pixels

@@ -22,8 +22,8 @@ def test_kgain():
     ptc_hdr = fits.Header()
     image1 = data.Image(dat,pri_hdr = prhd, ext_hdr = exthd, err = err)
     image2 = image1.copy()
-    image1.filename = "test1_L1_.fits"
-    image2.filename = "test2_L1_.fits"
+    image1.filename = "test1_l1_.fits"
+    image2.filename = "test2_l1_.fits"
     dataset= data.Dataset([image1, image2])
 
     prhd_kgain = prhd.copy()
@@ -40,7 +40,7 @@ def test_kgain():
         
     kgain = data.KGain(gain_value, pri_hdr = prhd_kgain, ext_hdr = exthd_kgain, input_dataset = dataset)
 
-    assert kgain.filename.split(".")[0] == "test2_KRN_CAL"
+    assert kgain.filename.split(".")[0] == "test2_krn_cal"
     assert kgain.value == gain_value
     assert kgain.data[0] == gain_value
     
@@ -94,6 +94,9 @@ def test_kgain():
     assert np.mean(gain_dataset[0].data) == pytest.approx(k_gain * np.mean(dataset[0].data), abs = 1e-4)
     assert np.mean(gain_dataset[0].err) == pytest.approx(k_gain * np.mean(dataset[0].err), abs = 1e-4)
 
+    # test error propagation
+    assert gain_dataset[0].err[0,10,10] == np.sqrt(dataset[0].err[0,10,10]**2 * k_gain**2 + kgain.err**2 * gain_dataset[0].data[10,10]**2)
+     
     #test header updates
     assert gain_dataset[0].ext_hdr["BUNIT"] == "detected EM electron"
     assert gain_dataset[0].err_hdr["BUNIT"] == "detected EM electron"

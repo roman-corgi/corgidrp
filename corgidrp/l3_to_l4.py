@@ -1,5 +1,8 @@
 # A file that holds the functions that transmogrify l3 data to l4 data 
-
+import warnings
+import numpy as np
+import os
+import pyklip.rdi
 from pyklip.klip import rotate
 import scipy.ndimage
 from astropy.wcs import WCS
@@ -12,12 +15,10 @@ from corgidrp.klip_fm import meas_klip_thrupt
 from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
-import warnings
-import numpy as np
-import pyklip.rdi
-import os
 from astropy.io import fits
 from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
+from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
+
 
 def distortion_correction(input_dataset, astrom_calibration):
     """
@@ -808,6 +809,122 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
+def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None):
+    """ 
+    A procedure for estimating the centroid of the zero-point image
+    (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): Dataset containing 2D PSF or satellite spot images taken through the narrowband filter and slit.
+        template_dataset (corgidrp.data.Dataset): dataset of the template PSF, if None, a simulated PSF from the data/spectroscopy/template 
+                                                  path is taken
+        xcent_guess (float): initial x guess for the centroid fit for all frames
+        ycent_guess (float): initial y guess for the centroid fit for all frames
+    
+    Returns:
+        corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
+                               information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
+    """
+    dataset = input_dataset.copy()
+    dpamname = dataset.frames[0].ext_hdr["DPAMNAME"]
+    if not dpamname.startswith("PRISM"):
+        raise AttributeError("This is not a spectroscopic observation. but {0}").format(dpamname)
+    slit = dataset.frames[0].ext_hdr['FSAMNAME']
+    if not slit.startswith("R"):
+        raise AttributeError("not a slit observation")
+    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
+    narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
+    band = np.array(band)
+    if len(band) < 2:
+        raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
+                             to determine the wavelength zero point")
+        
+    if "3d" in band:
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "3d")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "3d")[0].item())]
+    elif "2c" in band:
+        sat_dataset = narrow_dataset[int(np.nonzero(band == "2c")[0].item())]
+        sci_dataset = narrow_dataset[int(np.nonzero(band != "2c")[0].item())]
+    else:
+        raise AttributeError("No narrowband frames found in input dataset")
+    
+    if len(sci_dataset) == 0:
+        raise AttributeError("No science frames found in input dataset")
+    
+    if xcent_guess is not None and ycent_guess is not None:
+        n = len(sat_dataset)
+        initial_cent = {"xcent": np.repeat(xcent_guess, n),
+                        "ycent": np.repeat(ycent_guess, n)}
+    else:
+        initial_cent = None
+    spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
+    
+    x0 = np.mean(spot_centroids.xfit)
+    x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
+    y0 = np.mean(spot_centroids.yfit)
+    y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
+    filter = sat_dataset[0].ext_hdr["CFAMNAME"]
+    cen_wave = read_cent_wave(filter)[0]
+    for frame in sci_dataset:
+        frame.ext_hdr["WAVLEN0"] = cen_wave
+        frame.ext_hdr["WV0_X"] = x0
+        frame.ext_hdr["WV0_XERR"] = x0err
+        frame.ext_hdr["WV0_Y"] = y0
+        frame.ext_hdr["WV0_YERR"] = y0err
+        frame.ext_hdr["WV0_DIMX"] = sat_dataset[0].ext_hdr['NAXIS1']
+        frame.ext_hdr["WV0_DIMY"] = sat_dataset[0].ext_hdr['NAXIS2']
+                              
+    history_msg = "wavelength zeropoint values added to header"
+    sci_dataset.update_after_processing_step(history_msg)
+    return sci_dataset
+
+def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials = 1000):
+    """
+    add_wavelength_map adds the wavelength map + error and the position lookup table as extensions to the frames
+    
+    Args:
+        input_dataset (corgidrp.data.Dataset): a dataset of spectroscopy Images (L3-level)
+        disp_model (corgidrp.data.DispersionModel): dispersion model of the corresponding band
+        pixel_pitch_um (float): EXCAM pixel pitch in microns, default: 13.0
+        ntrials (int): number of trials when applying a Monte Carlo error propagation to estimate the uncertainties of the
+                       values in the wavelength calibration map
+
+    Returns:
+        corgidrp.data.Dataset: dataset with appended wavelength map and error
+    """
+    dataset = input_dataset.copy()
+    
+    for frames in dataset:
+        #get the corgidrp.data.Dataset:wavelength zeropoint information from the input science frames header
+        head = frames.ext_hdr
+        wave_zero = {
+        'wavlen': head['WAVLEN0'],
+        'x' : head['WV0_X'],
+        'xerr': head['WV0_XERR'],
+        'y': head['WV0_Y'],
+        'yerr': head['WV0_YERR'],
+        'shapex': head['WV0_DIMX'],
+        'shapey': head['WV0_DIMY']
+        }
+    
+        wave_map, wave_err, pos_lookup, x_refwav, y_refwav = create_wave_cal(disp_model, wave_zero, pixel_pitch_um = pixel_pitch_um, ntrials = ntrials)
+        wave_hdr = fits.Header()
+        wave_hdr["BUNIT"] = "nm"
+        wave_hdr["REFWAVE"] = disp_model.ext_hdr["REFWAVE"]
+        wave_hdr["XREFWAV"] = x_refwav
+        wave_hdr["YREFWAV"] = y_refwav
+        wave_err_hdr = fits.Header()
+        wave_err_hdr["BUNIT"] = "nm"
+        frames.add_extension_hdu("WAVE" ,data = wave_map, header = wave_hdr)
+        frames.add_extension_hdu("WAVE_ERR", data = wave_err, header = wave_err_hdr)
+        pos_hdu = fits.BinTableHDU(data = pos_lookup, header = fits.Header(), name = "POSLOOKUP")
+        frames.hdu_list.append(pos_hdu.copy())
+        frames.hdu_names.append("POSLOOKUP")
+    
+    history_msg = "wavelength map and position lookup table extension added"
+    dataset.update_after_processing_step(history_msg)
+    return dataset
+
 
 def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
     """
@@ -842,7 +959,7 @@ def update_to_l4(input_dataset, corethroughput_cal, flux_cal):
         frame.ext_hdr['FLXCALFN'] = flux_cal.filename.split("/")[-1] #Associate the flux calibration file
         # update filename convention. The file convention should be
         # "CGI_[dataleel_*]" so we should be same just replacing the just instance of L1
-        frame.filename = frame.filename.replace("_L3_", "_L4_", 1)
+        frame.filename = frame.filename.replace("_l3_", "_l4_", 1)
 
     history_msg = "Updated Data Level to L4"
     updated_dataset.update_after_processing_step(history_msg)
