@@ -69,7 +69,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     os.mkdir(output_dir)
     
     # List of filenames
-    corethroughput_data_filelist = ['corethroughput_e2e_{0}_L2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
+    corethroughput_data_filelist = ['corethroughput_e2e_{0}_l2b.fits'.format(i) for i in range(len(corethroughput_dataset))]
     corethroughput_dataset.save(output_dir, corethroughput_data_filelist)
 
     # make DRP output directory if needed
@@ -77,6 +77,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     if os.path.exists(corethroughput_outputdir):
         shutil.rmtree(corethroughput_outputdir)
     os.mkdir(corethroughput_outputdir)
+    
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
 
     # Run the DRP walker
     print('Running walker')
@@ -84,9 +91,9 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     corethroughput_data_filepath = [os.path.join(output_dir, f) for f in corethroughput_data_filelist]
     walker.walk_corgidrp(corethroughput_data_filepath, '', corethroughput_outputdir)
     
-    # Load in the output data. It should be the latest CTP_CAL file produced.
+    # Load in the output data. It should be the latest ctp_cal file produced.
     corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
-        '*CTP_CAL*.fits'))[0]
+        '*ctp_cal*.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
 
     # CT cal file from mock data directly
@@ -103,9 +110,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_cal_drp.ct_fpam == ct_cal_mock.ct_fpam)
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_mock.ct_fsam)
 
-    # Remove entry from caldb
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(ct_cal_drp)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
     # Print success message
     print('e2e test for corethroughput calibration passed')

@@ -3030,7 +3030,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     y, x = np.indices(imshape)
 
     # Following astropy documentation:
-    # Generate random source model list. Random amplitues and centers within a pixel
+    # Generate random source model list. Random amplitudes and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
     # Set seed for reproducibility of mock data

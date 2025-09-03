@@ -742,7 +742,7 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
 
-def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm = 10.):
+def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm = 5.):
     """
     Fit the line spread function to a wavelength calibrated (averaged) dataset, by reading 
     the wavelength map extension and wavelength zeropoint header
@@ -750,7 +750,8 @@ def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm 
     Args:
         dataset (corgidrp.data.Dataset): dataset containg a narrowband filter + prism PSF
         halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels.
-        halfheight (int): The height of the fitting region is 2 * halfwidth + 1 pixels.
+        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels.
+        guess_fwhm (float): guess value of the fwhm of the line
 
     Returns:
         corgidrp.data.LineSpread: LineSpread object containing
@@ -803,7 +804,6 @@ def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm 
     mean_wave = np.mean(np.array(wave))
     mean_flux_profile = np.mean(np.array(flux_profile), axis = 0)
     mean_wavlens = np.mean(np.array(wavlens), axis = 0)
-    print(mean_wavlens)
     prihdr = nar_dataset[0].pri_hdr.copy()
     exthdr = nar_dataset[0].ext_hdr.copy()
     

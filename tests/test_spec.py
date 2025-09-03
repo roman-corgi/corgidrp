@@ -107,7 +107,8 @@ def convert_tvac_to_dataset():
             err=err,
             dq=dq
         )
-        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+        
+        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper()
         image.ext_hdr['DPAMNAME'] = 'PRISM3'
         image.ext_hdr['FSAMNAME'] = 'OPEN'
         image.ext_hdr['xcent']= initial_cent.get('xcent')[i]
@@ -558,14 +559,24 @@ def test_linespread_function():
     using the output_dataset of the test of the wavelength map
     """
     line_spread = steps.fit_line_spread_function(output_dataset)
-    print(np.max(output_dataset[0].data)/np.sum(output_dataset[0].data))
-    print(np.mean(output_dataset[0].hdu_list["WAVE"].data))
-    print(line_spread.amplitude)
-    print(line_spread.fwhm)
-    print(line_spread.mean_wave)
+    flux = np.sum(output_dataset[0].data, axis = 1)/np.sum(output_dataset[0].data)
+    pos_max = np.argmax(flux)
+    mean_wave = np.mean(output_dataset[0].hdu_list["WAVE"].data, axis = 1)
+    assert line_spread.amplitude == pytest.approx(flux[pos_max], abs=0.04)
+    assert line_spread.mean_wave == pytest.approx(mean_wave[pos_max], abs=2)
+    ind_fwhm = np.where(flux >= flux[pos_max]/2.)[0]
+    est_fwhm = mean_wave[ind_fwhm[0]] - mean_wave[ind_fwhm[-1]]
+    assert est_fwhm == pytest.approx(line_spread.fwhm, abs = 3.)
+    assert np.min(mean_wave) < np.min(line_spread.wavlens)
+    assert np.max(mean_wave) > np.max(line_spread.wavlens)
+    assert np.min(flux) == pytest.approx(np.min(line_spread.flux_profile), abs = 0.001)
+    assert np.max(flux) == pytest.approx(np.max(line_spread.flux_profile), abs = 0.035)
     line_spread.save(filedir = output_dir)
     
     line_spread_load = LineSpread(os.path.join(output_dir, line_spread.filename))
+    assert np.array_equal(line_spread_load.gauss_par, np.array([line_spread.amplitude, line_spread.mean_wave, line_spread.fwhm]))
+    assert np.array_equal(line_spread.flux_profile, line_spread_load.flux_profile)
+    assert np.array_equal(line_spread.wavlens, line_spread_load.wavlens)
     assert line_spread_load.amplitude == line_spread.amplitude
     assert line_spread_load.fwhm == line_spread.fwhm
     assert line_spread_load.mean_wave == line_spread.mean_wave
