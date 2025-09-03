@@ -173,25 +173,26 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
         Calls Image.rescale_errors() for each frame.
         Updates Dataset.all_err
 
         Args:
-          input_error (np.array): 2-d error layer or 3-d layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim == 3:
-            for i,frame in enumerate(self.frames):
-                frame.rescale_error(input_error[i], err_name)
-
-        elif input_error.ndim ==2:
+        if isinstance(scale_factor, float):
             for frame in self.frames:
-                frame.rescale_error(input_error, err_name)
-
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 2:
+            for frame in self.frames:
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.rescale_error(scale_factor[i], scale_name)
         else:
-            raise ValueError("input_error is not either a 2D or 3D array.")
+            raise ValueError("scale_factor is neither a float nor a 2D or 3D array.")
 
         # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])
@@ -571,30 +572,27 @@ class Image():
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
-        Add a layer of a specific additive uncertainty on the 3-dim error array extension
-        and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name.
-
-        Only tracks individual errors if the "track_individual_errors" setting is set to True
-        in the configuration file
+        scale the 3-dim error array extension with a factor.
+        Update the error header with the history and reason of the scaling.
 
         Args:
-          input_error (np.array): 2-d error layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim != 2 or input_error.shape != self.data.shape:
-            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        if isinstance(scale_factor, float):
+            pass
+        elif scale_factor.ndim == 2 or scale_factor.shape == self.data.shape:
+            pass
+        else:
+            raise ValueError("we expect a 2-dimensional input array with dimensions {0} or a float value".format(self.data.shape))
 
-        #first layer is always the updated combined error
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
-            self.err = self.err*input_error
-        self.err_hdr["Layer_1"] = "combined_error"
-
+            self.err = self.err*scale_factor
         # record history since 2-D error map doesn't track individual terms
-        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(err_name)
+        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(scale_name)
 
 
     def get_hash(self):
@@ -605,8 +603,14 @@ class Image():
             str: the hash of the data, err, and dq
         """
         data_bytes = self.data.data.tobytes()
-        err_bytes = self.err.data.tobytes()
-        dq_bytes = self.dq.data.tobytes()
+        if self.err is not None:
+            err_bytes = self.err.data.tobytes()
+        else:
+            err_bytes = b''
+        if self.dq is not None:
+            dq_bytes = self.dq.data.tobytes()
+        else:
+            dq_bytes = b''
 
         total_bytes = data_bytes + err_bytes + dq_bytes
 
@@ -760,11 +764,10 @@ class SpectroscopyCentroidPSF(Image):
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpectroscopyCentroidPSF 
         if ext_hdr is not None:
             if input_dataset is None:
-                raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
+                raise ValueError("Must pass `input_dataset` to create new SpectroscopyCentroidPSF.")
             
             self.ext_hdr["EXTNAME"] = "CENTROIDS"
-
-            self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
+            self.ext_hdr['DATATYPE'] = 'SpectroscopyCentroidPSF'
             self.ext_hdr['DATALVL'] = 'CAL'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
@@ -775,10 +778,10 @@ class SpectroscopyCentroidPSF(Image):
             self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
-                self.err_hdr = fits.Header
+                self.err_hdr = fits.Header()
 
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'PSFCentroidCalibration':
-            raise ValueError("This file is not a valid PSFCentroidCalibration.")
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SpectroscopyCentroidPSF':
+            raise ValueError("This file is not a valid SpectroscopyCentroidPSF.")
 
         self.xfit = self.data[:, 0]
         self.yfit = self.data[:, 1]
@@ -1393,7 +1396,9 @@ class DetectorParams(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':','.')
+            self.filename = filename
             self.pri_hdr['FILENAME'] = self.filename
 
     def get_hash(self):
@@ -1710,8 +1715,9 @@ class FpamFsamCal(Image):
 
             # use the start date for the filename by default
             self.filedir = '.'
-            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':', '.') # compatible with Windows machines
             self.pri_hdr['FILENAME'] = self.filename
+
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1970,7 +1976,7 @@ class CoreThroughputCalibration(Image):
         r_good = radius_cor >= radii.min()
         
         if len(x_cor[r_good]) == 0:
-            raise ValueError('All target radius are less than the minimum '
+            raise ValueError('All target radii are less than the minimum '
                 'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor
@@ -2832,9 +2838,8 @@ datatypes = { "Image" : Image,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
+              "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
-              "CoreThroughputMap": CoreThroughputMap,
-              "PSFCentroidCalibration": SpectroscopyCentroidPSF,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel

@@ -30,7 +30,7 @@ all_steps = {
     "calibrate_nonlin": corgidrp.calibrate_nonlin.calibrate_nonlin,
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
     "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
-    "add_photon_noise" : corgidrp.l2a_to_l2b.add_photon_noise,
+    "add_shot_noise_to_err" : corgidrp.l2a_to_l2b.add_shot_noise_to_err,
     "dark_subtraction" : corgidrp.l2a_to_l2b.dark_subtraction,
     "flat_division" : corgidrp.l2a_to_l2b.flat_division,
     "frame_select" : corgidrp.l2a_to_l2b.frame_select,
@@ -389,6 +389,7 @@ def run_recipe(recipe, save_recipe_file=True):
     # save recipe before running recipe
     if save_recipe_file:
         recipe_filename = "{0}_{1}_recipe.json".format(recipe["name"], time.Time.now().isot)
+        recipe_filename = recipe_filename.replace(":", ".")  # replace colons with periods for compatibility with Windows machines
         recipe_filepath = os.path.join(recipe["outputdir"], recipe_filename)
         with open(recipe_filepath, "w") as json_file:
             json.dump(recipe, json_file, indent=4)

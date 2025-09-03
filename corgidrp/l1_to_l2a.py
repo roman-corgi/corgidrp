@@ -4,7 +4,7 @@ import numpy as np
 import corgidrp.data as data
 
 def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False, 
-                    detector_regions=None, use_imaging_area = False):
+                    detector_regions=None, use_imaging_area = False, dataset_copy=True):
     """
     Measure and subtract the median bias in each row of the pre-scan detector region.
     This step also crops the images to just the science area, or
@@ -19,26 +19,32 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         detector_regions: (dict):  A dictionary of detector geometry properties.
             Keys should be as found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
         use_imaging_area (bool): flag indicating whether to use the imaging area (like in the trap pump code) or use the defualt (equivalent to EMCCDFrame)
+        dataset_copy (bool): flag indicating whether the input dataset will be preserved after this function is executed or not.  If False, the output dataset will be the input dataset modified, and 
+            the input and output datasets will be identical.  This is useful when handling a large dataset and when the input dataset is not needed afterwards. Defaults to True.
 
     Returns:
         corgidrp.data.Dataset: a pre-scan bias subtracted version of the input dataset
     """
-
+    if dataset_copy:
+        # Make a copy of the input dataset to operate on
+        output_dataset = input_dataset.copy(copy_data=False)
+    else:
+        output_dataset = input_dataset
+    
     if detector_regions is None:
         detector_regions = detector_areas
 
     # Initialize list of output frames to be concatenated
-    out_frames_data = []
-    out_frames_err = []
-    out_frames_dq = []
-    out_frames_bias = []
-
+    out_frames_data_arr = []
+    out_frames_err_arr = []
+    out_frames_dq_arr = []
+    out_frames_bias_arr = []
     # Place to save new error estimates to be added later via Image.add_error_term()
     new_err_list = []
-
+    dataset_length = len(input_dataset)
     # Iterate over frames
-    for i, frame in enumerate(input_dataset):
-
+    for i in range(dataset_length):
+        frame = input_dataset[i]
         frame_data = np.copy(frame.data)
         frame_err = np.copy(frame.err)
         frame_dq = np.copy(frame.dq)
@@ -116,26 +122,19 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
         bias = medbyrow - bias_offset
         image_bias_corrected = image_data - bias
 
-        out_frames_data.append(image_bias_corrected)
-        out_frames_err.append(image_err)
-        out_frames_dq.append(image_dq)
-        out_frames_bias.append(bias[:,0]) # save 1D version of array
+        out_frames_data_arr.append(image_bias_corrected)
+        out_frames_err_arr.append(image_err)
+        out_frames_dq_arr.append(image_dq)
+        out_frames_bias_arr.append(bias[:,0]) # save 1D version of array
 
     # Update all_data and reassign frame pointers (only necessary because the array size has changed)
-    out_frames_data_arr = np.array(out_frames_data)
-    out_frames_err_arr = np.array(out_frames_err)
-    out_frames_dq_arr = np.array(out_frames_dq)
-    out_frames_bias_arr = np.array(out_frames_bias, dtype=np.float32)
-    # try to free some memory
-    del out_frames_data, out_frames_err, out_frames_dq, out_frames_bias
-
-    # Make a copy of the input dataset to operate on
-    output_dataset = input_dataset.copy(copy_data=False)
-
+    out_frames_data_arr = np.array(out_frames_data_arr)
+    out_frames_err_arr = np.array(out_frames_err_arr)
+    out_frames_dq_arr = np.array(out_frames_dq_arr)
+    out_frames_bias_arr = np.array(out_frames_bias_arr, dtype=np.float32)
     output_dataset.all_data = out_frames_data_arr
     output_dataset.all_err = out_frames_err_arr
     output_dataset.all_dq = out_frames_dq_arr
-
     for i,frame in enumerate(output_dataset):
         frame.data = out_frames_data_arr[i]
         frame.err = out_frames_err_arr[i]

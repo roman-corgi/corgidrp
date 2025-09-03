@@ -3194,7 +3194,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     y, x = np.indices(imshape)
 
     # Following astropy documentation:
-    # Generate random source model list. Random amplitues and centers within a pixel
+    # Generate random source model list. Random amplitudes and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
     # Set seed for reproducibility of mock data
@@ -4365,3 +4365,68 @@ def get_formatted_filename(dt, visitid):
     """
     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
     return f"cgi_{visitid}_{timestamp}_l2b_.fits"
+
+def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
+                                       left_image_value=1, right_image_value=1, alignment_angle=None):
+    """
+    Creates mock L2b polarimetric data with two polarized images placed on the larger
+    detector frame. Image size and placement depends on the wollaston used and the observing mode.
+
+    Args:
+        image_center (optional, tuple(int, int)): pixel location of where the two images are centered on the detector
+        dpamname (optional, string): name of the wollaston prism used, accepted values are 'POL0' and 'POL45'
+        observing_mode (optional, string): observing mode of the coronagraph
+        left_image_value (optional, int): value to fill inside the radius of the left image, corresponding to 0 or 45 degree polarization
+        right_image_value (optional, int): value to fill inside the radius of the right image, corresponding to 90 or 135 degree polarization
+        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 0 for WP1 and 45 for WP2
+    
+    Returns:
+        corgidrp.data.Image: The simulated L2b polarimetric image
+    """
+    assert dpamname in ['POL0', 'POL45'], \
+        "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
+    # create initial blank frame
+    image_data = np.zeros(shape=(1024, 1024))
+
+    image_separation_arcsec = 7.5
+
+    #determine radius of the images
+    if observing_mode == 'NFOV':
+        cfamname = '1F'
+        radius = int(round((9.7 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    elif observing_mode == 'WFOV':
+        cfamname = '4F'
+        radius = int(round((20.1 * ((0.8255 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    else:
+        cfamname = '1F'
+        radius = int(round(1.9 / 0.0218))
+    
+    #determine the center of the two images
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    #fill the location where the images are with 1s
+    y, x = np.indices([1024, 1024])
+    image_data[((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2] = left_image_value
+    image_data[((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2] = right_image_value
+    
+    #create L2b headers
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    #define necessary header keywords
+    exthdr['CFAMNAME'] = cfamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['LSAMNAME'] = observing_mode
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    return image
+
