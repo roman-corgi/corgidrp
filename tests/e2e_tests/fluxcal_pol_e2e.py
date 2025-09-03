@@ -15,9 +15,9 @@ from corgidrp import caldb
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Load in L1 polarimetric data
     # Load in unpolarized data also for comparison 
-    WP1_input_path = os.path.join('..', 'test_data', 'polarimetry', 'simulated_polarimetric_L1_HLC_WP1.fits')
-    WP2_input_path = os.path.join('..', 'test_data', 'polarimetry', 'simulated_polarimetric_L1_HLC_WP2.fits')
-    unpol_input_path = os.path.join('..', 'test_data', 'polarimetry', 'simulated_unpol_L1_HLC.fits')
+    WP1_input_path = os.path.join(e2edata_path, 'corgisim_polarimetry_data', 'simulated_polarimetric_L1_HLC_WP1.fits')
+    WP2_input_path = os.path.join(e2edata_path, 'corgisim_polarimetry_data', 'simulated_polarimetric_L1_HLC_WP2.fits')
+    unpol_input_path = os.path.join(e2edata_path, 'corgisim_polarimetry_data', 'simulated_unpol_L1_HLC.fits')
     L1_image_WP1 = data.Image(WP1_input_path)
     L1_image_WP2 = data.Image(WP2_input_path)
     L1_image_unpol = data.Image(unpol_input_path)
@@ -174,9 +174,9 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/home/ericshen/corgi/TVAC_data/"
+    e2edata_dir =  "/home/ericshen/corgi/E2E_Test_Data/"
 
-    ap = argparse.ArgumentParser(description="run the l2b-> FluxcalFactor end-to-end test")
+    ap = argparse.ArgumentParser(description="run the l2b-> PolFluxcalFactor end-to-end test")
     ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
                     help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,

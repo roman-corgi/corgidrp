@@ -84,10 +84,7 @@ tests/e2e_tests/pc_sim_test_data/*.json
 # data files
 *.FITS
 *.fits
-!nonlin_table_TVAC.fits
-!simulated_polarimetric_L1_HLC_WP1.fits
-!simulated_polarimetric_L1_HLC_WP2.fits
-!simulated_unpol_L1_HLC.fits    
+!nonlin_table_TVAC.fits 
 
 # Output figures
 figures/
