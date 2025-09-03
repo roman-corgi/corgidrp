@@ -420,8 +420,8 @@ def calibrate_kgain(dataset_kgain,
                 'be equal to or greater than {n_mean}.')
 
     check.real_positive_scalar(actual_gain, 'actual_gain', TypeError)
-    if actual_gain < 1:
-        raise CalKgainException('Actual gain must be >= 1.')
+    if actual_gain != 1:
+        raise CalKgainException('Actual gain must equal 1.')
     check.positive_scalar_integer(min_val, 'min_val', TypeError)
     check.positive_scalar_integer(max_val, 'max_val', TypeError)
     if min_val >= max_val:

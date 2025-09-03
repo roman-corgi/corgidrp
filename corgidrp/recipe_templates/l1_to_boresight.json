@@ -49,7 +49,7 @@
             "name" : "em_gain_division"
         },
         {
-            "name" : "add_photon_noise"
+            "name" : "add_shot_noise_to_err"
         },
         {
             "name" : "dark_subtraction",
