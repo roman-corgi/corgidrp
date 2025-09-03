@@ -564,15 +564,15 @@ def test_star_spec_registration():
     fsam_name = ['OPEN', 'R1C2', 'R6C5', 'R3C1']
     fpam_name = ['OPEN', 'ND225', 'ND475']
 
-    # Seeded
+    # Seeded random generator
     rng = np.random.default_rng(seed=0)
-    # Choose (arbitrarily) which template will be the correct spectrum
+    # Choose (arbitrarily) which template will be the correct stellar spectrum
     disp_ref = 4
-    # Loop over possible values of FSAM and FPAM
+    # Loop over possible setup values (loop over FSAM and FPAM)
     for fsam in fsam_name:
         for fpam in fpam_name:
-            # Create some mock data (for now there's only one combination)
-            file_path = os.path.join(datadir,
+            # Create some mock data (for now, until corgisim, there's only one combination)
+            file_path = os.path.join(test_datadir,
                     'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
             assert os.path.exists(file_path), f'Test FITS file not found: {file_path}'
 
@@ -582,19 +582,21 @@ def test_star_spec_registration():
                 psf_array = hdul[0].data
                 psf_table = Table(hdul[1].data)
 
+            # Add an initial guess of where the centroid is found
             initial_cent = {
                 'xcent': np.array(psf_table['xcent']),
                 'ycent': np.array(psf_table['ycent'])
             }
 
-            # Add wavelength zero-point. Match it to one of the slices to know
-            # the expected output
+            # Add wavelength zero-point, matching it to one of the slices to
+            # know the expected output
             ext_hdr['WV0_X'] = initial_cent['xcent'][disp_ref]
             ext_hdr['WV0_Y'] = initial_cent['ycent'][disp_ref]
         
             assert psf_array.ndim == 3, 'Expected 3D PSF array'
             assert 'xcent' in psf_table.colnames and 'ycent' in psf_table.colnames, 'Missing centroid columns'
         
+            # Update Setup header key values
             ext_hdr['CFAMNAME'] = cfam_name
             ext_hdr['DPAMNAME'] = dpam_name
             ext_hdr['SPAMNAME'] = spam_name
@@ -607,7 +609,7 @@ def test_star_spec_registration():
                 data_2d = np.copy(psf_array[i])
                 err = np.zeros_like(data_2d)
                 dq = np.zeros_like(data_2d, dtype=int)
-                # Different FSM values
+                # Some different FSM values
                 ext_hdr['FSMX'] = i // 5
                 ext_hdr['FSMY'] = i - 5 * (i // 5)
                 image = Image(
@@ -618,17 +620,19 @@ def test_star_spec_registration():
                     dq=dq
                 )
                 psf_images.append(image)
-                # Noisy version for data. The first one has no noise to
-                # test that this is the one outputted by star_spec_registration()
+                # Some noisy version for the simulated data without blowing it
+                # unreasonably. The one with disp_ref has no additional
+                # noise to test that this is the one outputted by star_spec_registration()
                 image_data = Image(
                     data_or_filepath=data_2d + rng.normal(0,
-                        0*np.abs(i-disp_ref)*data_2d.std(), data_2d.shape),
+                        0.1*np.abs(i-disp_ref)*data_2d.std(), data_2d.shape),
                     pri_hdr=pri_hdr,
                     ext_hdr=ext_hdr,
                     err=err,
                     dq=dq
                 )
-                # Add some filename
+                # Add some filename that will be used to check that the correct
+                # spectrum is found
                 image_data.filename = f'test_file_{i}.fits'
                 data_images.append(image_data)
             dataset_template = Dataset(psf_images)
@@ -640,11 +644,14 @@ def test_star_spec_registration():
                 xcent_template=initial_cent['xcent'],
                 ycent_template=initial_cent['ycent'],
                 align_err_disp=disp_ref)
-            # Test it corresponds to the expected best image
+
+            # Tests:
+            # Test that the output corresponds with the expected best image
             assert np.all(best_image.data == dataset_data[disp_ref].data), 'Expected output data does not coincide with the input frame'
-            # Check all but those who depend on clock creation time
+            # Check that all static header values in the primary header coincide
+            # b/w I/O (all but those who depend on clock creation time)
             assert np.all([best_image.pri_hdr[key] == dataset_data[disp_ref].pri_hdr[key] for key in dataset_data[disp_ref].pri_hdr]), 'Some keyword values between the expected output and input disagree'
-            # Check all but those who depend on clock creation time
+            # Similarly for the extended header
             assert np.all([best_image.ext_hdr[key] == dataset_data[disp_ref].ext_hdr[key] for key in dataset_data[disp_ref].ext_hdr if key != 'DRPCTIME']), 'Some keyword values between the expected output and input disagree'
  
 
