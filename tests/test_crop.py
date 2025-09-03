@@ -273,16 +273,21 @@ def test_non_nfov_input():
     for frame in test_dataset:
         frame.ext_hdr['LSAMNAME'] = 'SPEC'
         frame.ext_hdr['CFAMNAME'] = '2F'
-    cropped_data_WFOV_band_4 = crop(test_dataset)
-    assert cropped_data_WFOV_band_4[0].data.shape == (58, 58)
+    cropped_data_spec_band_2 = crop(test_dataset)
+    assert cropped_data_spec_band_2[0].data.shape == (58, 58)
 
     #test SPEC band 3
     for frame in test_dataset:
         frame.ext_hdr['LSAMNAME'] = 'SPEC'
         frame.ext_hdr['CFAMNAME'] = '3F'
-    cropped_data_WFOV_band_4 = crop(test_dataset)
-    assert cropped_data_WFOV_band_4[0].data.shape == (64, 64)
-    
+    cropped_data_spec_band_3 = crop(test_dataset)
+    assert cropped_data_spec_band_3[0].data.shape == (64, 64)
+
+    #test SPEC with slit/prism
+    for frame in test_dataset:
+        frame.ext_hdr['FSAMNAME'] = 'R6C5'
+    cropped_data_spec_band_3_slit = crop(test_dataset)
+    assert cropped_data_spec_band_3_slit[0].data.shape == (124, 124)
 
 if __name__ == "__main__":
     # test_2d_square_center_crop()

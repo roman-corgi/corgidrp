@@ -374,8 +374,8 @@ def crop(input_dataset, sizexy=None, centerxy=None):
                 'WFOV': 20.1,
                 'SPEC': 9.1
             }
-            if cor_mode == 'NFOV' or slit in spec_slits or prism in spec_prisms:
-                # set size to 60 if coronagraph is HLC NFOV or spec slit/prism is used
+            if cor_mode == 'NFOV':
+                # set size to 60 if coronagraph is HLC NFOV
                 sizexy = 60
             elif cor_mode not in cor_outer_working_angle or filter_band not in color_filters:
                 # raise warning if unable to calculate image size
@@ -390,6 +390,9 @@ def crop(input_dataset, sizexy=None, centerxy=None):
                 radius_pix = int(round(radius_arcsec / 0.0218))
                 # update sizexy
                 sizexy = 2 * (padding + radius_pix)
+                # add additional 60 pixels to account for increase in size with spec slit or prism
+                if slit in spec_slits or prism in spec_prisms:
+                    sizexy += 60
                           
 
         # Assign new array sizes and center location
