@@ -743,9 +743,9 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 def star_spec_registration(
     dataset_fsm,
     dataset_template,
+    slit_align_err=0,
     xcent_template=0,
     ycent_template=0,
-    align_err_disp=0,
     halfheight=30):
     """ This function addresses:
 
@@ -772,12 +772,14 @@ def star_spec_registration(
       dataset_template (Dataset): Dataset containing the star spectrum that is
         used as a template to find the image in the dataset_fsm that best
         matches it.
+      slit_align_err (float64): Error in the FSAM alignment. This value is
+        determined after each observation by looking at the data. Even though it
+        may be determined as a real number, it's integer, round value is used in
+        this function.
       xcent_target (float): true x centroid of the template PSF; for accurate
         results this must be determined in advance.
       ycent_target (float): true y centroid of the template PSF; for accurate
         results this must be determined in advance.
-      align_err_disp (float64): Error in the FSAM alignment. This value is
-        determined after each observation by looking at the data.
       halfheight: 1/2 the height of the box used for the fit.
 
     Returns:
@@ -785,9 +787,9 @@ def star_spec_registration(
       that of the target source.
         HDU0 = header only
         HDU1 = binary table containing: 
-          • best_fsmx, best_fsmy (float64): offsets of best-matching image
-          • align_err_disp (float64): alignment error value
-          • best_file (string): filename of best-matching image (also written to HISTORY)
+          • BESTFSMX, BESTFSMY (float64): offsets of best-matching image
+          • SLITERR (float64): alignment error value
+          • BESTFILE (string): filename of best-matching image (also written to HISTORY)
         HDU2 = header only (for consistency)
         HDU3 = header only (for consistency)
       
@@ -823,9 +825,10 @@ def star_spec_registration(
     if (fsam_name != 'OPEN' and fsam_name != 'R1C2' and fsam_name != 'R6C5' and
         fsam_name != 'R3C1'):
         raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
-    # Wavelength zero-point solution must be present
+    # Wavelength zero-point solution must be present in template data
     try:
-        wv0_x, wv0_y = dataset_fsm[0].ext_hdr['WV0_X'], dataset_fsm[0].ext_hdr['WV0_Y']
+        wv0_x = dataset_template[0].ext_hdr['WV0_X']
+        wv0_y = dataset_template[0].ext_hdr['WV0_Y']
     except:
         raise ValueError('Wavelength zero-point keywords WV0_X, WV0_Y are missing')
     # All images must have the same setup
@@ -852,10 +855,11 @@ def star_spec_registration(
     # EXCAM pixels
     zeropt_dist = 1e8
     for idx_img, img in enumerate(dataset_fsm):
+        slit_idx = int(round(slit_align_err))
         x_fit, y_fit = fit_psf_centroid(img.data,
-                     dataset_template[int(round(align_err_disp))].data,
-                     xcent_template = xcent_template[idx_img],
-                     ycent_template = ycent_template[idx_img],
+                     dataset_template[slit_idx].data,
+                     xcent_template = xcent_template[slit_idx],
+                     ycent_template = ycent_template[slit_idx],
                      halfheight = halfheight)[0:2]
 
         # best-matching image is wrt zero-point
@@ -866,6 +870,7 @@ def star_spec_registration(
             img_best.ext_hdr['BESTFSMX'] = x_fit
             img_best.ext_hdr['BESTFSMY'] = y_fit
             img_best.ext_hdr['BESTFILE'] = img_best.filename
+            img_best.ext_hdr['SLITERR']  = slit_align_err
         
     # Check that there's at least one solution
     assert isinstance(img_best, type(img)), 'No suitable best image found.'        
