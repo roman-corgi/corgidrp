@@ -138,6 +138,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert flux_fac_WP1.fluxcal_fac == pytest.approx(flux_fac_WP2.fluxcal_fac, rel=0.05)
 
     ####### Run the DRP walker for unpolarized image
+    # Since we don't directly know the flux of the simulated images used in this test, we 
+    # will compare the fluxcal factor of an unpolarized image with the fluxcal factor of the
+    # polarized images, since all of the images are of the same star and hence the flux of all
+    # three should be comparable if implemented correctly. 
     print('Running walker for unpolarized image')
     walker.walk_corgidrp(data_filelist_unpol, '', fluxcal_outputdir_unpol)
     fluxcal_file_unpol = glob.glob(os.path.join(fluxcal_outputdir_unpol, '*abf_cal*.fits'))[0]
