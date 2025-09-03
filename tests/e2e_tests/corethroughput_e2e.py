@@ -14,6 +14,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
+import corgidrp.l2b_to_l3 as l2b_to_l3
 from corgidrp import caldb
 
 # this file's folder
@@ -118,36 +119,71 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     print('e2e test for corethroughput calibration passed')
     
 @pytest.mark.e2e
-def test_expected_results_simdata_e2e(e2edata_path, e2eoutput_path):
+def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     
     
     # Read the files in the directory
-    files = os.listdir(e2edata_path)
-    data = [os.path.join(e2edata_path, x) for x in files if x.startswith('flux_map-3-f') or x.startswith('pupil')]
+    input_dir = os.path.join(e2edata_path, "ct_band3_shapedpupil")
+    files = os.listdir(input_dir)
+    files.sort()
+    datafiles = [os.path.join(input_dir, x) for x in files if x.startswith('flux_map-3-f') or x.startswith('pupil')]
     
-    # Create the dataset
+    # Create the input data in the right format
     images = []
-    for file in data:
+    for file in datafiles[::10]:
         image = fits.open(file)
-        exptime = image[1].header['EXPTIME']
-        images.append(data.Image(image[0].data/exptime, pri_hdr=image[0].header, ext_hdr=image[1].header))
+        new_image = data.Image(image[0].data, pri_hdr=image[0].header, ext_hdr=image[1].header)
+        new_image.pri_hdr['VISTYPE'] = 'CORETPUT'
+        new_image.ext_hdr['DATALVL'] = "L2b"
+        new_image.ext_hdr['BUNIT'] = "photoelectron"
+        ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
+        new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
+        images.append(new_image)
+    filenames = [img.filename for img in images]
+    def get_filename(img):
+        return img.filename
+    images.sort(key=get_filename)
+
+    # add pupil image
+    pupil_file = os.path.join(input_dir, 'pupil.fits')
+    image = fits.open(pupil_file)
+    new_image = data.Image(image[0].data, pri_hdr=image[0].header, ext_hdr=image[1].header)
+    new_image.pri_hdr['VISTYPE'] = 'CORETPUT'
+    new_image.ext_hdr['DATALVL'] = "L2b"
+    new_image.ext_hdr['BUNIT'] = "photoelectron"
+    new_image.ext_hdr['DPAMNAME'] = 'PUPIL'
+    new_image.ext_hdr['LSAMNAME'] = 'OPEN'
+    new_image.ext_hdr['FSAMNAME'] = 'OPEN'
+    new_image.ext_hdr['FPAMNAME'] = 'OPEN_12'
+    ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
+    new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
+    images.append(new_image)
 
     dataset = data.Dataset(images)
     
     # Create the output directory
-    corethroughput_outputdir = os.path.join(e2eoutput_path, 'l2b_to_corethroughput_output_sim_data')
+    corethroughput_outputdir = os.path.join(e2eoutput_path, 'l2b_to_corethroughput_band3_sp_output_data')
     if os.path.exists(corethroughput_outputdir):
         shutil.rmtree(corethroughput_outputdir)
     os.mkdir(corethroughput_outputdir)
-    
-    walker.walk_corgidrp(data, '', corethroughput_outputdir)
+
+    # save the input data
+    l2b_data_dir = os.path.join(corethroughput_outputdir, 'l2b_data')
+    os.mkdir(l2b_data_dir)
+    dataset.save(filedir=l2b_data_dir)
+    l2b_filenames = glob.glob(os.path.join(l2b_data_dir, '*.fits'))
+    l2b_filenames.sort()
+
+    walker.walk_corgidrp(l2b_filenames, '', corethroughput_outputdir)
     
     # Load in the output data. It should be the latest CTP_CAL file produced.
     corethroughput_drp_file = glob.glob(os.path.join(corethroughput_outputdir,
-        '*CTP_CAL*.fits'))[0]
+        '*ctp_cal.fits'))[0]
     ct_cal_drp = data.CoreThroughputCalibration(corethroughput_drp_file)
     
-    ct_cal_sim = corethroughput.generate_ct_cal(dataset)
+    # run the recipe directly to check out it comes
+    dataset_normed = l2b_to_l3.divide_by_exptime(dataset)
+    ct_cal_sim = corethroughput.generate_ct_cal(dataset_normed)
 
     # Asserts
 
@@ -159,17 +195,16 @@ def test_expected_results_simdata_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_cal_drp.ct_fsam == ct_cal_sim.ct_fsam)
 
     assert ct_cal_drp.data is not None, "CoreThroughput calibration data is None"
-    assert len(ct_cal_drp.data) == len(dataset), "CoreThroughput calibration data length does not match dataset length"
-    assert len(ct_cal_drp.data) == len(ct_cal_drp.ct_excam), "CoreThroughput calibration excam length does not match data length"
-    assert ct_cal_drp.ct_excam is not None, "CoreThroughput excam data is None"
+    assert len(ct_cal_drp.data) == len(dataset) - 1, "CoreThroughput calibration data length does not match dataset length"
+    assert ct_cal_drp.data.shape[0] == ct_cal_drp.ct_excam.shape[1], "CoreThroughput calibration excam length does not match data length"
     assert ct_cal_drp.err is not None, "CoreThroughput error data is None"
     assert ct_cal_drp.dq is not None, "CoreThroughput dq data is None"
     
-    assert np.min(ct_cal_drp.ct_excam[:, 2]) > 0, "CoreThroughput measurements have non-positive values"
-    assert np.max(ct_cal_drp.ct_excam[:, 2]) <= 1, "CoreThroughput measurements exceed 1"
+    assert np.min(ct_cal_drp.ct_excam[2]) > 0, "CoreThroughput measurements have non-positive values"
+    assert np.max(ct_cal_drp.ct_excam[2]) <= 1, "CoreThroughput measurements exceed 1"
 
     # Print success message
-    print('e2e test for corethroughput calibration with simulated data passed')
+    print('e2e test for corethroughput calibration with simulated band3 shaped pupil data passed')
     
 if __name__ == "__main__":
     # Use arguments to run the test. Users can then write their own scripts
@@ -183,11 +218,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
                     help='Path to CGI_TVAC_Data Folder [%(default)s]')
-    ap.add_argument('-e2es', '--e2esim_dir', default=e2edata_path,
-                    help='Path to simulated data Folder [%(default)s]')
     ap.add_argument('-o', '--outputdir', default=outputdir,
                     help='directory to write results to [%(default)s]')
     args = ap.parse_args()
     outputdir = args.outputdir
-    test_expected_results_e2e(args.e2edata_dir, args.outputdir)
-    test_expected_results_simdata_e2e(args.e2esim_dir, args.outputdir)
+    # test_expected_results_e2e(args.e2edata_dir, args.outputdir)
+    test_expected_results_spc_band3_simdata_e2e(args.e2edata_dir, args.outputdir)
