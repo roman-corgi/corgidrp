@@ -224,7 +224,7 @@ def test_unsupported_input():
     try:
         _ = crop(test_dataset,sizexy=20,centerxy=None)
     except:
-        raise ValueError('Crop function is currently only configured for NFOV, WFOV, and SPEC observations in bands 1, 2, 3, and 4 if sizexy is not provided.')
+        raise ValueError('Unable to determine image size, please change instrument configuration or provide a sizexy value')
     
     
     with pytest.raises(UserWarning):

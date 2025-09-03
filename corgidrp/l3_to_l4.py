@@ -359,23 +359,38 @@ def crop(input_dataset, sizexy=None, centerxy=None):
 
         # Pick default crop size based on the size of the effective field of view
         if sizexy is None:
-            outer_working_angle_mas = {
-                # info found on table 1: https://arxiv.org/pdf/2108.05986
-                'WFOV_band_1': 1008.8,
-                'WFOV_band_4': 1447.4,
-                'SPEC_band_2': 524.2,
-                'SPEC_band_3': 579.8
+            filter_band = exthdr['CFAMNAME']
+            # change filter names ending in F to just the number
+            if filter_band[1] == 'F':
+                filter_band = filter_band[0]
+            prism = exthdr['DPAMNAME']
+            slit = exthdr['FSAMNAME']
+            cor_mode = exthdr['LSAMNAME']
+            spec_slits = ['R1C2', 'R2C3', 'R2C4', 'R2C5', 'R3C1', 'R3C2', 'R4C6', 'R5C1', 'R5C2', 'R6C3', 'R6C4', 'R6C5']
+            spec_prisms = ['PRISM2', 'PRISM3']
+            color_filters = ['1', '1A', '1B', '1C', '2', '2A', '2B', '2C', '3', '3A', '3B', '3C', '3D', '3E', '3F', '3G', '4', '4A', '4B', '4C']
+            # outer working angle in lambda/D
+            cor_outer_working_angle = {
+                'WFOV': 20.1,
+                'SPEC': 9.1
             }
-            observing_mode = exthdr['LSAMNAME'] + '_band_' + exthdr['CFAMNAME'][0]
-            if exthdr['LSAMNAME'] == 'NFOV':
+            if cor_mode == 'NFOV' or slit in spec_slits or prism in spec_prisms:
+                # set size to 60 if coronagraph is HLC NFOV or spec slit/prism is used
                 sizexy = 60
-            elif observing_mode not in outer_working_angle_mas:
-                raise UserWarning('Crop function is currently only configured for NFOV, WFOV, and SPEC observations in bands 1, 2, 3, and 4 if sizexy is not provided.')
+            elif cor_mode not in cor_outer_working_angle or filter_band not in color_filters:
+                # raise warning if unable to calculate image size
+                raise UserWarning('Unable to determine image size, please change instrument configuration or provide a sizexy value')
             else:
+                ## calculate image size using coronagraph information
                 padding = 5
-                #convert mas to pixels
-                radius_pix = int(round(outer_working_angle_mas[observing_mode]/21.8))
-                sizexy = 2 * (radius_pix + padding)             
+                diam = 2.363114
+                # convert lambda/D to arcsec
+                radius_arcsec = cor_outer_working_angle[cor_mode] * ((read_cent_wave(filter_band)[0] * 1e-9) / diam) * 206265
+                # convert arcsec to pix, 1 pix = 0.0218", round to nearest integer
+                radius_pix = int(round(radius_arcsec / 0.0218))
+                # update sizexy
+                sizexy = 2 * (padding + radius_pix)
+                          
 
         # Assign new array sizes and center location
         frame_shape = frame.data.shape
