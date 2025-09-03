@@ -15,9 +15,9 @@ from corgidrp import caldb
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Load in L1 polarimetric data
     # Load in unpolarized data also for comparison 
-    WP1_input_path = os.path.join(e2edata_path, 'corgisim_polarimetry_data', 'simulated_polarimetric_L1_HLC_WP1.fits')
-    WP2_input_path = os.path.join(e2edata_path, 'corgisim_polarimetry_data', 'simulated_polarimetric_L1_HLC_WP2.fits')
-    unpol_input_path = os.path.join(e2edata_path, 'corgisim_polarimetry_data', 'simulated_unpol_L1_HLC.fits')
+    WP1_input_path = os.path.join(e2edata_path, 'corgisim_fluxcal_polarimetry_data', 'simulated_polarimetric_L1_HLC_WP1.fits')
+    WP2_input_path = os.path.join(e2edata_path, 'corgisim_fluxcal_polarimetry_data', 'simulated_polarimetric_L1_HLC_WP2.fits')
+    unpol_input_path = os.path.join(e2edata_path, 'corgisim_fluxcal_polarimetry_data', 'simulated_unpol_L1_HLC.fits')
     L1_image_WP1 = data.Image(WP1_input_path)
     L1_image_WP2 = data.Image(WP2_input_path)
     L1_image_unpol = data.Image(unpol_input_path)
