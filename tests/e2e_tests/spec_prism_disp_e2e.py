@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import logging
 import pytest
 import argparse
+import warnings
+from astropy.io.fits.verify import VerifyWarning
 
 from corgidrp.data import Dataset, DispersionModel
 from corgidrp.spec import compute_psf_centroid, calibrate_dispersion_model
@@ -257,7 +259,9 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
             # Save as FITS
             primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
             image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
-            fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=VerifyWarning)
+                fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
 
         # Load saved files back into dataset
         saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))

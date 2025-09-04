@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
+from numpy.exceptions import RankWarning
 
 from corgidrp import check
 import corgidrp.data as data
@@ -731,15 +732,17 @@ def calibrate_nonlin(dataset_nl,
         y_rel_err = np.abs((corr_mean_signal_sorted - y0)/corr_mean_signal_sorted)
         rms_y_rel_err = np.sqrt(np.mean(y_rel_err**2))
         # NOTE: the following limits were determined with simulated frames
-        if rms_y_rel_err < rms_low_limit:
-            p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
-        elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
-                            corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
-        else:
-            p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
-                            corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
-        y1 = np.polyval(p1, filt_exp_times_sorted)
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', category=RankWarning)
+            if rms_y_rel_err < rms_low_limit:
+                p1 = np.polyfit(filt_exp_times_sorted, corr_mean_signal_sorted, 1)
+            elif (rms_y_rel_err >= rms_low_limit) and (rms_y_rel_err < rms_upp_limit):
+                p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 
+                                corr_mean_signal_sorted[pfit_low_cutoff1:pfit_upp_cutoff1], 1)
+            else:
+                p1 = np.polyfit(filt_exp_times_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 
+                                corr_mean_signal_sorted[pfit_low_cutoff2:pfit_upp_cutoff2], 1)
+            y1 = np.polyval(p1, filt_exp_times_sorted)
         
         if make_plot:
             fname = 'non_lin_fit'
@@ -804,7 +807,7 @@ def calibrate_nonlin(dataset_nl,
         normconst = rel_gain_interp[idxnorm]
         rel_gain_interp /= normconst
         if (norm_val < temp_min) or (norm_val > temp_max):
-            warnings.warn('norm_val is not between the minimum and maximum values '
+            print('norm_val is not between the minimum and maximum values '
                           'of the means for the current EM gain. Extrapolation '
                           'will be used for norm_val.')
         
