@@ -798,7 +798,7 @@ class LineSpread(Image):
                                               with shape (N, 2), where N is the length of the wavelength array.
         pri_hdr (fits.Header): Primary header.
         ext_hdr (fits.Header): Extension header.
-        gauss_par (np.ndarray): Gaussian fit parameters: [amplitude, mean_wavelen, fwhm]
+        gauss_par (np.ndarray): Gaussian fit parameters + corresponding errors: [amplitude, mean_wavelen, fwhm, amp_err, wave_err, fwhm_err]
         input_dataset (Dataset): Dataset used to generate this calibration.
         
     Attr:
@@ -807,6 +807,9 @@ class LineSpread(Image):
         amplitude (float): Gaussian amplitude
         mean_wave (float): mean wavelength
         fwhm (float): Gaussian FWHM
+        amp_err (float): fit error of the amplitude
+        wave_err (float): fit error of the mean wavelength
+        fwhm_err (float): fit error of the Gaussian fwhm
     """
     def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, gauss_par=None, input_dataset=None):
         super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
@@ -819,6 +822,7 @@ class LineSpread(Image):
                 raise ValueError("Must pass `input_dataset` to create new LineSpread calibration.")
 
             self.ext_hdr['DATATYPE'] = 'LineSpread'
+            self.ext_hdr['EXTNAME'] = 'FLUX_PROF'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
 
@@ -826,8 +830,8 @@ class LineSpread(Image):
             base = input_dataset[0].filename.split(".fits")[0]
             self.filename = f"{base}_line_spread.fits"
             if gauss_par is not None:
-                if not (gauss_par.ndim == 1 and len(gauss_par) == 3):
-                    raise ValueError('The LineSpread calibration gauss_par array must have 3 entries')
+                if not (gauss_par.ndim == 1 and len(gauss_par) == 6):
+                    raise ValueError('The LineSpread calibration gauss_par array must have 6 entries')
                 else:
                     self.gauss_par = gauss_par
             else:
@@ -853,6 +857,9 @@ class LineSpread(Image):
         self.amplitude = self.gauss_par[0]
         self.mean_wave = self.gauss_par[1]
         self.fwhm = self.gauss_par[2]
+        self.amp_err = self.gauss_par[3]
+        self.wave_err = self.gauss_par[4]
+        self.fwhm_err = self.gauss_par[5]
    
     def save(self, filedir=None, filename=None):
         """

@@ -567,12 +567,15 @@ def test_linespread_function():
     line_spread.save(filedir = output_dir)
     
     line_spread_load = LineSpread(os.path.join(output_dir, line_spread.filename))
-    assert np.array_equal(line_spread_load.gauss_par, np.array([line_spread.amplitude, line_spread.mean_wave, line_spread.fwhm]))
+    assert np.array_equal(line_spread_load.gauss_par, np.array([line_spread.amplitude, line_spread.mean_wave, line_spread.fwhm, line_spread.amp_err, line_spread.wave_err, line_spread.fwhm_err]))
     assert np.array_equal(line_spread.flux_profile, line_spread_load.flux_profile)
     assert np.array_equal(line_spread.wavlens, line_spread_load.wavlens)
     assert line_spread_load.amplitude == line_spread.amplitude
     assert line_spread_load.fwhm == line_spread.fwhm
     assert line_spread_load.mean_wave == line_spread.mean_wave
+    assert line_spread_load.amp_err == line_spread.amp_err
+    assert line_spread_load.fwhm_err == line_spread.fwhm_err
+    assert line_spread_load.wave_err == line_spread.wave_err
     
     
 if __name__ == "__main__":

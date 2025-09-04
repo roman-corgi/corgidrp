@@ -774,8 +774,11 @@ def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm 
         raise AttributeError("No narrowband frames found in input dataset")
     
     wave = []
+    wave_err = []
     fwhm = []
+    fwhm_err = []
     peak = []
+    peak_err = []
     wavlens = []
     flux_profile = []
     for image in nar_dataset:
@@ -793,22 +796,29 @@ def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm 
         g_init = models.Gaussian1D(amplitude = np.max(flux_p),
                                    mean = wav[halfheight], 
                                    stddev = guess_fwhm/(2 * np.sqrt(2*np.log(2))))
-        fit_g = fitting.LevMarLSQFitter()
+        fit_g = fitting.LevMarLSQFitter(calc_uncertainties=True)
         g_func = fit_g(g_init, x = wav, y = flux_p)
         fwhm.append(2 * np.sqrt(2*np.log(2)) * g_func.stddev.value)
         wave.append(g_func.mean.value)
         peak.append(g_func.amplitude.value)
+        errors = np.diagonal(fit_g.fit_info.get("param_cov"))
+        peak_err.append(errors[0])
+        wave_err.append(errors[1])
+        fwhm_err.append(errors[2] * 8 * np.log(2))
     
     mean_peak = np.mean(np.array(peak))
     mean_fwhm = np.mean(np.array(fwhm))
     mean_wave = np.mean(np.array(wave))
+    mean_peak_err = np.sqrt(np.sum(np.array(peak_err)))
+    mean_wave_err = np.sqrt(np.sum(np.array(wave_err)))
+    mean_fwhm_err = np.sqrt(np.sum(np.array(fwhm_err)))
     mean_flux_profile = np.mean(np.array(flux_profile), axis = 0)
     mean_wavlens = np.mean(np.array(wavlens), axis = 0)
     prihdr = nar_dataset[0].pri_hdr.copy()
     exthdr = nar_dataset[0].ext_hdr.copy()
     
     ls_data = np.array([mean_wavlens, mean_flux_profile])
-    gauss_profile = np.array([mean_peak, mean_wave, mean_fwhm])
+    gauss_profile = np.array([mean_peak, mean_wave, mean_fwhm, mean_peak_err, mean_wave_err, mean_fwhm_err])
     
     line_spread = LineSpread(ls_data, pri_hdr = prihdr, ext_hdr = exthdr, gauss_par = gauss_profile, input_dataset = nar_dataset)
     return line_spread
