@@ -460,6 +460,14 @@ class Image():
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # recast header data to the appropriate bit depth as set by the pipeline settings
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_bit_depth)
+        if self.err is not None:
+            self.err = self.err.astype(corgidrp.image_bit_depth)
+        if self.dq is not None:
+            self.dq = self.dq.astype(corgidrp.dq_bit_depth)
+            
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
