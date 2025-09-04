@@ -1,7 +1,6 @@
 import configparser
 import os
 import pathlib
-import configparser
 import numpy as np
 
 __version__ = "3.0-alpha"
@@ -49,7 +48,7 @@ def create_config_dir():
         # overwrite with old settings if needed
         if oldconfig is not None:
             config["PATH"]["caldb"] = oldconfig["PATH"]["caldb"]
-
+            
         with open(config_filepath, 'w') as f:
             config.write(f)
 
