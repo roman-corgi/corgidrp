@@ -41,7 +41,6 @@ def convert_tvac_to_dataset():
     
         psf_images = []
         file_names = []
-        basetime = datetime.now()
         for i in range(psf_array.shape[0]):
             data_2d = np.copy(psf_array[i])
             err = np.zeros_like(data_2d)
@@ -64,16 +63,14 @@ def convert_tvac_to_dataset():
             image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
             image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
             psf_images.append(image)
-            
-            # Generate timestamp for this file
-            dt = basetime + timedelta(seconds=i)
-            filename = get_formatted_filename(dt, pri_hdr['VISITID'])
-            file_names.append(filename)
-        
-        # Sort by CFAMNAME for deterministic output
-        sorted_indices = sorted(range(len(psf_images)), key=lambda x: psf_images[x].ext_hdr['CFAMNAME'])
-        psf_images = [psf_images[i] for i in sorted_indices]
-        file_names = [file_names[i] for i in sorted_indices]
+            if i > 0 and i <10:
+                num = "0"+str(i)
+            else:
+                num = str(i)
+            if k == 0:
+                file_names.append("spec_unocc_noslit_offset_prism3_3d_" +num+".fits")
+            else:
+                file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
         
         #for now only one image needed as template
         dataset = Dataset([psf_images[12]])
@@ -96,7 +93,6 @@ def convert_tvac_to_dataset():
     
     psf_images = []
     file_names = []
-    basetime = datetime.now()
     for i in range(psf_array.shape[0]):
         data_2d = np.copy(psf_array[i])
         err = np.zeros_like(data_2d)
@@ -117,17 +113,11 @@ def convert_tvac_to_dataset():
         image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
         image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
         psf_images.append(image)
-        
-        # Generate timestamp for this file
-        dt = basetime + timedelta(seconds=i)
-        filename = get_formatted_filename(dt, pri_hdr['VISITID'])
-        file_names.append(filename)
-    
-    # Sort by CFAMNAME for deterministic output
-    sorted_indices = sorted(range(len(psf_images)), key=lambda x: psf_images[x].ext_hdr['CFAMNAME'])
-    psf_images = [psf_images[i] for i in sorted_indices]
-    file_names = [file_names[i] for i in sorted_indices]
-    
+        if i>0 and i <10:
+            num = "0"+str(i)
+        else:
+            num = str(i)
+        file_names.append("spec_unocc_noslit_prism3_filtersweep_" +num+".fits")
     dataset = Dataset(psf_images)
     dataset.save(filedir=template_dir, filenames = file_names)
 
@@ -315,7 +305,7 @@ def test_calibrate_dispersion_model():
             err=err,
             dq=dq
         )
-        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper()
         psf_images.append(image)
 
     dataset = Dataset(psf_images)
