@@ -640,7 +640,8 @@ def test_star_spec_registration():
             dataset_data     = Dataset(data_images)
         
             # Identify best image. Pass template and guessed centroids
-            best_image = steps.star_spec_registration(dataset_data,
+            best_image = steps.star_spec_registration(
+                dataset_data,
                 dataset_template,
                 xcent_template=initial_cent['xcent'],
                 ycent_template=initial_cent['ycent'],
@@ -651,14 +652,75 @@ def test_star_spec_registration():
             assert np.all(best_image.data == dataset_data[slit_ref].data), 'Expected output data does not coincide with the input frame'
             # Check that all static header values in the primary header coincide
             # b/w I/O (all but those who depend on clock creation time)
-            assert np.all([best_image.pri_hdr[key] == dataset_data[slit_ref].pri_hdr[key] for key in dataset_data[slit_ref].pri_hdr]), 'Some keyword values between the expected output and input disagree'
+            assert np.all([best_image.pri_hdr[key] == dataset_data[slit_ref].pri_hdr[key] 
+                for key in dataset_data[slit_ref].pri_hdr]), 'Some keyword values between the expected output and input disagree'
             # Similarly for the extended header
-            assert np.all([best_image.ext_hdr[key] == dataset_data[slit_ref].ext_hdr[key] for key in dataset_data[slit_ref].ext_hdr if key != 'DRPCTIME']), 'Some keyword values between the expected output and input disagree'
+            assert np.all([best_image.ext_hdr[key] == dataset_data[slit_ref].ext_hdr[key]
+                for key in dataset_data[slit_ref].ext_hdr if key != 'DRPCTIME']), 'Some keyword values between the expected output and input disagree'
  
 
     # Expected failures
-    # Break assumptions
- 
+    pam_list = ['CFAMNAME', 'DPAMNAME', 'SPAMNAME', 'LSAMNAME', 'FSAMNAME',
+        'FPAMNAME']
+
+    for pam in pam_list:
+        # Store current common value
+        tmp = dataset_data[0].ext_hdr[pam]
+        # Set it to some value that will disagree
+        dataset_data[0].ext_hdr[pam] = ''
+        with pytest.raises(ValueError):
+            steps.star_spec_registration(
+                dataset_data,
+                dataset_template,
+                xcent_template=initial_cent['xcent'],
+                ycent_template=initial_cent['ycent'],
+                slit_align_err=slit_ref)
+        print(f'PAM failure test for {pam} passed')
+        dataset_data[0].ext_hdr[pam] = tmp
+    # Remove WV0_X/Y keywords
+    del dataset_data[0].ext_hdr['WV0_X']
+    with pytest.raises(ValueError):
+        steps.star_spec_registration(
+            dataset_data,
+            dataset_template,
+            xcent_template=initial_cent['xcent'],
+            ycent_template=initial_cent['ycent'],
+            slit_align_err=slit_ref)
+    print('WV0_X failure test passed')
+    dataset_data[0].ext_hdr['WV0_X'] = 30.
+    del dataset_data[0].ext_hdr['WV0_Y']
+    with pytest.raises(ValueError):
+        steps.star_spec_registration(
+            dataset_data,
+            dataset_template,
+            xcent_template=initial_cent['xcent'],
+            ycent_template=initial_cent['ycent'],
+            slit_align_err=slit_ref)
+    print('WV0_Y failure test passed')
+    dataset_data[0].ext_hdr['WV0_Y'] = 30.
+
+    # Remove FSMX/Y keywords
+    del dataset_data[0].ext_hdr['FSMX']
+    with pytest.raises(AssertionError):
+        steps.star_spec_registration(
+            dataset_data,
+            dataset_template,
+            xcent_template=initial_cent['xcent'],
+            ycent_template=initial_cent['ycent'],
+            slit_align_err=slit_ref)
+    print('FSMX failure test passed')
+    dataset_data[0].ext_hdr['FSMX'] = 30.
+    del dataset_data[0].ext_hdr['FSMY']
+    with pytest.raises(AssertionError):
+        steps.star_spec_registration(
+            dataset_data,
+            dataset_template,
+            xcent_template=initial_cent['xcent'],
+            ycent_template=initial_cent['ycent'],
+            slit_align_err=slit_ref)
+    print('FSMY failure test passed')
+    dataset_data[0].ext_hdr['FSMY'] = 30.
+    
     print('Star spectrum registration passed')
     
 if __name__ == "__main__":
