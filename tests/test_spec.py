@@ -571,7 +571,7 @@ def test_star_spec_registration():
     # Loop over possible setup values (loop over FSAM and FPAM)
     for fsam in fsam_name:
         for fpam in fpam_name:
-            # Create some mock data for the temaplate with spectra
+            # Create some mock data for the template with spectra
             file_path = os.path.join(test_datadir,
                     'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
             assert os.path.exists(file_path), f'Test FITS file not found: {file_path}'
@@ -580,6 +580,9 @@ def test_star_spec_registration():
             with fits.open(file_path) as hdul:
                 psf_array = hdul[0].data
                 psf_table = Table(hdul[1].data)
+
+            assert psf_array.ndim == 3, 'Expected 3D PSF array'
+            assert 'xcent' in psf_table.colnames and 'ycent' in psf_table.colnames, 'Missing centroid columns'
 
             # Add an initial guess of where the centroid is found
             initial_cent = {
@@ -592,9 +595,6 @@ def test_star_spec_registration():
             # best image later
             ext_hdr['WV0_X'] = initial_cent['xcent'][slit_ref]
             ext_hdr['WV0_Y'] = initial_cent['ycent'][slit_ref]
-        
-            assert psf_array.ndim == 3, 'Expected 3D PSF array'
-            assert 'xcent' in psf_table.colnames and 'ycent' in psf_table.colnames, 'Missing centroid columns'
         
             # Update Setup header key values
             ext_hdr['CFAMNAME'] = cfam_name
@@ -649,6 +649,7 @@ def test_star_spec_registration():
 
             # Tests:
             # Test that the output corresponds with the expected best image
+            assert best_image.filename == f'test_file_{slit_ref}.fits'
             assert np.all(best_image.data == dataset_data[slit_ref].data), 'Expected output data does not coincide with the input frame'
             # Check that all static header values in the primary header coincide
             # b/w I/O (all but those who depend on clock creation time)

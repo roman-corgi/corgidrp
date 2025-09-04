@@ -9,7 +9,7 @@ import pytest
 import argparse
 
 from corgidrp.data import Dataset, DispersionModel
-from corgidrp.spec import star_spectrum_registration
+from corgidrp.spec import star_spec_registration
 from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
@@ -142,8 +142,8 @@ def get_latest_cal_file(e2eoutput_path, pattern):
 # Main Spec Prism Disp E2E Test Function
 # ================================================================================
 
-def run_star_spectrum_registration_e2e_test(e2edata_path, e2eoutput_path):
-    """Run the complete star_spectrum_registration end-to-end test.
+def run_star_spec_registration_e2e_test(e2edata_path, e2eoutput_path):
+    """Run the complete star spectrum registration end-to-end test.
     
     This function consolidates all the test steps into a single linear flow
     for easier reading and understanding.
@@ -168,73 +168,131 @@ def run_star_spectrum_registration_e2e_test(e2edata_path, e2eoutput_path):
     cfam_test = '3F'
 
     # Check if input folder already contains the expected files
-    breakpoint()
-    existing_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
+    existing_files_template = sorted(glob.glob(os.path.join(e2edata_path,
+        'template', 'cgi_*_l2b.fits')))
+    existing_files_data = sorted(glob.glob(os.path.join(e2edata_path,
+        'data', 'cgi_*_l2b.fits')))
     
-    if existing_files:
-        logger.info(f"Found {len(existing_files)} existing L2b files in {e2edata_path}")
-        logger.info("Using existing input files (skipping generation)")
-        saved_files = existing_files
-        l2b_dataset_with_filenames = Dataset(saved_files)
+    if existing_files_template and existing_files_data:
+        logger.info(f'Found {len(existing_files_template)} existing L2b files in {e2edata_path}/template/')
+        logger.info(f'Found {len(existing_files_template)} existing L2b files in {e2edata_path}/data/')
+        logger.info('Using existing input files (skipping generation)')
+        dataset_template = Dataset(existing_files_template)
+        dataset_data = Dataset(existing_files_data)
     else:
-        logger.info("No existing input files found. Generating new input files...")
+        logger.info('No existing input files found. Generating new input files...')
         
         # Load test data
-        datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
-        file_path = os.path.join(datadir,
-            f'g0v_vmag6_spc-spec_band{cfam_test[0]:s}_unocc_NOSLIT_PRISM{cfam_test[0]}_filtersweep_withoffsets.fits')
+        test_datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
 
-        assert os.path.exists(file_path), f'Test file not found: {file_path}'
+        # Create some mock data for the template with spectra
+        file_path = os.path.join(test_datadir,
+                'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
+        assert os.path.exists(file_path), f'Test FITS file not found: {file_path}'
 
-        psf_array = fits.getdata(file_path, ext=0)
-        psf_table = Table(fits.getdata(file_path, ext=1))
+        with fits.open(file_path) as hdul:
+            psf_array = hdul[0].data
+            psf_table = Table(hdul[1].data)
 
         # Create dataset with mock headers and noise
-        pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-        ext_hdr["DPAMNAME"] = f'PRISM{cfam_test[0]:s}'
-        ext_hdr["FSAMNAME"] = 'OPEN'
+        pri_hdr, ext_hdr = create_default_L2b_headers()[0:2]
 
-        # Add random noise for reproducibility
-        np.random.seed(5)
-        read_noise = 200
-        noisy_data_array = (np.random.poisson(np.abs(psf_array) / 2) + 
-                            np.random.normal(loc=0, scale=read_noise, size=psf_array.shape))
+        # Instrumental setup
+        cfam_name = '3F'
+        dpam_name = 'PRISM3'
+        spam_name = 'SPEC'
+        lsam_name = 'SPEC'
+        fsam_name = 'R1C2'
+        fpam_name = 'ND225'
 
-        # Create Image objects
-        psf_images = []
-        for i in range(noisy_data_array.shape[0]):
-            image = Image(
-                data_or_filepath=np.copy(noisy_data_array[i]),
-                pri_hdr=pri_hdr.copy(),
-                ext_hdr=ext_hdr.copy(),
-                err=np.zeros_like(noisy_data_array[i]),
-                dq=np.zeros_like(noisy_data_array[i], dtype=int)
+        # Seeded random generator
+        rng = np.random.default_rng(seed=0)
+        # Choose (arbitrarily) which template will be the correct stellar spectrum
+        slit_ref = 4
+
+        # Add an initial guess of where the centroid is found
+        initial_cent = {
+            'xcent': np.array(psf_table['xcent']),
+            'ycent': np.array(psf_table['ycent'])
+        }
+
+        # Add wavelength zero-point. In this test, we set it in a way that
+        # matches one of the slices, so that we can predict which one is the
+        # best image later
+        ext_hdr['WV0_X'] = initial_cent['xcent'][slit_ref]
+        ext_hdr['WV0_Y'] = initial_cent['ycent'][slit_ref]
+
+        # Update Setup header key values
+        ext_hdr['CFAMNAME'] = cfam_name
+        ext_hdr['DPAMNAME'] = dpam_name
+        ext_hdr['SPAMNAME'] = spam_name
+        ext_hdr['LSAMNAME'] = lsam_name
+        ext_hdr['FSAMNAME'] = fsam_name
+        ext_hdr['FPAMNAME'] = fpam_name
+        template_images = []
+        data_images = []
+        for i in range(psf_array.shape[0]):
+            data_2d = np.copy(psf_array[i])
+            err = np.zeros_like(data_2d)
+            dq = np.zeros_like(data_2d, dtype=int)
+            # Store template data as a DRP object
+            image_template = Image(
+                data_or_filepath=data_2d,
+                pri_hdr=pri_hdr,
+                ext_hdr=ext_hdr,
+                err=err,
+                dq=dq
             )
-            image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
-            psf_images.append(image)
-
+            template_images.append(image_template)
+            # Some noisy version for the simulated data without blowing it
+            # unreasonably. The one with slit_ref has no additional
+            # noise to test that this is the one outputted by star_spec_registration()
+            # Collected data have different FSM values
+            ext_hdr['FSMX'] = i // 5
+            ext_hdr['FSMY'] = i - 5 * (i // 5)
+            image_data = Image(
+                data_or_filepath=data_2d + rng.normal(0,
+                    0.1*np.abs(i-slit_ref)*data_2d.std(), data_2d.shape),
+                pri_hdr=pri_hdr,
+                ext_hdr=ext_hdr,
+                err=err,
+                dq=dq
+            )
+            data_images.append(image_data)
         # Save images to disk with timestamped filenames
         def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
             visitid = pri_hdr.get('VISITID', '0000000000000000000')
             now = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
-            return f"cgi_{visitid}_{now}_{suffix}.fits"
+            return f'cgi_{visitid}_{now}_{suffix}.fits'
 
         basetime = datetime.now()
-        for i, img in enumerate(psf_images):
-            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix="l2b")
-            fpath = os.path.join(e2edata_path, fname)
-            
+        for i, img in enumerate(template_images):
+            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix='l2b')
+            fpath = os.path.join(e2edata_path, 'template', fname)
             # Save as FITS
             primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
             image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
             fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)
+        for i, img in enumerate(data_images):
+            fname = get_formatted_filename(img.pri_hdr, basetime + timedelta(seconds=i), suffix='l2b')
+            fpath = os.path.join(e2edata_path, 'data', fname)
+            # Save as FITS
+            primary_hdu = fits.PrimaryHDU(header=img.pri_hdr)
+            image_hdu = fits.ImageHDU(data=img.data, header=img.ext_hdr)
+            fits.HDUList([primary_hdu, image_hdu]).writeto(fpath, overwrite=True)        
 
         # Load saved files back into dataset
-        saved_files = sorted(glob.glob(os.path.join(e2edata_path, 'cgi_*_l2b.fits')))
-        assert len(saved_files) > 0, f'No saved L2b files found in {e2edata_path}!'
+        saved_template_files = sorted(glob.glob(os.path.join(e2edata_path, 'template', 'cgi_*_l2b.fits')))
+        assert len(saved_template_files) > 0, f'No saved L2b files found in {e2edata_path}/template/!'
 
-        l2b_dataset_with_filenames = Dataset(saved_files)
-        logger.info(f"Generated and saved {len(saved_files)} new input files")
+        dataset_template = Dataset(saved_template_files)
+        logger.info(f"Generated and saved {len(saved_template_files)} new template files")
+
+        saved_data_files = sorted(glob.glob(os.path.join(e2edata_path, 'data', 'cgi_*_l2b.fits')))
+        assert len(saved_data_files) > 0, f'No saved L2b files found in {e2edata_path}/data/!'
+
+        dataset_fsm = Dataset(saved_data_files)
+        logger.info(f"Generated and saved {len(saved_data_files)} new data files")
 
     breakpoint()
     # Double check and set up rest of PAM enumvalues
@@ -335,8 +393,6 @@ def run_star_spectrum_registration_e2e_test(e2edata_path, e2eoutput_path):
     
     return disp_model, coeffs, angle
 
-
-
 # ================================================================================
 # Pytest Test Function
 # ================================================================================
@@ -354,23 +410,26 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    breakpoint()
     # Adjust folders
-    # Create the spec_prism_disp_e2e subfolder regardless
-    input_top_level = os.path.join(e2edata_path, 'spec_prism_disp_e2e')
-    output_top_level = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e')
+    # Create the e2e subfolder regardless
+    input_top_level = os.path.join(e2edata_path)
+    output_top_level = os.path.join(e2eoutput_path)
     
     os.makedirs(input_top_level, exist_ok=True)
     os.makedirs(output_top_level, exist_ok=True)
+
+    # Add subfloders for template (reference spectra) and data (FSM values)
+    os.makedirs(os.path.join(input_top_level, 'template'), exist_ok=True)
+    os.makedirs(os.path.join(input_top_level, 'data'), exist_ok=True)
     
     # Update paths to use the subfolder structure
     e2edata_path = input_top_level
     e2eoutput_path = output_top_level
     
-    log_file = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e.log')
+    log_file = os.path.join(e2eoutput_path, 'star_spec_registration_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
-    logger = logging.getLogger('spec_prism_disp_e2e')
+    logger = logging.getLogger('star_spec_registration_e2e')
     logger.setLevel(logging.INFO)
     
     # Clear any existing handlers to avoid duplicates
@@ -394,12 +453,12 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.addHandler(console_handler)
     
     logger.info('='*80)
-    logger.info('SPECTROSCOPY PRISM SCALE AND DISPERSION END-TO-END TEST')
+    logger.info('STAR SPECTRUM REGISTRATION END-TO-END TEST')
     logger.info('='*80)
     logger.info("")
     
     # Run the complete end-to-end test
-    best_img = run_star_spectrum_registration_e2e_test(e2edata_path, e2eoutput_path)
+    best_img = run_star_spec_registration_e2e_test(e2edata_path, e2eoutput_path)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
@@ -411,10 +470,10 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
 # Run the test if this script is executed directly
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
-    # Create top-level spec_prism_disp_e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_prism_disp_e2e')
+    # Create top-level e2e folder
+    top_level_dir = os.path.join(thisfile_dir, 'star_spec_registration_e2e')
     outputdir = os.path.join(top_level_dir, 'output')
-    e2edata_dir = os.path.join(top_level_dir, 'input_data')
+    e2edata_dir = os.path.join(top_level_dir, 'input')
 
     ap = argparse.ArgumentParser(description="run the spectroscopy prism dispersion end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
