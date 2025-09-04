@@ -743,9 +743,10 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 def star_spec_registration(
     dataset_fsm,
     dataset_template,
-    slit_align_err=0,
     xcent_template=0,
     ycent_template=0,
+    yoffset_template=0,
+    slit_align_err=0,
     halfheight=30):
     """ This function addresses:
 
@@ -772,14 +773,14 @@ def star_spec_registration(
       dataset_template (Dataset): Dataset containing the star spectrum that is
         used as a template to find the image in the dataset_fsm that best
         matches it.
+      xcent_target (float or array): true x centroid of the template PSF; for
+        accurate results this must be determined in advance.
+      ycent_target (float or array): true y centroid of the template PSF; for
+        accurate results this must be determined in advance.
+      yoffset_template (float or array): TBD proper docstring.
       slit_align_err (float64): Error in the FSAM alignment. This value is
-        determined after each observation by looking at the data. Even though it
-        may be determined as a real number, it's integer, round value is used in
-        this function.
-      xcent_target (float): true x centroid of the template PSF; for accurate
-        results this must be determined in advance.
-      ycent_target (float): true y centroid of the template PSF; for accurate
-        results this must be determined in advance.
+        determined after each observation by looking at the data. Units are the
+        same as yoffset_template.
       halfheight: 1/2 the height of the box used for the fit.
 
     Returns:
@@ -850,12 +851,14 @@ def star_spec_registration(
     dataset_fsm = dataset_fsm.copy()
     dataset_template = dataset_template.copy()
 
+    # Find closest template offset to the one measured in the data
+    slit_idx = int(np.abs(slit_align_err - yoffset_template).argmin())
+
     # Find best PSF centroid fit for each image compared to the template
     # Cost function: Start with any large value that cannot happen. Units are
     # EXCAM pixels
     zeropt_dist = 1e8
     for idx_img, img in enumerate(dataset_fsm):
-        slit_idx = int(round(slit_align_err))
         x_fit, y_fit = fit_psf_centroid(img.data,
                      dataset_template[slit_idx].data,
                      xcent_template = xcent_template[slit_idx],

@@ -584,11 +584,17 @@ def test_star_spec_registration():
             assert psf_array.ndim == 3, 'Expected 3D PSF array'
             assert 'xcent' in psf_table.colnames and 'ycent' in psf_table.colnames, 'Missing centroid columns'
 
-            # Add an initial guess of where the centroid is found
+            # Add an initial guess of where the centroid is found as well as
+            # FSAM offsets from the templates
             initial_cent = {
                 'xcent': np.array(psf_table['xcent']),
-                'ycent': np.array(psf_table['ycent'])
+                'ycent': np.array(psf_table['ycent']),
+                'yoffset': np.array(psf_table['yoffset'])
             }
+
+            # Having selected a particular index for the test, allows us to
+            # set the expected offset in the data
+            slit_align_err = initial_cent['yoffset'][slit_ref]
 
             # Add wavelength zero-point. In this test, we set it in a way that
             # matches one of the slices, so that we can predict which one is the
@@ -645,7 +651,8 @@ def test_star_spec_registration():
                 dataset_template,
                 xcent_template=initial_cent['xcent'],
                 ycent_template=initial_cent['ycent'],
-                slit_align_err=slit_ref)
+                yoffset_template=initial_cent['yoffset'],
+                slit_align_err=slit_align_err)
 
             # Tests:
             # Test that the output corresponds with the expected best image
