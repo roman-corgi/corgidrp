@@ -1171,10 +1171,11 @@ def create_cr_dataset(nonlin_filepath, filedir=None, datetime=None, numfiles=2, 
                 cr_tail = [fwc/(j+1) for j in range(tail_len)]
                 dataset.all_data[i,loc[0],tail_start:] += cr_tail
 
-        # Save frame if desired
-        if filedir is not None:
-            filepattern = "simcal_cosmics_{0:04d}.fits"
-            dataset[i].save(filedir=filedir, filename=filepattern.format(i))
+        dataset[i].filename = "simcal_cosmics_{0:04d}.fits"
+
+    # Save frame if desired
+    if filedir is not None:
+        dataset.save(filedir=filedir)
 
     return dataset
 
