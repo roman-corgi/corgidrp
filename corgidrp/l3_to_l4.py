@@ -359,10 +359,41 @@ def crop(input_dataset, sizexy=None, centerxy=None):
 
         # Pick default crop size based on the size of the effective field of view
         if sizexy is None:
-            if exthdr['LSAMNAME'] == 'NFOV':
+            filter_band = exthdr['CFAMNAME']
+            # change filter names ending in F to just the number
+            if filter_band[1] == 'F':
+                filter_band = filter_band[0]
+            prism = exthdr['DPAMNAME']
+            slit = exthdr['FSAMNAME']
+            cor_mode = exthdr['LSAMNAME']
+            spec_slits = ['R1C2', 'R2C3', 'R2C4', 'R2C5', 'R3C1', 'R3C2', 'R4C6', 'R5C1', 'R5C2', 'R6C3', 'R6C4', 'R6C5']
+            spec_prisms = ['PRISM2', 'PRISM3']
+            color_filters = ['1', '1A', '1B', '1C', '2', '2A', '2B', '2C', '3', '3A', '3B', '3C', '3D', '3E', '3F', '3G', '4', '4A', '4B', '4C']
+            # outer working angle in lambda/D
+            cor_outer_working_angle = {
+                'WFOV': 20.1,
+                'SPEC': 9.1
+            }
+            if cor_mode == 'NFOV':
+                # set size to 60 if coronagraph is HLC NFOV
                 sizexy = 60
+            elif cor_mode not in cor_outer_working_angle or filter_band not in color_filters:
+                # raise warning if unable to calculate image size
+                raise UserWarning('Unable to determine image size, please change instrument configuration or provide a sizexy value')
             else:
-                raise UserWarning('Crop function is currently only configured for NFOV (narrow field-of-view) observations if sizexy is not provided.')
+                ## calculate image size using coronagraph information
+                padding = 5
+                diam = 2.363114
+                # convert lambda/D to arcsec
+                radius_arcsec = cor_outer_working_angle[cor_mode] * ((read_cent_wave(filter_band)[0] * 1e-9) / diam) * 206265
+                # convert arcsec to pix, 1 pix = 0.0218", round to nearest integer
+                radius_pix = int(round(radius_arcsec / 0.0218))
+                # update sizexy
+                sizexy = 2 * (padding + radius_pix)
+                # add additional 60 pixels to account for increase in size with spec slit or prism
+                if slit in spec_slits or prism in spec_prisms:
+                    sizexy += 60
+                          
 
         # Assign new array sizes and center location
         frame_shape = frame.data.shape
