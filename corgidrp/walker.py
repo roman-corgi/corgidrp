@@ -271,7 +271,8 @@ def guess_template(dataset):
             # for either ENGPUPIL or ENGIMGAGE
             recipe_filename = "l1_to_l2a_eng.json"
         elif image.pri_hdr['VISTYPE'] == "BORESITE":
-            recipe_filename = "l1_to_boresight.json"
+            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
+            chained = True
         elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
@@ -287,13 +288,13 @@ def guess_template(dataset):
         elif image.pri_hdr['VISTYPE'] in ("ABSFLXFT", "ABSFLXBT"):
             _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
             if len(fsm_unique) > 1:
-                recipe_filename = ["l1_to_l2a_basic.json", "l2b_to_nd_filter.json"]
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
                 chained = True
             else:
-                recipe_filename = ["l1_to_l2a_basic.json", "l2b_to_fluxcal_factor.json"]
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
                 chained = True
         elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
-            recipe_filename = ["l1_to_l2a_basic.json", 'l2b_to_corethroughput.json']
+            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
             chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
