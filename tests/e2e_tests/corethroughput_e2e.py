@@ -126,8 +126,8 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     input_dir = os.path.join(e2edata_path, "ct_band3_shapedpupil")
     files = os.listdir(input_dir)
     files.sort()
-    datafiles = [os.path.join(input_dir, x) for x in files if x.startswith('flux_map-3-f') or x.startswith('pupil')]
-    datafiles = datafiles[::5] # only use every 5 files to make it smaller
+    datafiles = glob.glob(os.path.join(input_dir, "*.fits"))
+    # datafiles = datafiles[::5] # only use every 5 files to make it smaller
 
     # Create the input data in the right format
     images = []
@@ -144,21 +144,6 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     def get_filename(img):
         return img.filename
     images.sort(key=get_filename)
-
-    # add pupil image
-    pupil_file = os.path.join(input_dir, 'pupil.fits')
-    image = fits.open(pupil_file)
-    new_image = data.Image(image[0].data, pri_hdr=image[0].header, ext_hdr=image[1].header)
-    new_image.pri_hdr['VISTYPE'] = 'CORETPUT'
-    new_image.ext_hdr['DATALVL'] = "L2b"
-    new_image.ext_hdr['BUNIT'] = "photoelectron"
-    new_image.ext_hdr['DPAMNAME'] = 'PUPIL'
-    new_image.ext_hdr['LSAMNAME'] = 'OPEN'
-    new_image.ext_hdr['FSAMNAME'] = 'OPEN'
-    new_image.ext_hdr['FPAMNAME'] = 'OPEN_12'
-    ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])
-    new_image.filename = f'cgi_{new_image.pri_hdr["VISITID"]}_{ftimeutc}_l2b.fits'
-    images.append(new_image)
 
     dataset = data.Dataset(images)
     
