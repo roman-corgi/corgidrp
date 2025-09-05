@@ -832,6 +832,7 @@ def star_spec_registration(
         wv0_y = dataset_template[0].ext_hdr['WV0_Y']
     except:
         raise ValueError('Wavelength zero-point keywords WV0_X, WV0_Y are missing')
+
     # All images must have the same setup
     for img in dataset_fsm:
         exthdr = img.ext_hdr

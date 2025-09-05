@@ -628,13 +628,14 @@ def test_star_spec_registration():
                 # unreasonably. The one with slit_ref has no additional
                 # noise to test that this is the one outputted by star_spec_registration()
                 # Collected data have different FSM values
-                ext_hdr['FSMX'] = i // 5
-                ext_hdr['FSMY'] = i - 5 * (i // 5)
+                ext_hdr_cp = ext_hdr.copy()
+                ext_hdr_cp['FSMX'] = i // 5
+                ext_hdr_cp['FSMY'] = i - 5 * (i // 5)
                 image_data = Image(
                     data_or_filepath=data_2d + rng.normal(0,
                         0.1*np.abs(i-slit_ref)*data_2d.std(), data_2d.shape),
                     pri_hdr=pri_hdr,
-                    ext_hdr=ext_hdr,
+                    ext_hdr=ext_hdr_cp,
                     err=err,
                     dq=dq
                 )
@@ -682,32 +683,35 @@ def test_star_spec_registration():
                 dataset_template,
                 xcent_template=initial_cent['xcent'],
                 ycent_template=initial_cent['ycent'],
-                slit_align_err=slit_ref)
+                yoffset_template=initial_cent['yoffset'],
+                slit_align_err=slit_align_err)
         print(f'PAM failure test for {pam} passed')
         dataset_data[0].ext_hdr[pam] = tmp
-    # Remove WV0_X/Y keywords
-    del dataset_data[0].ext_hdr['WV0_X']
+    # Remove WV0_X/Y keywords from the template
+    del dataset_template[0].ext_hdr['WV0_X']
     with pytest.raises(ValueError):
         steps.star_spec_registration(
             dataset_data,
             dataset_template,
             xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
-            slit_align_err=slit_ref)
+            yoffset_template=initial_cent['yoffset'],
+            slit_align_err=slit_align_err)
     print('WV0_X failure test passed')
-    dataset_data[0].ext_hdr['WV0_X'] = 30.
-    del dataset_data[0].ext_hdr['WV0_Y']
+    dataset_template[0].ext_hdr['WV0_X'] = 30.
+    del dataset_template[0].ext_hdr['WV0_Y']
     with pytest.raises(ValueError):
         steps.star_spec_registration(
             dataset_data,
             dataset_template,
             xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
-            slit_align_err=slit_ref)
+            yoffset_template=initial_cent['yoffset'],
+            slit_align_err=slit_align_err)
     print('WV0_Y failure test passed')
-    dataset_data[0].ext_hdr['WV0_Y'] = 30.
+    dataset_template[0].ext_hdr['WV0_Y'] = 30.
 
-    # Remove FSMX/Y keywords
+    # Remove FSMX/Y keywords from the observation data
     del dataset_data[0].ext_hdr['FSMX']
     with pytest.raises(AssertionError):
         steps.star_spec_registration(
@@ -715,7 +719,8 @@ def test_star_spec_registration():
             dataset_template,
             xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
-            slit_align_err=slit_ref)
+            yoffset_template=initial_cent['yoffset'],
+            slit_align_err=slit_align_err)
     print('FSMX failure test passed')
     dataset_data[0].ext_hdr['FSMX'] = 30.
     del dataset_data[0].ext_hdr['FSMY']
@@ -725,7 +730,8 @@ def test_star_spec_registration():
             dataset_template,
             xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
-            slit_align_err=slit_ref)
+            yoffset_template=initial_cent['yoffset'],
+            slit_align_err=slit_align_err)
     print('FSMY failure test passed')
     dataset_data[0].ext_hdr['FSMY'] = 30.
     

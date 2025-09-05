@@ -15,6 +15,43 @@ from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
 
+# =============================================================================
+# Validation functions - can be used in other E2E tests
+# =============================================================================
+
+def check_filename_convention(filename, expected_pattern, frame_info=""):
+    """Check if filename follows the expected naming convention.
+
+    Args:
+        filename (str): Filename to check
+        expected_pattern (str): Expected pattern (e.g., 'cgi_*_l2b.fits')
+        frame_info (str): Additional info for logging (e.g., "Frame 0")
+
+    Returns:
+        bool: True if filename matches convention
+    """
+    if not filename:
+        logger.info(f"{frame_info}: No filename. Naming convention FAIL.")
+        return False
+
+    # Basic pattern check
+    if expected_pattern == 'cgi_*_l2b.fits':
+        parts = filename.split('_')
+        valid = (len(parts) >= 4 and
+                parts[0] == 'cgi' and
+                len(parts[2]) == 16 and parts[2][8] == 't' and
+                parts[2][:8].isdigit() and parts[2][9:].isdigit() and
+                filename.endswith('_l2b.fits'))
+    elif expected_pattern == 'cgi_*_dpm_cal.fits':
+        valid = filename.startswith('cgi_') and '_dpm_cal.fits' in filename
+    else:
+        valid = expected_pattern in filename
+
+    status = "PASS" if valid else "FAIL"
+    logger.info(f"{frame_info}: Filename: {filename}. Naming convention {status}.")
+    return valid
+
+
 def check_dimensions(data, expected_shape, frame_info=""):
     """Check if data has expected dimensions.
 
@@ -178,7 +215,7 @@ def run_star_spec_registration_e2e_test(e2edata_path, e2eoutput_path):
         logger.info(f'Found {len(existing_files_template)} existing L2b files in {e2edata_path}/data/')
         logger.info('Using existing input files (skipping generation)')
         dataset_template = Dataset(existing_files_template)
-        dataset_data = Dataset(existing_files_data)
+        dataset_fsm = Dataset(existing_files_data)
     else:
         logger.info('No existing input files found. Generating new input files...')
         
@@ -242,23 +279,25 @@ def run_star_spec_registration_e2e_test(e2edata_path, e2eoutput_path):
                 ext_hdr=ext_hdr,
                 err=err,
                 dq=dq
-            )
-            template_images.append(image_template)
+                )
+            template_images += [image_template]
             # Some noisy version for the simulated data without blowing it
             # unreasonably. The one with slit_ref has no additional
             # noise to test that this is the one outputted by star_spec_registration()
             # Collected data have different FSM values
-            ext_hdr['FSMX'] = i // 5
-            ext_hdr['FSMY'] = i - 5 * (i // 5)
+            ext_hdr_cp = ext_hdr.copy()
+            ext_hdr_cp['FSMX'] = i // 5
+            ext_hdr_cp['FSMY'] = i - 5 * (i // 5)
             image_data = Image(
                 data_or_filepath=data_2d + rng.normal(0,
                     0.1*np.abs(i-slit_ref)*data_2d.std(), data_2d.shape),
                 pri_hdr=pri_hdr,
-                ext_hdr=ext_hdr,
+                ext_hdr=ext_hdr_cp,
                 err=err,
                 dq=dq
-            )
-            data_images.append(image_data)
+                )
+            data_images += [image_data]
+
         # Save images to disk with timestamped filenames
         def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
             visitid = pri_hdr.get('VISITID', '0000000000000000000')
@@ -294,9 +333,6 @@ def run_star_spec_registration_e2e_test(e2edata_path, e2eoutput_path):
         dataset_fsm = Dataset(saved_data_files)
         logger.info(f"Generated and saved {len(saved_data_files)} new data files")
 
-    breakpoint()
-    # Double check and set up rest of PAM enumvalues
-
     logger.info('')
     
     # ================================================================================
@@ -307,17 +343,46 @@ def run_star_spec_registration_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Validate all input images
-    for i, frame in enumerate(l2b_dataset_with_filenames):
-        frame_info = f"Frame {i}"
-        
+    # Template data
+    for i, frame in enumerate(dataset_template):
+        frame_info = f"Template frame {i}"
+
+        # Check filename convention
         check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l2b.fits', frame_info)
+        # Check expected dimensions
         check_dimensions(frame.data, (81, 81), frame_info)
-        verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info)
+        # Check DATALVL = L2b
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info)
+        # All images must have the same CFAMNAME value
+        verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_test}, frame_info)
+
+    logger.info(f"Total input template images validated: {len(dataset_template)}")
+    logger.info("")
+
+    # FSM data
+    for i, frame in enumerate(dataset_fsm):
+        frame_info = f"Data frame {i}"
+
+        # Check filename convention
+        check_filename_convention(getattr(frame, 'filename', None), 'cgi_*_l2b.fits', frame_info)
+        # Check expected dimensions
+        check_dimensions(frame.data, (81, 81), frame_info)
+        # Check DATALVL = L2b
+        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info)
+        # All images must have the same CFAMNAME value
+        verify_header_keywords(frame.ext_hdr, {'CFAMNAME': cfam_test}, frame_info)
+        # Each FSMX, FSMY value is unique
+        if i:
+            fsm_tmp = np.array([frame.ext_hdr['FSMX'], frame.ext_hdr['FSMY']])
+            assert np.any(fsm_tmp != fsm), 'FSM values are not unique'
+        else:
+            fsm = np.array([frame.ext_hdr['FSMX'], frame.ext_hdr['FSMY']])
         logger.info("")
 
-    logger.info(f"Total input images validated: {len(l2b_dataset_with_filenames)}")
+    logger.info(f"Total input data images validated: {len(dataset_fsm)}")
     logger.info("")
+   
+    breakpoint()
     
     # ================================================================================
     # (3) Run Processing Pipeline
@@ -331,15 +396,17 @@ def run_star_spec_registration_e2e_test(e2edata_path, e2eoutput_path):
         filelist=saved_files, 
         CPGS_XML_filepath="",
         outputdir=e2eoutput_path,
-        template="l2b_to_spec_prism_disp.json"
+        template="l2b_to_star_spec_registration.json"
     )
     logger.info("")
+
+    breakpoint()
     
     # ================================================================================
     # (4) Validate Output Calibration Product
     # ================================================================================
     logger.info('='*80)
-    logger.info('Test Case 2: Output Calibration Product Data Format and Content')
+    logger.info('Test Case 2: Output Product Data Format and Content')
     logger.info('='*80)
 
     # Validate output calibration product
