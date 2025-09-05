@@ -127,10 +127,11 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     files = os.listdir(input_dir)
     files.sort()
     datafiles = [os.path.join(input_dir, x) for x in files if x.startswith('flux_map-3-f') or x.startswith('pupil')]
-    
+    datafiles = datafiles[::5] # only use every 5 files to make it smaller
+
     # Create the input data in the right format
     images = []
-    for file in datafiles[::10]:
+    for file in datafiles:
         image = fits.open(file)
         new_image = data.Image(image[0].data, pri_hdr=image[0].header, ext_hdr=image[1].header)
         new_image.pri_hdr['VISTYPE'] = 'CORETPUT'
