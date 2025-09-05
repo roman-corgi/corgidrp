@@ -52,7 +52,7 @@
             "name" : "add_shot_noise_to_err",
             "calibs" : {
                 "KGain" : "AUTOMATIC",
-                "DetectorNoiseMaps" : "AUTOMATIC"
+                "DetectorParams" : "AUTOMATIC"
             }
         },
         {

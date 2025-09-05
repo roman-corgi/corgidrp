@@ -486,7 +486,10 @@ def run_recipe(recipe, save_recipe_file=True):
 
     output_filepaths = None
     if save_step:
-        output_filepaths = [frame.filepath for frame in curr_dataset]
+        if isinstance(curr_dataset, data.Dataset):
+            output_filepaths = [frame.filepath for frame in curr_dataset]
+        else:
+            output_filepaths = [curr_dataset.filepath]
     
     return output_filepaths
 
