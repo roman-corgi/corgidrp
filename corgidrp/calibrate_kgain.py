@@ -395,7 +395,7 @@ def calibrate_kgain(dataset_kgain,
         raise CalKgainException(f'Number of sub-stacks in cal_list must '
                 'be more than {n_cal}.')
     if len(cal_list) < 20 :
-        warnings.warn('Number of sub-stacks in cal_list is less than 20, '
+        print('Number of sub-stacks in cal_list is less than 20, '
         'which is the recommended minimum number for a good fit ')
     for i in range(len(cal_list)):
         check.threeD_array(cal_list[i], 'cal_list['+str(i)+']', TypeError)
