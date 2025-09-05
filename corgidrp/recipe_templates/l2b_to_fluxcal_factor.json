@@ -11,10 +11,7 @@
             "name": "divide_by_exptime"
         },
         {
-            "name" : "calibrate_fluxcal_aper",
-               "keywords" : {
-                              "phot_kwargs" : {"encircled_radius" : 4}
-                            }
+            "name" : "calibrate_fluxcal_aper"
         },
         {
             "name" : "save"
