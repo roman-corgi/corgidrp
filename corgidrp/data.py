@@ -804,6 +804,7 @@ class LineSpread(Image):
     Attr:
         wavlens (np.array): wavelengths in nm
         flux_profile (np.array): normalized flux
+        gauss_par (np.array): Gaussian fit parameters: [amplitude, mean_wavelen, fwhm, amp_err, wave_err, fwhm_err]
         amplitude (float): Gaussian amplitude
         mean_wave (float): mean wavelength
         fwhm (float): Gaussian FWHM

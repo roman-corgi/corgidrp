@@ -742,7 +742,7 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
 
-def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm = 5.):
+def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 5.):
     """
     Fit the line spread function to a wavelength calibrated (averaged) dataset, by reading 
     the wavelength map extension and wavelength zeropoint header
@@ -764,11 +764,11 @@ def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm 
     """
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the line spread function LSF
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
-    band = np.array(band)
+    band = np.array([s.upper() for s in band])
         
     if "3D" in band:
         nar_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
-    elif "2c" in band:
+    elif "2C" in band:
         nar_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
     else:
         raise AttributeError("No narrowband frames found in input dataset")
@@ -785,10 +785,13 @@ def fit_line_spread_function(dataset, halfwidth = 1, halfheight = 9, guess_fwhm 
         xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
         image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
                                   xcent_round - halfwidth:xcent_round + halfwidth + 1]
-
+        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
         wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
                                                           xcent_round - halfwidth:xcent_round + halfwidth + 1]
-        flux_p = np.sum(image_cutout, axis=1) / np.sum(image_cutout)
+        bad_ind = np.where(dq_cutout > 0)
+        image_cutout[bad_ind] = np.nan
+        flux_p = np.nansum(image_cutout, axis=1) / np.nansum(image_cutout)
         wav = np.mean(wave_cal_map_cutout, axis=1)
         flux_profile.append(flux_p)
         wavlens.append(wav)

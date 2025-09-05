@@ -559,13 +559,14 @@ def test_linespread_function():
     assert line_spread.mean_wave == pytest.approx(mean_wave[pos_max], abs=2)
     ind_fwhm = np.where(flux >= flux[pos_max]/2.)[0]
     est_fwhm = mean_wave[ind_fwhm[0]] - mean_wave[ind_fwhm[-1]]
-    assert est_fwhm == pytest.approx(line_spread.fwhm, abs = 3.)
+    assert est_fwhm == pytest.approx(line_spread.fwhm, abs = 3)
     assert np.min(mean_wave) < np.min(line_spread.wavlens)
     assert np.max(mean_wave) > np.max(line_spread.wavlens)
     assert np.min(flux) == pytest.approx(np.min(line_spread.flux_profile), abs = 0.001)
     assert np.max(flux) == pytest.approx(np.max(line_spread.flux_profile), abs = 0.035)
     line_spread.save(filedir = output_dir)
     
+    #load the calibration fits file and check whether the content is unchanged
     line_spread_load = LineSpread(os.path.join(output_dir, line_spread.filename))
     assert np.array_equal(line_spread_load.gauss_par, np.array([line_spread.amplitude, line_spread.mean_wave, line_spread.fwhm, line_spread.amp_err, line_spread.wave_err, line_spread.fwhm_err]))
     assert np.array_equal(line_spread.flux_profile, line_spread_load.flux_profile)
@@ -577,7 +578,15 @@ def test_linespread_function():
     assert line_spread_load.fwhm_err == line_spread.fwhm_err
     assert line_spread_load.wave_err == line_spread.wave_err
     
-    
+    #add a bad pixel and check the result
+    bad_dataset = output_dataset.copy()
+    for frame in bad_dataset:
+        frame.dq[31, 40] = 1
+        frame.data[10,10] = np.nan 
+    line_spread_bad = steps.fit_line_spread_function(bad_dataset)
+    assert line_spread_bad.fwhm == pytest.approx(line_spread.fwhm, rel = 0.1)
+    assert line_spread_bad.amplitude == pytest.approx(line_spread.amplitude, rel = 0.1)
+
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_psf_centroid()
