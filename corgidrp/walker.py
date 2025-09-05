@@ -112,8 +112,11 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
 
         output_filelist = run_recipe(recipe)
 
-
-    return recipes
+    # return just the recipe if there was only one
+    if len(recipes) == 1:
+        return recipes[0]
+    else:
+        return recipes
 
 def autogen_recipe(filelist, outputdir, template=None):
     """
