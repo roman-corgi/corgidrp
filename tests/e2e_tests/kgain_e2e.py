@@ -155,6 +155,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', category=RuntimeWarning)
         warnings.filterwarnings('ignore', category=DeprecationWarning)
+        warnings.filterwarnings('ignore', category=UserWarning)
         (tvac_kgain, tvac_readnoise, mean_rn_std_e, ptc) = calibrate_kgain(stack_arr, stack_arr2, emgain=1, min_val=800, max_val=3000, 
                         binwidth=68, config_file=default_config_file, 
                         mkplot=None, verbose=None)

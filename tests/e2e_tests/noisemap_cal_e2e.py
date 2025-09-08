@@ -4,6 +4,7 @@ import argparse
 import os
 import pytest
 import numpy as np
+import warnings
 import astropy.time as time
 from astropy.io import fits
 
@@ -162,13 +163,15 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     kgain_arr = np.array(kgain_arr)
 
     ####### call II&T code
-    (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
-                D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
-                C_image_mean, D_image_mean, unreliable_pix_map) = \
-    calibrate_darks_lsq(stackl1_arr, gain_arr, exptime_arr, kgain_arr, fwc_em_e, fwc_pp_e,
-                meta_path, nonlin_path, Nem = 604, telem_rows=telem_rows, 
-                sat_thresh=0.7, plat_thresh=0.7, cosm_filter=1, cosm_box=3,
-                cosm_tail=10, desmear_flags=None, rowreadtime=223.5e-6)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
+                    D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
+                    C_image_mean, D_image_mean, unreliable_pix_map) = \
+        calibrate_darks_lsq(stackl1_arr, gain_arr, exptime_arr, kgain_arr, fwc_em_e, fwc_pp_e,
+                    meta_path, nonlin_path, Nem = 604, telem_rows=telem_rows, 
+                    sat_thresh=0.7, plat_thresh=0.7, cosm_filter=1, cosm_box=3,
+                    cosm_tail=10, desmear_flags=None, rowreadtime=223.5e-6)
     ##########
 
     ####### Now prep and setup necessary calibration files for DRP run
@@ -381,13 +384,15 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     kgain_arr = np.array(kgain_arr)
     
     ####### Run the II&T code
-    (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
-                D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
-                C_image_mean, D_image_mean, unreliable_pix_map) = \
-    calibrate_darks_lsq(stackl1_arr, gain_arr, exptime_arr, kgain_arr, fwc_em_e, fwc_pp_e,
-                meta_path, nonlin_path, Nem = 604, telem_rows=telem_rows, 
-                sat_thresh=0.7, plat_thresh=0.7, cosm_filter=1, cosm_box=3,
-                cosm_tail=10, desmear_flags=None, rowreadtime=223.5e-6)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', category=UserWarning)
+        (F_map, C_map, D_map, bias_offset, F_image_map, C_image_map,
+                    D_image_map, Fvar, Cvar, Dvar, read_noise, R_map, F_image_mean,
+                    C_image_mean, D_image_mean, unreliable_pix_map) = \
+        calibrate_darks_lsq(stackl1_arr, gain_arr, exptime_arr, kgain_arr, fwc_em_e, fwc_pp_e,
+                    meta_path, nonlin_path, Nem = 604, telem_rows=telem_rows, 
+                    sat_thresh=0.7, plat_thresh=0.7, cosm_filter=1, cosm_box=3,
+                    cosm_tail=10, desmear_flags=None, rowreadtime=223.5e-6)
     ##########
 
     ####### Now prep and setup necessary calibration files for DRP run
