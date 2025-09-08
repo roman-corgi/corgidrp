@@ -21,7 +21,7 @@ def convert_tvac_to_dataset():
     for me to convert the tvac data once.
     """
 
-    file_path = [os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits"), 
+    file_path = [os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits"), 
                  os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")]
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
 
@@ -135,7 +135,7 @@ def test_psf_centroid():
     Test PSF centroid computation with mock data and assert correctness of output FITS structure.
     """
     errortol_pix = 0.01
-    file_path = os.path.join(spec_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
+    file_path = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_NOSLIT_PRISM3_offset_array.fits")
     assert os.path.exists(file_path), f"Test FITS file not found: {file_path}"
     
     pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
