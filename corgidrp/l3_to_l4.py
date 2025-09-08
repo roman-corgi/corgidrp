@@ -865,7 +865,7 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         raise AttributeError("not a slit observation")
     # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the zeropoint
     narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
-    band = np.array(band)
+    band = np.array([s.upper() for s in band])
     if len(band) < 2:
         raise AttributeError("there needs to be at least 1 narrowband and 1 science band prism frame in the dataset\
                              to determine the wavelength zero point")
@@ -873,7 +873,7 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
     if "3D" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
         sci_dataset = narrow_dataset[int(np.nonzero(band != "3D")[0].item())]
-    elif "2c" in band:
+    elif "2C" in band:
         sat_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
         sci_dataset = narrow_dataset[int(np.nonzero(band != "2C")[0].item())]
     else:

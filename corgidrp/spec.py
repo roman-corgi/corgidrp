@@ -742,7 +742,7 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
 
-def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 5.):
+def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 15.):
     """
     Fit the line spread function to a wavelength calibrated (averaged) dataset, by reading 
     the wavelength map extension and wavelength zeropoint header
@@ -795,7 +795,6 @@ def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm 
         wav = np.mean(wave_cal_map_cutout, axis=1)
         flux_profile.append(flux_p)
         wavlens.append(wav)
-
         g_init = models.Gaussian1D(amplitude = np.max(flux_p),
                                    mean = wav[halfheight], 
                                    stddev = guess_fwhm/(2 * np.sqrt(2*np.log(2))))

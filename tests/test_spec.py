@@ -552,7 +552,9 @@ def test_linespread_function():
     using the output_dataset of the test of the wavelength map
     """
     line_spread = steps.fit_line_spread_function(output_dataset)
-    flux = np.sum(output_dataset[0].data, axis = 1)/np.sum(output_dataset[0].data)
+    xcent_round, ycent_round = (int(np.rint(output_dataset[0].ext_hdr["WV0_X"])), int(np.rint(output_dataset[0].ext_hdr["WV0_Y"])))
+    image = output_dataset[0].data
+    flux = np.sum(image, axis = 1)/np.sum(image)
     pos_max = np.argmax(flux)
     mean_wave = np.mean(output_dataset[0].hdu_list["WAVE"].data, axis = 1)
     assert line_spread.amplitude == pytest.approx(flux[pos_max], abs=0.04)
