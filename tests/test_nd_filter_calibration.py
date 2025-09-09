@@ -45,10 +45,10 @@ calspec_filepath = os.path.join(os.path.dirname(__file__), "test_data", "alpha_l
 
 DIM_EXPTIME = 10.0
 BRIGHT_EXPTIME = 5.0
-FWHM = 3
+FWHM = 1
 FILTER_USED = '3C'
 INPUT_OD = 2.25
-CAL_FACTOR = 0.8
+CAL_FACTOR = 0.000001
 OD_RASTER_THRESHOLD = 0.1
 OD_TEST_TOLERANCE = 0.2
 FILESAVE = True
