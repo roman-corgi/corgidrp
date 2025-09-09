@@ -22,6 +22,7 @@ import corgidrp.flat
 import corgidrp.darks
 import corgidrp.sorting
 import corgidrp.fluxcal
+import corgidrp.spec
 
 all_steps = {
     "prescan_biassub" : corgidrp.l1_to_l2a.prescan_biassub,
@@ -29,7 +30,7 @@ all_steps = {
     "calibrate_nonlin": corgidrp.calibrate_nonlin.calibrate_nonlin,
     "correct_nonlinearity" : corgidrp.l1_to_l2a.correct_nonlinearity,
     "update_to_l2a" : corgidrp.l1_to_l2a.update_to_l2a,
-    "add_photon_noise" : corgidrp.l2a_to_l2b.add_photon_noise,
+    "add_shot_noise_to_err" : corgidrp.l2a_to_l2b.add_shot_noise_to_err,
     "dark_subtraction" : corgidrp.l2a_to_l2b.dark_subtraction,
     "flat_division" : corgidrp.l2a_to_l2b.flat_division,
     "frame_select" : corgidrp.l2a_to_l2b.frame_select,
@@ -52,6 +53,7 @@ all_steps = {
     "divide_by_exptime" : corgidrp.l2b_to_l3.divide_by_exptime,
     "northup" : corgidrp.l3_to_l4.northup,
     "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper,
+    "calibrate_pol_fluxcal_aper": corgidrp.fluxcal.calibrate_pol_fluxcal_aper,
     "update_to_l3": corgidrp.l2b_to_l3.update_to_l3,
     "create_wcs": corgidrp.l2b_to_l3.create_wcs,
     "distortion_correction": corgidrp.l3_to_l4.distortion_correction,
@@ -61,6 +63,8 @@ all_steps = {
     "generate_ct_cal": corgidrp.corethroughput.generate_ct_cal,
     "create_ct_map": corgidrp.corethroughput.create_ct_map,
     "create_nd_filter_cal": corgidrp.nd_filter_calibration.create_nd_filter_cal,
+    "compute_psf_centroid": corgidrp.spec.compute_psf_centroid,
+    "calibrate_dispersion_model": corgidrp.spec.calibrate_dispersion_model,
 }
 
 recipe_dir = os.path.join(os.path.dirname(__file__), "recipe_templates")
@@ -221,11 +225,7 @@ def _fill_in_calib_files(step, this_caldb, ref_frame):
                     step["skip"] = True # skip this step but continue
                     step["calibs"][calib] = None
                     warnings.warn("Skipping {0} because no {1} in caldb and skip_missing_cal_steps is True".format(step['name'], calib))
-                    # Don't continue - set all remaining calibrations to None and return
-                    for remaining_calib in step["calibs"]:
-                        if remaining_calib != calib:
-                            step["calibs"][remaining_calib] = None
-                    return step
+                    continue # continue on the for loop
                 else:
                     raise # reraise exception
 
@@ -293,7 +293,10 @@ def guess_template(dataset):
             if len(fsm_unique) > 1:
                 recipe_filename = "l2b_to_nd_filter.json"
             else:
-                recipe_filename = "l2b_to_fluxcal_factor.json"
+                if image.ext_hdr['DPAMNAME'] == 'POL0' or image.ext_hdr['DPAMNAME'] == 'POL45':
+                    recipe_filename = 'l2b_to_fluxcal_factor_pol.json'
+                else:
+                    recipe_filename = "l2b_to_fluxcal_factor.json"
         elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
             recipe_filename = 'l2b_to_corethroughput.json'
         else:
@@ -386,6 +389,7 @@ def run_recipe(recipe, save_recipe_file=True):
     # save recipe before running recipe
     if save_recipe_file:
         recipe_filename = "{0}_{1}_recipe.json".format(recipe["name"], time.Time.now().isot)
+        recipe_filename = recipe_filename.replace(":", ".")  # replace colons with periods for compatibility with Windows machines
         recipe_filepath = os.path.join(recipe["outputdir"], recipe_filename)
         with open(recipe_filepath, "w") as json_file:
             json.dump(recipe, json_file, indent=4)

@@ -11,9 +11,29 @@ from corgidrp import caldb
 from corgidrp import detector
 from corgidrp import darks
 from corgidrp import walker
+from corgidrp import mocks
 
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
+
+def fix_str_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Gets around EMGAIN_A being set to 1 in TVAC data.
+    
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        exthdr = fits_file[1].header
+        if float(exthdr['EMGAIN_A']) == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if type(exthdr['EMGAIN_C']) is str:
+            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
 
 def fix_headers_for_tvac(
     list_of_fits,
@@ -102,7 +122,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     original_frame_numbers = [90501, 90502]  # These are the original frame numbers
 
     # update TVAC headers
-    fix_headers_for_tvac(l1_data_filelist, bp_map_outputdir)
+    #fix_headers_for_tvac(l1_data_filelist, bp_map_outputdir)
     
     # Update file list to reflect the new filenames
     input_data_dir = os.path.join(bp_map_outputdir, 'input_data')
@@ -125,6 +145,11 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
     # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
     # Load and combine noise maps from various calibration files into a single array
@@ -145,6 +170,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Initialize additional noise map parameters
     noise_map_noise = np.zeros([1,] + list(noise_map_dat.shape))
     noise_map_dq = np.zeros(noise_map_dat.shape, dtype=int)
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     err_hdr = fits.Header()
     err_hdr['BUNIT'] = 'detected electron'
     
@@ -193,6 +219,11 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     master_dark.save(filedir=bp_map_outputdir, filename=master_dark_filename)
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
+
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
@@ -277,8 +308,9 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_master_dark_test.png")
         plt.savefig(output_path)
 
-    # Skip removal of generated_bp_map_img since it doesn't have a proper filepath
-    # this_caldb.remove_entry(generated_bp_map_img)
+    this_caldb.remove_entry(generated_bp_map_img)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 @pytest.mark.e2e
 def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
@@ -297,7 +329,10 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Define the list of raw science data files for input, selecting the first two files as examples
     input_image_filelist = []
-    l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    l1_data_filelist = []
+    for filename in os.listdir(l1_datadir)[:2]:
+        l1_data_filelist.append(os.path.join(l1_datadir, filename))
+    # l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
     
     # Extract frame numbers from original filenames before renaming
     original_frame_numbers = [90499, 90500]  # These are the original frame numbers
@@ -326,6 +361,11 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     mock_input_dataset = data.Dataset(l1_data_filelist)
 
     # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
 
     # Generate filename variables for this test
@@ -337,6 +377,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     ## Load and save flat field calibration data
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
+    pri_hdr, ext_hdr, _, _ = mocks.create_default_calibration_product_headers()
     flat = data.FlatField(flat_dat, pri_hdr=mock_input_dataset[0].pri_hdr, ext_hdr=mock_input_dataset[0].ext_hdr,
                           input_dataset=mock_input_dataset)
     # Generate filename with visitid and current time
@@ -376,6 +417,10 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
     ####### Run the CorGI DRP walker script
     walker.walk_corgidrp(input_image_filelist, "", bp_map_outputdir, template="bp_map.json")
 
@@ -427,13 +472,14 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_simulated_dark_test.png")
         plt.savefig(output_path)
     
-    # Skip removal of generated_bp_map_img since it doesn't have a proper filepath
-    # this_caldb.remove_entry(generated_bp_map_img)
+    this_caldb.remove_entry(generated_bp_map_img)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     # Set default paths and parse command-line arguments
-    e2edata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"
-    #e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
+    # e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data"
+    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     # Argument parser setup

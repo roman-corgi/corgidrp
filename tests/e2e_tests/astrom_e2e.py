@@ -15,6 +15,26 @@ import corgidrp.detector as detector
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
+
+def fix_str_for_tvac(
+    list_of_fits,
+    ):
+    """ 
+    Gets around EMGAIN_A being set to 1 in TVAC data.
+    
+    Args:
+        list_of_fits (list): list of FITS files that need to be updated.
+    """
+    for file in list_of_fits:
+        fits_file = fits.open(file)
+        exthdr = fits_file[1].header
+        if float(exthdr['EMGAIN_A']) == 1:
+            exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
+        if type(exthdr['EMGAIN_C']) is str:
+            exthdr['EMGAIN_C'] = float(exthdr['EMGAIN_C'])
+        # Update FITS file
+        fits_file.writeto(file, overwrite=True)
+
 def fix_headers_for_tvac(
     list_of_fits,
     output_dir,
@@ -108,6 +128,11 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_output")
     if not os.path.exists(astrom_cal_outputdir):
         os.mkdir(astrom_cal_outputdir)
+    # clean out any files from a previous run
+    for f in os.listdir(astrom_cal_outputdir):
+        file_path = os.path.join(astrom_cal_outputdir, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -125,10 +150,17 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     rawdata_dir = os.path.join(astrom_cal_outputdir, 'input_data')
     if not os.path.exists(rawdata_dir):
         os.mkdir(rawdata_dir)
+    # clean out any files from a previous run
+    for f in os.listdir(rawdata_dir):
+        file_path = os.path.join(rawdata_dir, f)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
     # get an idea of the noise rms
     noise_datacube = []
     for dark in os.listdir(noise_characterization_path):
+        if not dark.lower().endswith('.fits'):
+            continue
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             noise_datacube.append(dark_dat)
@@ -136,6 +168,8 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_rms = np.mean(noise_std)
 
     for dark in os.listdir(noise_characterization_path):
+        if not dark.lower().endswith('.fits'):
+                continue
         with fits.open(os.path.join(noise_characterization_path, dark)) as hdulist:
             dark_dat = hdulist[1].data
             hdulist[0].header['VISTYPE'] = "BORESITE"
@@ -157,23 +191,39 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
                         hdulist[1].header.add_history(item)
                 elif ext_key not in hdulist[1].header:
                     hdulist[1].header[ext_key] = image_sources[0].ext_hdr[ext_key]
-
+            
+            hdulist[0].header['RA'] = image_sources[0].pri_hdr['RA'] 
+            hdulist[0].header['DEC'] = image_sources[0].pri_hdr['DEC']
             # save to the data dir in the output directory
             hdulist.writeto(os.path.join(rawdata_dir, dark[:-5].lower()+'.fits'), overwrite=True)
 
     # define the raw science data to process
     ## replace w my raw data sets
     sim_data_filelist = [os.path.join(rawdata_dir, f) for f in os.listdir(rawdata_dir)] # full paths to simulated data
-    mock_cal_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90526, 90527]] # grab the last two real data to mock the calibration 
+    mock_cal_filelist = []
+    # grab 2 files of real data to mock the calibration
+    for filename in os.listdir(l1_datadir):
+        if filename.lower().endswith('.fits'):
+            mock_cal_filelist.append(os.path.join(l1_datadir, filename))
+        if len(mock_cal_filelist) == 2:
+            break
 
     # update headers of TVAC data
-    fix_headers_for_tvac(sim_data_filelist, astrom_cal_outputdir)
+    #fix_headers_for_tvac(sim_data_filelist, astrom_cal_outputdir)
+    fix_str_for_tvac(sim_data_filelist)
     
     # Update file list to reflect the new filenames
     input_data_dir = os.path.join(astrom_cal_outputdir, 'input_data')
     sim_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
 
     ###### Setup necessary calibration files
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+    this_caldb = caldb.CalDB()  # connection to cal DB
+
     # Create necessary calibration files
     # we are going to make calibration files using
     # a combination of the II&T nonlinearty file and the mock headers from
@@ -182,8 +232,6 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ext_hdr["DRPCTIME"] = time.Time.now().isot
     ext_hdr['DRPVERSN'] =  corgidrp.__version__
     mock_input_dataset = data.Dataset(mock_cal_filelist)
-
-    this_caldb = caldb.CalDB() # connection to cal DB
 
     # Nonlinearity calibration
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
@@ -252,18 +300,14 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     bp_map.save(filedir=astrom_cal_outputdir, filename=bpm_filename)
     this_caldb.create_entry(bp_map)
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
-
-
-    # clean up by removing entry
-    this_caldb.remove_entry(nonlinear_cal)
-    this_caldb.remove_entry(kgain)
-    this_caldb.remove_entry(noise_map)
-    this_caldb.remove_entry(flat)
-    this_caldb.remove_entry(bp_map)
 
     ## Check against astrom ground truth -- target= [80.553428801, -69.514096821],
     ## plate scale = 21.8[mas/pixel], north angle = 45 [deg]
@@ -276,6 +320,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     expected_northangle = 45
     target = (80.553428801, -69.514096821)
 
+    astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_ast_cal.fits'))[0])
     astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_ast_cal.fits'))[0])
 
     # check that the astrometric calibration filename is based on the last file in the input file list
@@ -293,8 +338,9 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
-
-    this_caldb.remove_entry(astrom_cal)
+    
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
 if __name__ == "__main__":
     e2edata_dir = "/Users/jmilton/Documents/CGI/CGI_TVAC_Data"

@@ -1,10 +1,10 @@
 import os
+import csv
 from pathlib import Path
 import numpy as np
 import warnings
 import math
 import re
-import datetime
 import datetime
 import scipy.ndimage
 import pandas as pd
@@ -101,9 +101,77 @@ detector_areas_test= {
         }
 }
 
+def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
+                    value_col="Example Value", datatype_col="Datatype"):
+    """
+    Parse a combined CSV (with a Section column) and extract keywords and values
+    from a specified section.
+
+    Args:
+        csv_file_path (str): Path to the combined CSV file.
+        section_name (str): Name of the section to filter on
+                            (eg, "Primary Header (HDU 0)" or "Image Header (HDU 1)").
+        key_col (str): Column name holding the keyword (default: "Keyword").
+        value_col (str): Column name holding the example/value (default: "Example Value").
+        datatype_col (str): Column name holding the datatype (default: "Datatype").
+
+    Returns:
+        dict: values are coerced using the datatype column. If the section is not a header 
+                table or required columns are missing, returns an empty dict.
+    """
+    def coerce(val_str, dtype_str):
+        if val_str is None:
+            return None
+        s = str(val_str).strip()
+        # strip surrounding quotes if present
+        if len(s) >= 2 and ((s[0] == s[-1] == '"') or (s[0] == s[-1] == "'")):
+            s = s[1:-1].strip()
+
+        dtype = (dtype_str or "").strip().lower()
+        if dtype == "int":
+            try:
+                return int(float(s))  # tolerate "0.0"
+            except ValueError:
+                return 0
+        if dtype == "float":
+            try:
+                return float(s)
+            except ValueError:
+                return 0.0
+        if dtype == "bool":
+            return s.lower() in ("true", "1", "yes", "y", "t")
+        # default: string
+        return s
+
+    out = {}
+
+    if not os.path.exists(csv_file_path):
+        print(f"Warning: CSV file not found at {csv_file_path}")
+        return out
+
+    with open(csv_file_path, newline="") as f:
+        reader = csv.DictReader(f)
+        # Ensure required columns exist
+        required_cols = {"Section", key_col, value_col, datatype_col}
+        if not required_cols.issubset(reader.fieldnames or []):
+            # Not a header-style section or wrong CSV
+            return out
+
+        for row in reader:
+            if row.get("Section") != section_name:
+                continue
+            key = (row.get(key_col) or "").strip()
+            if not key or key.lower() in {"keyword", "datatype", "example value", "description"}:
+                continue
+            val = coerce(row.get(value_col), row.get(datatype_col))
+            out[key] = val
+
+    return out
+
+
 def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     """
-    Creates default L1 headers by reading values from the l1.rst documentation file.
+    Creates default L1 headers by reading values from the l1.csv documentation file.
     
     Args:
         arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
@@ -120,106 +188,21 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr = fits.Header()
     
     # Set up dynamic values
-    dt_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
     # Override NAXIS values to match test expectations (1024x1024)
     # L1.rst documents actual detector dimensions (2200x1200 for SCI, 2200x2200 for ENG)
     NAXIS1 = 1024
     NAXIS2 = 1024
     
-    def parse_rst_table(rst_file_path, section_name, stop_at=None):
-        """
-        Parse .rst file and extract keyword-value pairs from a specified section.
-        
-        Args:
-            rst_file_path (str): Path to the RST file to parse
-            section_name (str): Name of the section to find (e.g., "Primary Header (HDU 0)")
-            stop_at (str, optional): Section name to stop parsing at. If provided, 
-                                   parsing stops before this section. Defaults to None.
-        
-        Returns:
-            keyword_values (dict): Dictionary mapping keyword names to their parsed values. 
-                Values are converted to appropriate Python types (int, float, bool, str) based
-                on the datatype column in the RST table.
-        
-        """
-
-        keyword_values = {}
-        
-        if not os.path.exists(rst_file_path):
-            print(f"Warning: RST file not found at {rst_file_path}")
-            return keyword_values
-            
-        with open(rst_file_path, 'r') as f:
-            content = f.read()
-        
-        # Find the section
-        section_pattern = rf"{section_name}\s*\n\^+\s*\n(.*?)(?=\n\w+\s*\n\^+\s*\n|\Z)"
-        section_match = re.search(section_pattern, content, re.DOTALL)
-        
-        if not section_match:
-            print(f"Warning: Section '{section_name}' not found in RST file")
-            return keyword_values
-        
-        section_content = section_match.group(1)
-
-        # Look for the next section header and cut off at that point
-        if stop_at:
-            # Use the specific stop_at section
-            stop_pattern = rf'\n{re.escape(stop_at)}\s*\n\^+\s*\n'
-            stop_match = re.search(stop_pattern, section_content)
-            if stop_match:
-                section_content = section_content[:stop_match.start()]
-        else:
-            # Use the generic next section pattern
-            next_section_pattern = r'\n\w+\s*\([^)]+\)\s*\n\^+\s*\n'
-            next_match = re.search(next_section_pattern, section_content)
-            if next_match:
-                section_content = section_content[:next_match.start()]
-        
-        # Parse the table
-        # Look for table rows with | keyword | datatype | example_value | description |
-        table_pattern = r'\|\s*(\w+)\s*\|\s*(\w+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|'
-        matches = re.findall(table_pattern, section_content)
-        
-        for match in matches:
-            keyword = match[0].strip()
-            datatype = match[1].strip()
-            example_value = match[2].strip()
-            description = match[3].strip()
-            
-            # Skip the header row
-            if keyword.lower() in ['keyword', 'datatype', 'example value', 'description']:
-                continue
-            
-            # Convert example value to appropriate type
-            if datatype == 'int':
-                try:
-                    value = int(example_value)
-                except ValueError:
-                    value = 0
-            elif datatype == 'float':
-                try:
-                    value = float(example_value)
-                except ValueError:
-                    value = 0.0
-            elif datatype == 'bool':
-                if example_value.lower() in ['true', '1']:
-                    value = True
-                else:
-                    value = False
-            else:  # str
-                value = example_value
-            
-            keyword_values[keyword] = value
-        
-        return keyword_values
 
     # Get the path to the RST file
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    rst_file_path = os.path.join(current_dir, '..', 'docs', 'source', 'data_formats', 'l1.rst')
+    csv_file_path = os.path.join(current_dir, 'data', 'header_formats', 'l1.csv')
     
     # Parse primary header values
-    primary_values = parse_rst_table(rst_file_path, "Primary Header \\(HDU 0\\)", stop_at="Image Header (HDU 1)")
+    primary_values = parse_csv_table(csv_file_path, "Primary Header (HDU 0)")
     
     # Fill in primary header with values from RST
     for keyword, value in primary_values.items():
@@ -230,7 +213,7 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     prihdr['VISTYPE'] = vistype
     
     # Parse image header values  
-    image_values = parse_rst_table(rst_file_path, "Image Header \\(HDU 1\\)")
+    image_values = parse_csv_table(csv_file_path, "Image Header (HDU 1)")
     
     # Fill in extension header with values from RST
     for keyword, value in image_values.items():
@@ -242,13 +225,14 @@ def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+    prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
 
     return prihdr, exthdr
 
 
 def create_default_L1_TrapPump_headers(arrtype="SCI"):
     """
-    Creates default L1 trap pump headers by reading values from the l1.rst documentation file.
+    Creates default L1 trap pump headers by reading values from the l1.csv documentation file.
     
     Args:
         arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
@@ -264,120 +248,22 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr = fits.Header()
     
     # Set up dynamic values
-    dt_str = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
     # Override NAXIS values to match test expectations (1024x1024)
     # L1.rst documents actual detector dimensions (2200x1200 for SCI, 2200x2200 for ENG)
     NAXIS1 = 1024
     NAXIS2 = 1024
     
-    def parse_rst_table(rst_file_path, section_name, stop_at=None):
-        """
-        Parse a reStructuredText file and extract keyword-value pairs from a specified section.
-        
-        This function reads an RST file, finds a specific section containing a table,
-        and extracts keyword-value pairs from the table rows. It supports type conversion
-        based on the datatype column in the table.
-        
-        Args:
-            rst_file_path (str): Path to the RST file to parse
-            section_name (str): Name of the section to find (e.g., "Primary Header (HDU 0)")
-            stop_at (str, optional): Section name to stop parsing at. If provided, 
-                                   parsing stops before this section. Defaults to None.
-        
-        Returns:
-            dict: Dictionary mapping keyword names to their parsed values. Values are
-                  converted to appropriate Python types (int, float, bool, str) based
-                  on the datatype column in the RST table.
-        
-        Example:
-            >>> values = parse_rst_table("l1.rst", "Primary Header (HDU 0)")
-            >>> print(values)
-            {'SIMPLE': True, 'BITPIX': 16, 'NAXIS': 0, ...}
-        
-        Notes:
-            - The function expects RST tables with columns: | keyword | datatype | example_value | description |
-            - Supported datatypes: 'int', 'float', 'bool', 'str'
-            - Table header rows are automatically skipped
-            - If a section is not found, an empty dictionary is returned
-            - If the RST file doesn't exist, a warning is printed and an empty dict is returned
-        """
-        keyword_values = {}
-        
-        if not os.path.exists(rst_file_path):
-            print(f"Warning: RST file not found at {rst_file_path}")
-            return keyword_values
-            
-        with open(rst_file_path, 'r') as f:
-            content = f.read()
-        
-        # Find the section
-        section_pattern = rf"{section_name}\s*\n\^+\s*\n(.*?)(?=\n\w+\s*\n\^+\s*\n|\Z)"
-        section_match = re.search(section_pattern, content, re.DOTALL)
-        
-        if not section_match:
-            print(f"Warning: Section '{section_name}' not found in RST file")
-            return keyword_values
-        
-        section_content = section_match.group(1)
 
-        # Look for the next section header and cut off at that point
-        if stop_at:
-            # Use the specific stop_at section
-            stop_pattern = rf'\n{re.escape(stop_at)}\s*\n\^+\s*\n'
-            stop_match = re.search(stop_pattern, section_content)
-            if stop_match:
-                section_content = section_content[:stop_match.start()]
-        else:
-            # Use the generic next section pattern
-            next_section_pattern = r'\n\w+\s*\([^)]+\)\s*\n\^+\s*\n'
-            next_match = re.search(next_section_pattern, section_content)
-            if next_match:
-                section_content = section_content[:next_match.start()]
-        
-        # Parse the table
-        # Look for table rows with | keyword | datatype | example_value | description |
-        table_pattern = r'\|\s*(\w+)\s*\|\s*(\w+)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|'
-        matches = re.findall(table_pattern, section_content)
-        
-        for match in matches:
-            keyword = match[0].strip()
-            datatype = match[1].strip()
-            example_value = match[2].strip()
-            description = match[3].strip()
-            
-            # Skip the header row
-            if keyword.lower() in ['keyword', 'datatype', 'example value', 'description']:
-                continue
-            
-            # Convert example value to appropriate type
-            if datatype == 'int':
-                try:
-                    value = int(example_value)
-                except ValueError:
-                    value = 0
-            elif datatype == 'float':
-                try:
-                    value = float(example_value)
-                except ValueError:
-                    value = 0.0
-            elif datatype == 'bool':
-                if example_value.lower() in ['true', '1']:
-                    value = True
-                else:
-                    value = False
-            else:  # str
-                value = example_value
-            
-            keyword_values[keyword] = value
-        
-        return keyword_values
 
     # Get the path to the RST file
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    rst_file_path = os.path.join(current_dir, '..', 'docs', 'source', 'data_formats', 'l1.rst')
+    csv_file_path = os.path.join(current_dir, 'data', 'header_formats', 'l1.csv')
     
     # Parse primary header values
-    primary_values = parse_rst_table(rst_file_path, "Primary Header \\(HDU 0\\)", stop_at="Image Header (HDU 1)")
+    primary_values = parse_csv_table(csv_file_path, "Primary Header (HDU 0)")
     
     # Fill in primary header with values from RST
     for keyword, value in primary_values.items():
@@ -385,10 +271,10 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     
     # Override some values that should be dynamic
     prihdr['FILETIME'] = dt_str
-    prihdr['VISTYPE'] = 'MOCK'  # Trap pump specific
+    prihdr['VISTYPE'] = 'TPUMP'  # Trap pump specific
     
     # Parse image header values  
-    image_values = parse_rst_table(rst_file_path, "Image Header \\(HDU 1\\)")
+    image_values = parse_csv_table(csv_file_path, "Image Header (HDU 1)")
     
     # Fill in extension header with values from RST
     for keyword, value in image_values.items():
@@ -400,6 +286,8 @@ def create_default_L1_TrapPump_headers(arrtype="SCI"):
     exthdr['ARRTYPE'] = arrtype
     exthdr['DATETIME'] = dt_str
     exthdr['FTIMEUTC'] = dt_str
+
+    prihdr['FILENAME'] = f"cgi_{prihdr['VISITID']}_{ftime}_l1_.fits"
     
     # Override BUNIT for trap pump data (different from regular L1)
     exthdr['BUNIT'] = 'detected EM electron'
@@ -434,8 +322,9 @@ def create_default_L2a_headers(arrtype="SCI"):
 
 
     """
-    dt = datetime.datetime.now(datetime.timezone.utc)
-    dt_str = dt.isoformat() 
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
 
     prihdr, exthdr = create_default_L1_headers(arrtype)
     
@@ -444,6 +333,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     biashdr = fits.Header()
 
     prihdr['ORIGIN']        = 'DRP'         # Who is responsible for the data
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2a.fits"
 
     del(exthdr['BSCALE'])
     del(exthdr['BZERO'])
@@ -461,6 +351,7 @@ def create_default_L2a_headers(arrtype="SCI"):
     exthdr['DRPVERSN']      = '2.2'         # Version of DRP software
     exthdr['DRPCTIME']      = dt_str        # DRP clock time
     exthdr['HISTORY']       = ''            # History comments
+    exthdr['FTIMEUTC']      = dt_str
 
     errhdr['XTENSION']    = 'IMAGE'         # Image Extension (FITS format keyword)
     errhdr['BITPIX']      = 16              # Array data type – instrument data is unsigned 16-bit
@@ -512,8 +403,9 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
 
     """
     # TO DO: Update this once L2a headers have been finalized
-    dt = datetime.datetime.now(datetime.timezone.utc)
-    dt_str = dt.isoformat() 
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
 
     prihdr, exthdr = create_default_L1_TrapPump_headers(arrtype)
     
@@ -522,6 +414,7 @@ def create_default_L2a_TrapPump_headers(arrtype="SCI"):
     biashdr = fits.Header()
 
     prihdr['ORIGIN']        = 'DRP'         # Who is responsible for the data
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2a.fits"
 
     del(exthdr['BSCALE'])
     del(exthdr['BZERO'])
@@ -593,6 +486,12 @@ def create_default_L2b_headers(arrtype="SCI"):
 
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2a_headers(arrtype)
 
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
+
     exthdr['BUNIT'] = 'photoelectron'   # Physical unit of the array (brightness unit)
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
 
@@ -635,6 +534,12 @@ def create_default_L2b_TrapPump_headers(arrtype="SCI"):
     """
 
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2a_TrapPump_headers(arrtype)
+
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l2b.fits"
 
     exthdr['BUNIT'] = 'photoelectron'   # Physical unit of the array (brightness unit)
     exthdr['DATALVL']       = 'L2b'         # Data level (e.g., 'L1', 'L2a', 'L2b')
@@ -679,6 +584,13 @@ def create_default_L3_headers(arrtype="SCI"):
     """
     # TO DO: Update this once L3 headers have been finalized
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers(arrtype)
+
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    exthdr['HISTORY']       = ''            # History comments
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l3_.fits"
     
     exthdr['BUNIT'] = 'photoelectron/s'   # Physical unit of the array (brightness unit)
     exthdr['CD1_1'] = 0
@@ -717,6 +629,13 @@ def create_default_L4_headers(arrtype="SCI"):
     """
     # TO DO: Update this once L4 headers have been finalized
     prihdr, exthdr, errhdr, dqhdr = create_default_L3_headers(arrtype)
+
+    dt = datetime.datetime.now()
+    dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+    ftime = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]
+    exthdr['DRPCTIME']      = dt_str        # DRP clock time
+    exthdr['HISTORY']       = ''            # History comments
+    prihdr['FILENAME']      = f"cgi_{prihdr['VISITID']}_{ftime}_l4_.fits"
     
     exthdr['NUM_FR']        = 2             # Number of frames that were used in the combine_subexposures step
     exthdr['DRPNFILE']      = 2             # Num raw files used in final image combination
@@ -2458,7 +2377,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, 100, temp)
             # add in 'CENel1' trap for all phase times
         #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
-    #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
             add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, 100, temp)
             add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, 100, temp)
             # add in 'RHSel1' trap for more than length limit (but diff lengths)
@@ -2541,7 +2460,7 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             add_1_dipole(temps[temp][1], 33, 77, 'below', 'sp', 0, phase_times, temp)
             # add in 'CENel1' trap for all phase times
         #    add_1_dipole(temps[temp][3], 26, 28, 'below', 'mf2', 0, 100, temp)
-    #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
+        #    add_1_dipole(temps[temp][4], 26, 28, 'above', 'mf2', 0, 100, temp)
             add_1_dipole(temps[temp][3], 26, 28, 'below', 2, 0, phase_times, temp)
             add_1_dipole(temps[temp][4], 26, 28, 'above', 2, 0, phase_times, temp)
             # add in 'RHSel1' trap for more than length limit (but diff lengths)
@@ -2970,6 +2889,170 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     return frame
 
+def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, filter='3C', dpamname = 'POL0', fpamname = 'HOLE', 
+                      target_name='Vega', fsm_x=0.0, fsm_y=0.0, exptime=1.0, filedir=None, platescale=21.8, 
+                      background=0, add_gauss_noise=True, noise_scale=1., file_save=False):
+    """
+    Create simulated data for polarimetric absolute flux calibration. Two point sources to
+    simulate images split by polarization, with a 2D-Gaussian PSF and Gaussian noise.
+
+    Args:
+        star_flux_left (float): Flux of the point source on the left size of the image in erg/(s*cm^2*AA)
+        star_flux_right (float): Flux of the point source on the right size of the image in erg/(s*cm^2*AA)
+        fwhm (float): Full width at half max (FWHM) of the centroid
+        cal_factor (float): Calibration factor erg/(s*cm^2*AA)/electron/s
+        filter (str): (Optional) The CFAM filter used.
+        dpamname (str): (Optional) The wollaston prism being used
+        fpamname (str): (Optional) Position of the FPAM
+        target_name (str): (Optional) Name of the calspec star
+        fsm_x (float): (Optional) X position shift in milliarcseconds (mas)
+        fsm_y (float): (Optional) Y position shift in milliarcseconds (mas)
+        exptime (float): (Optional) Exposure time (s)
+        filedir (str): (Optional) Directory path to save the output file
+        platescale (float): Plate scale in mas/pixel (default: 21.8 mas/pixel)
+        background (float): optional additive background value
+        add_gauss_noise (bool): Whether to add Gaussian noise to the data (default: True)
+        noise_scale (float): Spread of the Gaussian noise
+        file_save (bool): Whether to save the image (default: False)
+
+    Returns:
+        corgidrp.data.Image: The simulated image
+    """
+
+    # Create directory if needed
+    if filedir is not None and not os.path.exists(filedir):
+        os.mkdir(filedir)
+
+    # Image properties
+    size = (1024, 1024)
+    sim_data = np.zeros(size)
+    ny, nx = size
+    center = [nx // 2, ny // 2]  # Default image center
+    target_location = (80.553428801, -69.514096821)
+
+    # Convert FSM shifts from mas to pixels
+    fsm_x_shift = fsm_x * 0.001 / (platescale * 0.001)  # Convert mas to degrees, then to pixels
+    fsm_y_shift = fsm_y * 0.001 / (platescale * 0.001)
+
+    # New star position
+    xpos = center[0] + fsm_x_shift
+    ypos = center[1] + fsm_y_shift
+
+    # Find nearest pixel
+    x_int = int(round(xpos))
+    y_int = int(round(ypos))
+
+
+    # Convert flux from calspec units to photo-electrons/s
+    flux_left = star_flux_left / cal_factor
+    flux_right = star_flux_right / cal_factor
+
+    if dpamname == 'POL0':
+        x_int_left = x_int - 172
+        x_int_right = x_int + 172
+        y_int_left = y_int
+        y_int_right = y_int
+        dpam_h = 8991.3
+        dpam_v = 1261.3
+    elif dpamname == 'POL45':
+        x_int_left = x_int - 122
+        x_int_right = x_int + 122
+        y_int_left = y_int + 122
+        y_int_right = y_int - 122
+        dpam_h = 44660.1
+        dpam_v = 1261.3
+    else:
+        raise ValueError('dpamname have to be "POL0" or "POL45"')
+
+
+    # Inject Gaussian PSF star
+    stampsize = int(np.ceil(3 * fwhm))
+    sigma = fwhm/ (2.*np.sqrt(2*np.log(2)))
+
+    # coordinate system
+    y, x = np.indices([stampsize, stampsize])
+    y -= stampsize // 2
+    x -= stampsize // 2
+
+    x_left = x + x_int_left
+    x_right = x + x_int_right
+    y_left = y + y_int_left
+    y_right = y + y_int_right
+    
+    xmin_left = x_left[0][0]
+    xmax_left = x_left[-1][-1]
+    xmin_right = x_right[0][0]
+    xmax_right = x_right[-1][-1]
+    ymin_left = y_left[0][0]
+    ymax_left = y_left[-1][-1]
+    ymin_right = y_right[0][0]
+    ymax_right = y_right[-1][-1]
+
+    psf_left = gaussian_array((stampsize,stampsize),sigma,flux_left) / (2.0 * np.pi * sigma**2)
+    psf_right = gaussian_array((stampsize,stampsize),sigma,flux_right) / (2.0 * np.pi * sigma**2)
+
+    # Inject the star into the image
+    sim_data[ymin_left:ymax_left + 1, xmin_left:xmax_left + 1] += psf_left
+    sim_data[ymin_right:ymax_right + 1, xmin_right:xmax_right + 1] += psf_right
+
+    # Add background
+    sim_data += background
+
+    # Add Gaussian noise
+    if add_gauss_noise:
+        # add Gaussian random noise
+        noise_rng = np.random.default_rng(10)
+        noise = noise_rng.normal(scale=noise_scale, size=size)
+        sim_data += noise
+
+    # Error map
+    err = np.full(size, noise_scale)
+
+    # Get FPAM positions, not strictly necessary but
+    if fpamname == 'HOLE':
+        fpam_h = 40504.4
+        fpam_v = 9616.8
+    elif fpamname == 'ND225':
+        fpam_h = 61507.8
+        fpam_v = 25612.4
+    elif fpamname == 'ND475':
+        fpam_h = 2503.7
+        fpam_v = 6124.9
+
+    # Create image object
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['TARGET'] = target_name
+
+    exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
+    exthdr['FPAMNAME'] = fpamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['DPAM_H'] = dpam_h
+    exthdr['DPAM_V'] = dpam_v
+    exthdr['FPAM_H']   = 2503.7
+    exthdr['FPAM_V']   = 6124.9
+    exthdr['FSMX']    = fsm_x              # Ensure fsm_x is defined
+    exthdr['FSMY']    = fsm_y              # Ensure fsm_y is defined
+    exthdr['EXPTIME']  = exptime            # Ensure exptime is defined       # Ensure color_cor is defined
+    exthdr['CRPIX1']   = xpos               # Ensure xpos is defined
+    exthdr['CRPIX2']   = ypos               # Ensure ypos is defined
+    exthdr['CTYPE1']   = 'RA---TAN'
+    exthdr['CTYPE2']   = 'DEC--TAN'
+    exthdr['CDELT1']   = (platescale * 0.001) / 3600  # Ensure platescale is defined
+    exthdr['CDELT2']   = (platescale * 0.001) / 3600
+    exthdr['CRVAL1']   = target_location[0]  # Ensure target_location is a defined list/tuple
+    exthdr['CRVAL2']   = target_location[1]
+    exthdr['BUNIT'] = 'photoelectron/s'
+    frame = data.Image(sim_data, err=err, pri_hdr=prihdr, ext_hdr=exthdr)
+   
+    # Save file
+    if filedir is not None and file_save:
+        ftimeutc = data.format_ftimeutc(exthdr['FTIMEUTC'])
+        filename = f'cgi_{prihdr["VISITID"]}_{ftimeutc}_l2b.fits'
+        frame.save(filedir=filedir, filename=filename)
+
+    return frame
+
 def generate_reference_star_dataset_with_flux(
     n_frames=3,
     roll_angles=None,
@@ -3120,7 +3203,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     y, x = np.indices(imshape)
 
     # Following astropy documentation:
-    # Generate random source model list. Random amplitues and centers within a pixel
+    # Generate random source model list. Random amplitudes and centers within a pixel
     # PSF's final location on SCI frame is moved by more than one pixel below. This
     # is the fractional part that only needs a smaller array of non-zero values
     # Set seed for reproducibility of mock data
@@ -4277,3 +4360,82 @@ def create_satellite_spot_observing_sequence(
     dataset = data.Dataset(all_frames)
 
     return dataset
+
+def get_formatted_filename(dt, visitid):
+    """
+    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
+    
+    Args:
+        dt (datetime): Datetime object
+        visitid (str): Visit ID
+
+    Returns:
+        str: Formatted filename
+    """
+    timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
+    return f"cgi_{visitid}_{timestamp}_l2b_.fits"
+
+def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
+                                       left_image_value=1, right_image_value=1, alignment_angle=None):
+    """
+    Creates mock L2b polarimetric data with two polarized images placed on the larger
+    detector frame. Image size and placement depends on the wollaston used and the observing mode.
+
+    Args:
+        image_center (optional, tuple(int, int)): pixel location of where the two images are centered on the detector
+        dpamname (optional, string): name of the wollaston prism used, accepted values are 'POL0' and 'POL45'
+        observing_mode (optional, string): observing mode of the coronagraph
+        left_image_value (optional, int): value to fill inside the radius of the left image, corresponding to 0 or 45 degree polarization
+        right_image_value (optional, int): value to fill inside the radius of the right image, corresponding to 90 or 135 degree polarization
+        alignment_angle (optional, float): the angle in degrees of how the two polarized images are aligned with respect to the horizontal,
+            defaults to 0 for WP1 and 45 for WP2
+    
+    Returns:
+        corgidrp.data.Image: The simulated L2b polarimetric image
+    """
+    assert dpamname in ['POL0', 'POL45'], \
+        "Invalid prism selected, must be 'POL0' or 'POL45'"
+    
+    # create initial blank frame
+    image_data = np.zeros(shape=(1024, 1024))
+
+    image_separation_arcsec = 7.5
+
+    #determine radius of the images
+    if observing_mode == 'NFOV':
+        cfamname = '1F'
+        radius = int(round((9.7 * ((0.5738 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    elif observing_mode == 'WFOV':
+        cfamname = '4F'
+        radius = int(round((20.1 * ((0.8255 * 1e-6) / 2.363114) * 206265) / 0.0218))
+    else:
+        cfamname = '1F'
+        radius = int(round(1.9 / 0.0218))
+    
+    #determine the center of the two images
+    if alignment_angle is None:
+        if dpamname == 'POL0':
+            alignment_angle = 0
+        else:
+            alignment_angle = 45
+    angle_rad = alignment_angle * (np.pi / 180)
+    displacement_x = int(round((7.5 * np.cos(angle_rad)) / (2 * 0.0218)))
+    displacement_y = int(round((7.5 * np.sin(angle_rad)) / (2 * 0.0218)))
+    center_left = (image_center[0] - displacement_x, image_center[1] + displacement_y)
+    center_right = (image_center[0] + displacement_x, image_center[1] - displacement_y)
+
+    #fill the location where the images are with 1s
+    y, x = np.indices([1024, 1024])
+    image_data[((x - center_left[0])**2) + ((y - center_left[1])**2) <= radius**2] = left_image_value
+    image_data[((x - center_right[0])**2) + ((y - center_right[1])**2) <= radius**2] = right_image_value
+    
+    #create L2b headers
+    prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
+    #define necessary header keywords
+    exthdr['CFAMNAME'] = cfamname
+    exthdr['DPAMNAME'] = dpamname
+    exthdr['LSAMNAME'] = observing_mode
+    image = data.Image(image_data, pri_hdr=prihdr, ext_hdr=exthdr)
+
+    return image
+

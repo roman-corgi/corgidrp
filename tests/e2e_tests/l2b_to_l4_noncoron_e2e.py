@@ -3,6 +3,7 @@ import os
 import numpy as np
 from astropy.io import fits
 from datetime import datetime
+import corgidrp
 from corgidrp.data import Image
 from corgidrp.mocks import (create_default_L2b_headers, create_default_L3_headers, 
                             create_synthetic_satellite_spot_image, create_ct_psfs)
@@ -76,6 +77,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     astrom_cal.save(filedir=e2eoutput_path)
 
     # add calibration file to caldb
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(astrom_cal)
 
@@ -85,7 +91,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     #Read in the PSFs
     input_file = 'hlc_os11_no_fpm.fits'
-    input_hdul = fits.open(os.path.join(e2edata_path, "hcl_os11_v3", input_file))
+    input_hdul = fits.open(os.path.join(e2edata_path, "hlc_os11_v3", input_file))
     input_image = input_hdul[0].data
     header = input_hdul[0].header
     # I think we work with (0,0) at the center of the pixel
@@ -164,6 +170,11 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     #### Pass the data to the walker ####
     #####################################
 
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+
     l2b_data_filelist = sorted(glob.glob(os.path.join(e2e_data_path, "*.fits")))
     walker.walk_corgidrp(l2b_data_filelist, "", e2eoutput_path)
 
@@ -186,7 +197,9 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     assert l3_image.ext_hdr['BUNIT'] == 'photoelectron/s'
     
     #Clean up
-    this_caldb.remove_entry(astrom_cal)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
+    shutil.rmtree(e2e_data_path)
     # shutil.rmtree(e2eoutput_path)
     
 
@@ -239,6 +252,11 @@ def test_l3_to_l4(e2eoutput_path):
     astrom_cal.save(filedir=e2eoutput_path_l4)
 
     # add calibration file to caldb
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
     this_caldb = caldb.CalDB()
     this_caldb.create_entry(astrom_cal)
 
@@ -264,7 +282,12 @@ def test_l3_to_l4(e2eoutput_path):
     #### Read in the L3 data and run ####
     #####################################
 
-    l3_data_filelist = sorted(glob.glob(os.path.join(e2einput_path, "*l3_.fits")))
+    # now get any default cal files that might be needed; if any reside in the folder that are not 
+    # created by caldb.initialize(), doing the line below AFTER having added in the ones in the previous lines
+    # means the ones above will be preferentially selected
+    this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    
+    l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
     walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4)
 
@@ -306,10 +329,8 @@ def test_l3_to_l4(e2eoutput_path):
     assert combined_image.ext_hdr['FILE3'] in input_filenames
     assert combined_image.ext_hdr['FILE4'] in input_filenames
 
-
-    #Clean up
-    this_caldb.remove_entry(astrom_cal)
-    this_caldb.remove_entry(fluxcal_fac)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
     # shutil.rmtree(e2eoutput_path_l4)
     # shutil.rmtree(e2eintput_path)
 

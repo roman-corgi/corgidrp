@@ -1,6 +1,9 @@
 import os
+import glob
 import numpy as np
 import pytest
+import shutil
+from astropy.io import fits
 import corgidrp
 import corgidrp.caldb as caldb
 import corgidrp.data as data
@@ -171,7 +174,64 @@ def test_caldb_scan():
     # reset everything
     os.remove(testcaldb_filepath)
 
+def test_default_calibs():
+    """
+    Tests that the default calibration files are created if they don't exist.
+    """
+    # Copy all files in corgidrp.default_cal_dir to a temporary directory, 
+    # then clear out corgidrp.default_cal_dir for this test and restore it at the end
+    current_dir = os.path.dirname(__file__)
+    temp_dir = os.path.join(os.path.dirname(current_dir), "temp_test_dir")
+    shutil.copy2(corgidrp.caldb_filepath, os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
+    os.makedirs(temp_dir, exist_ok=True)
+    for filename in os.listdir(corgidrp.default_cal_dir):
+        src = os.path.join(corgidrp.default_cal_dir, filename)
+        dst = os.path.join(temp_dir, filename)
+        if os.path.isfile(src):
+            shutil.copy2(src, dst)
+    # Remove all files in corgidrp.default_cal_dir
+    for filename in os.listdir(corgidrp.default_cal_dir):
+        file_path = os.path.join(corgidrp.default_cal_dir, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    default_cal_files_before = glob.glob(os.path.join(corgidrp.default_cal_dir, "*.fits"))
+    assert(len(default_cal_files_before) == 0)
+    # initialize (same thing happens at import, but we want to re-run it)
+    caldb.initialize()
+    testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
+    testcaldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
+    default_cal_files_after = glob.glob(os.path.join(corgidrp.default_cal_dir, "*.fits"))
+    assert(len(default_cal_files_after) > 0)
+    assert(len(testcaldb._db.index) == len(default_cal_files_after))
+    # check that the default cals were generated
+    cal_type_list = []
+    for filename in default_cal_files_after:
+        with fits.open(filename) as hdul:
+            cal_type_list.append(hdul[1].header['DATATYPE'])
+    assert(set(testcaldb._db['Type']) == set(cal_type_list))
+
+    # reset everything
+    os.remove(testcaldb_filepath)
+    # Remove all files just created in corgidrp.default_cal_dir
+    for filename in os.listdir(corgidrp.default_cal_dir):
+        file_path = os.path.join(corgidrp.default_cal_dir, filename)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+    # Copy back the original files
+    for filename in os.listdir(temp_dir):
+        src = os.path.join(temp_dir, filename)
+        dst = os.path.join(corgidrp.default_cal_dir, filename)
+        if os.path.isfile(src):
+            shutil.copy2(src, dst)
+    shutil.rmtree(temp_dir)
+    shutil.copy2(os.path.join(corgidrp.config_folder, "temp_caldb.csv"), corgidrp.caldb_filepath)
+    os.remove(os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
+
+
+
+
 if __name__ == "__main__":
+    test_default_calibs()
     test_caldb_init()
     test_get_calib()
     test_caldb_create_default()

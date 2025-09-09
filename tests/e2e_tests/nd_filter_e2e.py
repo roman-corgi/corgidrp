@@ -1,11 +1,13 @@
 import os, shutil, glob, argparse
 import pytest
 from datetime import datetime
+import corgidrp
 import corgidrp.mocks as mocks
 import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 from corgidrp import caldb
+import time
 
 # ----------------------------------------------------------------------
 @pytest.mark.e2e
@@ -30,6 +32,9 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     dim_frames.ext_hdr['CFAMNAME'] = '3C'
     dim_frames.ext_hdr['BUNIT'] = 'photoelectron'
     dim_frames = [dim_frames] if not isinstance(dim_frames, list) else dim_frames
+
+    # sleep for 2 seconds so the next file has a different timestamp
+    time.sleep(2)
 
     # 2. Synthetic “bright star” frames (with ND)
     true_flux_bright = nd_filter_calibration.compute_expected_band_irradiance('Vega', '3C')
@@ -80,9 +85,16 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
 
     filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir)]
 
+    # Initialize a connection to the calibration database
+    tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
+    corgidrp.caldb_filepath = tmp_caldb_csv
+    # remove any existing caldb file so that CalDB() creates a new one
+    if os.path.exists(corgidrp.caldb_filepath):
+        os.remove(tmp_caldb_csv)
+
     # 4. Run the DRP walker with outputs saved in the current folder (e2eoutput_path)
     # Remove old NDF cal files first
-    for old_file in glob.glob(os.path.join(simdata_dir, "*NDF_CAL.fits")):
+    for old_file in glob.glob(os.path.join(simdata_dir, "*ndf_cal.fits")):
         os.remove(old_file)
     walker.walk_corgidrp(filelist, "", simdata_dir)
 
@@ -95,8 +107,8 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
     print("Input OD:", od_truth)
     assert recovered_od == pytest.approx(od_truth, abs=1e-1)
 
-    # Clean up CAL‑DB entry
-    caldb.CalDB().remove_entry(nd_cal)
+    # remove temporary caldb file
+    os.remove(tmp_caldb_csv)
 
     print("ND‑filter E2E test passed")
 

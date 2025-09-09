@@ -173,25 +173,26 @@ class Dataset():
         for i, frame in enumerate(self.frames):
             frame.err = self.all_err[i]
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
         Calls Image.rescale_errors() for each frame.
         Updates Dataset.all_err
 
         Args:
-          input_error (np.array): 2-d error layer or 3-d layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim == 3:
-            for i,frame in enumerate(self.frames):
-                frame.rescale_error(input_error[i], err_name)
-
-        elif input_error.ndim ==2:
+        if isinstance(scale_factor, float):
             for frame in self.frames:
-                frame.rescale_error(input_error, err_name)
-
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 2:
+            for frame in self.frames:
+                frame.rescale_error(scale_factor, scale_name)
+        elif scale_factor.ndim == 3:
+            for i,frame in enumerate(self.frames):
+                frame.rescale_error(scale_factor[i], scale_name)
         else:
-            raise ValueError("input_error is not either a 2D or 3D array.")
+            raise ValueError("scale_factor is neither a float nor a 2D or 3D array.")
 
         # Preserve pointer links between Dataset.all_err and Image.err
         self.all_err = np.array([frame.err for frame in self.frames])
@@ -571,30 +572,27 @@ class Image():
         # record history since 2-D error map doesn't track individual terms
         self.err_hdr['HISTORY'] = "Added error term: {0}".format(err_name)
 
-    def rescale_error(self, input_error, err_name):
+    def rescale_error(self, scale_factor, scale_name):
         """
-        Add a layer of a specific additive uncertainty on the 3-dim error array extension
-        and update the combined uncertainty in the first layer.
-        Update the error header and assign the error name.
-
-        Only tracks individual errors if the "track_individual_errors" setting is set to True
-        in the configuration file
+        scale the 3-dim error array extension with a factor.
+        Update the error header with the history and reason of the scaling.
 
         Args:
-          input_error (np.array): 2-d error layer
-          err_name (str): name of the uncertainty layer
+          scale_factor (np.array or float): scale factor value or array
+          scale_name (str): name of the scaling reason
         """
-        if input_error.ndim != 2 or input_error.shape != self.data.shape:
-            raise ValueError("we expect a 2-dimensional error layer with dimensions {0}".format(self.data.shape))
+        if isinstance(scale_factor, float):
+            pass
+        elif scale_factor.ndim == 2 or scale_factor.shape == self.data.shape:
+            pass
+        else:
+            raise ValueError("we expect a 2-dimensional input array with dimensions {0} or a float value".format(self.data.shape))
 
-        #first layer is always the updated combined error
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning) # catch any invalid value encountered in multiply
-            self.err = self.err*input_error
-        self.err_hdr["Layer_1"] = "combined_error"
-
+            self.err = self.err*scale_factor
         # record history since 2-D error map doesn't track individual terms
-        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(err_name)
+        self.err_hdr['HISTORY'] = "Errors rescaled by: {0}".format(scale_name)
 
 
     def get_hash(self):
@@ -605,8 +603,14 @@ class Image():
             str: the hash of the data, err, and dq
         """
         data_bytes = self.data.data.tobytes()
-        err_bytes = self.err.data.tobytes()
-        dq_bytes = self.dq.data.tobytes()
+        if self.err is not None:
+            err_bytes = self.err.data.tobytes()
+        else:
+            err_bytes = b''
+        if self.dq is not None:
+            dq_bytes = self.dq.data.tobytes()
+        else:
+            dq_bytes = b''
 
         total_bytes = data_bytes + err_bytes + dq_bytes
 
@@ -681,6 +685,7 @@ class Dark(Image):
                     self.filename = "drk_cal.fits" # we shouldn't normally be here, but we default to something just in case. 
                 else:
                     self.filename = self.filename.replace("_dnm_cal", "_drk_cal")
+            self.pri_hdr['FILENAME'] = self.filename
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
         
@@ -766,23 +771,24 @@ class SpectroscopyCentroidPSF(Image):
         # b/c of logic in the super.__init__, we just need to check this to see if it is a new SpectroscopyCentroidPSF 
         if ext_hdr is not None:
             if input_dataset is None:
-                raise ValueError("Must pass `input_dataset` to create new PSFCentroidCalibration.")
+                raise ValueError("Must pass `input_dataset` to create new SpectroscopyCentroidPSF.")
             
             self.ext_hdr["EXTNAME"] = "CENTROIDS"
-
-            self.ext_hdr['DATATYPE'] = 'PSFCentroidCalibration'
+            self.ext_hdr['DATATYPE'] = 'SpectroscopyCentroidPSF'
+            self.ext_hdr['DATALVL'] = 'CAL'
             self._record_parent_filenames(input_dataset)
             self.ext_hdr['HISTORY'] = "Stored PSF centroid calibration results."
 
             # Generate default output filename
             base = input_dataset[0].filename.split(".fits")[0]
-            self.filename = f"{base}_psf_centroid.fits"
+            self.filename = re.sub('_l[0-9].', '_scp_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename
             if err is None:
                 self.err = np.zeros(self.data.shape)
-                self.err_hdr = fits.Header
+                self.err_hdr = fits.Header()
 
-        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'PSFCentroidCalibration':
-            raise ValueError("This file is not a valid PSFCentroidCalibration.")
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'SpectroscopyCentroidPSF':
+            raise ValueError("This file is not a valid SpectroscopyCentroidPSF.")
 
         self.xfit = self.data[:, 0]
         self.yfit = self.data[:, 1]
@@ -798,7 +804,6 @@ class DispersionModel(Image):
         data_or_filepath (str or dict): either the filepath to the FITS file to read in OR the dictionary containing the dispersion data
         pri_hdr (fits.Header): Primary header.
         ext_hdr (fits.Header): Extension header.
-        input_dataset (Dataset): Dataset of raw PSF images used to generate this calibration.
         
     Attributes:
         data (dict): table containing the dispersion data
@@ -824,7 +829,7 @@ class DispersionModel(Image):
     """
     
     params_key = ['clocking_angle', 'clocking_angle_uncertainty', 'pos_vs_wavlen_polycoeff', 'pos_vs_wavlen_cov', 'wavlen_vs_pos_polycoeff', 'wavlen_vs_pos_cov']
-    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, input_dataset=None):
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None):
         if isinstance(data_or_filepath, str):
             # run the image class contructor
             super().__init__(data_or_filepath)
@@ -839,8 +844,10 @@ class DispersionModel(Image):
                 raise ValueError("Input should either be a dictionary or a filepath string")
             if pri_hdr == None:
                 pri_hdr = fits.Header()
-            if ext_hdr == None:
-                ext_hdr = fits.Header()
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', category=VerifyWarning)
+                if ext_hdr == None:
+                    ext_hdr = fits.Header()
             ext_hdr['DRPCTIME'] =  time.Time.now().isot
             ext_hdr['DRPVERSN'] =  corgidrp.__version__
             self.pri_hdr = pri_hdr
@@ -848,16 +855,18 @@ class DispersionModel(Image):
             self.ext_hdr['DATATYPE'] = 'DispersionModel' # corgidrp specific keyword for saving to disk
             # add to history
             self.ext_hdr['HISTORY'] = "DispersionModel file created"
-            
             #check that all parameters are available in the input dict
             for key in self.params_key:
                 if key not in data_or_filepath:
                     raise ValueError("parameter {0} is missing in the data".format(key))
             data_list = Table(rows = [data_or_filepath])
             self.data = data_list
-            # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DispersionModel_{0}.fits".format(self.ext_hdr['DRPCTIME'])
+            # Use the last input file's name if available, else timestamp
+            filetime = format_ftimeutc(pri_hdr['FILETIME'])
+            self.filename = f"cgi_{pri_hdr['VISITID']}_{filetime}_dpm_cal.fits"
+            self.pri_hdr['FILENAME'] = self.filename
+
         # initialization data passed in
         self.clocking_angle = self.data["clocking_angle"][0]
         self.clocking_angle_uncertainty = self.data["clocking_angle_uncertainty"][0]
@@ -865,6 +874,10 @@ class DispersionModel(Image):
         self.pos_vs_wavlen_cov = np.array(self.data["pos_vs_wavlen_cov"][0])
         self.wavlen_vs_pos_polycoeff = np.array(self.data["wavlen_vs_pos_polycoeff"][0])
         self.wavlen_vs_pos_cov = np.array(self.data["wavlen_vs_pos_cov"][0])
+        
+        # Add err and dq attributes for walker compatibility (set to None since DispersionModel doesn't have these)
+        self.err = None
+        self.dq = None
 
 
     def save(self, filedir=None, filename=None):
@@ -979,6 +992,7 @@ class NonLinearityCalibration(Image):
             # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) and replace with _nln_cal
             # Handle both lowercase and uppercase L, with or without periods
             self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_nln_cal', input_dataset[-1].filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
         # double check that this is actually a NonLinearityCalibration file that got read in
         # since if only a filepath was passed in, any file could have been read in
@@ -1061,6 +1075,7 @@ class KGain(Image):
                 # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.) and replace with _krn_cal
                 # Handle both lowercase and uppercase L, with or without periods
                 self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '_krn_cal', input_dataset[-1].filename)
+                self.pri_hdr['FILENAME'] = self.filename
 
             self.ext_hdr['DATATYPE'] = 'KGain' # corgidrp specific keyword for saving to disk
             self.ext_hdr['BUNIT'] = 'detected EM electron/DN'
@@ -1159,9 +1174,7 @@ class BadPixelMap(Image):
                 base_filename = input_dataset[-1].filename.replace('.fits', '')
                 base_filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', base_filename)
                 self.filename = f"{base_filename}_bpm_cal.fits"
-            
-            # if no input_dataset is given, do we want to set the filename manually using 
-            # header values?            
+            self.pri_hdr['FILENAME'] = self.filename          
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1247,6 +1260,7 @@ class DetectorNoiseMaps(Image):
                 self.filename = "{0}.fits".format(orig_input_filename)
             else:
                 self.filename = "{0}_dnm_cal.fits".format(orig_input_filename)
+            self.pri_hdr['FILENAME'] = self.filename
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
 
@@ -1407,7 +1421,10 @@ class DetectorParams(Image):
 
             # use the start date for the filename by default
             self.filedir = "."
-            self.filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT'])
+
+            filename = "DetectorParams_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':','.')
+            self.filename = filename
+            self.pri_hdr['FILENAME'] = self.filename
 
     def get_hash(self):
         """
@@ -1421,7 +1438,7 @@ class DetectorParams(Image):
             hashing_str += str(self.params[key])
 
         return str(hash(hashing_str))
-
+            
 class AstrometricCalibration(Image):
     """
     Class for astrometric calibration file. 
@@ -1482,6 +1499,7 @@ class AstrometricCalibration(Image):
                 self.filename = "{0}.fits".format(orig_input_filename)
             else:
                 self.filename = "{0}_ast_cal.fits".format(orig_input_filename)
+            self.pri_hdr['FILENAME'] = self.filename
             
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1534,6 +1552,7 @@ class TrapCalibration(Image):
             # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.)
             # Handle both lowercase and uppercase L, with or without periods
             self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1642,6 +1661,7 @@ class FluxcalFactor(Image):
             # Remove any data level suffixes (e.g., _l1_, _l2a, _L1_, _L2a, etc.)
             # Handle both lowercase and uppercase L, with or without periods
             self.filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', self.filename)
+            self.pri_hdr['FILENAME'] = self.filename
 
 class FpamFsamCal(Image):
     """
@@ -1732,7 +1752,9 @@ class FpamFsamCal(Image):
 
             # use the start date for the filename by default
             self.filedir = '.'
-            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT'])
+            self.filename = "FpamFsamCal_{0}.fits".format(self.ext_hdr['SCTSRT']).replace(':', '.') # compatible with Windows machines
+            self.pri_hdr['FILENAME'] = self.filename
+
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1846,6 +1868,7 @@ class CoreThroughputCalibration(Image):
             base_filename = input_dataset[-1].filename.replace('.fits', '')
             base_filename = re.sub('_[lL][0-9][a-z]?[_.]?', '', base_filename)
             self.filename = f"{base_filename}_ctp_cal.fits"
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = CAL
             self.ext_hdr['DATALVL']    = 'CAL'
@@ -1939,7 +1962,7 @@ class CoreThroughputCalibration(Image):
           corDataset (corgidrp.data.Dataset): a dataset containing some
               coronagraphic observations.
           fpamfsamcal (corgidrp.data.FpamFsamCal): an instance of the
-              FpamFsamCal class. That is, a FpamFsamCal calibration file.
+              FpamFsamCal calibration class.
           logr (bool) (optional): If True, radii are mapped into their logarithmic
               values before constructing the interpolant.
 
@@ -1995,7 +2018,7 @@ class CoreThroughputCalibration(Image):
         r_good = radius_cor >= radii.min()
         
         if len(x_cor[r_good]) == 0:
-            raise ValueError('All target radius are less than the minimum '
+            raise ValueError('All target radii are less than the minimum '
                 'radius in the core throughout data: {:.2f} EXCAM pixels'.format(radii.min()))
         radius_cor = radius_cor[r_good]
         # Update x_cor and y_cor
@@ -2271,6 +2294,7 @@ class CoreThroughputMap(Image):
             # calibration files
             self.filedir = '.'
             self.filename = 'corethroughput_map.fits'
+            self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = L3
             self.ext_hdr['DATALVL']    = 'L3'
@@ -2858,9 +2882,8 @@ datatypes = { "Image" : Image,
               "TrapCalibration" : TrapCalibration,
               "FluxcalFactor" : FluxcalFactor,
               "FpamFsamCal" : FpamFsamCal,
+              "CoreThroughputMap" : CoreThroughputMap,
               "CoreThroughputCalibration": CoreThroughputCalibration,
-              "CoreThroughputMap": CoreThroughputMap,
-              "PSFCentroidCalibration": SpectroscopyCentroidPSF,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
               "DispersionModel": DispersionModel
