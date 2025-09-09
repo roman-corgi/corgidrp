@@ -1,5 +1,5 @@
 {
-    "name" : "l2b_to_fluxcal_factor",
+    "name" : "l2b_to_fluxcal_factor_pol",
     "template" : true,
     "drpconfig" : {
         "track_individual_errors" : false
@@ -11,7 +11,7 @@
             "name": "divide_by_exptime"
         },
         {
-            "name" : "calibrate_fluxcal_aper"
+            "name" : "calibrate_pol_fluxcal_aper"
         },
         {
             "name" : "save"
