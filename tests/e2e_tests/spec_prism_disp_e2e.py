@@ -225,8 +225,6 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
         e2edata_path (str): Path to input data directory
         e2eoutput_path (str): Output directory path for results and logs.
 
-    Returns:
-        tuple: (disp_model, coeffs, angle)
     """
     # Set up output directory and logging
     global logger
