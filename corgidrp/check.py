@@ -389,7 +389,7 @@ def dictionary(var, vname, vexc):
     return var
 
 # ================================================================================
-# Validation functions for E2E tests - moved from spec_prism_disp_e2e.py
+# Validation functions for E2E tests
 # ================================================================================
 
 def check_filename_convention(filename, expected_pattern, frame_info="", logger=None):
