@@ -280,7 +280,6 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
     
-    return disp_model, coeffs, angle
 
 
 # Run the test if this script is executed directly
