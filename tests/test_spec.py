@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pytest
+import logging
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel
@@ -556,6 +557,44 @@ def test_determine_zeropoint():
 def test_star_spec_registration():
     """ Test the star spectrum registration """
 
+    # Directory to temporarily store the outputs of the test
+    dir_test = 'simdata'
+    os.makedirs(dir_test, exist_ok=True)
+    # Start logger
+    log_file = os.path.join(dir_test, 'star_spec_registration_vap.log')
+
+    # Create a new logger specifically for this test, otherwise things have issues
+    logger = logging.getLogger('star_spec_registration')
+    logger.setLevel(logging.INFO)
+
+    # Clear any existing handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    logger.info('='*80)
+    logger.info('STAR SPECTRUM REGISTRATION UT/VAP TEST')
+    logger.info('='*80)
+    logger.info("")
+
+    logger.info('='*80)
+    logger.info('Pre-test: set up input files and save to disk')
+    logger.info('='*80)
+
     # Instrumental setup
     cfam_name = '3F'
     dpam_name = 'PRISM3'
@@ -563,6 +602,11 @@ def test_star_spec_registration():
     lsam_name = 'SPEC'
     fsam_name = ['OPEN', 'R1C2', 'R6C5', 'R3C1']
     fpam_name = ['OPEN', 'ND225', 'ND475']
+    logger.info(f'Considering CFAM={cfam_name:s}, DPAM={dpam_name:s}, ' +
+        f'SPAM={spam_name}, LSAM={lsam_name:s}')
+
+    # Data level of input data
+    dt_lvl = 'l3'
 
     # Seeded random generator
     rng = np.random.default_rng(seed=0)
@@ -576,18 +620,19 @@ def test_star_spec_registration():
                     'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
             assert os.path.exists(file_path), f'Test FITS file not found: {file_path}'
 
+            logger.info(f'Considering FPAM={fpam:s}, FSAM={fsam:s}')
+
             pri_hdr, ext_hdr = create_default_L2b_headers()[0:2]
             with fits.open(file_path) as hdul:
                 psf_array = hdul[0].data
                 psf_table = Table(hdul[1].data)
 
             assert psf_array.ndim == 3, 'Expected 3D PSF array'
-            assert 'xcent' in psf_table.colnames and 'ycent' in psf_table.colnames, 'Missing centroid columns'
+            assert 'ycent' in psf_table.colnames, 'Missing centroid columns'
 
             # Add an initial guess of where the centroid is found as well as
             # FSAM offsets from the templates
             initial_cent = {
-                'xcent': np.array(psf_table['xcent']),
                 'ycent': np.array(psf_table['ycent']),
                 'yoffset': np.array(psf_table['yoffset'])
             }
@@ -599,7 +644,7 @@ def test_star_spec_registration():
             # Add wavelength zero-point. In this test, we set it in a way that
             # matches one of the slices, so that we can predict which one is the
             # best image later
-            ext_hdr['WV0_X'] = initial_cent['xcent'][slit_ref]
+            ext_hdr['WV0_X'] = (psf_array.shape[1] - 1)/2
             ext_hdr['WV0_Y'] = initial_cent['ycent'][slit_ref]
         
             # Update Setup header key values
@@ -643,6 +688,8 @@ def test_star_spec_registration():
                 # spectrum is found
                 image_data.filename = f'test_file_{i}.fits'
                 data_images.append(image_data)
+
+
             dataset_template = Dataset(template_images)
             dataset_data     = Dataset(data_images)
         
@@ -650,7 +697,6 @@ def test_star_spec_registration():
             best_image = steps.star_spec_registration(
                 dataset_data,
                 dataset_template,
-                xcent_template=initial_cent['xcent'],
                 ycent_template=initial_cent['ycent'],
                 yoffset_template=initial_cent['yoffset'],
                 slit_align_err=slit_align_err)
@@ -681,7 +727,6 @@ def test_star_spec_registration():
             steps.star_spec_registration(
                 dataset_data,
                 dataset_template,
-                xcent_template=initial_cent['xcent'],
                 ycent_template=initial_cent['ycent'],
                 yoffset_template=initial_cent['yoffset'],
                 slit_align_err=slit_align_err)
@@ -693,7 +738,6 @@ def test_star_spec_registration():
         steps.star_spec_registration(
             dataset_data,
             dataset_template,
-            xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
             yoffset_template=initial_cent['yoffset'],
             slit_align_err=slit_align_err)
@@ -704,7 +748,6 @@ def test_star_spec_registration():
         steps.star_spec_registration(
             dataset_data,
             dataset_template,
-            xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
             yoffset_template=initial_cent['yoffset'],
             slit_align_err=slit_align_err)
@@ -717,7 +760,6 @@ def test_star_spec_registration():
         steps.star_spec_registration(
             dataset_data,
             dataset_template,
-            xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
             yoffset_template=initial_cent['yoffset'],
             slit_align_err=slit_align_err)
@@ -728,14 +770,13 @@ def test_star_spec_registration():
         steps.star_spec_registration(
             dataset_data,
             dataset_template,
-            xcent_template=initial_cent['xcent'],
             ycent_template=initial_cent['ycent'],
             yoffset_template=initial_cent['yoffset'],
             slit_align_err=slit_align_err)
     print('FSMY failure test passed')
     dataset_data[0].ext_hdr['FSMY'] = 30.
     
-    print('Star spectrum registration passed')
+    logger.info('STAR SPECTRUM REGISTRATION UT/VAP TEST PASSED')
     
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
