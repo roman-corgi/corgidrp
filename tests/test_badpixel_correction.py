@@ -126,7 +126,9 @@ def test_bad_pixels():
 
 
 def test_replace_bps_2d():
-
+    """Test that the replace_bad_pixels correctly patches bad pixels, and 
+    the error array, and does not modify the dq array, given a uniform 2d data array.
+    """
     # Create a clean dataset with constant values in data & err
     input_dataset_clean, _ = mocks.create_psfsub_dataset(2,0,[0,0],data_shape=[30,20])
     input_dataset_clean.all_data[:,:,:] = constant
@@ -153,11 +155,16 @@ def test_replace_bps_2d():
     # Run bad pixel cleaning
     cleaned_dataset = replace_bad_pixels(input_dataset_bad)
 
-    assert cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data)
-    assert cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err)
+    if not cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data):
+        raise Exception("Cleaned data array does not match input data array for 2D uniform data.")
+    if not  cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err):
+        raise Exception("Cleaned error array does not match input error array for 2D uniform data.")
+    if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
+        raise Exception("Output DQ array does not match input DQ array for 2D uniform data.")
 
 def test_replace_bps_3d():
-
+    """Test that the replace_bad_pixels correctly patches bad pixels, and 
+    the error array, and does not modify the dq array, given a uniform 3d data array."""
     # Create a clean dataset with constant values in data & err
     input_dataset_clean, _ = mocks.create_psfsub_dataset(2,0,[0,0],data_shape=[3,30,20])
     input_dataset_clean.all_data[:,:,:,:] = constant
@@ -179,11 +186,17 @@ def test_replace_bps_3d():
     # Run bad pixel cleaning
     cleaned_dataset = replace_bad_pixels(input_dataset_bad)
 
-    assert cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data)
-    assert cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err)
+    if not cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data):
+        raise Exception("Cleaned data array does not match input data array for 3D uniform data.")
+    if not  cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err):
+        raise Exception("Cleaned error array does not match input error array for 3D uniform data.")
+    if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
+        raise Exception("Output DQ array does not match input DQ array for 3D uniform data.")
 
 def test_replace_bps_nonuniform():
-
+    """Test that the replace_bad_pixels correctly patches bad pixels, and 
+    the error array, and does not modify the dq array, given a nonuniform (linear gradient)
+    2d data array."""
     # Create a clean dataset with constant values in data & err
     input_dataset_clean, _ = mocks.create_psfsub_dataset(2,0,[0,0],data_shape=[30,20])
     
@@ -221,8 +234,12 @@ def test_replace_bps_nonuniform():
     #     ax[1].imshow(cleaned_dataset[f].data,vmin=0,vmax=30)
     #     ax[1].set_title('Cleaned Data')
 
-    assert cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data)
-    assert cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err)
+    if not cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data):
+        raise Exception("Cleaned data array does not match input data array for 2D nonuniform data.")
+    if not  cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err):
+        raise Exception("Cleaned error array does not match input error array for 2D nonuniform data.")
+    if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
+        raise Exception("Output DQ array does not match input DQ array for 2D nonuniform data.")
 
     
 if __name__ == '__main__':
