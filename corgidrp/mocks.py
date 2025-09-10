@@ -4355,7 +4355,7 @@ def create_satellite_spot_observing_sequence(
 
 def get_formatted_filename(dt, visitid):
     """
-    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b_.fits
+    Generate filename with proper format: cgi_VISITID_YYYYMMDDtHHMMSSS_l2b.fits
     
     Args:
         dt (datetime): Datetime object
@@ -4365,7 +4365,7 @@ def get_formatted_filename(dt, visitid):
         str: Formatted filename
     """
     timestamp = dt.strftime("%Y%m%dt%H%M%S%f")[:-5]  # Remove microseconds, keep milliseconds
-    return f"cgi_{visitid}_{timestamp}_l2b_.fits"
+    return f"cgi_{visitid}_{timestamp}_l2b.fits"
 
 def create_mock_l2b_polarimetric_image(image_center=(512, 512), dpamname='POL0', observing_mode='NFOV',
                                        left_image_value=1, right_image_value=1, alignment_angle=None):
