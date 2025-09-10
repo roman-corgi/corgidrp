@@ -218,19 +218,21 @@ class CalDB:
             drp_version,
             obsid,
             naxis1,
-            naxis2
+            naxis2,
         ]
 
         # rest are ext_hdr keys we can copy
         start_index = len(row)
         for i in range(start_index, len(self.columns)):
-
-            val = entry.ext_hdr[self.columns[i]]
-            if val is not None:
-                row.append(val)  # add value staright from header
-            else:
-                # if value is not in header, use default value
+            if self.columns[i] not in entry.ext_hdr:
                 row.append(default_values[column_dtypes[self.columns[i]]])
+            else:
+                val = entry.ext_hdr[self.columns[i]]
+                if val is not None:
+                    row.append(val)  # add value staright from header
+                else:
+                    # if value is not in header, use default value
+                    row.append(default_values[column_dtypes[self.columns[i]]])
 
         row_dict = {}
         for key, val in zip(self.columns, row):
@@ -325,6 +327,8 @@ class CalDB:
 
         # downselect to only calibs of this type
         calibdf = self._db[self._db["Type"] == dtype_label]
+        if len(calibdf) == 0:
+            raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
 
         # different logic for different cases
         # each if/else statement returns a single filepath to a good calibration
@@ -332,33 +336,22 @@ class CalDB:
             # no frame is passed in, get the most recently created 
             options = calibdf
 
-            if len(options) == 0:
-                raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
-
             # select the one that was most recently created
             result_index = options["Date Created"].argmax()
             calib_filepath = options.iloc[result_index, 0]
 
         elif dtype_label in ["Dark"]:
             # general selection criteria for 2D image frames. Can use different selection criteria for different dtypes
-            options = calibdf.loc[
-                (
-                    (calibdf["EXPTIME"] == frame_dict["EXPTIME"])
-                )
-            ]
-
-            if len(options) == 0:
-                raise ValueError("No valid Dark with EXPTIME={0})"
-                                 .format(frame_dict["EXPTIME"]))
+            options = self.filter_calib(calibdf, "EXPTIME", frame_dict["EXPTIME"], err_if_none=True)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         else:
-            options = calibdf
-
-            if len(options) == 0:
-                raise ValueError("No valid {0} calibration in caldb located at {1}".format(dtype_label, self.filepath))
+            # filter by color filter
+            # TODO: potentially add more filters later
+            # filters here are optional, no need to throw an error if no matches are found, just returns the original list
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -399,6 +392,42 @@ class CalDB:
         # load all these files into the caldb
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
+
+    def filter_calib(self, calibdf, col_name, value, err_if_none=False):
+        '''
+        Takes in a list of potential calibration files, filters them so that
+        only the files with matching header values are returned. If none is found,
+        this function is omitted and the original list is returned or an error is 
+        thrown depending on the err_if_none parameter.
+
+        Args:
+            calibdf (pd.DataFrame): database containing the potential calibration files 
+            col_name (string): name of the column that we want to look for matches in
+            value (string/float/int): value of the column entry to filter by
+            err_if_none (optional, boolean): tells the function whether to throw an error
+            or not if no matches are found. 
+
+        Returns:
+            filtered_calibdf (pd.DataFrame): database cntaining only the calibration files
+            with matching values, or the original database if no matches are found and 
+            err_if_none is set to false. 
+
+        '''
+
+        filtered_calibdf = calibdf.loc[
+            (
+                (calibdf[col_name] == value)
+            )
+        ]
+
+        if len(filtered_calibdf) == 0:
+            # throws an error if err_if_none=True, otherwise return original calibf
+            if err_if_none:
+                raise ValueError(f"No valid calibration with {col_name}={value})")
+            else:
+                return calibdf
+        
+        return filtered_calibdf
 
 def initialize():
     """
