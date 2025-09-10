@@ -395,15 +395,15 @@ class CalDB:
 
     def filter_calib(self, calibdf, col_name, value, err_if_none=False):
         '''
-        Takes in a list of potential calibration files, filters them so that
+        Takes in a calibration dataframe, filters them so that
         only the files with matching header values are returned. If none is found,
         this function is omitted and the original list is returned or an error is 
         thrown depending on the err_if_none parameter.
 
         Args:
             calibdf (pd.DataFrame): database containing the potential calibration files 
-            col_name (string): name of the column that we want to look for matches in
-            value (string/float/int): value of the column entry to filter by
+            col_name (string or list): name(s) of the column that we want to look for matches in
+            value (string/float/int or list): value(s) of the column entry to filter by
             err_if_none (optional, boolean): tells the function whether to throw an error
             or not if no matches are found. 
 
@@ -414,18 +414,31 @@ class CalDB:
 
         '''
 
-        filtered_calibdf = calibdf.loc[
-            (
-                (calibdf[col_name] == value)
-            )
-        ]
+        # convert input to list if not already
+        if not isinstance(col_name, list):
+            col_name = [col_name]
+        if not isinstance(value, list):
+            value = [value]
+        if len(col_name) != len(value):
+            raise ValueError("List of column names and list of values differ in size, please make sure " \
+            "each inputted column have a corresponding value")
+        
+        filtered_calibdf = calibdf.copy()
+        for i in range(len(col_name)):
+            filtered_calibdf_new = filtered_calibdf.loc[
+                (
+                    (filtered_calibdf[col_name[i]] == value[i])
+                )
+            ]
 
-        if len(filtered_calibdf) == 0:
-            # throws an error if err_if_none=True, otherwise return original calibf
-            if err_if_none:
-                raise ValueError(f"No valid calibration with {col_name}={value})")
+            if len(filtered_calibdf_new) == 0:
+                # throws an error if err_if_none=True
+                if err_if_none:
+                    raise ValueError(f"No valid calibration with {col_name[i]}={value[i]})")
+                else:
+                    print(f"No valid calibration with {col_name[i]}={value[i]}, omitting this parameter)")
             else:
-                return calibdf
+                filtered_calibdf = filtered_calibdf_new
         
         return filtered_calibdf
 

@@ -25,6 +25,12 @@ dark_dataset = mocks.create_dark_calib_files()
 master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
 # save master dark to disk to be loaded later
 master_dark.save(filedir=calibdir, filename="mockdark.fits")
+ct_cal_1F = mocks.create_ct_cal(3, cfam_name='1F')
+ct_cal_2F = mocks.create_ct_cal(3, cfam_name='2F')
+ct_cal_3F = mocks.create_ct_cal(3, cfam_name='3F')
+ct_cal_1F.save(filedir=calibdir, filename=('mock_ct_cal_1F.fits'))
+ct_cal_2F.save(filedir=calibdir, filename=('mock_ct_cal_2F.fits'))
+ct_cal_3F.save(filedir=calibdir, filename=('mock_ct_cal_3F.fits'))
 
 def test_caldb_init():
     """
@@ -227,8 +233,43 @@ def test_default_calibs():
     shutil.copy2(os.path.join(corgidrp.config_folder, "temp_caldb.csv"), corgidrp.caldb_filepath)
     os.remove(os.path.join(corgidrp.config_folder, "temp_caldb.csv"))
 
+def test_caldb_filter():
+    '''
+    test that the filter function works correctly to select the best
+    calibration file 
+    '''
 
+    # remove any stranded testcaldb if needed
+    if os.path.exists(testcaldb_filepath):
+        os.remove(testcaldb_filepath)
+    assert(not os.path.exists(testcaldb_filepath))
 
+    # create custom caldb for testing
+    testcaldb = caldb.CalDB(filepath=testcaldb_filepath)
+    assert(len(testcaldb._db.index) == 0)
+
+    # add mock ct cal files with different filter configurations
+    testcaldb.create_entry(ct_cal_1F)
+    assert(len(testcaldb._db.index) == 1)
+    testcaldb.create_entry(ct_cal_2F)
+    assert(len(testcaldb._db.index) == 2)
+    testcaldb.create_entry(ct_cal_3F)
+    assert(len(testcaldb._db.index) == 3)
+
+    # create mock image to input into caldb.get_calib()
+    img_1F, loc_1F, val_1F = mocks.create_ct_psfs(3, cfam_name='1F', n_psfs=1)
+    img_2F, loc_2F, val_2F = mocks.create_ct_psfs(3, cfam_name='2F', n_psfs=1)
+
+    # check that the returned calibration file uses the 1F color filter
+    returned_cal_file = testcaldb.get_calib(img_1F[0], data.CoreThroughputCalibration)
+    assert returned_cal_file.ext_hdr['CFAMNAME'] == '1F'
+
+    # check again with a different input to confirm caldb isn't just picking the most recent file
+    returned_cal_file = testcaldb.get_calib(img_2F[0], data.CoreThroughputCalibration)
+    assert returned_cal_file.ext_hdr['CFAMNAME'] == '2F'
+
+    # reset everything
+    os.remove(testcaldb_filepath)
 
 if __name__ == "__main__":
     test_default_calibs()
@@ -238,3 +279,4 @@ if __name__ == "__main__":
     test_caldb_custom_filepath()
     test_caldb_insert_and_remove()
     test_caldb_scan()
+    test_caldb_filter()
