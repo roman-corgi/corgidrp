@@ -28,7 +28,8 @@ column_dtypes = {
     "NAXIS2": int,
     "OPMODE": str,
     "EMGAIN_C": float,
-    "EXCAMT": float
+    "EXCAMT": float,
+    "CFAMNAME": str
 }
 
 default_values = {
@@ -100,6 +101,10 @@ class CalDB:
         Load/update db from filepath
         """
         self._db = pd.read_csv(self.filepath, dtype=column_dtypes)
+        # Scan the database for any columns that might be missing, fill in missing columns with default values if necessary
+        for col in column_names:
+            if col not in self._db.columns:
+                self._db[col] = default_values[column_dtypes[col]]
 
     def save(self):
         """
@@ -141,7 +146,8 @@ class CalDB:
                 "NAXIS2" : 0,
                 "OPMODE" : "",
                 "EMGAIN_C" : 0.,
-                "EXCAMT" : 0
+                "EXCAMT" : 0,
+                "CFAMNAME": ""
             }
             return list(row_dict.values()), row_dict
 
@@ -177,7 +183,7 @@ class CalDB:
                 drp_version = ""
         else:
             drp_version = ""
-
+        
         if "OBSNUM" in entry.pri_hdr:
             obsid = entry.pri_hdr["OBSNUM"]
             if obsid is None:
@@ -393,8 +399,6 @@ class CalDB:
         # load all these files into the caldb
         for calib_frame in calib_frames:
             self.create_entry(calib_frame, to_disk=to_disk)
-
-
 
 def initialize():
     """
