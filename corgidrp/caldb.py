@@ -436,7 +436,7 @@ class CalDB:
                 if err_if_none:
                     raise ValueError(f"No valid calibration with {col_name[i]}={value[i]})")
                 else:
-                    print(f"No valid calibration with {col_name[i]}={value[i]}, omitting this parameter)")
+                    print(f"No valid calibration with {col_name[i]}={value[i]}, omitting this parameter")
             else:
                 filtered_calibdf = filtered_calibdf_new
         
