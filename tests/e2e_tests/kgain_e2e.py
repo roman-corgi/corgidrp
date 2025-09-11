@@ -224,7 +224,7 @@ if __name__ == "__main__":
     # to edit the file. The arguments use the variables in this file as their
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/''/home/jwang/Desktop/CGI_TVAC_Data/'  
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/''/home/jwang/Desktop/CGI_TVAC_Data/'  
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->kgain end-to-end test")

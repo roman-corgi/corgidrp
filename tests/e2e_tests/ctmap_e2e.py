@@ -6,6 +6,7 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
+import datetime
 from astropy.io import fits
 
 import corgidrp
@@ -97,10 +98,17 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         shutil.rmtree(output_dir)
     os.mkdir(output_dir)
     
-    # List of filenames
-    corDataset_filelist = ['ctmap_e2e_{0}_L2b.fits'.format(i)
-        for i in range(len(corDataset))]
-    # Save them
+    # Generate filename variables
+    current_time = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')
+    
+    # List of filenames with proper format
+    corDataset_filelist = []
+    for i in range(len(corDataset)):
+        visitid = str(i).zfill(19)  # Pad to 19 digits
+        filename = f'cgi_{visitid}_{current_time}_l2b.fits'
+        corDataset_filelist.append(filename)
+    
+    # Save them in input_data directory
     corDataset.save(output_dir, corDataset_filelist)
 
     # Make directory for the CT cal file

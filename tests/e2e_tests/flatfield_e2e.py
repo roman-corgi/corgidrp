@@ -6,6 +6,7 @@ import numpy as np
 import scipy.ndimage
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime
 import corgidrp
 import re
 import corgidrp.data as data
@@ -89,6 +90,10 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
+    # Generate proper calibration filenames
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S')
+    visitid = "0000000000000000000"
+
     # change the UTC time using the UTC time from the first time as the start
     #start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
     #base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
@@ -149,7 +154,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -159,7 +164,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
+    kgain.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -183,7 +188,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
+    noise_map.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -275,6 +280,12 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     avg_noise = np.mean(noise_map[r0c0[0]:r0c0[0]+rows, r0c0[1]:r0c0[1]+cols])
     target_snr = 250/np.sqrt(4.95) # per pix
 
+    # Create proper L1 filenames following the convention
+    
+    # Generate proper calibration filenames
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S')
+    visitid = "0000000000000000000"
+
     # change the UTC time using the UTC time from the first time as the start
     #start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
     #base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
@@ -335,7 +346,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename="mock_nonlinearcal.fits" )
+    nonlinear_cal.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -345,7 +356,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     ext_hdr['RN_ERR'] = 0
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename="mock_kgain.fits")
+    kgain.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -369,7 +380,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename="mock_detnoisemaps.fits")
+    noise_map.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -410,7 +421,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     # e2edata_dir = '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_Test_Data2'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
