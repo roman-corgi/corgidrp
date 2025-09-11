@@ -11,6 +11,7 @@ def make_test_dataset(test_arr,centxy=None,set_cen_kws=True):
     Make 2D or 3D test data.
 
     Args:
+        test_arr (np.array): input frame data array (must be 2D or 3D).
         centxy (arraylike, optional): location of 4 pixel dot. Defaults to center of array.
         set_cen_kws (bool, optional): if false, delete center keywords.
 
