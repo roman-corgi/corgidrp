@@ -3598,8 +3598,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
         wcs_header (astropy.fits.Header, optional): Fits header object containing WCS 
             information. If not provided, a mock header will be created. Defaults to None.
-        data_shape (list of int): desired shape of data array in xy order. Must have length 2 or 3. Defaults to 
-            [100,100].
+        data_shape (list of int): desired shape of data array, with the last two axes in xy order. 
+            Must have length 2 or 3. Defaults to [100,100].
         centerxy (list of float): Desired PSF center in xy order. Must have length 2. Defaults 
             to image center.
         outdir (str, optional): Desired output directory. If not provided, data will not be 
