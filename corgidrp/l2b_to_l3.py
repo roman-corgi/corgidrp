@@ -412,6 +412,10 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             prihdr["CRPIX1"] -= x1
             prihdr["CRPIX2"] -= y1
             updated_hdrs.append('CRPIX1/2')
+        if ("STARLOCX" in prihdr.keys()):
+            prihdr["STARLOCX"] -= x1
+            prihdr["STARLOCY"] -= y1
+            updated_hdrs.append('CRPIX1/2')
         if not ("DETPIX0X" in exthdr.keys()):
             exthdr.set('DETPIX0X',0)
             exthdr.set('DETPIX0Y',0)

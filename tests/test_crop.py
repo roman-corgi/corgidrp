@@ -11,8 +11,8 @@ def make_test_dataset(test_arr,centxy=None,set_cen_kws=True):
     Make 2D or 3D test data.
 
     Args:
-        shape (arraylike, optional): data shape. Defaults to [100,100].
-        centxy (arraylike,optional): location of 4 pixel dot. Defaults to center of array.
+        centxy (arraylike, optional): location of 4 pixel dot. Defaults to center of array.
+        set_cen_kws (bool, optional): if false, delete center keywords.
 
     Returns:
         corgidrp.data.Dataset: test data with a 2x2 "PSF" at location centxy.
@@ -75,6 +75,8 @@ def test_2d_square_center_crop():
     test_dataset = make_test_dataset(input_arr_even,centxy=[49.5,49.5])
     test_dataset[0].pri_hdr["CRPIX1"] = 50.5
     test_dataset[0].pri_hdr["CRPIX2"] = 50.5
+    test_dataset[0].pri_hdr["STARLOCX"] = 50.5
+    test_dataset[0].pri_hdr["STARLOCY"] = 50.5
     
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
@@ -95,6 +97,10 @@ def test_2d_square_center_crop():
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
     if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
         raise Exception("Frame header kw CRPIX2 not updated correctly.")
+    if not cropped_test_dataset[0].pri_hdr["STARLOCX"] == 5.5:
+        raise Exception("Frame header kw STARLOCX not updated correctly.")
+    if not cropped_test_dataset[0].pri_hdr["STARLOCY"] == 5.5:
+        raise Exception("Frame header kw STARLOCY not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["NAXIS1"] == 10:
         raise Exception("Frame header kw NAXIS1 not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10:
@@ -424,18 +430,26 @@ def test_mixed_oddeven_crop():
     if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_mixed):
         raise Exception("Unexpected result for mixed odd-even size crop test.")
 
+def test_missing_cen_kws():
+    "Crop function should fail if center keywords do not exist and centerxy is not provided."
+    test_dataset = make_test_dataset(input_arr_even,centxy=[49.5,49.5],set_cen_kws=False)
+    
+    with pytest.raises(ValueError):
+        _ = crop(test_dataset,sizexy=10,centerxy=None)
+
 
 if __name__ == "__main__":
     test_2d_square_center_crop()
-    test_manual_center_crop()
-    test_2d_square_offcenter_crop()
-    test_2d_rect_offcenter_crop()
-    test_3d_rect_offcenter_crop()
-    test_edge_of_detector()
-    test_outside_detector_edge()
-    test_nonhalfinteger_centxy()
-    test_non_nfov_input()
-    test_detpix0_nonzero()
-    test_unsupported_input()
-    test_default_crop()
-    test_mixed_oddeven_crop()
+    # test_manual_center_crop()
+    # test_2d_square_offcenter_crop()
+    # test_2d_rect_offcenter_crop()
+    # test_3d_rect_offcenter_crop()
+    # test_edge_of_detector()
+    # test_outside_detector_edge()
+    # test_nonhalfinteger_centxy()
+    # test_non_nfov_input()
+    # test_detpix0_nonzero()
+    # test_unsupported_input()
+    # test_default_crop()
+    # test_mixed_oddeven_crop()
+    test_missing_cen_kws()
