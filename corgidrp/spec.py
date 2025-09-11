@@ -861,6 +861,7 @@ def star_spec_registration(
     for idx_img, img in enumerate(dataset_fsm):
         x_fit, y_fit = fit_psf_centroid(img.data,
                      dataset_template[slit_idx].data,
+                     # TODO: Waiting for xcent_template=None bug to be resolved
                      xcent_template = wv0_x,
                      ycent_template = ycent_template[slit_idx],
                      halfheight = halfheight)[0:2]
