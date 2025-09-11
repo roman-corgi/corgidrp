@@ -29,7 +29,9 @@ column_dtypes = {
     "OPMODE": str,
     "EMGAIN_C": float,
     "EXCAMT": float,
-    "CFAMNAME": str
+    "CFAMNAME": str,
+    "DPAMNAME": str,
+    "FPAMNAME": str
 }
 
 default_values = {
@@ -347,12 +349,28 @@ class CalDB:
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
-        else:
+        elif dtype_label in ['FluxcalFactor', 'NDFilterSweetSpot']:
             # filter by color filter
-            # TODO: potentially add more filters later
-            # filters here are optional, no need to throw an error if no matches are found, just returns the original list
-            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
 
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['CoreThroughputCalibration']:
+            # filter by focal plane mask
+            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['FlatField']:
+            # filter by DPAM
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        else:
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
@@ -402,43 +420,31 @@ class CalDB:
 
         Args:
             calibdf (pd.DataFrame): database containing the potential calibration files 
-            col_name (string or list): name(s) of the column that we want to look for matches in
-            value (string/float/int or list): value(s) of the column entry to filter by
+            col_name (string): name of the column that we want to look for matches in
+            value (string/float/int): value of the column entry to filter by
             err_if_none (optional, boolean): tells the function whether to throw an error
             or not if no matches are found. 
 
         Returns:
-            filtered_calibdf (pd.DataFrame): database cntaining only the calibration files
+            filtered_calibdf (pd.DataFrame): database containing only the calibration files
             with matching values, or the original database if no matches are found and 
             err_if_none is set to false. 
 
         '''
-
-        # convert input to list if not already
-        if not isinstance(col_name, list):
-            col_name = [col_name]
-        if not isinstance(value, list):
-            value = [value]
-        if len(col_name) != len(value):
-            raise ValueError("List of column names and list of values differ in size, please make sure " \
-            "each inputted column have a corresponding value")
         
-        filtered_calibdf = calibdf.copy()
-        for i in range(len(col_name)):
-            filtered_calibdf_new = filtered_calibdf.loc[
-                (
-                    (filtered_calibdf[col_name[i]] == value[i])
-                )
-            ]
+        filtered_calibdf = calibdf.loc[
+            (
+                (calibdf[col_name] == value)
+            )
+        ]
 
-            if len(filtered_calibdf_new) == 0:
-                # throws an error if err_if_none=True
-                if err_if_none:
-                    raise ValueError(f"No valid calibration with {col_name[i]}={value[i]})")
-                else:
-                    print(f"No valid calibration with {col_name[i]}={value[i]}, omitting this parameter")
+        if len(filtered_calibdf) == 0:
+            # throws an error if err_if_none=True
+            if err_if_none:
+                raise ValueError(f"No valid calibration with {col_name}={value})")
             else:
-                filtered_calibdf = filtered_calibdf_new
+                print(f"No valid calibration with {col_name}={value}")
+                return calibdf
         
         return filtered_calibdf
 

@@ -25,12 +25,15 @@ dark_dataset = mocks.create_dark_calib_files()
 master_dark = data.Dark(dark_dataset[0].data, dark_dataset[0].pri_hdr, dark_dataset[0].ext_hdr, dark_dataset)
 # save master dark to disk to be loaded later
 master_dark.save(filedir=calibdir, filename="mockdark.fits")
-ct_cal_1F = mocks.create_ct_cal(3, cfam_name='1F')
-ct_cal_2F = mocks.create_ct_cal(3, cfam_name='2F')
-ct_cal_3F = mocks.create_ct_cal(3, cfam_name='3F')
-ct_cal_1F.save(filedir=calibdir, filename=('mock_ct_cal_1F.fits'))
-ct_cal_2F.save(filedir=calibdir, filename=('mock_ct_cal_2F.fits'))
-ct_cal_3F.save(filedir=calibdir, filename=('mock_ct_cal_3F.fits'))
+ct_cal_nfov = mocks.create_ct_cal(3)
+ct_cal_nfov.ext_hdr['FPAMNAME'] = "HLC12_C2R1"
+ct_cal_wfov = mocks.create_ct_cal(3)
+ct_cal_wfov.ext_hdr['FPAMNAME'] = "SPC12_R1C1"
+ct_cal_nd = mocks.create_ct_cal(3)
+ct_cal_nd.ext_hdr['FPAMNAME'] = "ND475"
+ct_cal_nfov.save(filedir=calibdir, filename=('mock_ct_cal_nfov.fits'))
+ct_cal_wfov.save(filedir=calibdir, filename=('mock_ct_cal_wfov.fits'))
+ct_cal_nd.save(filedir=calibdir, filename=('mock_ct_cal_nd.fits'))
 
 def test_caldb_init():
     """
@@ -249,24 +252,26 @@ def test_caldb_filter():
     assert(len(testcaldb._db.index) == 0)
 
     # add mock ct cal files with different filter configurations
-    testcaldb.create_entry(ct_cal_1F)
+    testcaldb.create_entry(ct_cal_nfov)
     assert(len(testcaldb._db.index) == 1)
-    testcaldb.create_entry(ct_cal_2F)
+    testcaldb.create_entry(ct_cal_wfov)
     assert(len(testcaldb._db.index) == 2)
-    testcaldb.create_entry(ct_cal_3F)
+    testcaldb.create_entry(ct_cal_nd)
     assert(len(testcaldb._db.index) == 3)
 
     # create mock image to input into caldb.get_calib()
-    img_1F, loc_1F, val_1F = mocks.create_ct_psfs(3, cfam_name='1F', n_psfs=1)
-    img_2F, loc_2F, val_2F = mocks.create_ct_psfs(3, cfam_name='2F', n_psfs=1)
+    img_nfov, loc_nfov, val_nfov = mocks.create_ct_psfs(3, n_psfs=1)
+    img_nfov[0].ext_hdr['FPAMNAME'] = 'HLC12_C2R1'
+    img_wfov, loc_wfov, val_wfiv = mocks.create_ct_psfs(3, n_psfs=1)
+    img_wfov[0].ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
 
-    # check that the returned calibration file uses the 1F color filter
-    returned_cal_file = testcaldb.get_calib(img_1F[0], data.CoreThroughputCalibration)
-    assert returned_cal_file.ext_hdr['CFAMNAME'] == '1F'
+    # check that the returned calibration file uses the hlc focal plane msk
+    returned_cal_file = testcaldb.get_calib(img_nfov[0], data.CoreThroughputCalibration)
+    assert returned_cal_file.ext_hdr['FPAMNAME'] == 'HLC12_C2R1'
 
     # check again with a different input to confirm caldb isn't just picking the most recent file
-    returned_cal_file = testcaldb.get_calib(img_2F[0], data.CoreThroughputCalibration)
-    assert returned_cal_file.ext_hdr['CFAMNAME'] == '2F'
+    returned_cal_file = testcaldb.get_calib(img_wfov[0], data.CoreThroughputCalibration)
+    assert returned_cal_file.ext_hdr['FPAMNAME'] == 'SPC12_R1C1'
 
     # reset everything
     os.remove(testcaldb_filepath)
