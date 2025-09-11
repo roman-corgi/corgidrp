@@ -99,16 +99,25 @@ def walk_corgidrp(filelist, CPGS_XML_filepath, outputdir, template=None):
     # generate recipe
     recipes = autogen_recipe(filelist, outputdir, template=template)
 
-    # process recipe
-    if isinstance(recipes, list):
-        # if multiple recipes
-        for recipe in recipes:
-            run_recipe(recipe)
-    else:
-        # process single recipe
-        run_recipe(recipes)
 
-    return recipes
+    if not isinstance(recipes, list):
+        recipes = [recipes]
+    
+    # process recipes
+    output_filelist = None
+    for i, recipe in enumerate(recipes):
+        # check for recipe chaining
+        if i > 0 and  len(recipe['inputs']) == 0:
+            for filename in output_filelist:
+                recipe["inputs"].append(filename)
+
+        output_filelist = run_recipe(recipe)
+
+    # return just the recipe if there was only one
+    if len(recipes) == 1:
+        return recipes[0]
+    else:
+        return recipes
 
 def autogen_recipe(filelist, outputdir, template=None):
     """
@@ -134,7 +143,7 @@ def autogen_recipe(filelist, outputdir, template=None):
 
     # if user didn't pass in template
     if template is None:
-        recipe_filename = guess_template(dataset)
+        recipe_filename, chained = guess_template(dataset)
 
         # handle it as a list moving forward
         if isinstance(recipe_filename, list):
@@ -151,15 +160,21 @@ def autogen_recipe(filelist, outputdir, template=None):
     else:
         # user passed in a single template
         recipe_template_list = [template]
+        chained = False
 
     recipe_list = []
-    for template in recipe_template_list:
+    for i, template in enumerate(recipe_template_list):
         # create the personalized recipe
         recipe = template.copy()
         recipe["template"] = False
 
-        for filename in filelist:
-            recipe["inputs"].append(filename)
+        # for chained recipes, don't put the input in yet since we don't know it
+        if i > 0 and chained:
+            pass
+        else:
+            for filename in filelist:
+                recipe["inputs"].append(filename)
+
 
         recipe["outputdir"] = outputdir
 
@@ -243,9 +258,13 @@ def guess_template(dataset):
 
     Returns:
         str or list: the best template filename or a list of multiple template filenames
+        bool: whether multiple recipes are chained together. If True, the output of the first recipe
+              should be used as the input to the second recipe. If False, the same input should be used
+              for all recipes. This keyworkd is irrelevant if only a single recipe is returned.
     """
     image = dataset[0] # first image for convenience
 
+    chained = False # whether multiiple recipes are chained together
     # L1 -> L2a data processing
     if image.ext_hdr['DATALVL'] == "L1":
         if 'VISTYPE' not in image.pri_hdr:
@@ -256,7 +275,8 @@ def guess_template(dataset):
             # for either ENGPUPIL or ENGIMGAGE
             recipe_filename = "l1_to_l2a_eng.json"
         elif image.pri_hdr['VISTYPE'] == "BORESITE":
-            recipe_filename = "l1_to_boresight.json"
+            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_boresight.json'] #"l1_to_boresight.json"
+            chained = True
         elif image.pri_hdr['VISTYPE'] == "FFIELD":
             recipe_filename = "l1_flat_and_bp.json"
         elif image.pri_hdr['VISTYPE'] == "DARK":
@@ -269,6 +289,17 @@ def guess_template(dataset):
                 recipe_filename = "build_trad_dark_image.json"
         elif image.pri_hdr['VISTYPE'] == "PUPILIMG":
             recipe_filename = ["l1_to_l2a_nonlin.json", "l1_to_kgain.json"]
+        elif image.pri_hdr['VISTYPE'] in ("ABSFLXFT", "ABSFLXBT"):
+            _, fsm_unique = dataset.split_dataset(exthdr_keywords=['FSMX', 'FSMY'])
+            if len(fsm_unique) > 1:
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_nd_filter.json"]
+                chained = True
+            else:
+                recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", "l2b_to_fluxcal_factor.json"]
+                chained = True
+        elif image.pri_hdr['VISTYPE'] == 'CORETPUT':
+            recipe_filename = ["l1_to_l2a_basic.json", "l2a_to_l2b.json", 'l2b_to_corethroughput.json']
+            chained = True
         else:
             recipe_filename = "l1_to_l2a_basic.json"  # science data and all else (including photon counting)
     # L2a -> L2b data processing
@@ -313,7 +344,7 @@ def guess_template(dataset):
     else:
         raise NotImplementedError("Cannot automatically guess the input dataset with 'DATALVL' = {0}".format(image.ext_hdr['DATALVL']))
 
-    return recipe_filename
+    return recipe_filename, chained
 
 
 def save_data(dataset_or_image, outputdir, suffix=""):
@@ -366,6 +397,9 @@ def run_recipe(recipe, save_recipe_file=True):
     Args:
         recipe (dict or str): either the filepath to the recipe or the already loaded in recipe
         save_recipe_file (bool): saves the recipe as a JSON file in the outputdir (true by default)
+
+    Returns:
+        list: list of filepaths to the saved files, or None if no files were saved
     """
     if isinstance(recipe, str):
         # need to load in
@@ -395,6 +429,7 @@ def run_recipe(recipe, save_recipe_file=True):
             json.dump(recipe, json_file, indent=4)
 
     tot_steps = len(recipe["steps"])
+    save_step = False
 
     # execute each pipeline step
     for i, step in enumerate(recipe["steps"]):
@@ -409,6 +444,7 @@ def run_recipe(recipe, save_recipe_file=True):
                 suffix = ''
                 
             save_data(curr_dataset, recipe["outputdir"], suffix=suffix)
+            save_step = True
 
         else:
             step_func = all_steps[step["name"]]
@@ -454,4 +490,13 @@ def run_recipe(recipe, save_recipe_file=True):
 
             # run the step!
             curr_dataset = step_func(curr_dataset, *other_args, **kwargs)
+
+    output_filepaths = None
+    if save_step:
+        if isinstance(curr_dataset, data.Dataset):
+            output_filepaths = [frame.filepath for frame in curr_dataset]
+        else:
+            output_filepaths = [curr_dataset.filepath]
+    
+    return output_filepaths
 
