@@ -60,7 +60,8 @@ def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
     err_replaced = np.where(np.isnan(im_err),err_filtered,im_err)
     
     # Update dataset
-    history_msg = f"Interpolated over bad pixels with median filter size {kernelsize}."
+    bp_count = np.sum(np.isnan(im_data))
+    history_msg = f"Interpolated over {bp_count} bad pixels with median filter size {kernelsize}."
     dataset.update_after_processing_step(history_msg,
                                          new_all_data=im_replaced, 
                                          new_all_err=err_replaced)
