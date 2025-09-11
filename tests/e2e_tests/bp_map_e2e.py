@@ -54,14 +54,20 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         
-        # Extract frame number from current filename and pad to 19 digits
-        current_filename = os.path.basename(file)
-        if current_filename.replace('.fits', '').isdigit():
-            # Handle numbered files like 90500.fits
-            frame_number = current_filename.replace('.fits', '')
-            visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+        # Extract visit ID from primary header VISITID keyword
+        visitid = prihdr.get('VISITID', None)
+        if visitid is not None:
+            # Convert to string and pad to 19 digits
+            visitid = str(visitid).zfill(19)
         else:
-            visitid = f"{i:019d}"  # Fallback: use file index padded to 19 digits
+            # Fallback: try to extract from filename or use file index
+            current_filename = os.path.basename(file)
+            if current_filename.replace('.fits', '').isdigit():
+                # Handle numbered files like 90500.fits
+                frame_number = current_filename.replace('.fits', '')
+                visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+            else:
+                visitid = f"{i:019d}"  # Fallback: use file index padded to 19 digits
         
         filetime = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
         
@@ -76,7 +82,7 @@ def fix_headers_for_tvac(
             filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
         
         # Create new filename with proper L1 convention
-        input_data_dir = os.path.join(output_dir, 'input_data')
+        input_data_dir = os.path.join(output_dir, 'bp_map_cal_e2e_input_data')
         if not os.path.exists(input_data_dir):
             os.mkdir(input_data_dir)
         new_filename = os.path.join(input_data_dir, f'cgi_{visitid}_{filetime}_l1_.fits')
@@ -101,7 +107,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
-    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
+    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_cal_e2e_output")
     if not os.path.exists(bp_map_outputdir):
         os.mkdir(bp_map_outputdir)
 
@@ -119,16 +125,25 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         l1_data_filelist.append(os.path.join(l1_datadir, filename))
     #l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
-    # Extract frame numbers from original filenames before renaming
-    original_frame_numbers = [90501, 90502]  # These are the original frame numbers
-
     # update TVAC headers
     fix_headers_for_tvac(l1_data_filelist, bp_map_outputdir)
     fix_str_for_tvac(l1_data_filelist)
 
     # Update file list to reflect the new filenames
-    input_data_dir = os.path.join(bp_map_outputdir, 'input_data')
+    input_data_dir = os.path.join(bp_map_outputdir, 'bp_map_cal_e2e_input_data')
     l1_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
+    
+    # Extract visit ID from the first file's primary header
+    def get_visitid_from_header(filepath):
+        with fits.open(filepath) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                return str(visitid).zfill(19)
+            else:
+                return "0000000000000000000"  # fallback
+    
+    visitid = get_visitid_from_header(l1_data_filelist[0])
 
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
@@ -183,9 +198,6 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
     # Generate filename with visitid and current time
-    # Use the original frame number from before renaming
-    frame_number = str(original_frame_numbers[0])
-    visitid = frame_number.zfill(19)  # Pad to 19 digits
     current_time = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')
     noise_maps_filename = f"cgi_{visitid}_{current_time}_dnm_cal.fits"
     noise_maps.save(filedir=bp_map_outputdir, filename=noise_maps_filename)
@@ -308,7 +320,6 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_master_dark_test.png")
         plt.savefig(output_path)
 
-    this_caldb.remove_entry(generated_bp_map_img)
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -319,7 +330,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # Create output directory for bad pixel map results if it doesn't exist
-    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_output")
+    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_cal_e2e_output")
     if not os.path.exists(bp_map_outputdir):
         os.mkdir(bp_map_outputdir)
 
@@ -334,15 +345,24 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         l1_data_filelist.append(os.path.join(l1_datadir, filename))
     # l1_data_filelist = [os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
-    # Extract frame numbers from original filenames before renaming
-    original_frame_numbers = [90499, 90500]  # These are the original frame numbers
-
     # update TVAC headers
     fix_headers_for_tvac(l1_data_filelist, bp_map_outputdir)
     
     # Update file list to reflect the new filenames
     input_data_dir = os.path.join(bp_map_outputdir, 'input_data')
     l1_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
+    
+    # Extract visit ID from the first file's primary header
+    def get_visitid_from_header(filepath):
+        with fits.open(filepath) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                return str(visitid).zfill(19)
+            else:
+                return "0000000000000000000"  # fallback
+    
+    visitid = get_visitid_from_header(l1_data_filelist[0])
 
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
@@ -369,9 +389,6 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     this_caldb = caldb.CalDB()
 
     # Generate filename variables for this test
-    # Use the original frame number from before renaming
-    frame_number = str(original_frame_numbers[0])
-    visitid = frame_number.zfill(19)  # Pad to 19 digits
     current_time = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')
 
     ## Load and save flat field calibration data

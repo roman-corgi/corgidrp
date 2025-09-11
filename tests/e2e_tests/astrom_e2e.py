@@ -53,14 +53,20 @@ def fix_headers_for_tvac(
         prihdr = fits_file[0].header
         exthdr = fits_file[1].header
         
-        # Extract frame number from current filename and pad to 16 digits
-        current_filename = os.path.basename(file)
-        if '_l1_' in current_filename:
-            # Extract the frame number after '_l1_'
-            frame_number = current_filename.split('_l1_')[-1].replace('.fits', '')
-            visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+        # Extract visit ID from primary header VISITID keyword
+        visitid = prihdr.get('VISITID', None)
+        if visitid is not None:
+            # Convert to string and pad to 19 digits
+            visitid = str(visitid).zfill(19)
         else:
-            visitid = f"{i:019d}"  # Fallback- use file index padded to 19 digits
+            # Fallback: try to extract from filename or use file index
+            current_filename = os.path.basename(file)
+            if '_l1_' in current_filename:
+                # Extract the frame number after '_l1_'
+                frame_number = current_filename.split('_l1_')[-1].replace('.fits', '')
+                visitid = frame_number.zfill(19)  # Pad with zeros to make 19 digits
+            else:
+                visitid = f"{i:019d}"  # Fallback- use file index padded to 19 digits
         
         filetime = exthdr.get('FILETIME', prihdr.get('FILETIME', None))
         
@@ -76,7 +82,7 @@ def fix_headers_for_tvac(
         
         
         # Create new filename with proper L1 convention
-        input_data_dir = os.path.join(output_dir, 'input_data')
+        input_data_dir = os.path.join(output_dir, 'astrom_cal_e2e_input_data')
         if not os.path.exists(input_data_dir):
             os.mkdir(input_data_dir)
         new_filename = os.path.join(input_data_dir, f'cgi_{visitid}_{filetime}_l1_.fits')
@@ -125,7 +131,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_characterization_path = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
 
     # make output directory if needed
-    astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_output")
+    astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_e2e_output")
     if not os.path.exists(astrom_cal_outputdir):
         os.mkdir(astrom_cal_outputdir)
     # clean out any files from a previous run
@@ -147,7 +153,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     image_sources = mocks.create_astrom_data(jwst_calfield_path, add_gauss_noise=False)
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     # create a directory in the output dir to hold the simulated data files
-    rawdata_dir = os.path.join(astrom_cal_outputdir, 'input_data')
+    rawdata_dir = os.path.join(astrom_cal_outputdir, 'astrom_cal_e2e_input_data')
     if not os.path.exists(rawdata_dir):
         os.mkdir(rawdata_dir)
     # clean out any files from a previous run
@@ -210,11 +216,13 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
     # update headers of TVAC data
     fix_headers_for_tvac(sim_data_filelist, astrom_cal_outputdir)
-    fix_str_for_tvac(sim_data_filelist)
 
     # Update file list to reflect the new filenames
-    input_data_dir = os.path.join(astrom_cal_outputdir, 'input_data')
+    input_data_dir = os.path.join(astrom_cal_outputdir, 'astrom_cal_e2e_input_data')
     sim_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
+    
+    # Now fix the string values in the new files
+    fix_str_for_tvac(sim_data_filelist)
 
     ###### Setup necessary calibration files
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')

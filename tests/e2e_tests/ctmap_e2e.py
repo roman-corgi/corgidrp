@@ -7,6 +7,7 @@ import pytest
 import numpy as np
 import astropy.time as time
 import datetime
+import time as time_module
 from astropy.io import fits
 
 import corgidrp
@@ -92,30 +93,40 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create coronagraphic dataset
     corDataset = data.Dataset(corDataset_image_list)
 
-    # Define temporary directory to store the individual frames
-    output_dir = os.path.join(e2eoutput_path, 'ctmap_test_data')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
+    # Make directory for the CT cal file
+    ctmap_outputdir = os.path.join(e2eoutput_path, 'ctmap_cal_e2e_output')
+    if os.path.exists(ctmap_outputdir):
+        shutil.rmtree(ctmap_outputdir)
+    os.mkdir(ctmap_outputdir)
+    
+    # Define temporary directory to store the individual frames under the output directory
+    output_dir = os.path.join(ctmap_outputdir, 'ctmap_cal_e2e_input_data')
     os.mkdir(output_dir)
     
     # Generate filename variables
-    current_time = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')
+    base_time = datetime.datetime.now()
     
     # List of filenames with proper format
     corDataset_filelist = []
     for i in range(len(corDataset)):
-        visitid = str(i).zfill(19)  # Pad to 19 digits
+        # Generate unique timestamp by incrementing seconds (with rollover to minutes)
+        current_time = (base_time + datetime.timedelta(seconds=i)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        
+        # Extract visit ID from primary header VISITID keyword
+        prihdr = corDataset[i].pri_hdr
+        visitid = prihdr.get('VISITID', None)
+        if visitid is not None:
+            # Convert to string and pad to 19 digits
+            visitid = str(visitid).zfill(19)
+        else:
+            # Fallback: use file index padded to 19 digits
+            visitid = str(i).zfill(19)
+        
         filename = f'cgi_{visitid}_{current_time}_l2b.fits'
         corDataset_filelist.append(filename)
     
     # Save them in input_data directory
     corDataset.save(output_dir, corDataset_filelist)
-
-    # Make directory for the CT cal file
-    ctmap_outputdir = os.path.join(e2eoutput_path, 'l2a_to_ct_map')
-    if os.path.exists(ctmap_outputdir):
-        shutil.rmtree(ctmap_outputdir)
-    os.mkdir(ctmap_outputdir)
     
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -175,7 +186,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path =  '.'
+    e2edata_path = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,

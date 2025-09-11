@@ -2249,11 +2249,12 @@ class CoreThroughputMap(Image):
                 self.ext_hdr['HISTORY'] = ('CoreThroughputMap derived '
                     f'from a set of frames on {self.ext_hdr["DATETIME"]}')
 
-            # The corethroughput map is not a calibration product as of writing
-            # this class. The filename does not follow the convention for
-            # calibration files
+            # Generate filename following the calibration file convention
             self.filedir = '.'
-            self.filename = 'corethroughput_map.fits'
+            if input_dataset is not None:
+                self.filename = re.sub('_l[0-9].', '_ctm_cal', input_dataset[-1].filename)
+            else:
+                self.filename = 'corethroughput_map.fits'  # fallback
             self.pri_hdr['FILENAME'] = self.filename
 
             # Enforce data level = L3
