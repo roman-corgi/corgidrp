@@ -51,6 +51,7 @@ all_steps = {
     "sort_pupilimg_frames" : corgidrp.sorting.sort_pupilimg_frames,
     "get_pc_mean" : corgidrp.photon_counting.get_pc_mean,
     "divide_by_exptime" : corgidrp.l2b_to_l3.divide_by_exptime,
+    "crop" : corgidrp.l2b_to_l3.crop,
     "northup" : corgidrp.l3_to_l4.northup,
     "calibrate_fluxcal_aper": corgidrp.fluxcal.calibrate_fluxcal_aper,
     "calibrate_pol_fluxcal_aper": corgidrp.fluxcal.calibrate_pol_fluxcal_aper,
