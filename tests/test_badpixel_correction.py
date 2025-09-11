@@ -204,6 +204,11 @@ def test_replace_bps_nonuniform():
     input_dataset_clean.all_data[:,:,:] = xgradient
     input_dataset_clean.all_err[:,:,:,:] = constant
 
+    # Add bad pixel below dq threshold which we won't change
+    input_dataset_clean.all_dq[1,-1,-1] = 0.1
+    input_dataset_clean.all_data[1,-1,-1] = 50
+    
+
     # Flag some bad pixels and assign erroneous values in data
     input_dataset_bad = input_dataset_clean.copy()
 
@@ -217,7 +222,7 @@ def test_replace_bps_nonuniform():
     input_dataset_bad.all_data[1,9,9] = 100.
     input_dataset_bad.all_err[1,:,9,9] = 100.
 
-        # Patch of 4 pixels
+        # Another bad pixel
     input_dataset_bad.all_dq[1,15,15] = 1
     input_dataset_bad.all_data[1,15,15] = 100.
     input_dataset_bad.all_err[1,:,15,15] = 100.
