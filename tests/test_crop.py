@@ -5,6 +5,7 @@ from corgidrp.data import Dataset, Image
 from corgidrp.l2b_to_l3 import crop
 from corgidrp.mocks import create_default_L3_headers
 
+
 def make_test_dataset(test_arr,centxy=None,set_cen_kws=True):
     """
     Make 2D or 3D test data.
@@ -36,10 +37,15 @@ def make_test_dataset(test_arr,centxy=None,set_cen_kws=True):
         del exthdr['EACQ_COL']
         del exthdr['EACQ_ROW']
     
+    if test_arr.ndim == 2:
+        err_arr = test_arr[np.newaxis,:,:]
+    elif test_arr.ndim == 3:
+        err_arr = test_arr[np.newaxis,:,:,:]
     
-    test_dataset = Dataset([Image(test_arr,prihdr,exthdr)])
+    test_dataset = Dataset([Image(test_arr,prihdr,exthdr,dq=test_arr,err=err_arr)])
 
     return test_dataset
+
 
 input_arr_even = np.zeros((100,100))
 input_arr_even[49:51,49:51] = 1
@@ -61,6 +67,7 @@ input_rect_arr_mixed[49:51,100] = 1
 goal_rect_arr_mixed = np.zeros((10,21))
 goal_rect_arr_mixed[4:6,10] = 1
 
+
 def test_2d_square_center_crop():
     """ Test cropping to the center of a square using the header keywords "EACQ_ROW/COL".
     """
@@ -71,8 +78,12 @@ def test_2d_square_center_crop():
     
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
-    # Check that data was cropped correctly
+    # Check that data, err, and dq were cropped correctly
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
+        raise Exception("Unexpected result for 2D square crop test.")
+    if not cropped_test_dataset[0].err[0] == pytest.approx(goal_arr_even):
+        raise Exception("Unexpected result for 2D square crop test.")
+    if not cropped_test_dataset[0].dq == pytest.approx(goal_arr_even):
         raise Exception("Unexpected result for 2D square crop test.")
     
     # Test that headers were updated correctly
@@ -97,6 +108,7 @@ def test_2d_square_center_crop():
     if not cropped_test_dataset[0].dq_hdr["NAXIS2"] == 10:
         raise Exception("Frame dq header kw NAXIS2 not updated correctly.")
 
+
 def test_manual_center_crop():
     """ Test overriding crop location using centerxy argument and make sure 
     DETPIX0X/Y header keyword is updated correctly.
@@ -119,6 +131,11 @@ def test_manual_center_crop():
 
     if not cropped_test_dataset[0].data == pytest.approx(offset_goal_arr):
         raise Exception("Unexpected result for manual crop test.")
+    if not cropped_test_dataset[0].err[0] == pytest.approx(offset_goal_arr):
+        raise Exception("Unexpected result in errfor manual crop test.")
+    if not cropped_test_dataset[0].dq == pytest.approx(offset_goal_arr):
+        raise Exception("Unexpected result in dq for manual crop test.")
+
 
 def test_2d_square_offcenter_crop():
     """ Test cropping off-center square data.
@@ -131,6 +148,7 @@ def test_2d_square_offcenter_crop():
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
         raise Exception("Unexpected result for 2D square offcenter crop test.")
 
+
 def test_2d_rect_offcenter_crop():
     """ Tests cropping off-center non-square data.
     """
@@ -141,6 +159,7 @@ def test_2d_rect_offcenter_crop():
 
     if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_even):
         raise Exception("Unexpected result for 2D rect offcenter crop test.")
+
 
 def test_3d_rect_offcenter_crop():
     """ Tests cropping 3D off-center non-square data.
@@ -157,7 +176,11 @@ def test_3d_rect_offcenter_crop():
     goal_rect_arr3d = np.array([goal_rect_arr_even,goal_rect_arr_even,goal_rect_arr_even])
     if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr3d):
         raise Exception("Unexpected result for 2D rect offcenter crop test.")
-    
+    if not cropped_test_dataset[0].err[0] == pytest.approx(goal_rect_arr3d):
+        raise Exception("Unexpected result for 2D rect offcenter crop test.")
+    if not cropped_test_dataset[0].dq == pytest.approx(goal_rect_arr3d):
+        raise Exception("Unexpected result for 2D rect offcenter crop test.")
+        
     # Check that headers were updated correctly
     if not cropped_test_dataset[0].ext_hdr["EACQ_COL"] == 9.5:
         raise Exception("Frame header kw EACQ_COL not updated correctly.")
@@ -186,6 +209,7 @@ def test_3d_rect_offcenter_crop():
     if not cropped_test_dataset[0].err_hdr["NAXIS3"] == 3:
         raise Exception("Frame err header kw NAXIS3 not updated correctly.")
     
+
 def test_edge_of_detector():
     """ Tests that trying to crop a region right at the edge of the 
     detector succeeds.
@@ -198,6 +222,7 @@ def test_edge_of_detector():
 
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
         raise Exception("Unexpected result for edge of FOV crop test.")
+
 
 def test_outside_detector_edge():
     """ Tests that trying to crop a region outside the detector fails.
@@ -291,6 +316,7 @@ def test_nonhalfinteger_centxy():
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
         raise Exception("Unexpected result for non half-integer crop test.")
 
+
 def test_unsupported_input():
     """ Crop function is not configured for certain observations and should
     fail if the Lyot stop or filter is not the supported positions, unless the desired
@@ -309,6 +335,7 @@ def test_unsupported_input():
     
     with pytest.raises(UserWarning):
         _ = crop(test_dataset,sizexy=None,centerxy=None)
+
 
 def test_detpix0_nonzero():
     """ Tests that the detector pixel header keyword is updated correctly if it 
@@ -330,6 +357,7 @@ def test_detpix0_nonzero():
     if not (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
             cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy:
         raise Exception("Extension header DETPIX0X/Y not updated correctly.")
+
 
 def test_non_nfov_input():
     '''
@@ -373,6 +401,7 @@ def test_non_nfov_input():
     cropped_data_spec_band_3_slit = crop(test_dataset)
     assert cropped_data_spec_band_3_slit[0].data.shape == (125, 125)
 
+
 def test_default_crop():
 
     test_arr = input_rect_arr_odd
@@ -385,6 +414,7 @@ def test_default_crop():
     if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
         raise Exception("Unexpected result for default crop test.")
 
+
 def test_mixed_oddeven_crop():
 
     test_dataset = make_test_dataset(input_rect_arr_mixed)
@@ -396,16 +426,16 @@ def test_mixed_oddeven_crop():
 
 
 if __name__ == "__main__":
-    # test_2d_square_center_crop()
-    # test_manual_center_crop()
-    # test_2d_square_offcenter_crop()
-    # test_2d_rect_offcenter_crop()
-    # test_3d_rect_offcenter_crop()
-    # test_edge_of_detector()
+    test_2d_square_center_crop()
+    test_manual_center_crop()
+    test_2d_square_offcenter_crop()
+    test_2d_rect_offcenter_crop()
+    test_3d_rect_offcenter_crop()
+    test_edge_of_detector()
     test_outside_detector_edge()
-    # test_nonhalfinteger_centxy()
-    # test_non_nfov_input()
-    # test_detpix0_nonzero()
-    # test_unsupported_input()
-    # test_default_crop()
-    # test_mixed_oddeven_crop()
+    test_nonhalfinteger_centxy()
+    test_non_nfov_input()
+    test_detpix0_nonzero()
+    test_unsupported_input()
+    test_default_crop()
+    test_mixed_oddeven_crop()

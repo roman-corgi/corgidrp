@@ -374,7 +374,7 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             cropped_frame_data[:,below_pad:sizexy[1]-above_pad,
                                left_pad:sizexy[0]-right_pad] = frame.data[:,y1+below_pad:y2-above_pad,
                                                                           x1+left_pad:x2-right_pad]
-            cropped_frame_err = np.full((frame.err.shape[:2],*sizexy[::-1]),np.nan)
+            cropped_frame_err = np.full((*frame.err.shape[:2],*sizexy[::-1]),np.nan)
             cropped_frame_err[:,:,below_pad:sizexy[1]-above_pad,
                                left_pad:sizexy[0]-right_pad] = frame.err[:,:,y1+below_pad:y2-above_pad,
                                                                          x1+left_pad:x2-right_pad]
