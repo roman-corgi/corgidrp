@@ -16,7 +16,7 @@ def make_test_dataset(test_arr,centxy=None,set_cen_kws=True):
         set_cen_kws (bool, optional): if false, delete center keywords.
 
     Returns:
-        corgidrp.data.Dataset: test data with a 2x2 "PSF" at location centxy.
+        corgidrp.data.Dataset: test dataset with center related keywords if desired.
     """
     shape = np.array(test_arr.shape)
 
