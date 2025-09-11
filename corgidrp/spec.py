@@ -489,7 +489,7 @@ def estimate_dispersion_clocking_angle(xpts, ypts, weights):
 
 def fit_dispersion_polynomials(wavlens, xpts, ypts, cent_errs, clock_ang, ref_wavlen, pixel_pitch_um=13.0):
     """ 
-    Given arrays of wavlengths and positions, fit two polynomials:  
+    Given arrays of wavelengths and positions, fit two polynomials:  
     1. Displacement from a reference wavelength along the dispersion axis, 
        in millimeters as a function of wavelength  
     2. Wavelength as a function of displacement along the dispersion axis
