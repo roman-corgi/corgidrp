@@ -542,3 +542,62 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
     zp = app_mag + 2.5 * np.log10(ap_sum)
 
     return zp
+
+
+def convert_Q_U_to_Qphi_Uphi(I, Q, U, V):
+
+    """
+    Convert Stokes Q and U images to azimuthal Stokes components Q_phi and U_phi.
+
+    This function computes the polar angle φ at each pixel relative to the image center
+    (estimated as the midpoint of the x/y grids in `I`), and transforms the Cartesian
+    Stokes parameters (Q, U) into the azimuthal basis (Q_phi, U_phi):
+
+        Q_phi = −Q * cos(2φ) − U * sin(2φ)
+        U_phi =  Q * sin(2φ) − U * cos(2φ)
+
+    Args:
+        I (np.ndarray): 3D cube containing the Stokes I map. 
+        Q (np.ndarray): 3D cube containing the Stokes Q map. 
+        U (np.ndarray): 3D cube containing the Stokes U map.
+        V (np.ndarray): 3D cube containing the Stokes V map.
+
+    Returns:
+        tuple:
+            I (np.ndarray): Input 3D cube `I` (unchanged).
+            Q (np.ndarray): Input 3D cube `Q` (unchanged).
+            U (np.ndarray): Input 3D cube `U` (unchanged).
+            V (np.ndarray): Input 3D cube `V` (unchanged).
+            Qphi (np.ndarray): 3D cube with the same shape as `Q`, but channel 2 replaced by Q_phi.
+            Uphi (np.ndarray): 3D cube with the same shape as `U`, but channel 2 replaced by U_phi.
+
+    Notes:
+        - φ is computed in radians using `arctan2(y − y_center, x − x_center)`, where
+          (x_center, y_center) is the midpoint of the x/y ranges in `I`.
+    """
+    # Extract image coordinates
+    x_I = I[..., 0]
+    y_I = I[..., 1]
+
+    # Set the image center to (x_star, y_star)
+    x_star = 0.5 * (x_I.min() + x_I.max())
+    y_star = 0.5 * (y_I.min() + y_I.max())
+
+    # Compute azimuthal angle φ for each pixel
+    phi = np.arctan2(y_I - y_star, x_I - x_star)
+    plt.imshow(phi)
+    plt.title('φ')
+
+    # Q[..., 2] and U[..., 2] contain the actual Stokes Q and U images
+    q = Q[..., 2]
+    u = U[..., 2]
+
+    # Compute Q_phi and U_phi
+    qphi = -q * np.cos(2*phi) - u * np.sin(2*phi)
+    uphi = q * np.sin(2*phi) - u * np.cos(2*phi)
+
+    # Reconstruct 3D cubes for Qphi and Uphi
+    Qphi = np.stack([Q[..., 0], Q[..., 1], qphi], axis=-1)
+    Uphi = np.stack([U[..., 0], U[..., 1], uphi], axis=-1)
+
+    return I, Q, U, V, Qphi, Uphi
