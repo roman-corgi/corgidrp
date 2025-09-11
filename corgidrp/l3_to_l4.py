@@ -316,175 +316,10 @@ def find_star(input_dataset,
     return dataset
 
 
-def crop(input_dataset, sizexy=None, centerxy=None):
-    """
-    
-    Crop the Images in a Dataset to a desired field of view. Default behavior is to 
-    crop the image to the dark hole region, centered on the pixel intersection nearest 
-    to the star location. Assumes 3D Image data is a stack of 2D data arrays, so only 
-    crops the last two indices. Currently only configured for HLC mode.
-
-    TODO: 
-        - Pad with nans if you try to crop outside the array (handle err & DQ too)
-        - Option to crop to an odd data array and center on a pixel?
-
-    Args:
-        input_dataset (corgidrp.data.Dataset): a dataset of Images (any level)
-        sizexy (int or array of int): desired frame size, if only one number is provided the 
-            desired shape is assumed to be square, otherwise xy order. If not provided, 
-            defaults to 60 for NFOV (narrow field-of-view) observations. Defaults to None.
-        centerxy (float or array of float): desired center (xy order), should be a pixel intersection (a.k.a 
-            half-integer) otherwise the function rounds to the nearest intersection. Defaults to the 
-            "STARLOCX/Y" header values.
-
-    Returns:
-        corgidrp.data.Dataset: a version of the input dataset cropped to the desired FOV.
-    """
-
-    # Copy input dataset
-    dataset = input_dataset.copy()
-
-    # Require even data shape
-    if not sizexy is None and not np.all(np.array(sizexy)%2==0):
-        raise UserWarning('Even sizexy is required.')
-       
-    # Need to loop over frames and reinit dataset because array sizes change
-    frames_out = []
-
-    for frame in dataset:
-        prihdr = frame.pri_hdr
-        exthdr = frame.ext_hdr
-        dqhdr = frame.dq_hdr
-        errhdr = frame.err_hdr
-
-        # Pick default crop size based on the size of the effective field of view
-        if sizexy is None:
-            filter_band = exthdr['CFAMNAME']
-            # change filter names ending in F to just the number
-            if filter_band[1] == 'F':
-                filter_band = filter_band[0]
-            prism = exthdr['DPAMNAME']
-            slit = exthdr['FSAMNAME']
-            cor_mode = exthdr['LSAMNAME']
-            spec_slits = ['R1C2', 'R2C3', 'R2C4', 'R2C5', 'R3C1', 'R3C2', 'R4C6', 'R5C1', 'R5C2', 'R6C3', 'R6C4', 'R6C5']
-            spec_prisms = ['PRISM2', 'PRISM3']
-            color_filters = ['1', '1A', '1B', '1C', '2', '2A', '2B', '2C', '3', '3A', '3B', '3C', '3D', '3E', '3F', '3G', '4', '4A', '4B', '4C']
-            # outer working angle in lambda/D
-            cor_outer_working_angle = {
-                'WFOV': 20.1,
-                'SPEC': 9.1
-            }
-            if cor_mode == 'NFOV':
-                # set size to 60 if coronagraph is HLC NFOV
-                sizexy = 60
-            elif cor_mode not in cor_outer_working_angle or filter_band not in color_filters:
-                # raise warning if unable to calculate image size
-                raise UserWarning('Unable to determine image size, please change instrument configuration or provide a sizexy value')
-            else:
-                ## calculate image size using coronagraph information
-                padding = 5
-                diam = 2.363114
-                # convert lambda/D to arcsec
-                radius_arcsec = cor_outer_working_angle[cor_mode] * ((read_cent_wave(filter_band)[0] * 1e-9) / diam) * 206265
-                # convert arcsec to pix, 1 pix = 0.0218", round to nearest integer
-                radius_pix = int(round(radius_arcsec / 0.0218))
-                # update sizexy
-                sizexy = 2 * (padding + radius_pix)
-                # add additional 60 pixels to account for increase in size with spec slit or prism
-                if slit in spec_slits or prism in spec_prisms:
-                    sizexy += 60
-                          
-
-        # Assign new array sizes and center location
-        frame_shape = frame.data.shape
-        if isinstance(sizexy,int):
-            sizexy = [sizexy]*2
-        if isinstance(centerxy,float):
-            centerxy = [centerxy] * 2
-        elif centerxy is None:
-            if ("STARLOCX" in exthdr.keys()) and ("STARLOCY" in exthdr.keys()):
-                centerxy = np.array([exthdr["STARLOCX"],exthdr["STARLOCY"]])
-            else: raise ValueError('centerxy not provided but STARLOCX/Y are missing from image extension header.')
-        
-        # Round to centerxy to nearest half-pixel
-        centerxy = np.array(centerxy)
-        if not np.all((centerxy-0.5)%1 == 0):
-            old_centerxy = centerxy.copy()
-            centerxy = np.round(old_centerxy-0.5)+0.5
-            print(f'Desired center {old_centerxy} is not at the intersection of 4 pixels. Centering on the nearest intersection {centerxy}')
-            
-        # Crop the data
-        start_ind = (centerxy + 0.5 - np.array(sizexy)/2).astype(int)
-        end_ind = (centerxy + 0.5 + np.array(sizexy)/2).astype(int)
-        x1,y1 = start_ind
-        x2,y2 = end_ind
-
-        # Check if cropping outside the FOV
-        xleft_pad = -x1 if (x1<0) else 0
-        xrright_pad = x2-frame_shape[-1]+1 if (x2 > frame_shape[-1]) else 0
-        ybelow_pad = -y1 if (y1<0) else 0
-        yabove_pad = y2-frame_shape[-2]+1 if (y2 > frame_shape[-2]) else 0
-        
-        if np.any(np.array([xleft_pad,xrright_pad,ybelow_pad,yabove_pad])> 0) :
-            raise ValueError("Trying to crop to a region outside the input data array. Not yet configured.")
-
-        if frame.data.ndim == 2:
-            cropped_frame_data = frame.data[y1:y2,x1:x2]
-            cropped_frame_err = frame.err[:,y1:y2,x1:x2]
-            cropped_frame_dq = frame.dq[y1:y2,x1:x2]
-        elif frame.data.ndim == 3:
-            cropped_frame_data = frame.data[:,y1:y2,x1:x2]
-            cropped_frame_err = frame.err[:,:,y1:y2,x1:x2]
-            cropped_frame_dq = frame.dq[:,y1:y2,x1:x2]
-        else:
-            raise ValueError('Crop function only supports 2D or 3D frame data.')
-
-        # Update headers
-        exthdr["NAXIS1"] = sizexy[0]
-        exthdr["NAXIS2"] = sizexy[1]
-        dqhdr["NAXIS1"] = sizexy[0]
-        dqhdr["NAXIS2"] = sizexy[1]
-        errhdr["NAXIS1"] = sizexy[0]
-        errhdr["NAXIS2"] = sizexy[1]
-        errhdr["NAXIS3"] = cropped_frame_err.shape[-3]
-        if frame.data.ndim == 3:
-            exthdr["NAXIS3"] = frame.data.shape[0]
-            dqhdr["NAXIS3"] = frame.dq.shape[0]
-            errhdr["NAXIS4"] = frame.err.shape[0]
-        
-        updated_hdrs = []
-        if ("STARLOCX" in exthdr.keys()):
-            exthdr["STARLOCX"] -= x1
-            exthdr["STARLOCY"] -= y1
-            updated_hdrs.append('STARLOCX/Y')
-        if ("CRPIX1" in prihdr.keys()):
-            prihdr["CRPIX1"] -= x1
-            prihdr["CRPIX2"] -= y1
-            updated_hdrs.append('CRPIX1/2')
-        if not ("DETPIX0X" in exthdr.keys()):
-            exthdr.set('DETPIX0X',0)
-            exthdr.set('DETPIX0Y',0)
-        exthdr.set('DETPIX0X',exthdr["DETPIX0X"]+x1)
-        exthdr.set('DETPIX0Y',exthdr["DETPIX0Y"]+y1)
-
-        new_frame = data.Image(cropped_frame_data,prihdr,exthdr,cropped_frame_err,cropped_frame_dq,frame.err_hdr,frame.dq_hdr)
-        new_frame.filename = frame.filename
-        frames_out.append(new_frame)
-
-    output_dataset = data.Dataset(frames_out)
-
-    history_msg1 = f"""Frames cropped to new shape {list(output_dataset[0].data.shape)} on center {list(centerxy)}. Updated header kws: {", ".join(updated_hdrs)}."""
-    output_dataset.update_after_processing_step(history_msg1)
-    
-    return output_dataset
-
-
 def do_psf_subtraction(input_dataset, 
                        ct_calibration=None,
                        reference_star_dataset=None,
                        outdir=None,fileprefix="",
-                       do_crop=True,
-                       crop_sizexy=None,
                        measure_klip_thrupt=True,
                        measure_1d_core_thrupt=True,
                        cand_locs=None,
@@ -498,7 +333,7 @@ def do_psf_subtraction(input_dataset,
     """
     Perform PSF subtraction on the dataset. Optionally using a reference star dataset.
     TODO: 
-        Handle propagate DQ array
+        Handle/propagate DQ array
         Propagate error correctly
         What info is missing from output dataset headers?
         Add comments to new ext header cards
@@ -514,9 +349,6 @@ def do_psf_subtraction(input_dataset,
             star. If not provided, references will be searched for in the input dataset.
         outdir (str or path, optional): path to output directory. Defaults to "KLIP_SUB".
         fileprefix (str, optional): prefix of saved output files. Defaults to "".
-        do_crop (bool, optional): whether to crop data before PSF subtraction. Defaults to True.
-        crop_sizexy (list of int, optional): Desired size to crop the images to before PSF subtraction. Defaults to 
-            None, which results in the step choosing a crop size based on the imaging mode. 
         measure_klip_thrupt (bool, optional): Whether to measure KLIP throughput via injection-recovery. Separations 
             and throughput levels for each separation and KL mode are saved in Dataset[0].hdu_list['KL_THRU']. 
             Defaults to True.
@@ -602,11 +434,6 @@ def do_psf_subtraction(input_dataset,
     outdir = os.path.join(outdir,klip_kwargs['mode'])
     if not os.path.exists(outdir):
         os.makedirs(outdir)
-
-    # Crop data
-    if do_crop:
-        sci_dataset = crop(sci_dataset,sizexy=crop_sizexy)
-        ref_dataset = None if ref_dataset is None else crop(ref_dataset,sizexy=crop_sizexy) 
 
     # Mask data where DQ > 0, let pyklip deal with the nans
     sci_dataset_masked = nan_flags(sci_dataset)
