@@ -585,8 +585,6 @@ def convert_Q_U_to_Qphi_Uphi(I, Q, U, V):
 
     # Compute azimuthal angle φ for each pixel
     phi = np.arctan2(y_I - y_star, x_I - x_star)
-    plt.imshow(phi)
-    plt.title('φ')
 
     # Q[..., 2] and U[..., 2] contain the actual Stokes Q and U images
     q = Q[..., 2]
