@@ -74,6 +74,7 @@ def create_wcs(input_dataset, astrom_calibration, offset=None):
 
     return updated_dataset
 
+
 def divide_by_exptime(input_dataset):
     """
     
@@ -114,6 +115,7 @@ def divide_by_exptime(input_dataset):
 
 
     return data
+
 
 def split_image_by_polarization_state(input_dataset,
                                       image_center_x=512,
@@ -327,10 +329,8 @@ def crop(input_dataset, sizexy=None, centerxy=None):
                 centerxy = np.array([exthdr["EACQ_COL"],exthdr["EACQ_ROW"]])
             else: raise ValueError('centerxy not provided but EACQ_ROW/COL are missing from image extension header.')
         
-        # Determine if size is even or odd:
-        size_evenness = (np.array(sizexy) % 2) == 0
-
         # Round to center to nearest half-pixel if size is even, nearest pixel if odd
+        size_evenness = (np.array(sizexy) % 2) == 0
         centerxy_input = np.array(centerxy)
         centerxy = np.where(size_evenness,np.round(centerxy_input-0.5)+0.5,np.round(centerxy_input))
         if not np.all(centerxy == centerxy_input):
@@ -343,22 +343,50 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         x2,y2 = end_ind
 
         # Check if cropping outside the FOV
-        xleft_pad = -x1 if (x1<0) else 0
-        xrright_pad = x2-frame_shape[-1]+1 if (x2 > frame_shape[-1]) else 0
-        ybelow_pad = -y1 if (y1<0) else 0
-        yabove_pad = y2-frame_shape[-2]+1 if (y2 > frame_shape[-2]) else 0
+        left_pad = -x1 if (x1<0) else 0
+        right_pad = x2-frame_shape[-1] if (x2 > frame_shape[-1]) else 0
+        below_pad = -y1 if (y1<0) else 0
+        above_pad = y2-frame_shape[-2] if (y2 > frame_shape[-2]) else 0
         
-        if np.any(np.array([xleft_pad,xrright_pad,ybelow_pad,yabove_pad])> 0) :
-            raise ValueError("Trying to crop to a region outside the input data array. Not yet configured.")
 
         if frame.data.ndim == 2:
-            cropped_frame_data = frame.data[y1:y2,x1:x2]
-            cropped_frame_err = frame.err[:,y1:y2,x1:x2]
-            cropped_frame_dq = frame.dq[y1:y2,x1:x2]
+
+            cropped_frame_data = np.full(sizexy[::-1],np.nan)
+            cropped_frame_data[below_pad:sizexy[1]-above_pad,
+                               left_pad:sizexy[0]-right_pad] = frame.data[y1+below_pad:y2-above_pad,
+                                                                          x1+left_pad:x2-right_pad]
+            cropped_frame_err = np.full((frame.err.shape[0],*sizexy[::-1]),np.nan)
+            cropped_frame_err[:,below_pad:sizexy[1]-above_pad,
+                               left_pad:sizexy[0]-right_pad] = frame.err[:,y1+below_pad:y2-above_pad,
+                                                                         x1+left_pad:x2-right_pad]
+            cropped_frame_dq = np.full(sizexy[::-1],np.nan)
+            cropped_frame_dq[below_pad:sizexy[1]-above_pad,
+                               left_pad:sizexy[0]-right_pad] = frame.dq[y1+below_pad:y2-above_pad,
+                                                                          x1+left_pad:x2-right_pad]
+            
+            # cropped_frame_data = frame.data[y1:y2,x1:x2]
+            # cropped_frame_err = frame.err[:,y1:y2,x1:x2]
+            # cropped_frame_dq = frame.dq[y1:y2,x1:x2]
+
         elif frame.data.ndim == 3:
-            cropped_frame_data = frame.data[:,y1:y2,x1:x2]
-            cropped_frame_err = frame.err[:,:,y1:y2,x1:x2]
-            cropped_frame_dq = frame.dq[:,y1:y2,x1:x2]
+
+            cropped_frame_data = np.full((frame.data.shape[0],*sizexy[::-1]),np.nan)
+            cropped_frame_data[:,below_pad:sizexy[1]-above_pad,
+                               left_pad:sizexy[0]-right_pad] = frame.data[:,y1+below_pad:y2-above_pad,
+                                                                          x1+left_pad:x2-right_pad]
+            cropped_frame_err = np.full((frame.err.shape[:2],*sizexy[::-1]),np.nan)
+            cropped_frame_err[:,:,below_pad:sizexy[1]-above_pad,
+                               left_pad:sizexy[0]-right_pad] = frame.err[:,:,y1+below_pad:y2-above_pad,
+                                                                         x1+left_pad:x2-right_pad]
+            cropped_frame_dq = np.full((frame.dq.shape[0],*sizexy[::-1]),np.nan)
+            cropped_frame_dq[:,below_pad:sizexy[1]-above_pad,
+                               left_pad:sizexy[0]-right_pad] = frame.dq[:,y1+below_pad:y2-above_pad,
+                                                                          x1+left_pad:x2-right_pad]
+            
+            
+            # cropped_frame_data = frame.data[:,y1:y2,x1:x2]
+            # cropped_frame_err = frame.err[:,:,y1:y2,x1:x2]
+            # cropped_frame_dq = frame.dq[:,y1:y2,x1:x2]
         else:
             raise ValueError('Crop function only supports 2D or 3D frame data.')
 

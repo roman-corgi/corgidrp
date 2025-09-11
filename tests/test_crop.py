@@ -203,10 +203,83 @@ def test_outside_detector_edge():
     """ Tests that trying to crop a region outside the detector fails.
     """
 
-    test_dataset = make_test_dataset(input_arr_even)
+    
+    # Upper right edge
+    test_arr = np.zeros((100,100))
+    test_arr[-1,-1] = 1
+    test_dataset = make_test_dataset(test_arr)
+    goal_arr = np.full((11,11),np.nan)
+    goal_arr[:6,:6] = 0
+    goal_arr[5,5] = 1
+    cropped_test_dataset = crop(test_dataset,sizexy=11,centerxy=[99,99])
 
-    with pytest.raises(ValueError):
-        _ = crop(test_dataset,sizexy=10,centerxy=[99,99])
+    # Replace nans with a finite value for comparison purposes
+    cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
+    goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
+    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
+        raise Exception("Unexpected result for cropping off top-right edge.")
+    
+    # Lower right edge
+    test_arr = np.zeros((100,100))
+    test_arr[0,-1] = 1
+    test_dataset = make_test_dataset(test_arr)
+    goal_arr = np.full((11,11),np.nan)
+    goal_arr[5:,:6] = 0
+    goal_arr[5,5] = 1
+    cropped_test_dataset = crop(test_dataset,sizexy=11,centerxy=[99,0])
+
+    # Replace nans with a finite value for comparison purposes
+    cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
+    goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
+    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
+        raise Exception("Unexpected result for cropping off lower-right edge.")
+    
+    # Lower left edge
+    test_arr = np.zeros((100,100))
+    test_arr[0,0] = 1
+    test_dataset = make_test_dataset(test_arr)
+    goal_arr = np.full((11,11),np.nan)
+    goal_arr[5:,5:] = 0
+    goal_arr[5,5] = 1
+    cropped_test_dataset = crop(test_dataset,sizexy=11,centerxy=[0,0])
+
+    # Replace nans with a finite value for comparison purposes
+    cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
+    goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
+    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
+        raise Exception("Unexpected result for cropping off lower-left edge.")
+
+    # Upper left edge
+    test_arr = np.zeros((100,100))
+    test_arr[99,0] = 1
+    test_dataset = make_test_dataset(test_arr)
+    goal_arr = np.full((11,11),np.nan)
+    goal_arr[:6,5:] = 0
+    goal_arr[5,5] = 1
+    cropped_test_dataset = crop(test_dataset,sizexy=11,centerxy=[0,99])
+
+    # Replace nans with a finite value for comparison purposes
+    cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
+    goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
+    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
+        raise Exception("Unexpected result for cropping off top-left edge.")
+    
+
+    # Zoom out
+    test_arr = np.zeros((99,99))
+    test_arr[49,49] = 1
+    test_dataset = make_test_dataset(test_arr)
+    goal_arr = np.full((101,101),np.nan)
+    goal_arr[1:100,1:100] = 0
+    goal_arr[50,50] = 1
+    cropped_test_dataset = crop(test_dataset,sizexy=101,centerxy=[49,49])
+
+    # Replace nans with a finite value for comparison purposes
+    cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
+    goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
+    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
+        raise Exception("Unexpected result for zoom out.")
+
 
 def test_nonhalfinteger_centxy():
     """ Tests that trying to crop data to a center that is not at the intersection 
@@ -329,10 +402,10 @@ if __name__ == "__main__":
     # test_2d_rect_offcenter_crop()
     # test_3d_rect_offcenter_crop()
     # test_edge_of_detector()
-    # test_outside_detector_edge()
+    test_outside_detector_edge()
     # test_nonhalfinteger_centxy()
     # test_non_nfov_input()
     # test_detpix0_nonzero()
     # test_unsupported_input()
-    test_default_crop()
-    test_mixed_oddeven_crop()
+    # test_default_crop()
+    # test_mixed_oddeven_crop()
