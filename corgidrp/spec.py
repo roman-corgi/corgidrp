@@ -853,6 +853,9 @@ def star_spec_registration(
     # Find closest template offset to the one measured in the data
     slit_idx = int(np.abs(slit_align_err - yoffset_template).argmin())
 
+    # TODO: cross-correlate input data with template and crop around when the 
+    # simulations with CORGISIM are ready
+
     # Find best PSF centroid fit for each image compared to the template
     # Cost function: Start with any large value that cannot happen. Units are
     # EXCAM pixels. Response along long slit axis (x) is quite constant. Setting
@@ -868,6 +871,7 @@ def star_spec_registration(
 
         # best-matching image is wrt zero-point
         zeropt_dist_img = np.sqrt((x_fit-wv0_x)**2 + (y_fit-wv0_y)**2)
+        # TODO: return only filename of best image
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
             img_best = img
