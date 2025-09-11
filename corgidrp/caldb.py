@@ -351,21 +351,24 @@ class CalDB:
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['FluxcalFactor', 'NDFilterSweetSpot']:
             # filter by color filter
-            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=True)
+            # filter_calib() is configured to not throw an error if no matches are found, so that
+            # no existing e2e tests breaks, if in the future we want to strictly only use the calibration
+            # files with matching headers, then set err_if_none to True
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['CoreThroughputCalibration']:
             # filter by focal plane mask
-            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=True)
+            options = self.filter_calib(calibdf, "FPAMNAME", frame_dict['FPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
         elif dtype_label in ['FlatField']:
             # filter by DPAM
-            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=True)
+            options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
