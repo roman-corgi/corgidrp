@@ -262,7 +262,7 @@ def test_caldb_filter():
     # create mock image to input into caldb.get_calib()
     img_nfov, loc_nfov, val_nfov = mocks.create_ct_psfs(3, n_psfs=1)
     img_nfov[0].ext_hdr['FPAMNAME'] = 'HLC12_C2R1'
-    img_wfov, loc_wfov, val_wfiv = mocks.create_ct_psfs(3, n_psfs=1)
+    img_wfov, loc_wfov, val_wfov = mocks.create_ct_psfs(3, n_psfs=1)
     img_wfov[0].ext_hdr['FPAMNAME'] = 'SPC12_R1C1'
 
     # check that the returned calibration file uses the hlc focal plane msk
