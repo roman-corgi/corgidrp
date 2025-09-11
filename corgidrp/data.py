@@ -471,11 +471,11 @@ class Image():
 
         # recast header data to the appropriate bit depth as set by the pipeline settings
         if self.data is not None:
-            self.data = self.data.astype(corgidrp.image_bit_depth)
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
         if self.err is not None:
-            self.err = self.err.astype(corgidrp.image_bit_depth)
+            self.err = self.err.astype(corgidrp.image_dtype, copy=False)
         if self.dq is not None:
-            self.dq = self.dq.astype(corgidrp.dq_bit_depth)
+            self.dq = self.dq.astype(corgidrp.dq_dtype, copy=False)
             
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)

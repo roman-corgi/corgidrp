@@ -17,12 +17,12 @@ def test_bit_depth():
     config.read(corgidrp.config_filepath)
 
     # save original information
-    original_image_bit_depth = config.get("DATA", "image_bit_depth", fallback="64")
-    original_dq_bit_depth = config.get("DATA", "dq_bit_depth", fallback="16")
+    original_image_dtype = config.get("DATA", "image_dtype", fallback="64")
+    original_dq_dtype = config.get("DATA", "dq_dtype", fallback="16")
 
     # test default settings
-    config['DATA']['image_bit_depth'] = '64'
-    config['DATA']['dq_bit_depth'] = '16'
+    config['DATA']['image_dtype'] = '64'
+    config['DATA']['dq_dtype'] = '16'
 
     # write to file
     with open(corgidrp.config_filepath, 'w') as f:
@@ -42,8 +42,8 @@ def test_bit_depth():
     
     # reset configuration file to its original state
     # reset the file before assert statements so that if the test fails the config file will not be affected
-    config['DATA']['image_bit_depth'] = original_image_bit_depth
-    config['DATA']['dq_bit_depth'] = original_dq_bit_depth
+    config['DATA']['image_dtype'] = original_image_dtype
+    config['DATA']['dq_dtype'] = original_dq_dtype
     with open(corgidrp.config_filepath, 'w') as f:
         config.write(f)
     corgidrp.update_pipeline_settings()
@@ -56,16 +56,16 @@ def test_bit_depth():
     assert img.dq.dtype.type == np.uint16
 
     # change config file to use reduced bit-depth and test again
-    config['DATA']['image_bit_depth'] = '32'
-    config['DATA']['dq_bit_depth'] = '8'
+    config['DATA']['image_dtype'] = '32'
+    config['DATA']['dq_dtype'] = '8'
     with open(corgidrp.config_filepath, 'w') as f:
         config.write(f)
     corgidrp.update_pipeline_settings()
     generate_coron_dataset_with_companions(outdir=output_dir)
 
     # reset config file
-    config['DATA']['image_bit_depth'] = original_image_bit_depth
-    config['DATA']['dq_bit_depth'] = original_dq_bit_depth
+    config['DATA']['image_dtype'] = original_image_dtype
+    config['DATA']['dq_dtype'] = original_dq_dtype
     with open(corgidrp.config_filepath, 'w') as f:
         config.write(f)
     corgidrp.update_pipeline_settings()

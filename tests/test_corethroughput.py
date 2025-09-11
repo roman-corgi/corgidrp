@@ -444,7 +444,7 @@ def test_cal_file():
         except:
             pass
         psf_cube_in += [frame.data]
-    psf_cube_in = np.array(psf_cube_in, dtype=corgidrp.image_bit_depth)
+    psf_cube_in = np.array(psf_cube_in, dtype=corgidrp.image_dtype)
 
     # Compare the PSF cube from the calibration file, which may have a smaller
     # extension, with the input ones
