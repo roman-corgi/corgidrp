@@ -3598,8 +3598,8 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             If not provided, a noisy 2D gaussian will be used instead. Defaults to None.
         wcs_header (astropy.fits.Header, optional): Fits header object containing WCS 
             information. If not provided, a mock header will be created. Defaults to None.
-        data_shape (list of int): desired shape of data array. Must have length 2. Defaults to 
-            [100,100].
+        data_shape (list of int): desired shape of data array, with the last two axes in xy order. 
+            Must have length 2 or 3. Defaults to [100,100].
         centerxy (list of float): Desired PSF center in xy order. Must have length 2. Defaults 
             to image center.
         outdir (str, optional): Desired output directory. If not provided, data will not be 
@@ -3618,7 +3618,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         tuple: corgiDRP science Dataset object and reference Dataset object.
     """
 
-    assert len(data_shape) == 2
+    assert len(data_shape) == 2 or len(data_shape) == 3
     
     if roll_angles is None:
         roll_angles = [0.] * (n_sci+n_ref)
@@ -3642,7 +3642,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             darkhole = fits.getdata(fpath)
             
             fill_value = np.nanmin(darkhole)
-            img_data = np.full(data_shape,fill_value)
+            img_data = np.full(data_shape[-2:],fill_value)
 
             # Overwrite center of array with the darkhole data
             cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
@@ -3659,7 +3659,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             _,fname = os.path.split(fpath)
             darkhole = fits.getdata(fpath)
             fill_value = np.nanmin(darkhole)
-            img_data = np.full(data_shape,fill_value)
+            img_data = np.full(data_shape[-2:],fill_value)
 
             # Overwrite center of array with the darkhole data
             cr_psf_pix = np.array(darkhole.shape) / 2 - 0.5
@@ -3681,14 +3681,14 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             fwhm = ref_fwhm if i>= n_sci else sci_fwhm
             sigma = fwhm / (2 * np.sqrt(2. * np.log(2.)))
             fname = f'MOCK_{label}_roll{roll_angles[i]}.fits'
-            arr_center = np.array(data_shape) / 2 - 0.5
+            arr_center = np.array(data_shape[-2:]) / 2 - 0.5
             if centerxy is None:
                 psfcenty,psfcentx = arr_center
             else:
                 psfcentx,psfcenty = centerxy
             
             psf_off_xy = (psfcentx-arr_center[1],psfcenty-arr_center[0])
-            img_data = gaussian_array(array_shape=data_shape,
+            img_data = gaussian_array(array_shape=data_shape[-2:],
                                       xoffset=psf_off_xy[0],
                                       yoffset=psf_off_xy[1],
                                       sigma=sigma,
@@ -3703,7 +3703,7 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
             if i<n_sci:
                 pa_deg = -roll_angles[i]
                 xoff,yoff = pl_sep * np.array([-np.sin(np.radians(pa_deg)),np.cos(np.radians(pa_deg))])
-                planet_psf = gaussian_array(array_shape=data_shape,
+                planet_psf = gaussian_array(array_shape=data_shape[-2:],
                                             amp=pl_amp,
                                             sigma=sigma,
                                             xoffset=xoff+psf_off_xy[0],
@@ -3738,7 +3738,13 @@ def create_psfsub_dataset(n_sci,n_ref,roll_angles,darkhole_scifiles=None,darkhol
         exthdr.extend(wcs_header)
 
         # Make a corgiDRP Image frame
-        frame = data.Image(img_data, pri_hdr=prihdr, ext_hdr=exthdr)
+        if len(data_shape)==3:
+            frame_data = np.zeros([data_shape[0],data_shape[2],data_shape[1]])
+            frame_data[:] = img_data
+        else:
+            frame_data = img_data
+
+        frame = data.Image(frame_data, pri_hdr=prihdr, ext_hdr=exthdr)
         frame.filename = fname
 
         # Add it to the correct dataset

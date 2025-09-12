@@ -16,17 +16,64 @@ from corgidrp.corethroughput import get_1d_ct
 from scipy.ndimage import rotate as rotate_scipy # to avoid duplicated name
 from scipy.ndimage import shift
 from astropy.io import fits
-from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
+from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
 
 
-def distortion_correction(input_dataset, astrom_calibration):
+def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
+    """Interpolate over bad pixels in image and error arrays using a median filter.
+    TODO: Add additional options for bad pixel replacement (e.g. 2d interpolation that
+    can handle nans, constant value, etc.)
+
+    Args:
+        input_dataset (corgidrp.data.Dataset): input L3 dataset with bad pixels
+        kernelsize (int, optional): Size of median filter window in pixels. Defaults to 3.
+        dq_thresh (int, optional): Minimum DQ value for a pixel to be replaced. Defaults to 1.
+
+    Returns:
+        corgidrp.data.Dataset: A copy of the dataset with the bad pixels and error values interpolated over. 
+        The bad pixel map is unchanged.
     """
+
+    # Copy input dataset
+    dataset = input_dataset.copy()
+    im_data = dataset.all_data
+    im_err = dataset.all_err
+
+    # Get the pixels where the dq array is above the threshold
+    im_dq_bool = dataset.all_dq >= dq_thresh
     
-    Applies the distortion correction to the dataset. The function interpolates the bad pixels 
-    before applying the distortion correction to avoid creating more bad pixels. It then adds 
-    the bad pixels back in after the correction is applied, keeping the bad pixel maps the same. 
-    Furthermore it also applies the distortion correction to the error maps.
+    # Set the bad pixels to np.nan
+    im_data[im_dq_bool] = np.nan
+    
+    # Apply the correct dq frame to each error frame
+    for f,frame in enumerate(im_err):
+        for e,_ in enumerate(frame):
+            im_err[f][e] = np.where(im_dq_bool[f], np.nan,im_err[f][e])
+
+    # Interpolate over the bad pixels using nanmedian
+    im_filtered = generic_filter(im_data,np.nanmedian,size=kernelsize,axes=[-1,-2])
+    err_filtered = generic_filter(im_err,np.nanmedian,size=kernelsize,axes=[-1,-2])
+    
+    # Replace the bad pixels with the interpolated pixels
+    im_replaced = np.where(np.isnan(im_data),im_filtered,im_data)
+    err_replaced = np.where(np.isnan(im_err),err_filtered,im_err)
+    
+    # Update dataset
+    bp_count = np.sum(np.isnan(im_data))
+    history_msg = f"Interpolated over {bp_count} bad pixels with median filter size {kernelsize}."
+    dataset.update_after_processing_step(history_msg,
+                                         new_all_data=im_replaced, 
+                                         new_all_err=err_replaced)
+
+    return dataset
+
+
+def distortion_correction(input_dataset, astrom_calibration):
+    """ 
+    Applies the distortion correction to the dataset. The function assumes bad 
+    pixels have been corrected beforehand. Furthermore it also applies the distortion 
+    correction to the error maps.
     
 
     Args:
@@ -48,12 +95,10 @@ def distortion_correction(input_dataset, astrom_calibration):
 
         im_data = undistorted_data.data
         im_err = undistorted_data.err
-        im_dq = undistorted_data.dq
         imgsizeX, imgsizeY = im_data.shape
 
         # set image size to the largest axis if not square imagea
-        if (imgsizeX >= imgsizeY): imgsize = imgsizeX
-        else: imgsize = imgsizeY
+        imgsize = np.max([imgsizeX,imgsizeY])
 
         yorig, xorig = np.indices(im_data.shape)
         y0, x0 = imgsize//2, imgsize//2
@@ -89,47 +134,19 @@ def distortion_correction(input_dataset, astrom_calibration):
         gridx, gridy = np.meshgrid(np.arange(imgsize), np.arange(imgsize))
         gridx = gridx - distmapX
         gridy = gridy - distmapY
-
-        # interpolating bad pixels to not spillover during the interpolation while saving bpix
-        im_bpixs = np.zeros_like(im_data)
-        im_bpixs[im_dq.astype(bool)] = im_data[im_dq.astype(bool)]
         
-        im_data[im_dq.astype(bool)] = np.nan
-        
-        kernel = Gaussian2DKernel(3)
-        im_data = interpolate_replace_nans(im_data, kernel)
-    
         undistorted_image = scipy.ndimage.map_coordinates(im_data, [gridy, gridx])
         
-        # interpolate the errors
+        # undistort the errors
         if len(im_err.shape) == 2:
-            
-            err_bpixs = np.zeros_like(im_err)
-            err_bpixs[im_dq.astype(bool)] = im_err[im_dq.astype(bool)]
-            
-            im_err[im_dq.astype(bool)] = np.nan
-            im_err = interpolate_replace_nans(im_err, kernel)
-            
             undistorted_errors = scipy.ndimage.map_coordinates(im_err, [gridy, gridx])
-            undistorted_errors[im_dq.astype(bool)] = err_bpixs[im_dq.astype(bool)]
         else:
             undistorted_errors = []
             for err in im_err:
-                err_bpixs = np.zeros_like(err)
-                err_bpixs[im_dq.astype(bool)] = err[im_dq.astype(bool)]
-            
-                err[im_dq.astype(bool)] = np.nan
-                err = interpolate_replace_nans(err, kernel)
-                
                 und_err = scipy.ndimage.map_coordinates(err, [gridy, gridx])
-                und_err[im_dq.astype(bool)] = err_bpixs[im_dq.astype(bool)]
                 
                 undistorted_errors.append(und_err)
         
-        # put the bad pixels back in
-        
-        undistorted_image[im_dq.astype(bool)] = im_bpixs[im_dq.astype(bool)]
-
         undistorted_ims.append(undistorted_image)
         undistorted_errs.append(undistorted_errors)
 
@@ -840,6 +857,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
 
     return processed_dataset 
 
+
 def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None):
     """ 
     A procedure for estimating the centroid of the zero-point image
@@ -908,6 +926,7 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
     history_msg = "wavelength zeropoint values added to header"
     sci_dataset.update_after_processing_step(history_msg)
     return sci_dataset
+
 
 def add_wavelength_map(input_dataset, disp_model, pixel_pitch_um = 13.0, ntrials = 1000):
     """
