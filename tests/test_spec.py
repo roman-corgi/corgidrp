@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.table import Table
-from corgidrp.data import Dataset, Image, DispersionModel
+from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
 import corgidrp.spec as steps
 from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
 from corgidrp.spec import get_template_dataset
@@ -41,7 +41,6 @@ def convert_tvac_to_dataset():
     
         psf_images = []
         file_names = []
-        basetime = datetime.now()
         for i in range(psf_array.shape[0]):
             data_2d = np.copy(psf_array[i])
             err = np.zeros_like(data_2d)
@@ -53,7 +52,7 @@ def convert_tvac_to_dataset():
                 err=err,
                 dq=dq
             )
-            image.ext_hdr['CFAMNAME'] = '3d'
+            image.ext_hdr['CFAMNAME'] = '3D'
             image.ext_hdr['DPAMNAME'] = 'PRISM3'
             if k == 0:
                 image.ext_hdr['FSAMNAME'] = 'OPEN'
@@ -64,16 +63,14 @@ def convert_tvac_to_dataset():
             image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
             image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
             psf_images.append(image)
-            
-            # Generate timestamp for this file
-            dt = basetime + timedelta(seconds=i)
-            filename = get_formatted_filename(dt, pri_hdr['VISITID'])
-            file_names.append(filename)
-        
-        # Sort by CFAMNAME for deterministic output
-        sorted_indices = sorted(range(len(psf_images)), key=lambda x: psf_images[x].ext_hdr['CFAMNAME'])
-        psf_images = [psf_images[i] for i in sorted_indices]
-        file_names = [file_names[i] for i in sorted_indices]
+            if i > 0 and i <10:
+                num = "0"+str(i)
+            else:
+                num = str(i)
+            if k == 0:
+                file_names.append("spec_unocc_noslit_offset_prism3_3d_" +num+".fits")
+            else:
+                file_names.append("spec_unocc_r1c2slit_offset_prism3_3d_" +num+".fits")
         
         #for now only one image needed as template
         dataset = Dataset([psf_images[12]])
@@ -96,7 +93,6 @@ def convert_tvac_to_dataset():
     
     psf_images = []
     file_names = []
-    basetime = datetime.now()
     for i in range(psf_array.shape[0]):
         data_2d = np.copy(psf_array[i])
         err = np.zeros_like(data_2d)
@@ -108,7 +104,8 @@ def convert_tvac_to_dataset():
             err=err,
             dq=dq
         )
-        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+        
+        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper()
         image.ext_hdr['DPAMNAME'] = 'PRISM3'
         image.ext_hdr['FSAMNAME'] = 'OPEN'
         image.ext_hdr['xcent']= initial_cent.get('xcent')[i]
@@ -116,17 +113,11 @@ def convert_tvac_to_dataset():
         image.ext_hdr['xoffset']= initial_cent.get('xoffset')[i]
         image.ext_hdr['yoffset']= initial_cent.get('yoffset')[i]
         psf_images.append(image)
-        
-        # Generate timestamp for this file
-        dt = basetime + timedelta(seconds=i)
-        filename = get_formatted_filename(dt, pri_hdr['VISITID'])
-        file_names.append(filename)
-    
-    # Sort by CFAMNAME for deterministic output
-    sorted_indices = sorted(range(len(psf_images)), key=lambda x: psf_images[x].ext_hdr['CFAMNAME'])
-    psf_images = [psf_images[i] for i in sorted_indices]
-    file_names = [file_names[i] for i in sorted_indices]
-    
+        if i>0 and i <10:
+            num = "0"+str(i)
+        else:
+            num = str(i)
+        file_names.append("spec_unocc_noslit_prism3_filtersweep_" +num+".fits")
     dataset = Dataset(psf_images)
     dataset.save(filedir=template_dir, filenames = file_names)
 
@@ -165,7 +156,7 @@ def test_psf_centroid():
             err=err,
             dq=dq
         )
-        image.ext_hdr['CFAMNAME'] = '3d'
+        image.ext_hdr['CFAMNAME'] = '3D'
         psf_images.append(image)
 
     dataset = Dataset(psf_images)
@@ -314,7 +305,7 @@ def test_calibrate_dispersion_model():
             err=err,
             dq=dq
         )
-        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+        image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper()
         psf_images.append(image)
 
     dataset = Dataset(psf_images)
@@ -367,6 +358,7 @@ def test_add_wavelength_map():
     ref_wavlen = disp_model.ext_hdr["REFWAVE"]
     filepath = os.path.join(spec_datadir, "templates", "spec_unocc_noslit_offset_prism3_3d_12.fits")
     image = Image(filepath)
+    image.ext_hdr['CFAMNAME'] = '3D'
     image.ext_hdr['WAVLEN0'] = wave_0.get('wavlen')
     image.ext_hdr['WV0_X'] = wave_0.get('x')
     image.ext_hdr['WV0_XERR'] = wave_0.get('xerr')
@@ -376,6 +368,7 @@ def test_add_wavelength_map():
     image.ext_hdr['WV0_DIMY'] = wave_0.get('shapey')
     dataset = Dataset([image])
     
+    global output_dataset
     output_dataset = l3_to_l4.add_wavelength_map(dataset, disp_model)
     
     out_im = output_dataset.frames[0]
@@ -408,7 +401,7 @@ def test_add_wavelength_map():
     
 def test_determine_zeropoint():
     """
-    test the calculation of the wavelength zeropoint position of satspot data
+    test the calculation of the wavelength zeropoint position of narrowband/satspot data
     """
     errortol_pix = 0.5
     filepath = os.path.join(test_datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
@@ -448,7 +441,7 @@ def test_determine_zeropoint():
         ext_hdr['CFAMNAME'] = '3'
         if i == 12:
             pri_hdr["SATSPOTS"] = 1
-            ext_hdr['CFAMNAME'] = '3d'
+            ext_hdr['CFAMNAME'] = '3D'
         else:
             pri_hdr["SATSPOTS"] = 0
         err = np.zeros_like(data_2d)
@@ -490,7 +483,7 @@ def test_determine_zeropoint():
         data_2d = np.copy(psf_array[i])
         ext_hdr["NAXIS1"] =np.shape(data_2d)[0]
         ext_hdr["NAXIS2"] =np.shape(data_2d)[1]
-        ext_hdr['CFAMNAME'] = '3d'
+        ext_hdr['CFAMNAME'] = '3D'
         pri_hdr["SATSPOTS"] = 0
         err = np.zeros_like(data_2d)
         dq = np.zeros_like(data_2d, dtype=int)
@@ -553,6 +546,49 @@ def test_determine_zeropoint():
         assert x0err_noi < errortol_pix
         assert y0err_noi < errortol_pix
     
+def test_linespread_function():
+    """
+    test the fit of a linespread function to a narrowband observation and storing in a LineSpread calibration file
+    using the output_dataset of the test of the wavelength map
+    """
+    line_spread = steps.fit_line_spread_function(output_dataset)
+    xcent_round, ycent_round = (int(np.rint(output_dataset[0].ext_hdr["WV0_X"])), int(np.rint(output_dataset[0].ext_hdr["WV0_Y"])))
+    image = output_dataset[0].data
+    flux = np.sum(image, axis = 1)/np.sum(image)
+    pos_max = np.argmax(flux)
+    mean_wave = np.mean(output_dataset[0].hdu_list["WAVE"].data, axis = 1)
+    assert line_spread.amplitude == pytest.approx(flux[pos_max], abs=0.04)
+    assert line_spread.mean_wave == pytest.approx(mean_wave[pos_max], abs=2)
+    ind_fwhm = np.where(flux >= flux[pos_max]/2.)[0]
+    est_fwhm = mean_wave[ind_fwhm[0]] - mean_wave[ind_fwhm[-1]]
+    assert est_fwhm == pytest.approx(line_spread.fwhm, abs = 3)
+    assert np.min(mean_wave) < np.min(line_spread.wavlens)
+    assert np.max(mean_wave) > np.max(line_spread.wavlens)
+    assert np.min(flux) == pytest.approx(np.min(line_spread.flux_profile), abs = 0.001)
+    assert np.max(flux) == pytest.approx(np.max(line_spread.flux_profile), abs = 0.035)
+    line_spread.save(filedir = output_dir)
+    
+    #load the calibration fits file and check whether the content is unchanged
+    line_spread_load = LineSpread(os.path.join(output_dir, line_spread.filename))
+    assert np.array_equal(line_spread_load.gauss_par, np.array([line_spread.amplitude, line_spread.mean_wave, line_spread.fwhm, line_spread.amp_err, line_spread.wave_err, line_spread.fwhm_err]))
+    assert np.array_equal(line_spread.flux_profile, line_spread_load.flux_profile)
+    assert np.array_equal(line_spread.wavlens, line_spread_load.wavlens)
+    assert line_spread_load.amplitude == line_spread.amplitude
+    assert line_spread_load.fwhm == line_spread.fwhm
+    assert line_spread_load.mean_wave == line_spread.mean_wave
+    assert line_spread_load.amp_err == line_spread.amp_err
+    assert line_spread_load.fwhm_err == line_spread.fwhm_err
+    assert line_spread_load.wave_err == line_spread.wave_err
+    
+    #add a bad pixel and check the result
+    bad_dataset = output_dataset.copy()
+    for frame in bad_dataset:
+        frame.dq[31, 40] = 1
+        frame.data[10,10] = np.nan 
+    line_spread_bad = steps.fit_line_spread_function(bad_dataset)
+    assert line_spread_bad.fwhm == pytest.approx(line_spread.fwhm, rel = 0.1)
+    assert line_spread_bad.amplitude == pytest.approx(line_spread.amplitude, rel = 0.1)
+
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
     test_psf_centroid()
@@ -561,3 +597,4 @@ if __name__ == "__main__":
     test_calibrate_dispersion_model()
     test_determine_zeropoint()
     test_add_wavelength_map()
+    test_linespread_function()
