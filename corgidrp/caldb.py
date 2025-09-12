@@ -349,12 +349,20 @@ class CalDB:
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['FluxcalFactor', 'NDFilterSweetSpot']:
+        elif dtype_label in ['NDFilterSweetSpot']:
             # filter by color filter
             # filter_calib() is configured to not throw an error if no matches are found, so that
             # no existing e2e tests breaks, if in the future we want to strictly only use the calibration
             # files with matching headers, then set err_if_none to True
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+
+            # select the one closest in time
+            result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
+            calib_filepath = options.iloc[result_index, 0]
+        elif dtype_label in ['FluxcalFactor']:
+            # filter by color filter and DPAM
+            options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
+            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
