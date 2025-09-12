@@ -362,7 +362,8 @@ class CalDB:
         elif dtype_label in ['FluxcalFactor']:
             # filter by color filter and DPAM
             options = self.filter_calib(calibdf, "CFAMNAME", frame_dict['CFAMNAME'], err_if_none=False)
-            options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
+            if frame_dict['DPAMNAME'] in ['POL0', 'POL45']:
+                options = self.filter_calib(options, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
 
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
@@ -374,7 +375,7 @@ class CalDB:
             # select the one closest in time
             result_index = np.abs(options["MJD"] - frame_dict["MJD"]).argmin()
             calib_filepath = options.iloc[result_index, 0]
-        elif dtype_label in ['FlatField']:
+        elif dtype_label in ['FlatField'] and frame_dict['DPAMNAME'] in ['POL0', 'POL45']:
             # filter by DPAM
             options = self.filter_calib(calibdf, "DPAMNAME", frame_dict['DPAMNAME'], err_if_none=False)
 
