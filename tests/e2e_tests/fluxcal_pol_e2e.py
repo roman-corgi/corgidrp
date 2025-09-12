@@ -10,9 +10,18 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
+from corgidrp.check import (check_filename_convention, check_dimensions, 
+                           verify_hdu_count, verify_header_keywords, 
+                           validate_binary_table_fields, get_latest_cal_file)
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+    # create output dir
+    output_dir = os.path.join(e2eoutput_path, 'pol_flux_sim_test_data')
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.mkdir(output_dir)
+
     #mock a point source image
     fwhm = 3
     star_flux = 1.5e-09 #erg/(s*cm^2*AA)
@@ -20,17 +29,43 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # split the flux unevenly by polarization
     star_flux_left = 0.6 * star_flux
     star_flux_right = 0.4 * star_flux
-    flux_image_WP1 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL0')
+    flux_image_WP1 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL0', filedir=output_dir, file_save=True)
     flux_image_WP1.ext_hdr['BUNIT'] = 'photoelectron'
-    flux_dataset_WP1 = data.Dataset([flux_image_WP1])
-    flux_image_WP2 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL45')
+    flux_dataset_WP1 = data.Dataset([flux_image_WP1, flux_image_WP1])
+    flux_image_WP2 = mocks.create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, dpamname='POL45', filedir=output_dir, file_save=True)
     flux_image_WP2.ext_hdr['BUNIT'] = 'photoelectron'
-    flux_dataset_WP2 = data.Dataset([flux_image_WP2])
+    flux_dataset_WP2 = data.Dataset([flux_image_WP2, flux_image_WP2])
 
-    output_dir = os.path.join(e2eoutput_path, 'pol_flux_sim_test_data')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
+    # check input dataset info
+    for i, frame in enumerate(flux_dataset_WP1):
+        frame_name = getattr(frame, 'filename', None)
+        assert check_filename_convention(frame_name, 'cgi_*_l2b.fits')
+        assert check_dimensions(frame.data, (1024, 1024))
+        # check all images have the same CFAMNAME value
+        assert verify_header_keywords(frame.ext_hdr, {'CFAMNAME': flux_dataset_WP1.frames[0].ext_hdr['CFAMNAME']})
+        # check all images have POL0 as DPAMNAME value
+        assert verify_header_keywords(frame.ext_hdr, {'DPAMNAME': 'POL0'})
+        assert verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'})
+        # print CFAMNAME
+        print(f'Frame {frame_name} in flux_dataset_WP1 have CFAMNAME {frame.ext_hdr['CFAMNAME']}')
+        # prin FSMX and FSMY
+        print(f'Frame {frame_name} in flux_dataset_WP1 have FSMX {frame.ext_hdr['FSMX']}')
+        print(f'Frame {frame_name} in flux_dataset_WP1 have FSMY {frame.ext_hdr['FSMY']}')
+    # same checks for other dataset
+    for i, frame in enumerate(flux_dataset_WP2):
+        frame_name = getattr(frame, 'filename', None)
+        assert check_filename_convention(frame_name, 'cgi_*_l2b.fits')
+        assert check_dimensions(frame.data, (1024, 1024))
+        # check all images have the same CFAMNAME value
+        assert verify_header_keywords(frame.ext_hdr, {'CFAMNAME': flux_dataset_WP2.frames[0].ext_hdr['CFAMNAME']})
+        # check all images have POL45 as DPAMNAME value
+        assert verify_header_keywords(frame.ext_hdr, {'DPAMNAME': 'POL45'})
+        assert verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'})
+        # print CFAMNAME
+        print(f'Frame {frame_name} in flux_dataset_WP2 have CFAMNAME {frame.ext_hdr['CFAMNAME']}')
+        # prin FSMX and FSMY
+        print(f'Frame {frame_name} in flux_dataset_WP2 have FSMX {frame.ext_hdr['FSMX']}')
+        print(f'Frame {frame_name} in flux_dataset_WP2 have FSMY {frame.ext_hdr['FSMY']}')
 
     output_dir_WP1 = os.path.join(output_dir, 'WP1')
     output_dir_WP2 = os.path.join(output_dir, 'WP2')
@@ -65,12 +100,22 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     fluxcal_file_WP1 = glob.glob(os.path.join(fluxcal_outputdir_WP1, '*abf_cal*.fits'))[0]
     fluxcal_image_WP1 = data.Image(fluxcal_file_WP1)
 
-    #check that the calibration file is configured correctly
+    ## check that the calibration file is configured correctly
+    # check HDU0 have no data
     assert fluxcal_image_WP1.pri_hdr['NAXIS'] == 0
-    assert fluxcal_image_WP1.ext_hdr['DPAMNAME'] == 'POL0'
-    assert fluxcal_image_WP1.data.shape == (1,)
+    # check HDU1 data is a single float
+    assert fluxcal_image_WP1.data.dtype.type == corgidrp.image_dtype
+    # check err and dq haave the right dimension
     assert fluxcal_image_WP1.err.shape == (1,)
     assert fluxcal_image_WP1.dq.shape == (1,)
+    # check filename convention
+    assert check_filename_convention(getattr(fluxcal_image_WP1, 'filename', None), 'abf_cal.fits')
+    # check header keyword values match with what is expected
+    assert verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'DATALVL': 'CAL'})
+    assert verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'DATATYPE': 'FluxcalFactor'})
+    assert verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'DPAMNAME': flux_image_WP1.ext_hdr['DPAMNAME']})
+    assert verify_header_keywords(fluxcal_image_WP1.ext_hdr, {'CFAMNAME': flux_image_WP1.ext_hdr['CFAMNAME']})
+    
 
     #output values
     flux_fac_WP1 = data.FluxcalFactor(fluxcal_file_WP1)
@@ -87,12 +132,22 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     fluxcal_file_WP2 = glob.glob(os.path.join(fluxcal_outputdir_WP2, '*abf_cal*.fits'))[0]
     fluxcal_image_WP2 = data.Image(fluxcal_file_WP2)
 
-    #check that the calibration file is configured correctly
+    ## check that the calibration file is configured correctly
+    # check HDU0 have no data
     assert fluxcal_image_WP2.pri_hdr['NAXIS'] == 0
-    assert fluxcal_image_WP2.ext_hdr['DPAMNAME'] == 'POL45'
-    assert fluxcal_image_WP2.data.shape == (1,)
+    # check HDU1 data is a single float
+    assert fluxcal_image_WP2.data.dtype.type == corgidrp.image_dtype
+    # check err and dq haave the right dimension
     assert fluxcal_image_WP2.err.shape == (1,)
     assert fluxcal_image_WP2.dq.shape == (1,)
+    # check filename convention
+    print(getattr(fluxcal_image_WP2, 'filename', None))
+    assert check_filename_convention(getattr(fluxcal_image_WP2, 'filename', None), 'abf_cal.fits')
+    # check header keyword values match with what is expected
+    assert verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'DATALVL': 'CAL'})
+    assert verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'DATATYPE': 'FluxcalFactor'})
+    assert verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'DPAMNAME': flux_image_WP2.ext_hdr['DPAMNAME']})
+    assert verify_header_keywords(fluxcal_image_WP2.ext_hdr, {'CFAMNAME': flux_image_WP2.ext_hdr['CFAMNAME']})
 
     #output values
     flux_fac_WP2 = data.FluxcalFactor(fluxcal_file_WP2)
