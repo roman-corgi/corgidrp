@@ -94,6 +94,15 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
+        # relink frames with all_data
+        self.all_data = np.array([frame.data for frame in self.frames])
+        self.all_err = np.array([frame.err for frame in self.frames])
+        self.all_dq = np.array([frame.dq for frame in self.frames])
+        for i, frame in enumerate(self.frames):
+            frame.data = self.all_data[i]
+            frame.err = self.all_err[i]
+            frame.dq = self.all_dq[i]
+
     def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None):
         """
         Updates the dataset after going through a processing step
@@ -460,6 +469,14 @@ class Image():
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # recast header data to the appropriate bit depth as set by the pipeline settings
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.err is not None:
+            self.err = self.err.astype(corgidrp.image_dtype, copy=False)
+        if self.dq is not None:
+            self.dq = self.dq.astype(corgidrp.dq_dtype, copy=False)
+            
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])

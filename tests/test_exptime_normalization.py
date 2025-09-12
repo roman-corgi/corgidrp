@@ -42,12 +42,12 @@ def test_exptime_normalization():
         assert np.mean(not_normalized_dataset.frames[i].dq) == pytest.approx(0, abs=1e-6)
 
         # check that, for each frame, if you multiply the output by the exposure time you can recover the input
-        assert not_normalized_dataset.frames[i].data == pytest.approx(exposure_times[i] * norm_dataset.frames[i].data, abs=1e-6)
-        assert not_normalized_dataset.frames[i].err == pytest.approx(exposure_times[i] * norm_dataset.frames[i].err, abs=1e-6)
+        assert not_normalized_dataset.frames[i].data == pytest.approx(exposure_times[i] * norm_dataset.frames[i].data, abs=1e-5)
+        assert not_normalized_dataset.frames[i].err == pytest.approx(exposure_times[i] * norm_dataset.frames[i].err, abs=1e-5)
 
         # check that the output in .frames.data and .frames.err correspond to .all_data and .all_err
-        assert norm_dataset.frames[i].data == pytest.approx(norm_dataset.all_data[i,:,:], abs = 1e-6)
-        assert norm_dataset.frames[i].err == pytest.approx(norm_dataset.all_err[i,:,:], abs = 1e-6)
+        assert norm_dataset.frames[i].data == pytest.approx(norm_dataset.all_data[i,:,:], abs = 1e-5)
+        assert norm_dataset.frames[i].err == pytest.approx(norm_dataset.all_err[i,:,:], abs = 1e-5)
 
 #%%    
 
