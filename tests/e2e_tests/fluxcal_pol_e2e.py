@@ -47,10 +47,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert verify_header_keywords(frame.ext_hdr, {'DPAMNAME': 'POL0'})
         assert verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'})
         # print CFAMNAME
-        print(f'Frame {frame_name} in flux_dataset_WP1 have CFAMNAME {frame.ext_hdr['CFAMNAME']}')
+        print(f"Frame {frame_name} in flux_dataset_WP1 have CFAMNAME {frame.ext_hdr['CFAMNAME']}")
         # prin FSMX and FSMY
-        print(f'Frame {frame_name} in flux_dataset_WP1 have FSMX {frame.ext_hdr['FSMX']}')
-        print(f'Frame {frame_name} in flux_dataset_WP1 have FSMY {frame.ext_hdr['FSMY']}')
+        print(f"Frame {frame_name} in flux_dataset_WP1 have FSMX {frame.ext_hdr['FSMX']}")
+        print(f"Frame {frame_name} in flux_dataset_WP1 have FSMY {frame.ext_hdr['FSMY']}")
     # same checks for other dataset
     for i, frame in enumerate(flux_dataset_WP2):
         frame_name = getattr(frame, 'filename', None)
@@ -62,10 +62,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert verify_header_keywords(frame.ext_hdr, {'DPAMNAME': 'POL45'})
         assert verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'})
         # print CFAMNAME
-        print(f'Frame {frame_name} in flux_dataset_WP2 have CFAMNAME {frame.ext_hdr['CFAMNAME']}')
+        print(f"Frame {frame_name} in flux_dataset_WP2 have CFAMNAME {frame.ext_hdr['CFAMNAME']}")
         # prin FSMX and FSMY
-        print(f'Frame {frame_name} in flux_dataset_WP2 have FSMX {frame.ext_hdr['FSMX']}')
-        print(f'Frame {frame_name} in flux_dataset_WP2 have FSMY {frame.ext_hdr['FSMY']}')
+        print(f"Frame {frame_name} in flux_dataset_WP2 have FSMX {frame.ext_hdr['FSMX']}")
+        print(f"Frame {frame_name} in flux_dataset_WP2 have FSMY {frame.ext_hdr['FSMY']}")
 
     output_dir_WP1 = os.path.join(output_dir, 'WP1')
     output_dir_WP2 = os.path.join(output_dir, 'WP2')
