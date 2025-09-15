@@ -74,10 +74,10 @@ def test_2d_square_center_crop():
     """
 
     test_dataset = make_test_dataset(input_arr_even,centxy=[49.5,49.5])
-    test_dataset[0].pri_hdr["CRPIX1"] = 50.5
-    test_dataset[0].pri_hdr["CRPIX2"] = 50.5
-    test_dataset[0].pri_hdr["STARLOCX"] = 50.5
-    test_dataset[0].pri_hdr["STARLOCY"] = 50.5
+    test_dataset[0].ext_hdr["CRPIX1"] = 50.5
+    test_dataset[0].ext_hdr["CRPIX2"] = 50.5
+    test_dataset[0].ext_hdr["STARLOCX"] = 50.5
+    test_dataset[0].ext_hdr["STARLOCY"] = 50.5
     
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
@@ -94,13 +94,13 @@ def test_2d_square_center_crop():
         raise Exception("Frame header kw EACQ_COL not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["EACQ_ROW"] == 4.5:
         raise Exception("Frame header kw EACQ_ROW not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 5.5:
+    if not cropped_test_dataset[0].ext_hdr["CRPIX1"] == 5.5:
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
+    if not cropped_test_dataset[0].ext_hdr["CRPIX2"] == 5.5:
         raise Exception("Frame header kw CRPIX2 not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["STARLOCX"] == 5.5:
+    if not cropped_test_dataset[0].ext_hdr["STARLOCX"] == 5.5:
         raise Exception("Frame header kw STARLOCX not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["STARLOCY"] == 5.5:
+    if not cropped_test_dataset[0].ext_hdr["STARLOCY"] == 5.5:
         raise Exception("Frame header kw STARLOCY not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["NAXIS1"] == 10:
         raise Exception("Frame header kw NAXIS1 not updated correctly.")

@@ -408,14 +408,14 @@ def crop(input_dataset, sizexy=None, centerxy=None):
             exthdr["EACQ_COL"] -= x1
             exthdr["EACQ_ROW"] -= y1
             updated_hdrs.append('EACQ_ROW/COL')
-        if ("CRPIX1" in prihdr.keys()):
-            prihdr["CRPIX1"] -= x1
-            prihdr["CRPIX2"] -= y1
+        if ("CRPIX1" in exthdr.keys()):
+            exthdr["CRPIX1"] -= x1
+            exthdr["CRPIX2"] -= y1
             updated_hdrs.append('CRPIX1/2')
-        if ("STARLOCX" in prihdr.keys()):
-            prihdr["STARLOCX"] -= x1
-            prihdr["STARLOCY"] -= y1
-            updated_hdrs.append('CRPIX1/2')
+        if ("STARLOCX" in exthdr.keys()):
+            exthdr["STARLOCX"] -= x1
+            exthdr["STARLOCY"] -= y1
+            updated_hdrs.append('STARLOCX/Y')
         if not ("DETPIX0X" in exthdr.keys()):
             exthdr.set('DETPIX0X',0)
             exthdr.set('DETPIX0Y',0)
