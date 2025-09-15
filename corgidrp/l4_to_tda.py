@@ -544,58 +544,101 @@ def calculate_zero_point(image, star_name, encircled_radius, phot_kwargs=None):
     return zp
 
 
-def convert_Q_U_to_Qphi_Uphi(I, Q, U, V):
-
+def compute_QphiUphi(input_dataset):
     """
-    Convert Stokes Q and U images to azimuthal Stokes components Q_phi and U_phi.
+    Convert linear polarization components Q and U into azimuthal Stokes parameters Q_phi and U_phi.
 
-    This function computes the polar angle φ at each pixel relative to the image center
-    (estimated as the midpoint of the x/y grids in `I`), and transforms the Cartesian
-    Stokes parameters (Q, U) into the azimuthal basis (Q_phi, U_phi):
-
-        Q_phi = −Q * cos(2φ) − U * sin(2φ)
-        U_phi =  Q * sin(2φ) − U * cos(2φ)
+    This step computes Q_phi and U_phi by rotating the Stokes Q and U frames according to the azimuthal 
+    angle around the stellar position. The stellar position is read from the dataset header keywords 
+    'STARLOCX' and 'STARLOCY', if present. If these keywords are not available, the image center is used 
+    as the reference position. The resulting Q_phi and U_phi frames are appended to the dataset.
 
     Args:
-        I (np.ndarray): 3D cube containing the Stokes I map. 
-        Q (np.ndarray): 3D cube containing the Stokes Q map. 
-        U (np.ndarray): 3D cube containing the Stokes U map.
-        V (np.ndarray): 3D cube containing the Stokes V map.
+        input_dataset (corgidrp.data.Dataset): 
+            A dataset whose `all_data` attribute has shape [4, n, m], representing 
+            the Stokes parameters [I, Q, U, V].
 
     Returns:
-        tuple:
-            I (np.ndarray): Input 3D cube `I` (unchanged).
-            Q (np.ndarray): Input 3D cube `Q` (unchanged).
-            U (np.ndarray): Input 3D cube `U` (unchanged).
-            V (np.ndarray): Input 3D cube `V` (unchanged).
-            Qphi (np.ndarray): 3D cube with the same shape as `Q`, but channel 2 replaced by Q_phi.
-            Uphi (np.ndarray): 3D cube with the same shape as `U`, but channel 2 replaced by U_phi.
-
-    Notes:
-        - φ is computed in radians using `arctan2(y − y_center, x − x_center)`, where
-          (x_center, y_center) is the midpoint of the x/y ranges in `I`.
+        processed_dataset (corgidrp.data.Dataset): 
+            A copy of the input dataset with two additional frames appended: Q_phi and U_phi. 
     """
-    # Extract image coordinates
-    x_I = I[..., 0]
-    y_I = I[..., 1]
+    # Copy input
+    ds_in = input_dataset.copy(copy_data=True)
 
-    # Set the image center to (x_star, y_star)
-    x_star = 0.5 * (x_I.min() + x_I.max())
-    y_star = 0.5 * (y_I.min() + y_I.max())
+    # Convert dataset to array of the 4 Stokes frames [I,Q,U,V]
+    all_data = ds_in.all_data
+    if all_data.shape[0] != 4:
+        raise ValueError(f"Expected [4,n,m], got {all_data.shape}")
+    I_im, Q_im, U_im, V_im = all_data[0], all_data[1], all_data[2], all_data[3]
+    n, m = I_im.shape
+    y, x = np.mgrid[0:n, 0:m]
 
-    # Compute azimuthal angle φ for each pixel
+    # Build (x,y,value) cubes for consistency with compute functions
+    I_cube = np.stack([x, y, I_im], axis=-1)
+    Q_cube = np.stack([x, y, Q_im], axis=-1)
+    U_cube = np.stack([x, y, U_im], axis=-1)
+    V_cube = np.stack([x, y, V_im], axis=-1)
+
+    # Get host star position from header if available, otherwise use image center
+    header = getattr(ds_in.frames[0], "ext_hdr", {})
+    x_I = I_cube[..., 0]
+    y_I = I_cube[..., 1]
+    if header is not None and "STARLOCX" in header and "STARLOCY" in header:
+        x_star = header["STARLOCX"]
+        y_star = header["STARLOCY"]
+    else:
+        x_star = 0.5 * (x_I.min() + x_I.max())
+        y_star = 0.5 * (y_I.min() + y_I.max())
+    # or
+    # else:
+    #     ValueError(f'STARLOCX or/and STARLOCY do not exist in the header.')
+
+    # Polar angle relative to star position
     phi = np.arctan2(y_I - y_star, x_I - x_star)
 
-    # Q[..., 2] and U[..., 2] contain the actual Stokes Q and U images
-    q = Q[..., 2]
-    u = U[..., 2]
-
-    # Compute Q_phi and U_phi
+    # Compute: Q_phi, U_phi
+    q = Q_cube[..., 2]
+    u = U_cube[..., 2]
     qphi = -q * np.cos(2*phi) - u * np.sin(2*phi)
-    uphi = q * np.sin(2*phi) - u * np.cos(2*phi)
+    uphi =  q * np.sin(2*phi) - u * np.cos(2*phi)
 
-    # Reconstruct 3D cubes for Qphi and Uphi
-    Qphi = np.stack([Q[..., 0], Q[..., 1], qphi], axis=-1)
-    Uphi = np.stack([U[..., 0], U[..., 1], uphi], axis=-1)
+    Qphi_im = qphi
+    Uphi_im = uphi
 
-    return I, Q, U, V, Qphi, Uphi
+    def _new_frame_from(arr, in_frames):
+        """
+        Helper to create a new frame:
+          * Copy headers (pri_hdr, ext_hdr, err_hdr).
+          * Assign data, error, dq arrays.
+          * No new header entries are added.
+        """
+        try:
+            FrameType = type(in_frames)
+            f = FrameType()
+        except Exception:
+            from types import SimpleNamespace as _SN
+            f = _SN()
+
+        f.data = arr.copy()
+        f.err  = np.zeros_like(arr, dtype=float)
+        f.dq   = np.zeros_like(arr, dtype=np.uint16)
+
+        f.pri_hdr = dict(getattr(in_frames, "pri_hdr", {}) or {})
+        f.ext_hdr = dict(getattr(in_frames, "ext_hdr", {}) or {})
+        f.err_hdr = dict(getattr(in_frames, "err_hdr", {}) or {})
+
+        return f
+
+    # Create new Qphi, Uphi frames
+    qphi_frame = _new_frame_from(Qphi_im, ds_in.frames[1])
+    uphi_frame = _new_frame_from(Uphi_im, ds_in.frames[2])
+
+    # Build new Dataset with original + new frames ([I, Q, U, V] + [Qphi, Uphi])
+    processed_dataset = Dataset(list(ds_in.frames) + [qphi_frame, uphi_frame])
+
+    # Record history for reproducibility
+    processed_dataset.update_after_processing_step(
+        history_entry="Appended Q_phi and U_phi."
+    )
+    return processed_dataset
+
