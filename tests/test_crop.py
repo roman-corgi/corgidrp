@@ -82,38 +82,23 @@ def test_2d_square_center_crop():
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
     # Check that data, err, and dq were cropped correctly
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
-        raise Exception("Unexpected result for 2D square crop test.")
-    if not cropped_test_dataset[0].err[0] == pytest.approx(goal_arr_even):
-        raise Exception("Unexpected result for 2D square crop test.")
-    if not cropped_test_dataset[0].dq == pytest.approx(goal_arr_even):
-        raise Exception("Unexpected result for 2D square crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr_even) , "Unexpected result for 2D square crop test."
+    assert cropped_test_dataset[0].err[0] == pytest.approx(goal_arr_even), "Unexpected result in err for 2D square crop test."
+    assert cropped_test_dataset[0].dq == pytest.approx(goal_arr_even), "Unexpected result for 2D square crop test."
     
     # Test that headers were updated correctly
-    if not cropped_test_dataset[0].ext_hdr["EACQ_COL"] == 4.5:
-        raise Exception("Frame header kw EACQ_COL not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["EACQ_ROW"] == 4.5:
-        raise Exception("Frame header kw EACQ_ROW not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["CRPIX1"] == 5.5:
-        raise Exception("Frame header kw CRPIX1 not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["CRPIX2"] == 5.5:
-        raise Exception("Frame header kw CRPIX2 not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["STARLOCX"] == 5.5:
-        raise Exception("Frame header kw STARLOCX not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["STARLOCY"] == 5.5:
-        raise Exception("Frame header kw STARLOCY not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["NAXIS1"] == 10:
-        raise Exception("Frame header kw NAXIS1 not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10:
-        raise Exception("Frame header kw NAXIS2 not updated correctly.")
-    if not cropped_test_dataset[0].err_hdr["NAXIS1"] == 10:
-        raise Exception("Frame err header kw NAXIS1 not updated correctly.")
-    if not cropped_test_dataset[0].err_hdr["NAXIS2"] == 10:
-        raise Exception("Frame err header kw NAXIS2 not updated correctly.")
-    if not cropped_test_dataset[0].dq_hdr["NAXIS1"] == 10:
-        raise Exception("Frame dq header kw NAXIS1 not updated correctly.")
-    if not cropped_test_dataset[0].dq_hdr["NAXIS2"] == 10:
-        raise Exception("Frame dq header kw NAXIS2 not updated correctly.")
+    assert cropped_test_dataset[0].ext_hdr["EACQ_COL"] == 4.5, "Frame header kw EACQ_COL not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["EACQ_ROW"] == 4.5, "Frame header kw EACQ_ROW not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["CRPIX1"] == 5.5, "Frame header kw CRPIX1 not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["CRPIX2"] == 5.5, "Frame header kw CRPIX2 not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["STARLOCX"] == 5.5, "Frame header kw STARLOCX not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["STARLOCY"] == 5.5, "Frame header kw STARLOCY not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["NAXIS1"] == 10, "Frame header kw NAXIS1 not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10, "Frame header kw NAXIS2 not updated correctly."
+    assert cropped_test_dataset[0].err_hdr["NAXIS1"] == 10, "Frame err header kw NAXIS1 not updated correctly."
+    assert cropped_test_dataset[0].err_hdr["NAXIS2"] == 10, "Frame err header kw NAXIS2 not updated correctly."
+    assert cropped_test_dataset[0].dq_hdr["NAXIS1"] == 10, "Frame dq header kw NAXIS1 not updated correctly."
+    assert cropped_test_dataset[0].dq_hdr["NAXIS2"] == 10, "Frame dq header kw NAXIS2 not updated correctly."
 
 
 def test_manual_center_crop():
@@ -131,17 +116,13 @@ def test_manual_center_crop():
 
     expected_detpix_xy = (2,2)
 
-    if not (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
-            cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy:
-        raise Exception("Extension header DETPIX0X/Y not updated correctly.")
+    assert (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
+            cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy, "Extension header DETPIX0X/Y not updated correctly."
     
 
-    if not cropped_test_dataset[0].data == pytest.approx(offset_goal_arr):
-        raise Exception("Unexpected result for manual crop test.")
-    if not cropped_test_dataset[0].err[0] == pytest.approx(offset_goal_arr):
-        raise Exception("Unexpected result in errfor manual crop test.")
-    if not cropped_test_dataset[0].dq == pytest.approx(offset_goal_arr):
-        raise Exception("Unexpected result in dq for manual crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(offset_goal_arr), "Unexpected result for manual crop test."
+    assert cropped_test_dataset[0].err[0] == pytest.approx(offset_goal_arr), "Unexpected result in errfor manual crop test."
+    assert cropped_test_dataset[0].dq == pytest.approx(offset_goal_arr), "Unexpected result in dq for manual crop test."
 
 
 def test_2d_square_offcenter_crop():
@@ -152,8 +133,7 @@ def test_2d_square_offcenter_crop():
     test_dataset = make_test_dataset(test_arr,centxy=[49.5,24.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
-        raise Exception("Unexpected result for 2D square offcenter crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr_even), "Unexpected result for 2D square offcenter crop test."
 
 
 def test_2d_rect_offcenter_crop():
@@ -164,8 +144,7 @@ def test_2d_rect_offcenter_crop():
     test_dataset = make_test_dataset(test_arr,centxy=[49.5,24.5,])
     cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
 
-    if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_even):
-        raise Exception("Unexpected result for 2D rect offcenter crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_even), "Unexpected result for 2D rect offcenter crop test."
 
 
 def test_3d_rect_offcenter_crop():
@@ -181,41 +160,25 @@ def test_3d_rect_offcenter_crop():
 
     # Check that data was cropped correctly
     goal_rect_arr3d = np.array([goal_rect_arr_even,goal_rect_arr_even,goal_rect_arr_even])
-    if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr3d):
-        raise Exception("Unexpected result for 2D rect offcenter crop test.")
-    if not cropped_test_dataset[0].err[0] == pytest.approx(goal_rect_arr3d):
-        raise Exception("Unexpected result for 2D rect offcenter crop test.")
-    if not cropped_test_dataset[0].dq == pytest.approx(goal_rect_arr3d):
-        raise Exception("Unexpected result for 2D rect offcenter crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_rect_arr3d), "Unexpected result for 2D rect offcenter crop test."
+    assert cropped_test_dataset[0].err[0] == pytest.approx(goal_rect_arr3d), "Unexpected result for 2D rect offcenter crop test."
+    assert cropped_test_dataset[0].dq == pytest.approx(goal_rect_arr3d), "Unexpected result for 2D rect offcenter crop test."
         
     # Check that headers were updated correctly
-    if not cropped_test_dataset[0].ext_hdr["EACQ_COL"] == 9.5:
-        raise Exception("Frame header kw EACQ_COL not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["EACQ_ROW"] == 4.5:
-        raise Exception("Frame header kw EACQ_ROW not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["CRPIX1"] == 10.5:
-        raise Exception("Frame header kw CRPIX1 not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["CRPIX2"] == 5.5:
-        raise Exception("Frame header kw CRPIX2 not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["NAXIS1"] == 20:
-        raise Exception("Frame header kw NAXIS1 not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10:
-        raise Exception("Frame header kw NAXIS2 not updated correctly.")
-    if not cropped_test_dataset[0].ext_hdr["NAXIS3"] == 3:
-        raise Exception("Frame header kw NAXIS3 not updated correctly.")
-    if not cropped_test_dataset[0].dq_hdr["NAXIS1"] == 20:
-        raise Exception("Frame dq header kw NAXIS1 not updated correctly.")
-    if not cropped_test_dataset[0].dq_hdr["NAXIS2"] == 10:
-        raise Exception("Frame dq header kw NAXIS2 not updated correctly.")
-    if not cropped_test_dataset[0].dq_hdr["NAXIS3"] == 3:
-        raise Exception("Frame dq header kw NAXIS3 not updated correctly.")
-    if not cropped_test_dataset[0].err_hdr["NAXIS1"] == 20:
-        raise Exception("Frame err header kw NAXIS1 not updated correctly.")
-    if not cropped_test_dataset[0].err_hdr["NAXIS2"] == 10:
-        raise Exception("Frame err header kw NAXIS2 not updated correctly.")
-    if not cropped_test_dataset[0].err_hdr["NAXIS3"] == 3:
-        raise Exception("Frame err header kw NAXIS3 not updated correctly.")
-    
+    assert cropped_test_dataset[0].ext_hdr["EACQ_COL"] == 9.5, "Frame header kw EACQ_COL not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["EACQ_ROW"] == 4.5, "Frame header kw EACQ_ROW not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["CRPIX1"] == 10.5, "Frame header kw CRPIX1 not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["CRPIX2"] == 5.5, "Frame header kw CRPIX2 not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["NAXIS1"] == 20, "Frame header kw NAXIS1 not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["NAXIS2"] == 10, "Frame header kw NAXIS2 not updated correctly."
+    assert cropped_test_dataset[0].ext_hdr["NAXIS3"] == 3, "Frame header kw NAXIS3 not updated correctly."
+    assert cropped_test_dataset[0].dq_hdr["NAXIS1"] == 20, "Frame dq header kw NAXIS1 not updated correctly."
+    assert cropped_test_dataset[0].dq_hdr["NAXIS2"] == 10, "Frame dq header kw NAXIS2 not updated correctly."
+    assert cropped_test_dataset[0].dq_hdr["NAXIS3"] == 3, "Frame dq header kw NAXIS3 not updated correctly."
+    assert cropped_test_dataset[0].err_hdr["NAXIS1"] == 20, "Frame err header kw NAXIS1 not updated correctly."
+    assert cropped_test_dataset[0].err_hdr["NAXIS2"] == 10, "Frame err header kw NAXIS2 not updated correctly."
+    assert cropped_test_dataset[0].err_hdr["NAXIS3"] == 3, "Frame err header kw NAXIS3 not updated correctly."
+
 
 def test_edge_of_detector():
     """ Tests that trying to crop a region right at the edge of the 
@@ -227,8 +190,7 @@ def test_edge_of_detector():
     test_dataset = make_test_dataset(test_arr,centxy=[94.5,94.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=None)
 
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
-        raise Exception("Unexpected result for edge of FOV crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr_even), "Unexpected result for edge of FOV crop test."
 
 
 def test_outside_detector_edge():
@@ -248,8 +210,7 @@ def test_outside_detector_edge():
     # Replace nans with a finite value for comparison purposes
     cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
     goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
-        raise Exception("Unexpected result for cropping off top-right edge.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr), "Unexpected result for cropping off top-right edge."
     
     # Lower right edge
     test_arr = np.zeros((100,100))
@@ -263,8 +224,7 @@ def test_outside_detector_edge():
     # Replace nans with a finite value for comparison purposes
     cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
     goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
-        raise Exception("Unexpected result for cropping off lower-right edge.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr), "Unexpected result for cropping off lower-right edge."
     
     # Lower left edge
     test_arr = np.zeros((100,100))
@@ -278,8 +238,7 @@ def test_outside_detector_edge():
     # Replace nans with a finite value for comparison purposes
     cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
     goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
-        raise Exception("Unexpected result for cropping off lower-left edge.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr), "Unexpected result for cropping off lower-left edge."
 
     # Upper left edge
     test_arr = np.zeros((100,100))
@@ -293,8 +252,7 @@ def test_outside_detector_edge():
     # Replace nans with a finite value for comparison purposes
     cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
     goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
-        raise Exception("Unexpected result for cropping off top-left edge.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr), "Unexpected result for cropping off top-left edge."
     
 
     # Zoom out
@@ -309,8 +267,7 @@ def test_outside_detector_edge():
     # Replace nans with a finite value for comparison purposes
     cropped_test_dataset[0].data = np.where(np.isnan(cropped_test_dataset[0].data),100.,cropped_test_dataset[0].data)
     goal_arr = np.where(np.isnan(goal_arr),100.,goal_arr)
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
-        raise Exception("Unexpected result for zoom out.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr), "Unexpected result for zoom out."
 
 
 def test_nonhalfinteger_centxy():
@@ -320,8 +277,7 @@ def test_nonhalfinteger_centxy():
     test_dataset = make_test_dataset(input_arr_even,centxy=[49.5,49.5])
     cropped_test_dataset = crop(test_dataset,sizexy=10,centerxy=[49.7,49.7])
 
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr_even):
-        raise Exception("Unexpected result for non half-integer crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr_even), "Unexpected result for non half-integer crop test."
 
 
 def test_unsupported_input():
@@ -358,12 +314,10 @@ def test_detpix0_nonzero():
     
     cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
 
-    if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_even):
-        raise Exception("Unexpected result for 2D rect offcenter crop test with nonzero DETPIX0X/Y.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_even), "Unexpected result for 2D rect offcenter crop test with nonzero DETPIX0X/Y."
     
-    if not (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
-            cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy:
-        raise Exception("Extension header DETPIX0X/Y not updated correctly.")
+    assert (cropped_test_dataset[0].ext_hdr["DETPIX0X"],
+            cropped_test_dataset[0].ext_hdr["DETPIX0Y"]) == expected_detpix_xy, "Extension header DETPIX0X/Y not updated correctly."
 
 
 def test_non_nfov_input():
@@ -418,8 +372,7 @@ def test_default_crop():
 
     goal_arr = np.zeros((61,61))
     goal_arr[30,30] = 1
-    if not cropped_test_dataset[0].data == pytest.approx(goal_arr):
-        raise Exception("Unexpected result for default crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_arr), "Unexpected result for default crop test."
 
 
 def test_mixed_oddeven_crop():
@@ -428,8 +381,7 @@ def test_mixed_oddeven_crop():
 
     cropped_test_dataset = crop(test_dataset,sizexy=[21,10])
 
-    if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_mixed):
-        raise Exception("Unexpected result for mixed odd-even size crop test.")
+    assert cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_mixed), "Unexpected result for mixed odd-even size crop test."
 
 
 def test_missing_cen_kws():
@@ -442,16 +394,16 @@ def test_missing_cen_kws():
 
 if __name__ == "__main__":
     test_2d_square_center_crop()
-    # test_manual_center_crop()
-    # test_2d_square_offcenter_crop()
-    # test_2d_rect_offcenter_crop()
-    # test_3d_rect_offcenter_crop()
-    # test_edge_of_detector()
-    # test_outside_detector_edge()
-    # test_nonhalfinteger_centxy()
-    # test_non_nfov_input()
-    # test_detpix0_nonzero()
-    # test_unsupported_input()
-    # test_default_crop()
-    # test_mixed_oddeven_crop()
+    test_manual_center_crop()
+    test_2d_square_offcenter_crop()
+    test_2d_rect_offcenter_crop()
+    test_3d_rect_offcenter_crop()
+    test_edge_of_detector()
+    test_outside_detector_edge()
+    test_nonhalfinteger_centxy()
+    test_non_nfov_input()
+    test_detpix0_nonzero()
+    test_unsupported_input()
+    test_default_crop()
+    test_mixed_oddeven_crop()
     test_missing_cen_kws()
