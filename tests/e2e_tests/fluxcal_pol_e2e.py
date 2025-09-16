@@ -3,6 +3,7 @@ import os, shutil
 import glob
 import pytest
 import numpy as np
+from datetime import datetime
 
 import corgidrp
 import corgidrp.data as data
@@ -12,7 +13,7 @@ import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
 
 @pytest.mark.e2e
-def test_expected_results_e2e(e2edata_path, e2eoutput_path):
+def test_expected_results_e2e(e2eoutput_path):
     #mock a point source image
     fwhm = 3
     star_flux = 1.5e-09 #erg/(s*cm^2*AA)
@@ -27,42 +28,47 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     flux_image_WP2.ext_hdr['BUNIT'] = 'photoelectron'
     flux_dataset_WP2 = data.Dataset([flux_image_WP2])
 
-    output_dir = os.path.join(e2eoutput_path, 'pol_flux_sim_test_data')
+    output_dir = os.path.join(e2eoutput_path, 'flux_cal_pol_e2e_output')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
+    os.makedirs(output_dir)
 
-    output_dir_WP1 = os.path.join(output_dir, 'WP1')
-    output_dir_WP2 = os.path.join(output_dir, 'WP2')
-    os.mkdir(output_dir_WP1)
-    os.mkdir(output_dir_WP2)
-    flux_dataset_WP1.save(output_dir_WP1, ['flux_e2e_WP1_{0}.fits'.format(i) for i in range(len(flux_dataset_WP1))])
-    flux_dataset_WP2.save(output_dir_WP2, ['flux_e2e_WP2_{0}.fits'.format(i) for i in range(len(flux_dataset_WP2))])
+    # Create input_data subfolders
+    input_data_dir_WP1 = os.path.join(output_dir, 'input_data_WP1')
+    input_data_dir_WP2 = os.path.join(output_dir, 'input_data_WP2')
+    if not os.path.exists(input_data_dir_WP1):
+        os.makedirs(input_data_dir_WP1)
+    if not os.path.exists(input_data_dir_WP2):
+        os.makedirs(input_data_dir_WP2)
+
+    # Generate proper filenames with visitid and current time
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Extract visit ID from primary header VISITID keyword
+    visitid = flux_image_WP1.pri_hdr.get('VISITID', None)
+    if visitid is not None:
+        # Convert to string and pad to 19 digits
+        visitid = str(visitid).zfill(19)
+    else:
+        # Fallback: use default visitid
+        visitid = "0000000000000000000"
+
+    # Create proper L2b filenames: cgi_{visitid}_{current_time}_l2b.fits
+    flux_dataset_WP1.save(input_data_dir_WP1, [f'cgi_{visitid}_{current_time}_l2b.fits'])
+    flux_dataset_WP2.save(input_data_dir_WP2, [f'cgi_{visitid}_{current_time}_l2b.fits'])
 
     data_filelist_WP1 = []
     data_filelist_WP2 = []
 
-    for f in os.listdir(output_dir_WP1):
-        data_filelist_WP1.append(os.path.join(output_dir_WP1, f))
+    for f in os.listdir(input_data_dir_WP1):
+        data_filelist_WP1.append(os.path.join(input_data_dir_WP1, f))
     
-    for f in os.listdir(output_dir_WP2):
-        data_filelist_WP2.append(os.path.join(output_dir_WP2, f))
-    
-    # make DRP output directory if needed
-    fluxcal_outputdir = os.path.join(e2eoutput_path, "l2b_to_pol_fluxcal_factor_output")
-    if os.path.exists(fluxcal_outputdir):
-        shutil.rmtree(fluxcal_outputdir)
-    os.mkdir(fluxcal_outputdir)
-
-    fluxcal_outputdir_WP1 = os.path.join(fluxcal_outputdir, 'WP1')
-    fluxcal_outputdir_WP2 = os.path.join(fluxcal_outputdir, 'WP2')
-    os.mkdir(fluxcal_outputdir_WP1)
-    os.mkdir(fluxcal_outputdir_WP2)
+    for f in os.listdir(input_data_dir_WP2):
+        data_filelist_WP2.append(os.path.join(input_data_dir_WP2, f))
 
     ####### Run the DRP walker for WP1
     print('Running walker for WP1')
-    walker.walk_corgidrp(data_filelist_WP1, '', fluxcal_outputdir_WP1)
-    fluxcal_file_WP1 = glob.glob(os.path.join(fluxcal_outputdir_WP1, '*abf_cal*.fits'))[0]
+    walker.walk_corgidrp(data_filelist_WP1, '', output_dir)
+    fluxcal_file_WP1 = glob.glob(os.path.join(output_dir, '*abf_cal*.fits'))[0]
     fluxcal_image_WP1 = data.Image(fluxcal_file_WP1)
 
     #check that the calibration file is configured correctly
@@ -83,8 +89,8 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     ####### Run the DRP walker for WP2
     print('Running walker for WP2')
-    walker.walk_corgidrp(data_filelist_WP2, '', fluxcal_outputdir_WP2)
-    fluxcal_file_WP2 = glob.glob(os.path.join(fluxcal_outputdir_WP2, '*abf_cal*.fits'))[0]
+    walker.walk_corgidrp(data_filelist_WP2, '', output_dir)
+    fluxcal_file_WP2 = glob.glob(os.path.join(output_dir, '*abf_cal*.fits'))[0]
     fluxcal_image_WP2 = data.Image(fluxcal_file_WP2)
 
     #check that the calibration file is configured correctly
@@ -105,11 +111,6 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     #check the flux values are similar regardless of the wollaston used
     assert flux_fac_WP1.fluxcal_fac == pytest.approx(flux_fac_WP2.fluxcal_fac, rel=0.05)
 
-    # clean up
-    this_caldb = caldb.CalDB()
-    this_caldb.remove_entry(flux_fac_WP1)
-    this_caldb.remove_entry(flux_fac_WP2)
-
 
 
 if __name__ == "__main__":
@@ -120,13 +121,10 @@ if __name__ == "__main__":
     # workflow.
     thisfile_dir = os.path.dirname(__file__)
     outputdir = thisfile_dir
-    e2edata_dir =  "/home/ericshen/corgi/E2E_Test_Data/"
 
     ap = argparse.ArgumentParser(description="run the l2b-> PolFluxcalFactor end-to-end test")
-    ap.add_argument("-tvac", "--e2edata_dir", default=e2edata_dir,
-                    help="Path to CGI_TVAC_Data Folder [%(default)s]")
     ap.add_argument("-o", "--outputdir", default=outputdir,
                     help="directory to write results to [%(default)s]")
     args = ap.parse_args()
     outputdir = args.outputdir
-    test_expected_results_e2e(e2edata_dir, outputdir)
+    test_expected_results_e2e(outputdir)

@@ -6,7 +6,7 @@ import numpy as np
 import scipy.ndimage
 import astropy.time as time
 import astropy.io.fits as fits
-from datetime import datetime
+from datetime import datetime, timedelta
 import corgidrp
 import re
 import corgidrp.data as data
@@ -51,12 +51,12 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flat_neptune_output")
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e_output/flat_neptune_output")
     if not os.path.exists(flat_outputdir):
-        os.mkdir(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "mock_input_data")
+        os.makedirs(flat_outputdir)
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_data")
     if not os.path.exists(flat_mock_inputdir):
-        os.mkdir(flat_mock_inputdir)    
+        os.makedirs(flat_mock_inputdir)    
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -91,17 +91,22 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     target_snr = 250/np.sqrt(4.95) # per pix
 
     # Generate proper calibration filenames
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S')
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # Remove last 5 digits to get 3 digits for seconds
     visitid = "0000000000000000000"
 
-    # change the UTC time using the UTC time from the first time as the start
-    #start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
-    #base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    # Extract the timestamp part from the original filename
     l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
-    match = re.findall(r'\d{2,}', l1_dark_st_filename)
-    last_num_str = match[-1] if match else None
-    start_utc = int(last_num_str)
+    # Find the timestamp pattern (YYYYMMDDtHHMMSSS)
+    timestamp_match = re.search(r'\d{8}t\d{7}', l1_dark_st_filename)
+    if timestamp_match:
+        original_timestamp = timestamp_match.group()
+    else:
+        # Fallback: use the last number sequence
+        match = re.findall(r'\d{2,}', l1_dark_st_filename)
+        original_timestamp = match[-1] if match else "00000000000000000"
     l1_flat_dataset = []
+    # Generate base time once to ensure consistent timestamps
+    base_time = datetime.now()
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Neptune"
@@ -109,8 +114,9 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        # add 1 millisecond each time to UTC time
-        base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        base_image.filename = l1_dark_st_filename.replace(original_timestamp, unique_time)
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -218,7 +224,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat # compute residual from true
     smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
-    print(np.std(smoothed_diff[good_region]))
+    #print(np.std(smoothed_diff[good_region]))
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
 
@@ -245,12 +251,12 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flat_uranus_output")
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e_output/flat_uranus_output")
     if not os.path.exists(flat_outputdir):
-        os.mkdir(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "mock_input_data")
+        os.makedirs(flat_outputdir)
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_data")
     if not os.path.exists(flat_mock_inputdir):
-        os.mkdir(flat_mock_inputdir)    
+        os.makedirs(flat_mock_inputdir)    
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -286,17 +292,22 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     # Create proper L1 filenames following the convention
     
     # Generate proper calibration filenames
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S')
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # Remove last 5 digits to get 3 digits for seconds
     visitid = "0000000000000000000"
 
-    # change the UTC time using the UTC time from the first time as the start
-    #start_filenum = int(l1_dark_filelist[0][:-5].split("_")[-1])
-    #base_filename = l1_dark_filelist[0].split(os.path.sep)[-1][:-15]
+    # Extract the timestamp part from the original filename
     l1_dark_st_filename = l1_dark_filelist[0].split(os.path.sep)[-1]
-    match = re.findall(r'\d{2,}', l1_dark_st_filename)
-    last_num_str = match[-1] if match else None
-    start_utc = int(last_num_str)
+    # Find the timestamp pattern (YYYYMMDDtHHMMSSS)
+    timestamp_match = re.search(r'\d{8}t\d{7}', l1_dark_st_filename)
+    if timestamp_match:
+        original_timestamp = timestamp_match.group()
+    else:
+        # Fallback: use the last number sequence
+        match = re.findall(r'\d{2,}', l1_dark_st_filename)
+        original_timestamp = match[-1] if match else "00000000000000000"
     l1_flat_dataset = []
+    # Generate base time once to ensure consistent timestamps
+    base_time = datetime.now()
     for i in range(len(raster_dataset)):
         base_image = l1_dark_dataset[i % len(l1_dark_dataset)].copy()
         base_image.pri_hdr['TARGET'] = "Uranus"
@@ -304,8 +315,9 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
         base_image.pri_hdr['VISTYPE'] = "FFIELD"
         base_image.ext_hdr['EXPTIME'] = 60 # needed to mitigate desmear processing effect
         base_image.data = base_image.data.astype(float)
-        # add 1 millisecond each time to UTC time
-        base_image.filename = l1_dark_st_filename.replace(last_num_str, str(start_utc + i))
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        base_image.filename = l1_dark_st_filename.replace(original_timestamp, unique_time)
 
         # scale the raster image by the noise to reach a desired snr
         raster_frame = raster_dataset[i].data
@@ -407,7 +419,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     good_region = np.where(flat.data != 1)
     diff = flat.data - input_flat
     smoothed_diff = scipy.ndimage.gaussian_filter(diff, 1.4) # smooth by the size of the resolution element, since we care about that
-    print(np.std(smoothed_diff[good_region]))
+    #print(np.std(smoothed_diff[good_region]))
     assert np.std(smoothed_diff[good_region]) < 0.0071
 
     ####### Check the bad pixel map result

@@ -1743,7 +1743,7 @@ class FluxcalFactor(Image):
             self.filedir = "."
             # slight hack for old mocks not in the stardard filename format
             self.filename = "{0}_abf_cal.fits".format(orig_input_filename)
-            self.filename = re.sub('_L[0-9].', '', self.filename)
+            self.filename = re.sub('_l[0-9].', '', self.filename)
             self.pri_hdr['FILENAME'] = self.filename
 
 class FpamFsamCal(Image):

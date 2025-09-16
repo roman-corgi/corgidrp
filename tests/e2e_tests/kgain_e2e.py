@@ -5,6 +5,7 @@ import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.walker as walker
@@ -163,10 +164,45 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     ########### Now run the DRP
 
     # make DRP output directory if needed
-    kgain_outputdir = os.path.join(e2eoutput_path, "l1_to_kgain_output")
+    kgain_outputdir = os.path.join(e2eoutput_path, "kgain_cal_e2e_output")
     if os.path.exists(kgain_outputdir):
         shutil.rmtree(kgain_outputdir)
-    os.mkdir(kgain_outputdir)
+    os.makedirs(kgain_outputdir)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(kgain_outputdir, 'input_data')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+
+    # Generate proper filenames with visitid and current time
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Extract visit ID from primary header VISITID keyword of first file
+    if ordered_filelist:
+        with fits.open(ordered_filelist[0]) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                # Convert to string and pad to 19 digits
+                visitid = str(visitid).zfill(19)
+            else:
+                # Fallback: use default visitid
+                visitid = "0000000000000000000"
+    else:
+        visitid = "0000000000000000000"
+
+    # Copy files to input_data directory with proper naming
+    for i, file_path in enumerate(ordered_filelist):
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
+        new_file_path = os.path.join(input_data_dir, new_filename)
+        shutil.copy2(file_path, new_file_path)
+    
+    # Update ordered_filelist to point to new files
+    ordered_filelist = []
+    for f in os.listdir(input_data_dir):
+        if f.endswith('.fits'):
+            ordered_filelist.append(os.path.join(input_data_dir, f))
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
