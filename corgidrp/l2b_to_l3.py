@@ -260,9 +260,9 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         sizexy (int or array of int): desired frame size, if only one number is provided the 
             desired shape is assumed to be square, otherwise xy order. If not provided, 
             defaults to 61 for NFOV (narrow field-of-view) observations. Defaults to None.
-        centerxy (float or array of float): desired center (xy order), should be a pixel intersection (a.k.a 
-            half-integer) otherwise the function rounds to the nearest intersection. Defaults to the 
-            "EACQ_ROW/COL" header values.
+        centerxy (float or array of float): desired center (xy order), should be a pixel center 
+            (aka integer) or intersection (aka  half-integer) otherwise the function rounds 
+            to the nearest pixel or pixel intersection. Defaults to the "EACQ_ROW/COL" header values.
 
     Returns:
         corgidrp.data.Dataset: a version of the input dataset cropped to the desired FOV.
