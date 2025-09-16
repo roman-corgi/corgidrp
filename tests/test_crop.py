@@ -175,8 +175,8 @@ def test_3d_rect_offcenter_crop():
     test_arr[:,24:26,49:51] = 1
     test_dataset = make_test_dataset(test_arr,centxy=[49.5,24.5,])
 
-    test_dataset[0].pri_hdr["CRPIX1"] = 50.5
-    test_dataset[0].pri_hdr["CRPIX2"] = 25.5
+    test_dataset[0].ext_hdr["CRPIX1"] = 50.5
+    test_dataset[0].ext_hdr["CRPIX2"] = 25.5
     cropped_test_dataset = crop(test_dataset,sizexy=[20,10],centerxy=None)
 
     # Check that data was cropped correctly
@@ -193,9 +193,9 @@ def test_3d_rect_offcenter_crop():
         raise Exception("Frame header kw EACQ_COL not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["EACQ_ROW"] == 4.5:
         raise Exception("Frame header kw EACQ_ROW not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["CRPIX1"] == 10.5:
+    if not cropped_test_dataset[0].ext_hdr["CRPIX1"] == 10.5:
         raise Exception("Frame header kw CRPIX1 not updated correctly.")
-    if not cropped_test_dataset[0].pri_hdr["CRPIX2"] == 5.5:
+    if not cropped_test_dataset[0].ext_hdr["CRPIX2"] == 5.5:
         raise Exception("Frame header kw CRPIX2 not updated correctly.")
     if not cropped_test_dataset[0].ext_hdr["NAXIS1"] == 20:
         raise Exception("Frame header kw NAXIS1 not updated correctly.")
@@ -430,6 +430,7 @@ def test_mixed_oddeven_crop():
 
     if not cropped_test_dataset[0].data == pytest.approx(goal_rect_arr_mixed):
         raise Exception("Unexpected result for mixed odd-even size crop test.")
+
 
 def test_missing_cen_kws():
     "Crop function should fail if center keywords do not exist and centerxy is not provided."
