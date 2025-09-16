@@ -94,6 +94,15 @@ class Dataset():
         for filename, frame in zip(filenames, self.frames):
             frame.save(filename=filename, filedir=filedir)
 
+        # relink frames with all_data
+        self.all_data = np.array([frame.data for frame in self.frames])
+        self.all_err = np.array([frame.err for frame in self.frames])
+        self.all_dq = np.array([frame.dq for frame in self.frames])
+        for i, frame in enumerate(self.frames):
+            frame.data = self.all_data[i]
+            frame.err = self.all_err[i]
+            frame.dq = self.all_dq[i]
+
     def update_after_processing_step(self, history_entry, new_all_data=None, new_all_err = None, new_all_dq = None, header_entries = None):
         """
         Updates the dataset after going through a processing step
@@ -460,6 +469,14 @@ class Image():
         if len(self.filename) == 0:
             raise ValueError("Output filename is not defined. Please specify!")
 
+        # recast header data to the appropriate bit depth as set by the pipeline settings
+        if self.data is not None:
+            self.data = self.data.astype(corgidrp.image_dtype, copy=False)
+        if self.err is not None:
+            self.err = self.err.astype(corgidrp.image_dtype, copy=False)
+        if self.dq is not None:
+            self.dq = self.dq.astype(corgidrp.dq_dtype, copy=False)
+            
         prihdu = fits.PrimaryHDU(header=self.pri_hdr)
         exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
         hdulist = fits.HDUList([prihdu, exthdu])
@@ -788,6 +805,107 @@ class SpectroscopyCentroidPSF(Image):
         self.xfit_err = self.err[0][:, 0]
         self.yfit_err = self.err[0][:, 1]
 
+class LineSpread(Image):
+    """
+    Calibration product that stores a flux profile vs. wavelength of a narrowband observation and the fitted Gaussian parameters
+
+    Args:
+        data_or_filepath (str or np.ndarray): 1D wavelength array (nm)
+                                              1D flux profile
+                                              with shape (N, 2), where N is the length of the wavelength array.
+        pri_hdr (fits.Header): Primary header.
+        ext_hdr (fits.Header): Extension header.
+        gauss_par (np.ndarray): Gaussian fit parameters + corresponding errors: [amplitude, mean_wavelen, fwhm, amp_err, wave_err, fwhm_err]
+        input_dataset (Dataset): Dataset used to generate this calibration.
+        
+    Attr:
+        wavlens (np.array): wavelengths in nm
+        flux_profile (np.array): normalized flux
+        gauss_par (np.array): Gaussian fit parameters: [amplitude, mean_wavelen, fwhm, amp_err, wave_err, fwhm_err]
+        amplitude (float): Gaussian amplitude
+        mean_wave (float): mean wavelength
+        fwhm (float): Gaussian FWHM
+        amp_err (float): fit error of the amplitude
+        wave_err (float): fit error of the mean wavelength
+        fwhm_err (float): fit error of the Gaussian fwhm
+    """
+    def __init__(self, data_or_filepath, pri_hdr=None, ext_hdr=None, gauss_par=None, input_dataset=None):
+        super().__init__(data_or_filepath, pri_hdr=pri_hdr, ext_hdr=ext_hdr)
+
+
+        # if this is a new LineSpread, we need to bookkeep it in the header
+        # b/c of logic in the super.__init__, we just need to check this to see if it is a new LineSpread 
+        if ext_hdr is not None:
+            if input_dataset is None:
+                raise ValueError("Must pass `input_dataset` to create new LineSpread calibration.")
+
+            self.ext_hdr['DATATYPE'] = 'LineSpread'
+            self.ext_hdr['EXTNAME'] = 'FLUX_PROF'
+            self._record_parent_filenames(input_dataset)
+            self.ext_hdr['HISTORY'] = "Stored LineSpread fit results."
+
+            # Generate default output filename
+            base = input_dataset[0].filename.split(".fits")[0]
+            self.filename = f"{base}_line_spread.fits"
+            if gauss_par is not None:
+                if not (gauss_par.ndim == 1 and len(gauss_par) == 6):
+                    raise ValueError('The LineSpread calibration gauss_par array must have 6 entries')
+                else:
+                    self.gauss_par = gauss_par
+            else:
+                raise ValueError('The LineSpread calibration must have also the Gaussian parameters')
+            self.gauss_hdr = fits.Header()
+            self.gauss_hdr["EXTNAME"] = "GAUSS_PAR"
+        else:
+            # a filepath is passed in
+            with fits.open(data_or_filepath) as hdulist:
+                #gauss par is in FITS extension
+                self.gauss_par = hdulist[2].data
+                self.gauss_hdr = hdulist[2].header
+            
+        if 'DATATYPE' not in self.ext_hdr or self.ext_hdr['DATATYPE'] != 'LineSpread':
+            raise ValueError("This file is not a valid LineSpread calibration.")
+
+        if self.data.shape[0] != 2:
+            raise ValueError('The LineSpread calibration array must have a shape of (2,N)')
+        
+        #convenience attributes
+        self.wavlens = self.data[0, :]
+        self.flux_profile = self.data[1, :]
+        self.amplitude = self.gauss_par[0]
+        self.mean_wave = self.gauss_par[1]
+        self.fwhm = self.gauss_par[2]
+        self.amp_err = self.gauss_par[3]
+        self.wave_err = self.gauss_par[4]
+        self.fwhm_err = self.gauss_par[5]
+   
+    def save(self, filedir=None, filename=None):
+        """
+        Save file to disk with user specified filepath
+
+        Args:
+            filedir (str): filedir to save to. Use self.filedir if not specified
+            filename (str): filepath to save to. Use self.filename if not specified
+        """
+        if filename is not None:
+            self.filename = filename
+        if filedir is not None:
+            self.filedir = filedir
+
+        if len(self.filename) == 0:
+            raise ValueError("Output filename is not defined. Please specify!")
+
+        prihdu = fits.PrimaryHDU(header=self.pri_hdr)
+        exthdu = fits.ImageHDU(data=self.data, header=self.ext_hdr)
+        hdulist = fits.HDUList([prihdu, exthdu])
+
+        gauss_hdu = fits.ImageHDU(data=self.gauss_par, header = self.gauss_hdr)
+        hdulist.append(gauss_hdu)
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=VerifyWarning) # fits save card length truncated warning
+            hdulist.writeto(self.filepath, overwrite=True)
+        hdulist.close()
 
 class DispersionModel(Image):
     """ 
@@ -2845,7 +2963,8 @@ datatypes = { "Image" : Image,
               "CoreThroughputCalibration": CoreThroughputCalibration,
               "NDFilterSweetSpotDataset": NDFilterSweetSpotDataset,
               "SpectroscopyCentroidPSF": SpectroscopyCentroidPSF,
-              "DispersionModel": DispersionModel
+              "DispersionModel": DispersionModel,
+              "LineSpread": LineSpread
               }
 
 def autoload(filepath):

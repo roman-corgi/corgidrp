@@ -180,10 +180,10 @@ def test_rescale_error():
     image_test = Image('test_image0.fits')
     scale_factor = 8.1
     image_test.rescale_error(scale_factor, "test_factor")
-    assert np.array_equal(image_test.err[1], err1 * scale_factor)
+    assert np.allclose(image_test.err[1], err1 * scale_factor, rtol=1e-6)
     scale_factor = np.ones([1024,1024]) * 8.1
     image_test.rescale_error(scale_factor, "test_factor")
-    assert np.array_equal(image_test.err[1], err1 * scale_factor * scale_factor)
+    assert np.allclose(image_test.err[1], err1 * scale_factor * scale_factor, rtol=1e-6)
     assert "test_factor" in str(image_test.err_hdr["HISTORY"])
     
 
