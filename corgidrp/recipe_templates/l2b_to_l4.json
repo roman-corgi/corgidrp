@@ -23,6 +23,9 @@
             "name": "save"
         },
         {
+            "name": "replace_bad_pixels"
+        },
+        {
             "name": "distortion_correction", 
             "calibs": {
                 "AstrometricCalibration": "AUTOMATIC"

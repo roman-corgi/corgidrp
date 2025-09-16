@@ -7,6 +7,7 @@ import corgidrp.mocks as mocks
 from corgidrp.mocks import create_default_calibration_product_headers
 from corgidrp.l2a_to_l2b import correct_bad_pixels
 from corgidrp.data import Image, Dataset, BadPixelMap
+from corgidrp.l3_to_l4 import replace_bad_pixels
 
 old_err_tracking = corgidrp.track_individual_errors
 
@@ -14,6 +15,8 @@ data = np.ones([1024,1024])*2.
 err = np.ones([1024,1024]) *0.5
 dq = np.zeros([1024,1024], dtype = np.uint16)
 prhd, exthd, errhdr, dqhdr = create_default_calibration_product_headers()
+constant = 10.
+xgradient = np.arange(30)
 
 def test_bad_pixels():
 
@@ -121,5 +124,131 @@ def test_bad_pixels():
 
     print("UT passed")
 
+
+def test_replace_bps_2d():
+    """Test that the replace_bad_pixels correctly patches bad pixels, and 
+    the error array, and does not modify the dq array, given a uniform 2d data array.
+    """
+    # Create a clean dataset with constant values in data & err
+    input_dataset_clean, _ = mocks.create_psfsub_dataset(2,0,[0,0],data_shape=[30,20])
+    input_dataset_clean.all_data[:,:,:] = constant
+    input_dataset_clean.all_err[:,:,:,:] = constant
+
+    # Flag some bad pixels and assign erroneous values in data
+    input_dataset_bad = input_dataset_clean.copy()
+
+        # Pixel on the edge
+    input_dataset_bad.all_dq[0,0,1] = 1
+    input_dataset_bad.all_data[0,0,1] = 100.
+    input_dataset_bad.all_err[0,:,0,1] = 100.
+
+        # Pixel near the middle
+    input_dataset_bad.all_dq[1,9,9] = 1
+    input_dataset_bad.all_data[1,9,9] = 100.
+    input_dataset_bad.all_err[1,:,9,9] = 100.
+
+        # Patch of 4 pixels
+    input_dataset_bad.all_dq[1,15:17,15:17] = 1
+    input_dataset_bad.all_data[1,15:17,15:17] = 100.
+    input_dataset_bad.all_err[1,:,15:17,15:17] = 100.
+    
+    # Run bad pixel cleaning
+    cleaned_dataset = replace_bad_pixels(input_dataset_bad)
+
+    if not cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data):
+        raise Exception("Cleaned data array does not match input data array for 2D uniform data.")
+    if not  cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err):
+        raise Exception("Cleaned error array does not match input error array for 2D uniform data.")
+    if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
+        raise Exception("Output DQ array does not match input DQ array for 2D uniform data.")
+
+def test_replace_bps_3d():
+    """Test that the replace_bad_pixels correctly patches bad pixels, and 
+    the error array, and does not modify the dq array, given a uniform 3d data array."""
+    # Create a clean dataset with constant values in data & err
+    input_dataset_clean, _ = mocks.create_psfsub_dataset(2,0,[0,0],data_shape=[3,30,20])
+    input_dataset_clean.all_data[:,:,:,:] = constant
+    input_dataset_clean.all_err[:,:,:,:,:] = constant
+
+    # Flag some bad pixels and assign erroneous values in data
+    input_dataset_bad = input_dataset_clean.copy()
+
+        # Pixel on the edge
+    input_dataset_bad.all_dq[0,2,0,1] = 1
+    input_dataset_bad.all_data[0,2,0,1] = 100.
+    input_dataset_bad.all_err[0,:,2,0,1] = 100.
+
+        # Pixel near the middle
+    input_dataset_bad.all_dq[1,2,9,9] = 1
+    input_dataset_bad.all_data[1,2,9,9] = 100.
+    input_dataset_bad.all_err[1,:,2,9,9] = 100.
+    
+    # Run bad pixel cleaning
+    cleaned_dataset = replace_bad_pixels(input_dataset_bad)
+
+    if not cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data):
+        raise Exception("Cleaned data array does not match input data array for 3D uniform data.")
+    if not  cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err):
+        raise Exception("Cleaned error array does not match input error array for 3D uniform data.")
+    if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
+        raise Exception("Output DQ array does not match input DQ array for 3D uniform data.")
+
+def test_replace_bps_nonuniform():
+    """Test that the replace_bad_pixels correctly patches bad pixels, and 
+    the error array, and does not modify the dq array, given a nonuniform (linear gradient)
+    2d data array."""
+    # Create a clean dataset with constant values in data & err
+    input_dataset_clean, _ = mocks.create_psfsub_dataset(2,0,[0,0],data_shape=[30,20])
+    
+    
+    input_dataset_clean.all_data[:,:,:] = xgradient
+    input_dataset_clean.all_err[:,:,:,:] = constant
+
+    # Add bad pixel below dq threshold which we won't change
+    input_dataset_clean.all_dq[1,-1,-1] = 0.1
+    input_dataset_clean.all_data[1,-1,-1] = 50
+    
+
+    # Flag some bad pixels and assign erroneous values in data
+    input_dataset_bad = input_dataset_clean.copy()
+
+        # Pixel on the edge
+    input_dataset_bad.all_dq[0,0,1] = 1
+    input_dataset_bad.all_data[0,0,1] = 100.
+    input_dataset_bad.all_err[0,:,0,1] = 100.
+
+        # Pixel near the middle
+    input_dataset_bad.all_dq[1,9,9] = 1
+    input_dataset_bad.all_data[1,9,9] = 100.
+    input_dataset_bad.all_err[1,:,9,9] = 100.
+
+        # Another bad pixel
+    input_dataset_bad.all_dq[1,15,15] = 1
+    input_dataset_bad.all_data[1,15,15] = 100.
+    input_dataset_bad.all_err[1,:,15,15] = 100.
+    
+    # Run bad pixel cleaning
+    cleaned_dataset = replace_bad_pixels(input_dataset_bad)
+
+    # for f,frame in enumerate(input_dataset_bad):
+    #     import matplotlib.pyplot as plt
+    #     fig,ax = plt.subplots(1,2,figsize=[10,5])
+    #     ax[0].imshow(frame.data,vmin=0,vmax=30)
+    #     ax[0].set_title('Input Data')
+
+    #     ax[1].imshow(cleaned_dataset[f].data,vmin=0,vmax=30)
+    #     ax[1].set_title('Cleaned Data')
+
+    if not cleaned_dataset.all_data == pytest.approx(input_dataset_clean.all_data):
+        raise Exception("Cleaned data array does not match input data array for 2D nonuniform data.")
+    if not  cleaned_dataset.all_err == pytest.approx(input_dataset_clean.all_err):
+        raise Exception("Cleaned error array does not match input error array for 2D nonuniform data.")
+    if not cleaned_dataset.all_dq == pytest.approx(input_dataset_bad.all_dq):
+        raise Exception("Output DQ array does not match input DQ array for 2D nonuniform data.")
+
+    
 if __name__ == '__main__':
     test_bad_pixels()
+    test_replace_bps_2d()
+    test_replace_bps_3d()
+    test_replace_bps_nonuniform()
