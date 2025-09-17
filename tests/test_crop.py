@@ -194,7 +194,7 @@ def test_edge_of_detector():
 
 
 def test_outside_detector_edge():
-    """ Tests that trying to crop a region outside the detector fails.
+    """ Tests cropping to a region partially outside the detector.
     """
 
     
