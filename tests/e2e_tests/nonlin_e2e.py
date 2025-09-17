@@ -7,6 +7,7 @@ import numpy as np
 from astropy import time
 from astropy.io import fits
 import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
 
 import corgidrp
 from corgidrp import data
@@ -96,7 +97,7 @@ def test_nonlin_cal_e2e(
     kgain_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
     tvac_caldir = os.path.join(e2edata_path, 'TV-36_Coronagraphic_Data', 'Cals')
-    e2eoutput_path = os.path.join(e2eoutput_path, 'l1_to_nonlin_output')
+    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_cal_e2e')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
@@ -107,11 +108,25 @@ def test_nonlin_cal_e2e(
     if not os.path.exists(tvac_caldir):
         raise FileNotFoundError(f'Please store L1 calibration data in {tvac_caldir}')
 
-    if not os.path.exists(e2eoutput_path):
-        os.mkdir(e2eoutput_path)
-    # clean up output directory
-    for f in os.listdir(e2eoutput_path):
-        os.remove(os.path.join(e2eoutput_path, f))
+    if os.path.exists(e2eoutput_path):
+        import shutil
+        shutil.rmtree(e2eoutput_path)
+    os.makedirs(e2eoutput_path)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(e2eoutput_path, 'input_l1')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    
+    # Create calibrations subfolder
+    calibrations_dir = os.path.join(e2eoutput_path, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
+    
+    # Create tvac_reference subfolder
+    tvac_reference_dir = os.path.join(e2eoutput_path, 'tvac_reference')
+    if not os.path.exists(tvac_reference_dir):
+        os.makedirs(tvac_reference_dir)
 
     # Define the raw science data to process
     nonlin_l1_list = glob.glob(os.path.join(nonlin_l1_datadir, "*.fits"))
@@ -119,6 +134,37 @@ def test_nonlin_cal_e2e(
     kgain_l1_list = glob.glob(os.path.join(kgain_l1_datadir, "*.fits"))
     kgain_l1_list.sort()
     nonlin_l1_list = nonlin_l1_list + kgain_l1_list
+
+    # Generate proper filenames with visitid and current time
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Extract visit ID from primary header VISITID keyword of first file
+    if nonlin_l1_list:
+        with fits.open(nonlin_l1_list[0]) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                # Convert to string and pad to 19 digits
+                visitid = str(visitid).zfill(19)
+            else:
+                # Fallback: use default visitid
+                visitid = "0000000000000000000"
+    else:
+        visitid = "0000000000000000000"
+
+    # Copy files to input_data directory with proper naming
+    for i, file_path in enumerate(nonlin_l1_list):
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
+        new_file_path = os.path.join(input_data_dir, new_filename)
+        import shutil
+        shutil.copy2(file_path, new_file_path)
+    
+    # Update nonlin_l1_list to point to new files
+    nonlin_l1_list = []
+    for f in os.listdir(input_data_dir):
+        if f.endswith('.fits'):
+            nonlin_l1_list.append(os.path.join(input_data_dir, f))
 
     # Set TVAC OBSNAME to MNFRAME/NONLIN (flight data should have these values)
     #fix_headers_for_tvac(nonlin_l1_list)
@@ -141,13 +187,20 @@ def test_nonlin_cal_e2e(
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=e2eoutput_path, filename="nonlin_tvac.fits")
+    # Generate timestamp for TVAC reference NonLinearityCalibration
+    base_time = datetime.now()
+    tvac_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
+    tvac_nln_filename = f"cgi_0000000000000000000_{tvac_time_str}_nln_cal.fits"
+    nonlinear_cal.save(filedir=tvac_reference_dir, filename=tvac_nln_filename)
 
     # KGain
     kgain_val = 8.7
     kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=e2eoutput_path, filename="mock_kgain.fits")
+    # Generate timestamp for KGain calibration
+    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
+    kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
+    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -183,7 +236,7 @@ def test_nonlin_cal_e2e(
     n_emgain = nonlin_out_table.shape[1]
 
     # NL from TVAC
-    nonlin_tvac = fits.open(os.path.join(e2eoutput_path,'nonlin_tvac.fits'))
+    nonlin_tvac = fits.open(os.path.join(tvac_reference_dir, tvac_nln_filename))
     nonlin_tvac_table = nonlin_tvac[1].data
 
     # Check
@@ -217,7 +270,7 @@ def test_nonlin_cal_e2e(
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
     # Print success message
-    print('e2e test for NL passed')
+    print('e2e test for nonlin calibration passed')
 
 if __name__ == "__main__":
 
@@ -227,7 +280,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     OUTPUT_DIR = thisfile_dir
 

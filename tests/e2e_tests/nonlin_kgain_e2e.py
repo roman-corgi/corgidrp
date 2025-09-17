@@ -7,6 +7,7 @@ import numpy as np
 from astropy import time
 from astropy.io import fits
 import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
 
 import corgidrp
 from corgidrp import data
@@ -91,7 +92,7 @@ def test_nonlin_and_kgain_e2e(
     kgain_l1_datadir = os.path.join(e2edata_path,
         'TV-20_EXCAM_noise_characterization', 'nonlin', 'kgain')
 
-    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_and_kgain_output')
+    e2eoutput_path = os.path.join(e2eoutput_path, 'nonlin_kgain_cal_e2e')
 
     if not os.path.exists(nonlin_l1_datadir):
         raise FileNotFoundError('Please store L1 data used to calibrate non-linearity',
@@ -100,11 +101,15 @@ def test_nonlin_and_kgain_e2e(
         raise FileNotFoundError('Please store L1 data used to calibrate kgain',
             f'in {kgain_l1_datadir}')
 
-    if not os.path.exists(e2eoutput_path):
-        os.mkdir(e2eoutput_path)
-    # clean up output directory
-    for f in os.listdir(e2eoutput_path):
-        os.remove(os.path.join(e2eoutput_path, f))
+    if os.path.exists(e2eoutput_path):
+        import shutil
+        shutil.rmtree(e2eoutput_path)
+    os.makedirs(e2eoutput_path)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(e2eoutput_path, 'input_l1')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -124,6 +129,37 @@ def test_nonlin_and_kgain_e2e(
     for filepath in kgain_l1_list:
         if filepath.lower().endswith('.fits'):
             pupilimg_l1_list.append(filepath)
+
+    # Generate proper filenames with visitid and current time
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Extract visit ID from primary header VISITID keyword of first file
+    if pupilimg_l1_list:
+        with fits.open(pupilimg_l1_list[0]) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                # Convert to string and pad to 19 digits
+                visitid = str(visitid).zfill(19)
+            else:
+                # Fallback: use default visitid
+                visitid = "0000000000000000000"
+    else:
+        visitid = "0000000000000000000"
+
+    # Copy files to input_data directory with proper naming
+    for i, file_path in enumerate(pupilimg_l1_list):
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
+        new_file_path = os.path.join(input_data_dir, new_filename)
+        import shutil
+        shutil.copy2(file_path, new_file_path)
+    
+    # Update pupilimg_l1_list to point to new files
+    pupilimg_l1_list = []
+    for f in os.listdir(input_data_dir):
+        if f.endswith('.fits'):
+            pupilimg_l1_list.append(os.path.join(input_data_dir, f))
 
 
     # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
@@ -164,9 +200,8 @@ def test_nonlin_and_kgain_e2e(
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
-
-   # Print success message
-    print('e2e test for NL passed')
+    # Print success message
+    print('e2e test for nonlin_kgain calibration passed')
 
 if __name__ == "__main__":
 
@@ -176,7 +211,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'#"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"#'/home/jwang/Desktop/CGI_TVAC_Data/'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
     OUTPUT_DIR = thisfile_dir
 
