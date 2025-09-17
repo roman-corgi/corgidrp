@@ -4,10 +4,12 @@ import numpy as np
 import scipy.ndimage as ndi
 import scipy.optimize as optimize
 from scipy.interpolate import interp1d
-from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel
+from corgidrp.data import Dataset, SpectroscopyCentroidPSF, DispersionModel, LineSpread
 import os
 from astropy.io import ascii, fits
 from astropy.table import Table
+import astropy.modeling.models as models
+import astropy.modeling.fitting as fitting
 
 
 def gauss2d(x0, y0, sigma_x, sigma_y, peak):
@@ -920,3 +922,85 @@ def star_spec_registration(
     assert isinstance(img_best, type(img)), 'No suitable best image found.'        
 
     return img_best
+def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 15.):
+    """
+    Fit the line spread function to a wavelength calibrated (averaged) dataset, by reading 
+    the wavelength map extension and wavelength zeropoint header
+
+    Args:
+        dataset (corgidrp.data.Dataset): dataset containg a narrowband filter + prism PSF
+        halfwidth (int): The width of the fitting region is 2 * halfwidth + 1 pixels.
+        halfheight (int): The height of the fitting region is 2 * halfheight + 1 pixels.
+        guess_fwhm (float): guess value of the fwhm of the line
+
+    Returns:
+        corgidrp.data.LineSpread: LineSpread object containing
+        wavlens (numpy.ndarray)
+        flux_profile (numpy.ndarray) 
+        fwhm_fit (float)
+        mean_fit (float)
+        peak_fit (float)
+
+    """
+    # Assumed that only narrowband filter (includes sat spots) frames are taken to fit the line spread function LSF
+    narrow_dataset, band = dataset.split_dataset(exthdr_keywords=["CFAMNAME"])
+    band = np.array([s.upper() for s in band])
+        
+    if "3D" in band:
+        nar_dataset = narrow_dataset[int(np.nonzero(band == "3D")[0].item())]
+    elif "2C" in band:
+        nar_dataset = narrow_dataset[int(np.nonzero(band == "2C")[0].item())]
+    else:
+        raise AttributeError("No narrowband frames found in input dataset")
+    
+    wave = []
+    wave_err = []
+    fwhm = []
+    fwhm_err = []
+    peak = []
+    peak_err = []
+    wavlens = []
+    flux_profile = []
+    for image in nar_dataset:
+        xcent_round, ycent_round = (int(np.rint(image.ext_hdr["WV0_X"])), int(np.rint(image.ext_hdr["WV0_Y"])))
+        image_cutout = image.data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        dq_cutout = image.dq[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                  xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        wave_cal_map_cutout = image.hdu_list["WAVE"].data[ycent_round - halfheight:ycent_round + halfheight + 1,
+                                                          xcent_round - halfwidth:xcent_round + halfwidth + 1]
+        bad_ind = np.where(dq_cutout > 0)
+        image_cutout[bad_ind] = np.nan
+        flux_p = np.nansum(image_cutout, axis=1) / np.nansum(image_cutout)
+        wav = np.mean(wave_cal_map_cutout, axis=1)
+        flux_profile.append(flux_p)
+        wavlens.append(wav)
+        g_init = models.Gaussian1D(amplitude = np.max(flux_p),
+                                   mean = wav[halfheight], 
+                                   stddev = guess_fwhm/(2 * np.sqrt(2*np.log(2))))
+        fit_g = fitting.LevMarLSQFitter(calc_uncertainties=True)
+        g_func = fit_g(g_init, x = wav, y = flux_p)
+        fwhm.append(2 * np.sqrt(2*np.log(2)) * g_func.stddev.value)
+        wave.append(g_func.mean.value)
+        peak.append(g_func.amplitude.value)
+        errors = np.diagonal(fit_g.fit_info.get("param_cov"))
+        peak_err.append(errors[0])
+        wave_err.append(errors[1])
+        fwhm_err.append(errors[2] * 8 * np.log(2))
+    
+    mean_peak = np.mean(np.array(peak))
+    mean_fwhm = np.mean(np.array(fwhm))
+    mean_wave = np.mean(np.array(wave))
+    mean_peak_err = np.sqrt(np.sum(np.array(peak_err)))
+    mean_wave_err = np.sqrt(np.sum(np.array(wave_err)))
+    mean_fwhm_err = np.sqrt(np.sum(np.array(fwhm_err)))
+    mean_flux_profile = np.mean(np.array(flux_profile), axis = 0)
+    mean_wavlens = np.mean(np.array(wavlens), axis = 0)
+    prihdr = nar_dataset[0].pri_hdr.copy()
+    exthdr = nar_dataset[0].ext_hdr.copy()
+    
+    ls_data = np.array([mean_wavlens, mean_flux_profile])
+    gauss_profile = np.array([mean_peak, mean_wave, mean_fwhm, mean_peak_err, mean_wave_err, mean_fwhm_err])
+    
+    line_spread = LineSpread(ls_data, pri_hdr = prihdr, ext_hdr = exthdr, gauss_par = gauss_profile, input_dataset = nar_dataset)
+    return line_spread

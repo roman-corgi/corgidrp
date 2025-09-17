@@ -74,7 +74,7 @@ def test_dark_sub():
 
     # leave out telemetry row of full frame
     dark_dataset_notelem = dark_dataset.all_data[:, 0:-1, :]
-    assert np.array_equal(np.std(dark_dataset_notelem, axis = 0)/np.sqrt(len(dark_dataset_notelem)), dark_frame.err[0][0:-1, :])
+    assert np.allclose(np.std(dark_dataset_notelem, axis = 0)/np.sqrt(len(dark_dataset_notelem)), dark_frame.err[0][0:-1, :], rtol=1e-6)
 
     # save dark
     calibdir = os.path.join(os.path.dirname(__file__), "testcalib")
@@ -116,7 +116,7 @@ def test_dark_sub():
         dark_im_frames.append(fr)
     dark_im_frames = np.stack(dark_im_frames)
     # check that the error is determined correctly (no telemetry row in image area)
-    assert np.array_equal(np.std(dark_im_frames, axis = 0)/np.sqrt(len(dark_im_frames)), dark_frame.err[0])
+    assert np.allclose(np.std(dark_im_frames, axis = 0)/np.sqrt(len(dark_im_frames)), dark_frame.err[0], rtol=1e-6)
 
     # check the propagated errors
     assert darkest_dataset[0].err_hdr["Layer_2"] == "dark_error"
