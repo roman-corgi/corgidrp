@@ -94,14 +94,17 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     corDataset = data.Dataset(corDataset_image_list)
 
     # Make directory for the CT cal file
-    ctmap_outputdir = os.path.join(e2eoutput_path, 'ctmap_cal_e2e_output')
+    ctmap_outputdir = os.path.join(e2eoutput_path, 'ctmap_cal_e2e')
     if os.path.exists(ctmap_outputdir):
         shutil.rmtree(ctmap_outputdir)
     os.mkdir(ctmap_outputdir)
     
-    # Define temporary directory to store the individual frames under the output directory
-    output_dir = os.path.join(ctmap_outputdir, 'ctmap_cal_e2e_input_data')
+    # Define directory to store the individual frames under the output directory
+    output_dir = os.path.join(ctmap_outputdir, 'input_l2b')
     os.mkdir(output_dir)
+
+    calibrations_dir = os.path.join(ctmap_outputdir, 'calibrations')
+    os.mkdir(calibrations_dir)
     
     # Generate filename variables
     base_time = datetime.datetime.now()
@@ -138,7 +141,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create CT cal file from the mock data directly
     ct_cal_mock = corethroughput.generate_ct_cal(corethroughput_dataset)
     # Save it
-    ct_cal_mock.filedir = ctmap_outputdir
+    ct_cal_mock.filedir = calibrations_dir
     ct_cal_mock.save()
     # Add it to caldb
     this_caldb.create_entry(ct_cal_mock)

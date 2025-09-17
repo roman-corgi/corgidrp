@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import numpy as np
 from astropy.io import fits
 import corgidrp
@@ -47,24 +48,19 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     '''
 
-    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e_output")
+    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e")
     if os.path.exists(main_output_dir):
-        import shutil
+
         shutil.rmtree(main_output_dir)
     os.makedirs(main_output_dir)
-
+    calibrations_dir = os.path.join(main_output_dir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
+    
     # Create input_data subfolder
-    input_data_dir = os.path.join(main_output_dir, 'input_data')
+    input_data_dir = os.path.join(main_output_dir, 'input_l2b')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
-
-    # Create l2b_to_l3_output subfolder under main output directory
-    l2b_to_l3_output = os.path.join(main_output_dir, "l2b_to_l3_output")
-    if not os.path.exists(l2b_to_l3_output):
-        os.makedirs(l2b_to_l3_output)
-    # clean out any old files 
-    for f in os.listdir(l2b_to_l3_output):
-        os.remove(os.path.join(l2b_to_l3_output, f))
 
     ##################################################
     #### Generate an astrometric calibration file ####
@@ -101,7 +97,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     base_time = datetime.now()
     ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
     ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=l2b_to_l3_output, filename=ast_filename)
+    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -255,10 +251,24 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     l2b_data_filelist = sorted(glob.glob(os.path.join(input_data_dir, "*.fits")))
     
-    walker.walk_corgidrp(l2b_data_filelist, "", l2b_to_l3_output)
+    walker.walk_corgidrp(l2b_data_filelist, "", main_output_dir)
 
-    #Read in an L3 file
-    l3_filename = glob.glob(os.path.join(l2b_to_l3_output, "*l3_.fits"))[0]
+    # Organize L3 files into l2b_to_l3 subfolder
+    l2b_to_l3_dir = os.path.join(main_output_dir, "l2b_to_l3")
+    if not os.path.exists(l2b_to_l3_dir):
+        os.mkdir(l2b_to_l3_dir)
+    
+    # Move L3 files and related recipes to l2b_to_l3 subfolder
+    for filename in os.listdir(main_output_dir):
+        filepath = os.path.join(main_output_dir, filename)
+        if os.path.isfile(filepath):
+            if '_l3_' in filename and filename.endswith('.fits'):
+                shutil.move(filepath, os.path.join(l2b_to_l3_dir, filename))
+            elif 'l2b_to_l3' in filename and filename.endswith('_recipe.json'):
+                shutil.move(filepath, os.path.join(l2b_to_l3_dir, filename))
+
+    #Read in an L3 file (now from l2b_to_l3 subfolder)
+    l3_filename = glob.glob(os.path.join(l2b_to_l3_dir, "*l3_.fits"))[0]
     l3_image = Image(l3_filename)
 
     #Check if there's a WCS header
@@ -296,12 +306,12 @@ def test_l3_to_l4(e2eoutput_path):
         e2eoutput_path (str): Path to the output directory
     '''
 
-    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e_output")
-    e2eintput_path = os.path.join(main_output_dir, "l2b_to_l3_output")
+    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_e2e")
+    e2eintput_path = os.path.join(main_output_dir, "l2b_to_l3")
+    calibrations_dir = os.path.join(main_output_dir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
 
-    e2eoutput_path_l4 = os.path.join(main_output_dir, "l3_to_l4_output")
-    if not os.path.exists(e2eoutput_path_l4):
-        os.makedirs(e2eoutput_path_l4)
 
     ##################################################
     #### Generate an astrometric calibration file ####
@@ -338,7 +348,7 @@ def test_l3_to_l4(e2eoutput_path):
     base_time = datetime.now()
     ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
     ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=e2eoutput_path_l4, filename=ast_filename)
+    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -383,7 +393,7 @@ def test_l3_to_l4(e2eoutput_path):
     # Generate timestamp for CoreThroughputMap calibration
     ctm_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
     ctm_filename = f"cgi_0000000000000000000_{ctm_time_str}_ctm_cal.fits"
-    ct_cal_tmp.save(filedir=e2eoutput_path_l4, filename=ctm_filename)
+    ct_cal_tmp.save(filedir=calibrations_dir, filename=ctm_filename)
     this_caldb.create_entry(ct_cal_tmp)
 
     ##########################################
@@ -399,7 +409,7 @@ def test_l3_to_l4(e2eoutput_path):
     # Generate timestamp for FluxcalFactor calibration
     abf_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
     abf_filename = f"cgi_0000000000000000000_{abf_time_str}_abf_cal.fits"
-    fluxcal_fac.save(filedir=e2eoutput_path_l4, filename=abf_filename)
+    fluxcal_fac.save(filedir=calibrations_dir, filename=abf_filename)
     this_caldb.create_entry(fluxcal_fac)
 
     #####################################
@@ -413,13 +423,13 @@ def test_l3_to_l4(e2eoutput_path):
 
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
-    walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4)
+    walker.walk_corgidrp(l3_data_filelist, "", main_output_dir)
 
     ########################################################################
     #### Read in the psf_subtracted images and test for source detection ###
     ########################################################################
 
-    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*l4_.fits"))[0]
+    l4_filename = glob.glob(os.path.join(main_output_dir, "*l4_.fits"))[0]
     psf_subtracted_image = Image(l4_filename)
     psf_subtracted_image.data = psf_subtracted_image.data[-1,:,:] #Just pick one of the KL modes for now
     

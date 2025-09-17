@@ -3,7 +3,7 @@ import os, shutil
 import glob
 import pytest
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import corgidrp
 import corgidrp.data as data
@@ -28,21 +28,31 @@ def test_expected_results_e2e(e2eoutput_path):
     flux_image_WP2.ext_hdr['BUNIT'] = 'photoelectron'
     flux_dataset_WP2 = data.Dataset([flux_image_WP2])
 
-    output_dir = os.path.join(e2eoutput_path, 'flux_cal_pol_e2e_output')
+    output_dir = os.path.join(e2eoutput_path, 'flux_cal_pol_e2e')
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir)
 
     # Create input_data subfolders
-    input_data_dir_WP1 = os.path.join(output_dir, 'input_data_WP1')
-    input_data_dir_WP2 = os.path.join(output_dir, 'input_data_WP2')
+    wp1_dir = os.path.join(output_dir, 'WP1')
+    wp2_dir = os.path.join(output_dir, 'WP2')
+    if not os.path.exists(wp1_dir):
+        os.makedirs(wp1_dir)
+    if not os.path.exists(wp2_dir):
+        os.makedirs(wp2_dir)
+    input_data_dir_WP1 = os.path.join(wp1_dir, 'input_l2b')
+    input_data_dir_WP2 = os.path.join(wp2_dir, 'input_l2b')
     if not os.path.exists(input_data_dir_WP1):
         os.makedirs(input_data_dir_WP1)
     if not os.path.exists(input_data_dir_WP2):
         os.makedirs(input_data_dir_WP2)
 
     # Generate proper filenames with visitid and current time
-    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    base_time = datetime.now()
+    current_time = base_time.strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Create second timestamp with 0.1 seconds added
+    current_time_wp2 = (base_time + timedelta(milliseconds=100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+    
     # Extract visit ID from primary header VISITID keyword
     visitid = flux_image_WP1.pri_hdr.get('VISITID', None)
     if visitid is not None:
@@ -52,9 +62,9 @@ def test_expected_results_e2e(e2eoutput_path):
         # Fallback: use default visitid
         visitid = "0000000000000000000"
 
-    # Create proper L2b filenames: cgi_{visitid}_{current_time}_l2b.fits
+    # Create proper L2b filenames with unique timestamps
     flux_dataset_WP1.save(input_data_dir_WP1, [f'cgi_{visitid}_{current_time}_l2b.fits'])
-    flux_dataset_WP2.save(input_data_dir_WP2, [f'cgi_{visitid}_{current_time}_l2b.fits'])
+    flux_dataset_WP2.save(input_data_dir_WP2, [f'cgi_{visitid}_{current_time_wp2}_l2b.fits'])
 
     data_filelist_WP1 = []
     data_filelist_WP2 = []
@@ -67,8 +77,8 @@ def test_expected_results_e2e(e2eoutput_path):
 
     ####### Run the DRP walker for WP1
     print('Running walker for WP1')
-    walker.walk_corgidrp(data_filelist_WP1, '', output_dir)
-    fluxcal_file_WP1 = glob.glob(os.path.join(output_dir, '*abf_cal*.fits'))[0]
+    walker.walk_corgidrp(data_filelist_WP1, '', wp1_dir)
+    fluxcal_file_WP1 = glob.glob(os.path.join(wp1_dir, '*abf_cal*.fits'))[0]
     fluxcal_image_WP1 = data.Image(fluxcal_file_WP1)
 
     #check that the calibration file is configured correctly
@@ -89,8 +99,8 @@ def test_expected_results_e2e(e2eoutput_path):
 
     ####### Run the DRP walker for WP2
     print('Running walker for WP2')
-    walker.walk_corgidrp(data_filelist_WP2, '', output_dir)
-    fluxcal_file_WP2 = glob.glob(os.path.join(output_dir, '*abf_cal*.fits'))[0]
+    walker.walk_corgidrp(data_filelist_WP2, '', wp2_dir)
+    fluxcal_file_WP2 = glob.glob(os.path.join(wp2_dir, '*abf_cal*.fits'))[0]
     fluxcal_image_WP2 = data.Image(fluxcal_file_WP2)
 
     #check that the calibration file is configured correctly

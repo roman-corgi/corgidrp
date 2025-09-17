@@ -59,12 +59,12 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
         bright_frames.append(frame)
 
     # 3. Create output directory structure
-    main_output_dir = os.path.join(e2eoutput_path, "nd_filter_cal_band3_e2e_output")
+    main_output_dir = os.path.join(e2eoutput_path, "nd_filter_cal_band3_e2e")
     shutil.rmtree(main_output_dir, ignore_errors=True)
     os.makedirs(main_output_dir)
     
     # Create input_data subfolder
-    input_data_dir = os.path.join(main_output_dir, 'input_data')
+    input_data_dir = os.path.join(main_output_dir, 'input_l3')
     os.makedirs(input_data_dir)
 
     # Save raw files with proper filename conventions

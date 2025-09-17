@@ -149,13 +149,13 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     dataset = data.Dataset(images)
     
     # Create the output directory
-    corethroughput_outputdir = os.path.join(e2eoutput_path, 'corethroughout_e2e_output')
+    corethroughput_outputdir = os.path.join(e2eoutput_path, 'corethroughput_cal_e2e')
     if os.path.exists(corethroughput_outputdir):
         shutil.rmtree(corethroughput_outputdir)
     os.mkdir(corethroughput_outputdir)
 
     # save the input data
-    l2b_data_dir = os.path.join(corethroughput_outputdir, 'corethroughput_e2e_input_data')
+    l2b_data_dir = os.path.join(corethroughput_outputdir, 'input_l2b')
     os.mkdir(l2b_data_dir)
     dataset.save(filedir=l2b_data_dir)
     l2b_filenames = glob.glob(os.path.join(l2b_data_dir, '*.fits'))

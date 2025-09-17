@@ -35,14 +35,14 @@ def test_l2b_to_distortion(e2edata_path, e2eoutput_path):
 
     '''
 
-    distortion_outputdir = os.path.join(e2eoutput_path, "l2b_to_distortion_e2e_output")
+    distortion_outputdir = os.path.join(e2eoutput_path, "l2b_to_distortion_e2e")
     if os.path.exists(distortion_outputdir):
         import shutil
         shutil.rmtree(distortion_outputdir)
     os.makedirs(distortion_outputdir)
 
     # Create input_data subfolder
-    e2e_mockdata_path = os.path.join(distortion_outputdir, 'input_data')
+    e2e_mockdata_path = os.path.join(distortion_outputdir, 'input_l2b')
     if not os.path.exists(e2e_mockdata_path):
         os.makedirs(e2e_mockdata_path)
 

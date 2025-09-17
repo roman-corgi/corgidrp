@@ -164,13 +164,13 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     ########### Now run the DRP
 
     # make DRP output directory if needed
-    kgain_outputdir = os.path.join(e2eoutput_path, "kgain_cal_e2e_output")
+    kgain_outputdir = os.path.join(e2eoutput_path, "kgain_cal_e2e")
     if os.path.exists(kgain_outputdir):
         shutil.rmtree(kgain_outputdir)
     os.makedirs(kgain_outputdir)
 
     # Create input_data subfolder
-    input_data_dir = os.path.join(kgain_outputdir, 'input_data')
+    input_data_dir = os.path.join(kgain_outputdir, 'input_l1')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 

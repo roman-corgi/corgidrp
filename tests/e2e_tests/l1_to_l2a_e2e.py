@@ -75,16 +75,21 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     cic_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals", "cic_20240322.fits")
 
     # make output directory if needed
-    l2a_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_e2e_output")
+    l2a_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_e2e")
     if os.path.exists(l2a_outputdir):
         import shutil
         shutil.rmtree(l2a_outputdir)
     os.makedirs(l2a_outputdir)
 
     # Create input_data subfolder
-    input_data_dir = os.path.join(l2a_outputdir, 'input_data')
+    input_data_dir = os.path.join(l2a_outputdir, 'input_l1')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
+    
+    # Create calibrations subfolder
+    calibrations_dir = os.path.join(l2a_outputdir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
 
     l2a_tvac_outputdir = os.path.join(l2a_outputdir, "tvac_reference_data")
     if not os.path.exists(l2a_tvac_outputdir):
@@ -193,7 +198,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     base_time = datetime.now()
     nln_time_str = data.format_ftimeutc(base_time.isoformat())
     nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=l2a_outputdir, filename=nln_filename)
+    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
     this_caldb.create_entry(nonlinear_cal)
 
     # NoiseMap
@@ -219,7 +224,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     # Generate timestamp for DetectorNoiseMaps calibration
     dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
     dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
-    noise_map.save(filedir=l2a_outputdir, filename=dnm_filename)
+    noise_map.save(filedir=calibrations_dir, filename=dnm_filename)
     this_caldb.create_entry(noise_map)
 
     # KGain
@@ -232,7 +237,7 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
     # Generate timestamp for KGain calibration
     kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
     kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=l2a_outputdir, filename=kgain_filename)
+    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
     this_caldb.create_entry(kgain)
 
     ####### Run the walker on some test_data

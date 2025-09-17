@@ -82,7 +82,7 @@ def fix_headers_for_tvac(
             filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
         
         # Create new filename with proper L1 convention
-        input_data_dir = os.path.join(output_dir, 'bp_map_cal_e2e_input_data')
+        input_data_dir = os.path.join(output_dir, 'input_l1')
         if not os.path.exists(input_data_dir):
             os.mkdir(input_data_dir)
         new_filename = os.path.join(input_data_dir, f'cgi_{visitid}_{filetime}_l1_.fits')
@@ -106,10 +106,15 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # Create output directory for bad pixel map results if it doesn't exist
-    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_cal_e2e_output")
+    # Create main output directory and master dark subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "bp_map_cal_e2e")
+    bp_map_outputdir = os.path.join(main_output_dir, "bp_map_master_dark")
     if not os.path.exists(bp_map_outputdir):
-        os.mkdir(bp_map_outputdir)
+        os.makedirs(bp_map_outputdir)
+
+    calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
+    if not os.path.exists(calibrations_dir):
+        os.mkdir(calibrations_dir)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -130,7 +135,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     fix_str_for_tvac(l1_data_filelist)
 
     # Update file list to reflect the new filenames
-    input_data_dir = os.path.join(bp_map_outputdir, 'bp_map_cal_e2e_input_data')
+    input_data_dir = os.path.join(bp_map_outputdir, 'input_l1')
     l1_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
     
     # Extract visit ID from the first file's primary header
@@ -200,7 +205,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     # Generate filename with visitid and current time
     current_time = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')
     noise_maps_filename = f"cgi_{visitid}_{current_time}_dnm_cal.fits"
-    noise_maps.save(filedir=bp_map_outputdir, filename=noise_maps_filename)
+    noise_maps.save(filedir=calibrations_dir, filename=noise_maps_filename)
     this_caldb.create_entry(noise_maps)
     this_caldb.create_entry(noise_maps)
 
@@ -211,7 +216,7 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
                           input_dataset=mock_input_dataset)
     # Generate filename with visitid and current time
     flat_filename = f"cgi_{visitid}_{current_time}_flt_cal.fits"
-    flat.save(filedir=bp_map_outputdir, filename=flat_filename)
+    flat.save(filedir=calibrations_dir, filename=flat_filename)
     this_caldb.create_entry(flat)
 
     # Load and save bad pixel map data
@@ -221,14 +226,14 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
                               input_dataset=mock_input_dataset)
     # Generate filename with visitid and current time
     bp_map_filename = f"cgi_{visitid}_{current_time}_bpm_cal.fits"
-    bp_map.save(filedir=bp_map_outputdir, filename=bp_map_filename)
+    bp_map.save(filedir=calibrations_dir, filename=bp_map_filename)
     this_caldb.create_entry(bp_map)
 
     # Build and save a synthesized master dark frame
     master_dark = darks.build_synthesized_dark(mock_input_dataset, noise_maps)
     # Generate filename with visitid and current time
     master_dark_filename = f"cgi_{visitid}_{current_time}_drk_cal.fits"
-    master_dark.save(filedir=bp_map_outputdir, filename=master_dark_filename)
+    master_dark.save(filedir=calibrations_dir, filename=master_dark_filename)
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 
@@ -329,10 +334,15 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     l1_datadir = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "L1")
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
-    # Create output directory for bad pixel map results if it doesn't exist
-    bp_map_outputdir = os.path.join(e2eoutput_path, "bp_map_cal_e2e_output")
+    # Create main output directory and simulated dark subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "bp_map_cal_e2e")
+    bp_map_outputdir = os.path.join(main_output_dir, "bp_map_simulated_dark")
     if not os.path.exists(bp_map_outputdir):
-        os.mkdir(bp_map_outputdir)
+        os.makedirs(bp_map_outputdir)
+
+    calibrations_dir = os.path.join(bp_map_outputdir, "calibrations")
+    if not os.path.exists(calibrations_dir):
+        os.mkdir(calibrations_dir)
 
     # Paths to calibration files
     dark_current_path = os.path.join(processed_cal_path, "dark_current_20240322.fits")
@@ -349,7 +359,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     fix_headers_for_tvac(l1_data_filelist, bp_map_outputdir)
     
     # Update file list to reflect the new filenames
-    input_data_dir = os.path.join(bp_map_outputdir, 'input_data')
+    input_data_dir = os.path.join(bp_map_outputdir, 'input_l1')
     l1_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
     
     # Extract visit ID from the first file's primary header
@@ -399,7 +409,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
                           input_dataset=mock_input_dataset)
     # Generate filename with visitid and current time
     flat_filename = f"cgi_{visitid}_{current_time}_flt_cal.fits"
-    flat.save(filedir=bp_map_outputdir, filename=flat_filename)
+    flat.save(filedir=calibrations_dir, filename=flat_filename)
     this_caldb.create_entry(flat)
 
     # Create a simulated dark frame with random hot pixels for testing
@@ -430,7 +440,7 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
 
     # Generate filename with visitid and current time
     master_dark_filename = f"cgi_{visitid}_{current_time}_drk_cal.fits"
-    master_dark.save(filedir=bp_map_outputdir, filename=master_dark_filename)
+    master_dark.save(filedir=calibrations_dir, filename=master_dark_filename)
     this_caldb.create_entry(master_dark)
     master_dark_ref = master_dark.filepath
 

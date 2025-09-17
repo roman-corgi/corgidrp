@@ -37,14 +37,14 @@ def test_expected_results_e2e(e2eoutput_path):
     #FPAMNAME= 'HOLE'
     #SPAMNAME= 'OPEN
     flux_dataset = data.Dataset([flux_image])
-    output_dir = os.path.join(e2eoutput_path, 'flux_cal_band3_e2e_output')
+    output_dir = os.path.join(e2eoutput_path, 'flux_cal_band3_e2e')
 
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.makedirs(output_dir)
     
     # Create input_data subfolder
-    input_data_dir = os.path.join(output_dir, 'input_data')
+    input_data_dir = os.path.join(output_dir, 'input_l2b')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 

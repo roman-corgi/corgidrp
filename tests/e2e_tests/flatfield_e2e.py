@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import glob
 import pytest
 import numpy as np
@@ -51,12 +52,15 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e_output/flat_neptune_output")
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_neptune_output")
     if not os.path.exists(flat_outputdir):
         os.makedirs(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "input_data")
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     if not os.path.exists(flat_mock_inputdir):
         os.makedirs(flat_mock_inputdir)    
+    calibrations_dir = os.path.join(flat_outputdir, "calibrations")
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -160,7 +164,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
+    nonlinear_cal.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -173,7 +177,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
+    kgain.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -197,7 +201,7 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
+    noise_map.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -216,6 +220,16 @@ def test_flat_creation_neptune(e2edata_path, e2eoutput_path):
             step['keywords']['n_pix'] = 165 # full shaped pupil FOV
     walker.run_recipe(recipe, save_recipe_file=True)
 
+    # Organize L2a files into l1_to_l2a subfolder
+    l1_to_l2a_dir = os.path.join(flat_outputdir, "l1_to_l2a")
+    if not os.path.exists(l1_to_l2a_dir):
+        os.mkdir(l1_to_l2a_dir)
+    
+    # Move L2a files to l1_to_l2a subfolder
+    for filename in os.listdir(flat_outputdir):
+        if '_l2a' in filename and filename.endswith('.fits'):
+            filepath = os.path.join(flat_outputdir, filename)
+            shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
 
     ####### Test the flat field result
     # the requirement: <=0.71% error per resolution element
@@ -251,12 +265,15 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e_output/flat_uranus_output")
+    flat_outputdir = os.path.join(e2eoutput_path, "flatfield_cal_e2e/flat_uranus_output")
     if not os.path.exists(flat_outputdir):
         os.makedirs(flat_outputdir)
-    flat_mock_inputdir = os.path.join(flat_outputdir, "input_data")
+    flat_mock_inputdir = os.path.join(flat_outputdir, "input_l1")
     if not os.path.exists(flat_mock_inputdir):
-        os.makedirs(flat_mock_inputdir)    
+        os.makedirs(flat_mock_inputdir) 
+    calibrations_dir = os.path.join(flat_outputdir, "calibrations")
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -361,7 +378,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
+    nonlinear_cal.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_nln_cal.fits" )
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -374,7 +391,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
+    kgain.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_krn_cal.fits")
     this_caldb.create_entry(kgain, to_disk=False)
     this_caldb.save()
 
@@ -398,7 +415,7 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=flat_outputdir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
+    noise_map.save(filedir=calibrations_dir, filename=f"cgi_{visitid}_{current_time}_dnm_cal.fits")
     this_caldb.create_entry(noise_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -411,6 +428,16 @@ def test_flat_creation_uranus(e2edata_path, e2eoutput_path):
     recipe = walker.autogen_recipe(l1_flatfield_filelist, flat_outputdir)
     walker.run_recipe(recipe, save_recipe_file=True)
 
+    # Organize L2a files into l1_to_l2a subfolder
+    l1_to_l2a_dir = os.path.join(flat_outputdir, "l1_to_l2a")
+    if not os.path.exists(l1_to_l2a_dir):
+        os.mkdir(l1_to_l2a_dir)
+    
+    # Move L2a files to l1_to_l2a subfolder
+    for filename in os.listdir(flat_outputdir):
+        if '_l2a' in filename and filename.endswith('.fits'):
+            filepath = os.path.join(flat_outputdir, filename)
+            shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
 
     ####### Test the result
     # the requirement: <=0.71% error per resolution element

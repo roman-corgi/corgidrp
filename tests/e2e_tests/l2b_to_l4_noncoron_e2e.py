@@ -48,20 +48,23 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
 
     '''
 
-    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e_output")
+    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e")
     if os.path.exists(main_output_dir):
         shutil.rmtree(main_output_dir)
     os.makedirs(main_output_dir)
 
     # Create input_data subfolder
-    input_data_dir = os.path.join(main_output_dir, 'input_data')
+    input_data_dir = os.path.join(main_output_dir, 'input_l2b')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 
-    # Create l2b_to_l3_noncoron_output subfolder under main output directory
-    l2b_to_l3_output = os.path.join(main_output_dir, "l2b_to_l3_noncoron_output")
-    if not os.path.exists(l2b_to_l3_output):
-        os.makedirs(l2b_to_l3_output)
+    calibrations_dir = os.path.join(main_output_dir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
+
+    l2b_to_l3_dir = os.path.join(main_output_dir, "l2b_to_l3")
+    if not os.path.exists(l2b_to_l3_dir):
+        os.makedirs(l2b_to_l3_dir)
 
     ##################################################
     #### Generate an astrometric calibration file ####
@@ -98,7 +101,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     base_time = datetime.now()
     ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
     ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=l2b_to_l3_output, filename=ast_filename)
+    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -197,10 +200,10 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
     this_caldb.scan_dir_for_new_entries(corgidrp.default_cal_dir)
 
     l2b_data_filelist = sorted(glob.glob(os.path.join(input_data_dir, "*.fits")))
-    walker.walk_corgidrp(l2b_data_filelist, "", l2b_to_l3_output)
+    walker.walk_corgidrp(l2b_data_filelist, "", l2b_to_l3_dir)
 
     #Read in an L3 file
-    l3_filename = glob.glob(os.path.join(l2b_to_l3_output, "*l3_.fits"))[0]
+    l3_filename = glob.glob(os.path.join(l2b_to_l3_dir, "*l3_.fits"))[0]
     l3_image = Image(l3_filename)
 
     #Check if there's a WCS header
@@ -239,12 +242,12 @@ def test_l3_to_l4(e2eoutput_path):
         e2eoutput_path (str): Path to the output directory
     '''
 
-    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e_output")
-    e2eintput_path = os.path.join(main_output_dir, "l2b_to_l3_noncoron_output")
+    main_output_dir = os.path.join(e2eoutput_path, "l2b_to_l4_noncoron_e2e")
+    e2eintput_path = os.path.join(main_output_dir, "l2b_to_l3")
+    calibrations_dir = os.path.join(main_output_dir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
 
-    e2eoutput_path_l4 = os.path.join(main_output_dir, "l3_to_l4_noncoron_output")
-    if not os.path.exists(e2eoutput_path_l4):
-        os.makedirs(e2eoutput_path_l4)
 
     ##################################################
     #### Generate an astrometric calibration file ####
@@ -281,7 +284,7 @@ def test_l3_to_l4(e2eoutput_path):
     base_time = datetime.now()
     ast_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
     ast_filename = f"cgi_0000000000000000000_{ast_time_str}_ast_cal.fits"
-    astrom_cal.save(filedir=e2eoutput_path_l4, filename=ast_filename)
+    astrom_cal.save(filedir=calibrations_dir, filename=ast_filename)
 
     # add calibration file to caldb
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -305,7 +308,7 @@ def test_l3_to_l4(e2eoutput_path):
     # Generate timestamp for FluxcalFactor calibration
     abf_time_str = corgidata.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
     abf_filename = f"cgi_0000000000000000000_{abf_time_str}_abf_cal.fits"
-    fluxcal_fac.save(filedir=e2eoutput_path_l4, filename=abf_filename)
+    fluxcal_fac.save(filedir=calibrations_dir, filename=abf_filename)
     this_caldb.create_entry(fluxcal_fac)
 
     #####################################
@@ -319,13 +322,13 @@ def test_l3_to_l4(e2eoutput_path):
     
     l3_data_filelist = sorted(glob.glob(os.path.join(e2eintput_path, "*l3_.fits")))
 
-    walker.walk_corgidrp(l3_data_filelist, "", e2eoutput_path_l4)
+    walker.walk_corgidrp(l3_data_filelist, "", main_output_dir)
 
     ########################################################################
     #### Read in the psf_subtracted images and test for source detection ###
     ########################################################################
 
-    l4_filename = glob.glob(os.path.join(e2eoutput_path_l4, "*l4_.fits"))[0]
+    l4_filename = glob.glob(os.path.join(main_output_dir, "*l4_.fits"))[0]
     combined_image = Image(l4_filename)
     assert combined_image.filename == l3_data_filelist[-1].split(os.path.sep)[-1].replace("_l3_", "_l4_")
     

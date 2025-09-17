@@ -1,5 +1,6 @@
 import argparse
 import os
+import shutil
 import glob
 import pytest
 import numpy as np
@@ -36,16 +37,17 @@ def fix_str_for_tvac(
         fits_file.writeto(file, overwrite=True)
 
 def fix_headers_for_tvac(
-    list_of_fits,
-    output_dir,
+    list_of_fits
     ):
     """ 
     Fixes TVAC headers to be consistent with flight headers and updates filenames.
-    Writes headers back to disk with proper L1 filename convention.
+    Works in-place, updating files with proper L1 naming convention.
 
     Args:
         list_of_fits (list): list of FITS files that need to be updated.
-        output_dir (str): directory to write results to
+    
+    Returns:
+        list: updated list of file paths with new filenames
     """
     print("Fixing TVAC headers and filenames")
     for i, file in enumerate(list_of_fits):
@@ -74,18 +76,16 @@ def fix_headers_for_tvac(
         if filetime and 'T' in filetime:
             try:
                 dt = datetime.datetime.fromisoformat(filetime.replace('Z', '+00:00'))
-                filetime = dt.strftime('%Y%m%dt%H%M%S')
+                filetime = dt.strftime('%Y%m%dt%H%M%S%f')[:-5]
             except:
-                filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+                filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # fallback to current time
         elif not filetime:
-            filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S')  # fallback to current time
+            filetime = datetime.datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]  # fallback to current time
         
         
-        # Create new filename with proper L1 convention
-        input_data_dir = os.path.join(output_dir, 'astrom_cal_e2e_input_data')
-        if not os.path.exists(input_data_dir):
-            os.mkdir(input_data_dir)
-        new_filename = os.path.join(input_data_dir, f'cgi_{visitid}_{filetime}_l1_.fits')
+        # Create new filename with proper L1 convention (in same directory)
+        file_dir = os.path.dirname(file)
+        new_filename = os.path.join(file_dir, f'cgi_{visitid}_{filetime}_l1_.fits')
         
         # Adjust headers - only modify if keywords exist
         if 'OBSID' in prihdr:
@@ -121,6 +121,11 @@ def fix_headers_for_tvac(
         # Remove old file if it's different from new filename
         if file != new_filename and os.path.exists(file):
             os.remove(file)
+        
+        # Update the file in the list
+        list_of_fits[i] = new_filename
+    
+    return list_of_fits
 
 
 @pytest.mark.e2e
@@ -131,14 +136,19 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     noise_characterization_path = os.path.join(e2edata_path, "TV-20_EXCAM_noise_characterization", "darkmap")
 
     # make output directory if needed
-    astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_e2e_output")
+    astrom_cal_outputdir = os.path.join(e2eoutput_path, "astrom_cal_e2e")
     if not os.path.exists(astrom_cal_outputdir):
-        os.mkdir(astrom_cal_outputdir)
+        os.makedirs(astrom_cal_outputdir)
     # clean out any files from a previous run
     for f in os.listdir(astrom_cal_outputdir):
         file_path = os.path.join(astrom_cal_outputdir, f)
         if os.path.isfile(file_path):
             os.remove(file_path)
+            
+    # Create calibrations subfolder for mock calibration products
+    calibrations_dir = os.path.join(astrom_cal_outputdir, "calibrations")
+    if not os.path.exists(calibrations_dir):
+        os.mkdir(calibrations_dir)
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -153,12 +163,12 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     image_sources = mocks.create_astrom_data(jwst_calfield_path, add_gauss_noise=False)
     rows, cols, r0c0 = detector.unpack_geom('SCI', 'image')
     # create a directory in the output dir to hold the simulated data files
-    rawdata_dir = os.path.join(astrom_cal_outputdir, 'astrom_cal_e2e_input_data')
-    if not os.path.exists(rawdata_dir):
-        os.mkdir(rawdata_dir)
+    input_data_dir = os.path.join(astrom_cal_outputdir, 'input_l1')
+    if not os.path.exists(input_data_dir):
+        os.mkdir(input_data_dir)
     # clean out any files from a previous run
-    for f in os.listdir(rawdata_dir):
-        file_path = os.path.join(rawdata_dir, f)
+    for f in os.listdir(input_data_dir):
+        file_path = os.path.join(input_data_dir, f)
         if os.path.isfile(file_path):
             os.remove(file_path)
 
@@ -201,11 +211,11 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
             hdulist[0].header['RA'] = image_sources[0].pri_hdr['RA'] 
             hdulist[0].header['DEC'] = image_sources[0].pri_hdr['DEC']
             # save to the data dir in the output directory
-            hdulist.writeto(os.path.join(rawdata_dir, dark[:-5]+'.fits'), overwrite=True)
+            hdulist.writeto(os.path.join(input_data_dir, dark[:-5]+'.fits'), overwrite=True)
 
     # define the raw science data to process
     ## replace w my raw data sets
-    sim_data_filelist = [os.path.join(rawdata_dir, f) for f in os.listdir(rawdata_dir)] # full paths to simulated data
+    sim_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir)] # full paths to simulated data
     mock_cal_filelist = []
     # grab 2 files of real data to mock the calibration
     for filename in os.listdir(l1_datadir):
@@ -214,12 +224,8 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
         if len(mock_cal_filelist) == 2:
             break
 
-    # update headers of TVAC data
-    fix_headers_for_tvac(sim_data_filelist, astrom_cal_outputdir)
-
-    # Update file list to reflect the new filenames
-    input_data_dir = os.path.join(astrom_cal_outputdir, 'astrom_cal_e2e_input_data')
-    sim_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
+    # update headers of TVAC data (works in-place and returns updated file list)
+    sim_data_filelist = fix_headers_for_tvac(sim_data_filelist)
     
     # Now fix the string values in the new files
     fix_str_for_tvac(sim_data_filelist)
@@ -249,7 +255,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     base_time = datetime.datetime.now()
     nln_time_str = data.format_ftimeutc(base_time.isoformat())
     nln_filename = f"cgi_0000000000000090526_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=astrom_cal_outputdir, filename=nln_filename)
+    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -262,7 +268,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # Generate timestamp for KGain calibration
     kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
     kgain_filename = f"cgi_0000000000000090526_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=astrom_cal_outputdir, filename=kgain_filename)
+    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -288,7 +294,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # Generate timestamp for DetectorNoiseMaps calibration
     dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
     dnm_filename = f"cgi_0000000000000090526_{dnm_time_str}_dnm_cal.fits"
-    noise_map.save(filedir=astrom_cal_outputdir, filename=dnm_filename)
+    noise_map.save(filedir=calibrations_dir, filename=dnm_filename)
     this_caldb.create_entry(noise_map)
 
     ## Flat field
@@ -298,7 +304,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # Generate timestamp for FlatField calibration
     flat_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
     flat_filename = f"cgi_0000000000000090526_{flat_time_str}_flt_cal.fits"
-    flat.save(filedir=astrom_cal_outputdir, filename=flat_filename)
+    flat.save(filedir=calibrations_dir, filename=flat_filename)
     this_caldb.create_entry(flat)
 
     # bad pixel map
@@ -308,7 +314,7 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     # Generate timestamp for BadPixelMap calibration
     bpm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 4) % 60)).isoformat())
     bpm_filename = f"cgi_0000000000000090526_{bpm_time_str}_bpm_cal.fits"
-    bp_map.save(filedir=astrom_cal_outputdir, filename=bpm_filename)
+    bp_map.save(filedir=calibrations_dir, filename=bpm_filename)
     this_caldb.create_entry(bp_map)
 
     # now get any default cal files that might be needed; if any reside in the folder that are not 
@@ -319,6 +325,36 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ####### Run the walker on some test_data
 
     walker.walk_corgidrp(sim_data_filelist, "", astrom_cal_outputdir)
+    
+    # Organize output files into subdirectories
+    
+    # Create subdirectories for L2a and L2b files
+    l1_to_l2a_dir = os.path.join(astrom_cal_outputdir, "l1_to_l2a")
+    l2a_to_l2b_dir = os.path.join(astrom_cal_outputdir, "l2a_to_l2b")
+    
+    if not os.path.exists(l1_to_l2a_dir):
+        os.mkdir(l1_to_l2a_dir)
+    if not os.path.exists(l2a_to_l2b_dir):
+        os.mkdir(l2a_to_l2b_dir)
+    
+    # Move L2a and L2b files to appropriate subdirectories
+    for filename in os.listdir(astrom_cal_outputdir):
+        filepath = os.path.join(astrom_cal_outputdir, filename)
+        if os.path.isfile(filepath):
+            if '_l2a' in filename and filename.endswith('.fits'):
+                shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
+            elif '_l2b' in filename and filename.endswith('.fits'):
+                shutil.move(filepath, os.path.join(l2a_to_l2b_dir, filename))
+            elif filename.endswith('_recipe.json'):
+                # Only move recipes that explicitly match the expected patterns
+                if 'l1_to_l2a' in filename:
+                    shutil.move(filepath, os.path.join(l1_to_l2a_dir, filename))
+                elif 'l2a_to_l2b' in filename:
+                    shutil.move(filepath, os.path.join(l2a_to_l2b_dir, filename))
+                # Leave other recipes (like l2b_to_boresight) in the main directory
+            elif '_cal.fits' in filename and not filename.endswith('_ast_cal.fits'):
+                # Move calibration files to calibrations folder, but exclude ast_cal (test output)
+                shutil.move(filepath, os.path.join(calibrations_dir, filename))
 
     ## Check against astrom ground truth -- target= [80.553428801, -69.514096821],
     ## plate scale = 21.8[mas/pixel], north angle = 45 [deg]
@@ -331,7 +367,12 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     expected_northangle = 45
     target = (80.553428801, -69.514096821)
 
-    astrom_cal = data.AstrometricCalibration(glob.glob(os.path.join(astrom_cal_outputdir, '*_ast_cal.fits'))[0])
+    # Look for astrometric calibration file in the main directory (it's not L2a or L2b data)
+    astrom_cal_files = glob.glob(os.path.join(astrom_cal_outputdir, '*_ast_cal.fits'))
+    if not astrom_cal_files:
+        # If not in main directory, check subdirectories
+        astrom_cal_files = glob.glob(os.path.join(astrom_cal_outputdir, '**', '*_ast_cal.fits'), recursive=True)
+    astrom_cal = data.AstrometricCalibration(astrom_cal_files[0])
 
     # check that the astrometric calibration filename is based on the last file in the input file list
     expected_last_filename = sim_data_filelist[-1].split('_l1_')[0].split(os.path.sep)[-1]

@@ -44,12 +44,12 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
         bright_frames.append(frame)
 
     # 3. Save raw files for the walker
-    simdata_dir = os.path.join(e2eoutput_path, "nd_filter_cal_e2e_output")
+    simdata_dir = os.path.join(e2eoutput_path, "nd_filter_cal_e2e")
     shutil.rmtree(simdata_dir, ignore_errors=True)
     os.makedirs(simdata_dir)
 
     # Create input_data subfolder
-    input_data_dir = os.path.join(simdata_dir, 'input_data')
+    input_data_dir = os.path.join(simdata_dir, 'input_l3')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
 

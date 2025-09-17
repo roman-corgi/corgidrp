@@ -121,7 +121,7 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
     
     # Create subdirectories for l1_to_dnm
     input_l1_dir = os.path.join(l1_to_dnm_dir, 'input_l1')
-    processed_l2a_dir = os.path.join(l1_to_dnm_dir, 'processed_l2a')
+    processed_l2a_dir = os.path.join(l1_to_dnm_dir, 'l1_to_l2a')
     calibrations_dir = os.path.join(l1_to_dnm_dir, 'calibrations')
     
     os.makedirs(input_l1_dir)

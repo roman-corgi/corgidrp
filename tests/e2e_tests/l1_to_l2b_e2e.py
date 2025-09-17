@@ -80,16 +80,19 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e_output")
+    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e")
     if os.path.exists(test_outputdir):
         import shutil
         shutil.rmtree(test_outputdir)
     os.makedirs(test_outputdir)
 
     # Create input_data subfolder
-    input_data_dir = os.path.join(test_outputdir, 'input_data')
+    input_data_dir = os.path.join(test_outputdir, 'input_l1')
     if not os.path.exists(input_data_dir):
         os.makedirs(input_data_dir)
+    calibrations_dir = os.path.join(test_outputdir, 'calibrations')
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
     l2a_tvac_outputdir = os.path.join(test_outputdir, "tvac_reference_data", "l2a")
     if not os.path.exists(l2a_tvac_outputdir):
         os.makedirs(l2a_tvac_outputdir)
@@ -103,18 +106,12 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     for file in os.listdir(l2b_tvac_outputdir):
         os.remove(os.path.join(l2b_tvac_outputdir, file))
     # separate L2a and L2b outputdirs
-    l2a_outputdir = os.path.join(test_outputdir, "l2a")
+    l2a_outputdir = os.path.join(test_outputdir, "l1_to_l2a")
     if not os.path.exists(l2a_outputdir):
         os.mkdir(l2a_outputdir)
     # clean up by removing old files
     for file in os.listdir(l2a_outputdir):
         os.remove(os.path.join(l2a_outputdir, file))
-    l2b_outputdir = os.path.join(test_outputdir, "l2b")
-    if not os.path.exists(l2b_outputdir):
-        os.mkdir(l2b_outputdir)
-    # clean up by removing old files
-    for file in os.listdir(l2b_outputdir):
-        os.remove(os.path.join(l2b_outputdir, file))
 
     # assume all cals are in the same directory
     nonlin_path = os.path.join(processed_cal_path, "nonlin_table_240322.txt")
@@ -150,7 +147,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     base_time = datetime.now()
     nln_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
     nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
-    nonlinear_cal.save(filedir=test_outputdir, filename=nln_filename)
+    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -163,7 +160,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     # Generate timestamp for KGain calibration
     kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
     kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
-    kgain.save(filedir=test_outputdir, filename=kgain_filename)
+    kgain.save(filedir=calibrations_dir, filename=kgain_filename)
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -189,7 +186,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     # Generate timestamp for DetectorNoiseMaps calibration
     dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
     dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
-    noise_map.save(filedir=test_outputdir, filename=dnm_filename)
+    noise_map.save(filedir=calibrations_dir, filename=dnm_filename)
     this_caldb.create_entry(noise_map)
 
     ## Flat field
@@ -199,7 +196,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     # Generate timestamp for FlatField calibration
     flt_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 4) % 60)).isoformat())
     flt_filename = f"cgi_0000000000000000000_{flt_time_str}_flt_cal.fits"
-    flat.save(filedir=test_outputdir, filename=flt_filename)
+    flat.save(filedir=calibrations_dir, filename=flt_filename)
     this_caldb.create_entry(flat)
 
     # bad pixel map
@@ -209,7 +206,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     # Generate timestamp for BadPixelMap calibration
     bpm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 5) % 60)).isoformat())
     bpm_filename = f"cgi_0000000000000000000_{bpm_time_str}_bpm_cal.fits"
-    bp_map.save(filedir=test_outputdir, filename=bpm_filename)
+    bp_map.save(filedir=calibrations_dir, filename=bpm_filename)
     this_caldb.create_entry(bp_map)
 
     # define the raw science data to process
@@ -299,7 +296,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
 
     # l2a -> l2b processing
     new_l2a_filenames = [os.path.join(l2a_outputdir, f) for f in os.listdir(l2a_outputdir) if f.endswith('l2a.fits')] #[os.path.join(l2a_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
-    walker.walk_corgidrp(new_l2a_filenames, "", l2b_outputdir)
+    walker.walk_corgidrp(new_l2a_filenames, "", test_outputdir)
 
     ##### Check against TVAC data
     # l2a data
@@ -314,7 +311,7 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         assert np.all(np.abs(diff) < 1e-5)
 
     # l2b data
-    new_l2b_filenames = [os.path.join(l2b_outputdir, f) for f in os.listdir(l2b_outputdir) if f.endswith('l2b.fits') ] #[os.path.join(l2b_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
+    new_l2b_filenames = [os.path.join(test_outputdir, f) for f in os.listdir(test_outputdir) if f.endswith('l2b.fits') ] #[os.path.join(l2b_outputdir, "{0}.fits".format(i)) for i in [90499, 90500]]
 
     for new_filename, tvac_filename in zip(sorted(new_l2b_filenames), sorted(tvac_l2b_filelist)):
         img = data.Image(new_filename)
