@@ -740,11 +740,44 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
 
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
+
+def get_shift_correlation(
+    img1,
+    img2,
+    ):
+    """ Find the array shift that maximizes the phase correlation between two
+      images.
+
+    Args:
+      img1 (array): first two dimensional array.
+      img2 (array): second two dimensional array.
+
+    Returns:
+      Image shift in image pixels that maximizes the phase correlation of the
+      first image with the second one.
+    """
+    breakpoint()
+    #TODO: Pad images?
+
+    dft1 = np.fft.fftshift(np.fft.fft2(img1))
+    dft2 = np.fft.fftshift(np.fft.fft2(img2))
+
+    # Cross-power spectrum (Add epsilon to avoid division by zero, from Google Labs)
+    R = (dft1 * np.conj(dft2)) / (np.abs(dft1 * np.conj(dft2)) + 1e-10)
+
+    # Inverse FFT: Imaginary part are numerical residuals. The original data are real.
+    poc_real = np.real(np.fft.ifft2(R))
+
+    # Find the peak location (shift)
+    shift = np.unravel_index(np.argmax(np.abs(poc_real)), poc_real.shape)
+
+    breakpoint()
+    #TODO: Double check how to apply the shift
+    return shift
+
 def star_spec_registration(
     dataset_fsm,
-    dataset_template,
-    ycent_template=0,
-    yoffset_template=0,
+    pathfiles_template,
     slit_align_err=0,
     halfheight=30):
     """ This function addresses:
@@ -769,12 +802,9 @@ def star_spec_registration(
           – FSMX, FSMY (float64)
           – CFAMNAME (same for all images)
           – FSAMNAME = OPEN, R1C2, R6C5, R3C1
-      dataset_template (Dataset): Dataset containing the star spectrum that is
-        used as a template to find the image in the dataset_fsm that best
-        matches it.
-      ycent_target (float or array): true y centroid of the template PSF; for
-        accurate results this must be determined in advance.
-      yoffset_template (float or array): TBD proper docstring.
+      pathfiles_template (array): array of path and filenames containing the 
+        simulated star spectrum that are used as a template to find the image
+        in dataset_fsm that best matches it.
       slit_align_err (float64): Distance between the source and the center of
         the slit aperture, measured along the narrow axis of the slit aperture,
         in units of EXCAM pixels. It is determined after each observation by
@@ -782,18 +812,11 @@ def star_spec_registration(
       halfheight: 1/2 the height of the box used for the fit.
 
     Returns:
-      Dispersed star image whose PSF-to-FSAM slit alignment most closely matches
-      that of the target source.
-        HDU0 = header only
-        HDU1 = binary table containing: 
-          • BESTFSMX, BESTFSMY (float64): offsets of best-matching image
-          • SLITERR (float64): alignment error value
-          • BESTFILE (string): filename of best-matching image (also written to HISTORY)
-        HDU2 = header only (for consistency)
-        HDU3 = header only (for consistency)
+      Filenames with the star image whose PSF-to-FSAM slit alignment most
+      closely matches that of the target source.
       
     """
-    # Confirm Spectroscopy configuration based on supported values for spectroscopy
+    # Confirming the spectroscopy configuration for different PAMs
     # CFAM
     cfam_name = dataset_fsm[0].ext_hdr['CFAMNAME'].upper()
     if cfam_name.find('3') != -1:
@@ -824,7 +847,13 @@ def star_spec_registration(
     if (fsam_name != 'OPEN' and fsam_name != 'R1C2' and fsam_name != 'R6C5' and
         fsam_name != 'R3C1'):
         raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
-    # Wavelength zero-point solution must be present in template data
+
+    # Make sure that all template files exist
+    for file in pathfiles_template:
+        if os.path.exists(file) == False:
+            raise Exception(f'Template file {file} not found.')
+
+    # TODO: Wavelength zero-point solution must be present in template data or passed in the function?
     try:
         wv0_x = dataset_template[0].ext_hdr['WV0_X']
         wv0_y = dataset_template[0].ext_hdr['WV0_Y']
@@ -840,21 +869,20 @@ def star_spec_registration(
         assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
         assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
         assert exthdr['FSAMNAME'].upper() in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
-        # Same wavelength zero-point
+        # TODO: Header keyword or function keyword: Same wavelength zero-point
         assert exthdr['WV0_X'] == wv0_x and exthdr['WV0_Y'] == wv0_y, f"Wavelength zero-point values {exthdr['WV0_X']}, {exthdr['WV0_Y']} differ from expected values {wv0_x}, {wv0_y}"
 
         # Confirm presence of FSMX, FSMY
         assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
 
-    # Copies
-    dataset_fsm = dataset_fsm.copy()
-    dataset_template = dataset_template.copy()
-
     # Find closest template offset to the one measured in the data
     slit_idx = int(np.abs(slit_align_err - yoffset_template).argmin())
 
-    # TODO: cross-correlate input data with template and crop around when the 
-    # simulations with CORGISIM are ready
+    # Copies
+    # TODO: Either copies or create Dataset from filenames and crop directly.
+    # Crop to the same size as template data
+    dataset_fsm = dataset_fsm.copy()
+    dataset_template = dataset_template.copy()
 
     # Find best PSF centroid fit for each image compared to the template
     # Cost function: Start with any large value that cannot happen. Units are
@@ -862,8 +890,16 @@ def star_spec_registration(
     # the guess value to its wavelength zero-point
     zeropt_dist = 1e8
     for idx_img, img in enumerate(dataset_fsm):
-        x_fit, y_fit = fit_psf_centroid(img.data,
-                     dataset_template[slit_idx].data,
+        img_tmp = img.data
+        temp = dataset_template[slit_idx].data
+        # TODO: cross-correlate input data with template
+        shift_corr = get_shift_correlation(img_tmp, temp)
+        # TODO: Center FSM data accorsing to their cross-correlation with the
+        img_tmp = np.shift(img_tmp)
+        img_tmp = img_tmp[:,:]
+        # template data and match the size of template data
+        x_fit, y_fit = fit_psf_centroid(img_tmp,
+                     temp,
                      # TODO: Waiting for xcent_template=None bug to be resolved
                      xcent_template = wv0_x,
                      ycent_template = ycent_template[slit_idx],
