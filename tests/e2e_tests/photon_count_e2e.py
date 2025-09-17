@@ -40,13 +40,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         os.makedirs(calibrations_dir)
     
     # Create l2a_to_l2b_output subfolder
-    l2a_to_l2b_output_dir = os.path.join(output_dir, 'l2a_to_l2b_output')
+    l2a_to_l2b_output_dir = os.path.join(output_dir, 'l2a_to_l2b')
     if not os.path.exists(l2a_to_l2b_output_dir):
         os.makedirs(l2a_to_l2b_output_dir)
 
     output_ill_dir = os.path.join(input_data_dir, 'ill_l1_frames')
     output_dark_dir = os.path.join(input_data_dir, 'dark_l1_frames')
-    output_l2a_dir = os.path.join(output_dir, 'l1_to_l2a_output')
+    output_l2a_dir = os.path.join(output_dir, 'l1_to_l2a')
     if not os.path.exists(output_ill_dir):
         os.makedirs(output_ill_dir)
     if not os.path.exists(output_dark_dir):

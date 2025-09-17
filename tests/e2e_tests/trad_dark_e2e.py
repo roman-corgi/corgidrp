@@ -108,8 +108,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
-    # make output directory if needed
-    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    # Create main output directory and full-frame test subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    build_trad_dark_outputdir = os.path.join(main_output_dir, "trad_dark_full_frame")
     if os.path.exists(build_trad_dark_outputdir):
         import shutil
         shutil.rmtree(build_trad_dark_outputdir)
@@ -352,8 +353,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     fpn_path = os.path.join(processed_cal_path, "fpn_20240322.fits")
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
-    # make output directory if needed
-    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    # Create main output directory and image-area test subfolder
+    main_output_dir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    build_trad_dark_outputdir = os.path.join(main_output_dir, "trad_dark_image_area")
     if os.path.exists(build_trad_dark_outputdir):
         import shutil
         shutil.rmtree(build_trad_dark_outputdir)
