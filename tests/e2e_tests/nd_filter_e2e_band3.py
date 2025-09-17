@@ -1,5 +1,6 @@
 import os, shutil, glob, argparse
 import pytest
+from datetime import datetime, timedelta
 
 import corgidrp.mocks as mocks
 import corgidrp.data as data
@@ -57,26 +58,35 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
         frame.ext_hdr['CFAMNAME']= cfam_name
         bright_frames.append(frame)
 
-    # 3. Save raw files for the walker
-    simdata_dir = os.path.join(e2eoutput_path, "nd_filter_e2e_output")
-    shutil.rmtree(simdata_dir, ignore_errors=True)
-    os.makedirs(simdata_dir)
+    # 3. Create output directory structure
+    main_output_dir = os.path.join(e2eoutput_path, "nd_filter_cal_band3_e2e_output")
+    shutil.rmtree(main_output_dir, ignore_errors=True)
+    os.makedirs(main_output_dir)
+    
+    # Create input_data subfolder
+    input_data_dir = os.path.join(main_output_dir, 'input_data')
+    os.makedirs(input_data_dir)
 
+    # Save raw files with proper filename conventions
+    base_time = datetime.now()
+    visitid = "0200001999001000001"  # Use consistent visitid
+    
     for i, frame in enumerate(dim_frames + bright_frames):
-        input_prihdr = frame.pri_hdr
-        input_exthdr = frame.ext_hdr
-        frame.save(simdata_dir, f"CGI_{input_prihdr['VISITID']}_{data.format_ftimeutc(input_exthdr['FTIMEUTC'])}_l3_.fits")
+        # Generate unique timestamp for each frame
+        unique_time = (base_time + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        frame.filename = f"cgi_{visitid}_{unique_time}_l3_.fits"
+        frame.save(filedir=input_data_dir)
 
-    filelist = [os.path.join(simdata_dir, f) for f in os.listdir(simdata_dir)]
+    filelist = sorted(glob.glob(os.path.join(input_data_dir, "*.fits")))
 
-    # 4. Run the DRP walker with outputs saved in the current folder (e2eoutput_path)
+    # 4. Run the DRP walker with outputs saved in the main output directory
     # Remove old NDF cal files first
-    for old_file in glob.glob(os.path.join(simdata_dir, "*ndf_cal.fits")):
+    for old_file in glob.glob(os.path.join(main_output_dir, "*ndf_cal.fits")):
         os.remove(old_file)
-    walker.walk_corgidrp(filelist, "", simdata_dir)
+    walker.walk_corgidrp(filelist, "", main_output_dir)
 
     # 5. Load product & assert if calculated OD matches the input
-    nd_file = glob.glob(os.path.join(simdata_dir, "*_ndf_cal*.fits"))
+    nd_file = glob.glob(os.path.join(main_output_dir, "*_ndf_cal*.fits"))
     nd_cal  = data.NDFilterSweetSpotDataset(nd_file[0])
 
     recovered_od = float(nd_cal.od_values[0])  # use the first entry for the check
