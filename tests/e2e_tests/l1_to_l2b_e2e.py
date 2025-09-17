@@ -4,6 +4,7 @@ import pytest
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.mocks as mocks
@@ -79,23 +80,25 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     processed_cal_path = os.path.join(e2edata_path, "TV-36_Coronagraphic_Data", "Cals")
 
     # make output directory if needed
-    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_output")
-    if not os.path.exists(test_outputdir):
-        os.mkdir(test_outputdir)
-    # clean up by removing old files
-    for file in os.listdir(test_outputdir):
-        if not os.path.isfile(os.path.join(test_outputdir, file)):
-            continue
-        os.remove(os.path.join(test_outputdir, file))
-    l2a_tvac_outputdir = os.path.join(e2eoutput_path, "l1_to_l2a_tvac_output")
+    test_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_e2e_output")
+    if os.path.exists(test_outputdir):
+        import shutil
+        shutil.rmtree(test_outputdir)
+    os.makedirs(test_outputdir)
+
+    # Create input_data subfolder
+    input_data_dir = os.path.join(test_outputdir, 'input_data')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    l2a_tvac_outputdir = os.path.join(test_outputdir, "tvac_reference_data", "l2a")
     if not os.path.exists(l2a_tvac_outputdir):
-        os.mkdir(l2a_tvac_outputdir)
+        os.makedirs(l2a_tvac_outputdir)
     # clean up by removing old files
     for file in os.listdir(l2a_tvac_outputdir):
         os.remove(os.path.join(l2a_tvac_outputdir, file))
-    l2b_tvac_outputdir = os.path.join(e2eoutput_path, "l1_to_l2b_tvac_output")
+    l2b_tvac_outputdir = os.path.join(test_outputdir, "tvac_reference_data", "l2b")
     if not os.path.exists(l2b_tvac_outputdir):
-        os.mkdir(l2b_tvac_outputdir)
+        os.makedirs(l2b_tvac_outputdir)
     # clean up by removing old files
     for file in os.listdir(l2b_tvac_outputdir):
         os.remove(os.path.join(l2b_tvac_outputdir, file))
@@ -143,7 +146,11 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     nonlin_dat = np.genfromtxt(nonlin_path, delimiter=",")
     nonlinear_cal = data.NonLinearityCalibration(nonlin_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                                 input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=test_outputdir, filename="mock_nonlinearcal.fits" )
+    # Generate timestamp for NonlinearityCalibration
+    base_time = datetime.now()
+    nln_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 1) % 60)).isoformat())
+    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
+    nonlinear_cal.save(filedir=test_outputdir, filename=nln_filename)
     this_caldb.create_entry(nonlinear_cal)
 
     # KGain
@@ -153,7 +160,10 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     ptc = np.column_stack([signal_array, noise_array])
     kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
-    kgain.save(filedir=test_outputdir, filename="mock_kgain.fits")
+    # Generate timestamp for KGain calibration
+    kgain_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 2) % 60)).isoformat())
+    kgain_filename = f"cgi_0000000000000000000_{kgain_time_str}_krn_cal.fits"
+    kgain.save(filedir=test_outputdir, filename=kgain_filename)
     this_caldb.create_entry(kgain)
 
     # NoiseMap
@@ -176,26 +186,66 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
     noise_map = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                     input_dataset=mock_input_dataset, err=noise_map_noise,
                                     dq = noise_map_dq, err_hdr=err_hdr)
-    noise_map.save(filedir=test_outputdir, filename="mock_detnoisemaps.fits")
+    # Generate timestamp for DetectorNoiseMaps calibration
+    dnm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 3) % 60)).isoformat())
+    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
+    noise_map.save(filedir=test_outputdir, filename=dnm_filename)
     this_caldb.create_entry(noise_map)
 
     ## Flat field
     with fits.open(flat_path) as hdulist:
         flat_dat = hdulist[0].data
     flat = data.FlatField(flat_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    flat.save(filedir=test_outputdir, filename="mock_flat.fits")
+    # Generate timestamp for FlatField calibration
+    flt_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 4) % 60)).isoformat())
+    flt_filename = f"cgi_0000000000000000000_{flt_time_str}_flt_cal.fits"
+    flat.save(filedir=test_outputdir, filename=flt_filename)
     this_caldb.create_entry(flat)
 
     # bad pixel map
     with fits.open(bp_path) as hdulist:
         bp_dat = hdulist[0].data
     bp_map = data.BadPixelMap(bp_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr, input_dataset=mock_input_dataset)
-    bp_map.save(filedir=test_outputdir, filename="mock_bpmap.fits")
+    # Generate timestamp for BadPixelMap calibration
+    bpm_time_str = data.format_ftimeutc((base_time.replace(second=(base_time.second + 5) % 60)).isoformat())
+    bpm_filename = f"cgi_0000000000000000000_{bpm_time_str}_bpm_cal.fits"
+    bp_map.save(filedir=test_outputdir, filename=bpm_filename)
     this_caldb.create_entry(bp_map)
 
     # define the raw science data to process
 
     l1_data_filelist = [os.path.join(l1_datadir, os.listdir(l1_datadir)[i]) for i in [0,1]] #[os.path.join(l1_datadir, "{0}.fits".format(i)) for i in [90499, 90500]] # just grab the first two files
+
+    # Generate proper filenames with visitid and current time
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Extract visit ID from primary header VISITID keyword of first file
+    if l1_data_filelist:
+        with fits.open(l1_data_filelist[0]) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                # Convert to string and pad to 19 digits
+                visitid = str(visitid).zfill(19)
+            else:
+                # Fallback: use default visitid
+                visitid = "0000000000000000000"
+    else:
+        visitid = "0000000000000000000"
+
+    # Copy files to input_data directory with proper naming
+    for i, file_path in enumerate(l1_data_filelist):
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
+        new_file_path = os.path.join(input_data_dir, new_filename)
+        import shutil
+        shutil.copy2(file_path, new_file_path)
+    
+    # Update l1_data_filelist to point to new files
+    l1_data_filelist = []
+    for f in os.listdir(input_data_dir):
+        if f.endswith('.fits'):
+            l1_data_filelist.append(os.path.join(input_data_dir, f))
     # tvac_l2a_filelist = [os.path.join(l2a_datadir, os.listdir(l2a_datadir)[i]) for i in [0,1]] #[os.path.join(l2a_datadir, "{0}.fits".format(i)) for i in [90528, 90530]] # just grab the first two files
     # tvac_l2b_filelist = [os.path.join(l2b_datadir, os.listdir(l2b_datadir)[i]) for i in [0,1]] #[os.path.join(l2b_datadir, "{0}.fits".format(i)) for i in [90529, 90531]] # just grab the first two files
     tvac_l2a_filelist = []
@@ -314,7 +364,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
     #e2edata_dir =  '/home/jwang/Desktop/CGI_TVAC_Data/'
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
     outputdir = thisfile_dir
 
     ap = argparse.ArgumentParser(description="run the l1->l2a end-to-end test")
