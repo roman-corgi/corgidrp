@@ -5,6 +5,7 @@ import re
 import numpy as np
 import astropy.time as time
 import astropy.io.fits as fits
+from datetime import datetime, timedelta
 import corgidrp
 import corgidrp.data as data
 import corgidrp.detector as detector
@@ -108,12 +109,19 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
     # make output directory if needed
-    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
-    if not os.path.exists(build_trad_dark_outputdir):
-        os.mkdir(build_trad_dark_outputdir)
+    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    if os.path.exists(build_trad_dark_outputdir):
+        import shutil
+        shutil.rmtree(build_trad_dark_outputdir)
+    os.makedirs(build_trad_dark_outputdir)
 
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
+    # Create input_data and calibrations subfolders
+    input_data_dir = os.path.join(build_trad_dark_outputdir, 'input_l1')
+    calibrations_dir = os.path.join(build_trad_dark_outputdir, 'calibrations')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
 
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -139,6 +147,37 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
+    # Generate proper filenames with visitid and current time
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Extract visit ID from primary header VISITID keyword of first file
+    if trad_dark_data_filelist:
+        with fits.open(trad_dark_data_filelist[0]) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                # Convert to string and pad to 19 digits
+                visitid = str(visitid).zfill(19)
+            else:
+                # Fallback: use default visitid
+                visitid = "0000000000000000000"
+    else:
+        visitid = "0000000000000000000"
+
+    # Copy files to input_data directory with proper naming
+    for i, file_path in enumerate(trad_dark_data_filelist):
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
+        new_file_path = os.path.join(input_data_dir, new_filename)
+        import shutil
+        shutil.copy2(file_path, new_file_path)
+    
+    # Update trad_dark_data_filelist to point to new files
+    trad_dark_data_filelist = []
+    for f in os.listdir(input_data_dir):
+        if f.endswith('.fits'):
+            trad_dark_data_filelist.append(os.path.join(input_data_dir, f))
+
     # modify headers from TVAC to in-flight headers
     #fix_headers_for_tvac(trad_dark_data_filelist)
     fix_str_for_tvac(trad_dark_data_filelist)
@@ -162,7 +201,11 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=build_trad_dark_outputdir, filename="mock_nonlinearcal.fits" )
+    # Generate timestamp for NonLinearityCalibration
+    base_time = datetime.now()
+    nln_time_str = data.format_ftimeutc(base_time.isoformat())
+    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
+    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -193,7 +236,10 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
+    # Generate timestamp for DetectorNoiseMaps
+    dnm_time_str = data.format_ftimeutc((base_time + timedelta(seconds=1)).isoformat())
+    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
+    noise_maps.save(filedir=calibrations_dir, filename=dnm_filename)
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -202,7 +248,10 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
                                 input_dataset=mock_input_dataset)
-    kgain.save(filedir=build_trad_dark_outputdir, filename="mock_kgain.fits")
+    # Generate timestamp for KGain
+    krn_time_str = data.format_ftimeutc((base_time + timedelta(seconds=2)).isoformat())
+    krn_filename = f"cgi_0000000000000000000_{krn_time_str}_krn_cal.fits"
+    kgain.save(filedir=calibrations_dir, filename=krn_filename)
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -273,7 +322,9 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
     TVAC_trad_dark = mean_frame #fits.getdata(TVAC_dark_path) 
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
-    pass
+    
+    # Print success message
+    print('e2e test for trad_dark calibration passed')
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -302,12 +353,19 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     cic_path = os.path.join(processed_cal_path, "cic_20240322.fits")
 
     # make output directory if needed
-    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "build_trad_dark_output")
-    if not os.path.exists(build_trad_dark_outputdir):
-        os.mkdir(build_trad_dark_outputdir)
-    # remove any files in the output directory that may have been there previously
-    for f in os.listdir(build_trad_dark_outputdir):
-        os.remove(os.path.join(build_trad_dark_outputdir, f))
+    build_trad_dark_outputdir = os.path.join(e2eoutput_path, "trad_dark_e2e")
+    if os.path.exists(build_trad_dark_outputdir):
+        import shutil
+        shutil.rmtree(build_trad_dark_outputdir)
+    os.makedirs(build_trad_dark_outputdir)
+
+    # Create input_data and calibrations subfolders
+    input_data_dir = os.path.join(build_trad_dark_outputdir, 'input_l1')
+    calibrations_dir = os.path.join(build_trad_dark_outputdir, 'calibrations')
+    if not os.path.exists(input_data_dir):
+        os.makedirs(input_data_dir)
+    if not os.path.exists(calibrations_dir):
+        os.makedirs(calibrations_dir)
     
     # Initialize a connection to the calibration database
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
@@ -332,6 +390,37 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     # trad_dark_data_filelist = np.load(os.path.join(e2edata_path, 'TV-20_EXCAM_noise_characterization', "results",'proc_cgi_frame_trad_dark_filelist_order.npy'), allow_pickle=True)
     # trad_dark_data_filelist = trad_dark_data_filelist.tolist()
 
+    # Generate proper filenames with visitid and current time
+    current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
+    # Extract visit ID from primary header VISITID keyword of first file
+    if trad_dark_data_filelist:
+        with fits.open(trad_dark_data_filelist[0]) as hdulist:
+            prihdr = hdulist[0].header
+            visitid = prihdr.get('VISITID', None)
+            if visitid is not None:
+                # Convert to string and pad to 19 digits
+                visitid = str(visitid).zfill(19)
+            else:
+                # Fallback: use default visitid
+                visitid = "0000000000000000000"
+    else:
+        visitid = "0000000000000000000"
+
+    # Copy files to input_data directory with proper naming
+    for i, file_path in enumerate(trad_dark_data_filelist):
+        # Generate unique timestamp by incrementing by 0.1 seconds each time
+        unique_time = (datetime.now() + timedelta(milliseconds=i*100)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        new_filename = f'cgi_{visitid}_{unique_time}_l1_.fits'
+        new_file_path = os.path.join(input_data_dir, new_filename)
+        import shutil
+        shutil.copy2(file_path, new_file_path)
+    
+    # Update trad_dark_data_filelist to point to new files
+    trad_dark_data_filelist = []
+    for f in os.listdir(input_data_dir):
+        if f.endswith('.fits'):
+            trad_dark_data_filelist.append(os.path.join(input_data_dir, f))
+
     # modify headers from TVAC to in-flight headers
     #fix_headers_for_tvac(trad_dark_data_filelist)
 
@@ -354,7 +443,11 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
                                                  pri_hdr=pri_hdr,
                                                  ext_hdr=ext_hdr,
                                                  input_dataset=mock_input_dataset)
-    nonlinear_cal.save(filedir=build_trad_dark_outputdir, filename="mock_nonlinearcal.fits" )
+    # Generate timestamp for NonLinearityCalibration
+    base_time = datetime.now()
+    nln_time_str = data.format_ftimeutc(base_time.isoformat())
+    nln_filename = f"cgi_0000000000000000000_{nln_time_str}_nln_cal.fits"
+    nonlinear_cal.save(filedir=calibrations_dir, filename=nln_filename)
 
 
     # Load and combine noise maps from various calibration files into a single array
@@ -385,7 +478,10 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     noise_maps = data.DetectorNoiseMaps(noise_map_dat, pri_hdr=pri_hdr, ext_hdr=ext_hdr,
                                         input_dataset=mock_input_dataset, err=noise_map_noise,
                                         dq=noise_map_dq, err_hdr=err_hdr)
-    noise_maps.save(filedir=build_trad_dark_outputdir, filename="mock_detnoisemaps.fits")
+    # Generate timestamp for DetectorNoiseMaps
+    dnm_time_str = data.format_ftimeutc((base_time + timedelta(seconds=1)).isoformat())
+    dnm_filename = f"cgi_0000000000000000000_{dnm_time_str}_dnm_cal.fits"
+    noise_maps.save(filedir=calibrations_dir, filename=dnm_filename)
 
     # create a k gain object and save it
     kgain_val = fits.getheader(os.path.join(trad_dark_raw_datadir, os.listdir(trad_dark_raw_datadir)[0]), 1)['KGAINPAR'] # read off header from TVAC files
@@ -394,7 +490,10 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
                                 pri_hdr=pri_hdr,
                                 ext_hdr=ext_hdr,
                                 input_dataset=mock_input_dataset)
-    kgain.save(filedir=build_trad_dark_outputdir, filename="mock_kgain.fits")
+    # Generate timestamp for KGain
+    krn_time_str = data.format_ftimeutc((base_time + timedelta(seconds=2)).isoformat())
+    krn_filename = f"cgi_0000000000000000000_{krn_time_str}_krn_cal.fits"
+    kgain.save(filedir=calibrations_dir, filename=krn_filename)
 
     # add calibration files to caldb
     this_caldb.create_entry(nonlinear_cal)
@@ -472,7 +571,9 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     test_filename = os.path.basename(test_filepath)
     test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(trad_dark.filename == test_filename)
-    pass
+    
+    # Print success message
+    print('e2e test for trad_dark_im calibration passed')
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
@@ -485,7 +586,7 @@ if __name__ == "__main__":
     # defaults allowing the use to edit the file if that is their preferred
     # workflow.
 
-    e2edata_dir = '/Users/kevinludwick/Documents/ssc_tvac_test/E2E_test_data2' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2' #r"/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/" #'/home/jwang/Desktop/CGI_TVAC_Data/'
     #e2edata_dir = "/Users/kevinludwick/Library/CloudStorage/Box-Box/CGI_TVAC_Data/Working_Folder/"
 
     outputdir = thisfile_dir

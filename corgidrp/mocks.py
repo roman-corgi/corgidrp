@@ -2587,18 +2587,27 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 #     str(temp)+'K'+'Scheme_'+str(sch)+'TPUMP_Npumps_10000_gain'+str(g)+'_phasetime'+
                 #     str(t)+'_2.fits'), overwrite = True)
                 # else: 
-                mult_counter = 0
-                filename = Path(output_dir,
-                str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps'+str(int(num_pumps))+'_gain'+str(EMgain)+'_phasetime'+
-                str(t)+'.fits')
-                if multiple > 1:
-                    if not os.path.exists(filename):
-                        hdul.writeto(filename, overwrite = True)
-                    else:
-                        mult_counter += 1
-                        hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
-                else:
-                    hdul.writeto(filename, overwrite = True)
+                # Generate standard CGI filename
+                import datetime
+                from . import data
+                
+                # Create unique timestamp for this file
+                base_time = datetime.datetime.now()
+                # Use a combination of temp, scheme, and phase time index to create unique timestamps
+                time_offset_ms = (temp - 180) * 10000 + sc * 1000 + i * 100
+                unique_time = (base_time + datetime.timedelta(milliseconds=time_offset_ms))
+                time_str = data.format_ftimeutc(unique_time.isoformat())
+                
+                # Standard filename format
+                visitid = "0000000000000000000"  # Default visitid
+                filename = Path(output_dir, f'cgi_{visitid}_{time_str}_l1_.fits')
+                
+                # Update standard headers
+                hdul[0].header['FILENAME'] = f'cgi_{visitid}_{time_str}_l1_.fits'
+                hdul[0].header['VISITID'] = visitid
+                hdul[0].header['OBSID'] = visitid
+                
+                hdul.writeto(filename, overwrite=True)
 
 
 def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0):
