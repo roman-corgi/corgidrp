@@ -88,7 +88,7 @@ def run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path):
                 err=np.zeros_like(noisy_data_array[i]),
                 dq=np.zeros_like(noisy_data_array[i], dtype=int)
             )
-            image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i]
+            image.ext_hdr['CFAMNAME'] = psf_table['CFAM'][i].upper().strip()
             psf_images.append(image)
 
         # Save images to disk with timestamped filenames
@@ -229,21 +229,26 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    # Create the spec_prism_disp_e2e subfolder regardless
-    input_top_level = os.path.join(e2edata_path, 'spec_prism_disp_e2e')
-    output_top_level = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e')
+    # Use the provided output path directly as the main folder
+    main_output_dir = e2eoutput_path
+    input_l2b_dir = os.path.join(main_output_dir, 'input_l2b')
     
-    os.makedirs(input_top_level, exist_ok=True)
-    os.makedirs(output_top_level, exist_ok=True)
+    # Clean up existing directory
+    if os.path.exists(main_output_dir):
+        import shutil
+        shutil.rmtree(main_output_dir)
     
-    # Update paths to use the subfolder structure
-    e2edata_path = input_top_level
-    e2eoutput_path = output_top_level
+    os.makedirs(main_output_dir, exist_ok=True)
+    os.makedirs(input_l2b_dir, exist_ok=True)
+    
+    # Update paths to use the new structure
+    e2edata_path = input_l2b_dir  # Input files go in input_l2b subfolder
+    e2eoutput_path = main_output_dir  # Outputs go in main folder
     
     log_file = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
-    logger = logging.getLogger('spec_prism_disp_e2e')
+    logger = logging.getLogger('spec_prism_disp_cal_e2e')
     logger.setLevel(logging.INFO)
     
     # Clear any existing handlers to avoid duplicates
@@ -278,15 +283,16 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
     
+    print('e2e test for spec_prism_disp calibration passed')
+    
 
 
 # Run the test if this script is executed directly
 if __name__ == "__main__":
     thisfile_dir = os.path.dirname(__file__)
-    # Create top-level spec_prism_disp_e2e folder
-    top_level_dir = os.path.join(thisfile_dir, 'spec_prism_disp_e2e')
-    outputdir = os.path.join(top_level_dir, 'output')
-    e2edata_dir = os.path.join(top_level_dir, 'input_data')
+    # Default output directory name
+    outputdir = os.path.join(thisfile_dir, 'spec_prism_disp_e2e')
+    e2edata_dir = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'  # Default input data path
 
     ap = argparse.ArgumentParser(description="run the spectroscopy prism dispersion end-to-end test")
     ap.add_argument("-i", "--e2edata_dir", default=e2edata_dir,
