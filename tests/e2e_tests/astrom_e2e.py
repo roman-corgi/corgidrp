@@ -183,7 +183,10 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
 
     # KGain
     kgain_val = 8.7
-    kgain = data.KGain(kgain_val, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
+    signal_array = np.linspace(0, 50)
+    noise_array = np.sqrt(signal_array)
+    ptc = np.column_stack([signal_array, noise_array])
+    kgain = data.KGain(kgain_val, ptc=ptc, pri_hdr=pri_hdr, ext_hdr=ext_hdr, 
                     input_dataset=mock_input_dataset)
     kgain.save(filedir=astrom_cal_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
