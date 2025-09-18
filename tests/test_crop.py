@@ -288,7 +288,7 @@ def test_unsupported_input():
 
     test_dataset = make_test_dataset(input_arr_even,centxy=[50.5,50.5])
     for frame in test_dataset:
-        frame.ext_hdr['LSAMNAME'] = 'OPEN'
+        frame.ext_hdr['LSAMNAME'] = 'UNKNOWN'
 
     try:
         _ = crop(test_dataset,sizexy=20,centerxy=None)
@@ -299,6 +299,17 @@ def test_unsupported_input():
     with pytest.raises(UserWarning):
         _ = crop(test_dataset,sizexy=None,centerxy=None)
 
+def test_noncoron():
+    """ Crop function should not automatically crop non-coronagraphic data.
+    """
+
+    test_dataset = make_test_dataset(input_arr_even,centxy=[50.5,50.5])
+    for frame in test_dataset:
+        frame.ext_hdr['LSAMNAME'] = 'OPEN'
+
+    cropped_dataset = crop(test_dataset,sizexy=None,centerxy=None)
+
+    assert cropped_dataset.all_data == pytest.approx(test_dataset.all_data)
 
 def test_detpix0_nonzero():
     """ Tests that the detector pixel header keyword is updated correctly if it 
@@ -404,6 +415,7 @@ if __name__ == "__main__":
     test_non_nfov_input()
     test_detpix0_nonzero()
     test_unsupported_input()
+    test_noncoron()
     test_default_crop()
     test_mixed_oddeven_crop()
     test_missing_cen_kws()
