@@ -653,17 +653,24 @@ def test_star_spec_registration():
                         '0000000000000000000')
                     data_images.append(image_data)
 
-            dataset_data = Dataset(data_images)
+            dataset_fsm = Dataset(data_images)
         
-            # Identify best image. Pass template and guessed centroids
+            # Identify best image
             best_image = steps.star_spec_registration(
-                dataset_data,
+                dataset_fsm,
                 pathfiles_template,
                 slit_align_err=slit_align_err)
 
             # Tests:
-            # Test that the output corresponds with the expected best image
-            assert best_image.filename == f'test_file_{slit_ref}.fits'
+            # Test that the output corresponds with the expected best FSM position
+            # Collect all input files
+            fsm_filenames = []
+            for image in dataset_fsm:
+                fsm_filenames += [image.filename]
+            breakpoint() 
+            # The best FSM position in the test is the one in these files
+            fsm_filenames_best = fsm_filenames[n_frames*slit_ref:n_frames*(slit_ref+1)]
+            assert np.all(best_image.filename == fsm_filenames_best)
    
             # TODO: If only a filename is needed, the rest of these tests are
             # unnecessary
