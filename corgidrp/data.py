@@ -28,10 +28,11 @@ class Dataset():
         all_data (np.array): an array with all the data combined together. First dimension is always number of images
         frames (np.array): list of data objects (probably corgidrp.data.Image)
     """
-    def __init__(self, frames_or_filepaths):
+    def __init__(self, frames_or_filepaths, no_data=False):
         """
         Args:
             frames_or_filepaths (list): list of either filepaths or data objects (e.g., Image class)
+            no_data (bool): If True, only the header information is loaded into the dataset.  Defaults to False.
         """
         if len(frames_or_filepaths) == 0:
             raise ValueError("Empty list passed in")
@@ -41,7 +42,10 @@ class Dataset():
             # TODO: do some auto detection of the filetype, but for now assume it is an image file
             self.frames = []
             for filepath in frames_or_filepaths:
-                self.frames.append(Image(filepath))
+                fr = Image(filepath)
+                if no_data:
+                    fr.data = None
+                self.frames.append(fr)
         else:
             # list of frames
             self.frames = frames_or_filepaths

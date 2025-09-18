@@ -130,8 +130,10 @@ def autogen_recipe(filelist, outputdir, template=None):
         first_frame = None
     else:
         # load the data to check what kind of recipe it is
-        dataset = data.Dataset(filelist)
-        first_frame = dataset[0]
+        dataset0 = data.Dataset([filelist[0]])
+        first_frame = dataset0[0]
+        # don't need the actual data, especially if it would take up a lot of RAM just to hold it in cache
+        dataset = data.Dataset(filelist, no_data=True)
 
     # if user didn't pass in template
     if template is None:
