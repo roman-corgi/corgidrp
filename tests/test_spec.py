@@ -564,7 +564,7 @@ def test_star_spec_registration():
     # Test all possible supported mode configurations
     fsam_name = ['OPEN', 'R1C2', 'R6C5', 'R3C1']
     fpam_name = ['OPEN', 'ND225', 'ND475']
-    logger.info(f'Considering CFAM={cfam_name:s}, DPAM={dpam_name:s}, ' +
+    print(f'Considering CFAM={cfam_name:s}, DPAM={dpam_name:s}, ' +
         f'SPAM={spam_name}, LSAM={lsam_name:s}')
 
     # Data level of input data
@@ -611,6 +611,8 @@ def test_star_spec_registration():
         +np.diff(np.array(yoffset_array)).mean()*0.1)[slit_ref]
 
     # Start UTs aimed at showing that the step function works as expected
+    # Some (arbitrary) number of frames per FSM position
+    nframes = 3
     # Seeded random generator
     rng = np.random.default_rng(seed=0)
     # Loop over possible spectroscopy setup values (loop over FSAM and FPAM)
@@ -624,6 +626,7 @@ def test_star_spec_registration():
             ext_hdr['FSAMNAME'] = fsam
             ext_hdr['FPAMNAME'] = fpam
             data_images = []
+            basetime = datetime.now()
             for i in range(len(psf_array)):
                 data_2d = np.copy(psf_array[i])
                 err = np.zeros_like(data_2d)
@@ -632,17 +635,23 @@ def test_star_spec_registration():
                 ext_hdr_cp = ext_hdr.copy()
                 ext_hdr_cp['FSMX'] = i // 5
                 ext_hdr_cp['FSMY'] = i - 5 * (i // 5)
-                image_data = Image(
-                    data_or_filepath=data_2d + rng.normal(0,
-                        0.1*np.abs(i-slit_ref+0.01)*data_2d.std(), data_2d.shape),
-                    pri_hdr=pri_hdr,
-                    ext_hdr=ext_hdr_cp,
-                    err=err,
-                    dq=dq
-                )
-                # Append L2b filename 
-                image_data.filename = ''
-                data_images.append(image_data)
+                # Produce NFRAMES for each FSM position
+                for i_frame in range(nframes):
+                    image_data = Image(
+                        data_or_filepath=data_2d + rng.normal(0,
+                            0.1*np.abs(i-slit_ref+0.01)*data_2d.std(),
+                            data_2d.shape),
+                        pri_hdr=pri_hdr,
+                        ext_hdr=ext_hdr_cp,
+                        err=err,
+                        dq=dq
+                    )
+                    # Append L2b filename 
+                    breakpoint()
+                    image_data.filename = get_formatted_filename(
+                        basetime + timedelta(seconds=nframes*i+j),
+                        '0000000000000000000')
+                    data_images.append(image_data)
 
             dataset_data = Dataset(data_images)
         
@@ -667,7 +676,6 @@ def test_star_spec_registration():
             assert np.all([best_image.ext_hdr[key] == dataset_data[slit_ref].ext_hdr[key]
                 for key in dataset_data[slit_ref].ext_hdr if key != 'DRPCTIME']), 'Some keyword values between the expected output and input disagree'
  
-
     # Expected failures
     pam_list = ['CFAMNAME', 'DPAMNAME', 'SPAMNAME', 'LSAMNAME', 'FSAMNAME',
         'FPAMNAME']
@@ -732,9 +740,8 @@ def test_star_spec_registration():
     print('FSMY failure test passed')
     dataset_data[0].ext_hdr['FSMY'] = 30.
     
-    logger.info('STAR SPECTRUM REGISTRATION UT/VAP TEST PASSED')
+    print('STAR SPECTRUM REGISTRATION UT/VAP TEST PASSED')
 
-    #TODO: remove temporary filenames
     
 def test_linespread_function():
     """
