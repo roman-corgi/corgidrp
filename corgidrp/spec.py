@@ -809,7 +809,7 @@ def star_spec_registration(
         in dataset_fsm that best matches it.
       slit_align_err (float64): Distance between the source and the center of
         the slit aperture, measured along the narrow axis of the slit aperture,
-        in units of EXCAM pixels. It is determined after each observation by
+        in units of mas. It is determined after each observation by
         looking at the data.
       halfheight: 1/2 the height of the box used for the fit.
 
@@ -859,65 +859,63 @@ def star_spec_registration(
         assert exthdr['SPAMNAME'].upper() == spam_name, f"SPAMNAME={exthdr['SPAMNAME']} differs from expected value: {spam_name}"
         assert exthdr['LSAMNAME'].upper() == lsam_name, f"LSAMNAME={exthdr['LSAMNAME']} differs from expected value: {lsam_name}"
         assert exthdr['FSAMNAME'].upper() in fsam_name, f"FSAMNAME={exthdr['FSAMNAME']} differs from expected values: {fsam_name}"
-        # TODO: Header keyword or function keyword: Same wavelength zero-point
-        assert exthdr['WV0_X'] == wv0_x and exthdr['WV0_Y'] == wv0_y, f"Wavelength zero-point values {exthdr['WV0_X']}, {exthdr['WV0_Y']} differ from expected values {wv0_x}, {wv0_y}"
-
         # Confirm presence of FSMX, FSMY
         assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
 
-    # Make sure that all template files exist
+    # Templates
+    yoffset_arr = []
     for file in pathfiles_template:
+        # Make sure that all template files exist
         if os.path.exists(file) == False:
             raise Exception(f'Template file {file} not found.')
-
-    # Check for WV0 and add unit tests back
-    breakpoint()
-
-    # TODO: Needed? Create Dataset with templates
-    dataset_template = Dataset(pathfiles_template)
+        # Collect FSAM offsets
+        yoffset_arr += [fits.open(file)[0].header['FSM_OFF']]
 
     # Find closest template offset to the one measured in the data
-    slit_idx = int(np.abs(slit_align_err - yoffset_template).argmin())
-
-    # Copy of Dataset
+    slit_idx = int(np.abs(slit_align_err - yoffset_arr).argmin())
+    # Template data
+    temp_data = fits.open(pathfiles_template[slit_idx])[0].data
+    # Associated zeropoint
+    try:
+        wv0_x = fits.open(pathfiles_template[slit_idx])[0].header['WV0_X']
+    except:
+        raise ValueError(f'WV0_X missing from {pathfiles_template[slit_idx]:s}')
+    try:
+        wv0_y = fits.open(pathfiles_template[slit_idx])[0].header['WV0_Y']
+    except:
+        raise ValueError(f'WV0_Y missing from {pathfiles_template[slit_idx]:s}')
+    
+    # Split FSM dataset according to their FSM values
     dataset_fsm = dataset_fsm.copy()
 
     # Find best PSF centroid fit for each image compared to the template
-    # Cost function: Start with any large value that cannot happen. Units are
-    # EXCAM pixels. Response along long slit axis (x) is quite constant. Setting
-    # the guess value to its wavelength zero-point
+    # Cost function: Start with any large value that cannot happen. P.S. Units
+    # are EXCAM pixels
     zeropt_dist = 1e8
     for idx_img, img in enumerate(dataset_fsm):
         img_tmp = img.data
-        temp = dataset_template[slit_idx].data
         # TODO: cross-correlate input data with template
-        shift_corr = get_shift_correlation(img_tmp, temp)
-        # TODO: Center FSM data accorsing to their cross-correlation with the
-        img_tmp = np.shift(img_tmp)
+        #shift_corr = get_shift_correlation(img_tmp, temp_data)
+        # TODO: Center FSM data according to their cross-correlation with the
+        #img_tmp = np.shift(img_tmp)
         img_tmp = img_tmp[:,:]
         # template data and match the size of template data
-        x_fit, y_fit = fit_psf_centroid(img_tmp,
-                     temp,
-                     # TODO: Waiting for xcent_template=None bug to be resolved
-                     xcent_template = wv0_x,
-                     ycent_template = ycent_template[slit_idx],
-                     halfheight = halfheight)[0:2]
+        x_fit, y_fit = fit_psf_centroid(img_tmp, temp_data,
+            xcent_template = wv0_x,
+            ycent_template = wv0_y,
+            halfheight = halfheight)[0:2]
 
         # best-matching image is wrt zero-point
         zeropt_dist_img = np.sqrt((x_fit-wv0_x)**2 + (y_fit-wv0_y)**2)
+        fsm_best = None
         # TODO: return only filename of best image
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
-            img_best = img
-            img_best.ext_hdr['BESTFSMX'] = x_fit
-            img_best.ext_hdr['BESTFSMY'] = y_fit
-            img_best.ext_hdr['BESTFILE'] = img_best.filename
-            img_best.ext_hdr['SLITERR']  = slit_align_err
         
     # Check that there's at least one solution
-    assert isinstance(img_best, type(img)), 'No suitable best image found.'        
+    assert fsm_best != None, 'No suitable best image found.'        
 
-    return img_best
+    return list_of_filenames_for_best_fsm_maybe_wo_path
 
 def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 15.):
     """

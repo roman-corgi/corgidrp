@@ -584,24 +584,24 @@ def test_star_spec_registration():
     # Number of templates available
     n_temp = 5
     # Array of data to be used to generate L2b later on adding some noise
-    psf_array = []
-    # FSAM offsets
-    slit_dy_array = []
+    psf_arr = []
+    # y offsets (from FSAM slit vertical offset)
+    yoffset_arr = []
     pathfiles_template = []
     for idx_temp in range(n_temp):
-        pathfile = os.path.join(dir_test, #TODO: test_datadir,
+        pathfile = os.path.join(test_datadir,
                 f'spec_reg_fsm_offset_template_cfam3F_{idx_temp:02d}.fits')
         # Make sure the template exists before continuing
         assert os.path.exists(pathfile), f'Test FITS file not found: {file_path}'
         with fits.open(pathfile) as hdul:
             # Get template data to create a noisy sim with different FSM positions later on
-            psf_array += [hdul[0].data]
-            assert psf_array[-1].ndim == 2, 'Expected 2D PSF array'
+            psf_arr += [hdul[0].data]
+            assert psf_arr[-1].ndim == 2, 'Expected 2D PSF array'
             # Make sure FSAM offset is present and record them
             try:
-                slit_dy_array += [hdul[0].header['SLIT_DY']]
+                yoffset_arr += [hdul[0].header['FSM_OFF']]
             except:
-                raise ValueError(f'Missing FSAM offset in file {file_path:s}')
+                raise ValueError(f'Missing FSM offset in file {file_path:s}')
             # Make sure zero-points are present
             assert 'WV0_X' in hdul[0].header and 'WV0_Y' in hdul[0].header, f'Missing WV0_X, WV0_Y in {pathfile}'
         # Add pathfilename to the list
@@ -610,10 +610,10 @@ def test_star_spec_registration():
     # Set a slit alignment offset for the FSM data that is close to one of the
     # templates to be able to predict which offset best matches the templates
     slit_ref = n_temp // 2
-    slit_align_err = (np.array(slit_dy_array)
-        + np.diff(np.array(slit_dy_array)).mean()*0.1)[slit_ref]
+    slit_align_err = (np.array(yoffset_arr)
+        + np.diff(np.array(yoffset_arr)).mean()*0.1)[slit_ref]
 
-    # Start UTs aimed at showing that the step function works as expected
+    # Start UTs showing that the step function works as expected
     # Some (arbitrary) number of frames per FSM position
     nframes = 3
     # Seeded random generator
@@ -630,8 +630,8 @@ def test_star_spec_registration():
             ext_hdr['FPAMNAME'] = fpam
             data_images = []
             basetime = datetime.now()
-            for i in range(len(psf_array)):
-                data_2d = np.copy(psf_array[i])
+            for i in range(len(psf_arr)):
+                data_2d = np.copy(psf_arr[i])
                 err = np.zeros_like(data_2d)
                 dq = np.zeros_like(data_2d, dtype=int)
                 # Some noisy version for the simulated data without blowing it
