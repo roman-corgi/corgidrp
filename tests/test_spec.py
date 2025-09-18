@@ -550,20 +550,18 @@ def test_determine_zeropoint():
 def test_star_spec_registration():
     """ Test the star spectrum registration """
 
-    # Directory to temporarily store the outputs of the test
-    # TODO: This may change when we have corgisim simulations? Will they be
-    # stored or generated each time? First, store it as other previous
-    # simulations
-    dir_test = 'simdata'
-    os.makedirs(dir_test, exist_ok=True)
+    # The tests are of two types:
+    # 1/ UTs with mock data showing that the step function finds the expected best
+    # match spectrum among all present ones
+    # 2/ UTs showing that if the input parameters are invalid, the step function
+    # raises an exception
 
     # Instrumental setup
-    # TODO: Does corgisim come with a specific PAM setup in its header keywords?
-    # If so, read them off the header keywords and do not loop
     cfam_name = '3F'
     dpam_name = 'PRISM3'
     spam_name = 'SPEC'
     lsam_name = 'SPEC'
+    # Test all possible supported mode configurations
     fsam_name = ['OPEN', 'R1C2', 'R6C5', 'R3C1']
     fpam_name = ['OPEN', 'ND225', 'ND475']
     logger.info(f'Considering CFAM={cfam_name:s}, DPAM={dpam_name:s}, ' +
@@ -572,48 +570,52 @@ def test_star_spec_registration():
     # Data level of input data
     dt_lvl = 'l2b'
 
+    # Directory to temporarily store the I/O of the test
+    dir_test = 'simdata'
+    os.makedirs(dir_test, exist_ok=True)
+
+    # Create some L2b mock data: The step function must find the spectrum that
+    # best matches one of the template spectra. There's a step in the step
+    # function that derives a shift between the L2b data and the templates.
+    # Hence, we create a mock L2b Dataset with a similar shape between template
+    # and L2b data
+    pri_hdr, ext_hdr = create_default_L2b_headers()[0:2]
+    # Number of templates available
+    n_temp = 5
+    # Array of data to be used to generate L2b later on adding some noise
+    psf_array = []
+    yoffsets_array = []
+    pathfiles_template = []
+    for idx_temp in range(n_temp):
+        pathfile = os.path.join(test_datadir,
+                f'tbw_{idx_temp:d}.fits')
+        # Make sure the template exists before continuing
+        assert os.path.exists(pathfile), f'Test FITS file not found: {file_path}'
+        with fits.open(pathfile) as hdul:
+            psf_array += [hdul[0].data]
+            assert psf_array[-1].ndim == 2, 'Expected 2D PSF array'
+            yoffset_array += [hdul[0].header['yoffset']
+            # Make sure FSAM offset is present
+            assert 'yoffset' in header[-1], f'Missing FSAM offset in file {file_path:s}'
+        # Add pathfilename to the list
+        pathfiles_template += [path_file]
+
+    # Wavelength zero-point solution (same for the same observation)
+    wv0_x = 41 #TODO
+    wv0_y = 41 #TODO
+
+    # Choose (arbitrarily) which template will be the best match with the L2b data
+    slit_ref = 3
+    # Choose some slit alignment error that is close to one of the simulated offsets
+    slit_align_err = (np.array(yoffset_array)
+        +np.diff(np.array(yoffset_array)).mean()*0.1)[slit_ref]
+
+    # Start UTs aimed at showing that the step function works as expected
     # Seeded random generator
     rng = np.random.default_rng(seed=0)
-    # Choose (arbitrarily) which template will be the correct stellar spectrum
-    slit_ref = 4
-    # Loop over possible setup values (loop over FSAM and FPAM)
+    # Loop over possible spectroscopy setup values (loop over FSAM and FPAM)
     for fsam in fsam_name:
         for fpam in fpam_name:
-            # Create some mock data for the template with spectra
-            # TODO: load corgisim data
-            file_path = os.path.join(test_datadir,
-                    'g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits')
-            assert os.path.exists(file_path), f'Test FITS file not found: {file_path}'
-
-            pri_hdr, ext_hdr = create_default_L2b_headers()[0:2]
-            with fits.open(file_path) as hdul:
-                psf_array = hdul[0].data
-                psf_table = Table(hdul[1].data)
-
-            assert psf_array.ndim == 3, 'Expected 3D PSF array'
-            # TODO: How are the centroid columns passed?
-            assert 'ycent' in psf_table.colnames, 'Missing centroid columns'
-
-            # Add an initial guess of where the centroid is found as well as
-            # FSAM offsets from the templates
-            # TODO: How are the FSAM offsets from the templates passed?
-            initial_cent = {
-                'ycent': np.array(psf_table['ycent']),
-                'yoffset': np.array(psf_table['yoffset'])
-            }
-
-            # Having selected a particular index for the test, allows us to
-            # set the expected offset in the data
-            slit_align_err = initial_cent['yoffset'][slit_ref]
-
-            # Add wavelength zero-point. In this test, we set it in a way that
-            # matches the vertical centroid of one of the template data, so that
-            # we can predict in the test which one is the best image
-            # TODO: How is the wavelength zero-point passed? L2b does not have
-            # it. Function argument?
-            ext_hdr['WV0_X'] = (psf_array.shape[1] - 1)/2
-            ext_hdr['WV0_Y'] = initial_cent['ycent'][slit_ref]
-        
             # Update Setup header key values
             ext_hdr['CFAMNAME'] = cfam_name
             ext_hdr['DPAMNAME'] = dpam_name
@@ -621,52 +623,33 @@ def test_star_spec_registration():
             ext_hdr['LSAMNAME'] = lsam_name
             ext_hdr['FSAMNAME'] = fsam
             ext_hdr['FPAMNAME'] = fpam
-            template_images = []
             data_images = []
-            for i in range(psf_array.shape[0]):
+            for i in range(len(psf_array)):
                 data_2d = np.copy(psf_array[i])
                 err = np.zeros_like(data_2d)
-                dq = np.zeros_like(data_2d, dtype=int)
-                # Store template data as a DRP object
-                image_template = Image(
-                    data_or_filepath=data_2d,
-                    pri_hdr=pri_hdr,
-                    ext_hdr=ext_hdr,
-                    err=err,
-                    dq=dq
-                )
-                template_images.append(image_template)
                 # Some noisy version for the simulated data without blowing it
-                # unreasonably. The one with slit_ref has no additional
-                # noise to test that this is the one outputted by star_spec_registration()
-                # Collected data have different FSM values
-                # TODO: Do corgisim template simulations come with noise, FSM ones?
+                # unreasonably. The one with slit_ref has little noise added
                 ext_hdr_cp = ext_hdr.copy()
                 ext_hdr_cp['FSMX'] = i // 5
                 ext_hdr_cp['FSMY'] = i - 5 * (i // 5)
                 image_data = Image(
                     data_or_filepath=data_2d + rng.normal(0,
-                        0.1*np.abs(i-slit_ref)*data_2d.std(), data_2d.shape),
+                        0.1*np.abs(i-slit_ref+0.01)*data_2d.std(), data_2d.shape),
                     pri_hdr=pri_hdr,
                     ext_hdr=ext_hdr_cp,
                     err=err,
                     dq=dq
                 )
-                # Add some filename that will be used to check that the correct
-                # spectrum is found
-                image_data.filename = f'test_file_{i}.fits'
+                # Append L2b filename 
+                image_data.filename = ''
                 data_images.append(image_data)
 
-
-            dataset_template = Dataset(template_images)
-            dataset_data     = Dataset(data_images)
+            dataset_data = Dataset(data_images)
         
             # Identify best image. Pass template and guessed centroids
             best_image = steps.star_spec_registration(
                 dataset_data,
-                dataset_template,
-                ycent_template=initial_cent['ycent'],
-                yoffset_template=initial_cent['yoffset'],
+                pathfiles_template,
                 slit_align_err=slit_align_err)
 
             # Tests:
@@ -750,6 +733,8 @@ def test_star_spec_registration():
     dataset_data[0].ext_hdr['FSMY'] = 30.
     
     logger.info('STAR SPECTRUM REGISTRATION UT/VAP TEST PASSED')
+
+    #TODO: remove temporary filenames
     
 def test_linespread_function():
     """

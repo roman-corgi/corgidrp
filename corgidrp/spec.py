@@ -854,6 +854,8 @@ def star_spec_registration(
     for file in pathfiles_template:
         if os.path.exists(file) == False:
             raise Exception(f'Template file {file} not found.')
+    # Create Dataset with templates
+    dataset_template = Dataset(pathfiles_template)
 
     # TODO: Wavelength zero-point solution must be present in template data or passed in the function?
     try:
@@ -880,11 +882,8 @@ def star_spec_registration(
     # Find closest template offset to the one measured in the data
     slit_idx = int(np.abs(slit_align_err - yoffset_template).argmin())
 
-    # Copies
-    # TODO: Either copies or create Dataset from filenames and crop directly.
-    # Crop to the same size as template data
+    # Copy of Dataset
     dataset_fsm = dataset_fsm.copy()
-    dataset_template = dataset_template.copy()
 
     # Find best PSF centroid fit for each image compared to the template
     # Cost function: Start with any large value that cannot happen. Units are
@@ -922,6 +921,7 @@ def star_spec_registration(
     assert isinstance(img_best, type(img)), 'No suitable best image found.'        
 
     return img_best
+:
 def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 15.):
     """
     Fit the line spread function to a wavelength calibrated (averaged) dataset, by reading 
