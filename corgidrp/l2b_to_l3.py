@@ -283,10 +283,6 @@ def crop(input_dataset, sizexy=None, centerxy=None):
         # Pick default crop size based on the size of the effective field of view
         if sizexy is None:
 
-            # Skip cropping by default if observation is non-coronagraphic
-            if exthdr['FSMLOS'] == 0:
-                return dataset
-
             filter_band = exthdr['CFAMNAME']
             # change filter names ending in F to just the number
             if filter_band[1] == 'F':
@@ -302,6 +298,9 @@ def crop(input_dataset, sizexy=None, centerxy=None):
                 'WFOV': 20.1,
                 'SPEC': 9.1
             }
+            # Skip cropping by default if observation is non-coronagraphic
+            if cor_mode == 'OPEN':
+                return dataset
             if cor_mode == 'NFOV':
                 # set size to 61 if coronagraph is HLC NFOV
                 sizexy = 61
