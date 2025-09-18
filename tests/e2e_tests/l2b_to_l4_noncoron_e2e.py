@@ -172,6 +172,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.pri_hdr.set('ROLL', 0)
         new_image.ext_hdr.set('CFAMNAME','1F')
         new_image.ext_hdr.set('FSMLOS', 0) # non-coron
+        new_image.ext_hdr.set('LSAMNAME', 'OPEN') # non-coron
 
         # Generate proper filename with visitid and current time
         current_time = datetime.now().strftime('%Y%m%dt%H%M%S%f')[:-5]
