@@ -738,10 +738,8 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
     nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
     bb_filter = nb_filter[0]
     cen_wave = read_cent_wave(nb_filter)[0]
-    xoff_nb = read_cent_wave(nb_filter)[2]
-    yoff_nb = read_cent_wave(nb_filter)[3]
-    xoff_bb = read_cent_wave(bb_filter)[2]
-    yoff_bb = read_cent_wave(bb_filter)[3]
+    (xoff_nb, yoff_nb) = (read_cent_wave(nb_filter)[2], read_cent_wave(nb_filter)[3])
+    (xoff_bb, yoff_bb) = (read_cent_wave(bb_filter)[2], read_cent_wave(bb_filter)[3])
     # Correct the centroid for the filter-to-filter image offset, so that
     # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
     x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
