@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import pytest
+import warnings
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
@@ -608,19 +609,28 @@ def test_extract_spec():
     err_ext = l3_to_l4.extract_spec(input_dataset, apply_weights = True)
     out_im = err_ext[0]
     assert np.allclose(out_im.data, image.data)
+    #estimate the resulting value at the position of the maximum
+    ind_x = np.argmax(err_im.data[:, 40])
+    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.data))
     
     #estimate error as Poisson like
     err_im.err[0,:,:] = np.sqrt(err_im.data)
     dataset = Dataset([err_im])
     err_ext = l3_to_l4.extract_spec(dataset, apply_weights = True)
     out_im = err_ext[0]
+    #estimate the resulting value at the position of the maximum, 
+    #there might be a great different in the maxima due to the rough weighting with signal noise
+    ind_x = np.argmax(err_im.data[:, 40])
+    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.data), rel = 2)
     max_ind = np.argmax(out_im.data)
     assert max_ind == np.argmax(image.data)
     err_wht = err_im.err[0]
-    whts = 1./np.square(err_wht)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        whts = 1./np.square(err_wht)
     err_expect = 1./np.sqrt(np.nansum(whts[:, 38:43], axis = 1))
     assert np.max(err_expect) == np.max(out_im.err)
-
+    assert "extraction" and "half width" and "weights" in str(out_im.ext_hdr["HISTORY"])
 
 if __name__ == "__main__":
     #convert_tvac_to_dataset()

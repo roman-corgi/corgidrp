@@ -1007,24 +1007,27 @@ def extract_spec(input_dataset, halfwidth = 2, halfheight = 9, apply_weights = F
         image_cutout[bad_ind] = np.nan
         err_cutout[bad_ind] = np.nan
         wave = np.mean(wave_cal_map_cutout, axis=1)
-        wave_err = np.sqrt(np.nansum(np.square(wave_err_cutout), axis=1))
+        wave_err = np.mean(wave_err_cutout, axis=1)
         err = np.sqrt(np.nansum(np.square(err_cutout), axis=2))
-        dq = np.sum(dq_cutout, axis = 1)
+        # dq collpase: keep all flags on
+        dq_collapse = np.bitwise_or.reduce(dq_cutout, axis=1)
+ 
         if apply_weights:
             err_cutout[0][err_cutout[0] == 0] = np.nan
             whts = 1./np.square(err_cutout[0])
             spec = np.nansum(image_cutout * whts, axis = 1) / np.nansum (whts, axis = 1) * (2 * halfwidth + 1)
             err[0] = 1./np.sqrt(np.nansum(whts, axis = 1))
+            weight_str = "weights applied"
         else:
             spec = np.nansum(image_cutout, axis=1)
+            weight_str = "no weights applied"
         image.data = spec
         image.err = err
-        image.dq = dq
+        image.dq = dq_collapse
         image.hdu_list["WAVE"].data = wave
         image.hdu_list["WAVE_ERR"].data = wave_err
         del(image.hdu_list["POSLOOKUP"])
-    
-    history_msg = "spectral extraction"
+    history_msg = "spectral extraction within a box of half width of {0}, half height of {1} and with ".format(halfwidth, halfheight) + weight_str
     dataset.update_after_processing_step(history_msg, header_entries={'BUNIT': "photoelectron/s/bin"})
     return dataset
 
