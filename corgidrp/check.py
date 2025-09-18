@@ -9,6 +9,7 @@ import logging
 import os
 import glob
 import astropy.io.fits as fits
+import pandas as pd
 
 # Set up module-level logger
 logger = logging.getLogger(__name__)
@@ -570,3 +571,143 @@ def get_latest_cal_file(e2eoutput_path, pattern, logger=None):
     cal_files = sorted(glob.glob(os.path.join(e2eoutput_path, pattern)), key=os.path.getmtime, reverse=True)
     assert len(cal_files) > 0, f'No {pattern} files found in {e2eoutput_path}!'
     return cal_files[0]
+
+
+def generate_fits_excel_documentation(fits_filepath, output_excel_path):
+    """
+    Generate an Excel file documenting the structure and headers of a FITS file.
+    
+    Args:
+        fits_filepath (str): Path to the FITS file to document
+        output_excel_path (str): Path where the Excel file should be saved
+        
+    Returns:
+        str: Path to the generated Excel file
+        
+    Raises:
+        ImportError: If pandas is not available
+        FileNotFoundError: If the FITS file doesn't exist
+    """
+    if pd is None:
+        raise ImportError("pandas is required for Excel generation. Install with: pip install pandas openpyxl")
+    
+    if not os.path.exists(fits_filepath):
+        raise FileNotFoundError(f"FITS file not found: {fits_filepath}")
+    
+    # Open the FITS file
+    with fits.open(fits_filepath) as hdulist:
+        
+        # Create Excel writer
+        with pd.ExcelWriter(output_excel_path, engine='openpyxl') as writer:
+            
+            # Sheet 1: Extensions Overview
+            extensions_data = []
+            for i, hdu in enumerate(hdulist):
+                # Determine extension name
+                if i == 0:
+                    ext_name = "Primary"
+                    description = "Primary header (no data)"
+                elif hasattr(hdu, 'name') and hdu.name:
+                    ext_name = hdu.name
+                else:
+                    ext_name = f"Extension {i}"
+                
+                # Determine description based on extension type
+                if i == 0:
+                    description = "Primary header (no data)"
+                elif hasattr(hdu, 'data') and hdu.data is not None:
+                    if len(hdu.data.shape) == 0:
+                        description = "Scalar data"
+                    elif len(hdu.data.shape) == 1:
+                        description = "1D array data"
+                    elif len(hdu.data.shape) == 2:
+                        description = "2D image data"
+                    elif len(hdu.data.shape) == 3:
+                        description = "3D data cube"
+                    else:
+                        description = f"{len(hdu.data.shape)}D data array"
+                else:
+                    description = "Header only"
+                
+                # Get data type
+                if hasattr(hdu, 'data') and hdu.data is not None:
+                    datatype = str(hdu.data.dtype)
+                else:
+                    datatype = "None"
+                
+                # Get array size
+                if hasattr(hdu, 'data') and hdu.data is not None:
+                    array_size = str(hdu.data.shape)
+                else:
+                    array_size = "0"
+                
+                extensions_data.append({
+                    'Index': i,
+                    'Extension Name': ext_name,
+                    'Description': description,
+                    'Data Type': datatype,
+                    'Array Size': array_size
+                })
+            
+            # Create DataFrame and save to first sheet
+            extensions_df = pd.DataFrame(extensions_data)
+            extensions_df.to_excel(writer, sheet_name='Extensions_Overview', index=False)
+            
+            # Sheets 2+: Header keywords for each extension
+            for i, hdu in enumerate(hdulist):
+                # Determine sheet name
+                if i == 0:
+                    sheet_name = "Primary_Header"
+                elif hasattr(hdu, 'name') and hdu.name:
+                    sheet_name = f"{hdu.name}_Header"
+                else:
+                    sheet_name = f"Extension_{i}_Header"
+                
+                # Ensure sheet name is valid (Excel limits)
+                sheet_name = sheet_name[:31]  # Excel sheet name limit
+                
+                # Extract header information
+                header_data = []
+                for keyword in hdu.header:
+                    value = hdu.header[keyword]
+                    comment = hdu.header.comments[keyword]
+                    
+                    # Determine data type
+                    if isinstance(value, bool):
+                        dtype = "boolean"
+                    elif isinstance(value, int):
+                        dtype = "integer"
+                    elif isinstance(value, float):
+                        dtype = "float"
+                    elif isinstance(value, str):
+                        dtype = "string"
+                    else:
+                        dtype = "other"
+                    
+                    # Determine if auto-populated by FITS
+                    fits_auto_keywords = ['SIMPLE', 'BITPIX', 'NAXIS', 'NAXIS1', 'NAXIS2', 'NAXIS3', 
+                                        'EXTEND', 'PCOUNT', 'GCOUNT', 'TFIELDS', 'TTYPE1', 'TFORM1', 
+                                        'TTYPE2', 'TFORM2', 'TTYPE3', 'TFORM3', 'TTYPE4', 'TFORM4',
+                                        'TTYPE5', 'TFORM5', 'TTYPE6', 'TFORM6', 'TTYPE7', 'TFORM7',
+                                        'TTYPE8', 'TFORM8', 'TTYPE9', 'TFORM9', 'TTYPE10', 'TFORM10']
+                    is_fits_auto = keyword in fits_auto_keywords
+                    
+                    # Determine if optional (customize this later)
+                    required_keywords = ['SIMPLE', 'BITPIX', 'NAXIS', 'EXTEND', 'TELESCOP', 'INSTRUME', 
+                                       'DETECTOR', 'DATALVL', 'FILENAME', 'VISITID']
+                    is_optional = keyword not in required_keywords
+                    
+                    header_data.append({
+                        'Keyword': keyword,
+                        'Value': str(value),
+                        'Data Type': dtype,
+                        'FITS Auto-populated': is_fits_auto,
+                        'Optional': is_optional,
+                        'Comment': comment
+                    })
+                
+                # Create DataFrame and save to sheet
+                header_df = pd.DataFrame(header_data)
+                header_df.to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    return output_excel_path

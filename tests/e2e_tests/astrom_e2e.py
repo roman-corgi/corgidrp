@@ -13,6 +13,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+from corgidrp.check import generate_fits_excel_documentation
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -389,6 +390,11 @@ def test_astrom_e2e(e2edata_path, e2eoutput_path):
     ra, dec = astrom_cal.boresight[0], astrom_cal.boresight[1]
     assert ra == pytest.approx(target[0], abs=8.333e-7)
     assert dec == pytest.approx(target[1], abs=8.333e-7)
+    
+    # Generate Excel documentation
+    excel_output_path = os.path.join(astrom_cal_outputdir, "ast_cal_documentation.xlsx")
+    generate_fits_excel_documentation(astrom_cal_files[0], excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

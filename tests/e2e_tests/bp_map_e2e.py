@@ -1,5 +1,6 @@
 import argparse
 import os
+import glob
 import pytest
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,6 +14,7 @@ from corgidrp import detector
 from corgidrp import darks
 from corgidrp import walker
 from corgidrp import mocks
+from corgidrp.check import generate_fits_excel_documentation
 
 # Get the directory of the current script file
 thisfile_dir = os.path.dirname(__file__)
@@ -325,6 +327,12 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
         output_path = os.path.join(bp_map_outputdir, "bp_map_master_dark_test.png")
         plt.savefig(output_path)
 
+    # Generate Excel documentation for the bad pixel map product
+    bp_map_file = glob.glob(os.path.join(bp_map_outputdir, "*_bpm_cal.fits"))[0]
+    excel_output_path = os.path.join(bp_map_outputdir, "bpm_cal_documentation.xlsx")
+    generate_fits_excel_documentation(bp_map_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -498,6 +506,12 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
         # Save the figure to a file
         output_path = os.path.join(bp_map_outputdir, "bp_map_simulated_dark_test.png")
         plt.savefig(output_path)
+    
+    # Generate Excel documentation for the bad pixel map product
+    bp_map_file = glob.glob(os.path.join(bp_map_outputdir, "*_bpm_cal.fits"))[0]
+    excel_output_path = os.path.join(bp_map_outputdir, "bpm_cal_documentation.xlsx")
+    generate_fits_excel_documentation(bp_map_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
     
     # Skip removal of generated_bp_map_img since it doesn't have a proper filepath
     # this_caldb.remove_entry(generated_bp_map_img)
