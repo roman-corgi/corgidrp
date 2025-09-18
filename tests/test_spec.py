@@ -555,6 +555,7 @@ def test_star_spec_registration():
     # match spectrum among all present ones
     # 2/ UTs showing that if the input parameters are invalid, the step function
     # raises an exception
+    # TODO: Update https://github.com/roman-corgi/corgidrp/issues/545 accordingly
 
     # Instrumental setup
     cfam_name = '3F'
@@ -584,31 +585,33 @@ def test_star_spec_registration():
     n_temp = 5
     # Array of data to be used to generate L2b later on adding some noise
     psf_array = []
-    yoffsets_array = []
+    # FSAM offsets
+    slit_dy_array = []
     pathfiles_template = []
     for idx_temp in range(n_temp):
-        pathfile = os.path.join(test_datadir,
-                f'tbw_{idx_temp:d}.fits')
+        pathfile = os.path.join(dir_test, #TODO: test_datadir,
+                f'spec_reg_fsm_offset_template_cfam3F_{idx_temp:02d}.fits')
         # Make sure the template exists before continuing
         assert os.path.exists(pathfile), f'Test FITS file not found: {file_path}'
         with fits.open(pathfile) as hdul:
+            # Get template data to create a noisy sim with different FSM positions later on
             psf_array += [hdul[0].data]
             assert psf_array[-1].ndim == 2, 'Expected 2D PSF array'
-            yoffset_array += [hdul[0].header['yoffset']
-            # Make sure FSAM offset is present
-            assert 'yoffset' in header[-1], f'Missing FSAM offset in file {file_path:s}'
+            # Make sure FSAM offset is present and record them
+            try:
+                slit_dy_array += [hdul[0].header['SLIT_DY']]
+            except:
+                raise ValueError(f'Missing FSAM offset in file {file_path:s}')
+            # Make sure zero-points are present
+            assert 'WV0_X' in hdul[0].header and 'WV0_Y' in hdul[0].header, f'Missing WV0_X, WV0_Y in {pathfile}'
         # Add pathfilename to the list
-        pathfiles_template += [path_file]
+        pathfiles_template += [pathfile]
 
-    # Wavelength zero-point solution (same for the same observation)
-    wv0_x = 41 #TODO
-    wv0_y = 41 #TODO
-
-    # Choose (arbitrarily) which template will be the best match with the L2b data
-    slit_ref = 3
-    # Choose some slit alignment error that is close to one of the simulated offsets
-    slit_align_err = (np.array(yoffset_array)
-        +np.diff(np.array(yoffset_array)).mean()*0.1)[slit_ref]
+    # Set a slit alignment offset for the FSM data that is close to one of the
+    # templates to be able to predict which offset best matches the templates
+    slit_ref = n_temp // 2
+    slit_align_err = (np.array(slit_dy_array)
+        + np.diff(np.array(slit_dy_array)).mean()*0.1)[slit_ref]
 
     # Start UTs aimed at showing that the step function works as expected
     # Some (arbitrary) number of frames per FSM position
@@ -630,6 +633,7 @@ def test_star_spec_registration():
             for i in range(len(psf_array)):
                 data_2d = np.copy(psf_array[i])
                 err = np.zeros_like(data_2d)
+                dq = np.zeros_like(data_2d, dtype=int)
                 # Some noisy version for the simulated data without blowing it
                 # unreasonably. The one with slit_ref has little noise added
                 ext_hdr_cp = ext_hdr.copy()
@@ -647,16 +651,15 @@ def test_star_spec_registration():
                         dq=dq
                     )
                     # Append L2b filename 
-                    breakpoint()
                     image_data.filename = get_formatted_filename(
-                        basetime + timedelta(seconds=nframes*i+j),
+                        basetime + timedelta(seconds=nframes*i+i_frame),
                         '0000000000000000000')
                     data_images.append(image_data)
 
             dataset_fsm = Dataset(data_images)
         
             # Identify best image
-            best_image = steps.star_spec_registration(
+            best_fsm = steps.star_spec_registration(
                 dataset_fsm,
                 pathfiles_template,
                 slit_align_err=slit_align_err)
@@ -670,79 +673,41 @@ def test_star_spec_registration():
             breakpoint() 
             # The best FSM position in the test is the one in these files
             fsm_filenames_best = fsm_filenames[n_frames*slit_ref:n_frames*(slit_ref+1)]
-            assert np.all(best_image.filename == fsm_filenames_best)
-   
-            # TODO: If only a filename is needed, the rest of these tests are
-            # unnecessary
-            assert np.all(best_image.data == dataset_data[slit_ref].data), 'Expected output data does not coincide with the input frame'
-            # Check that all static header values in the primary header coincide
-            # b/w I/O (all but those who depend on clock creation time)
-            assert np.all([best_image.pri_hdr[key] == dataset_data[slit_ref].pri_hdr[key] 
-                for key in dataset_data[slit_ref].pri_hdr]), 'Some keyword values between the expected output and input disagree'
-            # Similarly for the extended header
-            assert np.all([best_image.ext_hdr[key] == dataset_data[slit_ref].ext_hdr[key]
-                for key in dataset_data[slit_ref].ext_hdr if key != 'DRPCTIME']), 'Some keyword values between the expected output and input disagree'
- 
+            assert np.all(best_fsm.filename == fsm_filenames_best)
+    # End of tests testing proper functioning.
     # Expected failures
+    # Wrong PAM setting
     pam_list = ['CFAMNAME', 'DPAMNAME', 'SPAMNAME', 'LSAMNAME', 'FSAMNAME',
         'FPAMNAME']
 
     for pam in pam_list:
-        # Store current common value
+        # Store current, common value to all images
         tmp = dataset_data[0].ext_hdr[pam]
-        # Set it to some value that will disagree
-        dataset_data[0].ext_hdr[pam] = ''
+        # Set PAM to some value that will disagree with the other images
+        dataset_fsm[0].ext_hdr[pam] = ''
         with pytest.raises(ValueError):
             steps.star_spec_registration(
-                dataset_data,
-                dataset_template,
-                ycent_template=initial_cent['ycent'],
-                yoffset_template=initial_cent['yoffset'],
+                dataset_fsm,
+                pathfiles_template,
                 slit_align_err=slit_align_err)
         print(f'PAM failure test for {pam} passed')
+        # Restore original value, before moving to the next failure test
         dataset_data[0].ext_hdr[pam] = tmp
-    # Remove WV0_X/Y keywords from the template
-    # TODO: Wavelength zero-point may be a function parameter if the step function
-    # is L2b->L2b
-    del dataset_template[0].ext_hdr['WV0_X']
-    with pytest.raises(ValueError):
-        steps.star_spec_registration(
-            dataset_data,
-            dataset_template,
-            ycent_template=initial_cent['ycent'],
-            yoffset_template=initial_cent['yoffset'],
-            slit_align_err=slit_align_err)
-    print('WV0_X failure test passed')
-    dataset_template[0].ext_hdr['WV0_X'] = 30.
-    del dataset_template[0].ext_hdr['WV0_Y']
-    with pytest.raises(ValueError):
-        steps.star_spec_registration(
-            dataset_data,
-            dataset_template,
-            ycent_template=initial_cent['ycent'],
-            yoffset_template=initial_cent['yoffset'],
-            slit_align_err=slit_align_err)
-    print('WV0_Y failure test passed')
-    dataset_template[0].ext_hdr['WV0_Y'] = 30.
 
     # Remove FSMX/Y keywords from the observation data
     del dataset_data[0].ext_hdr['FSMX']
     with pytest.raises(AssertionError):
         steps.star_spec_registration(
-            dataset_data,
-            dataset_template,
-            ycent_template=initial_cent['ycent'],
-            yoffset_template=initial_cent['yoffset'],
+            dataset_fsm,
+            pathfiles_template,
             slit_align_err=slit_align_err)
     print('FSMX failure test passed')
     dataset_data[0].ext_hdr['FSMX'] = 30.
     del dataset_data[0].ext_hdr['FSMY']
     with pytest.raises(AssertionError):
         steps.star_spec_registration(
-            dataset_data,
-            dataset_template,
-            ycent_template=initial_cent['ycent'],
-            yoffset_template=initial_cent['yoffset'],
+            dataset_fsm,
+            pathfiles_template,
             slit_align_err=slit_align_err)
     print('FSMY failure test passed')
     dataset_data[0].ext_hdr['FSMY'] = 30.

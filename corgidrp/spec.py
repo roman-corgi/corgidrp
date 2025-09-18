@@ -818,7 +818,7 @@ def star_spec_registration(
       closely matches that of the target source.
       
     """
-    # Confirming the spectroscopy configuration for different PAMs
+    # Confirm spectroscopy configuration for different PAMs
     # CFAM
     cfam_name = dataset_fsm[0].ext_hdr['CFAMNAME'].upper()
     if cfam_name.find('3') != -1:
@@ -850,20 +850,6 @@ def star_spec_registration(
         fsam_name != 'R3C1'):
         raise ValueError('FSAMNAME should be either OPEN, R1C2, R6C5 or R3C1')
 
-    # Make sure that all template files exist
-    for file in pathfiles_template:
-        if os.path.exists(file) == False:
-            raise Exception(f'Template file {file} not found.')
-    # Create Dataset with templates
-    dataset_template = Dataset(pathfiles_template)
-
-    # TODO: Wavelength zero-point solution must be present in template data or passed in the function?
-    try:
-        wv0_x = dataset_template[0].ext_hdr['WV0_X']
-        wv0_y = dataset_template[0].ext_hdr['WV0_Y']
-    except:
-        raise ValueError('Wavelength zero-point keywords WV0_X, WV0_Y are missing')
-
     # All images must have the same setup
     for img in dataset_fsm:
         exthdr = img.ext_hdr
@@ -878,6 +864,17 @@ def star_spec_registration(
 
         # Confirm presence of FSMX, FSMY
         assert 'FSMX' in exthdr.keys() and 'FSMY' in exthdr.keys(), 'Missing FSMX/Y'
+
+    # Make sure that all template files exist
+    for file in pathfiles_template:
+        if os.path.exists(file) == False:
+            raise Exception(f'Template file {file} not found.')
+
+    # Check for WV0 and add unit tests back
+    breakpoint()
+
+    # TODO: Needed? Create Dataset with templates
+    dataset_template = Dataset(pathfiles_template)
 
     # Find closest template offset to the one measured in the data
     slit_idx = int(np.abs(slit_align_err - yoffset_template).argmin())
@@ -921,7 +918,7 @@ def star_spec_registration(
     assert isinstance(img_best, type(img)), 'No suitable best image found.'        
 
     return img_best
-:
+
 def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 15.):
     """
     Fit the line spread function to a wavelength calibrated (averaged) dataset, by reading 
