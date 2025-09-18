@@ -735,12 +735,20 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         initial_cent = None
     spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
     
-    x0 = np.mean(spot_centroids.xfit)
+    nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
+    bb_filter = nb_filter[0]
+    cen_wave = read_cent_wave(nb_filter)[0]
+    xoff_nb = read_cent_wave(nb_filter)[2]
+    yoff_nb = read_cent_wave(nb_filter)[3]
+    xoff_bb = read_cent_wave(bb_filter)[2]
+    yoff_bb = read_cent_wave(bb_filter)[3]
+    # Correct the centroid for the filter-to-filter image offset, so that
+    # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
+    x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
     x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-    y0 = np.mean(spot_centroids.yfit)
+    y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
     y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    filter = sat_dataset[0].ext_hdr["CFAMNAME"]
-    cen_wave = read_cent_wave(filter)[0]
+
     for frame in sci_dataset:
         frame.ext_hdr["WAVLEN0"] = cen_wave
         frame.ext_hdr["WV0_X"] = x0
