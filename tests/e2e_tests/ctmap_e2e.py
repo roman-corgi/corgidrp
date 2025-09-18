@@ -17,6 +17,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.caldb as caldb
+from corgidrp.check import generate_fits_excel_documentation
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -175,6 +176,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     assert np.all(ct_map_walker[2].data == ct_map_mock.err)
     # DQ
     assert np.all(ct_map_walker[3].data == ct_map_mock.dq)
+
+    # Generate Excel documentation for the core throughput map calibration product
+    ctmap_file = glob.glob(os.path.join(ctmap_outputdir, "*_ctm_cal.fits"))[0]
+    excel_output_path = os.path.join(ctmap_outputdir, "ctm_cal_documentation.xlsx")
+    generate_fits_excel_documentation(ctmap_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

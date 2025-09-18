@@ -17,6 +17,7 @@ import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.l2b_to_l3 as l2b_to_l3
 from corgidrp import caldb
+from corgidrp.check import generate_fits_excel_documentation
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -189,6 +190,12 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     
     assert np.min(ct_cal_drp.ct_excam[2]) > 0, "CoreThroughput measurements have non-positive values"
     assert np.max(ct_cal_drp.ct_excam[2]) <= 1, "CoreThroughput measurements exceed 1"
+
+    # Generate Excel documentation for the core throughput calibration product
+    ct_file = glob.glob(os.path.join(corethroughput_outputdir, "*_ctp_cal.fits"))[0]
+    excel_output_path = os.path.join(corethroughput_outputdir, "ctp_cal_documentation.xlsx")
+    generate_fits_excel_documentation(ct_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
 
     # Print success message
     print('e2e test for corethroughput calibration with simulated band3 shaped pupil data passed')

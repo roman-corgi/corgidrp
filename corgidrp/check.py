@@ -588,8 +588,6 @@ def generate_fits_excel_documentation(fits_filepath, output_excel_path):
         ImportError: If pandas is not available
         FileNotFoundError: If the FITS file doesn't exist
     """
-    if pd is None:
-        raise ImportError("pandas is required for Excel generation. Install with: pip install pandas openpyxl")
     
     if not os.path.exists(fits_filepath):
         raise FileNotFoundError(f"FITS file not found: {fits_filepath}")

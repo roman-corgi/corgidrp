@@ -13,6 +13,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.fluxcal as fluxcal
 from corgidrp import caldb
+from corgidrp.check import generate_fits_excel_documentation
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2eoutput_path):
@@ -72,6 +73,11 @@ def test_expected_results_e2e(e2eoutput_path):
     print("fluxcal factor", flux_fac.fluxcal_fac)
     print("fluxcal factor error", flux_fac.fluxcal_err)
     assert flux_fac.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac.fluxcal_err)
+    
+    # Generate Excel documentation for the flux calibration factor product
+    excel_output_path = os.path.join(output_dir, "abf_cal_documentation.xlsx")
+    generate_fits_excel_documentation(fluxcal_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

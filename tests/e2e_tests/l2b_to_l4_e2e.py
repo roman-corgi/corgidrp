@@ -14,6 +14,7 @@ import corgidrp.astrom as astrom
 import corgidrp.data as corgidata
 import corgidrp.walker as walker
 from corgidrp import corethroughput
+from corgidrp.check import generate_fits_excel_documentation
 import pytest
 import glob
 from datetime import datetime, timedelta
@@ -177,7 +178,6 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.ext_hdr.set('LSAMNAME','NFOV')
         new_image.ext_hdr.set('CFAMNAME','1F')
         new_image.ext_hdr.set('FSMLOS', 1) # tip/tilt enabled only in coronagraphic images
-        new_image.ext_hdr.set('LSAMNAME', 'NFOV')
         new_image.ext_hdr.set('FPAMNAME', 'HLC12_C2R1')
         new_image.ext_hdr.set('MASKLOCX', big_cols//2)
         new_image.ext_hdr.set('MASKLOCY', big_cols//2)
@@ -404,6 +404,12 @@ def test_l3_to_l4(e2eoutput_path):
     fluxcal_factor = 2e-12
     fluxcal_factor_error = 1e-14
     prhd, exthd, errhd, dqhd = create_default_L3_headers()
+    # Set consistent header values for flux calibration factor
+    exthd['CFAMNAME'] = '1F'
+    exthd['DPAMNAME'] = 'PUPIL'
+    exthd['LSAMNAME'] = 'OPEN'
+    exthd['FSAMNAME'] = 'OPEN'
+    exthd['FPAMNAME'] = 'OPEN_12'
     fluxcal_fac = corgidata.FluxcalFactor(fluxcal_factor, err = fluxcal_factor_error, pri_hdr = prhd, ext_hdr = exthd, err_hdr = errhd, input_dataset = dataset)
 
     # Generate timestamp for FluxcalFactor calibration
@@ -462,6 +468,15 @@ def test_l3_to_l4(e2eoutput_path):
     print("Filenames associated correctly!")
     
     print('e2e test for l3_to_l4 calibration passed')
+
+    # Generate Excel documentation for L4 science data files
+    l4_files = glob.glob(os.path.join(main_output_dir, "*_l4_.fits"))
+    if l4_files:
+        # Document the first L4 file as a representative example
+        l4_file = l4_files[0]
+        excel_output_path = os.path.join(main_output_dir, "l4_data_documentation.xlsx")
+        generate_fits_excel_documentation(l4_file, excel_output_path)
+        print(f"Excel documentation generated for L4 data: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

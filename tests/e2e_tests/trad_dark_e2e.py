@@ -1,5 +1,6 @@
 import argparse
 import os
+import glob
 import pytest
 import re
 import numpy as np
@@ -12,6 +13,7 @@ import corgidrp.detector as detector
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+from corgidrp.check import generate_fits_excel_documentation
 try:
     from proc_cgi_frame.gsw_process import Process, mean_combine
 except:
@@ -324,6 +326,12 @@ def test_trad_dark(e2edata_path, e2eoutput_path):
 
     assert(np.nanmax(np.abs(TVAC_trad_dark - trad_dark_data)) < 1e-11)
     
+    # Generate Excel documentation for the traditional dark calibration product
+    dark_file = glob.glob(os.path.join(build_trad_dark_outputdir, "*_drk_cal.fits"))[0]
+    excel_output_path = os.path.join(build_trad_dark_outputdir, "drk_cal_documentation.xlsx")
+    generate_fits_excel_documentation(dark_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
+    
     # Print success message
     print('e2e test for trad_dark calibration passed')
     
@@ -574,9 +582,15 @@ def test_trad_dark_im(e2edata_path, e2eoutput_path):
     test_filename = re.sub('_l[0-9].', '', test_filename)
     assert(trad_dark.filename == test_filename)
     
+    # Generate Excel documentation for the traditional dark calibration product (image area)
+    dark_file = glob.glob(os.path.join(build_trad_dark_outputdir, "*_drk_cal.fits"))[0]
+    excel_output_path = os.path.join(build_trad_dark_outputdir, "drk_cal_documentation.xlsx")
+    generate_fits_excel_documentation(dark_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
+    
     # Print success message
     print('e2e test for trad_dark_im calibration passed')
-
+    
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 

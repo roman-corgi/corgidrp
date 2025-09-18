@@ -1,5 +1,6 @@
 import argparse
 import os
+import glob
 import pytest
 import numpy as np
 import astropy.time as time
@@ -11,6 +12,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+from corgidrp.check import generate_fits_excel_documentation
 from corgidrp.darks import build_synthesized_dark
 
 try:
@@ -351,6 +353,16 @@ def test_l1_to_l2b(e2edata_path, e2eoutput_path):
         # plt.ylim([475, 535])
 
         # plt.show()
+    
+    # Generate Excel documentation for L2b science data files
+    l2b_files = glob.glob(os.path.join(test_outputdir, "*_l2b.fits"))
+    if l2b_files:
+        # Document the first L2b file as a representative example
+        l2b_file = l2b_files[0]
+        excel_output_path = os.path.join(test_outputdir, "l2b_data_documentation.xlsx")
+        generate_fits_excel_documentation(l2b_file, excel_output_path)
+        print(f"Excel documentation generated for L2b data: {excel_output_path}")
+    
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 

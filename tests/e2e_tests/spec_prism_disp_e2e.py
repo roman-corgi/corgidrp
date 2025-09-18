@@ -16,6 +16,7 @@ from astropy.table import Table
 from corgidrp.data import Image
 from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.walker import walk_corgidrp
+from corgidrp.check import generate_fits_excel_documentation
 from corgidrp.check import (check_filename_convention, check_dimensions, 
                            verify_hdu_count, verify_header_keywords, 
                            validate_binary_table_fields, get_latest_cal_file)
@@ -282,6 +283,12 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
+    
+    # Generate Excel documentation for the dispersion model calibration product
+    dpm_file = glob.glob(os.path.join(e2eoutput_path, "*_dpm_cal.fits"))[0]
+    excel_output_path = os.path.join(e2eoutput_path, "dpm_cal_documentation.xlsx")
+    generate_fits_excel_documentation(dpm_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
     
     print('e2e test for spec_prism_disp calibration passed')
     

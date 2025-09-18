@@ -11,6 +11,7 @@ import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 from corgidrp.sorting import sort_pupilimg_frames
+from corgidrp.check import generate_fits_excel_documentation
 from corgidrp.calibrate_nonlin import nonlin_kgain_dataset_2_stack
 
 import warnings
@@ -248,6 +249,12 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
 
     assert np.abs(diff_kgain) == 0
     assert np.abs(diff_readnoise) == 0 
+
+    # Generate Excel documentation for the KGain calibration product
+    kgain_file = glob.glob(os.path.join(kgain_outputdir, "*_krn_cal.fits"))[0]
+    excel_output_path = os.path.join(kgain_outputdir, "krn_cal_documentation.xlsx")
+    generate_fits_excel_documentation(kgain_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

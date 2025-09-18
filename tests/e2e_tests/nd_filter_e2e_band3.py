@@ -7,6 +7,7 @@ import corgidrp.data as data
 import corgidrp.walker as walker
 import corgidrp.nd_filter_calibration as nd_filter_calibration
 from corgidrp import caldb
+from corgidrp.check import generate_fits_excel_documentation
 import time
 
 # ----------------------------------------------------------------------
@@ -96,6 +97,12 @@ def test_nd_filter_e2e(e2edata_path, e2eoutput_path):
 
     # Clean up CAL‑DB entry
     caldb.CalDB().remove_entry(nd_cal)
+
+    # Generate Excel documentation for the ND filter calibration product (Band 3)
+    nd_filter_file = glob.glob(os.path.join(main_output_dir, "*_ndf_cal.fits"))[0]
+    excel_output_path = os.path.join(main_output_dir, "ndf_cal_documentation.xlsx")
+    generate_fits_excel_documentation(nd_filter_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
 
     print("ND‑filter E2E test passed")
 

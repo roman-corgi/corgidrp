@@ -17,6 +17,7 @@ import corgidrp.data as data
 import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
+from corgidrp.check import generate_fits_excel_documentation
 from corgidrp.darks import build_synthesized_dark
 
 try:
@@ -347,6 +348,12 @@ def test_noisemap_calibration_from_l1(e2edata_path, e2eoutput_path):
 
         # assert np.all(np.abs(diff) < 1e-5)
     
+    # Generate Excel documentation for the detector noise maps calibration product (from L1)
+    dnm_file = os.path.join(noisemap_outputdir, output_filename)
+    excel_output_path = os.path.join(noisemap_outputdir, "dnm_cal_documentation.xlsx")
+    generate_fits_excel_documentation(dnm_file, excel_output_path)
+    print(f"Excel documentation generated for detector noise maps (from L1): {excel_output_path}")
+    
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -599,6 +606,14 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
         # plt.close()
 
         # assert np.all(np.abs(diff) < 1e-5)
+    
+    # Generate Excel documentation for the detector noise maps calibration product (from L2a)
+    dnm_files = glob(os.path.join(noisemap_outputdir, "*_dnm_cal.fits"))
+    if dnm_files:
+        dnm_file = dnm_files[0]
+        excel_output_path = os.path.join(noisemap_outputdir, "dnm_cal_documentation.xlsx")
+        generate_fits_excel_documentation(dnm_file, excel_output_path)
+        print(f"Excel documentation generated for detector noise maps (from L2a): {excel_output_path}")
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

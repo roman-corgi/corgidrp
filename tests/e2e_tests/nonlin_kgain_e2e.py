@@ -14,6 +14,7 @@ from corgidrp import data
 from corgidrp import mocks
 from corgidrp import walker
 from corgidrp import caldb
+from corgidrp.check import generate_fits_excel_documentation
 
 thisfile_dir = os.path.dirname(__file__)  # this file's folder
 
@@ -196,6 +197,17 @@ def test_nonlin_and_kgain_e2e(
     possible_kgain_files = glob.glob(os.path.join(e2eoutput_path, '*_krn_cal*.fits'))
     kgain_filepath = max(possible_kgain_files, key=os.path.getmtime) # get the one most recently modified
     kgain = data.KGain(kgain_filepath)
+
+    # Generate Excel documentation for the nonlinearity and kgain calibration products
+    nonlin_file = os.path.join(e2eoutput_path, nonlin_drp_filepath)
+    excel_output_path_nln = os.path.join(e2eoutput_path, "nln_cal_documentation.xlsx")
+    generate_fits_excel_documentation(nonlin_file, excel_output_path_nln)
+    print(f"Excel documentation generated for nonlinearity: {excel_output_path_nln}")
+    
+    kgain_file = os.path.join(e2eoutput_path, kgain_filepath)
+    excel_output_path_krn = os.path.join(e2eoutput_path, "krn_cal_documentation.xlsx")
+    generate_fits_excel_documentation(kgain_file, excel_output_path_krn)
+    print(f"Excel documentation generated for kgain: {excel_output_path_krn}")
 
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

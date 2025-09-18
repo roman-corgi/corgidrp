@@ -1,5 +1,6 @@
 import argparse
 import os
+import glob
 import pytest
 import numpy as np
 import astropy.time as time
@@ -11,6 +12,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+from corgidrp.check import generate_fits_excel_documentation
 
 try:
     from proc_cgi_frame.gsw_process import Process
@@ -282,6 +284,15 @@ def test_l1_to_l2a(e2edata_path, e2eoutput_path):
         # plt.ylim([475, 535])
 
         # plt.show()
+    
+    # Generate Excel documentation for L2a science data files
+    l2a_files = glob.glob(os.path.join(l2a_outputdir, "*_l2a.fits"))
+    if l2a_files:
+        # Document the first L2a file as a representative example
+        l2a_file = l2a_files[0]
+        excel_output_path = os.path.join(l2a_outputdir, "l2a_data_documentation.xlsx")
+        generate_fits_excel_documentation(l2a_file, excel_output_path)
+        print(f"Excel documentation generated for L2a data: {excel_output_path}")
     
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)

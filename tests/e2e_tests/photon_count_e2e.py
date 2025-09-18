@@ -14,6 +14,7 @@ import corgidrp.mocks as mocks
 import corgidrp.walker as walker
 import corgidrp.caldb as caldb
 import corgidrp.detector as detector
+from corgidrp.check import generate_fits_excel_documentation
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
@@ -228,6 +229,15 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         assert np.isclose(np.nanmean(pc_dark_frame), dark_mean, rtol=0.01) 
         assert pc_frame_err.min() >= 0
         assert pc_dark_frame_err.min() >= 0
+
+    # Generate Excel documentation for L2b photon-counted science data files
+    l2b_files = [f for f in os.listdir(l2a_to_l2b_output_dir) if f.endswith('_drk_cal.fits')]
+    if l2b_files:
+        # Document the first L2b photon-counted file as a representative example
+        l2b_file = os.path.join(l2a_to_l2b_output_dir, l2b_files[0])
+        excel_output_path = os.path.join(l2a_to_l2b_output_dir, "drk_cal_photon_counted_documentation.xlsx")
+        generate_fits_excel_documentation(l2b_file, excel_output_path)
+        print(f"Excel documentation generated for dark cal photon-counted data: {excel_output_path}")
 
     # Print success message
     print('e2e test for photon counting calibration passed')
