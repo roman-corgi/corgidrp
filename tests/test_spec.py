@@ -10,6 +10,8 @@ from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
+# VAP testing
+from corgidrp.check import check_filename_convention, verify_header_keywords
 
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy")) 
 test_datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
@@ -556,6 +558,45 @@ def test_star_spec_registration():
     # 2/ UTs showing that if the input parameters are invalid, the step function
     # raises an exception
     # TODO: Update https://github.com/roman-corgi/corgidrp/issues/545 accordingly
+    # TODO: Double check: Check dimensions and header values per L2b documentation
+
+    # Directory to temporarily store the I/O of the test
+    dir_test = 'simdata'
+    os.makedirs(dir_test, exist_ok=True)
+
+    log_file = os.path.join(dir_test, 'star_spec_registration.log')
+
+    # Create a new logger specifically for this test, otherwise things have issues
+    logger = logging.getLogger('star_spec_registration')
+    logger.setLevel(logging.INFO)
+
+    # Clear any existing handlers to avoid duplicates
+    logger.handlers.clear()
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+
+    # Create console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+
+    # Add handlers to logger
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    logger.info('='*80)
+    logger.info('CGI-REQT-5465: REGISTERED PRISM IMAGE OF STAR TEST')
+    logger.info('='*80)
+    logger.info("")
+    logger.info('='*80)
+    logger.info('Test Case 1: Input Image Data Format and Content')
+    logger.info('='*80)
 
     # Instrumental setup
     cfam_name = '3F'
@@ -569,11 +610,7 @@ def test_star_spec_registration():
         f'SPAM={spam_name}, LSAM={lsam_name:s}')
 
     # Data level of input data
-    dt_lvl = 'l2b'
-
-    # Directory to temporarily store the I/O of the test
-    dir_test = 'simdata'
-    os.makedirs(dir_test, exist_ok=True)
+    dt_lvl = 'L2b'
 
     # Create some L2b mock data: The step function must find the spectrum that
     # best matches one of the template spectra. There's a step in the step
@@ -665,6 +702,24 @@ def test_star_spec_registration():
                     data_images.append(image_data)
 
             dataset_fsm = Dataset(data_images)
+
+            # =================================================================
+            # VAP Testing: Validate Input Images
+            # =================================================================
+            # Validate all input images
+            logger.info(f'SUBCASE FSAM={fsam:s}, FPAM={fpam:s}')
+            for i, frame in enumerate(dataset_fsm):
+                frame_info = f"Frame {i}"
+                check_filename_convention(getattr(frame, 'filename', None),
+                    f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger)
+                verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info,
+                    logger)
+                verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
+                    frame_info, logger)
+                logger.info("")
+
+            logger.info(f"Total input images validated: {len(dataset_fsm)}")
+            logger.info("")
         
             # Identify best image
             list_of_best_fsm = steps.star_spec_registration(
@@ -672,7 +727,6 @@ def test_star_spec_registration():
                 pathfiles_template,
                 slit_align_err=slit_align_err)
 
-            # Tests:
             # Test that the output corresponds with the expected best FSM position
             # Collect all input files
             fsm_filenames = []
@@ -682,9 +736,40 @@ def test_star_spec_registration():
             list_of_expected_fsm = fsm_filenames[nframes*slit_ref:nframes*(slit_ref+1)]
             # Check they are the same set (not necessarily in the same order)
             assert len(list_of_expected_fsm) == len(list_of_best_fsm), 'List of FSM frames does not match expected set'
-            # TODO: uncomment once the rest of the tests pass
+
+            # Save files (temporarily) to check data level
+            dataset_fsm.save(filedir=dir_test) 
+
+            # VAP testing: Check data level of best FSM files only
+            logger.info("")
+            logger.info('='*80)
+            logger.info('Test Case 2: Output Image Data Format and Content')
+            logger.info('='*80)
+            for i, frame in enumerate(dataset_fsm):
+                if frame.filename in list_of_best_fsm:
+                    frame_info = f"Frame {i}"
+                    check_filename_convention(getattr(frame, 'filename', None),
+                        f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger)
+                    verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
+                        frame_info, logger)
+                    logger.info("")
+
+            logger.info(f"Total input images validated: {len(list_of_best_fsm)}")
+            logger.info("")
+
+             # TODO: uncomment once the rest of the tests pas
 #            for file in list_of_best_fsm:
+                 # Verify all files are in the set of expected files in the test
 #                assert file in list_of_expected_fsm, f'File {file:s} is not in the list of expected best FSM frames'
+
+            # Delete temporary files
+            for file in dataset_fsm:
+                os.remove(file.filepath)
+
+    # Make sure all temporary files are removed except the logger
+    for file in os.listdir(dir_test):
+        if file[-3:] != 'log':
+            os.remove(os.path.join(dir_test, file))
 
     # End of tests testing proper functioning.
 
@@ -725,7 +810,9 @@ def test_star_spec_registration():
     print('FSMY failure test passed')
     dataset_fsm[0].ext_hdr['FSMY'] = 30.
     
-    print('STAR SPECTRUM REGISTRATION UT/VAP TEST PASSED')
+    logger.info('='*80)
+    logger.info('TEST COMPLETE')
+    logger.info('='*80)
 
     
 def test_linespread_function():
