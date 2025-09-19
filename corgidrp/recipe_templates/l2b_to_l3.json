@@ -17,6 +17,9 @@
             "name": "divide_by_exptime"
         },
         {
+            "name": "crop"
+        },
+        {
             "name": "update_to_l3"
         }, 
         {
