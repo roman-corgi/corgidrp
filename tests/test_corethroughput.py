@@ -8,6 +8,7 @@ from scipy.signal import decimate
 from astropy.modeling import models
 from astropy.modeling.models import Gaussian2D
 from termcolor import cprint
+import corgidrp.caldb as caldb
 
 import corgidrp
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
@@ -32,6 +33,9 @@ def setup_module():
     """
     Create datasets needed for the UTs
     """
+    # Ensure default calibration files exist
+    caldb.initialize()
+    
     global FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT
     # Choose some H/V values for FPAM/FSAM  during corethroughput observations
     FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT = 6854, 22524, 29471, 12120
