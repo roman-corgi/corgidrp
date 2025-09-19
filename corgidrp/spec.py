@@ -743,25 +743,32 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
 
-def get_shift_correlation(
-    img1,
-    img2,
+def get_cropped_correlated_frame(
+    img_data,
+    img_template,
     ):
     """ Find the array shift that maximizes the phase correlation between two
       images.
 
     Args:
-      img1 (array): first two dimensional array.
-      img2 (array): second two dimensional array.
+      img_data (array): first two dimensional array.
+      img_template (array): second two dimensional array. Its size must be the same or
+      less than img1, because img2 is the noiseless template used to find the
+      spectrum on the L2b data and it is a cropped frame.
 
     Returns:
       Image shift in image pixels that maximizes the phase correlation of the
       first image with the second one.
     """
-    breakpoint()
-    #TODO: Pad images?
+    if np.any(img_data.shape < img_template.shape):
+        raise Exception('The template image cannot have a larger size then the data one')  
 
-    dft1 = np.fft.fftshift(np.fft.fft2(img1))
+    # Pad img_template to be the same size as img_data
+    img2 = np.zeros_like(img_data)
+    img2[img_data.shape[0]//2-img_template.shape[0]//2:img_data.shape[0]//2+img_template.shape[0]//2 + 1,
+        img_data.shape[1]//2-img_template.shape[1]//2:img_data.shape[1]//2+img_template.shape[1]//2 + 1] = img_template
+
+    dft1 = np.fft.fftshift(np.fft.fft2(img_data))
     dft2 = np.fft.fftshift(np.fft.fft2(img2))
 
     # Cross-power spectrum (Add epsilon to avoid division by zero, from Google Labs)
@@ -773,9 +780,14 @@ def get_shift_correlation(
     # Find the peak location (shift)
     shift = np.unravel_index(np.argmax(np.abs(poc_real)), poc_real.shape)
 
-    breakpoint()
-    #TODO: Double check how to apply the shift
-    return shift
+    # Bring img_data on top of img_template
+    img_data = np.roll(img_data, (-shift[0], -shift[1]), axis=(0,1))
+
+    # Crop it to match img2 size
+    img_data_cropped = img_data[img_data.shape[0]//2-img_template.shape[0]//2:img_data.shape[0]//2+img_template.shape[0]//2+1,
+        img_data.shape[1]//2-img_template.shape[1]//2:img_data.shape[1]//2+img_template.shape[1]//2+1]
+
+    return img_data_cropped
 
 def star_spec_registration(
     dataset_fsm,
@@ -874,16 +886,26 @@ def star_spec_registration(
     # Find closest template offset to the one measured in the data
     slit_idx = int(np.abs(slit_align_err - yoffset_arr).argmin())
     # Template data
-    temp_data = fits.open(pathfiles_template[slit_idx])[0].data
+    temp = fits.open(pathfiles_template[slit_idx])[0]
+    temp_data = temp.data
     # Associated zeropoint
     try:
-        wv0_x = fits.open(pathfiles_template[slit_idx])[0].header['WV0_X']
+        wv0_x = temp.header['WV0_X']
     except:
         raise ValueError(f'WV0_X missing from {pathfiles_template[slit_idx]:s}')
     try:
-        wv0_y = fits.open(pathfiles_template[slit_idx])[0].header['WV0_Y']
+        wv0_y = temp.header['WV0_Y']
     except:
         raise ValueError(f'WV0_Y missing from {pathfiles_template[slit_idx]:s}')
+    # Measured centroid
+    try:
+        centx = temp.header['CENTX']
+    except:
+        raise ValueError(f'CENTX missing from {pathfiles_template[slit_idx]:s}')
+    try:
+        centy = temp.header['CENTY']
+    except:
+        raise ValueError(f'CENTY missing from {pathfiles_template[slit_idx]:s}')
     
     # Split FSM dataset according to their FSM values
     dataset_list, fsm_values = dataset_fsm.split_dataset(exthdr_keywords=['FSMY'])
@@ -903,27 +925,30 @@ def star_spec_registration(
     idx_best = None
     import matplotlib.pyplot as plt
     for idx_img, img in enumerate(fsm_combined):
-        # TODO: cross-correlate input data with template
-        #shift_corr = get_shift_correlation(img_tmp, temp_data)
-        # TODO: Center FSM data according to their cross-correlation with the
-        #img_tmp = np.shift(img_tmp)
-        img = img[:,:]
+        # cross-correlate input data with template and crop it
+        img = get_cropped_correlated_frame(img, temp_data)
         # template data and match the size of template data
         x_fit, y_fit = fit_psf_centroid(img, temp_data,
-            xcent_template = wv0_x,
-            ycent_template = wv0_y,
+            xcent_template = centx,
+            ycent_template = centy,
             halfheight = halfheight)[0:2]
         # best-matching image is wrt zero-point
         zeropt_dist_img = np.sqrt((x_fit - wv0_x)**2 + (y_fit - wv0_y)**2)
-        print(x_fit, wv0_x, y_fit, wv0_y, zeropt_dist_img)
+        print('IDX FSM', idx_img)
+        print(x_fit, centx, wv0_x)
+        print(y_fit, centy, wv0_y)
+        print(zeropt_dist_img)
         fig, (ax1, ax2) = plt.subplots(1, 2)
         ax1.imshow(img)
+        ax1.set_title(f'Noisy FSM. std={np.std(img[0:20,0:20]):.2f}')
         ax2.imshow(temp_data)
+        ax2.set_title(f'Noiseless template. std={np.std(temp_data[0:20,0:20]):.2f}')
         plt.show()
         # TODO: return only filename of best image
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
             idx_best = idx_img
+        print('MIN Value: ', zeropt_dist)
         
     breakpoint()
     # Check that there's at least one solution

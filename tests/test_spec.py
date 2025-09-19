@@ -633,9 +633,14 @@ def test_star_spec_registration():
             data_images = []
             basetime = datetime.now()
             for i in range(len(psf_arr)):
-                data_2d = np.copy(psf_arr[i])
-                err = np.zeros_like(data_2d)
-                dq = np.zeros_like(data_2d, dtype=int)
+                data_l2b = np.zeros([1024, 1024])
+                psf_tmp = np.copy(psf_arr[i])
+                # Random inserts to test the cross-correlation functionality
+                x0, y0 = 512+np.random.randint(300), 512+np.random.randint(300)
+                data_l2b[y0-psf_tmp.shape[0]//2:y0+psf_tmp.shape[0]//2 + 1,
+                    x0-psf_tmp.shape[1]//2:x0+psf_tmp.shape[1]//2 + 1] = psf_tmp
+                err = np.zeros_like(data_l2b)
+                dq = np.zeros_like(data_l2b, dtype=int)
                 # Some noisy version for the simulated data without blowing it
                 # unreasonably. The one with slit_ref has little noise added
                 ext_hdr_cp = ext_hdr.copy()
@@ -645,9 +650,9 @@ def test_star_spec_registration():
                 # Produce NFRAMES for each FSM position
                 for i_frame in range(nframes):
                     image_data = Image(
-                        data_or_filepath=data_2d + rng.normal(0,
-                            np.abs(i-slit_ref+0.01)*data_2d.std(),
-                            data_2d.shape),
+                        data_or_filepath=data_l2b + rng.normal(0,
+                            np.abs(i-slit_ref+0.01)*data_l2b.std(),
+                            data_l2b.shape),
                         pri_hdr=pri_hdr,
                         ext_hdr=ext_hdr_cp,
                         err=err,
