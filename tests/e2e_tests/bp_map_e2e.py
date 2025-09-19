@@ -141,16 +141,13 @@ def test_bp_map_master_dark_e2e(e2edata_path, e2eoutput_path):
     l1_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
     
     # Extract visit ID from the first file's primary header
-    def get_visitid_from_header(filepath):
-        with fits.open(filepath) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                return str(visitid).zfill(19)
-            else:
-                return "0000000000000000000"  # fallback
-    
-    visitid = get_visitid_from_header(l1_data_filelist[0])
+    with fits.open(l1_data_filelist[0]) as hdulist:
+        prihdr = hdulist[0].header
+        visitid = prihdr.get('VISITID', None)
+        if visitid is not None:
+            visitid = str(visitid).zfill(19)
+        else:
+            visitid = "0000000000000000000"  # fallback
 
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
@@ -371,16 +368,13 @@ def test_bp_map_simulated_dark_e2e(e2edata_path, e2eoutput_path):
     l1_data_filelist = [os.path.join(input_data_dir, f) for f in os.listdir(input_data_dir) if f.endswith('.fits')]
     
     # Extract visit ID from the first file's primary header
-    def get_visitid_from_header(filepath):
-        with fits.open(filepath) as hdulist:
-            prihdr = hdulist[0].header
-            visitid = prihdr.get('VISITID', None)
-            if visitid is not None:
-                return str(visitid).zfill(19)
-            else:
-                return "0000000000000000000"  # fallback
-    
-    visitid = get_visitid_from_header(l1_data_filelist[0])
+    with fits.open(l1_data_filelist[0]) as hdulist:
+        prihdr = hdulist[0].header
+        visitid = prihdr.get('VISITID', None)
+        if visitid is not None:
+            visitid = str(visitid).zfill(19)
+        else:
+            visitid = "0000000000000000000"  # fallback
 
     ###### Setup necessary calibration files
     # Modify input files to set KGAIN value in their headers
