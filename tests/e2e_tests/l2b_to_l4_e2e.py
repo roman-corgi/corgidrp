@@ -159,6 +159,8 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.ext_hdr.set('FPAMNAME', 'HLC12_C2R1')
         new_image.ext_hdr.set('MASKLOCX', big_cols//2)
         new_image.ext_hdr.set('MASKLOCY', big_cols//2)
+        new_image.ext_hdr.set('EACQ_ROW', big_cols//2)
+        new_image.ext_hdr.set('EACQ_COL', big_cols//2)
 
         #If Reference star then flag it. 
         if star[ibatch] == 2:
@@ -372,8 +374,8 @@ def test_l3_to_l4(e2eoutput_path):
     source_header = psf_subtracted_image_with_source.ext_hdr
 
     snyx = np.array([list(map(float, source_header[key].split(','))) for key in source_header if key.startswith("SNYX")])
-    xcen = psf_subtracted_image_with_source.ext_hdr['CRPIX1']
-    ycen = psf_subtracted_image_with_source.ext_hdr['CRPIX2']
+    xcen = psf_subtracted_image_with_source.ext_hdr['STARLOCX']
+    ycen = psf_subtracted_image_with_source.ext_hdr['STARLOCY']
     source_distances =np.sort(np.sqrt((snyx[:,1] - xcen)**2 + (snyx[:,2] - ycen)**2))
 
     ### Get the expected distances
@@ -413,7 +415,7 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = "/Users/maxmb/Data/corgi/corgidrp/" 
+    e2edata_dir = "/Users/sbogat/.corgidrp/" 
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 

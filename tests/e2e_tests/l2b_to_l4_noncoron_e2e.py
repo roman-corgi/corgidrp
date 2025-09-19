@@ -143,6 +143,7 @@ def test_l2b_to_l3(e2edata_path, e2eoutput_path):
         new_image.pri_hdr.set('ROLL', 0)
         new_image.ext_hdr.set('CFAMNAME','1F')
         new_image.ext_hdr.set('FSMLOS', 0) # non-coron
+        new_image.ext_hdr.set('LSAMNAME', 'OPEN') # non-coron
 
         # new_image.filename ="CGI_020000199900100{}00{}_20250415T0305102_L2b.fits".format(ibatch,i)
         new_image.filename = "CGI_0200001999001000001_20250415T0305{0:02d}_L2b.fits".format(i).lower()
@@ -321,7 +322,7 @@ if __name__ == "__main__":
 
     outputdir = thisfile_dir
     #This folder should contain an OS11 folder: ""hlc_os11_v3" with the OS11 data in it.
-    e2edata_dir = "/home/jwang/Desktop/CGI_TVAC_Data/" 
+    e2edata_dir = "/Users/sbogat/.corgidrp/" 
     #Not actually TVAC Data, but we can put it in the TVAC data folder. 
     ap = argparse.ArgumentParser(description="run the l2b->l4 end-to-end test")
 
