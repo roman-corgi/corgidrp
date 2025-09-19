@@ -199,12 +199,12 @@ def test_nonlin_and_kgain_e2e(
     kgain = data.KGain(kgain_filepath)
 
     # Generate Excel documentation for the nonlinearity and kgain calibration products
-    nonlin_file = os.path.join(e2eoutput_path, nonlin_drp_filepath)
+    nonlin_file = nonlin_drp_filepath  # This already contains the full path
     excel_output_path_nln = os.path.join(e2eoutput_path, "nln_cal_documentation.xlsx")
     generate_fits_excel_documentation(nonlin_file, excel_output_path_nln)
     print(f"Excel documentation generated for nonlinearity: {excel_output_path_nln}")
     
-    kgain_file = os.path.join(e2eoutput_path, kgain_filepath)
+    kgain_file = kgain_filepath  # This already contains the full path
     excel_output_path_krn = os.path.join(e2eoutput_path, "krn_cal_documentation.xlsx")
     generate_fits_excel_documentation(kgain_file, excel_output_path_krn)
     print(f"Excel documentation generated for kgain: {excel_output_path_krn}")

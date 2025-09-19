@@ -24,7 +24,13 @@ thisfile_dir = os.path.dirname(__file__)
 
 @pytest.mark.e2e
 def test_expected_results_e2e(e2edata_path, e2eoutput_path):
-    """Test corethroughput calibration with mock data"""
+    """Test corethroughput calibration with mock data
+
+    Args:
+        e2edata_path (str): Path to the test data
+        e2eoutput_path (str): Path to the output directory
+
+    """
     # make output directory if needed
     corethroughput_outputdir = os.path.join(e2eoutput_path, "corethroughput_cal_e2e/mock_data")
     if os.path.exists(corethroughput_outputdir):
@@ -134,7 +140,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     
 @pytest.mark.e2e
 def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
-    """Test corethroughput calibration with simulated band 3 shaped pupil data"""
+    """Test corethroughput calibration with simulated band 3 shaped pupil data
+
+    Args:
+        e2edata_path (str): Path to the test data
+        e2eoutput_path (str): Path to the output directory
+
+    """
     
     # Create the output directory
     corethroughput_outputdir = os.path.join(e2eoutput_path, 'corethroughput_cal_e2e/sim_data')
