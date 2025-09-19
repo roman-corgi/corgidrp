@@ -897,15 +897,6 @@ def star_spec_registration(
         wv0_y = temp.header['WV0_Y']
     except:
         raise ValueError(f'WV0_Y missing from {pathfiles_template[slit_idx]:s}')
-    # Measured centroid
-    try:
-        centx = temp.header['CENTX']
-    except:
-        raise ValueError(f'CENTX missing from {pathfiles_template[slit_idx]:s}')
-    try:
-        centy = temp.header['CENTY']
-    except:
-        raise ValueError(f'CENTY missing from {pathfiles_template[slit_idx]:s}')
     
     # Split FSM dataset according to their FSM values
     dataset_list, fsm_values = dataset_fsm.split_dataset(exthdr_keywords=['FSMY'])
@@ -929,32 +920,41 @@ def star_spec_registration(
         img = get_cropped_correlated_frame(img, temp_data)
         # template data and match the size of template data
         x_fit, y_fit = fit_psf_centroid(img, temp_data,
-            xcent_template = centx,
-            ycent_template = centy,
+            xcent_template = wv0_x,
+            ycent_template = wv0_y,
             halfheight = halfheight)[0:2]
         # best-matching image is wrt zero-point
         zeropt_dist_img = np.sqrt((x_fit - wv0_x)**2 + (y_fit - wv0_y)**2)
+        # TODO: remove this after debugging
         print('IDX FSM', idx_img)
-        print(x_fit, centx, wv0_x)
-        print(y_fit, centy, wv0_y)
-        print(zeropt_dist_img)
+        print('wvo_x:', wv0_x, 'x_fit:', x_fit)
+        print('wvo_y:', wv0_y, 'y_fit:', y_fit)
+        print('LOSS: ', zeropt_dist_img)
         fig, (ax1, ax2) = plt.subplots(1, 2)
         ax1.imshow(img)
         ax1.set_title(f'Noisy FSM. std={np.std(img[0:20,0:20]):.2f}')
         ax2.imshow(temp_data)
         ax2.set_title(f'Noiseless template. std={np.std(temp_data[0:20,0:20]):.2f}')
-        plt.show()
+        #plt.show()
+        plt.close()
+        
         # TODO: return only filename of best image
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
             idx_best = idx_img
+        # TODO: remove this after debugging
         print('MIN Value: ', zeropt_dist)
         
-    breakpoint()
     # Check that there's at least one solution
     assert idx_best != None, 'No suitable best image found.'        
+    
+    # List of filenames of frames with the same FSM value that best matches the
+    # stellar template
+    list_of_best_fsm = []
+    for img in dataset_list[idx_best]:
+        list_of_best_fsm += [img.filename]
 
-    return list_of_filenames_for_best_fsm_maybe_wo_path
+    return list_of_best_fsm
 
 def fit_line_spread_function(dataset, halfwidth = 2, halfheight = 9, guess_fwhm = 15.):
     """
