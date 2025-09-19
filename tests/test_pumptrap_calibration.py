@@ -110,7 +110,7 @@ def test_tpump_analysis():
                         bins_E=bins_E, bins_cs=bins_cs)
     # filename check
     test_filename = emgain_divided_dataset.frames[-1].filename.split('.fits')[0] + '_tpu_cal.fits'
-    test_filename = re.sub('_L[0-9].', '', test_filename)
+    test_filename = re.sub('_l[0-9].', '', test_filename)
     assert tpump_calibration.filename == test_filename
 
     #Extract the extra info. 

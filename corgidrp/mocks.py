@@ -1784,6 +1784,10 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
             If None, no nonlinearity is applied.  Defaults to None.
         arrtype (str): array type (for this function, choice of 'SCI' or 'ENG')
     """
+    
+    # Import modules needed for filename generation
+    import datetime
+    from . import data
 
     #If output_dir doesn't exist then make it
     if not os.path.exists(output_dir):
@@ -2587,27 +2591,45 @@ def generate_mock_pump_trap_data(output_dir,meta_path, EMgain=10,
                 #     str(temp)+'K'+'Scheme_'+str(sch)+'TPUMP_Npumps_10000_gain'+str(g)+'_phasetime'+
                 #     str(t)+'_2.fits'), overwrite = True)
                 # else: 
-                # Generate standard CGI filename
-                import datetime
-                from . import data
-                
-                # Create unique timestamp for this file
-                base_time = datetime.datetime.now()
-                # Use a combination of temp, scheme, and phase time index to create unique timestamps
-                time_offset_ms = (temp - 180) * 10000 + sc * 1000 + i * 100
-                unique_time = (base_time + datetime.timedelta(milliseconds=time_offset_ms))
-                time_str = data.format_ftimeutc(unique_time.isoformat())
-                
-                # Standard filename format
-                visitid = "0000000000000000000"  # Default visitid
-                filename = Path(output_dir, f'cgi_{visitid}_{time_str}_l1_.fits')
-                
-                # Update standard headers
-                hdul[0].header['FILENAME'] = f'cgi_{visitid}_{time_str}_l1_.fits'
-                hdul[0].header['VISITID'] = visitid
-                hdul[0].header['OBSID'] = visitid
-                
-                hdul.writeto(filename, overwrite=True)
+                # Use old filename format for now to avoid affecting data generation
+                mult_counter = 0
+                filename = Path(output_dir,
+                    str(temp)+'K'+'Scheme_'+str(sc)+'TPUMP_Npumps_'+str(int(num_pumps))+'_gain'+str(EMgain)+'_phasetime'+str(t)+'.fits')
+                if os.path.exists(filename):
+                    mult_counter += 1
+                    hdul.writeto(str(filename)[:-4]+'_'+str(mult_counter)+'.fits', overwrite = True)
+                else:
+                    hdul.writeto(filename, overwrite = True)
+    
+    # After all data generation is complete, rename files to CGI format, because changing the filename
+    # in the function above somehow affects the content of the file
+    _rename_files_to_cgi_format(output_dir)
+
+def _rename_files_to_cgi_format(output_dir):
+    """Rename files from old format to CGI format after data generation is complete"""
+    import glob
+    import shutil
+    
+    # Find all old format files
+    old_files = glob.glob(os.path.join(output_dir, "*K*Scheme_*TPUMP*.fits"))
+    
+    # Sort files to ensure consistent ordering
+    old_files.sort()
+    
+    for file_counter, old_file in enumerate(old_files):
+        # Generate simple CGI filename with sequential numbering
+        visitid = "0000000000000000000"
+        new_filename = f'cgi_{visitid}_20240101t0000000_{file_counter:03d}_l1_.fits'
+        new_file = os.path.join(output_dir, new_filename)
+        
+        # Update headers in the file
+        with fits.open(old_file, mode='update') as hdul:
+            hdul[0].header['FILENAME'] = new_filename
+            hdul[0].header['VISITID'] = visitid
+            hdul[0].header['OBSID'] = visitid
+        
+        # Rename the file
+        shutil.move(old_file, new_file)
 
 
 def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7, exptime=0.05, cosmic_rate=0, full_frame=True, smear=True, flux=1, bad_frames=0):

@@ -230,23 +230,23 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     # Set up output directory and logging
     global logger
     
-    # Use the provided output path directly as the main folder
-    main_output_dir = e2eoutput_path
-    input_l2b_dir = os.path.join(main_output_dir, 'input_l2b')
-    
-    # Clean up existing directory
-    if os.path.exists(main_output_dir):
+    # Create proper subfolder structure like other e2e tests
+    spec_prism_outputdir = os.path.join(e2eoutput_path, "spec_prism_disp_e2e")
+    if os.path.exists(spec_prism_outputdir):
         import shutil
-        shutil.rmtree(main_output_dir)
+        shutil.rmtree(spec_prism_outputdir)
     
-    os.makedirs(main_output_dir, exist_ok=True)
+    os.makedirs(spec_prism_outputdir, exist_ok=True)
+    
+    # Create input_l2b subfolder for input data
+    input_l2b_dir = os.path.join(spec_prism_outputdir, 'input_l2b')
     os.makedirs(input_l2b_dir, exist_ok=True)
     
-    # Update paths to use the new structure
-    e2edata_path = input_l2b_dir  # Input files go in input_l2b subfolder
-    e2eoutput_path = main_output_dir  # Outputs go in main folder
+    # Use proper paths for input generation and output
+    input_data_dir = input_l2b_dir  # Input files go in input_l2b subfolder
+    output_dir = spec_prism_outputdir  # Outputs go in main test folder
     
-    log_file = os.path.join(e2eoutput_path, 'spec_prism_disp_e2e.log')
+    log_file = os.path.join(output_dir, 'spec_prism_disp_e2e.log')
     
     # Create a new logger specifically for this test, otherwise things have issues
     logger = logging.getLogger('spec_prism_disp_cal_e2e')
@@ -278,19 +278,19 @@ def test_run_end_to_end(e2edata_path, e2eoutput_path):
     logger.info("")
     
     # Run the complete end-to-end test
-    disp_model, coeffs, angle = run_spec_prism_disp_e2e_test(e2edata_path, e2eoutput_path)
+    disp_model, coeffs, angle = run_spec_prism_disp_e2e_test(input_data_dir, output_dir)
     
     logger.info('='*80)
     logger.info('END-TO-END TEST COMPLETE')
     logger.info('='*80)
     
     # Generate Excel documentation for the dispersion model calibration product
-    dpm_file = glob.glob(os.path.join(e2eoutput_path, "*_dpm_cal.fits"))[0]
-    excel_output_path = os.path.join(e2eoutput_path, "dpm_cal_documentation.xlsx")
+    dpm_file = glob.glob(os.path.join(output_dir, "*_dpm_cal.fits"))[0]
+    excel_output_path = os.path.join(output_dir, "dpm_cal_documentation.xlsx")
     generate_fits_excel_documentation(dpm_file, excel_output_path)
     print(f"Excel documentation generated: {excel_output_path}")
     
-    print('e2e test for spec_prism_disp calibration passed')
+    print('e2e test for spectroscopy prism dispersion calibration passed')
     
 
 
