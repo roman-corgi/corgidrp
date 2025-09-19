@@ -159,7 +159,7 @@ def prescan_biassub(input_dataset, noise_maps=None, return_full_frame=False,
 
 def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh=0.7,
                        plat_thresh=0.7, cosm_filter=1, cosm_box=3, cosm_tail=10,
-                       mode='image', detector_regions=None):
+                       mode='image', detector_regions=None, frac_frame_oversat=0.5):
     """
     Detects cosmic rays in a given dataset. Updates the DQ to reflect the pixels that are affected.
     TODO: (Eventually) Decide if we want to invest time in improving CR rejection (modeling and subtracting the hit
@@ -199,6 +199,9 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
         detector_regions: (dict):  
             A dictionary of detector geometry properties.  Keys should be as 
             found in detector_areas in detector.py. Defaults to detector_areas in detector.py.
+        frac_frame_oversat: (float):
+            Fraction of frame over sat_thresh at which we determine the frame is oversaturated
+            and will be discarded.
 
     Returns:
         corgidrp.data.Dataset:
@@ -251,6 +254,16 @@ def detect_cosmic_rays(input_dataset, detector_params, k_gain = None, sat_thresh
     # threshold the frame to catch any values above sat_fwc --> this is
     # mask 1
     m1 = (crmasked_cube >= sat_fwcs_array) * sat_dqval
+
+    # TODO issue #481
+    # Discard frames that are oversaturated but did not meet OVEREXP threshold.
+    for frame in crmasked_cube:
+        if (frame.data > sat_thresh).sum / (float)frame.data.count > frac_frame_oversat:
+            # What does "discard frame" mean?
+            # 1) Remove data, err, and dq from crmasked_dataset?
+            # 2) Exclude these frames from following flag_cosmics step?
+            # 3) Return immediately?
+            # 3) Other?
 
     # run remove_cosmics() with fwc=fwc_em since tails only come from
     # saturation in the gain register --> this is mask 2
