@@ -886,34 +886,48 @@ def star_spec_registration(
         raise ValueError(f'WV0_Y missing from {pathfiles_template[slit_idx]:s}')
     
     # Split FSM dataset according to their FSM values
-    dataset_fsm = dataset_fsm.copy()
+    dataset_list, fsm_values = dataset_fsm.split_dataset(exthdr_keywords=['FSMY'])
+    
+    # Combine frames with the same FSMY to increase SNR before the analysis
+    fsm_combined = []
+    for dataset in dataset_list:
+        fsm_tmp = []
+        for img in dataset:
+            fsm_tmp += [img.data]
+        fsm_combined += [np.median(np.array(fsm_tmp), axis=0)]
 
     # Find best PSF centroid fit for each image compared to the template
     # Cost function: Start with any large value that cannot happen. P.S. Units
     # are EXCAM pixels
     zeropt_dist = 1e8
-    for idx_img, img in enumerate(dataset_fsm):
-        img_tmp = img.data
+    idx_best = None
+    import matplotlib.pyplot as plt
+    for idx_img, img in enumerate(fsm_combined):
         # TODO: cross-correlate input data with template
         #shift_corr = get_shift_correlation(img_tmp, temp_data)
         # TODO: Center FSM data according to their cross-correlation with the
         #img_tmp = np.shift(img_tmp)
-        img_tmp = img_tmp[:,:]
+        img = img[:,:]
         # template data and match the size of template data
-        x_fit, y_fit = fit_psf_centroid(img_tmp, temp_data,
+        x_fit, y_fit = fit_psf_centroid(img, temp_data,
             xcent_template = wv0_x,
             ycent_template = wv0_y,
             halfheight = halfheight)[0:2]
-
         # best-matching image is wrt zero-point
-        zeropt_dist_img = np.sqrt((x_fit-wv0_x)**2 + (y_fit-wv0_y)**2)
-        fsm_best = None
+        zeropt_dist_img = np.sqrt((x_fit - wv0_x)**2 + (y_fit - wv0_y)**2)
+        print(x_fit, wv0_x, y_fit, wv0_y, zeropt_dist_img)
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.imshow(img)
+        ax2.imshow(temp_data)
+        plt.show()
         # TODO: return only filename of best image
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
+            idx_best = idx_img
         
+    breakpoint()
     # Check that there's at least one solution
-    assert fsm_best != None, 'No suitable best image found.'        
+    assert idx_best != None, 'No suitable best image found.'        
 
     return list_of_filenames_for_best_fsm_maybe_wo_path
 

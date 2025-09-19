@@ -613,6 +613,8 @@ def test_star_spec_registration():
     slit_align_err = (np.array(yoffset_arr)
         + np.diff(np.array(yoffset_arr)).mean()*0.1)[slit_ref]
 
+    print('Slit ref', slit_ref)
+
     # Start UTs showing that the step function works as expected
     # Some (arbitrary) number of frames per FSM position
     nframes = 3
@@ -637,13 +639,14 @@ def test_star_spec_registration():
                 # Some noisy version for the simulated data without blowing it
                 # unreasonably. The one with slit_ref has little noise added
                 ext_hdr_cp = ext_hdr.copy()
-                ext_hdr_cp['FSMX'] = i // 5
+                # Only vertical FSM positions are changed
+                ext_hdr_cp['FSMX'] = 0
                 ext_hdr_cp['FSMY'] = i - 5 * (i // 5)
                 # Produce NFRAMES for each FSM position
                 for i_frame in range(nframes):
                     image_data = Image(
                         data_or_filepath=data_2d + rng.normal(0,
-                            0.1*np.abs(i-slit_ref+0.01)*data_2d.std(),
+                            np.abs(i-slit_ref+0.01)*data_2d.std(),
                             data_2d.shape),
                         pri_hdr=pri_hdr,
                         ext_hdr=ext_hdr_cp,
@@ -693,6 +696,8 @@ def test_star_spec_registration():
         print(f'PAM failure test for {pam} passed')
         # Restore original value, before moving to the next failure test
         dataset_data[0].ext_hdr[pam] = tmp
+
+    # TODO: Remove WV0_X/Y Keywords
 
     # Remove FSMX/Y keywords from the observation data
     del dataset_data[0].ext_hdr['FSMX']
