@@ -70,10 +70,10 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     flux_dataset_WP2 = data.Dataset([flux_image_WP2, flux_image_WP2])
 
     logger.info('='*80)
-    logger.info('Test Case 1: Input Image Data Format and Content')
+    logger.info('Test Case 1: Input Image Data Format and Content for WP1')
     logger.info('='*80)
 
-    # check input dataset info
+    # check input dataset info for WP1
     for i, frame in enumerate(flux_dataset_WP1):
         frame_info = f"Frame {i}"
         frame_name = getattr(frame, 'filename', None)
@@ -86,44 +86,17 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info=frame_info, logger=logger)
         # log CFAMNAME
         logger.info(f"Frame {frame_name} in flux_dataset_WP1 have CFAMNAME {frame.ext_hdr['CFAMNAME']}")
-        # log FSMX and FSMY
-        logger.info(f"Frame {frame_name} in flux_dataset_WP1 have FSMX {frame.ext_hdr['FSMX']}")
-        logger.info(f"Frame {frame_name} in flux_dataset_WP1 have FSMY {frame.ext_hdr['FSMY']}")
         logger.info("")
-
-    # same checks for other dataset
-    for i, frame in enumerate(flux_dataset_WP2):
-        frame_name = getattr(frame, 'filename', None)
-        check_filename_convention(frame_name, 'cgi_*_l2b.fits', frame_info=frame_info, logger=logger)
-        check_dimensions(frame.data, (1024, 1024), frame_info=frame_info, logger=logger)
-        # check all images have the same CFAMNAME value
-        verify_header_keywords(frame.ext_hdr, {'CFAMNAME': flux_dataset_WP2.frames[0].ext_hdr['CFAMNAME']}, frame_info=frame_info, logger=logger)
-        # check all images have POL45 as DPAMNAME value
-        verify_header_keywords(frame.ext_hdr, {'DPAMNAME': 'POL45'}, frame_info=frame_info, logger=logger)
-        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info=frame_info, logger=logger)
-        # print CFAMNAME
-        logger.info(f"Frame {frame_name} in flux_dataset_WP2 have CFAMNAME {frame.ext_hdr['CFAMNAME']}")
-        # prin FSMX and FSMY
-        logger.info(f"Frame {frame_name} in flux_dataset_WP2 have FSMX {frame.ext_hdr['FSMX']}")
-        logger.info(f"Frame {frame_name} in flux_dataset_WP2 have FSMY {frame.ext_hdr['FSMY']}")
-        logger.info("")
-    logger.info(f"Total input images validated: {len(flux_dataset_WP1) + len(flux_dataset_WP2)}")
+    logger.info(f"Total input images validated: {len(flux_dataset_WP1)}")
 
     output_dir_WP1 = os.path.join(output_dir, 'WP1')
-    output_dir_WP2 = os.path.join(output_dir, 'WP2')
     os.mkdir(output_dir_WP1)
-    os.mkdir(output_dir_WP2)
     flux_dataset_WP1.save(output_dir_WP1, ['flux_e2e_WP1_{0}.fits'.format(i) for i in range(len(flux_dataset_WP1))])
-    flux_dataset_WP2.save(output_dir_WP2, ['flux_e2e_WP2_{0}.fits'.format(i) for i in range(len(flux_dataset_WP2))])
 
     data_filelist_WP1 = []
-    data_filelist_WP2 = []
 
     for f in os.listdir(output_dir_WP1):
         data_filelist_WP1.append(os.path.join(output_dir_WP1, f))
-    
-    for f in os.listdir(output_dir_WP2):
-        data_filelist_WP2.append(os.path.join(output_dir_WP2, f))
     
     # make DRP output directory if needed
     fluxcal_outputdir = os.path.join(e2eoutput_path, "l2b_to_pol_fluxcal_factor_output")
@@ -151,24 +124,24 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     logger.info('='*80)
     ## check that the calibration file is configured correctly
     # check HDU0 have no data
-    if fluxcal_image_WP1.pri_hdr == 0:
+    if not hasattr(fluxcal_image_WP1.pri_hdr, "data"):
         logger.info("HDU0: Header only. Expected: header only. PASS.")
     else:
         logger.info(f"HDU0: Contains data. Expected: header only. FAIL.")
     # check HDU1 data is a single float
     if fluxcal_image_WP1.data.dtype.type == corgidrp.image_dtype:
-        logger.info(f"HDU1 dtype: float. Expected: float. Pass.")
+        logger.info(f"HDU1 dtype: float. Expected: float. PASS.")
     else:
-        logger.info(f"HDU1 dtype: {fluxcal_image_WP1.data.dtype.type}. Expected: float. Fail.")
-    # check err and dq haave the right dimension
+        logger.info(f"HDU1 dtype: {fluxcal_image_WP1.data.dtype.type}. Expected: float. FAIL.")
+    # check err and dq have the right dimension
     if fluxcal_image_WP1.err.shape == (1,):
-        logger.info(f"Error data shape: (1,1). Expected: (1,1). Pass.")
+        logger.info(f"Error data shape: (1,1). Expected: (1,1). PASS.")
     else:
-        logger.info(f"Error data shape: {fluxcal_image_WP1.err.shape}. Expected: (1,1). Fal.")
+        logger.info(f"Error data shape: {fluxcal_image_WP1.err.shape}. Expected: (1,1). FAIL.")
     if fluxcal_image_WP1.dq.shape == (1,):
-        logger.info(f"DQ data shape: (1,1). Expected: (1,1). Pass.")
+        logger.info(f"DQ data shape: (1,1). Expected: (1,1). PASS.")
     else:
-        logger.info(f"DQ data shape: {fluxcal_image_WP1.dq.shape}. Expected: (1,1). Fal.")
+        logger.info(f"DQ data shape: {fluxcal_image_WP1.dq.shape}. Expected: (1,1). FAIL.")
     # check filename convention
     check_filename_convention(getattr(fluxcal_image_WP1, 'filename', None), 'abf_cal.fits', logger=logger)
     # check header keyword values match with what is expected
@@ -187,9 +160,45 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     logger.info(f"used ND filter {flux_fac_WP1.nd_filter}")
     logger.info(f"fluxcal factor {flux_fac_WP1.fluxcal_fac}")
     logger.info(f"fluxcal factor error {flux_fac_WP1.fluxcal_err}")
+    for i, frame in enumerate(flux_dataset_WP1):
+        frame_info = f"Frame {i}"
+        frame_name = getattr(frame, 'filename', None)
+        # log input FSMX and FSMY
+        logger.info(f"Frame {frame_name} in flux_dataset_WP1 have FSMX {frame.ext_hdr['FSMX']}")
+        logger.info(f"Frame {frame_name} in flux_dataset_WP1 have FSMY {frame.ext_hdr['FSMY']}")
+    # log output FSMX and FSMY
+    logger.info(f"Output fluxcal file have FSMX {flux_fac_WP1.ext_hdr['FSMX']}")
+    logger.info(f"Output fluxcal file have FSMY {flux_fac_WP1.ext_hdr['FSMY']}")
     logger.info("")
     assert flux_fac_WP1.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac_WP1.fluxcal_err)
 
+    logger.info('='*80)
+    logger.info('Test Case 4: Input Image Data Format and Content for WP2')
+    logger.info('='*80)
+
+    # check input dataset info for WP2
+    for i, frame in enumerate(flux_dataset_WP2):
+        frame_name = getattr(frame, 'filename', None)
+        check_filename_convention(frame_name, 'cgi_*_l2b.fits', frame_info=frame_info, logger=logger)
+        check_dimensions(frame.data, (1024, 1024), frame_info=frame_info, logger=logger)
+        # check all images have the same CFAMNAME value
+        verify_header_keywords(frame.ext_hdr, {'CFAMNAME': flux_dataset_WP2.frames[0].ext_hdr['CFAMNAME']}, frame_info=frame_info, logger=logger)
+        # check all images have POL45 as DPAMNAME value
+        verify_header_keywords(frame.ext_hdr, {'DPAMNAME': 'POL45'}, frame_info=frame_info, logger=logger)
+        verify_header_keywords(frame.ext_hdr, {'DATALVL': 'L2b'}, frame_info=frame_info, logger=logger)
+        # print CFAMNAME
+        logger.info(f"Frame {frame_name} in flux_dataset_WP2 have CFAMNAME {frame.ext_hdr['CFAMNAME']}")
+        logger.info("")
+    logger.info(f"Total input images validated: {len(flux_dataset_WP2)}")
+
+    output_dir_WP2 = os.path.join(output_dir, 'WP2')
+    os.mkdir(output_dir_WP2)
+    flux_dataset_WP2.save(output_dir_WP2, ['flux_e2e_WP2_{0}.fits'.format(i) for i in range(len(flux_dataset_WP2))])
+
+    data_filelist_WP2 = []
+
+    for f in os.listdir(output_dir_WP2):
+        data_filelist_WP2.append(os.path.join(output_dir_WP2, f))
 
     ####### Run the DRP walker for WP2
     logger.info('Running walker for WP2')
@@ -198,28 +207,28 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     fluxcal_image_WP2 = data.Image(fluxcal_file_WP2)
 
     logger.info('='*80)
-    logger.info('Test Case 4: Output Calibration Product Data Format and Content for WP2')
+    logger.info('Test Case 5: Output Calibration Product Data Format and Content for WP2')
     logger.info('='*80)
     ## check that the calibration file is configured correctly
     # check HDU0 have no data
-    if fluxcal_image_WP2.pri_hdr == 0:
+    if not hasattr(fluxcal_image_WP2.pri_hdr, "data"):
         logger.info("HDU0: Header only. Expected: header only. PASS.")
     else:
         logger.info(f"HDU0: Contains data. Expected: header only. FAIL.")
     # check HDU1 data is a single float
     if fluxcal_image_WP2.data.dtype.type == corgidrp.image_dtype:
-        logger.info(f"HDU1 dtype: float. Expected: float. Pass.")
+        logger.info(f"HDU1 dtype: float. Expected: float. PASS.")
     else:
-        logger.info(f"HDU1 dtype: {fluxcal_image_WP2.data.dtype.type}. Expected: float. Fail.")
-    # check err and dq haave the right dimension
+        logger.info(f"HDU1 dtype: {fluxcal_image_WP2.data.dtype.type}. Expected: float. FAIL.")
+    # check err and dq have the right dimension
     if fluxcal_image_WP2.err.shape == (1,):
-        logger.info(f"Error data shape: (1,1). Expected: (1,1). Pass.")
+        logger.info(f"Error data shape: (1,1). Expected: (1,1). PASS.")
     else:
-        logger.info(f"Error data shape: {fluxcal_image_WP2.err.shape}. Expected: (1,1). Fal.")
+        logger.info(f"Error data shape: {fluxcal_image_WP2.err.shape}. Expected: (1,1). FAIL.")
     if fluxcal_image_WP2.dq.shape == (1,):
-        logger.info(f"DQ data shape: (1,1). Expected: (1,1). Pass.")
+        logger.info(f"DQ data shape: (1,1). Expected: (1,1). PASS.")
     else:
-        logger.info(f"DQ data shape: {fluxcal_image_WP2.dq.shape}. Expected: (1,1). Fal.")
+        logger.info(f"DQ data shape: {fluxcal_image_WP2.dq.shape}. Expected: (1,1). FAIL.")
     # check filename convention
     check_filename_convention(getattr(fluxcal_image_WP2, 'filename', None), 'abf_cal.fits', logger=logger)
     # check header keyword values match with what is expected
@@ -231,13 +240,22 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
 
     # baseline performance check WP2
     logger.info('='*80)
-    logger.info('Test Case 5: Baseline Performance Checks for WP2')
+    logger.info('Test Case 6: Baseline Performance Checks for WP2')
     logger.info('='*80)
     flux_fac_WP2 = data.FluxcalFactor(fluxcal_file_WP2)
     logger.info(f"used color filter {flux_fac_WP2.filter}")
     logger.info(f"used ND filter {flux_fac_WP2.nd_filter}")
     logger.info(f"fluxcal factor {flux_fac_WP2.fluxcal_fac}")
     logger.info(f"fluxcal factor error {flux_fac_WP2.fluxcal_err}")
+    for i, frame in enumerate(flux_dataset_WP2):
+        frame_info = f"Frame {i}"
+        frame_name = getattr(frame, 'filename', None)
+        # log input FSMX and FSMY
+        logger.info(f"Frame {frame_name} in flux_dataset_WP2 have FSMX {frame.ext_hdr['FSMX']}")
+        logger.info(f"Frame {frame_name} in flux_dataset_WP2 have FSMY {frame.ext_hdr['FSMY']}")
+    # log output FSMX and FSMY
+    logger.info(f"Output fluxcal file have FSMX {flux_fac_WP2.ext_hdr['FSMX']}")
+    logger.info(f"Output fluxcal file have FSMY {flux_fac_WP2.ext_hdr['FSMY']}")
     logger.info("")
     assert flux_fac_WP2.fluxcal_fac == pytest.approx(cal_factor, abs = 1.5 * flux_fac_WP2.fluxcal_err)
 
