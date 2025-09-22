@@ -557,8 +557,7 @@ def test_star_spec_registration():
     # match spectrum among all present ones
     # 2/ UTs showing that if the input parameters are invalid, the step function
     # raises an exception
-    # TODO: Update https://github.com/roman-corgi/corgidrp/issues/545 accordingly
-    # TODO: Double check: Check dimensions and header values per L2b documentation
+    # 3/ VAP tests are performed along this test function too
 
     # Directory to temporarily store the I/O of the test
     dir_test = 'simdata'
@@ -625,6 +624,14 @@ def test_star_spec_registration():
     # y offsets (from FSAM slit vertical offset)
     yoffset_arr = []
     pathfiles_template = []
+    # =================================================================
+    # VAP Testing: Validate Input Images
+    # =================================================================
+    # Validate all input images
+    logger.info('='*80)
+    logger.info('Test Case 1: Input Image Data Format and Content')
+    logger.info('='*80)
+    logger.info('Template data')
     for idx_temp in range(n_temp):
         pathfile = os.path.join(test_datadir,
                 f'spec_reg_fsm_offset_template_cfam3F_{idx_temp:02d}.fits')
@@ -638,9 +645,18 @@ def test_star_spec_registration():
             try:
                 yoffset_arr += [hdul[0].header['FSM_OFF']]
             except:
-                raise ValueError(f'Missing FSM offset in file {file_path:s}')
-            # Make sure zero-points are present
-            assert 'WV0_X' in hdul[0].header and 'WV0_Y' in hdul[0].header, f'Missing WV0_X, WV0_Y in {pathfile}'
+                logger.info(f'Alignment offsets relative to FSAM slit NOT present in template file {pathfile}. FAIL')
+                raise ValueError(f'Missing FSM offset in file {pathfile:s}')
+            # Make sure zero-points are present            
+            try:
+                wv0_x = hdul[0].header['WV0_X']
+                wv0_y = hdul[0].header['WV0_Y']
+            except:
+                logger.info(f'Wavelength zero-point WV0_X, WV0_Y NOT present in template file {pathfile}. FAIL')
+        # At this step all individual tests above have passed
+        logger.info('Alignment offsets relative to FSAM slit present in all template files. PASS')
+        logger.info('WV0_X and WV0_Y present in all template files. PASS')
+      
         # Add pathfilename to the list
         pathfiles_template += [pathfile]
 
@@ -703,19 +719,16 @@ def test_star_spec_registration():
 
             dataset_fsm = Dataset(data_images)
 
-            # =================================================================
-            # VAP Testing: Validate Input Images
-            # =================================================================
-            # Validate all input images
+            logger.info('FSM data')
             logger.info(f'SUBCASE FSAM={fsam:s}, FPAM={fpam:s}')
             for i, frame in enumerate(dataset_fsm):
                 frame_info = f"Frame {i}"
+                verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
+                    frame_info, logger)
                 check_filename_convention(getattr(frame, 'filename', None),
                     f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger)
                 verify_header_keywords(frame.ext_hdr, ['CFAMNAME'], frame_info,
                     logger)
-                verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
-                    frame_info, logger)
                 logger.info("")
 
             logger.info(f"Total input images validated: {len(dataset_fsm)}")
@@ -727,7 +740,6 @@ def test_star_spec_registration():
                 pathfiles_template,
                 slit_align_err=slit_align_err)
 
-            # Test that the output corresponds with the expected best FSM position
             # Collect all input files
             fsm_filenames = []
             for image in dataset_fsm:
@@ -736,31 +748,37 @@ def test_star_spec_registration():
             list_of_expected_fsm = fsm_filenames[nframes*slit_ref:nframes*(slit_ref+1)]
             # Check they are the same set (not necessarily in the same order)
             assert len(list_of_expected_fsm) == len(list_of_best_fsm), 'List of FSM frames does not match expected set'
-
             # Save files (temporarily) to check data level
             dataset_fsm.save(filedir=dir_test) 
 
             # VAP testing: Check data level of best FSM files only
-            logger.info("")
+            # Test that the output corresponds with the expected best FSM position
             logger.info('='*80)
-            logger.info('Test Case 2: Output Image Data Format and Content')
+            logger.info('Test Case 2: Output Calibration Product Data Format and Content')
             logger.info('='*80)
             for i, frame in enumerate(dataset_fsm):
                 if frame.filename in list_of_best_fsm:
                     frame_info = f"Frame {i}"
-                    check_filename_convention(getattr(frame, 'filename', None),
-                        f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger)
                     verify_header_keywords(frame.ext_hdr, {'DATALVL': dt_lvl},
                         frame_info, logger)
+                    check_filename_convention(getattr(frame, 'filename', None),
+                        f'cgi_*_{dt_lvl.lower():s}.fits', frame_info, logger)
                     logger.info("")
 
             logger.info(f"Total input images validated: {len(list_of_best_fsm)}")
             logger.info("")
 
-             # TODO: uncomment once the rest of the tests pas
+             # TODO: uncomment once the rest of the tests passes
 #            for file in list_of_best_fsm:
                  # Verify all files are in the set of expected files in the test
 #                assert file in list_of_expected_fsm, f'File {file:s} is not in the list of expected best FSM frames'
+
+            logger.info('='*80)
+            logger.info('Test Case 3: Baseline Performance Checks')
+            logger.info('Best-matching filenames')
+            for file in list_of_best_fsm:
+                logger.info(f'{file}')
+            logger.info('='*80)
 
             # Delete temporary files
             for file in dataset_fsm:

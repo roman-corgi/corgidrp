@@ -938,7 +938,7 @@ def star_spec_registration(
         #plt.show()
         plt.close()
         
-        # TODO: return only filename of best image
+        # Keep track of absolute minimum
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
             idx_best = idx_img
