@@ -885,6 +885,7 @@ def star_spec_registration(
 
     # Find closest template offset to the one measured in the data
     slit_idx = int(np.abs(slit_align_err - yoffset_arr).argmin())
+    
     # Template data
     temp = fits.open(pathfiles_template[slit_idx])[0]
     temp_data = temp.data

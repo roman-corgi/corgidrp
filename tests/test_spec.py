@@ -557,7 +557,7 @@ def test_star_spec_registration():
     # match spectrum among all present ones
     # 2/ UTs showing that if the input parameters are invalid, the step function
     # raises an exception
-    # 3/ VAP tests are performed along this test function too
+    # 3/ VAP tests are performed along this test function too (https://github.com/roman-corgi/corgidrp/issues/545)
 
     # Directory to temporarily store the I/O of the test
     dir_test = 'simdata'
@@ -660,13 +660,15 @@ def test_star_spec_registration():
         # Add pathfilename to the list
         pathfiles_template += [pathfile]
 
-    # Set a slit alignment offset for the FSM data that is close to one of the
+    # Define a slit alignment offset for the FSM data that is close to one of the
     # templates to be able to predict which offset best matches the templates
     slit_ref = n_temp // 2
+    # Slight change
     slit_align_err = (np.array(yoffset_arr)
         + np.diff(np.array(yoffset_arr)).mean()*0.1)[slit_ref]
 
-    print('Slit ref', slit_ref)
+    # TODO: Remove after debugging
+    print('Slit ref=', slit_ref, ', yoffset=', yoffset_arr[slit_ref], ', slit_align_err=', slit_align_err)
 
     # Start UTs showing that the step function works as expected
     # Some (arbitrary) number of frames per FSM position
@@ -694,13 +696,14 @@ def test_star_spec_registration():
                     x0-psf_tmp.shape[1]//2:x0+psf_tmp.shape[1]//2 + 1] = psf_tmp
                 err = np.zeros_like(data_l2b)
                 dq = np.zeros_like(data_l2b, dtype=int)
-                # Some noisy version for the simulated data without blowing it
-                # unreasonably. The one with slit_ref has little noise added
                 ext_hdr_cp = ext_hdr.copy()
-                # Only vertical FSM positions are changed
+                # Only vertical FSM positions, along the narrower length of the
+                # slit, need be explored. Values are irrelevant.
                 ext_hdr_cp['FSMX'] = 0
                 ext_hdr_cp['FSMY'] = i - 5 * (i // 5)
-                # Produce NFRAMES for each FSM position
+                # Produce NFRAMES for each FSM position:
+                # Some noisy version for the simulated data without blowing it
+                # unreasonably. The one with slit_ref has much less noise added
                 for i_frame in range(nframes):
                     image_data = Image(
                         data_or_filepath=data_l2b + rng.normal(0,
@@ -769,9 +772,9 @@ def test_star_spec_registration():
             logger.info("")
 
              # TODO: uncomment once the rest of the tests passes
-#            for file in list_of_best_fsm:
-                 # Verify all files are in the set of expected files in the test
-#                assert file in list_of_expected_fsm, f'File {file:s} is not in the list of expected best FSM frames'
+            for file in list_of_best_fsm:
+                # Verify all files are in the set of expected files in the test
+                assert file in list_of_expected_fsm, f'File {file:s} is not in the list of expected best FSM frames'
 
             logger.info('='*80)
             logger.info('Test Case 3: Baseline Performance Checks')
