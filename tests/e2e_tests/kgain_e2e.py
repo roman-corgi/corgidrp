@@ -67,7 +67,7 @@ def set_vistype_for_tvac(
         prihdr = fits_file[0].header
         # Adjust VISTYPE
         if prihdr['VISTYPE'] == 'N/A':
-            prihdr['VISTYPE'] = 'PUPILIMG'
+            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
@@ -94,7 +94,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     #             stack_arr2_f.append(file)
     #             with fits.open(file, mode='update') as hdus:
     #                 try:
-    #                     hdus[0].header['VISTYPE'] = 'PUPILIMG'
+    #                     hdus[0].header['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
     #                     hdus[0].header['OBSTYPE'] = 'MNFRAME'
     #                 except:
     #                     pass
@@ -108,7 +108,7 @@ def test_l1_to_kgain(e2edata_path, e2eoutput_path):
     #             stack_arr_f.append(file)
     #             with fits.open(file, mode='update') as hdus:
     #                 try:
-    #                     hdus[0].header['VISTYPE'] = 'PUPILIMG'
+    #                     hdus[0].header['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
     #                     hdus[0].header['OBSTYPE'] = 'KGAIN'
     #                 except:
     #                     pass

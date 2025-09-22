@@ -81,7 +81,7 @@ def fix_headers_for_tvac(
         for key in exthdr1:
             if key not in exthdr:
                 exthdr[key] = exthdr1[key]
-        prihdr['VISTYPE'] = 'DARK'
+        prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
         # Update FITS file  
         fits_file.writeto(file, overwrite=True)
 

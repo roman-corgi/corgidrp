@@ -28,7 +28,7 @@ thisfile_dir = os.path.dirname(__file__) # this file's folder
 def set_obstype_for_darks(
     list_of_fits,
     ):
-    """ Adds proper values to VISTYPE for the NoiseMap calibration: DARKS
+    """ Adds proper values to VISTYPE for the NoiseMap calibration: CGIVST_CAL_DRK
     (data used to calibrate the dark noise sources).
 
     This function is unnecessary with future data because data will have
@@ -45,7 +45,7 @@ def set_obstype_for_darks(
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
-        prihdr['VISTYPE'] = 'DARK'
+        prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
         prihdr['PHTCNT'] = False
         #exthdr['ISPC'] = False
         # Update FITS file
@@ -83,7 +83,7 @@ def fix_headers_for_tvac(
         for key in exthdr1:
             if key not in exthdr:
                 exthdr[key] = exthdr1[key]
-        prihdr['VISTYPE'] = 'DARK'
+        prihdr['VISTYPE'] = 'CGIVST_CAL_DRK'
         # Update FITS file
         fits_file.writeto(file, overwrite=True)
 
@@ -416,7 +416,7 @@ def test_noisemap_calibration_from_l2a(e2edata_path, e2eoutput_path):
     kgain.save(filedir=noisemap_outputdir, filename="mock_kgain.fits")
     this_caldb.create_entry(kgain)
 
-    # Update VISTPYE to "DARK" for DRP run
+    # Update VISTPYE to "CGIVST_CAL_DRK" for DRP run
     set_obstype_for_darks(l2a_filepaths)
 
     ####### Run the DRP walker
