@@ -546,6 +546,26 @@ def test_determine_zeropoint():
         assert x0err_noi < errortol_pix
         assert y0err_noi < errortol_pix
     
+    #test that the complete dataset is returned
+    all_dataset = l3_to_l4.determine_wave_zeropoint(input_dataset, return_all = True)
+    assert len(all_dataset) == len(input_dataset)
+    for frame in all_dataset:
+        assert frame.ext_hdr["WAVLEN0"] == 753.83
+        assert "WV0_X" in frame.ext_hdr
+        assert "WV0_Y" in frame.ext_hdr
+        assert "WV0_XERR" in frame.ext_hdr
+        assert "WV0_YERR" in frame.ext_hdr
+        assert frame.ext_hdr["WV0_DIMX"] == 81
+        assert frame.ext_hdr["WV0_DIMY"] == 81
+        x0 = frame.ext_hdr["WV0_X"]
+        y0 = frame.ext_hdr["WV0_Y"]
+        x0err = frame.ext_hdr["WV0_XERR"]
+        y0err = frame.ext_hdr["WV0_YERR"]
+        assert x0 == pytest.approx(slit_x, abs = errortol_pix)
+        assert y0 == pytest.approx(slit_y, abs = errortol_pix)
+        assert x0err < errortol_pix
+        assert y0err < errortol_pix
+    
 def test_linespread_function():
     """
     test the fit of a linespread function to a narrowband observation and storing in a LineSpread calibration file

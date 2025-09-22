@@ -685,7 +685,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     return processed_dataset 
 
 
-def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None):
+def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, return_all = False):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -696,6 +696,7 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
                                                   path is taken
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
+        return_all (boolean): return ony the broad band science frames or all (also narrow band)
     
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
@@ -741,6 +742,8 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
     y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
     filter = sat_dataset[0].ext_hdr["CFAMNAME"]
     cen_wave = read_cent_wave(filter)[0]
+    if return_all:
+        sci_dataset = dataset
     for frame in sci_dataset:
         frame.ext_hdr["WAVLEN0"] = cen_wave
         frame.ext_hdr["WV0_X"] = x0

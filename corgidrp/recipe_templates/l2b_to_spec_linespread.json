@@ -11,7 +11,10 @@
             "name": "divide_by_exptime"
         },
         {
-            "name" : "determine_wave_zeropoint"
+            "name" : "determine_wave_zeropoint",
+            "keywords" : {
+                "return_all" : true
+            }
         },
         {
             "name" : "add_wavelength_map",

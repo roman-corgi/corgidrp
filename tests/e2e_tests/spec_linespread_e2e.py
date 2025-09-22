@@ -59,22 +59,30 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         
         # Load test data
         datadir = os.path.join(os.path.dirname(__file__), '../test_data/spectroscopy')
-        file_path = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3d_R1C2SLIT_PRISM3_offset_array.fits")
+        file_path_science = os.path.join(datadir, "g0v_vmag6_spc-spec_band3_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits")
+        file_path_spot = os.path.join(datadir, "g0v_vmag6_spc-spec_band3d_unocc_CFAM3_R1C2SLIT_PRISM3_offset_array.fits")
 
-        assert os.path.exists(file_path), f'Test file not found: {file_path}'
+        assert os.path.exists(file_path_science), f'Test file not found: {file_path_science}'
+        assert os.path.exists(file_path_spot), f'Test file not found: {file_path_spot}'
 
-        psf_array = fits.getdata(file_path, ext=0)
+        psf_array_science = fits.getdata(file_path_science, ext=0)
+        psf_array_spot = fits.getdata(file_path_spot, ext=0)[12]
         
         # Create dataset with mock headers and noise
         pri_hdr, ext_hdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
         ext_hdr["DPAMNAME"] = 'PRISM3'
         ext_hdr["FSAMNAME"] = 'R1C2'
+        # add a fake satellite spot image from a small band simulation
+        image_spot = Image(psf_array_spot, pri_hdr = pri_hdr.copy(), ext_hdr = ext_hdr.copy(),
+                           err =np.zeros_like(psf_array_spot),
+                           dq=np.zeros_like(psf_array_spot, dtype=int))
+        image_spot.ext_hdr["CFAMNAME"] = "3D"
         # Add random noise for reproducibility
         np.random.seed(5)
         read_noise = 200
-        noisy_data_array = (np.random.poisson(np.abs(psf_array) / 2) + 
-                            np.random.normal(loc=0, scale=read_noise, size=psf_array.shape))
-
+        noisy_data_array = (np.random.poisson(np.abs(psf_array_science) / 2) + 
+                            np.random.normal(loc=0, scale=read_noise, size=psf_array_science.shape))
+        
         # Create Image objects
         psf_images = []
         for i in range(2):
@@ -85,12 +93,10 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
                 err=np.zeros_like(noisy_data_array[i]),
                 dq=np.zeros_like(noisy_data_array[i], dtype=int)
             )
-            if i == 0:
-                image.ext_hdr["CFAMNAME"] = "3D"
-            else:
-                image.ext_hdr["CFAMNAME"] = "3A"
+            image.ext_hdr["CFAMNAME"] = "3"
             psf_images.append(image)
-
+        psf_images.append(image_spot)
+        
         # Save images to disk with timestamped filenames
         def get_formatted_filename(pri_hdr, dt, suffix="l2b"):
             visitid = pri_hdr.get('VISITID', '0000000000000000000')
@@ -162,7 +168,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info('='*80)
 
     # Validate output calibration product
-    cal_file = get_latest_cal_file(e2eoutput_path, '*_linespread.fits', logger)
+    cal_file = get_latest_cal_file(e2eoutput_path, '*_line_spread.fits', logger)
     check_filename_convention(os.path.basename(cal_file), 'cgi_*_line_spread.fits', "LineSpread calibration product", logger)
 
     with fits.open(cal_file) as hdul:
@@ -185,7 +191,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
         
         # Verify header keywords
         if len(hdul) > 1:
-            verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'LineSpread'}, "linespread calibration product", logger)
+            verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'LineSpread', 'CFAMNAME' : '3D', 'FSAMNAME': 'R1C2'}, "linespread calibration product", logger)
 
     logger.info("")
     
@@ -204,7 +210,7 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
     logger.info(f"wavelengths: {wavlens} nm")
     logger.info(f"flux profile: {flux_profile}")
     logger.info(f"Gaussian fit parameters: amplitude: {linespread.amplitude} +- {linespread.amp_err}")
-    logger.info(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm, fwhm: {linespread.fwhm} +- {linespread.fwhm_err}")
+    logger.info(f"mean_wave: {linespread.mean_wave} +- {linespread.wave_err} nm, fwhm: {linespread.fwhm} +- {linespread.fwhm_err} nm")
     logger.info("")
     
     return wavlens, flux_profile, gauss_par
