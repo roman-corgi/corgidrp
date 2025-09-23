@@ -687,11 +687,11 @@ def test_star_spec_registration():
             ext_hdr['FPAMNAME'] = fpam
             data_images = []
             basetime = datetime.now()
+            # Random inserts to test the cross-correlation functionality
+            x0, y0 = 512+np.random.randint(300), 512+np.random.randint(300)
             for i in range(len(psf_arr)):
                 data_l2b = np.zeros([1024, 1024])
                 psf_tmp = np.copy(psf_arr[i])
-                # Random inserts to test the cross-correlation functionality
-                x0, y0 = 512+np.random.randint(300), 512+np.random.randint(300)
                 data_l2b[y0-psf_tmp.shape[0]//2:y0+psf_tmp.shape[0]//2 + 1,
                     x0-psf_tmp.shape[1]//2:x0+psf_tmp.shape[1]//2 + 1] = psf_tmp
                 err = np.zeros_like(data_l2b)

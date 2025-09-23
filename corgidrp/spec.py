@@ -743,7 +743,7 @@ def create_wave_cal(disp_model, wave_zeropoint, pixel_pitch_um=13.0, ntrials = 1
     return wavlen_map, wavlen_uncertainty_map, pos_lookup_table, x_refwav, y_refwav
 
 
-def get_cropped_correlated_frame(
+def get_shift_correlation(
     img_data,
     img_template,
     ):
@@ -780,14 +780,7 @@ def get_cropped_correlated_frame(
     # Find the peak location (shift)
     shift = np.unravel_index(np.argmax(np.abs(poc_real)), poc_real.shape)
 
-    # Bring img_data on top of img_template
-    img_data = np.roll(img_data, (-shift[0], -shift[1]), axis=(0,1))
-
-    # Crop it to match img2 size
-    img_data_cropped = img_data[img_data.shape[0]//2-img_template.shape[0]//2:img_data.shape[0]//2+img_template.shape[0]//2+1,
-        img_data.shape[1]//2-img_template.shape[1]//2:img_data.shape[1]//2+img_template.shape[1]//2+1]
-
-    return img_data_cropped
+    return shift
 
 def star_spec_registration(
     dataset_fsm,
@@ -915,12 +908,21 @@ def star_spec_registration(
     # are EXCAM pixels
     zeropt_dist = 1e8
     idx_best = None
+    # cross-correlate data with expected slit error with template
+    shift = get_shift_correlation(fsm_combined[slit_idx], temp_data)
     import matplotlib.pyplot as plt
+    # TODO: remove this after debugging
+    img_cropped_list = []
     for idx_img, img in enumerate(fsm_combined):
-        # cross-correlate input data with template and crop it
-        img = get_cropped_correlated_frame(img, temp_data)
-        # template data and match the size of template data
-        x_fit, y_fit = fit_psf_centroid(img, temp_data,
+        # Bring img_data on top of img_template
+        img = np.roll(img, (-shift[0], -shift[1]), axis=(0,1))
+        # Crop it to match img2 size
+        img_cropped = img[img.shape[0]//2-temp_data.shape[0]//2:img.shape[0]//2+temp_data.shape[0]//2+1,
+        img.shape[1]//2-temp_data.shape[1]//2:img.shape[1]//2+temp_data.shape[1]//2+1]
+        # TODO: remove this after debugging
+        img_cropped_list += [img_cropped]
+        # Find best centroid
+        x_fit, y_fit = fit_psf_centroid(img_cropped, temp_data,
             xcent_template = wv0_x,
             ycent_template = wv0_y,
             halfheight = halfheight)[0:2]
@@ -931,12 +933,14 @@ def star_spec_registration(
         print('wvo_x:', wv0_x, 'x_fit:', x_fit)
         print('wvo_y:', wv0_y, 'y_fit:', y_fit)
         print('LOSS: ', zeropt_dist_img)
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-        ax1.imshow(img)
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(13,4))
+        ax1.imshow(img_cropped)
         ax1.set_title(f'Noisy FSM. std={np.std(img[0:20,0:20]):.2f}')
         ax2.imshow(temp_data)
         ax2.set_title(f'Noiseless template. std={np.std(temp_data[0:20,0:20]):.2f}')
-        #plt.show()
+        ax3.imshow(img_cropped - temp_data)
+        ax3.set_title(f'Noisy FSM minue Noiseless template')
+        plt.savefig(f'/Users/srhildeb/Desktop/fsm_and_template_{idx_img}')
         plt.close()
         
         # Keep track of absolute minimum
@@ -944,7 +948,11 @@ def star_spec_registration(
             zeropt_dist = zeropt_dist_img
             idx_best = idx_img
         # TODO: remove this after debugging
-        print('MIN Value: ', zeropt_dist)
+        print('MIN Value: ', zeropt_dist, ', idx_best:', idx_best)
+
+    # TODO: remove this after debugging
+    np.savez('/Users/srhildeb/Desktop/test_data.npz', arr1=img_cropped_list,
+        arr2=temp_data, var1=wv0_x, var2=wv0_y)
         
     # Check that there's at least one solution
     assert idx_best != None, 'No suitable best image found.'        
