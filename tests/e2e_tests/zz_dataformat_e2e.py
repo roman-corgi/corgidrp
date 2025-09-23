@@ -5,6 +5,7 @@ import glob
 import pytest
 import numpy as np
 import astropy.io.fits as fits
+from datetime import datetime, timedelta
 
 thisfile_dir = os.path.dirname(__file__) # this file's folder
 
@@ -246,7 +247,7 @@ def compare_docs(ref_doc, new_doc):
 @pytest.mark.e2e
 def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    l2a_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2a")
+    l2a_data_dir = os.path.join(thisfile_dir, "l1_to_l2a_e2e")
     #l2a_data_file = os.path.join(l2a_data_dir, "90499.fits")
     fits_files = glob.glob(os.path.join(l2a_data_dir, "*.fits"))
     l2a_data_file = max(fits_files, key=os.path.getmtime)
@@ -272,9 +273,9 @@ def test_l2a_dataformat_e2e(e2edata_path, e2eoutput_path):
         compare_docs(ref_doc_contents, doc_contents)
 
 @pytest.mark.e2e
-def test_l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
+def test_l2b_analog_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_output", "l2b")
+    l2b_data_dir = os.path.join(thisfile_dir, "l1_to_l2b_e2e")
     fits_files = glob.glob(os.path.join(l2b_data_dir, "*.fits"))
     l2b_data_file = max(fits_files, key=os.path.getmtime)
 
@@ -301,8 +302,8 @@ def test_l2banalog_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    l2b_data_dir = os.path.join(thisfile_dir, "pc_sim_test_data")
-    l2b_data_file = glob.glob(os.path.join(l2b_data_dir, "pc_frame_ill_*.fits"))[0]
+    l2b_data_dir = os.path.join(thisfile_dir, "photon_count_e2e", "l2a_to_l2b")
+    l2b_data_file = glob.glob(os.path.join(l2b_data_dir, "*_l2b.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -328,8 +329,8 @@ def test_l2bpc_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    l3_data_dir = os.path.join(thisfile_dir, "l2b_to_l3_output")
-    l3_data_file = glob.glob(os.path.join(l3_data_dir, "cgi_*_l3_.fits"))[0]
+    l3_data_dir = os.path.join(thisfile_dir, "l2b_to_l4_e2e", "l2b_to_l3")
+    l3_data_file = glob.glob(os.path.join(l3_data_dir, "*_l3_.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -355,8 +356,8 @@ def test_l3_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    l4_data_dir = os.path.join(thisfile_dir, "l3_to_l4_output")
-    l4_data_file = glob.glob(os.path.join(l4_data_dir, "cgi_*_l4_.fits"))[0]
+    l4_data_dir = os.path.join(thisfile_dir, "l2b_to_l4_e2e")
+    l4_data_file = glob.glob(os.path.join(l4_data_dir, "*_l4_.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -381,7 +382,7 @@ def test_l4coron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    kgain_data_file = glob.glob(os.path.join(thisfile_dir, "l3_to_l4_noncoron_output", "cgi_*_l4_.fits"))[0]
+    kgain_data_file = glob.glob(os.path.join(thisfile_dir, "l2b_to_l4_noncoron_e2e", "*_l4_.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -406,7 +407,7 @@ def test_l4noncoron_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    astrom_data_file = glob.glob(os.path.join(thisfile_dir, "astrom_cal_output", "cgi_*_ast_cal.fits"))[0]
+    astrom_data_file = glob.glob(os.path.join(thisfile_dir, "astrom_cal_e2e", "*_ast_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -431,7 +432,7 @@ def test_astrom_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    bpmap_data_file = glob.glob(os.path.join(thisfile_dir, "flat_neptune_output", "cgi_*bpm_cal*.fits"))[0]
+    bpmap_data_file = glob.glob(os.path.join(thisfile_dir, "bp_map_cal_e2e", "bp_map_master_dark", "*_bpm_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -457,7 +458,7 @@ def test_bpmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    flat_data_file = glob.glob(os.path.join(thisfile_dir, "flat_neptune_output", "cgi_*flt_cal*.fits"))[0]
+    flat_data_file = glob.glob(os.path.join(thisfile_dir, "flatfield_cal_e2e", "flat_neptune_output", "*_flt_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -483,7 +484,7 @@ def test_flat_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    ct_data_file = glob.glob(os.path.join(thisfile_dir, "l2b_to_corethroughput_output", "*ctp_cal.fits"))[0]
+    ct_data_file = glob.glob(os.path.join(thisfile_dir, "corethroughput_cal_e2e", "*_ctp_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -508,7 +509,7 @@ def test_ct_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    ctmap_data_file = os.path.join(thisfile_dir, "l2a_to_ct_map", "corethroughput_map.fits")
+    ctmap_data_file = glob.glob(os.path.join(thisfile_dir, "ctmap_cal_e2e", "*_ctm_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -533,7 +534,7 @@ def test_ctmap_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    fluxcal_data_file = glob.glob(os.path.join(thisfile_dir, "l2b_to_fluxcal_factor_output", "*abf_cal.fits"))[0]
+    fluxcal_data_file = glob.glob(os.path.join(thisfile_dir, "flux_cal_e2e", "*_abf_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -558,7 +559,7 @@ def test_fluxcal_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    kgain_data_file = glob.glob(os.path.join(thisfile_dir, "nonlin_and_kgain_output", "cgi_*krn_cal*.fits"))[0]
+    kgain_data_file = glob.glob(os.path.join(thisfile_dir, "kgain_cal_e2e", "*_krn_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -584,7 +585,7 @@ def test_kgain_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nonlin_and_kgain_output", "cgi_*nln_cal*.fits"))[0]
+    nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nonlin_cal_e2e", "*_nln_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -609,7 +610,7 @@ def test_nonlin_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nd_filter_e2e_output", "cgi_*ndf_cal.fits"))[0]
+    nonlin_data_file = glob.glob(os.path.join(thisfile_dir, "nd_filter_cal_e2e", "*_ndf_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -634,7 +635,7 @@ def test_ndfilter_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    noisemaps_data_file = glob.glob(os.path.join(thisfile_dir, "noisemap_output", "cgi_*dnm_cal.fits"))[0]
+    noisemaps_data_file = glob.glob(os.path.join(thisfile_dir, "noisemap_cal_e2e", "l1_to_dnm", "*_dnm_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -660,7 +661,7 @@ def test_noisemaps_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    dark_data_file = glob.glob(os.path.join(thisfile_dir, "build_trad_dark_output", "cgi_*_drk_cal.fits"))[0]
+    dark_data_file = glob.glob(os.path.join(thisfile_dir, "trad_dark_e2e", "trad_dark_full_frame", "*_drk_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -686,7 +687,7 @@ def test_dark_dataformat_e2e(e2edata_path, e2eoutput_path):
 @pytest.mark.e2e
 def test_tpump_dataformat_e2e(e2edata_path, e2eoutput_path):
 
-    tpump_data_file = glob.glob(os.path.join(thisfile_dir, "trap_pump_cal_output", "*_tpu_cal.fits"))[0]
+    tpump_data_file = glob.glob(os.path.join(thisfile_dir, "trap_pump_cal_e2e", "*_tpu_cal.fits"))[0]
 
     doc_dir = os.path.join(thisfile_dir, "data_format_docs")
     if not os.path.exists(doc_dir):
@@ -730,7 +731,7 @@ if __name__ == "__main__":
     test_l2bpc_dataformat_e2e(e2edata_dir, outputdir)
     test_dark_dataformat_e2e(e2edata_dir, outputdir)
     test_l2a_dataformat_e2e(e2edata_dir, outputdir)
-    test_l2banalog_dataformat_e2e(e2edata_dir, outputdir)
+    test_l2b_analog_dataformat_e2e(e2edata_dir, outputdir)
     test_l3_dataformat_e2e(e2edata_dir, outputdir)
     test_l4coron_dataformat_e2e(e2edata_dir, outputdir)
     test_l4noncoron_dataformat_e2e(e2edata_dir, outputdir)

@@ -8,6 +8,7 @@ from scipy.signal import decimate
 from astropy.modeling import models
 from astropy.modeling.models import Gaussian2D
 from termcolor import cprint
+import corgidrp.caldb as caldb
 
 import corgidrp
 from corgidrp.mocks import (create_default_L3_headers, create_ct_psfs,
@@ -32,6 +33,9 @@ def setup_module():
     """
     Create datasets needed for the UTs
     """
+    # Ensure default calibration files exist
+    caldb.initialize()
+    
     global FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT
     # Choose some H/V values for FPAM/FSAM  during corethroughput observations
     FPAM_H_CT, FPAM_V_CT, FSAM_H_CT, FSAM_V_CT = 6854, 22524, 29471, 12120
@@ -130,6 +134,8 @@ def setup_module():
     exthd['STARLOCX'] = 509
     exthd['STARLOCY'] = 513
     data_cor = [Image(np.zeros([1024, 1024]), pri_hdr=prhd, ext_hdr=exthd, err=err)]
+    # Set proper filename following CGI convention
+    data_cor[0].filename = "cgi_0000000000000090526_20240101t1200000_l2b.fits"
     dataset_cor = Dataset(data_cor)
 
     # Dataset with some CT profile defined in create_ct_interp
@@ -444,7 +450,7 @@ def test_cal_file():
         except:
             pass
         psf_cube_in += [frame.data]
-    psf_cube_in = np.array(psf_cube_in, dtype=corgidrp.image_dtype)
+    psf_cube_in = np.array(psf_cube_in)
 
     # Compare the PSF cube from the calibration file, which may have a smaller
     # extension, with the input ones

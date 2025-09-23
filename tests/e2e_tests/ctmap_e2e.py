@@ -6,6 +6,8 @@ import glob
 import pytest
 import numpy as np
 import astropy.time as time
+import datetime
+import time as time_module
 from astropy.io import fits
 
 import corgidrp
@@ -15,6 +17,7 @@ import corgidrp.walker as walker
 import corgidrp.detector as detector
 import corgidrp.corethroughput as corethroughput
 import corgidrp.caldb as caldb
+from corgidrp.check import generate_fits_excel_documentation
 
 # this file's folder
 thisfile_dir = os.path.dirname(__file__)
@@ -91,23 +94,43 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create coronagraphic dataset
     corDataset = data.Dataset(corDataset_image_list)
 
-    # Define temporary directory to store the individual frames
-    output_dir = os.path.join(e2eoutput_path, 'ctmap_test_data')
-    if os.path.exists(output_dir):
-        shutil.rmtree(output_dir)
-    os.mkdir(output_dir)
-    
-    # List of filenames
-    corDataset_filelist = ['ctmap_e2e_{0}_L2b.fits'.format(i)
-        for i in range(len(corDataset))]
-    # Save them
-    corDataset.save(output_dir, corDataset_filelist)
-
     # Make directory for the CT cal file
-    ctmap_outputdir = os.path.join(e2eoutput_path, 'l2a_to_ct_map')
+    ctmap_outputdir = os.path.join(e2eoutput_path, 'ctmap_cal_e2e')
     if os.path.exists(ctmap_outputdir):
         shutil.rmtree(ctmap_outputdir)
     os.mkdir(ctmap_outputdir)
+    
+    # Define directory to store the individual frames under the output directory
+    output_dir = os.path.join(ctmap_outputdir, 'input_l2b')
+    os.mkdir(output_dir)
+
+    calibrations_dir = os.path.join(ctmap_outputdir, 'calibrations')
+    os.mkdir(calibrations_dir)
+    
+    # Generate filename variables
+    base_time = datetime.datetime.now()
+    
+    # List of filenames with proper format
+    corDataset_filelist = []
+    for i in range(len(corDataset)):
+        # Generate unique timestamp by incrementing seconds (with rollover to minutes)
+        current_time = (base_time + datetime.timedelta(seconds=i)).strftime('%Y%m%dt%H%M%S%f')[:-5]
+        
+        # Extract visit ID from primary header VISITID keyword
+        prihdr = corDataset[i].pri_hdr
+        visitid = prihdr.get('VISITID', None)
+        if visitid is not None:
+            # Convert to string and pad to 19 digits
+            visitid = str(visitid).zfill(19)
+        else:
+            # Fallback: use file index padded to 19 digits
+            visitid = str(i).zfill(19)
+        
+        filename = f'cgi_{visitid}_{current_time}_l2b.fits'
+        corDataset_filelist.append(filename)
+    
+    # Save them in input_data directory
+    corDataset.save(output_dir, corDataset_filelist)
     
     tmp_caldb_csv = os.path.join(corgidrp.config_folder, 'tmp_e2e_test_caldb.csv')
     corgidrp.caldb_filepath = tmp_caldb_csv
@@ -119,7 +142,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # Create CT cal file from the mock data directly
     ct_cal_mock = corethroughput.generate_ct_cal(corethroughput_dataset)
     # Save it
-    ct_cal_mock.filedir = ctmap_outputdir
+    ct_cal_mock.filedir = calibrations_dir
     ct_cal_mock.save()
     # Add it to caldb
     this_caldb.create_entry(ct_cal_mock)
@@ -154,6 +177,12 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     # DQ
     assert np.all(ct_map_walker[3].data == ct_map_mock.dq)
 
+    # Generate Excel documentation for the core throughput map calibration product
+    ctmap_file = glob.glob(os.path.join(ctmap_outputdir, "*_ctm_cal.fits"))[0]
+    excel_output_path = os.path.join(ctmap_outputdir, "ctm_cal_documentation.xlsx")
+    generate_fits_excel_documentation(ctmap_file, excel_output_path)
+    print(f"Excel documentation generated: {excel_output_path}")
+
     # remove temporary caldb file
     os.remove(tmp_caldb_csv)
 
@@ -167,7 +196,7 @@ if __name__ == "__main__":
     # defaults allowing the user to edit the file if that is their preferred
     # workflow.
     outputdir = thisfile_dir
-    e2edata_path =  '.'
+    e2edata_path = '/Users/jmilton/Documents/CGI/E2E_Test_Data2'
 
     ap = argparse.ArgumentParser(description='run the l2b-> CoreThroughput end-to-end test')
     ap.add_argument('-e2e', '--e2edata_dir', default=e2edata_path,
