@@ -7,7 +7,7 @@ from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_L2b_headers
+from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
 from datetime import datetime, timedelta
