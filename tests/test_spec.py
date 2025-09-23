@@ -219,6 +219,16 @@ def test_psf_centroid():
     assert np.all(calibration_2.xfit_err == calibration_3.xfit_err)
     assert np.all(calibration_2.yfit_err == calibration_3.yfit_err)
     
+    # test None in x/ycent header of template file
+    temp_dataset[0].ext_hdr['XCENT'] = None
+    calibration_4 = steps.compute_psf_centroid(
+        dataset=dataset, template_dataset = temp_dataset, filtersweep = filtersweep
+    )
+    assert np.all(calibration_2.xfit - calibration_4.xfit < errortol_pix)
+    assert np.all(calibration_2.yfit - calibration_4.yfit < errortol_pix)
+    assert np.all(calibration_4.xfit_err < errortol_pix)
+    assert np.all(calibration_4.yfit_err < errortol_pix)
+        
 def test_dispersion_model():
     global disp_dict
 
