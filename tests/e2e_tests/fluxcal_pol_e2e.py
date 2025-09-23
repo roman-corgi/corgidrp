@@ -135,13 +135,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         logger.info(f"HDU1 dtype: {fluxcal_image_WP1.data.dtype.type}. Expected: float. FAIL.")
     # check err and dq have the right dimension
     if fluxcal_image_WP1.err.shape == (1,):
-        logger.info(f"Error data shape: (1,1). Expected: (1,1). PASS.")
+        logger.info(f"Err data shape: (1,). Expected: (1,). PASS.")
     else:
-        logger.info(f"Error data shape: {fluxcal_image_WP1.err.shape}. Expected: (1,1). FAIL.")
+        logger.info(f"Err data shape: {fluxcal_image_WP1.err.shape}. Expected: (1,). FAIL.")
     if fluxcal_image_WP1.dq.shape == (1,):
-        logger.info(f"DQ data shape: (1,1). Expected: (1,1). PASS.")
+        logger.info(f"DQ data shape: (1,). Expected: (1,). PASS.")
     else:
-        logger.info(f"DQ data shape: {fluxcal_image_WP1.dq.shape}. Expected: (1,1). FAIL.")
+        logger.info(f"DQ data shape: {fluxcal_image_WP1.dq.shape}. Expected: (1,). FAIL.")
     # check filename convention
     check_filename_convention(getattr(fluxcal_image_WP1, 'filename', None), 'abf_cal.fits', logger=logger)
     # check header keyword values match with what is expected
@@ -222,13 +222,13 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
         logger.info(f"HDU1 dtype: {fluxcal_image_WP2.data.dtype.type}. Expected: float. FAIL.")
     # check err and dq have the right dimension
     if fluxcal_image_WP2.err.shape == (1,):
-        logger.info(f"Error data shape: (1,1). Expected: (1,1). PASS.")
+        logger.info(f"Err data shape: (1,). Expected: (1,). PASS.")
     else:
-        logger.info(f"Error data shape: {fluxcal_image_WP2.err.shape}. Expected: (1,1). FAIL.")
+        logger.info(f"Error data shape: {fluxcal_image_WP2.err.shape}. Expected: (1,). FAIL.")
     if fluxcal_image_WP2.dq.shape == (1,):
-        logger.info(f"DQ data shape: (1,1). Expected: (1,1). PASS.")
+        logger.info(f"DQ data shape: (1,). Expected: (1,). PASS.")
     else:
-        logger.info(f"DQ data shape: {fluxcal_image_WP2.dq.shape}. Expected: (1,1). FAIL.")
+        logger.info(f"DQ data shape: {fluxcal_image_WP2.dq.shape}. Expected: (1,). FAIL.")
     # check filename convention
     check_filename_convention(getattr(fluxcal_image_WP2, 'filename', None), 'abf_cal.fits', logger=logger)
     # check header keyword values match with what is expected
