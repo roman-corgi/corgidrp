@@ -647,7 +647,7 @@ def test_star_spec_registration():
         pathfile = os.path.join(test_datadir,
                 f'spec_reg_fsm_offset_template_cfam3F_{idx_temp:02d}.fits')
         # Make sure the template exists before continuing
-        assert os.path.exists(pathfile), f'Test FITS file not found: {file_path}'
+        assert os.path.exists(pathfile), f'Test FITS file not found: {pathfile}'
         with fits.open(pathfile) as hdul:
             # Get template data to create a noisy sim with different FSM positions later on
             psf_arr += [hdul[0].data]
