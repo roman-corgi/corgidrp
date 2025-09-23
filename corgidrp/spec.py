@@ -570,7 +570,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     
     #PRISM2 not yet available
     if prism == 'PRISM2':
-        subband_list = ['2A', '2B', '2C']
+        subband_list = ['2A', '2B', '2C', '2F']
         ref_cfam = '2'
         ref_wavlen = 660.
     else:

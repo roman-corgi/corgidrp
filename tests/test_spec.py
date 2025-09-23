@@ -1,14 +1,14 @@
 import os
 import numpy as np
 import pytest
+import warnings
 from astropy.io import fits
 from astropy.table import Table
 from corgidrp.data import Dataset, Image, DispersionModel, LineSpread
 import corgidrp.spec as steps
-from corgidrp.mocks import create_default_L2b_headers, get_formatted_filename
+from corgidrp.mocks import create_default_L2b_headers
 from corgidrp.spec import get_template_dataset
 import corgidrp.l3_to_l4 as l3_to_l4
-from datetime import datetime, timedelta
 
 spec_datadir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', "corgidrp", "data", "spectroscopy")) 
 test_datadir = os.path.join(os.path.dirname(__file__), "test_data", "spectroscopy")
@@ -552,7 +552,6 @@ def test_linespread_function():
     using the output_dataset of the test of the wavelength map
     """
     line_spread = steps.fit_line_spread_function(output_dataset)
-    xcent_round, ycent_round = (int(np.rint(output_dataset[0].ext_hdr["WV0_X"])), int(np.rint(output_dataset[0].ext_hdr["WV0_Y"])))
     image = output_dataset[0].data
     flux = np.sum(image, axis = 1)/np.sum(image)
     pos_max = np.argmax(flux)
@@ -584,10 +583,54 @@ def test_linespread_function():
     bad_dataset = output_dataset.copy()
     for frame in bad_dataset:
         frame.dq[31, 40] = 1
-        frame.data[10,10] = np.nan 
+        frame.data[10, 10] = np.nan 
     line_spread_bad = steps.fit_line_spread_function(bad_dataset)
     assert line_spread_bad.fwhm == pytest.approx(line_spread.fwhm, rel = 0.1)
     assert line_spread_bad.amplitude == pytest.approx(line_spread.amplitude, rel = 0.1)
+
+def test_extract_spec():
+    """
+    test the l3_to_l4.extract_spec() function, that extracts the 1D spectrum 
+    with corresponding wavelengths, error, and dq.
+    """
+    spec_dataset = l3_to_l4.extract_spec(output_dataset)
+    image = spec_dataset[0]
+    #halfwidth = 9, size: 2 * 9 + 1
+    assert np.shape(image.data) == (19,)
+    assert np.shape(image.dq) == (19,)
+    assert np.shape(image.err) == (1,19)
+    assert np.shape(image.hdu_list["WAVE"]) == (19,)
+    assert np.shape(image.hdu_list["WAVE_ERR"]) == (19,)
+    
+    err_im = output_dataset[0].copy()
+    #equal error for all pixels => equal weights, should not change the sum
+    err_im.err[0,:,:] = 3.
+    input_dataset = Dataset([err_im])
+    err_ext = l3_to_l4.extract_spec(input_dataset, apply_weights = True)
+    out_im = err_ext[0]
+    assert np.allclose(out_im.data, image.data)
+    #estimate the resulting value at the position of the maximum
+    ind_x = np.argmax(err_im.data[:, 40])
+    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.data))
+    
+    #estimate error as Poisson like
+    err_im.err[0,:,:] = np.sqrt(err_im.data)
+    dataset = Dataset([err_im])
+    err_ext = l3_to_l4.extract_spec(dataset, apply_weights = True)
+    out_im = err_ext[0]
+    #estimate the resulting value at the position of the maximum, 
+    #there might be a great different in the maxima due to the rough weighting with signal noise
+    ind_x = np.argmax(err_im.data[:, 40])
+    assert np.sum(err_im.data[ind_x, 38:43]) == pytest.approx(np.max(out_im.data), rel = 2)
+    max_ind = np.argmax(out_im.data)
+    assert max_ind == np.argmax(image.data)
+    err_wht = err_im.err[0]
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+        whts = 1./np.square(err_wht)
+    err_expect = 1./np.sqrt(np.nansum(whts[:, 38:43], axis = 1))
+    assert np.max(err_expect) == np.max(out_im.err)
+    assert "extraction" and "half width" and "weights" in str(out_im.ext_hdr["HISTORY"])
 
 if __name__ == "__main__":
     #convert_tvac_to_dataset()
@@ -598,3 +641,4 @@ if __name__ == "__main__":
     test_determine_zeropoint()
     test_add_wavelength_map()
     test_linespread_function()
+    test_extract_spec()
