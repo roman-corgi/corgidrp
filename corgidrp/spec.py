@@ -177,12 +177,14 @@ def rotate_points(points, angle_rad, pivot_point):
     rotated_points = (rotated_points[0] + pivot_point[0], rotated_points[1] + pivot_point[1])
     return rotated_points
 
+# TODO: remove this after debugging
 def fit_psf_centroid(psf_data, psf_template,
                      xcent_template = None, ycent_template = None,
                      xcent_guess = None, ycent_guess = None,
                      halfwidth = 10, halfheight = 10, 
                      fwhm_major_guess = 3, fwhm_minor_guess = 6,
-                     gauss2d_oversample = 9):
+                     gauss2d_oversample = 9,
+                     slit_idx=0):
     """
     Fit the centroid of a PSF image with a template.
     
@@ -270,6 +272,9 @@ def fit_psf_centroid(psf_data, psf_template,
     (x_precis, y_precis) = (np.abs(xfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
                             np.abs(yfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr)
 
+    # TODO: remove this after debugging
+    if slit_idx == 2:
+        pass
     return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
 
 def get_template_dataset(dataset):
@@ -786,7 +791,7 @@ def star_spec_registration(
     dataset_fsm,
     pathfiles_template,
     slit_align_err=0,
-    halfheight=30):
+    halfheight=40):
     """ This function addresses:
 
       CGI-REQT-5465 – Given (1) a series of cleaned images of a prism-dispersed
@@ -921,11 +926,12 @@ def star_spec_registration(
         img.shape[1]//2-temp_data.shape[1]//2:img.shape[1]//2+temp_data.shape[1]//2+1]
         # TODO: remove this after debugging
         img_cropped_list += [img_cropped]
+        # TODO: adjust this after debugging
         # Find best centroid
         x_fit, y_fit = fit_psf_centroid(img_cropped, temp_data,
             xcent_template = wv0_x,
             ycent_template = wv0_y,
-            halfheight = halfheight)[0:2]
+            halfheight = halfheight, slit_idx=slit_idx)[0:2]
         # best-matching image is wrt zero-point
         zeropt_dist_img = np.sqrt((x_fit - wv0_x)**2 + (y_fit - wv0_y)**2)
         # TODO: remove this after debugging
@@ -942,6 +948,9 @@ def star_spec_registration(
         ax3.set_title(f'Noisy FSM minue Noiseless template')
         plt.savefig(f'/Users/srhildeb/Desktop/fsm_and_template_{idx_img}')
         plt.close()
+        # TODO: remove this after debugging
+        if idx_img == slit_idx:
+            pass
         
         # Keep track of absolute minimum
         if zeropt_dist_img < zeropt_dist:
