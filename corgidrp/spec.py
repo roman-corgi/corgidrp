@@ -177,14 +177,12 @@ def rotate_points(points, angle_rad, pivot_point):
     rotated_points = (rotated_points[0] + pivot_point[0], rotated_points[1] + pivot_point[1])
     return rotated_points
 
-# TODO: remove this after debugging
 def fit_psf_centroid(psf_data, psf_template,
                      xcent_template = None, ycent_template = None,
                      xcent_guess = None, ycent_guess = None,
                      halfwidth = 10, halfheight = 10, 
                      fwhm_major_guess = 3, fwhm_minor_guess = 6,
-                     gauss2d_oversample = 9,
-                     slit_idx=0):
+                     gauss2d_oversample = 9):
     """
     Fit the centroid of a PSF image with a template.
     
@@ -272,9 +270,6 @@ def fit_psf_centroid(psf_data, psf_template,
     (x_precis, y_precis) = (np.abs(xfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr,
                             np.abs(yfwhm) / (2 * np.sqrt(2 * np.log(2))) / psf_peakpix_snr)
 
-    # TODO: remove this after debugging
-    if slit_idx == 2:
-        pass
     return xfit, yfit, gauss2d_xfit, gauss2d_yfit, psf_peakpix_snr, x_precis, y_precis
 
 def get_template_dataset(dataset):
@@ -916,53 +911,25 @@ def star_spec_registration(
     # cross-correlate data with expected slit error with template
     shift = get_shift_correlation(fsm_combined[slit_idx], temp_data)
     import matplotlib.pyplot as plt
-    # TODO: remove this after debugging
-    img_cropped_list = []
     for idx_img, img in enumerate(fsm_combined):
         # Bring img_data on top of img_template
         img = np.roll(img, (-shift[0], -shift[1]), axis=(0,1))
         # Crop it to match img2 size
         img_cropped = img[img.shape[0]//2-temp_data.shape[0]//2:img.shape[0]//2+temp_data.shape[0]//2+1,
         img.shape[1]//2-temp_data.shape[1]//2:img.shape[1]//2+temp_data.shape[1]//2+1]
-        # TODO: remove this after debugging
-        img_cropped_list += [img_cropped]
-        # TODO: adjust this after debugging
         # Find best centroid
         x_fit, y_fit = fit_psf_centroid(img_cropped, temp_data,
             xcent_template = wv0_x,
             ycent_template = wv0_y,
-            halfheight = halfheight, slit_idx=slit_idx)[0:2]
+            halfheight = halfheight)[0:2]
         # best-matching image is wrt zero-point
         zeropt_dist_img = np.sqrt((x_fit - wv0_x)**2 + (y_fit - wv0_y)**2)
-        # TODO: remove this after debugging
-        print('IDX FSM', idx_img)
-        print('wvo_x:', wv0_x, 'x_fit:', x_fit)
-        print('wvo_y:', wv0_y, 'y_fit:', y_fit)
-        print('LOSS: ', zeropt_dist_img)
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(13,4))
-        ax1.imshow(img_cropped)
-        ax1.set_title(f'Noisy FSM. std={np.std(img[0:20,0:20]):.2f}')
-        ax2.imshow(temp_data)
-        ax2.set_title(f'Noiseless template. std={np.std(temp_data[0:20,0:20]):.2f}')
-        ax3.imshow(img_cropped - temp_data)
-        ax3.set_title(f'Noisy FSM minue Noiseless template')
-        plt.savefig(f'/Users/srhildeb/Desktop/fsm_and_template_{idx_img}')
-        plt.close()
-        # TODO: remove this after debugging
-        if idx_img == slit_idx:
-            pass
-        
+
         # Keep track of absolute minimum
         if zeropt_dist_img < zeropt_dist:
             zeropt_dist = zeropt_dist_img
             idx_best = idx_img
-        # TODO: remove this after debugging
-        print('MIN Value: ', zeropt_dist, ', idx_best:', idx_best)
 
-    # TODO: remove this after debugging
-    np.savez('/Users/srhildeb/Desktop/test_data.npz', arr1=img_cropped_list,
-        arr2=temp_data, var1=wv0_x, var2=wv0_y)
-        
     # Check that there's at least one solution
     assert idx_best != None, 'No suitable best image found.'        
     

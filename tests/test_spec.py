@@ -667,9 +667,6 @@ def test_star_spec_registration():
     slit_align_err = (np.array(yoffset_arr)
         + np.diff(np.array(yoffset_arr)).mean()*0.1)[slit_ref]
 
-    # TODO: Remove after debugging
-    print('Slit ref=', slit_ref, ', yoffset=', yoffset_arr[slit_ref], ', slit_align_err=', slit_align_err)
-
     # Start UTs showing that the step function works as expected
     # Some (arbitrary) number of frames per FSM position
     nframes = 3
@@ -771,7 +768,6 @@ def test_star_spec_registration():
             logger.info(f"Total input images validated: {len(list_of_best_fsm)}")
             logger.info("")
 
-             # TODO: uncomment once the rest of the tests passes
             for file in list_of_best_fsm:
                 # Verify all files are in the set of expected files in the test
                 assert file in list_of_expected_fsm, f'File {file:s} is not in the list of expected best FSM frames'
