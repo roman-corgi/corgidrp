@@ -9,7 +9,10 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from statsmodels.nonparametric.smoothers_lowess import lowess
-from numpy.exceptions import RankWarning
+try:
+    from numpy.exceptions import RankWarning
+except:
+    from numpy import RankWarning
 
 from corgidrp import check
 import corgidrp.data as data

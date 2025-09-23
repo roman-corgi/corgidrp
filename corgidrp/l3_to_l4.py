@@ -18,6 +18,7 @@ from scipy.ndimage import shift
 from astropy.io import fits
 from scipy.ndimage import generic_filter
 from corgidrp.spec import compute_psf_centroid, create_wave_cal, read_cent_wave
+from corgidrp.l4_to_tda import find_source
 
 
 def replace_bad_pixels(input_dataset,kernelsize=3,dq_thresh=1):
@@ -695,6 +696,33 @@ def do_psf_subtraction(input_dataset,
         
         if cand_locs is None:
             cand_locs = []
+
+        #Find the sources and get their positions
+        klip_src_thpt_list = []
+        for i in range(len(frame.data)):
+            frame_copy = frame.copy()
+            frame_copy.data = frame_copy.data[i]
+            psf_subtracted_image_with_source = find_source(frame_copy)
+            source_header = psf_subtracted_image_with_source.ext_hdr
+
+            snyx = np.array([list(map(float, source_header[key].split(','))) for key in source_header if key.startswith("SNYX")])
+            xcen = psf_subtracted_image_with_source.ext_hdr['CRPIX1']
+            ycen = psf_subtracted_image_with_source.ext_hdr['CRPIX2']
+            source_distances =np.sort(np.sqrt((snyx[:,1] - xcen)**2 + (snyx[:,2] - ycen)**2))
+            angles = np.arctan2((snyx[:,2] - ycen),(snyx[:,1] - xcen))*180/np.pi
+            angles[angles<0] = 360 - angles[angles<0] # to get angles in [0,360] range instead of [-pi,pi]
+            klip_src_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
+                        dataset_out,
+                        ct_calibration,
+                        klip_params,
+                        kt_snr,
+                        cand_locs = [], # don't exclude any source locations for finding klip throughput at source location
+                        seps=source_distances,
+                        pas=angles,
+                        num_processes=num_processes
+                        )
+            klip_src_thpt_list.append(klip_src_thpt)
+            del frame_copy
 
         klip_thpt = meas_klip_thrupt(sci_dataset_masked,ref_dataset_masked, # pre-psf-subtracted dataset
                             dataset_out,

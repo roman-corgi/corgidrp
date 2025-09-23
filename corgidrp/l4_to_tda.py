@@ -184,7 +184,7 @@ def compute_flux_ratio_noise(input_dataset, NDcalibration, unocculted_star_datas
     produce a calibrated 1-sigma flux ratio "contrast" curve (or "noise curve" since contrast curve is typically 5-sigma), also accounting for the throughput of the coronagraph.
     It calculates flux ratio noise curve value for each radial separation from the subtracted star location, interpolating KLIP and core throughput values at these input separations.
     It uses a dataset of unocculted stars and ND transmission to determine the integrated flux of the Gaussian-fit star (where each frame in the dataset is assumed to correspond to the frames 
-    in the input_dataset), and the an estimate of planet flux per frame of inupt_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
+    in the input_dataset), and an estimate of planet flux per frame of input_dataset is made by calculating the integrated flux of a Gaussian with amplitude equal to 
     the annular noise and FWHM equal to that used for KLIP algorithm througput for each radial separation.
 
     Args:
@@ -435,7 +435,7 @@ def update_to_tda(input_dataset):
 
 
 def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
-                image_without_planet=None):
+                image_without_planet=None, max_radius=None):
     """
     Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
     
@@ -445,6 +445,8 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
         image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
+        max_radius (float):  maximum distance in pixels from the center of the input_image data allowed for a potential source. 
+            Defaults to None, for which no maximum (besides the bounds of the input_image data) is enforced.
 
     Returns:
         corgidrp.data.Image: A copy of the input image with the detected sources and their SNRs saved in the header.
@@ -475,16 +477,23 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     image_snmap = make_snmap(image_residual, psf_binarymask, image_without_planet=image_without_planet)
     
     sn_source, xy_source = [], []
-       
+    x_center = new_image.ext_hdr['CRPIX1']
+    y_center = new_image.ext_hdr['CRPIX2'] 
+    
     # Iteratively detect sources above the SNR threshold
     while np.nanmax(image_snmap) >= nsigma_threshold:
 
         sn = np.nanmax(image_snmap)
         xy = np.unravel_index(np.nanargmax(image_snmap), image_snmap.shape)
-        
+        source_dist = np.sqrt((xy[0]-y_center)**2 + (xy[1]-x_center)**2)
         if sn > nsigma_threshold:
-            sn_source.append(sn)
-            xy_source.append(xy)
+            if max_radius is not None:
+                if source_dist <= max_radius: 
+                    sn_source.append(sn)
+                    xy_source.append(xy)
+            elif max_radius is None:
+                sn_source.append(sn)
+                xy_source.append(xy)
 
             # Scale and subtract the detected PSF from the image
             image_residual = psf_scalesub(image_residual, xy, psf, fwhm)
