@@ -465,6 +465,11 @@ def test_determine_zeropoint():
         )
         psf_images.append(image)
 
+    # Load the filter-to-filter image offsets to correct for the location of the narrowband centroid
+    # with respect to the broadband filter.
+    (xoff_nb, yoff_nb) = (steps.read_cent_wave('3D')[2], steps.read_cent_wave('3D')[3])
+    (xoff_bb, yoff_bb) = (steps.read_cent_wave('3')[2], steps.read_cent_wave('3')[3])
+
     #test it with optional initial guess and with one satspot frame
     input_dataset = Dataset(psf_images)
     dataset_guess = l3_to_l4.determine_wave_zeropoint(input_dataset, xcent_guess = 40., ycent_guess = 32.)
@@ -483,8 +488,8 @@ def test_determine_zeropoint():
         y0 = frame.ext_hdr["WV0_Y"]
         x0err = frame.ext_hdr["WV0_XERR"]
         y0err = frame.ext_hdr["WV0_YERR"]
-        assert x0 == pytest.approx(slit_x, abs = errortol_pix)
-        assert y0 == pytest.approx(slit_y, abs = errortol_pix)
+        assert x0 - (xoff_bb - xoff_nb) == pytest.approx(slit_x, abs = errortol_pix)
+        assert y0 - (yoff_bb - yoff_nb) == pytest.approx(slit_y, abs = errortol_pix)
         assert x0err < errortol_pix
         assert y0err < errortol_pix
     
@@ -528,8 +533,8 @@ def test_determine_zeropoint():
         y0 = frame.ext_hdr["WV0_Y"]
         x0err = frame.ext_hdr["WV0_XERR"]
         y0err = frame.ext_hdr["WV0_YERR"]
-        assert x0 == pytest.approx(slit_x, abs = errortol_pix)
-        assert y0 == pytest.approx(slit_y, abs = errortol_pix)
+        assert x0 - (xoff_bb - xoff_nb) == pytest.approx(slit_x, abs = errortol_pix)
+        assert y0 - (yoff_bb - yoff_nb) == pytest.approx(slit_y, abs = errortol_pix)
         assert x0err < errortol_pix
         assert y0err < errortol_pix
     

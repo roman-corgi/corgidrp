@@ -685,7 +685,7 @@ def northup(input_dataset,use_wcs=True,rot_center='im_center'):
     return processed_dataset 
 
 
-def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None):
+def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess = None, ycent_guess = None, bb_nb_dx = None, bb_nb_dy = None):
     """ 
     A procedure for estimating the centroid of the zero-point image
     (satellite spot or PSF) taken through the narrowband filter (2C or 3D) and slit.
@@ -696,7 +696,11 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
                                                   path is taken
         xcent_guess (float): initial x guess for the centroid fit for all frames
         ycent_guess (float): initial y guess for the centroid fit for all frames
-    
+        bb_nb_dx (float): horizontal image offset between the narrowband and broadband filters, in EXCAM pixels. 
+                          This will override the offset in the existing lookup table. 
+        bb_nb_dy (float): vertical image offset between the narrowband and broadband filters, in EXCAM pixels. 
+                          This will override the offset in the existing lookup table. 
+
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
                                information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
@@ -735,12 +739,21 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         initial_cent = None
     spot_centroids = compute_psf_centroid(dataset = sat_dataset, template_dataset = template_dataset, initial_cent = initial_cent)
     
-    x0 = np.mean(spot_centroids.xfit)
+    nb_filter = sat_dataset[0].ext_hdr["CFAMNAME"]
+    bb_filter = nb_filter[0]
+    cen_wave, _, xoff_nb, yoff_nb = read_cent_wave(nb_filter)
+    _, _, xoff_bb, yoff_bb = read_cent_wave(bb_filter)
+    # Correct the centroid for the filter-to-filter image offset, so that
+    # the coordinates (x0,y0) correspond to the wavelength location in the broadband filter. 
+    if bb_nb_dx is not None and bb_nb_dy is not None:
+        x0 = np.mean(spot_centroids.xfit) + bb_nb_dx
+        y0 = np.mean(spot_centroids.yfit) + bb_nb_dy
+    else:
+        x0 = np.mean(spot_centroids.xfit) + (xoff_bb - xoff_nb)
+        y0 = np.mean(spot_centroids.yfit) + (yoff_bb - yoff_nb)
     x0err = np.sqrt(np.sum(spot_centroids.xfit_err**2)/len(spot_centroids.xfit_err))
-    y0 = np.mean(spot_centroids.yfit)
     y0err = np.sqrt(np.sum(spot_centroids.yfit_err**2)/len(spot_centroids.yfit_err))
-    filter = sat_dataset[0].ext_hdr["CFAMNAME"]
-    cen_wave = read_cent_wave(filter)[0]
+
     for frame in sci_dataset:
         frame.ext_hdr["WAVLEN0"] = cen_wave
         frame.ext_hdr["WV0_X"] = x0
