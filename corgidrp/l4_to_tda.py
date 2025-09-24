@@ -435,7 +435,7 @@ def update_to_tda(input_dataset):
 
 
 def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
-                image_without_planet=None, max_radius=None):
+                image_without_planet=None):
     """
     Detects sources in an image based on a specified SNR threshold and save their approximate pixel locations and SNRs into the header.
     
@@ -445,8 +445,6 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
         fwhm (float, optional): Full-width at half-maximum of the PSF in pixels.
         nsigma_threshold (float, optional): The SNR threshold for source detection.
         image_without_planet (ndarray, optional): An image without any sources (~noise map) to make snmap more accurate.
-        max_radius (float):  maximum distance in pixels from the center of the input_image data allowed for a potential source. 
-            Defaults to None, for which no maximum (besides the bounds of the input_image data) is enforced.
 
     Returns:
         corgidrp.data.Image: A copy of the input image with the detected sources and their SNRs saved in the header.
@@ -479,21 +477,15 @@ def find_source(input_image, psf=None, fwhm=2.8, nsigma_threshold=5.0,
     sn_source, xy_source = [], []
     x_center = new_image.ext_hdr['CRPIX1']
     y_center = new_image.ext_hdr['CRPIX2'] 
-    
+
     # Iteratively detect sources above the SNR threshold
     while np.nanmax(image_snmap) >= nsigma_threshold:
 
         sn = np.nanmax(image_snmap)
         xy = np.unravel_index(np.nanargmax(image_snmap), image_snmap.shape)
-        source_dist = np.sqrt((xy[0]-y_center)**2 + (xy[1]-x_center)**2)
         if sn > nsigma_threshold:
-            if max_radius is not None:
-                if source_dist <= max_radius: 
-                    sn_source.append(sn)
-                    xy_source.append(xy)
-            elif max_radius is None:
-                sn_source.append(sn)
-                xy_source.append(xy)
+            sn_source.append(sn)
+            xy_source.append(xy)
 
             # Scale and subtract the detected PSF from the image
             image_residual = psf_scalesub(image_residual, xy, psf, fwhm)

@@ -195,7 +195,12 @@ def meas_klip_thrupt(sci_dataset_in,ref_dataset_in, # pre-psf-subtracted dataset
         np.array: array of shape (N,n_seps,2), where N is 1 + the number of KL mode truncation choices and n_seps 
         is the number of separations sampled. Index 0 contains the separations sampled, and each following index
         contains the dimensionless KLIP throughput and FWHM in pixels measured at each separation for each KL mode 
-        truncation choice.
+        truncation choice. An example for 4 KL mode truncation choices, using r1 and r2 for separations and n_seps=2: 
+            [ [[r1,r1],[r2,r2]], 
+            [[KL_thpt_r1_KL1, FWHM_r1_KL1],[KL_thpt_r2_KL1, FWHM_r2_KL1]], 
+            [[KL_thpt_r1_KL2, FWHM_r1_KL2],[KL_thpt_r2_KL2, FWHM_r2_KL2]], 
+            [[KL_thpt_r1_KL3, FWHM_r1_KL3],[KL_thpt_r2_KL3, FWHM_r2_KL3]], 
+            [[KL_thpt_r1_KL4, FWHM_r1_KL4],[KL_thpt_r2_KL4, FWHM_r2_KL4]] ]
     """
     
     if sci_dataset_in[0].ext_hdr['CFAMNAME'] == '1F':
