@@ -169,13 +169,13 @@ def parse_csv_table(csv_file_path, section_name, key_col="Keyword",
     return out
 
 
-def create_default_L1_headers(arrtype="SCI", vistype="TDEMO"):
+def create_default_L1_headers(arrtype="SCI", vistype="CGIVST_TDD_OBS "):
     """
     Creates default L1 headers by reading values from the l1.csv documentation file.
     
     Args:
         arrtype (str): Array type ("SCI" or "ENG"). Defaults to "SCI".
-        vistype (str): Visit type. Defaults to "TDEMO".
+        vistype (str): Visit type. Defaults to "CGIVST_TDD_OBS ".
     
     Returns:
         tuple: 
@@ -1691,7 +1691,7 @@ def create_astrom_data(field_path, filedir=None, image_shape=(1024, 1024), targe
 
         # TO DO: Determine what level this image should be
         prihdr, exthdr = create_default_L1_headers()
-        prihdr['VISTYPE'] = 'BORESITE'
+        prihdr['VISTYPE'] = 'CGIVST_CAL_BORESIGHT'
         prihdr['RA'] = np.array(frame_targs).T[0][i]  # assume we will know something about the dither RA/DEC pointing
         prihdr['DEC'] = np.array(frame_targs).T[1][i]
         prihdr['ROLL'] = 0   ## assume a telescope roll = 0 for now
@@ -2691,7 +2691,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame.ext_hdr['KGAINPAR'] = kgain
         frame.pri_hdr['PHTCNT'] = True
         frame.ext_hdr['ISPC'] = True
-        frame.pri_hdr["VISTYPE"] = "TDEMO"
+        frame.pri_hdr["VISTYPE"] = "CGIVST_TDD_OBS "
         frame.filename = '_L1_for_pc_ill_{0}.fits'.format(i)
         frame_e_list.append(frame)
 
@@ -2708,7 +2708,7 @@ def create_photon_countable_frames(Nbrights=30, Ndarks=40, EMgain=5000, kgain=7,
         frame_dark.ext_hdr['KGAINPAR'] = kgain
         frame_dark.pri_hdr['PHTCNT'] = True
         frame_dark.ext_hdr['ISPC'] = True
-        frame_dark.pri_hdr["VISTYPE"] = "DARK"
+        frame_dark.pri_hdr["VISTYPE"] = "CGIVST_CAL_DRK"
         frame_dark.filename = '_L1_for_pc_dark_{0}.fits'.format(i)
         frame_e_dark_list.append(frame_dark)
 
@@ -2850,7 +2850,7 @@ def create_flux_image(star_flux, fwhm, cal_factor, filter='3C', fpamname = 'HOLE
 
     # Create image object
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['VISTYPE'] = 'CGIVST_CAL_ABSFLUX_BRIGHT'
     prihdr['RA'] = target_location[0]
     prihdr['DEC'] = target_location[1]
     prihdr['TARGET'] = target_name
@@ -3013,7 +3013,7 @@ def create_pol_flux_image(star_flux_left, star_flux_right, fwhm, cal_factor, fil
 
     # Create image object
     prihdr, exthdr, errhdr, dqhdr, biashdr = create_default_L2b_headers()
-    prihdr['VISTYPE'] = 'ABSFLXBT'
+    prihdr['VISTYPE'] = 'CGIVST_CAL_ABSFLUX_BRIGHT'
     prihdr['TARGET'] = target_name
 
     exthdr['CFAMNAME'] = filter             # Using the variable 'filter' (ensure it's defined)
@@ -3181,7 +3181,7 @@ def create_ct_psfs(fwhm_mas, cfam_name='1F', n_psfs=10, e2e=False):
     else:
         prhd, exthd, errhdr, dqhdr = create_default_L3_headers()
     # These data are for CT calibration
-    prhd['VISTYPE'] = 'CORETPUT'
+    prhd['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
     # cfam filter
     exthd['CFAMNAME'] = cfam_name
     # Mock ERR

@@ -51,7 +51,7 @@ def test_expected_results_e2e(e2edata_path, e2eoutput_path):
     corethroughput_image_list += mocks.create_ct_psfs(50, e2e=True)[0]
     # Make sure all dataframes share the same common header values
     for image in corethroughput_image_list:
-        image.pri_hdr['VISTYPE'] = 'CORETPUT'
+        image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
         image.ext_hdr['EXPTIME'] = exp_time_s
         # DRP
         image.ext_hdr['DRPCTIME'] = time.Time.now().isot
@@ -134,7 +134,7 @@ def test_expected_results_spc_band3_simdata_e2e(e2edata_path, e2eoutput_path):
     for file in datafiles:
         image = fits.open(file)
         new_image = data.Image(image[0].data, pri_hdr=image[0].header, ext_hdr=image[1].header)
-        new_image.pri_hdr['VISTYPE'] = 'CORETPUT'
+        new_image.pri_hdr['VISTYPE'] = 'CGIVST_CAL_CORETHRPT'
         new_image.ext_hdr['DATALVL'] = "L2b"
         new_image.ext_hdr['BUNIT'] = "photoelectron"
         ftimeutc = data.format_ftimeutc(new_image.ext_hdr['FTIMEUTC'])

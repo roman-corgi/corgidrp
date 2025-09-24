@@ -33,7 +33,7 @@ def set_vistype_for_tvac(
         prihdr = fits_file[0].header
         # Adjust VISTYPE
         if prihdr['VISTYPE'] == 'N/A':
-            prihdr['VISTYPE'] = 'PUPILIMG'
+            prihdr['VISTYPE'] = 'CGIVST_CAL_PUPIL_IMAGING'
         exthdr = fits_file[1].header
         if exthdr['EMGAIN_A'] == 1:
             exthdr['EMGAIN_A'] = -1 #for new SSC-updated TVAC files which have EMGAIN_A by default as 1 regardless of the commanded EM gain
@@ -126,7 +126,7 @@ def test_nonlin_and_kgain_e2e(
             pupilimg_l1_list.append(filepath)
 
 
-    # Set TVAC data to have VISTYPE=PUPILIMG (flight data should have these values)
+    # Set TVAC data to have VISTYPE=CGIVST_CAL_PUPIL_IMAGING (flight data should have these values)
     set_vistype_for_tvac(pupilimg_l1_list)
     #fix_headers_for_tvac(pupilimg_l1_list)
 

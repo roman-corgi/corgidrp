@@ -33,7 +33,7 @@ def test_pc():
 
     Tests safemode, which makes the function issue warnings instead of crashing (useful for HOWFSC's iterative digging of dark holes).
 
-    Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='DARK' while also inputting a photon-counted master dark raises exception, exception raised when 'EMGAIN_C' not the same for all frames.
+    Checks various inputs: threshold<0 gives exception, thresh>=em_gain gives exception, providing dataset of VISTYPE='CGIVST_CAL_DRK' while also inputting a photon-counted master dark raises exception, exception raised when 'EMGAIN_C' not the same for all frames.
 
     Checks various metadata changes: the expected filename and history edit for the output is done (for case of dark subtraction and the case of no dark subtraction), the master dark is indicated as such via a header keyword 'PC_STAT'.
 
@@ -94,7 +94,7 @@ def test_pc():
     # when thresh>=em_gain, exception
     with pytest.raises(Exception):
         get_pc_mean(dataset_err, T_factor=50, niter=2)
-    # can't provide master dark while "VISTYPE" of input dataset is 'DARK'
+    # can't provide master dark while "VISTYPE" of input dataset is 'CGIVST_CAL_DRK'
     with pytest.raises(PhotonCountException):
         get_pc_mean(dark_dataset_err, pc_master_dark=pc_dark, inputmode='darks')
     # must have same 'CMDGAIN' and other header values throughout input dataset
