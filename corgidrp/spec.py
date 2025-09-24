@@ -221,6 +221,7 @@ def fit_psf_centroid(psf_data, psf_template,
     # Use the center of mass as a starting point if positions were not provided.
     if xcent_template is None or ycent_template is None: 
         xcom_template, ycom_template = np.rint(get_center_of_mass(psf_template))
+        xcent_template, ycent_template = xcom_template, ycom_template
     else:
         xcom_template, ycom_template = (np.rint(xcent_template), np.rint(ycent_template))
 
@@ -570,7 +571,7 @@ def calibrate_dispersion_model(centroid_psf, band_center_file = None, pixel_pitc
     
     #PRISM2 not yet available
     if prism == 'PRISM2':
-        subband_list = ['2A', '2B', '2C']
+        subband_list = ['2A', '2B', '2C', '2F']
         ref_cfam = '2'
         ref_wavlen = 660.
     else:
