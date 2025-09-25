@@ -1,0 +1,32 @@
+{
+    "name" : "l2b_to_spec_linespread",
+    "template" : true,
+    "drpconfig" : {
+        "track_individual_errors" : false
+    },
+    "inputs" : [],
+    "outputdir" : "",
+    "steps" : [
+        {
+            "name": "divide_by_exptime"
+        },
+        {
+            "name" : "determine_wave_zeropoint",
+            "keywords" : {
+                "return_all" : true
+            }
+        },
+        {
+            "name" : "add_wavelength_map",
+            "calibs" : {
+                "DispersionModel" : "AUTOMATIC"
+            }
+        },
+        {
+            "name" : "fit_line_spread_function"
+        },
+        {
+            "name" : "save"
+        }
+    ]
+}
