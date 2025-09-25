@@ -701,6 +701,7 @@ def determine_wave_zeropoint(input_dataset, template_dataset = None, xcent_guess
         bb_nb_dy (float): vertical image offset between the narrowband and broadband filters, in EXCAM pixels. 
                           This will override the offset in the existing lookup table. 
         return_all (boolean): if false (default) returns only the broad band science frames, if true it returns all (including narrow band) frames
+    
     Returns:
         corgidrp.data.Dataset: the returned science dataset without the satellite spots images and the wavelength zeropoint 
                                information as header keywords, which is WAVLEN0, WV0_X, WV0_XERR, WV0_Y, WV0_YERR, WV0_DIMX, WV0_DIMY
