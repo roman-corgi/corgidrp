@@ -180,23 +180,23 @@ def run_spec_linespread_e2e_test(e2edata_path, e2eoutput_path):
             logger.info(f"HDU0: Contains data with shape {hdu0.data.shape}. Expected: header only. FAIL.")
         #verify HDU1
         hdu1 = hdul[1]
-        check_dimensions(hdu1.data, (2,19), "data array containing the 1D wavelengths and the line spread function", logger)
+        check_dimensions(hdu1.data, (2,19), "HDU1 Data Array: containing the 1D wavelengths and the line spread function", logger)
         if np.isnan(hdu1.data).any() is True:
-            logger.info(f"HDU1: Contains NANs in the data. Expected: no NANs. FAIL.")
+            logger.info(f"HDU1 Data Array: Contains NANs in the data. Expected: no NANs. FAIL.")
         else:
-            logger.info(f"HDU1: No NANs in the data. Expected: no NANs. PASS.")
+            logger.info(f"HDU1 Data Array: No NANs in the data. Expected: no NANs. PASS.")
         if np.isinf(hdu1.data).any() is True:
-            logger.info(f"HDU1: Contains INFs in the data. Expected: no INFs. FAIL.")
+            logger.info(f"HDU1 Data Array: Contains INFs in the data. Expected: no INFs. FAIL.")
         else:
-            logger.info(f"HDU1: No INFs in the data. Expected: no INFs. PASS.")
+            logger.info(f"HDU1 Data Array: No INFs in the data. Expected: no INFs. PASS.")
         #verify that the line spread function is normalized to 1
         if np.float32(np.sum(hdu1.data[1,:])) != 1.:
-            logger.info(f"HDU1: sum of the line spread function is not approx. 1. Expected: line spread function normalized to 1. FAIL.")
+            logger.info(f"HDU1 Data Array: sum of the line spread function is not approx. 1. Expected: line spread function normalized to 1. FAIL.")
         else:
-            logger.info(f"HDU1: sum of the line spread function is approx. 1. Expected: line spread function normalized to 1. PASS.")
+            logger.info(f"HDU1 Data Array: sum of the line spread function is approx. 1. Expected: line spread function normalized to 1. PASS.")
         # Verify HDU2 (Gaussian parameters)
         gauss_par = hdul[2].data
-        check_dimensions(gauss_par, (6,), "1D array with the Gaussian fit parameters", logger)
+        check_dimensions(gauss_par, (6,), "HDU2 Data Array: 1D array with the Gaussian fit parameters", logger)
         
         # Verify header keywords
         verify_header_keywords(hdul[1].header, {'DATALVL': 'CAL', 'DATATYPE': 'LineSpread', 'CFAMNAME' : '3D', 'FSAMNAME': 'R1C2', 'DPAMNAME':'PRISM3'}, "linespread calibration product", logger)
